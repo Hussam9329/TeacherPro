@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Course {
+  id        String   @id @default(cuid())
+  name      String
+  type      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  groups    Group[]
+  sites     Site[]
+  students  Student[]
+  chapters  CourseChapter[]
+}
+
+model Group {
+  id              String   @id @default(cuid())
+  name            String
+  electronicGroup String?
+  active          Boolean  @default(true)
+  courseId        String
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  students        Student[]
+}
+
+model Site {
+  id       String  @id @default(cuid())
+  main     String
+  sub      String
+  active   Boolean @default(true)
+  courseId String
+  course   Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model Chapter {
+  id            String          @id @default(cuid())
+  name          String
+  opportunities Int             @default(0)
+  courseLinks   CourseChapter[]
+}
+
+model CourseChapter {
+  id        String  @id @default(cuid())
+  active    Boolean @default(false)
+  archived  Boolean @default(false)
+  archive   String  @default("[]")
+  courseId  String
+  chapterId String
+  course    Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
+  @@index([chapterId])
+}
+
+model Student {
+  id              String   @id @default(cuid())
+  name            String
+  school          String   @default("")
+  gender          String
+  phone           String?
+  parentPhone     String?
+  telegram        String?
+  courseType      String
+  mainSite        String?
+  subSite         String?
+  receiptNo       String?
+  codeSequence    String?
+  code            String   @unique
+  totalAmount     Int      @default(0)
+  paidAmount      Int      @default(0)
+  installments    String   @default("[]")
+  status          String   @default("نشط")
+  dismissalType   String?
+  dismissalReason String?
+  accountingStart Int?
+  opportunities   Int      @default(0)
+  baseOpportunities Int    @default(0)
+  createdAt       DateTime @default(now())
+  courseId        String
+  groupId         String?
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  group           Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  grades          Grade[]
+  opportunityLogs OpportunityLog[]
+  correctionSheets CorrectionSheet[]
+  whatsappMessages WhatsAppMessage[]
+
+  @@index([courseId])
+  @@index([groupId])
+  @@index([status])
+}
+
+model Exam {
+  id                 String   @id @default(cuid())
+  name               String
+  type               String
+  courseIds          String   @default("[]")
+  mainSite           String?
+  date               DateTime
+  fullMark           Int
+  passMark           Int
+  discountMark       Int
+  opportunitiesPenalty String
+  dismissalGrade     Int?
+  active             Boolean @default(true)
+  attendanceClosed   Boolean @default(false)
+  attendance         String  @default("[]")
+  groupId            String?
+  grades             Grade[]
+  correctionSheets   CorrectionSheet[]
+  opportunityLogs    OpportunityLog[]
+
+  @@index([type])
+  @@index([date])
+}
+
+model Grade {
+  id                String   @id @default(cuid())
+  status            String
+  score             Int?
+  accountingChecked Boolean  @default(false)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  studentId         String
+  examId            String
+  student           Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam              Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, examId])
+  @@index([examId])
+}
+
+model OpportunityLog {
+  id        String   @id @default(cuid())
+  action    String
+  amount    Int
+  reason    String?
+  date      DateTime @default(now())
+  chapterId String?
+  studentId String
+  examId    String?
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam      Exam?    @relation(fields: [examId], references: [id], onDelete: SetNull)
+
+  @@index([studentId])
+  @@index([date])
+}
+
+model CorrectionSheet {
+  id               String   @id @default(cuid())
+  status           String
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  correctionErrors Int      @default(0)
+  sumErrors        Int      @default(0)
+  studentId        String
+  examId           String
+  correctorId      String
+  student          Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam             Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  corrector        AppUser  @relation(fields: [correctorId], references: [id], onDelete: Restrict)
+}
+
+model Role {
+  id          String    @id @default(cuid())
+  name        String
+  isDefault   Boolean   @default(false)
+  permissions String    @default("[]")
+  createdAt   DateTime  @default(now())
+  users       AppUser[]
+}
+
+model AppUser {
+  id               String   @id @default(cuid())
+  username         String   @unique
+  name             String
+  passwordHash     String?
+  role             String
+  roleId           String?
+  permissions      String   @default("[]")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  roleRef          Role?    @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  correctionSheets CorrectionSheet[]
+  logs             AuditLog[]
+}
+
+model PermissionCatalog {
+  id          String @id
+  label       String
+  category    String
+  level       String
+  description String
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  module    String
+  action    String
+  details   String?
+  time      DateTime @default(now())
+  userId    String?
+  userName  String?
+  user      AppUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([module])
+  @@index([time])
+}
+
+model WhatsAppReport {
+  id        String   @id @default(cuid())
+  command   String
+  recipient String
+  total     Int
+  delivered String   @default("[]")
+  failed    String   @default("[]")
+  time      DateTime @default(now())
+}
+
+model WhatsAppMessage {
+  id                String   @id @default(cuid())
+  phone             String?
+  message           String
+  command           String
+  status            String   @default("مجدول")
+  batch             Int      @default(1)
+  cooldownMinutes   Int      @default(0)
+  providerMessageId String?
+  lastError         String?
+  updatedAt         DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  studentId         String
+  student           Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([studentId])
+}
+
+model DemoCopy {
+  id              String    @id @default(cuid())
+  name            String
+  description     String    @default("")
+  expiresAt       DateTime?
+  active          Boolean   @default(true)
+  demoUserId      String
+  createdFromData Boolean   @default(false)
+  snapshot        String    @default("{}")
+  limits          String    @default("{}")
+  createdAt       DateTime  @default(now())
+  durationDays    Int       @default(7)
+
+  @@index([active])
+  @@index([expiresAt])
+}

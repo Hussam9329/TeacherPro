@@ -1,0 +1,1230 @@
+--- /mnt/data/teacherpro_original/TeacherPro-main/src/components/teacher-pro/student-register.tsx	2026-05-28 08:58:16.000000000 +0000
++++ /mnt/data/teacherpro_work/TeacherPro-main/src/components/teacher-pro/student-register.tsx	2026-05-28 09:12:49.414029508 +0000
+@@ -1,8 +1,7 @@
+ 'use client';
+ 
+-import React, { useEffect, useMemo, useState } from 'react';
++import React, { useMemo, useState } from 'react';
+ import { useTeacherStore } from '@/lib/teacher-store';
+-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+ import { Button } from '@/components/ui/button';
+ import { Input } from '@/components/ui/input';
+ import { Label } from '@/components/ui/label';
+@@ -12,18 +11,88 @@
+ import { getPhoneValidationError, sanitizePhoneInput, toLatinDigits } from '@/lib/format';
+ import { PUBLIC_MAIN_SITE_OPTIONS, PRIVATE_BAGHDAD_SUB_SITES, IRAQI_PROVINCES } from '@/lib/iraq';
+ import { getStudentDuplicateMessage, isValidAccountingGraceDays, sanitizeTelegramInput } from '@/lib/student-utils';
++import {
++  AlertCircle, Barcode, BookOpen, CheckCircle2, Coins,
++  Lock, MapPin, PhoneCall, Receipt, Save, School, Smartphone, Star,
++  User, UserPlus, Users, VenusAndMars, WalletCards,
++} from 'lucide-react';
++
++const fieldBaseClass =
++  'h-12 rounded-xl border border-gray-300 bg-white/95 pr-10 pl-4 text-right shadow-sm transition-all focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-0 dark:border-white/10 dark:bg-white/10';
++const selectTriggerClass =
++  'h-12 rounded-xl border border-gray-300 bg-white/95 px-4 shadow-sm focus:ring-2 focus:ring-blue-500 dark:border-white/10 dark:bg-white/10';
++
++type CourseType = 'خاصة' | 'عامة';
++
++type StudentRegisterForm = {
++  name: string;
++  school: string;
++  gender: 'ذكر' | 'أنثى';
++  phone: string;
++  parentPhone: string;
++  telegram: string;
++  courseType: CourseType;
++  courseId: string;
++  groupId: string;
++  mainSite: string;
++  subSite: string;
++  receiptNo: string;
++  codeSequence: string;
++  totalAmount: string;
++  paidAmount: string;
++  accountingStart: string;
++  createdAt: string;
++};
++
++function todayISO(): string {
++  return new Date().toISOString().slice(0, 10);
++}
++
++function emptyForm(): StudentRegisterForm {
++  return {
++    name: '',
++    school: '',
++    gender: 'ذكر',
++    phone: '',
++    parentPhone: '',
++    telegram: '',
++    courseType: 'عامة',
++    courseId: '',
++    groupId: '',
++    mainSite: 'بغداد',
++    subSite: '',
++    receiptNo: '',
++    codeSequence: '',
++    totalAmount: '',
++    paidAmount: '',
++    accountingStart: '0',
++    createdAt: todayISO(),
++  };
++}
+ 
+-export function StudentRegisterView() {
+-  const { students, courses, groups, sites, addStudent, activeChapterForCourse } = useTeacherStore();
++function amountValue(value: string): number {
++  return Number(toLatinDigits(value).replace(/\D/g, '')) || 0;
++}
++
++function formatAmount(value: number): string {
++  return new Intl.NumberFormat('en-US').format(value);
++}
++
++function FieldIcon({ icon: Icon, className = '' }: { icon: React.ElementType; className?: string }) {
++  return (
++    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
++      <Icon className={`h-4 w-4 text-gray-400 ${className}`} />
++    </div>
++  );
++}
+ 
+-  const [form, setForm] = useState({
+-    name: '', gender: 'ذكر' as 'ذكر' | 'أنثى', phone: '', parentPhone: '',
+-    telegram: '', courseType: 'خاصة' as 'خاصة' | 'عامة', courseId: '',
+-    groupId: '', mainSite: 'بغداد', subSite: '', receiptNo: '', codeSequence: '',
+-    installment: '', createdAt: new Date().toISOString().slice(0, 10),
+-    accountingStart: '',
+-  });
++function RequiredMark() {
++  return <span className="text-red-500">*</span>;
++}
+ 
++export function StudentRegisterView() {
++  const { students, courses, groups, addStudent, activeChapterForCourse } = useTeacherStore();
++  const [form, setForm] = useState<StudentRegisterForm>(() => emptyForm());
+   const [showRules, setShowRules] = useState(false);
+ 
+   const isPrivate = form.courseType === 'خاصة';
+@@ -43,32 +112,35 @@
+     return [...PUBLIC_MAIN_SITE_OPTIONS];
+   }, [isPrivate]);
+ 
+-  const subSiteOptions = useMemo(() => {
+-    // خاصة + بغداد → المنصور، زيونة، البنوك
++  const subSiteOptions = useMemo<string[]>(() => {
+     if (isPrivate && form.mainSite === 'بغداد') return [...PRIVATE_BAGHDAD_SUB_SITES];
+-    // عامة + بغداد → لا مواقع فرعية
+     if (!isPrivate && form.mainSite === 'بغداد') return [];
+-    // عامة + محافظات → المحافظات الـ17 (بدون بغداد)
+     if (!isPrivate && form.mainSite === 'محافظات') return [...IRAQI_PROVINCES];
+     return [];
+   }, [isPrivate, form.mainSite]);
+ 
+-  useEffect(() => {
+-    if (!mainSiteOptions.includes(form.mainSite)) {
+-      setForm(prev => ({ ...prev, mainSite: mainSiteOptions[0] || '', subSite: '' }));
+-      return;
+-    }
+-    if (subSiteOptions.length === 0 && form.subSite) {
+-      setForm(prev => ({ ...prev, subSite: '' }));
+-      return;
+-    }
+-    if (subSiteOptions.length > 0 && !subSiteOptions.includes(form.subSite)) {
+-      setForm(prev => ({ ...prev, subSite: subSiteOptions[0] }));
+-    }
+-  }, [mainSiteOptions, subSiteOptions, form.mainSite, form.subSite]);
++  const totalAmount = useMemo(() => amountValue(form.totalAmount), [form.totalAmount]);
++  const paidAmount = useMemo(() => amountValue(form.paidAmount), [form.paidAmount]);
++  const remainingAmount = Math.max(totalAmount - paidAmount, 0);
++
++  const updateForm = (key: keyof StudentRegisterForm, value: string) => {
++    setForm(prev => ({ ...prev, [key]: toLatinDigits(value) }));
++  };
++
++  const updateAmountForm = (key: 'totalAmount' | 'paidAmount', value: string) => {
++    setForm(prev => ({ ...prev, [key]: toLatinDigits(value).replace(/\D/g, '') }));
++  };
++
++  const updateGraceDays = (value: string) => {
++    setForm(prev => ({ ...prev, accountingStart: toLatinDigits(value).replace(/\D/g, '').slice(0, 2) }));
++  };
++
++  const updatePhoneForm = (key: 'phone' | 'parentPhone', value: string) => {
++    setForm(prev => ({ ...prev, [key]: sanitizePhoneInput(value) }));
++  };
+ 
+   const handleCourseTypeChange = (value: string) => {
+-    const nextType = value as 'خاصة' | 'عامة';
++    const nextType = value as CourseType;
+     setForm(prev => ({
+       ...prev,
+       courseType: nextType,
+@@ -78,7 +150,8 @@
+       subSite: '',
+       receiptNo: nextType === 'خاصة' ? prev.receiptNo : '',
+       codeSequence: nextType === 'خاصة' ? prev.codeSequence : '',
+-      installment: nextType === 'خاصة' ? prev.installment : '',
++      totalAmount: nextType === 'خاصة' ? prev.totalAmount : '',
++      paidAmount: nextType === 'خاصة' ? prev.paidAmount : '',
+     }));
+   };
+ 
+@@ -89,59 +162,60 @@
+   const validateRequiredFields = () => {
+     const requiredChecks: [boolean, string][] = [
+       [Boolean(form.name.trim()), 'اسم الطالب مطلوب'],
++      [Boolean(form.school.trim()), 'اسم المدرسة مطلوب'],
+       [Boolean(form.gender), 'الجنس مطلوب'],
+-      [Boolean(form.telegram.trim()), 'معرف التلكرام مطلوب'],
+-      [Boolean(form.phone.trim()), 'رقم الطالب مطلوب'],
+-      [Boolean(form.parentPhone.trim()), 'رقم ولي الأمر مطلوب'],
++      [Boolean(form.phone.trim()), 'رقم هاتف الطالب مطلوب'],
++      [Boolean(form.parentPhone.trim()), 'رقم هاتف ولي الأمر مطلوب'],
+       [Boolean(form.courseType), 'نوع الدورة مطلوب'],
+       [Boolean(form.courseId), filteredCourses.length === 0 ? 'لا توجد دورات مسجلة لهذا النوع' : 'يرجى اختيار الدورة'],
+       [Boolean(form.mainSite), 'الموقع الرئيسي مطلوب'],
+-      [subSiteOptions.length === 0 || Boolean(form.subSite), subSiteOptions.length === 0 ? 'لا توجد مناطق فرعية لهذا الموقع' : 'الموقع الفرعي مطلوب'],
+-      [Boolean(form.groupId), filteredGroups.length === 0 ? 'لا توجد كروبات مسجلة لهذه الدورة' : 'الكروب الإلكتروني مطلوب'],
+-      [Boolean(form.createdAt), 'تاريخ إضافة الطالب مطلوب'],
+-      [Boolean(form.accountingStart), 'بداية المحاسبة مطلوبة'],
++      [subSiteOptions.length === 0 || Boolean(form.subSite), 'الموقع الفرعي مطلوب'],
++      [Boolean(form.groupId), filteredGroups.length === 0 ? 'لا توجد كروبات إلكترونية لهذه الدورة' : 'يرجى اختيار الكروب الإلكتروني'],
++      [form.accountingStart.trim() !== '', 'فترة السماح مطلوبة'],
+     ];
+ 
+     if (isPrivate) {
+       requiredChecks.push(
+-        [Boolean(form.receiptNo.trim()), 'رقم الوصل مطلوب'],
+-        [Boolean(form.codeSequence.trim()), 'تسلسل الكود مطلوب'],
+-        [Boolean(form.installment.trim()), 'القسط الأول مطلوب'],
++        [Boolean(form.receiptNo.trim()), 'رقم الوصل مطلوب للدورة الخاصة'],
++        [Boolean(form.codeSequence.trim()), 'تسلسل الكود مطلوب للدورة الخاصة'],
++        [form.totalAmount.trim() !== '', 'المبلغ الكلي مطلوب للدورة الخاصة'],
++        [form.paidAmount.trim() !== '', 'المبلغ المدفوع مطلوب للدورة الخاصة'],
+       );
+     }
+ 
+     const missing = requiredChecks.find(([ok]) => !ok);
+     if (missing) return missing[1];
+-    return null;
+-  };
+ 
+-  const handleSubmit = (e: React.FormEvent) => {
+-    e.preventDefault();
++    const phoneError = getPhoneValidationError(form.phone, 'رقم هاتف الطالب', true);
++    if (phoneError) return phoneError;
+ 
+-    const requiredError = validateRequiredFields();
+-    if (requiredError) { toast.error(requiredError); return; }
+-
+-    const phoneError = getPhoneValidationError(form.phone, 'رقم الطالب', true);
+-    if (phoneError) { toast.error(phoneError); return; }
++    const parentPhoneError = getPhoneValidationError(form.parentPhone, 'رقم هاتف ولي الأمر', true);
++    if (parentPhoneError) return parentPhoneError;
+ 
+-    const parentPhoneError = getPhoneValidationError(form.parentPhone, 'رقم ولي الأمر', true);
+-    if (parentPhoneError) { toast.error(parentPhoneError); return; }
++    if (!isValidAccountingGraceDays(form.accountingStart)) return 'فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم';
+ 
+-    if (!isValidAccountingGraceDays(form.accountingStart)) {
+-      toast.error('بداية المحاسبة يجب أن تكون رقماً من 1 إلى 30 يوم');
+-      return;
+-    }
++    if (isPrivate && paidAmount > totalAmount) return 'المبلغ المدفوع لا يمكن أن يكون أكبر من المبلغ الكلي';
+ 
+     const duplicateMessage = getStudentDuplicateMessage(students, {
+       name: form.name,
+       phone: form.phone,
+       telegram: form.telegram,
+     });
+-    if (duplicateMessage) { toast.error(duplicateMessage); return; }
++    if (duplicateMessage) return duplicateMessage;
++
++    return null;
++  };
++
++  const handleSubmit = (e: React.FormEvent) => {
++    e.preventDefault();
++
++    const requiredError = validateRequiredFields();
++    if (requiredError) { toast.error(requiredError); return; }
+ 
+     const chapter = activeChapterForCourse(form.courseId);
+     const result = addStudent({
+       name: form.name.trim(),
++      school: form.school.trim(),
+       gender: form.gender,
+       phone: form.phone.trim(),
+       parentPhone: form.parentPhone.trim(),
+@@ -149,11 +223,13 @@
+       courseType: form.courseType,
+       courseId: form.courseId,
+       groupId: form.groupId,
+-      mainSite: form.mainSite,
++      mainSite: isPrivate ? 'بغداد' : form.mainSite,
+       subSite: form.subSite,
+       receiptNo: isPrivate ? form.receiptNo.trim() : '',
+       codeSequence: isPrivate ? form.codeSequence.trim() : '',
+-      installments: isPrivate ? [{ date: new Date().toISOString().slice(0, 10), amount: Number(form.installment) || 0, note: 'قسط عند التسجيل' }] : [],
++      totalAmount: isPrivate ? totalAmount : 0,
++      paidAmount: isPrivate ? paidAmount : 0,
++      installments: isPrivate ? [{ date: todayISO(), amount: paidAmount, note: 'دفعة التسجيل' }] : [],
+       status: 'نشط',
+       dismissalType: '',
+       dismissalReason: '',
+@@ -165,215 +241,278 @@
+ 
+     if (!result.ok) { toast.error(result.message); return; }
+ 
+-    setForm(prev => ({
+-      ...prev,
+-      name: '', phone: '', parentPhone: '', telegram: '',
+-      receiptNo: '', codeSequence: '', installment: '', accountingStart: '',
+-    }));
+-    toast.success('تم تسجيل الطالب', { description: 'تمت إضافة الطالب إلى سجل الطلاب بنجاح' });
+-  };
+-
+-  const updateForm = (key: string, value: string) => {
+-    setForm(prev => ({ ...prev, [key]: toLatinDigits(value) }));
+-  };
+-
+-  const updateTelegramForm = (value: string) => {
+-    setForm(prev => ({ ...prev, telegram: sanitizeTelegramInput(value) }));
+-  };
+-
+-  const updateAccountingDays = (value: string) => {
+-    setForm(prev => ({ ...prev, accountingStart: toLatinDigits(value).replace(/\D/g, '').slice(0, 2) }));
+-  };
+-
+-  const updatePhoneForm = (key: 'phone' | 'parentPhone', value: string) => {
+-    setForm(prev => ({ ...prev, [key]: sanitizePhoneInput(value) }));
++    setForm(emptyForm());
++    toast.success('تم حفظ بيانات الطالب', { description: 'تمت إضافة الطالب إلى سجل الطلاب بنجاح' });
+   };
+ 
+   return (
+-    <div className="space-y-6">
+-      <Card>
+-        <CardHeader>
+-          <CardTitle>تسجيل طالب جديد</CardTitle>
+-        </CardHeader>
+-        <CardContent>
+-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+-            <div className="space-y-2">
+-              <Label>اسم الطالب</Label>
+-              <Input value={form.name} onChange={e => updateForm('name', e.target.value)} required placeholder="اسم الطالب الرباعي" />
+-            </div>
+-
+-            <div className="space-y-2">
+-              <Label>الجنس</Label>
+-              <Select value={form.gender} onValueChange={v => updateForm('gender', v)}>
+-                <SelectTrigger aria-required="true"><SelectValue /></SelectTrigger>
+-                <SelectContent>
+-                  <SelectItem value="ذكر">ذكر</SelectItem>
+-                  <SelectItem value="أنثى">أنثى</SelectItem>
+-                </SelectContent>
+-              </Select>
+-            </div>
+-
+-            <div className="space-y-2">
+-              <Label>معرف التلكرام</Label>
+-              <Input value={form.telegram} onChange={e => updateTelegramForm(e.target.value)} required placeholder="username بدون @" />
+-            </div>
++    <div className="mx-auto max-w-6xl px-1 py-2 md:px-4">
++      <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white/95 shadow-xl shadow-black/5 dark:border-white/10 dark:bg-card/90">
++        <div className="p-5 md:p-8 lg:p-10">
++          <div className="mb-8 flex items-center justify-center border-b border-gray-100 pb-6 dark:border-white/10">
++            <UserPlus className="ml-4 h-9 w-9 text-blue-600 dark:text-primary" />
++            <div className="text-center">
++              <h2 className="text-2xl font-extrabold text-gray-800 dark:text-foreground md:text-3xl">إضافة طالب جديد</h2>
++              <p className="mt-2 text-sm text-gray-500 dark:text-muted-foreground">نموذج تسجيل الطالب حسب التصميم والمنطق المرفق</p>
++            </div>
++          </div>
++
++          <form onSubmit={handleSubmit} className="space-y-8">
++            <input type="hidden" name="createdAt" value={form.createdAt} readOnly />
++            <input type="hidden" name="telegram" value={form.telegram} readOnly />
++
++            <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
++              <div className="space-y-2">
++                <Label className="font-bold text-gray-700 dark:text-foreground">اسم الطالب <RequiredMark /></Label>
++                <div className="relative">
++                  <FieldIcon icon={User} />
++                  <Input value={form.name} onChange={e => updateForm('name', e.target.value)} required placeholder="الاسم الرباعي واللقب" className={fieldBaseClass} />
++                </div>
++              </div>
+ 
+-            <div className="space-y-2">
+-              <Label>رقم الطالب</Label>
+-              <Input
+-                value={form.phone}
+-                onChange={e => updatePhoneForm('phone', e.target.value)}
+-                placeholder="07XXXXXXXXX"
+-                inputMode="numeric"
+-                maxLength={11}
+-                pattern="07[0-9]{9}"
+-                required
+-              />
+-            </div>
++              <div className="space-y-2">
++                <Label className="font-bold text-gray-700 dark:text-foreground">اسم المدرسة <RequiredMark /></Label>
++                <div className="relative">
++                  <FieldIcon icon={School} />
++                  <Input value={form.school} onChange={e => updateForm('school', e.target.value)} required placeholder="اسم المدرسة" className={fieldBaseClass} />
++                </div>
++              </div>
++            </section>
+ 
+-            <div className="space-y-2">
+-              <Label>رقم ولي الأمر</Label>
+-              <Input
+-                value={form.parentPhone}
+-                onChange={e => updatePhoneForm('parentPhone', e.target.value)}
+-                placeholder="07XXXXXXXXX"
+-                inputMode="numeric"
+-                maxLength={11}
+-                pattern="07[0-9]{9}"
+-                required
+-              />
+-            </div>
++            <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
++              <div className="space-y-2">
++                <Label className="font-bold text-gray-700 dark:text-foreground">رقم هاتف الطالب <RequiredMark /></Label>
++                <div className="relative">
++                  <FieldIcon icon={Smartphone} />
++                  <Input
++                    value={form.phone}
++                    onChange={e => updatePhoneForm('phone', e.target.value)}
++                    required
++                    placeholder="07xxxxxxxxx"
++                    inputMode="numeric"
++                    maxLength={11}
++                    pattern="07[0-9]{9}"
++                    dir="ltr"
++                    className={`${fieldBaseClass} text-left`}
++                  />
++                </div>
++              </div>
+ 
+-            <div className="space-y-2">
+-              <Label>نوع الدورة</Label>
+-              <Select value={form.courseType} onValueChange={handleCourseTypeChange}>
+-                <SelectTrigger aria-required="true"><SelectValue /></SelectTrigger>
+-                <SelectContent>
+-                  <SelectItem value="خاصة">خاصة</SelectItem>
+-                  <SelectItem value="عامة">عامة</SelectItem>
+-                </SelectContent>
+-              </Select>
+-            </div>
++              <div className="space-y-2">
++                <Label className="font-bold text-gray-700 dark:text-foreground">رقم هاتف ولي الأمر <RequiredMark /></Label>
++                <div className="relative">
++                  <FieldIcon icon={PhoneCall} />
++                  <Input
++                    value={form.parentPhone}
++                    onChange={e => updatePhoneForm('parentPhone', e.target.value)}
++                    required
++                    placeholder="07xxxxxxxxx"
++                    inputMode="numeric"
++                    maxLength={11}
++                    pattern="07[0-9]{9}"
++                    dir="ltr"
++                    className={`${fieldBaseClass} text-left`}
++                  />
++                </div>
++              </div>
++            </section>
+ 
+-            <div className="space-y-2">
+-              <Label>اختر الدورة</Label>
+-              <Select value={form.courseId} onValueChange={handleCourseChange} disabled={filteredCourses.length === 0}>
+-                <SelectTrigger aria-required="true">
+-                  <SelectValue placeholder={filteredCourses.length === 0 ? 'لا توجد دورات مسجلة' : 'اختر الدورة'} />
+-                </SelectTrigger>
+-                <SelectContent>
+-                  {filteredCourses.length === 0 ? (
+-                    <div className="px-3 py-2 text-sm text-muted-foreground">لا توجد دورات مسجلة لهذا النوع</div>
+-                  ) : filteredCourses.map(c => (
+-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+-                  ))}
+-                </SelectContent>
+-              </Select>
+-            </div>
++            <section className="rounded-3xl border border-blue-100 bg-blue-50/60 p-5 dark:border-primary/20 dark:bg-primary/10 md:p-6">
++              <div className="mb-5 flex items-center justify-between gap-3">
++                <h3 className="flex items-center text-lg font-extrabold text-blue-800 dark:text-primary">
++                  <BookOpen className="ml-2 h-5 w-5" />
++                  تفاصيل الدورة
++                </h3>
++                {isPrivate && (
++                  <Button type="button" variant="outline" size="sm" onClick={() => setShowRules(true)}>
++                    عرض شروط الدورة الخاصة
++                  </Button>
++                )}
++              </div>
+ 
+-            <div className="space-y-2">
+-              <Label>الموقع الرئيسي</Label>
+-              <Select value={form.mainSite} onValueChange={v => setForm(prev => ({ ...prev, mainSite: v, subSite: '' }))} disabled={isPrivate}>
+-                <SelectTrigger aria-required="true"><SelectValue /></SelectTrigger>
+-                <SelectContent>
+-                  {mainSiteOptions.map(s => (
+-                    <SelectItem key={s} value={s}>{s}</SelectItem>
+-                  ))}
+-                </SelectContent>
+-              </Select>
+-            </div>
++              <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
++                <div className="space-y-2">
++                  <Label className="font-bold text-gray-700 dark:text-foreground">نوع الدورة <RequiredMark /></Label>
++                  <Select value={form.courseType} onValueChange={handleCourseTypeChange}>
++                    <SelectTrigger className={selectTriggerClass} aria-required="true"><SelectValue /></SelectTrigger>
++                    <SelectContent>
++                      <SelectItem value="عامة">عامة</SelectItem>
++                      <SelectItem value="خاصة">خاصة</SelectItem>
++                    </SelectContent>
++                  </Select>
++                </div>
+ 
+-            <div className="space-y-2">
+-              <Label>الموقع الفرعي</Label>
+-              <Select value={form.subSite} onValueChange={v => updateForm('subSite', v)} disabled={subSiteOptions.length === 0}>
+-                <SelectTrigger aria-required="true">
+-                  <SelectValue placeholder={subSiteOptions.length === 0 ? (isPrivate ? 'بغداد فقط - لا مواقع فرعية' : form.mainSite === 'بغداد' ? 'بغداد فقط - لا مواقع فرعية' : 'اختر المحافظة') : 'اختر الموقع الفرعي'} />
+-                </SelectTrigger>
+-                <SelectContent>
+-                  {subSiteOptions.length === 0 ? (
+-                    <div className="px-3 py-2 text-sm text-muted-foreground">لا توجد مناطق فرعية</div>
+-                  ) : subSiteOptions.map(s => (
+-                    <SelectItem key={s} value={s}>{s}</SelectItem>
+-                  ))}
+-                </SelectContent>
+-              </Select>
+-            </div>
++                <div className="space-y-2">
++                  <Label className="font-bold text-gray-700 dark:text-foreground">الدورة <RequiredMark /></Label>
++                  <Select value={form.courseId} onValueChange={handleCourseChange} disabled={filteredCourses.length === 0}>
++                    <SelectTrigger className={selectTriggerClass} aria-required="true">
++                      <SelectValue placeholder={filteredCourses.length === 0 ? 'لا توجد دورات مسجلة' : 'اختر الدورة...'} />
++                    </SelectTrigger>
++                    <SelectContent>
++                      {filteredCourses.length === 0 ? (
++                        <div className="px-3 py-2 text-sm text-muted-foreground">لا توجد دورات مسجلة لهذا النوع</div>
++                      ) : filteredCourses.map(c => (
++                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
++                      ))}
++                    </SelectContent>
++                  </Select>
++                </div>
++              </div>
+ 
+-            <div className="space-y-2">
+-              <Label>الكروب الإلكتروني</Label>
+-              <Select value={form.groupId} onValueChange={v => updateForm('groupId', v)} disabled={!form.courseId || filteredGroups.length === 0}>
+-                <SelectTrigger aria-required="true">
+-                  <SelectValue placeholder={filteredCourses.length === 0 ? 'لا توجد كروبات مسجلة' : !form.courseId ? 'اختر الدورة أولاً' : filteredGroups.length === 0 ? 'لا توجد كروبات مسجلة' : 'اختر الكروب'} />
+-                </SelectTrigger>
+-                <SelectContent>
+-                  {filteredCourses.length === 0 ? (
+-                    <div className="px-3 py-2 text-sm text-muted-foreground">لا توجد كروبات مسجلة لهذا النوع</div>
+-                  ) : !form.courseId ? (
+-                    <div className="px-3 py-2 text-sm text-muted-foreground">اختر الدورة أولاً</div>
+-                  ) : filteredGroups.length === 0 ? (
+-                    <div className="px-3 py-2 text-sm text-muted-foreground">لا توجد كروبات مسجلة لهذه الدورة</div>
+-                  ) : filteredGroups.map(g => (
+-                    <SelectItem key={g.id} value={g.id}>{g.name} - {g.electronicGroup}</SelectItem>
+-                  ))}
+-                </SelectContent>
+-              </Select>
+-            </div>
++              {isPrivate && (
++                <div className="mb-6 space-y-6 rounded-2xl border border-purple-200 bg-purple-50/80 p-5 dark:border-primary/30 dark:bg-primary/10 md:p-6">
++                  <div className="flex items-center">
++                    <Star className="ml-2 h-5 w-5 text-purple-600 dark:text-primary" />
++                    <h4 className="font-extrabold text-purple-800 dark:text-primary">بيانات الدورة الخاصة</h4>
++                  </div>
++
++                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
++                    <div className="space-y-2">
++                      <Label className="font-bold text-gray-700 dark:text-foreground">رقم الوصل <RequiredMark /></Label>
++                      <div className="relative">
++                        <FieldIcon icon={Receipt} className="text-purple-400" />
++                        <Input value={form.receiptNo} onChange={e => updateForm('receiptNo', e.target.value)} required placeholder="أدخل رقم الوصل" className="h-12 rounded-xl border border-purple-200 bg-white pr-10 pl-4 focus-visible:ring-2 focus-visible:ring-purple-500 dark:border-primary/30 dark:bg-white/10" />
++                      </div>
++                    </div>
++                    <div className="space-y-2">
++                      <Label className="font-bold text-gray-700 dark:text-foreground">تسلسل الكود <RequiredMark /></Label>
++                      <div className="relative">
++                        <FieldIcon icon={Barcode} className="text-purple-400" />
++                        <Input value={form.codeSequence} onChange={e => updateForm('codeSequence', e.target.value)} required placeholder="أدخل تسلسل الكود" className="h-12 rounded-xl border border-purple-200 bg-white pr-10 pl-4 focus-visible:ring-2 focus-visible:ring-purple-500 dark:border-primary/30 dark:bg-white/10" />
++                      </div>
++                    </div>
++                  </div>
++
++                  <div className="border-t border-purple-200 pt-6 dark:border-primary/20">
++                    <h4 className="mb-4 flex items-center font-extrabold text-purple-800 dark:text-primary">
++                      <Coins className="ml-2 h-5 w-5" />
++                      نظام الأقساط
++                    </h4>
++                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
++                      <div className="space-y-2">
++                        <Label className="font-bold text-gray-700 dark:text-foreground">المبلغ الكلي <RequiredMark /></Label>
++                        <div className="relative">
++                          <Input value={form.totalAmount} onChange={e => updateAmountForm('totalAmount', e.target.value)} required inputMode="numeric" placeholder="0" className="h-12 rounded-xl border border-purple-200 bg-white pl-12 pr-4 focus-visible:ring-2 focus-visible:ring-purple-500 dark:border-primary/30 dark:bg-white/10" />
++                          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-gray-500">د.ع</span>
++                        </div>
++                      </div>
++                      <div className="space-y-2">
++                        <Label className="font-bold text-gray-700 dark:text-foreground">المبلغ المدفوع <RequiredMark /></Label>
++                        <div className="relative">
++                          <Input value={form.paidAmount} onChange={e => updateAmountForm('paidAmount', e.target.value)} required inputMode="numeric" placeholder="0" className="h-12 rounded-xl border border-purple-200 bg-white pl-12 pr-4 focus-visible:ring-2 focus-visible:ring-purple-500 dark:border-primary/30 dark:bg-white/10" />
++                          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-gray-500">د.ع</span>
++                        </div>
++                      </div>
++                      <div className="space-y-2">
++                        <Label className="font-bold text-gray-700 dark:text-foreground">المبلغ المتبقي</Label>
++                        <div className="relative">
++                          <Input value={String(remainingAmount)} readOnly placeholder="0" className="h-12 rounded-xl border border-gray-200 bg-gray-100 pl-12 pr-4 font-bold text-red-600 dark:border-white/10 dark:bg-white/5" />
++                          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-gray-500">د.ع</span>
++                        </div>
++                        <p className="text-xs text-muted-foreground">المتبقي: {formatAmount(remainingAmount)} د.ع</p>
++                      </div>
++                    </div>
++                  </div>
++                </div>
++              )}
+ 
+-            {isPrivate && (
+-              <>
++              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                 <div className="space-y-2">
+-                  <Label>رقم الوصل</Label>
+-                  <Input value={form.receiptNo} onChange={e => updateForm('receiptNo', e.target.value)} required placeholder="R-1001" />
++                  <Label className="font-bold text-gray-700 dark:text-foreground">الموقع الرئيسي <RequiredMark /></Label>
++                  <Select value={form.mainSite} onValueChange={v => setForm(prev => ({ ...prev, mainSite: v, subSite: '' }))} disabled={isPrivate}>
++                    <SelectTrigger className={`${selectTriggerClass} disabled:opacity-100`} aria-required="true">
++                      <SelectValue />
++                    </SelectTrigger>
++                    <SelectContent>
++                      {mainSiteOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
++                    </SelectContent>
++                  </Select>
++                  <p className={isPrivate ? 'text-xs font-bold text-purple-600 dark:text-primary' : 'text-xs text-gray-500 dark:text-muted-foreground'}>
++                    {isPrivate ? <><Lock className="ml-1 inline h-3.5 w-3.5" /> تم تحديد بغداد تلقائياً للدورة الخاصة</> : 'اختر الموقع الرئيسي حسب الدورة'}
++                  </p>
+                 </div>
++
+                 <div className="space-y-2">
+-                  <Label>تسلسل الكود</Label>
+-                  <Input value={form.codeSequence} onChange={e => updateForm('codeSequence', e.target.value)} required placeholder="A-001" />
++                  <Label className="font-bold text-gray-700 dark:text-foreground">الموقع الفرعي {subSiteOptions.length > 0 && <RequiredMark />}</Label>
++                  <Select value={form.subSite} onValueChange={v => updateForm('subSite', v)} disabled={subSiteOptions.length === 0}>
++                    <SelectTrigger className={selectTriggerClass} aria-required={subSiteOptions.length > 0}>
++                      <SelectValue placeholder={subSiteOptions.length === 0 ? 'لا توجد مواقع فرعية' : 'اختر الموقع الفرعي...'} />
++                    </SelectTrigger>
++                    <SelectContent>
++                      {subSiteOptions.length === 0 ? (
++                        <div className="px-3 py-2 text-sm text-muted-foreground">لا توجد مواقع فرعية لهذا الموقع</div>
++                      ) : subSiteOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
++                    </SelectContent>
++                  </Select>
+                 </div>
+-                <div className="space-y-2">
+-                  <Label>القسط الأول</Label>
+-                  <Input type="number" min={0} value={form.installment} onChange={e => updateForm('installment', e.target.value)} required placeholder="150000" />
++
++                <div className="space-y-2 md:col-span-2">
++                  <Label className="font-bold text-gray-700 dark:text-foreground">الكروب الإلكتروني <RequiredMark /></Label>
++                  <Select value={form.groupId} onValueChange={v => updateForm('groupId', v)} disabled={!form.courseId || filteredGroups.length === 0}>
++                    <SelectTrigger className={selectTriggerClass} aria-required="true">
++                      <SelectValue placeholder={!form.courseId ? 'اختر الدورة أولاً...' : filteredGroups.length === 0 ? 'لا توجد كروبات إلكترونية' : 'اختر الكروب الإلكتروني...'} />
++                    </SelectTrigger>
++                    <SelectContent>
++                      {!form.courseId ? (
++                        <div className="px-3 py-2 text-sm text-muted-foreground">اختر الدورة أولاً</div>
++                      ) : filteredGroups.length === 0 ? (
++                        <div className="px-3 py-2 text-sm text-muted-foreground">لا توجد كروبات إلكترونية لهذه الدورة</div>
++                      ) : filteredGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name} - {g.electronicGroup}</SelectItem>)}
++                    </SelectContent>
++                  </Select>
+                 </div>
+-              </>
+-            )}
++              </div>
++            </section>
+ 
+-            <div className="space-y-2">
+-              <Label>تاريخ إضافة الطالب</Label>
+-              <Input type="date" value={form.createdAt} onChange={e => updateForm('createdAt', e.target.value)} required />
+-            </div>
+-            <div className="space-y-2">
+-              <Label>بداية المحاسبة</Label>
+-              <Input
+-                value={form.accountingStart}
+-                onChange={e => updateAccountingDays(e.target.value)}
+-                placeholder="مثلاً 7"
+-                inputMode="numeric"
+-                pattern="(?:[1-9]|[12][0-9]|30)"
+-                required
+-              />
+-              <p className="text-xs leading-5 text-muted-foreground">
+-                أي رقم من 1 إلى 30 يمثل عدد الأيام المتاحة للطالب قبل أن يبدأ احتسابه ضمن المحاسبة.
+-              </p>
+-            </div>
++            <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
++              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-white/10 dark:bg-white/5">
++                <Label className="mb-2 block font-bold text-gray-700 dark:text-foreground">فترة السماح (أيام)</Label>
++                <div className="flex items-center gap-4">
++                  <Input value={form.accountingStart} onChange={e => updateGraceDays(e.target.value)} inputMode="numeric" pattern="(?:[0-9]|[12][0-9]|30)" required className="h-11 w-24 rounded-lg text-center" />
++                  <span className="text-sm text-gray-500 dark:text-muted-foreground">أيام لا تُحتسب فيها النقاط</span>
++                </div>
++              </div>
++
++              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-white/10 dark:bg-white/5">
++                <Label className="mb-3 block font-bold text-gray-700 dark:text-foreground">الجنس <RequiredMark /></Label>
++                <div className="flex gap-8">
++                  <label className="inline-flex cursor-pointer items-center">
++                    <input type="radio" name="gender" value="ذكر" checked={form.gender === 'ذكر'} onChange={() => updateForm('gender', 'ذكر')} required className="h-5 w-5 accent-blue-600" />
++                    <span className="mr-2 font-medium text-gray-700 dark:text-foreground">ذكر</span>
++                  </label>
++                  <label className="inline-flex cursor-pointer items-center">
++                    <input type="radio" name="gender" value="أنثى" checked={form.gender === 'أنثى'} onChange={() => updateForm('gender', 'أنثى')} required className="h-5 w-5 accent-pink-500" />
++                    <span className="mr-2 font-medium text-gray-700 dark:text-foreground">أنثى</span>
++                  </label>
++                </div>
++              </div>
++            </section>
+ 
+-            <div className="md:col-span-2 lg:col-span-3 flex gap-3">
+-              <Button type="submit" className="flex-1">تسجيل الطالب</Button>
+-              <Button type="button" variant="outline" onClick={() => setShowRules(true)}>
+-                عرض شروط الدورة الخاصة
++            <div className="flex flex-col gap-3 pt-3 md:flex-row md:items-center md:justify-between">
++              <div className="flex items-start gap-2 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-800 dark:border-primary/20 dark:bg-primary/10 dark:text-primary">
++                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
++                <span>الدورة الخاصة تثبت الموقع الرئيسي على بغداد وتطلب اختيار المنصور أو زيونة أو البنوك مع بيانات الوصل والأقساط.</span>
++              </div>
++              <Button type="submit" className="h-14 min-w-56 rounded-xl px-10 py-4 text-lg font-bold shadow-lg transition-all hover:shadow-xl">
++                <Save className="ml-3 h-5 w-5" />
++                حفظ بيانات الطالب
+               </Button>
+             </div>
+           </form>
+-        </CardContent>
+-      </Card>
++        </div>
++      </div>
+ 
+       <Dialog open={showRules} onOpenChange={setShowRules}>
+         <DialogContent dir="rtl">
+           <DialogHeader>
+             <DialogTitle>شروط الدورة الخاصة</DialogTitle>
+           </DialogHeader>
+-          <ul className="space-y-2 text-sm list-disc list-inside">
+-            <li>الموقع الرئيسي بغداد ثابت ومغلق.</li>
+-            <li>الموقع الفرعي لا يعرض إلا المناطق التابعة لبغداد أو المناطق المعرفة للدورة.</li>
+-            <li>يفتح قسم الأقساط ورقم الوصل وتسلسل الكود فقط للدورة الخاصة.</li>
++          <ul className="space-y-3 text-sm leading-7">
++            <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 text-green-600" /> الموقع الرئيسي يثبت تلقائياً على بغداد.</li>
++            <li className="flex gap-2"><MapPin className="mt-1 h-4 w-4 text-purple-600" /> الموقع الفرعي مطلوب ويعرض فقط: المنصور، زيونة، البنوك.</li>
++            <li className="flex gap-2"><WalletCards className="mt-1 h-4 w-4 text-blue-600" /> تظهر حقول رقم الوصل، تسلسل الكود، المبلغ الكلي، المدفوع، والمتبقي للدورات الخاصة فقط.</li>
++            <li className="flex gap-2"><Users className="mt-1 h-4 w-4 text-blue-600" /> الكروب الإلكتروني يتغير حسب الدورة المختارة.</li>
++            <li className="flex gap-2"><VenusAndMars className="mt-1 h-4 w-4 text-pink-600" /> الجنس وفترة السماح من بيانات التسجيل الأساسية.</li>
+           </ul>
+         </DialogContent>
+       </Dialog>
+--- /mnt/data/teacherpro_original/TeacherPro-main/src/components/teacher-pro/student-registry.tsx	2026-05-28 08:58:16.000000000 +0000
++++ /mnt/data/teacherpro_work/TeacherPro-main/src/components/teacher-pro/student-registry.tsx	2026-05-28 09:12:49.414874026 +0000
+@@ -18,6 +18,7 @@
+ 
+ type StudentEditForm = {
+   name: string;
++  school: string;
+   gender: 'ذكر' | 'أنثى';
+   phone: string;
+   parentPhone: string;
+@@ -29,13 +30,15 @@
+   subSite: string;
+   receiptNo: string;
+   codeSequence: string;
+-  installment: string;
++  totalAmount: string;
++  paidAmount: string;
+   createdAt: string;
+   accountingStart: string;
+ };
+ 
+ const emptyEditForm: StudentEditForm = {
+   name: '',
++  school: '',
+   gender: 'ذكر',
+   phone: '',
+   parentPhone: '',
+@@ -47,7 +50,8 @@
+   subSite: '',
+   receiptNo: '',
+   codeSequence: '',
+-  installment: '',
++  totalAmount: '',
++  paidAmount: '',
+   createdAt: new Date().toISOString().slice(0, 10),
+   accountingStart: '',
+ };
+@@ -55,6 +59,7 @@
+ function getStudentEditForm(student: Student): StudentEditForm {
+   return {
+     name: student.name,
++    school: student.school || '',
+     gender: student.gender,
+     phone: student.phone,
+     parentPhone: student.parentPhone,
+@@ -66,7 +71,8 @@
+     subSite: student.subSite || '',
+     receiptNo: student.receiptNo || '',
+     codeSequence: student.codeSequence || '',
+-    installment: student.installments?.[0]?.amount ? String(student.installments[0].amount) : '',
++    totalAmount: student.totalAmount ? String(student.totalAmount) : '',
++    paidAmount: student.paidAmount ? String(student.paidAmount) : (student.installments?.[0]?.amount ? String(student.installments[0].amount) : ''),
+     createdAt: student.createdAt || new Date().toISOString().slice(0, 10),
+     accountingStart: student.accountingStart || '',
+   };
+@@ -130,7 +136,7 @@
+     return [...PUBLIC_MAIN_SITE_OPTIONS];
+   }, [editIsPrivate]);
+ 
+-  const editSubSiteOptions = useMemo(() => {
++  const editSubSiteOptions = useMemo<string[]>(() => {
+     // خاصة + بغداد → المنصور، زيونة، البنوك
+     if (editIsPrivate && editDialog.form.mainSite === 'بغداد') return [...PRIVATE_BAGHDAD_SUB_SITES];
+     // عامة + بغداد → لا مواقع فرعية
+@@ -140,19 +146,25 @@
+     return [];
+   }, [editIsPrivate, editDialog.form.mainSite]);
+ 
++  const editTotalAmount = Number(editDialog.form.totalAmount || 0);
++  const editPaidAmount = Number(editDialog.form.paidAmount || 0);
++  const editRemainingAmount = Math.max(editTotalAmount - editPaidAmount, 0);
++
+   useEffect(() => {
+     if (!editDialog.open) return;
++    let nextPatch: Partial<StudentEditForm> | null = null;
+     if (!editMainSiteOptions.includes(editDialog.form.mainSite)) {
+-      setEditDialog(prev => ({ ...prev, form: { ...prev.form, mainSite: editMainSiteOptions[0] || '', subSite: '' } }));
+-      return;
+-    }
+-    if (editSubSiteOptions.length === 0 && editDialog.form.subSite) {
+-      setEditDialog(prev => ({ ...prev, form: { ...prev.form, subSite: '' } }));
+-      return;
+-    }
+-    if (editSubSiteOptions.length > 0 && !editSubSiteOptions.includes(editDialog.form.subSite)) {
+-      setEditDialog(prev => ({ ...prev, form: { ...prev.form, subSite: editSubSiteOptions[0] } }));
++      nextPatch = { mainSite: editMainSiteOptions[0] || '', subSite: '' };
++    } else if (editSubSiteOptions.length === 0 && editDialog.form.subSite) {
++      nextPatch = { subSite: '' };
++    } else if (editSubSiteOptions.length > 0 && !editSubSiteOptions.includes(editDialog.form.subSite)) {
++      nextPatch = { subSite: '' };
+     }
++    if (!nextPatch) return;
++    const patch = nextPatch;
++    queueMicrotask(() => {
++      setEditDialog(prev => ({ ...prev, form: { ...prev.form, ...patch } }));
++    });
+   }, [editDialog.open, editDialog.form.mainSite, editDialog.form.subSite, editMainSiteOptions, editSubSiteOptions]);
+ 
+   const openEditDialog = (student: Student) => {
+@@ -179,8 +191,8 @@
+     const form = editDialog.form;
+     const requiredChecks: [boolean, string][] = [
+       [Boolean(form.name.trim()), 'اسم الطالب مطلوب'],
++      [Boolean(form.school.trim()), 'اسم المدرسة مطلوب'],
+       [Boolean(form.gender), 'الجنس مطلوب'],
+-      [Boolean(form.telegram.trim()), 'معرف التلكرام مطلوب'],
+       [Boolean(form.phone.trim()), 'رقم الطالب مطلوب'],
+       [Boolean(form.parentPhone.trim()), 'رقم ولي الأمر مطلوب'],
+       [Boolean(form.courseType), 'نوع الدورة مطلوب'],
+@@ -189,14 +201,15 @@
+       [editSubSiteOptions.length === 0 || Boolean(form.subSite), editSubSiteOptions.length === 0 ? 'لا توجد مناطق فرعية لهذا الموقع' : 'الموقع الفرعي مطلوب'],
+       [Boolean(form.groupId), editFilteredGroups.length === 0 ? 'لا توجد كروبات مسجلة لهذه الدورة' : 'الكروب الإلكتروني مطلوب'],
+       [Boolean(form.createdAt), 'تاريخ إضافة الطالب مطلوب'],
+-      [Boolean(form.accountingStart), 'بداية المحاسبة مطلوبة'],
++      [form.accountingStart.trim() !== '', 'فترة السماح مطلوبة'],
+     ];
+ 
+     if (form.courseType === 'خاصة') {
+       requiredChecks.push(
+         [Boolean(form.receiptNo.trim()), 'رقم الوصل مطلوب'],
+         [Boolean(form.codeSequence.trim()), 'تسلسل الكود مطلوب'],
+-        [Boolean(form.installment.trim()), 'القسط الأول مطلوب'],
++        [form.totalAmount.trim() !== '', 'المبلغ الكلي مطلوب'],
++        [form.paidAmount.trim() !== '', 'المبلغ المدفوع مطلوب'],
+       );
+     }
+ 
+@@ -209,7 +222,8 @@
+     const parentPhoneError = getPhoneValidationError(form.parentPhone, 'رقم ولي الأمر', true);
+     if (parentPhoneError) return parentPhoneError;
+ 
+-    if (!isValidAccountingGraceDays(form.accountingStart)) return 'بداية المحاسبة يجب أن تكون رقماً من 1 إلى 30 يوم';
++    if (!isValidAccountingGraceDays(form.accountingStart)) return 'فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم';
++    if (form.courseType === 'خاصة' && Number(form.paidAmount || 0) > Number(form.totalAmount || 0)) return 'المبلغ المدفوع لا يمكن أن يكون أكبر من المبلغ الكلي';
+ 
+     const duplicateMessage = getStudentDuplicateMessage(students, {
+       id: editDialog.id,
+@@ -230,6 +244,7 @@
+     const form = editDialog.form;
+     const result = updateStudent(editDialog.id, {
+       name: form.name.trim(),
++      school: form.school.trim(),
+       gender: form.gender,
+       phone: form.phone.trim(),
+       parentPhone: form.parentPhone.trim(),
+@@ -241,10 +256,12 @@
+       subSite: form.subSite,
+       receiptNo: form.courseType === 'خاصة' ? form.receiptNo.trim() : '',
+       codeSequence: form.courseType === 'خاصة' ? form.codeSequence.trim() : '',
++      totalAmount: form.courseType === 'خاصة' ? Number(form.totalAmount) || 0 : 0,
++      paidAmount: form.courseType === 'خاصة' ? Number(form.paidAmount) || 0 : 0,
+       installments: form.courseType === 'خاصة' ? [{
+         date: originalStudent?.installments?.[0]?.date || new Date().toISOString().slice(0, 10),
+-        amount: Number(form.installment) || 0,
+-        note: originalStudent?.installments?.[0]?.note || 'قسط عند التسجيل',
++        amount: Number(form.paidAmount) || 0,
++        note: originalStudent?.installments?.[0]?.note || 'دفعة التسجيل',
+       }] : [],
+       createdAt: form.createdAt,
+       accountingStart: form.accountingStart,
+@@ -267,7 +284,7 @@
+ 
+   const filtered = useMemo(() => {
+     return students.filter(s => {
+-      if (search && !s.name.includes(search) && !s.code.includes(search) && !s.telegram.includes(search) && !s.phone.includes(search) && !s.parentPhone.includes(search)) return false;
++      if (search && !s.name.includes(search) && !(s.school || '').includes(search) && !s.code.includes(search) && !(s.telegram || '').includes(search) && !s.phone.includes(search) && !s.parentPhone.includes(search)) return false;
+       if (filterCourseType && s.courseType !== filterCourseType) return false;
+       if (filterCourseId && s.courseId !== filterCourseId) return false;
+       if (filterStatus && s.status !== filterStatus) return false;
+@@ -295,11 +312,12 @@
+   };
+ 
+   const exportCSV = () => {
+-    const headers = ['الكود', 'الاسم', 'الجنس', 'نوع الدورة', 'الدورة', 'الموقع', 'الحالة', 'الفرص', 'الهاتف', 'ولي الأمر', 'التلكرام'];
++    const headers = ['الكود', 'الاسم', 'المدرسة', 'الجنس', 'نوع الدورة', 'الدورة', 'الموقع', 'الحالة', 'الفرص', 'الهاتف', 'ولي الأمر', 'التلكرام', 'المبلغ الكلي', 'المبلغ المدفوع', 'المبلغ المتبقي'];
+     const rows = filtered.map(s => ({
+-      'الكود': s.code, 'الاسم': s.name, 'الجنس': s.gender, 'نوع الدورة': s.courseType,
++      'الكود': s.code, 'الاسم': s.name, 'المدرسة': s.school || '', 'الجنس': s.gender, 'نوع الدورة': s.courseType,
+       'الدورة': courseName(s.courseId), 'الموقع': `${s.mainSite} - ${s.subSite}`,
+-      'الحالة': s.status, 'الفرص': String(s.opportunities), 'الهاتف': s.phone, 'ولي الأمر': s.parentPhone, 'التلكرام': s.telegram,
++      'الحالة': s.status, 'الفرص': String(s.opportunities), 'الهاتف': s.phone, 'ولي الأمر': s.parentPhone, 'التلكرام': s.telegram || '',
++      'المبلغ الكلي': String(s.totalAmount || 0), 'المبلغ المدفوع': String(s.paidAmount || 0), 'المبلغ المتبقي': String(Math.max((s.totalAmount || 0) - (s.paidAmount || 0), 0)),
+     }));
+     const csv = '\ufeff' + [headers.join(','), ...rows.map(r => headers.map(h => `"${(r as unknown as Record<string, string>)[h] || ''}"`).join(','))].join('\n');
+     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+@@ -408,6 +426,7 @@
+                 <div>
+                   <p className="font-bold">{student.name}</p>
+                   <p className="text-xs text-muted-foreground">{student.code}</p>
++                  <p className="text-xs text-muted-foreground">{student.school || 'بدون مدرسة'}</p>
+                 </div>
+                 <Badge variant={student.status === 'نشط' ? 'default' : 'destructive'}>
+                   {student.status}
+@@ -433,7 +452,7 @@
+                 </div>
+                 <div>
+                   <span className="text-muted-foreground text-xs">تلكرام</span>
+-                  <p className="text-xs"><ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink></p>
++                  <p className="text-xs">{student.telegram ? <ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink> : '-'}</p>
+                 </div>
+                 <div>
+                   <span className="text-muted-foreground text-xs">رقم الطالب</span>
+@@ -444,9 +463,15 @@
+                   <p className="text-xs"><ContactLink href={whatsappLink(student.parentPhone)}>{student.parentPhone}</ContactLink></p>
+                 </div>
+                 <div>
+-                  <span className="text-muted-foreground text-xs">بداية المحاسبة</span>
+-                  <p className="font-medium text-xs">بعد {student.accountingStart || '-'} يوم</p>
++                  <span className="text-muted-foreground text-xs">فترة السماح</span>
++                  <p className="font-medium text-xs">{student.accountingStart || '0'} يوم</p>
+                 </div>
++                {student.courseType === 'خاصة' && (
++                  <div>
++                    <span className="text-muted-foreground text-xs">الأقساط</span>
++                    <p className="font-medium text-xs">{student.paidAmount || 0} / {student.totalAmount || 0} د.ع</p>
++                  </div>
++                )}
+               </div>
+ 
+               {student.status === 'مفصول' && (
+@@ -500,6 +525,10 @@
+               <Input value={editDialog.form.name} onChange={e => updateEditForm('name', e.target.value)} required placeholder="اسم الطالب الرباعي" />
+             </div>
+             <div className="space-y-2">
++              <Label>اسم المدرسة</Label>
++              <Input value={editDialog.form.school} onChange={e => updateEditForm('school', e.target.value)} required placeholder="اسم المدرسة" />
++            </div>
++            <div className="space-y-2">
+               <Label>الجنس</Label>
+               <Select value={editDialog.form.gender} onValueChange={v => updateEditForm('gender', v)}>
+                 <SelectTrigger><SelectValue /></SelectTrigger>
+@@ -511,7 +540,7 @@
+             </div>
+             <div className="space-y-2">
+               <Label>معرف التلكرام</Label>
+-              <Input value={editDialog.form.telegram} onChange={e => updateEditTelegram(e.target.value)} required placeholder="username بدون @" />
++              <Input value={editDialog.form.telegram} onChange={e => updateEditTelegram(e.target.value)} placeholder="اختياري - username بدون @" />
+             </div>
+             <div className="space-y-2">
+               <Label>رقم الطالب</Label>
+@@ -523,7 +552,7 @@
+             </div>
+             <div className="space-y-2">
+               <Label>نوع الدورة</Label>
+-              <Select value={editDialog.form.courseType} onValueChange={v => setEditDialog(prev => ({ ...prev, form: { ...prev.form, courseType: v as 'خاصة' | 'عامة', courseId: '', groupId: '', mainSite: 'بغداد', subSite: '', receiptNo: v === 'خاصة' ? prev.form.receiptNo : '', codeSequence: v === 'خاصة' ? prev.form.codeSequence : '', installment: v === 'خاصة' ? prev.form.installment : '' } }))}>
++              <Select value={editDialog.form.courseType} onValueChange={v => setEditDialog(prev => ({ ...prev, form: { ...prev.form, courseType: v as 'خاصة' | 'عامة', courseId: '', groupId: '', mainSite: 'بغداد', subSite: '', receiptNo: v === 'خاصة' ? prev.form.receiptNo : '', codeSequence: v === 'خاصة' ? prev.form.codeSequence : '', totalAmount: v === 'خاصة' ? prev.form.totalAmount : '', paidAmount: v === 'خاصة' ? prev.form.paidAmount : '' } }))}>
+                 <SelectTrigger><SelectValue /></SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value="خاصة">خاصة</SelectItem>
+@@ -578,8 +607,16 @@
+                   <Input value={editDialog.form.codeSequence} onChange={e => updateEditForm('codeSequence', e.target.value)} required />
+                 </div>
+                 <div className="space-y-2">
+-                  <Label>القسط الأول</Label>
+-                  <Input type="number" min={0} value={editDialog.form.installment} onChange={e => updateEditForm('installment', e.target.value)} required />
++                  <Label>المبلغ الكلي</Label>
++                  <Input type="number" min={0} value={editDialog.form.totalAmount} onChange={e => updateEditForm('totalAmount', e.target.value)} required />
++                </div>
++                <div className="space-y-2">
++                  <Label>المبلغ المدفوع</Label>
++                  <Input type="number" min={0} value={editDialog.form.paidAmount} onChange={e => updateEditForm('paidAmount', e.target.value)} required />
++                </div>
++                <div className="space-y-2">
++                  <Label>المبلغ المتبقي</Label>
++                  <Input value={String(editRemainingAmount)} readOnly className="font-bold text-destructive" />
+                 </div>
+               </>
+             )}
+@@ -588,9 +625,9 @@
+               <Input type="date" value={editDialog.form.createdAt} onChange={e => updateEditForm('createdAt', e.target.value)} required />
+             </div>
+             <div className="space-y-2">
+-              <Label>بداية المحاسبة</Label>
+-              <Input value={editDialog.form.accountingStart} onChange={e => updateEditAccountingDays(e.target.value)} inputMode="numeric" pattern="(?:[1-9]|[12][0-9]|30)" required placeholder="مثلاً 7" />
+-              <p className="text-xs leading-5 text-muted-foreground">الرقم من 1 إلى 30 هو عدد الأيام المتاحة قبل بدء محاسبة الطالب.</p>
++              <Label>فترة السماح</Label>
++              <Input value={editDialog.form.accountingStart} onChange={e => updateEditAccountingDays(e.target.value)} inputMode="numeric" pattern="(?:[0-9]|[12][0-9]|30)" required placeholder="مثلاً 7" />
++              <p className="text-xs leading-5 text-muted-foreground">الرقم من 0 إلى 30 هو عدد الأيام التي لا تُحتسب فيها النقاط.</p>
+             </div>
+           </div>
+           <DialogFooter>
+@@ -655,16 +692,18 @@
+               <div className="grid grid-cols-2 gap-3 text-sm">
+                 <div><span className="text-muted-foreground">الكود:</span> <strong>{fileDialog.student.code}</strong></div>
+                 <div><span className="text-muted-foreground">الجنس:</span> <strong>{fileDialog.student.gender}</strong></div>
++                <div><span className="text-muted-foreground">المدرسة:</span> <strong>{fileDialog.student.school || '-'}</strong></div>
+                 <div><span className="text-muted-foreground">الهاتف:</span> <ContactLink href={whatsappLink(fileDialog.student.phone)}>{fileDialog.student.phone}</ContactLink></div>
+                 <div><span className="text-muted-foreground">ولي الأمر:</span> <ContactLink href={whatsappLink(fileDialog.student.parentPhone)}>{fileDialog.student.parentPhone}</ContactLink></div>
+-                <div><span className="text-muted-foreground">التلكرام:</span> <ContactLink href={telegramLink(fileDialog.student.telegram)}>{fileDialog.student.telegram}</ContactLink></div>
++                <div><span className="text-muted-foreground">التلكرام:</span> {fileDialog.student.telegram ? <ContactLink href={telegramLink(fileDialog.student.telegram)}>{fileDialog.student.telegram}</ContactLink> : '-'}</div>
+                 <div><span className="text-muted-foreground">الدورة:</span> <strong>{courseName(fileDialog.student.courseId)}</strong></div>
+                 <div><span className="text-muted-foreground">الكروب:</span> <strong>{groupName(fileDialog.student.groupId)}</strong></div>
+                 <div><span className="text-muted-foreground">الموقع:</span> <strong>{fileDialog.student.mainSite} - {fileDialog.student.subSite}</strong></div>
+                 <div><span className="text-muted-foreground">الفرص:</span> <strong>{fileDialog.student.opportunities} / {fileDialog.student.baseOpportunities}</strong></div>
+                 <div><span className="text-muted-foreground">الحالة:</span> <Badge variant={fileDialog.student.status === 'نشط' ? 'default' : 'destructive'}>{fileDialog.student.status}</Badge></div>
+                 <div><span className="text-muted-foreground">تاريخ التسجيل:</span> <strong>{fileDialog.student.createdAt}</strong></div>
+-                <div><span className="text-muted-foreground">بداية المحاسبة:</span> <strong>بعد {fileDialog.student.accountingStart || '-'} يوم</strong></div>
++                <div><span className="text-muted-foreground">فترة السماح:</span> <strong>{fileDialog.student.accountingStart || '0'} يوم</strong></div>
++                {fileDialog.student.courseType === 'خاصة' && <div><span className="text-muted-foreground">الأقساط:</span> <strong>{fileDialog.student.paidAmount || 0} / {fileDialog.student.totalAmount || 0} د.ع</strong></div>}
+               </div>
+ 
+               {fileDialog.student.courseType === 'خاصة' && fileDialog.student.installments.length > 0 && (
+--- /mnt/data/teacherpro_original/TeacherPro-main/src/lib/teacher-store.ts	2026-05-28 08:58:16.000000000 +0000
++++ /mnt/data/teacherpro_work/TeacherPro-main/src/lib/teacher-store.ts	2026-05-28 09:13:45.531297251 +0000
+@@ -66,6 +66,7 @@
+ export interface Student {
+   id: string;
+   name: string;
++  school: string;
+   gender: 'ذكر' | 'أنثى';
+   phone: string;
+   parentPhone: string;
+@@ -78,6 +79,8 @@
+   receiptNo: string;
+   codeSequence: string;
+   code: string;
++  totalAmount: number;
++  paidAmount: number;
+   installments: Installment[];
+   status: 'نشط' | 'مفصول';
+   dismissalType: string;
+@@ -743,6 +746,9 @@
+ 
+           const students = (serverData.students || []).map((st: Record<string, unknown>) => ({
+             ...st,
++            school: String(st.school || ''),
++            totalAmount: Number(st.totalAmount || 0),
++            paidAmount: Number(st.paidAmount || 0),
+             opportunities: Number(st.opportunities || 0),
+             baseOpportunities: Number(st.baseOpportunities || 0),
+             installments: parseArrayField(st.installments),
+@@ -1064,6 +1070,7 @@
+         const sanitizedStudentData = {
+           ...studentData,
+           name: studentData.name.trim(),
++          school: studentData.school.trim(),
+           phone: studentData.phone.trim(),
+           parentPhone: studentData.parentPhone.trim(),
+           telegram: sanitizeTelegramInput(studentData.telegram),
+@@ -1092,6 +1099,7 @@
+           ...current,
+           ...updates,
+           name: updates.name !== undefined ? updates.name.trim() : current.name,
++          school: updates.school !== undefined ? updates.school.trim() : current.school,
+           phone: updates.phone !== undefined ? updates.phone.trim() : current.phone,
+           parentPhone: updates.parentPhone !== undefined ? updates.parentPhone.trim() : current.parentPhone,
+           telegram: updates.telegram !== undefined ? sanitizeTelegramInput(updates.telegram) : current.telegram,
+@@ -1587,16 +1595,33 @@
+     }),
+     {
+       name: 'teacher-pro-store-v4',
+-      version: 4,
+-      migrate: (persistedState: Record<string, unknown>, version: number) => {
++      version: 5,
++      migrate: (persistedState: unknown, version: number) => {
++        const state = (persistedState ?? {}) as Record<string, unknown>;
++        const nextState: Record<string, unknown> = { ...state };
++
+         // Migration v3 → v4: Replace all courses with the new default courses
+         if (version < 4) {
+-          return {
+-            ...persistedState,
+-            courses: DEFAULT_COURSES.map(c => ({ ...c })),
+-          };
++          nextState.courses = DEFAULT_COURSES.map(c => ({ ...c }));
++        }
++
++        // Migration v4 → v5: normalize new student registration fields
++        if (version < 5 && Array.isArray(nextState.students)) {
++          nextState.students = nextState.students.map((student) => {
++            const st = student as Record<string, unknown>;
++            const firstInstallmentAmount = Array.isArray(st.installments)
++              ? Number((st.installments[0] as Record<string, unknown> | undefined)?.amount || 0)
++              : 0;
++            return {
++              ...st,
++              school: String(st.school || ''),
++              totalAmount: Number(st.totalAmount || 0),
++              paidAmount: Number(st.paidAmount || firstInstallmentAmount || 0),
++            };
++          });
+         }
+-        return persistedState;
++
++        return nextState;
+       },
+       partialize: (state) => ({
+         courses: state.courses,
+--- /mnt/data/teacherpro_original/TeacherPro-main/src/app/api/students/route.ts	2026-05-28 08:58:16.000000000 +0000
++++ /mnt/data/teacherpro_work/TeacherPro-main/src/app/api/students/route.ts	2026-05-28 09:09:22.287555339 +0000
+@@ -19,22 +19,30 @@
+ 
+   const requiredFields = [
+     ['name', 'اسم الطالب مطلوب'],
++    ['school', 'اسم المدرسة مطلوب'],
+     ['gender', 'الجنس مطلوب'],
+-    ['telegram', 'معرف التلكرام مطلوب'],
+     ['courseType', 'نوع الدورة مطلوب'],
+     ['courseId', 'الدورة مطلوبة'],
+     ['groupId', 'الكروب الإلكتروني مطلوب'],
+     ['mainSite', 'الموقع الرئيسي مطلوب'],
+-    ['subSite', 'الموقع الفرعي مطلوب'],
+     ['createdAt', 'تاريخ إضافة الطالب مطلوب'],
+-    ['accountingStart', 'بداية المحاسبة مطلوبة'],
++    ['accountingStart', 'فترة السماح مطلوبة'],
+   ] as const;
+   const missingField = requiredFields.find(([key]) => !String(body[key] ?? '').trim());
+   if (missingField) return NextResponse.json({ error: missingField[1] }, { status: 400 });
++
++  const requiresSubSite = body.courseType === 'خاصة' || body.mainSite === 'محافظات';
++  if (requiresSubSite && !String(body.subSite ?? '').trim()) {
++    return NextResponse.json({ error: 'الموقع الفرعي مطلوب' }, { status: 400 });
++  }
++
+   if (body.courseType === 'خاصة') {
+     if (!String(body.receiptNo ?? '').trim()) return NextResponse.json({ error: 'رقم الوصل مطلوب' }, { status: 400 });
+     if (!String(body.codeSequence ?? '').trim()) return NextResponse.json({ error: 'تسلسل الكود مطلوب' }, { status: 400 });
+-    if (!Array.isArray(body.installments) || body.installments.length === 0) return NextResponse.json({ error: 'القسط الأول مطلوب' }, { status: 400 });
++    if (String(body.totalAmount ?? '').trim() === '') return NextResponse.json({ error: 'المبلغ الكلي مطلوب' }, { status: 400 });
++    if (String(body.paidAmount ?? '').trim() === '') return NextResponse.json({ error: 'المبلغ المدفوع مطلوب' }, { status: 400 });
++    if (Number(body.paidAmount || 0) > Number(body.totalAmount || 0)) return NextResponse.json({ error: 'المبلغ المدفوع لا يمكن أن يكون أكبر من المبلغ الكلي' }, { status: 400 });
++    if (!Array.isArray(body.installments) || body.installments.length === 0) return NextResponse.json({ error: 'بيانات الدفعة الأولى مطلوبة' }, { status: 400 });
+   }
+ 
+   const duplicateSource = await db.student.findMany({ select: { id: true, name: true, phone: true, telegram: true } });
+@@ -42,13 +50,14 @@
+   if (duplicateMessage) return NextResponse.json({ error: duplicateMessage }, { status: 409 });
+ 
+   if (!isValidAccountingGraceDays(String(body.accountingStart ?? ''))) {
+-    return NextResponse.json({ error: 'بداية المحاسبة يجب أن تكون رقماً من 1 إلى 30' }, { status: 400 });
++    return NextResponse.json({ error: 'فترة السماح يجب أن تكون رقماً من 0 إلى 30' }, { status: 400 });
+   }
+ 
+   const student = await db.student.create({
+     data: {
+       id: body.id,
+       name: String(body.name ?? '').trim(),
++      school: String(body.school ?? '').trim(),
+       gender: body.gender,
+       phone: sanitizePhoneInput(String(body.phone ?? '')),
+       parentPhone: sanitizePhoneInput(String(body.parentPhone ?? '')),
+@@ -59,6 +68,8 @@
+       receiptNo: body.receiptNo,
+       codeSequence: body.codeSequence,
+       code: body.code,
++      totalAmount: Number(body.totalAmount || 0),
++      paidAmount: Number(body.paidAmount || 0),
+       installments: JSON.stringify(body.installments || []),
+       status: body.status || 'نشط',
+       dismissalType: body.dismissalType,
+@@ -101,10 +112,12 @@
+     if (duplicateMessage) return NextResponse.json({ error: duplicateMessage }, { status: 409 });
+   }
+   if (data.createdAt !== undefined) data.createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
++  if (data.totalAmount !== undefined) data.totalAmount = Number(data.totalAmount || 0);
++  if (data.paidAmount !== undefined) data.paidAmount = Number(data.paidAmount || 0);
+   if (data.installments !== undefined) data.installments = JSON.stringify(data.installments || []);
+   if (data.accountingStart !== undefined) {
+     if (!isValidAccountingGraceDays(String(data.accountingStart ?? ''))) {
+-      return NextResponse.json({ error: 'بداية المحاسبة يجب أن تكون رقماً من 1 إلى 30' }, { status: 400 });
++      return NextResponse.json({ error: 'فترة السماح يجب أن تكون رقماً من 0 إلى 30' }, { status: 400 });
+     }
+     data.accountingStart = data.accountingStart ? Number(data.accountingStart) : null;
+   }
+--- /mnt/data/teacherpro_original/TeacherPro-main/src/lib/student-utils.ts	2026-05-28 08:58:16.000000000 +0000
++++ /mnt/data/teacherpro_work/TeacherPro-main/src/lib/student-utils.ts	2026-05-28 09:08:53.781068170 +0000
+@@ -54,5 +54,5 @@
+ }
+ 
+ export function isValidAccountingGraceDays(value: string): boolean {
+-  return /^(?:[1-9]|[12][0-9]|30)$/.test(toLatinDigits(value).trim());
++  return /^(?:[0-9]|[12][0-9]|30)$/.test(toLatinDigits(value).trim());
+ }
+--- /mnt/data/teacherpro_original/TeacherPro-main/prisma/schema.prisma	2026-05-28 08:58:16.000000000 +0000
++++ /mnt/data/teacherpro_work/TeacherPro-main/prisma/schema.prisma	2026-05-28 09:08:59.800099806 +0000
+@@ -62,6 +62,7 @@
+ model Student {
+   id              String   @id @default(cuid())
+   name            String
++  school          String   @default("")
+   gender          String
+   phone           String?
+   parentPhone     String?
+@@ -72,6 +73,8 @@
+   receiptNo       String?
+   codeSequence    String?
+   code            String   @unique
++  totalAmount     Int      @default(0)
++  paidAmount      Int      @default(0)
+   installments    String   @default("[]")
+   status          String   @default("نشط")
+   dismissalType   String?
