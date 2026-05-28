@@ -1,50 +1,98 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import { useTeacherStore } from '@/lib/teacher-store';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { toast } from 'sonner';
+import React, { useState } from "react";
+import { useTeacherStore } from "@/lib/teacher-store";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
+import { useActionLock } from "@/hooks/use-action-lock";
 
 export function CoursesView() {
-  const { courses, addCourse, updateCourse, toggleCourse, deleteCourse } = useTeacherStore();
-  const [name, setName] = useState('');
-  const [type, setType] = useState<'خاصة' | 'عامة'>('خاصة');
-  const [editDialog, setEditDialog] = useState({ open: false, id: '', courseName: '' });
-  const [deleteDialog, setDeleteDialog] = useState({ open: false, id: '', courseName: '' });
+  const { courses, addCourse, updateCourse, toggleCourse, deleteCourse } =
+    useTeacherStore();
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"خاصة" | "عامة">("خاصة");
+  const [editDialog, setEditDialog] = useState({
+    open: false,
+    id: "",
+    courseName: "",
+  });
+  const [deleteDialog, setDeleteDialog] = useState({
+    open: false,
+    id: "",
+    courseName: "",
+  });
+  const { locked: isAddingCourse, runLocked: runAddCourseLocked } =
+    useActionLock();
+  const { locked: isSavingCourse, runLocked: runSaveCourseLocked } =
+    useActionLock();
+  const { locked: isDeletingCourse, runLocked: runDeleteCourseLocked } =
+    useActionLock();
 
   const openEditDialog = (id: string, oldName: string) => {
     setEditDialog({ open: true, id, courseName: oldName });
   };
-  const handleEditSave = () => {
-    if (!editDialog.courseName.trim()) { toast.error('يرجى إدخال اسم الدورة'); return; }
+  const handleEditSave = runSaveCourseLocked(async () => {
+    if (!editDialog.courseName.trim()) {
+      toast.error("يرجى إدخال اسم الدورة");
+      return;
+    }
     updateCourse(editDialog.id, { name: editDialog.courseName.trim() });
-    setEditDialog({ open: false, id: '', courseName: '' });
-    toast.success('تم تعديل الدورة');
-  };
+    setEditDialog({ open: false, id: "", courseName: "" });
+    toast.success("تم تعديل الدورة");
+  });
 
   const openDeleteDialog = (id: string, courseName: string) => {
     setDeleteDialog({ open: true, id, courseName });
   };
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = runDeleteCourseLocked(async () => {
     const ok = deleteCourse(deleteDialog.id);
-    ok ? toast.success('تم حذف الدورة') : toast.error('لا يمكن حذف الدورة لأنها مرتبطة ببيانات أخرى');
-    setDeleteDialog({ open: false, id: '', courseName: '' });
-  };
+    ok
+      ? toast.success("تم حذف الدورة")
+      : toast.error("لا يمكن حذف الدورة لأنها مرتبطة ببيانات أخرى");
+    setDeleteDialog({ open: false, id: "", courseName: "" });
+  });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) { toast.error('يرجى إدخال اسم الدورة'); return; }
-    addCourse(name.trim(), type);
-    setName('');
-    toast.success('تمت إضافة الدورة');
-  };
+  const handleSubmit = runAddCourseLocked(
+    async (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (!name.trim()) {
+        toast.error("يرجى إدخال اسم الدورة");
+        return;
+      }
+      addCourse(name.trim(), type);
+      setName("");
+      toast.success("تمت إضافة الدورة");
+    },
+  );
 
   return (
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -69,7 +117,10 @@ export function CoursesView() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="course-type">نوع الدورة</Label>
-              <Select value={type} onValueChange={(v) => setType(v as 'خاصة' | 'عامة')}>
+              <Select
+                value={type}
+                onValueChange={(v) => setType(v as "خاصة" | "عامة")}
+              >
                 <SelectTrigger id="course-type">
                   <SelectValue />
                 </SelectTrigger>
@@ -79,7 +130,9 @@ export function CoursesView() {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" className="w-full">حفظ الدورة</Button>
+            <Button type="submit" disabled={isAddingCourse} className="w-full">
+              {isAddingCourse ? "جاري الحفظ..." : "حفظ الدورة"}
+            </Button>
           </form>
         </CardContent>
       </Card>
@@ -95,13 +148,18 @@ export function CoursesView() {
               <p className="empty-state">لا توجد دورات بعد</p>
             ) : (
               courses.map((course) => (
-                <div key={course.id} className="flex items-center justify-between gap-3 p-3 rounded-2xl border bg-card/80 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg">
+                <div
+                  key={course.id}
+                  className="flex items-center justify-between gap-3 p-3 rounded-2xl border bg-card/80 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
+                >
                   <div className="flex-1">
                     <p className="font-medium text-sm">{course.name}</p>
-                    <p className="text-xs text-muted-foreground">{course.createdAt} - {course.type}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {course.createdAt} - {course.type}
+                    </p>
                   </div>
-                  <Badge variant={course.active ? 'default' : 'secondary'}>
-                    {course.active ? 'فعالة' : 'معطلة'}
+                  <Badge variant={course.active ? "default" : "secondary"}>
+                    {course.active ? "فعالة" : "معطلة"}
                   </Badge>
                   <div className="flex gap-2">
                     <Button
@@ -109,13 +167,27 @@ export function CoursesView() {
                       size="sm"
                       onClick={() => {
                         toggleCourse(course.id);
-                        toast.success(course.active ? 'تم تعطيل الدورة' : 'تم تفعيل الدورة');
+                        toast.success(
+                          course.active ? "تم تعطيل الدورة" : "تم تفعيل الدورة",
+                        );
                       }}
                     >
-                      {course.active ? 'تعطيل' : 'تفعيل'}
+                      {course.active ? "تعطيل" : "تفعيل"}
                     </Button>
-                    <Button variant="secondary" size="sm" onClick={() => openEditDialog(course.id, course.name)}>تعديل</Button>
-                    <Button variant="destructive" size="sm" onClick={() => openDeleteDialog(course.id, course.name)}>حذف</Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => openEditDialog(course.id, course.name)}
+                    >
+                      تعديل
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => openDeleteDialog(course.id, course.name)}
+                    >
+                      حذف
+                    </Button>
                   </div>
                 </div>
               ))
@@ -124,7 +196,10 @@ export function CoursesView() {
         </CardContent>
       </Card>
       {/* Edit Course Dialog */}
-      <Dialog open={editDialog.open} onOpenChange={o => setEditDialog(prev => ({ ...prev, open: o }))}>
+      <Dialog
+        open={editDialog.open}
+        onOpenChange={(o) => setEditDialog((prev) => ({ ...prev, open: o }))}
+      >
         <DialogContent dir="rtl">
           <DialogHeader>
             <DialogTitle>تعديل اسم الدورة</DialogTitle>
@@ -133,29 +208,57 @@ export function CoursesView() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="course-edit-name">اسم الدورة</Label>
-              <Input id="course-edit-name" name="courseName" autoComplete="off" value={editDialog.courseName} onChange={e => setEditDialog(prev => ({ ...prev, courseName: e.target.value }))} />
+              <Input
+                id="course-edit-name"
+                name="courseName"
+                autoComplete="off"
+                value={editDialog.courseName}
+                onChange={(e) =>
+                  setEditDialog((prev) => ({
+                    ...prev,
+                    courseName: e.target.value,
+                  }))
+                }
+              />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialog(prev => ({ ...prev, open: false }))}>إلغاء</Button>
-            <Button onClick={handleEditSave}>حفظ</Button>
+            <Button
+              variant="outline"
+              onClick={() =>
+                setEditDialog((prev) => ({ ...prev, open: false }))
+              }
+            >
+              إلغاء
+            </Button>
+            <Button onClick={handleEditSave} disabled={isSavingCourse}>
+              {isSavingCourse ? "جاري الحفظ..." : "حفظ"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Delete Course AlertDialog */}
-      <AlertDialog open={deleteDialog.open} onOpenChange={o => setDeleteDialog(prev => ({ ...prev, open: o }))}>
+      <AlertDialog
+        open={deleteDialog.open}
+        onOpenChange={(o) => setDeleteDialog((prev) => ({ ...prev, open: o }))}
+      >
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تريد حذف الدورة &quot;{deleteDialog.courseName}&quot;؟ لا يمكن حذف دورة مرتبطة بطلاب أو امتحانات.
+              هل تريد حذف الدورة &quot;{deleteDialog.courseName}&quot;؟ لا يمكن
+              حذف دورة مرتبطة بطلاب أو امتحانات.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              حذف
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              disabled={isDeletingCourse}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingCourse ? "جاري الحذف..." : "حذف"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
