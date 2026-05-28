@@ -291,7 +291,7 @@ export function StudentRegisterView() {
               </div>
               <div>
                 <CardTitle className="text-2xl font-black tracking-tight text-gradient-brand md:text-3xl">إضافة طالب جديد</CardTitle>
-                <CardDescription className="mt-2 leading-6">نموذج تسجيل متوافق مع هوية TeacherPro وحقول التسجيل المعتمدة.</CardDescription>
+                <CardDescription className="mt-2 leading-6">سجّل بيانات الطالب واختر الدورة والموقع المناسب.</CardDescription>
               </div>
             </div>
             <div className="chip w-fit border-primary/20 bg-primary/10 text-primary">
