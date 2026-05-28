@@ -120,12 +120,12 @@ export function ChaptersView() {
             {/* Add Chapter Form */}
             <form onSubmit={handleAddChapter} className="space-y-4">
               <div className="space-y-2">
-                <Label>اسم الفصل المنهجي</Label>
-                <Input value={chapterName_input} onChange={(e) => setChapterNameInput(e.target.value)} required placeholder="الفصل الأول - الخلية" />
+                <Label htmlFor="chapter-name">اسم الفصل المنهجي</Label>
+                <Input id="chapter-name" name="chapter-name" value={chapterName_input} onChange={(e) => setChapterNameInput(e.target.value)} required placeholder="الفصل الأول - الخلية" />
               </div>
               <div className="space-y-2">
-                <Label>عدد الفرص لهذا الفصل</Label>
-                <Input type="number" min={0} value={opportunities} onChange={(e) => setOpportunities(Number(toLatinDigits(e.target.value)) || 0)} />
+                <Label htmlFor="chapter-opportunities">عدد الفرص لهذا الفصل</Label>
+                <Input id="chapter-opportunities" name="chapter-opportunities" type="number" min={0} value={opportunities} onChange={(e) => setOpportunities(Number(toLatinDigits(e.target.value)) || 0)} />
               </div>
               <Button type="submit" className="w-full">إضافة فصل منهجي</Button>
               <div className="rounded-2xl border bg-muted/30 p-3 space-y-2">
@@ -147,9 +147,9 @@ export function ChaptersView() {
             {/* Attach Chapter Form */}
             <form onSubmit={handleAttachChapter} className="space-y-4">
               <div className="space-y-2">
-                <Label>اختر الدورة</Label>
+                <Label htmlFor="chapter-course">اختر الدورة</Label>
                 <Select value={courseId} onValueChange={setCourseId}>
-                  <SelectTrigger>
+                  <SelectTrigger id="chapter-course">
                     <SelectValue placeholder="اختر الدورة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -160,9 +160,9 @@ export function ChaptersView() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>اختر الفصل المنهجي لإضافته</Label>
+                <Label htmlFor="chapter-select">اختر الفصل المنهجي لإضافته</Label>
                 <Select value={chapterId} onValueChange={setChapterId}>
-                  <SelectTrigger>
+                  <SelectTrigger id="chapter-select">
                     <SelectValue placeholder="اختر الفصل" />
                   </SelectTrigger>
                   <SelectContent>
@@ -237,12 +237,12 @@ export function ChaptersView() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>اسم الفصل</Label>
-              <Input value={editChapterDialog.chName} onChange={e => setEditChapterDialog(prev => ({ ...prev, chName: e.target.value }))} />
+              <Label htmlFor="chapter-edit-name">اسم الفصل</Label>
+              <Input id="chapter-edit-name" name="chapter-edit-name" value={editChapterDialog.chName} onChange={e => setEditChapterDialog(prev => ({ ...prev, chName: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>عدد الفرص</Label>
-              <Input type="number" min={0} value={editChapterDialog.opps} onChange={e => setEditChapterDialog(prev => ({ ...prev, opps: Number(toLatinDigits(e.target.value)) || 0 }))} />
+              <Label htmlFor="chapter-edit-opps">عدد الفرص</Label>
+              <Input id="chapter-edit-opps" name="chapter-edit-opps" type="number" min={0} value={editChapterDialog.opps} onChange={e => setEditChapterDialog(prev => ({ ...prev, opps: Number(toLatinDigits(e.target.value)) || 0 }))} />
             </div>
           </div>
           <DialogFooter>

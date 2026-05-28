@@ -73,9 +73,9 @@ export function GradeEntryView() {
         <CardContent>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>اختر الامتحان</Label>
+              <Label htmlFor="grade-entry-exam">اختر الامتحان</Label>
               <Select value={selectedExamId} onValueChange={setSelectedExamId}>
-                <SelectTrigger>
+                <SelectTrigger id="grade-entry-exam">
                   <SelectValue placeholder="اختر الامتحان" />
                 </SelectTrigger>
                 <SelectContent>
@@ -133,7 +133,7 @@ export function GradeEntryView() {
                       {isEditing ? (
                         <div className="flex items-center gap-2 flex-wrap">
                           <Select value={editStatus} onValueChange={setEditStatus}>
-                            <SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id={`grade-entry-status-${student.id}`} className="w-28 h-8"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="درجة">درجة</SelectItem>
                               <SelectItem value="غائب">غائب</SelectItem>
@@ -142,9 +142,9 @@ export function GradeEntryView() {
                             </SelectContent>
                           </Select>
                           {editStatus === 'درجة' && (
-                            <Input type="number" className="w-20 h-8" value={editScore} onChange={e => setEditScore(toLatinDigits(e.target.value))} placeholder="الدرجة" title="اكتب درجة الطالب رقماً فقط" />
+                            <Input id={`grade-entry-score-${student.id}`} name={`grade-entry-score-${student.id}`} type="number" className="w-20 h-8" value={editScore} onChange={e => setEditScore(toLatinDigits(e.target.value))} placeholder="الدرجة" title="اكتب درجة الطالب رقماً فقط" />
                           )}
-                          <Input className="w-32 h-8" value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="ملاحظات" title="اكتب سبب الإجازة أو أي ملاحظة إدارية مهمة" />
+                          <Input id={`grade-entry-notes-${student.id}`} name={`grade-entry-notes-${student.id}`} className="w-32 h-8" value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="ملاحظات" title="اكتب سبب الإجازة أو أي ملاحظة إدارية مهمة" />
                           <Button size="sm" onClick={() => handleSaveGrade(student.id)} title="يحفظ الدرجة ويطبق القوانين تلقائياً">حفظ</Button>
                           <Button size="sm" variant="ghost" onClick={() => setEditGrade(null)} title="يغلق الإدخال بدون حفظ تغيير جديد">إلغاء</Button>
                         </div>

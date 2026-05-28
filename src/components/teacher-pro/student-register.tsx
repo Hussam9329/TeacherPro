@@ -3,7 +3,6 @@
 import React, { useMemo, useState } from 'react';
 import { useTeacherStore } from '@/lib/teacher-store';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -17,16 +16,11 @@ import {
   Lock, MapPin, PhoneCall, Receipt, Save, School, Smartphone, Star,
   User, UserPlus, Users, VenusAndMars, WalletCards,
 } from 'lucide-react';
-import { Send } from 'lucide-react';
 
 const fieldBaseClass =
-  'h-12 rounded-xl border-input bg-background/70 pr-10 pl-4 text-right shadow-xs backdrop-blur transition-all focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30';
+  'h-12 rounded-xl border border-gray-300 bg-white/95 pr-10 pl-4 text-right shadow-sm transition-all focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-0 dark:border-white/10 dark:bg-white/10';
 const selectTriggerClass =
-  'h-12 rounded-xl border-input bg-background/70 px-4 shadow-xs backdrop-blur focus:ring-ring/50 dark:bg-input/30';
-const privateFieldClass =
-  'h-12 rounded-xl border-primary/20 bg-background/80 pr-10 pl-4 shadow-xs backdrop-blur focus-visible:border-primary/50 focus-visible:ring-primary/20 dark:bg-input/30';
-const moneyFieldClass =
-  'h-12 rounded-xl border-primary/20 bg-background/80 pl-12 pr-4 shadow-xs backdrop-blur focus-visible:border-primary/50 focus-visible:ring-primary/20 dark:bg-input/30';
+  'h-12 rounded-xl border border-gray-300 bg-white/95 px-4 shadow-sm focus:ring-2 focus:ring-blue-500 dark:border-white/10 dark:bg-white/10';
 
 type CourseType = 'خاصة' | 'عامة';
 
@@ -87,40 +81,13 @@ function formatAmount(value: number): string {
 function FieldIcon({ icon: Icon, className = '' }: { icon: React.ElementType; className?: string }) {
   return (
     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-      <Icon className={`h-4 w-4 text-muted-foreground ${className}`} />
+      <Icon className={`h-4 w-4 text-gray-400 ${className}`} />
     </div>
   );
 }
 
 function RequiredMark() {
-  return <span className="text-destructive">*</span>;
-}
-
-function SectionTitle({
-  icon: Icon,
-  title,
-  description,
-  actions,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description?: string;
-  actions?: React.ReactNode;
-}) {
-  return (
-    <div className="mb-5 flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
-          <Icon className="size-5" />
-        </span>
-        <div>
-          <h3 className="text-base font-black tracking-tight text-foreground md:text-lg">{title}</h3>
-          {description && <p className="mt-1 text-xs leading-6 text-muted-foreground">{description}</p>}
-        </div>
-      </div>
-      {actions && <div className="shrink-0">{actions}</div>}
-    </div>
-  );
+  return <span className="text-red-500">*</span>;
 }
 
 export function StudentRegisterView() {
@@ -279,133 +246,99 @@ export function StudentRegisterView() {
   };
 
   return (
-    <div className="section-stack mx-auto max-w-7xl">
-      <Card className="gap-0 overflow-hidden py-0">
-        <CardHeader className="relative overflow-hidden border-b bg-card/70 p-5 md:p-6">
-          <div className="absolute inset-inline-start-0 top-0 h-28 w-28 rounded-full bg-primary/20 blur-3xl" />
-          <div className="absolute inset-inline-end-0 bottom-0 h-24 w-36 rounded-full bg-primary/10 blur-3xl" />
-          <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex size-14 shrink-0 items-center justify-center rounded-3xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
-                <UserPlus className="size-7" />
-              </div>
-              <div>
-                <CardTitle className="text-2xl font-black tracking-tight text-gradient-brand md:text-3xl">إضافة طالب جديد</CardTitle>
-                <CardDescription className="mt-2 leading-6">سجّل بيانات الطالب واختر الدورة والموقع المناسب.</CardDescription>
-              </div>
-            </div>
-            <div className="chip w-fit border-primary/20 bg-primary/10 text-primary">
-              {isPrivate ? 'دورة خاصة' : 'دورة عامة'}
+    <div className="mx-auto max-w-6xl px-1 py-2 md:px-4">
+      <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white/95 shadow-xl shadow-black/5 dark:border-white/10 dark:bg-card/90">
+        <div className="p-5 md:p-8 lg:p-10">
+          <div className="mb-8 flex items-center justify-center border-b border-gray-100 pb-6 dark:border-white/10">
+            <UserPlus className="ml-4 h-9 w-9 text-blue-600 dark:text-primary" />
+            <div className="text-center">
+              <h2 className="text-2xl font-extrabold text-gray-800 dark:text-foreground md:text-3xl">إضافة طالب جديد</h2>
+              <p className="mt-2 text-sm text-gray-500 dark:text-muted-foreground">نموذج تسجيل الطالب حسب التصميم والمنطق المرفق</p>
             </div>
           </div>
-        </CardHeader>
 
-        <CardContent className="p-4 md:p-6 lg:p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <input type="hidden" name="createdAt" value={form.createdAt} readOnly />
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <input type="hidden" id="reg-createdAt" name="createdAt" value={form.createdAt} readOnly />
+            <input type="hidden" id="reg-telegram" name="telegram" value={form.telegram} readOnly />
 
-            <section className="surface-card p-5 md:p-6">
-              <SectionTitle icon={User} title="بيانات الطالب" description="المعلومات الأساسية المطلوبة لإنشاء ملف الطالب." />
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="font-bold text-foreground">اسم الطالب <RequiredMark /></Label>
-                  <div className="relative">
-                    <FieldIcon icon={User} />
-                    <Input value={form.name} onChange={e => updateForm('name', e.target.value)} required placeholder="الاسم الرباعي واللقب" className={fieldBaseClass} />
-                  </div>
+            <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="reg-name" className="font-bold text-gray-700 dark:text-foreground">اسم الطالب <RequiredMark /></Label>
+                <div className="relative">
+                  <FieldIcon icon={User} />
+                  <Input id="reg-name" name="name" value={form.name} onChange={e => updateForm('name', e.target.value)} required placeholder="الاسم الرباعي واللقب" className={fieldBaseClass} />
                 </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Label className="font-bold text-foreground">اسم المدرسة <RequiredMark /></Label>
-                  <div className="relative">
-                    <FieldIcon icon={School} />
-                    <Input value={form.school} onChange={e => updateForm('school', e.target.value)} required placeholder="اسم المدرسة" className={fieldBaseClass} />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="font-bold text-foreground">الجنس <RequiredMark /></Label>
-                  <div className="flex gap-8">
-                    <label className="inline-flex cursor-pointer items-center">
-                      <input type="radio" name="gender" value="ذكر" checked={form.gender === 'ذكر'} onChange={() => updateForm('gender', 'ذكر')} required className="h-5 w-5 accent-primary" />
-                      <span className="mr-2 font-medium text-foreground">ذكر</span>
-                    </label>
-                    <label className="inline-flex cursor-pointer items-center">
-                      <input type="radio" name="gender" value="أنثى" checked={form.gender === 'أنثى'} onChange={() => updateForm('gender', 'أنثى')} required className="h-5 w-5 accent-primary" />
-                      <span className="mr-2 font-medium text-foreground">أنثى</span>
-                    </label>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="font-bold text-foreground">معرف التليكرام</Label>
-                  <div className="relative">
-                    <FieldIcon icon={Send} />
-                    <Input
-                      value={form.telegram}
-                      onChange={e => setForm(prev => ({ ...prev, telegram: sanitizeTelegramInput(e.target.value) }))}
-                      placeholder="username بدون @"
-                      dir="ltr"
-                      className={`${fieldBaseClass} text-left font-tabular`}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="font-bold text-foreground">رقم هاتف الطالب <RequiredMark /></Label>
-                  <div className="relative">
-                    <FieldIcon icon={Smartphone} />
-                    <Input
-                      value={form.phone}
-                      onChange={e => updatePhoneForm('phone', e.target.value)}
-                      required
-                      placeholder="07xxxxxxxxx"
-                      inputMode="numeric"
-                      maxLength={11}
-                      pattern="07[0-9]{9}"
-                      dir="ltr"
-                      className={`${fieldBaseClass} text-left font-tabular`}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="font-bold text-foreground">رقم هاتف ولي الأمر <RequiredMark /></Label>
-                  <div className="relative">
-                    <FieldIcon icon={PhoneCall} />
-                    <Input
-                      value={form.parentPhone}
-                      onChange={e => updatePhoneForm('parentPhone', e.target.value)}
-                      required
-                      placeholder="07xxxxxxxxx"
-                      inputMode="numeric"
-                      maxLength={11}
-                      pattern="07[0-9]{9}"
-                      dir="ltr"
-                      className={`${fieldBaseClass} text-left font-tabular`}
-                    />
-                  </div>
+              <div className="space-y-2">
+                <Label htmlFor="reg-school" className="font-bold text-gray-700 dark:text-foreground">اسم المدرسة <RequiredMark /></Label>
+                <div className="relative">
+                  <FieldIcon icon={School} />
+                  <Input id="reg-school" name="school" value={form.school} onChange={e => updateForm('school', e.target.value)} required placeholder="اسم المدرسة" className={fieldBaseClass} />
                 </div>
               </div>
             </section>
 
-            <section className="surface-card p-5 md:p-6">
-              <SectionTitle
-                icon={BookOpen}
-                title="تفاصيل الدورة"
-                description="اختيار نوع الدورة يحدد الدورات والكروبات والمواقع المتاحة تلقائياً."
-                actions={isPrivate && (
+            <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="reg-phone" className="font-bold text-gray-700 dark:text-foreground">رقم هاتف الطالب <RequiredMark /></Label>
+                <div className="relative">
+                  <FieldIcon icon={Smartphone} />
+                  <Input
+                    id="reg-phone"
+                    name="phone"
+                    value={form.phone}
+                    onChange={e => updatePhoneForm('phone', e.target.value)}
+                    required
+                    placeholder="07xxxxxxxxx"
+                    inputMode="numeric"
+                    maxLength={11}
+                    pattern="07[0-9]{9}"
+                    dir="ltr"
+                    className={`${fieldBaseClass} text-left`}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reg-parentPhone" className="font-bold text-gray-700 dark:text-foreground">رقم هاتف ولي الأمر <RequiredMark /></Label>
+                <div className="relative">
+                  <FieldIcon icon={PhoneCall} />
+                  <Input
+                    id="reg-parentPhone"
+                    name="parentPhone"
+                    value={form.parentPhone}
+                    onChange={e => updatePhoneForm('parentPhone', e.target.value)}
+                    required
+                    placeholder="07xxxxxxxxx"
+                    inputMode="numeric"
+                    maxLength={11}
+                    pattern="07[0-9]{9}"
+                    dir="ltr"
+                    className={`${fieldBaseClass} text-left`}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-blue-100 bg-blue-50/60 p-5 dark:border-primary/20 dark:bg-primary/10 md:p-6">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <h3 className="flex items-center text-lg font-extrabold text-blue-800 dark:text-primary">
+                  <BookOpen className="ml-2 h-5 w-5" />
+                  تفاصيل الدورة
+                </h3>
+                {isPrivate && (
                   <Button type="button" variant="outline" size="sm" onClick={() => setShowRules(true)}>
                     عرض شروط الدورة الخاصة
                   </Button>
                 )}
-              />
+              </div>
 
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label className="font-bold text-foreground">نوع الدورة <RequiredMark /></Label>
+                  <Label htmlFor="reg-courseType" className="font-bold text-gray-700 dark:text-foreground">نوع الدورة <RequiredMark /></Label>
                   <Select value={form.courseType} onValueChange={handleCourseTypeChange}>
-                    <SelectTrigger className={selectTriggerClass} aria-required="true"><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="reg-courseType" className={selectTriggerClass} aria-required="true"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="عامة">عامة</SelectItem>
                       <SelectItem value="خاصة">خاصة</SelectItem>
@@ -414,9 +347,9 @@ export function StudentRegisterView() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="font-bold text-foreground">الدورة <RequiredMark /></Label>
+                  <Label htmlFor="reg-courseId" className="font-bold text-gray-700 dark:text-foreground">الدورة <RequiredMark /></Label>
                   <Select value={form.courseId} onValueChange={handleCourseChange} disabled={filteredCourses.length === 0}>
-                    <SelectTrigger className={selectTriggerClass} aria-required="true">
+                    <SelectTrigger id="reg-courseId" className={selectTriggerClass} aria-required="true">
                       <SelectValue placeholder={filteredCourses.length === 0 ? 'لا توجد دورات مسجلة' : 'اختر الدورة...'} />
                     </SelectTrigger>
                     <SelectContent>
@@ -431,59 +364,54 @@ export function StudentRegisterView() {
               </div>
 
               {isPrivate && (
-                <div className="mt-6 rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm md:p-6">
-                  <div className="mb-5 flex items-center gap-3">
-                    <span className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                      <Star className="size-5" />
-                    </span>
-                    <div>
-                      <h4 className="font-black text-foreground">بيانات الدورة الخاصة</h4>
-                      <p className="text-xs text-muted-foreground">تظهر هذه الحقول للدورات الخاصة فقط.</p>
-                    </div>
+                <div className="mb-6 space-y-6 rounded-2xl border border-purple-200 bg-purple-50/80 p-5 dark:border-primary/30 dark:bg-primary/10 md:p-6">
+                  <div className="flex items-center">
+                    <Star className="ml-2 h-5 w-5 text-purple-600 dark:text-primary" />
+                    <h4 className="font-extrabold text-purple-800 dark:text-primary">بيانات الدورة الخاصة</h4>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label className="font-bold text-foreground">رقم الوصل <RequiredMark /></Label>
+                      <Label htmlFor="reg-receiptNo" className="font-bold text-gray-700 dark:text-foreground">رقم الوصل <RequiredMark /></Label>
                       <div className="relative">
-                        <FieldIcon icon={Receipt} className="text-primary" />
-                        <Input value={form.receiptNo} onChange={e => updateForm('receiptNo', e.target.value)} required placeholder="أدخل رقم الوصل" className={privateFieldClass} />
+                        <FieldIcon icon={Receipt} className="text-purple-400" />
+                        <Input id="reg-receiptNo" name="receiptNo" value={form.receiptNo} onChange={e => updateForm('receiptNo', e.target.value)} required placeholder="أدخل رقم الوصل" className="h-12 rounded-xl border border-purple-200 bg-white pr-10 pl-4 focus-visible:ring-2 focus-visible:ring-purple-500 dark:border-primary/30 dark:bg-white/10" />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label className="font-bold text-foreground">تسلسل الكود <RequiredMark /></Label>
+                      <Label htmlFor="reg-codeSequence" className="font-bold text-gray-700 dark:text-foreground">تسلسل الكود <RequiredMark /></Label>
                       <div className="relative">
-                        <FieldIcon icon={Barcode} className="text-primary" />
-                        <Input value={form.codeSequence} onChange={e => updateForm('codeSequence', e.target.value)} required placeholder="أدخل تسلسل الكود" className={privateFieldClass} />
+                        <FieldIcon icon={Barcode} className="text-purple-400" />
+                        <Input id="reg-codeSequence" name="codeSequence" value={form.codeSequence} onChange={e => updateForm('codeSequence', e.target.value)} required placeholder="أدخل تسلسل الكود" className="h-12 rounded-xl border border-purple-200 bg-white pr-10 pl-4 focus-visible:ring-2 focus-visible:ring-purple-500 dark:border-primary/30 dark:bg-white/10" />
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-6 border-t border-primary/20 pt-6">
-                    <h4 className="mb-4 flex items-center font-black text-foreground">
-                      <Coins className="ml-2 h-5 w-5 text-primary" />
+                  <div className="border-t border-purple-200 pt-6 dark:border-primary/20">
+                    <h4 className="mb-4 flex items-center font-extrabold text-purple-800 dark:text-primary">
+                      <Coins className="ml-2 h-5 w-5" />
                       نظام الأقساط
                     </h4>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                       <div className="space-y-2">
-                        <Label className="font-bold text-foreground">المبلغ الكلي <RequiredMark /></Label>
+                        <Label htmlFor="reg-totalAmount" className="font-bold text-gray-700 dark:text-foreground">المبلغ الكلي <RequiredMark /></Label>
                         <div className="relative">
-                          <Input value={form.totalAmount} onChange={e => updateAmountForm('totalAmount', e.target.value)} required inputMode="numeric" placeholder="0" className={`${moneyFieldClass} font-tabular`} />
-                          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-muted-foreground">د.ع</span>
+                          <Input id="reg-totalAmount" name="totalAmount" value={form.totalAmount} onChange={e => updateAmountForm('totalAmount', e.target.value)} required inputMode="numeric" placeholder="0" className="h-12 rounded-xl border border-purple-200 bg-white pl-12 pr-4 focus-visible:ring-2 focus-visible:ring-purple-500 dark:border-primary/30 dark:bg-white/10" />
+                          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-gray-500">د.ع</span>
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label className="font-bold text-foreground">المبلغ المدفوع <RequiredMark /></Label>
+                        <Label htmlFor="reg-paidAmount" className="font-bold text-gray-700 dark:text-foreground">المبلغ المدفوع <RequiredMark /></Label>
                         <div className="relative">
-                          <Input value={form.paidAmount} onChange={e => updateAmountForm('paidAmount', e.target.value)} required inputMode="numeric" placeholder="0" className={`${moneyFieldClass} font-tabular`} />
-                          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-muted-foreground">د.ع</span>
+                          <Input id="reg-paidAmount" name="paidAmount" value={form.paidAmount} onChange={e => updateAmountForm('paidAmount', e.target.value)} required inputMode="numeric" placeholder="0" className="h-12 rounded-xl border border-purple-200 bg-white pl-12 pr-4 focus-visible:ring-2 focus-visible:ring-purple-500 dark:border-primary/30 dark:bg-white/10" />
+                          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-gray-500">د.ع</span>
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label className="font-bold text-foreground">المبلغ المتبقي</Label>
+                        <Label htmlFor="reg-remainingAmount" className="font-bold text-gray-700 dark:text-foreground">المبلغ المتبقي</Label>
                         <div className="relative">
-                          <Input value={String(remainingAmount)} readOnly placeholder="0" className="h-12 rounded-xl border-input bg-muted/55 pl-12 pr-4 font-bold text-destructive shadow-xs dark:bg-muted/25" />
-                          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-muted-foreground">د.ع</span>
+                          <Input id="reg-remainingAmount" name="remainingAmount" value={String(remainingAmount)} readOnly placeholder="0" className="h-12 rounded-xl border border-gray-200 bg-gray-100 pl-12 pr-4 font-bold text-red-600 dark:border-white/10 dark:bg-white/5" />
+                          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-gray-500">د.ع</span>
                         </div>
                         <p className="text-xs text-muted-foreground">المتبقي: {formatAmount(remainingAmount)} د.ع</p>
                       </div>
@@ -492,26 +420,26 @@ export function StudentRegisterView() {
                 </div>
               )}
 
-              <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label className="font-bold text-foreground">الموقع الرئيسي <RequiredMark /></Label>
+                  <Label htmlFor="reg-mainSite" className="font-bold text-gray-700 dark:text-foreground">الموقع الرئيسي <RequiredMark /></Label>
                   <Select value={form.mainSite} onValueChange={v => setForm(prev => ({ ...prev, mainSite: v, subSite: '' }))} disabled={isPrivate}>
-                    <SelectTrigger className={`${selectTriggerClass} disabled:opacity-100`} aria-required="true">
+                    <SelectTrigger id="reg-mainSite" className={`${selectTriggerClass} disabled:opacity-100`} aria-required="true">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {mainSiteOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <p className={isPrivate ? 'text-xs font-bold text-primary' : 'text-xs text-muted-foreground'}>
+                  <p className={isPrivate ? 'text-xs font-bold text-purple-600 dark:text-primary' : 'text-xs text-gray-500 dark:text-muted-foreground'}>
                     {isPrivate ? <><Lock className="ml-1 inline h-3.5 w-3.5" /> تم تحديد بغداد تلقائياً للدورة الخاصة</> : 'اختر الموقع الرئيسي حسب الدورة'}
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="font-bold text-foreground">الموقع الفرعي {subSiteOptions.length > 0 && <RequiredMark />}</Label>
+                  <Label htmlFor="reg-subSite" className="font-bold text-gray-700 dark:text-foreground">الموقع الفرعي {subSiteOptions.length > 0 && <RequiredMark />}</Label>
                   <Select value={form.subSite} onValueChange={v => updateForm('subSite', v)} disabled={subSiteOptions.length === 0}>
-                    <SelectTrigger className={selectTriggerClass} aria-required={subSiteOptions.length > 0}>
+                    <SelectTrigger id="reg-subSite" className={selectTriggerClass} aria-required={subSiteOptions.length > 0}>
                       <SelectValue placeholder={subSiteOptions.length === 0 ? 'لا توجد مواقع فرعية' : 'اختر الموقع الفرعي...'} />
                     </SelectTrigger>
                     <SelectContent>
@@ -523,9 +451,9 @@ export function StudentRegisterView() {
                 </div>
 
                 <div className="space-y-2 md:col-span-2">
-                  <Label className="font-bold text-foreground">الكروب الإلكتروني <RequiredMark /></Label>
+                  <Label htmlFor="reg-groupId" className="font-bold text-gray-700 dark:text-foreground">الكروب الإلكتروني <RequiredMark /></Label>
                   <Select value={form.groupId} onValueChange={v => updateForm('groupId', v)} disabled={!form.courseId || filteredGroups.length === 0}>
-                    <SelectTrigger className={selectTriggerClass} aria-required="true">
+                    <SelectTrigger id="reg-groupId" className={selectTriggerClass} aria-required="true">
                       <SelectValue placeholder={!form.courseId ? 'اختر الدورة أولاً...' : filteredGroups.length === 0 ? 'لا توجد كروبات إلكترونية' : 'اختر الكروب الإلكتروني...'} />
                     </SelectTrigger>
                     <SelectContent>
@@ -540,30 +468,43 @@ export function StudentRegisterView() {
               </div>
             </section>
 
-            <section className="surface-card p-5 md:p-6">
-              <SectionTitle icon={VenusAndMars} title="إعدادات التسجيل" description="بيانات مساعدة لاكتمال ملف الطالب ونظام المحاسبة." />
-              <div className="soft-panel">
-                <Label className="mb-2 block font-bold text-foreground">فترة السماح (أيام)</Label>
-                <div className="flex flex-wrap items-center gap-4">
-                  <Input value={form.accountingStart} onChange={e => updateGraceDays(e.target.value)} inputMode="numeric" pattern="(?:[0-9]|[12][0-9]|30)" required className="h-11 w-24 rounded-xl text-center font-tabular" />
-                  <span className="text-sm text-muted-foreground">أيام لا تُحتسب فيها النقاط</span>
+            <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-white/10 dark:bg-white/5">
+                <Label htmlFor="reg-accountingStart" className="mb-2 block font-bold text-gray-700 dark:text-foreground">فترة السماح (أيام)</Label>
+                <div className="flex items-center gap-4">
+                  <Input id="reg-accountingStart" name="accountingStart" value={form.accountingStart} onChange={e => updateGraceDays(e.target.value)} inputMode="numeric" pattern="(?:[0-9]|[12][0-9]|30)" required className="h-11 w-24 rounded-lg text-center" />
+                  <span className="text-sm text-gray-500 dark:text-muted-foreground">أيام لا تُحتسب فيها النقاط</span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-white/10 dark:bg-white/5">
+                <Label className="mb-3 block font-bold text-gray-700 dark:text-foreground">الجنس <RequiredMark /></Label>
+                <div className="flex gap-8">
+                  <label htmlFor="reg-gender-male" className="inline-flex cursor-pointer items-center">
+                    <input type="radio" id="reg-gender-male" name="gender" value="ذكر" checked={form.gender === 'ذكر'} onChange={() => updateForm('gender', 'ذكر')} required className="h-5 w-5 accent-blue-600" />
+                    <span className="mr-2 font-medium text-gray-700 dark:text-foreground">ذكر</span>
+                  </label>
+                  <label htmlFor="reg-gender-female" className="inline-flex cursor-pointer items-center">
+                    <input type="radio" id="reg-gender-female" name="gender" value="أنثى" checked={form.gender === 'أنثى'} onChange={() => updateForm('gender', 'أنثى')} required className="h-5 w-5 accent-pink-500" />
+                    <span className="mr-2 font-medium text-gray-700 dark:text-foreground">أنثى</span>
+                  </label>
                 </div>
               </div>
             </section>
 
-            <div className="flex flex-col gap-3 rounded-3xl border bg-muted/35 p-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-start gap-2 text-sm leading-6 text-muted-foreground">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <div className="flex flex-col gap-3 pt-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start gap-2 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-800 dark:border-primary/20 dark:bg-primary/10 dark:text-primary">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>الدورة الخاصة تثبت الموقع الرئيسي على بغداد وتطلب اختيار المنصور أو زيونة أو البنوك مع بيانات الوصل والأقساط.</span>
               </div>
-              <Button type="submit" size="lg" className="h-14 min-w-56 rounded-2xl px-10 text-base font-black shadow-lg shadow-primary/20">
-                <Save className="ml-2 h-5 w-5" />
+              <Button type="submit" className="h-14 min-w-56 rounded-xl px-10 py-4 text-lg font-bold shadow-lg transition-all hover:shadow-xl">
+                <Save className="ml-3 h-5 w-5" />
                 حفظ بيانات الطالب
               </Button>
             </div>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <Dialog open={showRules} onOpenChange={setShowRules}>
         <DialogContent dir="rtl">
@@ -571,11 +512,11 @@ export function StudentRegisterView() {
             <DialogTitle>شروط الدورة الخاصة</DialogTitle>
           </DialogHeader>
           <ul className="space-y-3 text-sm leading-7">
-            <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 text-emerald-600 dark:text-emerald-400" /> الموقع الرئيسي يثبت تلقائياً على بغداد.</li>
-            <li className="flex gap-2"><MapPin className="mt-1 h-4 w-4 text-primary" /> الموقع الفرعي مطلوب ويعرض فقط: المنصور، زيونة، البنوك.</li>
-            <li className="flex gap-2"><WalletCards className="mt-1 h-4 w-4 text-primary" /> تظهر حقول رقم الوصل، تسلسل الكود، المبلغ الكلي، المدفوع، والمتبقي للدورات الخاصة فقط.</li>
-            <li className="flex gap-2"><Users className="mt-1 h-4 w-4 text-primary" /> الكروب الإلكتروني يتغير حسب الدورة المختارة.</li>
-            <li className="flex gap-2"><VenusAndMars className="mt-1 h-4 w-4 text-primary" /> الجنس وفترة السماح من بيانات التسجيل الأساسية.</li>
+            <li className="flex gap-2"><CheckCircle2 className="mt-1 h-4 w-4 text-green-600" /> الموقع الرئيسي يثبت تلقائياً على بغداد.</li>
+            <li className="flex gap-2"><MapPin className="mt-1 h-4 w-4 text-purple-600" /> الموقع الفرعي مطلوب ويعرض فقط: المنصور، زيونة، البنوك.</li>
+            <li className="flex gap-2"><WalletCards className="mt-1 h-4 w-4 text-blue-600" /> تظهر حقول رقم الوصل، تسلسل الكود، المبلغ الكلي، المدفوع، والمتبقي للدورات الخاصة فقط.</li>
+            <li className="flex gap-2"><Users className="mt-1 h-4 w-4 text-blue-600" /> الكروب الإلكتروني يتغير حسب الدورة المختارة.</li>
+            <li className="flex gap-2"><VenusAndMars className="mt-1 h-4 w-4 text-pink-600" /> الجنس وفترة السماح من بيانات التسجيل الأساسية.</li>
           </ul>
         </DialogContent>
       </Dialog>

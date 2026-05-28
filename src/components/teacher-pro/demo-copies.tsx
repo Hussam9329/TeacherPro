@@ -416,8 +416,10 @@ export function DemoCopiesTab() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>اسم النسخة</Label>
+              <Label htmlFor="demo-name">اسم النسخة</Label>
               <Input
+                id="demo-name"
+                name="demo-name"
                 value={newDemo.name}
                 onChange={(e) =>
                   setNewDemo((p) => ({ ...p, name: e.target.value }))
@@ -426,8 +428,10 @@ export function DemoCopiesTab() {
               />
             </div>
             <div className="space-y-2">
-              <Label>الوصف</Label>
+              <Label htmlFor="demo-description">الوصف</Label>
               <Input
+                id="demo-description"
+                name="demo-description"
                 value={newDemo.description}
                 onChange={(e) =>
                   setNewDemo((p) => ({ ...p, description: e.target.value }))
@@ -436,8 +440,10 @@ export function DemoCopiesTab() {
               />
             </div>
             <div className="space-y-2">
-              <Label>مدة الصلاحية (بالأيام)</Label>
+              <Label htmlFor="demo-duration">مدة الصلاحية (بالأيام)</Label>
               <Input
+                id="demo-duration"
+                name="demo-duration"
                 type="number"
                 min={1}
                 max={365}
@@ -478,8 +484,10 @@ export function DemoCopiesTab() {
                       ][]
                     ).map(([key, val]) => (
                       <div key={key} className="space-y-1">
-                        <Label className="text-xs">{LIMIT_LABELS[key]}</Label>
+                        <Label className="text-xs" htmlFor={`demo-limit-${key}`}>{LIMIT_LABELS[key]}</Label>
                         <Input
+                          id={`demo-limit-${key}`}
+                          name={`demo-limit-${key}`}
                           type="number"
                           min={1}
                           value={val}
@@ -526,8 +534,10 @@ export function DemoCopiesTab() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>عدد الأيام الإضافية</Label>
+              <Label htmlFor="demo-extend-days">عدد الأيام الإضافية</Label>
               <Input
+                id="demo-extend-days"
+                name="demo-extend-days"
                 type="number"
                 min={1}
                 max={365}

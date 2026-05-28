@@ -70,9 +70,9 @@ export function SitesView() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label>الدورة</Label>
+                <Label htmlFor="site-course">الدورة</Label>
                 <Select value={courseId} onValueChange={setCourseId}>
-                  <SelectTrigger>
+                  <SelectTrigger id="site-course">
                     <SelectValue placeholder="اختر الدورة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -83,9 +83,9 @@ export function SitesView() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>الموقع الرئيسي</Label>
+                <Label htmlFor="site-main">الموقع الرئيسي</Label>
                 <Select value={main} onValueChange={setMain}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger id="site-main"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {MAIN_SITE_OPTIONS.map((site) => (
                       <SelectItem key={site} value={site}>{site}</SelectItem>
@@ -94,8 +94,8 @@ export function SitesView() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>الموقع الفرعي</Label>
-                <Input value={sub} onChange={(e) => setSub(e.target.value)} placeholder="المنصور / زيونة / بنوك" />
+                <Label htmlFor="site-sub">الموقع الفرعي</Label>
+                <Input id="site-sub" name="sub" value={sub} onChange={(e) => setSub(e.target.value)} placeholder="المنصور / زيونة / بنوك" />
               </div>
               <Button type="submit" className="w-full">حفظ الموقع</Button>
             </form>
@@ -152,9 +152,9 @@ export function SitesView() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>الموقع الرئيسي</Label>
+              <Label htmlFor="edit-site-main">الموقع الرئيسي</Label>
               <Select value={editDialog.mainSite} onValueChange={value => setEditDialog(prev => ({ ...prev, mainSite: value }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="edit-site-main"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {MAIN_SITE_OPTIONS.map((site) => (
                     <SelectItem key={site} value={site}>{site}</SelectItem>
@@ -163,8 +163,8 @@ export function SitesView() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>الموقع الفرعي</Label>
-              <Input value={editDialog.subSite} onChange={e => setEditDialog(prev => ({ ...prev, subSite: e.target.value }))} placeholder="المنصور / زيونة / بنوك" />
+              <Label htmlFor="edit-site-sub">الموقع الفرعي</Label>
+              <Input id="edit-site-sub" name="subSite" value={editDialog.subSite} onChange={e => setEditDialog(prev => ({ ...prev, subSite: e.target.value }))} placeholder="المنصور / زيونة / بنوك" />
             </div>
           </div>
           <DialogFooter>

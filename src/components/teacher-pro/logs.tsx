@@ -56,13 +56,13 @@ export function LogsView() {
         <CardContent className="p-4">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">بحث</Label>
-              <Input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="إجراء / تفاصيل" />
+              <Label className="text-xs" htmlFor="logs-search">بحث</Label>
+              <Input id="logs-search" name="logs-search" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="إجراء / تفاصيل" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">الوحدة</Label>
+              <Label className="text-xs" htmlFor="logs-module">الوحدة</Label>
               <Select value={filterModule} onValueChange={v => { setFilterModule(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="logs-module"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {modules.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
@@ -70,9 +70,9 @@ export function LogsView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">المستخدم</Label>
+              <Label className="text-xs" htmlFor="logs-user">المستخدم</Label>
               <Select value={filterUser} onValueChange={v => { setFilterUser(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="logs-user"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {users.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
@@ -80,9 +80,9 @@ export function LogsView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">حجم الصفحة</Label>
+              <Label className="text-xs" htmlFor="logs-page-size">حجم الصفحة</Label>
               <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setPage(1); }}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="logs-page-size" className="h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="10">10</SelectItem>
                   <SelectItem value="20">20</SelectItem>

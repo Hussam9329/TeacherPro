@@ -144,14 +144,14 @@ export function ExamNewView() {
         <CardContent>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-2">
-              <Label>اسم الامتحان</Label>
-              <Input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required placeholder="اختبار يومي - الخلية" />
+              <Label htmlFor="exam-name">اسم الامتحان</Label>
+              <Input id="exam-name" name="exam-name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required placeholder="اختبار يومي - الخلية" />
             </div>
 
             <div className="space-y-2">
-              <Label>نوع الامتحان</Label>
+              <Label htmlFor="exam-type">نوع الامتحان</Label>
               <Select value={form.type} onValueChange={v => setForm(p => ({ ...p, type: v as 'يومي' | 'تراكمي' | 'فاينل' }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="exam-type"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="يومي">يومي</SelectItem>
                   <SelectItem value="تراكمي">تراكمي</SelectItem>
@@ -216,40 +216,40 @@ export function ExamNewView() {
             </div>
 
             <div className="space-y-2">
-              <Label>تاريخ الامتحان</Label>
-              <Input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+              <Label htmlFor="exam-date">تاريخ الامتحان</Label>
+              <Input id="exam-date" name="exam-date" type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
             </div>
 
             <div className="space-y-2">
-              <Label>الدرجة الكاملة</Label>
-              <Input type="number" value={form.fullMark} onChange={e => setForm(p => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 100 }))} />
+              <Label htmlFor="exam-full-mark">الدرجة الكاملة</Label>
+              <Input id="exam-full-mark" name="exam-full-mark" type="number" value={form.fullMark} onChange={e => setForm(p => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 100 }))} />
             </div>
 
             <div className="space-y-2">
-              <Label>درجة النجاح</Label>
-              <Input type="number" value={form.passMark} onChange={e => setForm(p => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 60 }))} />
+              <Label htmlFor="exam-pass-mark">درجة النجاح</Label>
+              <Input id="exam-pass-mark" name="exam-pass-mark" type="number" value={form.passMark} onChange={e => setForm(p => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 60 }))} />
             </div>
 
             <div className="space-y-2">
-              <Label>درجة الخصم</Label>
-              <Input type="number" value={form.discountMark} onChange={e => setForm(p => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 45 }))} />
+              <Label htmlFor="exam-discount-mark">درجة الخصم</Label>
+              <Input id="exam-discount-mark" name="exam-discount-mark" type="number" value={form.discountMark} onChange={e => setForm(p => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 45 }))} />
             </div>
 
             <div className="space-y-2">
-              <Label>خصم الفرص</Label>
+              <Label htmlFor="exam-opp-penalty">خصم الفرص</Label>
               {isCumulativeOrFinal ? (
                 <div className="p-2 rounded bg-amber-50 dark:bg-amber-950/40 text-sm">
                   فصل مؤقت تلقائياً عند الغياب
                 </div>
               ) : (
-                <Input type="number" min={0} value={form.opportunitiesPenaltyNum} onChange={e => setForm(p => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 1 }))} />
+                <Input id="exam-opp-penalty" name="exam-opp-penalty" type="number" min={0} value={form.opportunitiesPenaltyNum} onChange={e => setForm(p => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 1 }))} />
               )}
             </div>
 
             {isCumulativeOrFinal && (
               <div className="space-y-2">
-                <Label>درجة الفصل</Label>
-                <Input type="number" value={form.dismissalGrade} onChange={e => setForm(p => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} placeholder="أدنى درجة للفصل" />
+                <Label htmlFor="exam-dismissal-grade">درجة الفصل</Label>
+                <Input id="exam-dismissal-grade" name="exam-dismissal-grade" type="number" value={form.dismissalGrade} onChange={e => setForm(p => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} placeholder="أدنى درجة للفصل" />
               </div>
             )}
 

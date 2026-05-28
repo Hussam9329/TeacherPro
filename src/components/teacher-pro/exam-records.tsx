@@ -75,9 +75,9 @@ export function ExamRecordsView() {
         <CardContent className="p-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">نوع الامتحان</Label>
+              <Label className="text-xs" htmlFor="exam-records-type">نوع الامتحان</Label>
               <Select value={filterType} onValueChange={v => setFilterType(v === 'all' ? '' : v)}>
-                <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="exam-records-type"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   <SelectItem value="يومي">يومي</SelectItem>
@@ -87,9 +87,9 @@ export function ExamRecordsView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">الدورة</Label>
+              <Label className="text-xs" htmlFor="exam-records-course">الدورة</Label>
               <Select value={filterCourseId} onValueChange={v => setFilterCourseId(v === 'all' ? '' : v)}>
-                <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="exam-records-course"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {courses.map(c => (

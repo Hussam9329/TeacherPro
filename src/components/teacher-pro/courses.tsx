@@ -66,9 +66,9 @@ export function CoursesView() {
               />
             </div>
             <div className="space-y-2">
-              <Label>نوع الدورة</Label>
+              <Label htmlFor="course-type">نوع الدورة</Label>
               <Select value={type} onValueChange={(v) => setType(v as 'خاصة' | 'عامة')}>
-                <SelectTrigger>
+                <SelectTrigger id="course-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -130,8 +130,8 @@ export function CoursesView() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>اسم الدورة</Label>
-              <Input value={editDialog.courseName} onChange={e => setEditDialog(prev => ({ ...prev, courseName: e.target.value }))} />
+              <Label htmlFor="course-edit-name">اسم الدورة</Label>
+              <Input id="course-edit-name" name="course-edit-name" value={editDialog.courseName} onChange={e => setEditDialog(prev => ({ ...prev, courseName: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>

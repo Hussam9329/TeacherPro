@@ -69,13 +69,13 @@ export function GroupsView() {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label>اسم الكروب</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="اسم الكروب" />
+                <Label htmlFor="group-name">اسم الكروب</Label>
+                <Input id="group-name" name="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="اسم الكروب" />
               </div>
               <div className="space-y-2">
-                <Label>الدورة</Label>
+                <Label htmlFor="group-course">الدورة</Label>
                 <Select value={courseId} onValueChange={setCourseId}>
-                  <SelectTrigger>
+                  <SelectTrigger id="group-course">
                     <SelectValue placeholder="اختر الدورة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -86,8 +86,8 @@ export function GroupsView() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>الكروب الإلكتروني</Label>
-                <Input value={electronicGroup} onChange={(e) => setElectronicGroup(e.target.value)} placeholder="@group" />
+                <Label htmlFor="group-electronic">الكروب الإلكتروني</Label>
+                <Input id="group-electronic" name="electronicGroup" value={electronicGroup} onChange={(e) => setElectronicGroup(e.target.value)} placeholder="@group" />
               </div>
               <Button type="submit" className="w-full">حفظ الكروب</Button>
             </form>
@@ -153,12 +153,12 @@ export function GroupsView() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>اسم الكروب</Label>
-              <Input value={editDialog.groupName} onChange={e => setEditDialog(prev => ({ ...prev, groupName: e.target.value }))} />
+              <Label htmlFor="edit-group-name">اسم الكروب</Label>
+              <Input id="edit-group-name" name="name" value={editDialog.groupName} onChange={e => setEditDialog(prev => ({ ...prev, groupName: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>معرف الكروب الإلكتروني</Label>
-              <Input value={editDialog.electronic} onChange={e => setEditDialog(prev => ({ ...prev, electronic: e.target.value }))} placeholder="@group" />
+              <Label htmlFor="edit-group-electronic">معرف الكروب الإلكتروني</Label>
+              <Input id="edit-group-electronic" name="electronicGroup" value={editDialog.electronic} onChange={e => setEditDialog(prev => ({ ...prev, electronic: e.target.value }))} placeholder="@group" />
             </div>
           </div>
           <DialogFooter>

@@ -231,8 +231,8 @@ function RolesTab() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>اسم الدور</Label>
-              <Input value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="اسم الدور بالعربية" />
+              <Label htmlFor="role-name">اسم الدور</Label>
+              <Input id="role-name" name="roleName" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="اسم الدور بالعربية" />
             </div>
             <div className="space-y-2">
               <Label>الصلاحيات</Label>
@@ -461,12 +461,12 @@ function UsersTab() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>الاسم الكامل</Label>
-              <Input value={editUserDialog.name} onChange={e => setEditUserDialog(prev => ({ ...prev, name: e.target.value }))} />
+              <Label htmlFor="user-edit-name">الاسم الكامل</Label>
+              <Input id="user-edit-name" name="name" value={editUserDialog.name} onChange={e => setEditUserDialog(prev => ({ ...prev, name: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label>كلمة المرور الجديدة</Label>
-              <Input type="password" value={editUserDialog.password} onChange={e => setEditUserDialog(prev => ({ ...prev, password: e.target.value }))} />
+              <Label htmlFor="user-edit-password">كلمة المرور الجديدة</Label>
+              <Input id="user-edit-password" name="password" type="password" value={editUserDialog.password} onChange={e => setEditUserDialog(prev => ({ ...prev, password: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>
@@ -503,21 +503,21 @@ function UsersTab() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>اسم المستخدم</Label>
-              <Input value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))} placeholder="username" />
+              <Label htmlFor="new-username">اسم المستخدم</Label>
+              <Input id="new-username" name="username" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))} placeholder="username" />
             </div>
             <div className="space-y-2">
-              <Label>الاسم الكامل</Label>
-              <Input value={newUser.name} onChange={e => setNewUser(p => ({ ...p, name: e.target.value }))} placeholder="الاسم" />
+              <Label htmlFor="new-fullname">الاسم الكامل</Label>
+              <Input id="new-fullname" name="name" value={newUser.name} onChange={e => setNewUser(p => ({ ...p, name: e.target.value }))} placeholder="الاسم" />
             </div>
             <div className="space-y-2">
-              <Label>كلمة المرور</Label>
-              <Input value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="123456" type="password" />
+              <Label htmlFor="new-password">كلمة المرور</Label>
+              <Input id="new-password" name="password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="123456" type="password" />
             </div>
             <div className="space-y-2">
-              <Label>الدور</Label>
+              <Label htmlFor="new-role">الدور</Label>
               <Select value={newUser.roleId} onValueChange={handleRoleChange}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="new-role"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {roles.map(role => (
                     <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>

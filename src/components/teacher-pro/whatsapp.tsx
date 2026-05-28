@@ -93,9 +93,9 @@ export function WhatsAppView() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label>نوع الأمر</Label>
+                  <Label htmlFor="whatsapp-command">نوع الأمر</Label>
                   <Select value={command} onValueChange={v => setCommand(v as typeof command)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="whatsapp-command"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="QR">QR</SelectItem>
                       <SelectItem value="تقرير">تقرير</SelectItem>
@@ -104,9 +104,9 @@ export function WhatsAppView() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>المستلم</Label>
+                  <Label htmlFor="whatsapp-recipient">المستلم</Label>
                   <Select value={recipient} onValueChange={v => setRecipient(v as typeof recipient)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="whatsapp-recipient"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="الطالب">الطالب</SelectItem>
                       <SelectItem value="ولي الأمر">ولي الأمر</SelectItem>
@@ -114,9 +114,9 @@ export function WhatsAppView() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>الدورة</Label>
+                  <Label htmlFor="whatsapp-course">الدورة</Label>
                   <Select value={filterCourseId} onValueChange={v => setFilterCourseId(v === 'all' ? '' : v)}>
-                    <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                    <SelectTrigger id="whatsapp-course"><SelectValue placeholder="الكل" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">الكل</SelectItem>
                       {courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -126,9 +126,9 @@ export function WhatsAppView() {
               </div>
 
               <div className="space-y-2">
-                <Label>حالة الطلاب</Label>
+                <Label htmlFor="whatsapp-status">حالة الطلاب</Label>
                 <Select value={filterStatus} onValueChange={v => setFilterStatus(v === 'all' ? '' : v)}>
-                  <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                  <SelectTrigger id="whatsapp-status"><SelectValue placeholder="الكل" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">الكل</SelectItem>
                     <SelectItem value="نشط">نشط</SelectItem>
@@ -139,8 +139,10 @@ export function WhatsAppView() {
 
               {command === 'رسالة حرة' && (
                 <div className="space-y-2">
-                  <Label>نص الرسالة</Label>
+                  <Label htmlFor="whatsapp-free-message">نص الرسالة</Label>
                   <textarea
+                    id="whatsapp-free-message"
+                    name="whatsapp-free-message"
                     className="w-full min-h-36 rounded-2xl border bg-background/70 px-3.5 py-3 text-sm shadow-xs backdrop-blur"
                     value={freeMessage}
                     onChange={e => setFreeMessage(e.target.value)}

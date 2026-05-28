@@ -339,13 +339,13 @@ export function StudentRegistryView() {
         <CardContent className="p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
             <div className="space-y-1">
-              <Label className="text-xs">بحث</Label>
-              <Input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تلكرام / هاتف" />
+              <Label htmlFor="registry-search" className="text-xs">بحث</Label>
+              <Input id="registry-search" name="search" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تلكرام / هاتف" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">نوع الدورة</Label>
+              <Label htmlFor="registry-filterCourseType" className="text-xs">نوع الدورة</Label>
               <Select value={filterCourseType} onValueChange={v => { setFilterCourseType(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="registry-filterCourseType"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   <SelectItem value="خاصة">خاصة</SelectItem>
@@ -354,9 +354,9 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">الدورة</Label>
+              <Label htmlFor="registry-filterCourseId" className="text-xs">الدورة</Label>
               <Select value={filterCourseId} onValueChange={v => { setFilterCourseId(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="registry-filterCourseId"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -364,9 +364,9 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">الكروب</Label>
+              <Label htmlFor="registry-filterGroupId" className="text-xs">الكروب</Label>
               <Select value={filterGroupId} onValueChange={v => { setFilterGroupId(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="registry-filterGroupId"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {groups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
@@ -374,9 +374,9 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">الحالة</Label>
+              <Label htmlFor="registry-filterStatus" className="text-xs">الحالة</Label>
               <Select value={filterStatus} onValueChange={v => { setFilterStatus(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="registry-filterStatus"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   <SelectItem value="نشط">نشط</SelectItem>
@@ -385,9 +385,9 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">الجنس</Label>
+              <Label htmlFor="registry-filterGender" className="text-xs">الجنس</Label>
               <Select value={filterGender} onValueChange={v => { setFilterGender(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="registry-filterGender"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   <SelectItem value="ذكر">ذكر</SelectItem>
@@ -406,9 +406,9 @@ export function StudentRegistryView() {
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>عرض {paged.length} من {filtered.length} طالب</span>
         <div className="flex items-center gap-2">
-          <Label className="text-xs">حجم الصفحة:</Label>
+          <Label htmlFor="registry-pageSize" className="text-xs">حجم الصفحة:</Label>
           <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setPage(1); }}>
-            <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
+            <SelectTrigger id="registry-pageSize" className="w-20 h-8"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="10">10</SelectItem>
               <SelectItem value="50">50</SelectItem>
@@ -521,17 +521,17 @@ export function StudentRegistryView() {
           </DialogHeader>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-2">
-              <Label>اسم الطالب</Label>
-              <Input value={editDialog.form.name} onChange={e => updateEditForm('name', e.target.value)} required placeholder="اسم الطالب الرباعي" />
+              <Label htmlFor="edit-name">اسم الطالب</Label>
+              <Input id="edit-name" name="name" value={editDialog.form.name} onChange={e => updateEditForm('name', e.target.value)} required placeholder="اسم الطالب الرباعي" />
             </div>
             <div className="space-y-2">
-              <Label>اسم المدرسة</Label>
-              <Input value={editDialog.form.school} onChange={e => updateEditForm('school', e.target.value)} required placeholder="اسم المدرسة" />
+              <Label htmlFor="edit-school">اسم المدرسة</Label>
+              <Input id="edit-school" name="school" value={editDialog.form.school} onChange={e => updateEditForm('school', e.target.value)} required placeholder="اسم المدرسة" />
             </div>
             <div className="space-y-2">
-              <Label>الجنس</Label>
+              <Label htmlFor="edit-gender">الجنس</Label>
               <Select value={editDialog.form.gender} onValueChange={v => updateEditForm('gender', v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="edit-gender"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ذكر">ذكر</SelectItem>
                   <SelectItem value="أنثى">أنثى</SelectItem>
@@ -539,21 +539,21 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>معرف التلكرام</Label>
-              <Input value={editDialog.form.telegram} onChange={e => updateEditTelegram(e.target.value)} placeholder="اختياري - username بدون @" />
+              <Label htmlFor="edit-telegram">معرف التلكرام</Label>
+              <Input id="edit-telegram" name="telegram" value={editDialog.form.telegram} onChange={e => updateEditTelegram(e.target.value)} placeholder="اختياري - username بدون @" />
             </div>
             <div className="space-y-2">
-              <Label>رقم الطالب</Label>
-              <Input value={editDialog.form.phone} onChange={e => updateEditPhone('phone', e.target.value)} inputMode="numeric" maxLength={11} pattern="07[0-9]{9}" required />
+              <Label htmlFor="edit-phone">رقم الطالب</Label>
+              <Input id="edit-phone" name="phone" value={editDialog.form.phone} onChange={e => updateEditPhone('phone', e.target.value)} inputMode="numeric" maxLength={11} pattern="07[0-9]{9}" required />
             </div>
             <div className="space-y-2">
-              <Label>رقم ولي الأمر</Label>
-              <Input value={editDialog.form.parentPhone} onChange={e => updateEditPhone('parentPhone', e.target.value)} inputMode="numeric" maxLength={11} pattern="07[0-9]{9}" required />
+              <Label htmlFor="edit-parentPhone">رقم ولي الأمر</Label>
+              <Input id="edit-parentPhone" name="parentPhone" value={editDialog.form.parentPhone} onChange={e => updateEditPhone('parentPhone', e.target.value)} inputMode="numeric" maxLength={11} pattern="07[0-9]{9}" required />
             </div>
             <div className="space-y-2">
-              <Label>نوع الدورة</Label>
+              <Label htmlFor="edit-courseType">نوع الدورة</Label>
               <Select value={editDialog.form.courseType} onValueChange={v => setEditDialog(prev => ({ ...prev, form: { ...prev.form, courseType: v as 'خاصة' | 'عامة', courseId: '', groupId: '', mainSite: 'بغداد', subSite: '', receiptNo: v === 'خاصة' ? prev.form.receiptNo : '', codeSequence: v === 'خاصة' ? prev.form.codeSequence : '', totalAmount: v === 'خاصة' ? prev.form.totalAmount : '', paidAmount: v === 'خاصة' ? prev.form.paidAmount : '' } }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="edit-courseType"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="خاصة">خاصة</SelectItem>
                   <SelectItem value="عامة">عامة</SelectItem>
@@ -561,36 +561,36 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>اختر الدورة</Label>
+              <Label htmlFor="edit-courseId">اختر الدورة</Label>
               <Select value={editDialog.form.courseId} onValueChange={v => setEditDialog(prev => ({ ...prev, form: { ...prev.form, courseId: v, groupId: '', subSite: '' } }))} disabled={editFilteredCourses.length === 0}>
-                <SelectTrigger><SelectValue placeholder={editFilteredCourses.length === 0 ? 'لا توجد دورات مسجلة' : 'اختر الدورة'} /></SelectTrigger>
+                <SelectTrigger id="edit-courseId"><SelectValue placeholder={editFilteredCourses.length === 0 ? 'لا توجد دورات مسجلة' : 'اختر الدورة'} /></SelectTrigger>
                 <SelectContent>
                   {editFilteredCourses.length === 0 ? <div className="px-3 py-2 text-sm text-muted-foreground">لا توجد دورات مسجلة لهذا النوع</div> : editFilteredCourses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>الموقع الرئيسي</Label>
+              <Label htmlFor="edit-mainSite">الموقع الرئيسي</Label>
               <Select value={editDialog.form.mainSite} onValueChange={v => setEditDialog(prev => ({ ...prev, form: { ...prev.form, mainSite: v, subSite: '' } }))} disabled={editIsPrivate}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="edit-mainSite"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {editMainSiteOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>الموقع الفرعي</Label>
+              <Label htmlFor="edit-subSite">الموقع الفرعي</Label>
               <Select value={editDialog.form.subSite} onValueChange={v => updateEditForm('subSite', v)} disabled={editSubSiteOptions.length === 0}>
-                <SelectTrigger><SelectValue placeholder={editSubSiteOptions.length === 0 ? (editIsPrivate ? 'بغداد فقط - لا مواقع فرعية' : editDialog.form.mainSite === 'بغداد' ? 'بغداد فقط - لا مواقع فرعية' : 'اختر المحافظة') : 'اختر الموقع الفرعي'} /></SelectTrigger>
+                <SelectTrigger id="edit-subSite"><SelectValue placeholder={editSubSiteOptions.length === 0 ? (editIsPrivate ? 'بغداد فقط - لا مواقع فرعية' : editDialog.form.mainSite === 'بغداد' ? 'بغداد فقط - لا مواقع فرعية' : 'اختر المحافظة') : 'اختر الموقع الفرعي'} /></SelectTrigger>
                 <SelectContent>
                   {editSubSiteOptions.length === 0 ? <div className="px-3 py-2 text-sm text-muted-foreground">لا توجد مناطق فرعية</div> : editSubSiteOptions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>الكروب الإلكتروني</Label>
+              <Label htmlFor="edit-groupId">الكروب الإلكتروني</Label>
               <Select value={editDialog.form.groupId} onValueChange={v => updateEditForm('groupId', v)} disabled={!editDialog.form.courseId || editFilteredGroups.length === 0}>
-                <SelectTrigger><SelectValue placeholder={editFilteredCourses.length === 0 ? 'لا توجد كروبات مسجلة' : !editDialog.form.courseId ? 'اختر الدورة أولاً' : editFilteredGroups.length === 0 ? 'لا توجد كروبات مسجلة' : 'اختر الكروب'} /></SelectTrigger>
+                <SelectTrigger id="edit-groupId"><SelectValue placeholder={editFilteredCourses.length === 0 ? 'لا توجد كروبات مسجلة' : !editDialog.form.courseId ? 'اختر الدورة أولاً' : editFilteredGroups.length === 0 ? 'لا توجد كروبات مسجلة' : 'اختر الكروب'} /></SelectTrigger>
                 <SelectContent>
                   {editFilteredCourses.length === 0 ? <div className="px-3 py-2 text-sm text-muted-foreground">لا توجد كروبات مسجلة لهذا النوع</div> : !editDialog.form.courseId ? <div className="px-3 py-2 text-sm text-muted-foreground">اختر الدورة أولاً</div> : editFilteredGroups.length === 0 ? <div className="px-3 py-2 text-sm text-muted-foreground">لا توجد كروبات مسجلة لهذه الدورة</div> : editFilteredGroups.map(g => <SelectItem key={g.id} value={g.id}>{g.name} - {g.electronicGroup}</SelectItem>)}
                 </SelectContent>
@@ -599,34 +599,34 @@ export function StudentRegistryView() {
             {editIsPrivate && (
               <>
                 <div className="space-y-2">
-                  <Label>رقم الوصل</Label>
-                  <Input value={editDialog.form.receiptNo} onChange={e => updateEditForm('receiptNo', e.target.value)} required />
+                  <Label htmlFor="edit-receiptNo">رقم الوصل</Label>
+                  <Input id="edit-receiptNo" name="receiptNo" value={editDialog.form.receiptNo} onChange={e => updateEditForm('receiptNo', e.target.value)} required />
                 </div>
                 <div className="space-y-2">
-                  <Label>تسلسل الكود</Label>
-                  <Input value={editDialog.form.codeSequence} onChange={e => updateEditForm('codeSequence', e.target.value)} required />
+                  <Label htmlFor="edit-codeSequence">تسلسل الكود</Label>
+                  <Input id="edit-codeSequence" name="codeSequence" value={editDialog.form.codeSequence} onChange={e => updateEditForm('codeSequence', e.target.value)} required />
                 </div>
                 <div className="space-y-2">
-                  <Label>المبلغ الكلي</Label>
-                  <Input type="number" min={0} value={editDialog.form.totalAmount} onChange={e => updateEditForm('totalAmount', e.target.value)} required />
+                  <Label htmlFor="edit-totalAmount">المبلغ الكلي</Label>
+                  <Input id="edit-totalAmount" name="totalAmount" type="number" min={0} value={editDialog.form.totalAmount} onChange={e => updateEditForm('totalAmount', e.target.value)} required />
                 </div>
                 <div className="space-y-2">
-                  <Label>المبلغ المدفوع</Label>
-                  <Input type="number" min={0} value={editDialog.form.paidAmount} onChange={e => updateEditForm('paidAmount', e.target.value)} required />
+                  <Label htmlFor="edit-paidAmount">المبلغ المدفوع</Label>
+                  <Input id="edit-paidAmount" name="paidAmount" type="number" min={0} value={editDialog.form.paidAmount} onChange={e => updateEditForm('paidAmount', e.target.value)} required />
                 </div>
                 <div className="space-y-2">
-                  <Label>المبلغ المتبقي</Label>
-                  <Input value={String(editRemainingAmount)} readOnly className="font-bold text-destructive" />
+                  <Label htmlFor="edit-remainingAmount">المبلغ المتبقي</Label>
+                  <Input id="edit-remainingAmount" name="remainingAmount" value={String(editRemainingAmount)} readOnly className="font-bold text-destructive" />
                 </div>
               </>
             )}
             <div className="space-y-2">
-              <Label>تاريخ إضافة الطالب</Label>
-              <Input type="date" value={editDialog.form.createdAt} onChange={e => updateEditForm('createdAt', e.target.value)} required />
+              <Label htmlFor="edit-createdAt">تاريخ إضافة الطالب</Label>
+              <Input id="edit-createdAt" name="createdAt" type="date" value={editDialog.form.createdAt} onChange={e => updateEditForm('createdAt', e.target.value)} required />
             </div>
             <div className="space-y-2">
-              <Label>فترة السماح</Label>
-              <Input value={editDialog.form.accountingStart} onChange={e => updateEditAccountingDays(e.target.value)} inputMode="numeric" pattern="(?:[0-9]|[12][0-9]|30)" required placeholder="مثلاً 7" />
+              <Label htmlFor="edit-accountingStart">فترة السماح</Label>
+              <Input id="edit-accountingStart" name="accountingStart" value={editDialog.form.accountingStart} onChange={e => updateEditAccountingDays(e.target.value)} inputMode="numeric" pattern="(?:[0-9]|[12][0-9]|30)" required placeholder="مثلاً 7" />
               <p className="text-xs leading-5 text-muted-foreground">الرقم من 0 إلى 30 هو عدد الأيام التي لا تُحتسب فيها النقاط.</p>
             </div>
           </div>
@@ -661,9 +661,9 @@ export function StudentRegistryView() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>نوع الفصل</Label>
+              <Label htmlFor="dismiss-type">نوع الفصل</Label>
               <Select value={dismissType} onValueChange={setDismissType}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="dismiss-type"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="فصل مؤقت">فصل مؤقت</SelectItem>
                   <SelectItem value="فصل نهائي">فصل نهائي</SelectItem>
@@ -671,8 +671,8 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>سبب الفصل</Label>
-              <Input value={dismissReason} onChange={e => setDismissReason(e.target.value)} placeholder="سبب الفصل" />
+              <Label htmlFor="dismiss-reason">سبب الفصل</Label>
+              <Input id="dismiss-reason" name="dismissReason" value={dismissReason} onChange={e => setDismissReason(e.target.value)} placeholder="سبب الفصل" />
             </div>
           </div>
           <DialogFooter>

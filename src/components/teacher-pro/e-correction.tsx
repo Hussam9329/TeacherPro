@@ -131,9 +131,9 @@ export function ECorrectionView() {
         <TabsContent value="sheets" className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">الامتحان</Label>
+              <Label className="text-xs" htmlFor="ecorrection-exam">الامتحان</Label>
               <Select value={filterExamId} onValueChange={v => setFilterExamId(v === 'all' ? '' : v)}>
-                <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="ecorrection-exam"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {exams.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
@@ -141,9 +141,9 @@ export function ECorrectionView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">الحالة</Label>
+              <Label className="text-xs" htmlFor="ecorrection-status">الحالة</Label>
               <Select value={filterStatus} onValueChange={v => setFilterStatus(v === 'all' ? '' : v)}>
-                <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="ecorrection-status"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   <SelectItem value="بانتظار التصحيح">بانتظار التصحيح</SelectItem>
@@ -290,12 +290,12 @@ export function ECorrectionView() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>أخطاء التصحيح</Label>
-              <Input type="number" min={0} value={completeDialog.correctionErrors} onChange={e => setCompleteDialog(prev => ({ ...prev, correctionErrors: Number(toLatinDigits(e.target.value)) || 0 }))} />
+              <Label htmlFor="ecorrection-correction-errors">أخطاء التصحيح</Label>
+              <Input id="ecorrection-correction-errors" name="ecorrection-correction-errors" type="number" min={0} value={completeDialog.correctionErrors} onChange={e => setCompleteDialog(prev => ({ ...prev, correctionErrors: Number(toLatinDigits(e.target.value)) || 0 }))} />
             </div>
             <div className="space-y-2">
-              <Label>أخطاء الجمع</Label>
-              <Input type="number" min={0} value={completeDialog.sumErrors} onChange={e => setCompleteDialog(prev => ({ ...prev, sumErrors: Number(toLatinDigits(e.target.value)) || 0 }))} />
+              <Label htmlFor="ecorrection-sum-errors">أخطاء الجمع</Label>
+              <Input id="ecorrection-sum-errors" name="ecorrection-sum-errors" type="number" min={0} value={completeDialog.sumErrors} onChange={e => setCompleteDialog(prev => ({ ...prev, sumErrors: Number(toLatinDigits(e.target.value)) || 0 }))} />
             </div>
           </div>
           <DialogFooter>
