@@ -33,7 +33,9 @@ export function OpportunitiesView() {
     opportunityLogs,
     adjustOpportunities,
     resetOpportunities,
+    undoOpportunityLog,
     courseName,
+    activeChapterForCourse,
   } = useTeacherStore();
 
   const [filterCourseId, setFilterCourseId] = useState("");
@@ -64,6 +66,11 @@ export function OpportunitiesView() {
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const handleAction = runActionLocked(async () => {
+    const selectedStudent = students.find((student) => student.id === actionDialog.studentId);
+    if (!selectedStudent || !activeChapterForCourse(selectedStudent.courseId)) {
+      toast.error("لا يمكن تعديل فرص طالب قبل اختيار فصل نشط لدورته");
+      return;
+    }
     if (actionDialog.type === "reset") {
       resetOpportunities(actionDialog.studentId);
       toast.success("تم إعادة تعيين الفرص");
@@ -225,8 +232,10 @@ export function OpportunitiesView() {
         <CardContent>
           <div className="space-y-2">
             {paged.map((student) => {
+              const activeChapter = activeChapterForCourse(student.courseId);
+              const hasChapter = Boolean(activeChapter);
               const oppPercent =
-                student.baseOpportunities > 0
+                hasChapter && student.baseOpportunities > 0
                   ? (student.opportunities / student.baseOpportunities) * 100
                   : 0;
               return (
@@ -246,6 +255,11 @@ export function OpportunitiesView() {
                     <p className="text-xs text-muted-foreground">
                       {courseName(student.courseId)}
                     </p>
+                    {!hasChapter && (
+                      <p className="mt-1 text-xs font-semibold text-destructive">
+                        لم يتم اختيار الفصل لهم بعد؛ كل الإجراءات مقفلة.
+                      </p>
+                    )}
                   </div>
 
                   {/* Opportunity Progress */}
@@ -273,7 +287,7 @@ export function OpportunitiesView() {
                             : "text-emerald-600"
                       }`}
                     >
-                      {student.opportunities}/{student.baseOpportunities}
+                      {hasChapter ? `${student.opportunities}/${student.baseOpportunities}` : "0/0"}
                     </span>
                   </div>
 
@@ -283,6 +297,7 @@ export function OpportunitiesView() {
                       variant="outline"
                       size="sm"
                       className="text-xs text-emerald-600"
+                      disabled={!hasChapter}
                       onClick={() =>
                         setActionDialog({
                           studentId: student.id,
@@ -297,6 +312,7 @@ export function OpportunitiesView() {
                       variant="outline"
                       size="sm"
                       className="text-xs text-rose-600"
+                      disabled={!hasChapter}
                       onClick={() =>
                         setActionDialog({
                           studentId: student.id,
@@ -311,6 +327,7 @@ export function OpportunitiesView() {
                       variant="ghost"
                       size="sm"
                       className="text-xs"
+                      disabled={!hasChapter}
                       onClick={() =>
                         setActionDialog({
                           studentId: student.id,
@@ -366,6 +383,7 @@ export function OpportunitiesView() {
             ) : (
               opportunityLogs.slice(0, 20).map((log) => {
                 const student = students.find((s) => s.id === log.studentId);
+                const canUndo = Boolean(student && activeChapterForCourse(student.courseId) && (log.action === "إضافة" || log.action === "خصم"));
                 return (
                   <div
                     key={log.id}
@@ -393,6 +411,18 @@ export function OpportunitiesView() {
                       <span className="text-muted-foreground text-xs">
                         {log.reason}
                       </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={!canUndo}
+                        onClick={() => {
+                          const ok = undoOpportunityLog(log.id);
+                          ok ? toast.success("تم التراجع عن الحركة") : toast.error("لا يمكن التراجع عن هذه الحركة");
+                        }}
+                      >
+                        تراجع
+                      </Button>
                     </div>
                   </div>
                 );

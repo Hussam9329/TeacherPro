@@ -117,7 +117,7 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
     date: form.date,
     fullMark: form.fullMark,
     passMark: form.passMark,
-    discountMark: form.discountMark,
+    discountMark: isCumulativeOrFinal ? 0 : form.discountMark,
     opportunitiesPenalty: isCumulativeOrFinal ? "فصل مؤقت" : form.opportunitiesPenaltyNum,
     dismissalGrade: isCumulativeOrFinal && form.dismissalGrade ? Number(form.dismissalGrade) : null,
     ...applyStatus(form),
@@ -270,7 +270,7 @@ export function ExamNewView() {
     const selectedMainSites = splitSelection(selectedExam.mainSite);
     const selectedGroupIds = splitSelection(selectedExam.groupId);
     return students.filter((s) => {
-      if (!selectedExam.courseIds.includes(s.courseId) || s.status !== "نشط") return false;
+      if (!selectedExam.courseIds.includes(s.courseId)) return false;
       if (!hasActiveChapterLink(courseChapters, s.courseId)) return false;
       if (selectedMainSites.length > 0 && !selectedMainSites.includes(s.mainSite)) return false;
       if (selectedGroupIds.length > 0 && !selectedGroupIds.includes(s.groupId)) return false;
@@ -309,7 +309,17 @@ export function ExamNewView() {
         </div>
         <div className="space-y-2">
           <Label htmlFor={`${prefix}-type`}>نوع الامتحان</Label>
-          <Select value={state.type} onValueChange={(v) => setState((p) => ({ ...p, type: v as ExamFormState["type"] }))}>
+          <Select value={state.type} onValueChange={(v) => setState((p) => {
+            const nextType = v as ExamFormState["type"];
+            const nextIsCumulativeOrFinal = nextType === "تراكمي" || nextType === "فاينل";
+            return {
+              ...p,
+              type: nextType,
+              discountMark: nextIsCumulativeOrFinal ? 0 : (p.discountMark || 45),
+              opportunitiesPenaltyNum: nextIsCumulativeOrFinal ? 0 : (p.opportunitiesPenaltyNum || 1),
+              dismissalGrade: nextIsCumulativeOrFinal ? p.dismissalGrade : "",
+            };
+          })}>
             <SelectTrigger id={`${prefix}-type`}><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="يومي">يومي</SelectItem>
@@ -358,10 +368,26 @@ export function ExamNewView() {
         </div>
         <div className="space-y-2"><Label>الدرجة الكاملة</Label><Input type="number" value={state.fullMark} onChange={(e) => setState((p) => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 100 }))} /></div>
         <div className="space-y-2"><Label>درجة النجاح</Label><Input type="number" value={state.passMark} onChange={(e) => setState((p) => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 60 }))} /></div>
-        <div className="space-y-2"><Label>درجة الخصم</Label><Input type="number" value={state.discountMark} onChange={(e) => setState((p) => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
+        <div className="space-y-2">
+          <Label>درجة الخصم</Label>
+          <Input
+            type="number"
+            value={isCumulativeOrFinal ? 0 : state.discountMark}
+            disabled={isCumulativeOrFinal}
+            onChange={(e) => setState((p) => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 0 }))}
+          />
+          {isCumulativeOrFinal && <p className="text-xs text-amber-600">معطل في التراكمي/الفاينل؛ الحكم يكون فقط من درجة الفصل.</p>}
+        </div>
         <div className="space-y-2">
           <Label>خصم الفرص</Label>
-          {isCumulativeOrFinal ? <div className="rounded-xl bg-amber-50 p-3 text-sm dark:bg-amber-950/40">فصل مؤقت تلقائياً عند الغياب</div> : <Input type="number" min={0} value={state.opportunitiesPenaltyNum} onChange={(e) => setState((p) => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 1 }))} />}
+          <Input
+            type="number"
+            min={0}
+            value={isCumulativeOrFinal ? 0 : state.opportunitiesPenaltyNum}
+            disabled={isCumulativeOrFinal}
+            onChange={(e) => setState((p) => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 1 }))}
+          />
+          {isCumulativeOrFinal && <p className="text-xs text-amber-600">معطل في التراكمي/الفاينل؛ الغياب أو الغش أو درجة الفصل يعالج كفصل مؤقت فقط.</p>}
         </div>
         {isCumulativeOrFinal && <div className="space-y-2"><Label>درجة الفصل</Label><Input type="number" value={state.dismissalGrade} onChange={(e) => setState((p) => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} /></div>}
         {renderStatusControls(state, setState, prefix)}
@@ -434,15 +460,20 @@ export function ExamNewView() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {selectedExamStudents.length === 0 ? <p className="empty-state">لا يوجد طلاب مطابقون للدورات والمناطق والمجموعات المختارة أو لا توجد فصول مفعلة.</p> : selectedExamStudents.map((student) => (
+              {selectedExamStudents.length === 0 ? <p className="empty-state">لا يوجد طلاب مطابقون للدورات والمناطق والمجموعات المختارة أو لا توجد فصول مفعلة.</p> : selectedExamStudents.map((student) => {
+                const dismissedButNotThisExam = student.status === "مفصول" && !(student.dismissalReason || "").includes(selectedExam.name);
+                return (
                 <div key={student.id} className="flex items-center justify-between rounded-xl bg-muted/60 p-2">
-                  <span className="text-sm">{student.name} ({student.code})</span>
+                  <span className="flex flex-wrap items-center gap-2 text-sm">
+                    {student.name} ({student.code})
+                    {student.status === "مفصول" && <Badge variant={dismissedButNotThisExam ? "destructive" : "secondary"} className="text-[10px]">مفصول</Badge>}
+                  </span>
                   <div className="flex items-center gap-2">
-                    <Checkbox checked={selectedExam.attendance.includes(student.id)} onCheckedChange={() => toggleAttendance(selectedExam.id, student.id)} disabled={selectedExam.attendanceClosed} />
+                    <Checkbox checked={selectedExam.attendance.includes(student.id)} onCheckedChange={() => toggleAttendance(selectedExam.id, student.id)} disabled={selectedExam.attendanceClosed || dismissedButNotThisExam} />
                     <Badge variant={selectedExam.attendance.includes(student.id) ? "default" : "secondary"}>{selectedExam.attendance.includes(student.id) ? "حاضر" : "غائب"}</Badge>
                   </div>
                 </div>
-              ))}
+              );})}
             </div>
           </CardContent>
         </Card>

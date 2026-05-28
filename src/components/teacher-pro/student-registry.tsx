@@ -486,6 +486,8 @@ export function StudentRegistryView() {
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const dismissedStudents = students.filter((student) => student.status === "مفصول");
+  const noActiveChapterStudents = students.filter((student) => !activeChapterForCourse(student.courseId));
 
   const handleDismiss = () => {
     if (!dismissDialog.student) return;
@@ -729,6 +731,36 @@ export function StudentRegistryView() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <Card className="bg-card/80">
+          <CardContent className="flex items-center justify-between gap-3 p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">الطلاب النشطون</p>
+              <p className="text-2xl font-black">{students.filter((student) => student.status === "نشط").length}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => { setFilterStatus("نشط"); setPage(1); }}>عرض</Button>
+          </CardContent>
+        </Card>
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="flex items-center justify-between gap-3 p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">قائمة المفصولين</p>
+              <p className="text-2xl font-black text-destructive">{dismissedStudents.length}</p>
+            </div>
+            <Button variant="destructive" size="sm" onClick={() => { setFilterStatus("مفصول"); setPage(1); }}>عرض المفصولين</Button>
+          </CardContent>
+        </Card>
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="flex items-center justify-between gap-3 p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">بدون فصل نشط</p>
+              <p className="text-2xl font-black text-amber-600">{noActiveChapterStudents.length}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => { setFilterStatus(""); setFilterCourseId(""); setSearch(""); setPage(1); }}>عرض الكل</Button>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>

@@ -276,6 +276,8 @@ export function TeacherProLayout() {
     setSidebarOpen,
     theme,
     toggleTheme,
+    guideMode,
+    toggleGuideMode,
     exportBackup,
     importBackup,
     exportMonthlyReport,
@@ -761,6 +763,17 @@ export function TeacherProLayout() {
             size="sm"
             className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={() => {
+              toggleGuideMode();
+              toast.success(guideMode ? "تم إخفاء وضع الإرشاد" : "تم إظهار وضع الإرشاد");
+            }}
+          >
+            {guideMode ? "إخفاء وضع الإرشاد" : "إظهار وضع الإرشاد"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            onClick={() => {
               downloadTextFile(
                 exportBackup(),
                 `backup-${new Date().toISOString().slice(0, 10)}.json`,
@@ -840,6 +853,17 @@ export function TeacherProLayout() {
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant={guideMode ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => {
+                  toggleGuideMode();
+                  toast.success(guideMode ? "تم إخفاء وضع الإرشاد" : "تم إظهار وضع الإرشاد");
+                }}
+                className="hidden rounded-full sm:inline-flex"
+              >
+                {guideMode ? "وضع الإرشاد مفعل" : "وضع الإرشاد مخفي"}
+              </Button>
               <Button
                 variant="outline"
                 size="icon"

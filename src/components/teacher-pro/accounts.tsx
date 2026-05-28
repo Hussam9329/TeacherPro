@@ -22,7 +22,7 @@ import { useActionLock } from '@/hooks/use-action-lock';
 const PERMISSION_CATEGORIES = [
   'النظام', 'الدورات', 'المجموعات الإلكترونية', 'المواقع', 'الفصول',
   'الطلاب', 'الامتحانات', 'الدرجات', 'الفرص', 'التصحيح',
-  'واتساب', 'الحسابات', 'السجلات',
+  'واتساب', 'الحسابات', 'السجلات', 'نسخ الديمو',
 ];
 
 function getPermissionsByCategory(permissions: PermissionEntry[]) {
@@ -232,7 +232,7 @@ function RolesTab() {
 
       {/* Add Role Dialog */}
       <Dialog open={showAddRoleDialog} onOpenChange={setShowAddRoleDialog}>
-        <DialogContent dir="rtl" className="max-w-lg">
+        <DialogContent dir="rtl" className="max-h-[88vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>إضافة دور جديد</DialogTitle>
             <DialogDescription>أنشئ دوراً جديداً وحدد الصلاحيات المطلوبة</DialogDescription>
@@ -256,7 +256,7 @@ function RolesTab() {
 
       {/* Edit Role Permissions Dialog */}
       <Dialog open={!!editRoleId} onOpenChange={() => { setEditRoleId(null); setEditRolePerms([]); }}>
-        <DialogContent dir="rtl" className="max-w-lg">
+        <DialogContent dir="rtl" className="max-h-[88vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>تعديل صلاحيات الدور - {roles.find(r => r.id === editRoleId)?.name}</DialogTitle>
             <DialogDescription>
@@ -319,6 +319,14 @@ function UsersTab() {
       toast.error('يرجى إدخال اسم المستخدم والاسم');
       return;
     }
+    if (!newUser.password.trim()) {
+      toast.error('يرجى إدخال رمز المرور');
+      return;
+    }
+    if (users.some(u => u.username.trim().toLowerCase() === newUser.username.trim().toLowerCase())) {
+      toast.error('اسم المستخدم موجود مسبقاً');
+      return;
+    }
     const role = roles.find(r => r.id === newUser.roleId);
     const perms = newUser.permissions.length > 0 ? newUser.permissions : (role?.permissions || []);
     addUser({
@@ -327,7 +335,7 @@ function UsersTab() {
       roleId: newUser.roleId,
       role: role?.name || 'مشاهدة فقط',
       permissions: perms,
-      password: newUser.password,
+      password: newUser.password.trim(),
       active: true,
     });
     setShowAddDialog(false);
@@ -342,7 +350,8 @@ function UsersTab() {
   };
   const handleEditUserSave = runSaveUserLocked(async () => {
     if (!editUserDialog.name.trim()) { toast.error('يرجى إدخال الاسم'); return; }
-    updateUser(editUserDialog.id, { name: editUserDialog.name.trim(), password: editUserDialog.password });
+    if (!editUserDialog.password.trim()) { toast.error('يرجى إدخال رمز المرور'); return; }
+    updateUser(editUserDialog.id, { name: editUserDialog.name.trim(), password: editUserDialog.password.trim() });
     setEditUserDialog({ open: false, id: '', name: '', password: '' });
     toast.success('تم تعديل المستخدم');
   });
@@ -385,6 +394,7 @@ function UsersTab() {
   };
 
   const getRoleName = (roleId: string) => roles.find(r => r.id === roleId)?.name || 'غير محدد';
+  const generatePasscode = () => String(Math.floor(100000 + Math.random() * 900000));
 
 
   return (
@@ -487,8 +497,11 @@ function UsersTab() {
               <Input id="user-edit-name" name="name" autoComplete="name" value={editUserDialog.name} onChange={e => setEditUserDialog(prev => ({ ...prev, name: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="user-edit-password">كلمة المرور الجديدة</Label>
-              <Input id="user-edit-password" name="password" type="password" autoComplete="new-password" value={editUserDialog.password} onChange={e => setEditUserDialog(prev => ({ ...prev, password: e.target.value }))} />
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="user-edit-password">رمز المرور الجديد</Label>
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditUserDialog(prev => ({ ...prev, password: generatePasscode() }))}>توليد رمز</Button>
+              </div>
+              <Input id="user-edit-password" name="password" autoComplete="new-password" value={editUserDialog.password} onChange={e => setEditUserDialog(prev => ({ ...prev, password: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>
@@ -518,7 +531,7 @@ function UsersTab() {
 
       {/* Add User Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent dir="rtl" className="max-w-lg">
+        <DialogContent dir="rtl" className="max-h-[88vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>إضافة مستخدم جديد</DialogTitle>
             <DialogDescription>أنشئ حساب مستخدم جديد وحدد دوره وصلاحياته</DialogDescription>
@@ -533,8 +546,11 @@ function UsersTab() {
               <Input id="new-name" name="name" autoComplete="name" value={newUser.name} onChange={e => setNewUser(p => ({ ...p, name: e.target.value }))} placeholder="مثال: أحمد محمد" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-password">كلمة المرور</Label>
-              <Input id="new-password" name="password" autoComplete="new-password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="كلمة مرور آمنة" type="password" />
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="new-password">رمز المرور</Label>
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setNewUser(p => ({ ...p, password: generatePasscode() }))}>توليد رمز</Button>
+              </div>
+              <Input id="new-password" name="password" autoComplete="new-password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="مثال: 123456" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-role">الدور</Label>
@@ -562,7 +578,7 @@ function UsersTab() {
 
       {/* Edit Permissions Dialog */}
       <Dialog open={!!editPermsId} onOpenChange={() => { setEditPermsId(''); setEditPerms([]); }}>
-        <DialogContent dir="rtl" className="max-w-lg">
+        <DialogContent dir="rtl" className="max-h-[88vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>تحديث الصلاحيات - {users.find(u => u.id === editPermsId)?.name}</DialogTitle>
             <DialogDescription>فعّل الصلاحيات التي تريد السماح بها فقط، ثم اضغط حفظ لتطبيقها.</DialogDescription>

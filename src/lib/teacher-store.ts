@@ -518,6 +518,7 @@ interface TeacherState {
   currentSection: SectionId;
   sidebarOpen: boolean;
   theme: 'light' | 'dark';
+  guideMode: boolean;
   studentPageSize: number;
   gradePageSize: number;
   currentUserId: string;
@@ -529,6 +530,7 @@ interface TeacherState {
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   toggleTheme: () => void;
+  toggleGuideMode: () => void;
 
   currentUser: () => User | null;
   login: (username: string, password: string) => { ok: boolean; message: string };
@@ -585,6 +587,7 @@ interface TeacherState {
 
   adjustOpportunities: (studentId: string, amount: number, reason: string) => void;
   resetOpportunities: (studentId: string) => void;
+  undoOpportunityLog: (logId: string) => boolean;
 
   addCorrectionSheet: (sheet: Omit<CorrectionSheet, 'id'>) => void;
   updateCorrectionSheet: (id: string, updates: Partial<CorrectionSheet>) => void;
@@ -886,14 +889,17 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
 
       if (grade.status === 'درجة' && grade.score !== null) {
         const score = Number(grade.score);
-        if (score <= exam.discountMark) {
-          opportunities -= examPenaltyValue(exam);
-          if ((exam.type === 'تراكمي' || exam.type === 'فاينل') && exam.dismissalGrade !== null && score <= exam.dismissalGrade) {
+        if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
+          if (exam.dismissalGrade !== null && score <= exam.dismissalGrade) {
             setDismissal('فصل مؤقت', `درجة فصل (${score}): ${exam.name}`, 75);
           }
+          if (score === 0) {
+            setDismissal('فصل مؤقت', `درجة صفر في امتحان ${exam.type}: ${exam.name}`, 76);
+          }
+          continue;
         }
-        if (score === 0 && (exam.type === 'تراكمي' || exam.type === 'فاينل')) {
-          setDismissal('فصل مؤقت', `درجة صفر في امتحان ${exam.type}: ${exam.name}`, 76);
+        if (score <= exam.discountMark) {
+          opportunities -= examPenaltyValue(exam);
         }
       }
     }
@@ -930,6 +936,7 @@ export const useTeacherStore = create<TeacherState>()(
       currentSection: 'dashboard' as SectionId,
       sidebarOpen: false,
       theme: 'light' as 'light' | 'dark',
+      guideMode: true,
       studentPageSize: 10,
       gradePageSize: 10,
       currentUserId: 'u_admin',
@@ -1139,6 +1146,7 @@ export const useTeacherStore = create<TeacherState>()(
         }
         return { theme: next };
       }),
+      toggleGuideMode: () => set((s) => ({ guideMode: !s.guideMode })),
 
       currentUser: () => {
         const state = get();
@@ -1232,6 +1240,11 @@ export const useTeacherStore = create<TeacherState>()(
         if (grade.status === 'غش') return { text: 'غش', type: 'danger', kind: 'cheat' };
         if (grade.status === 'غائب') return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
         const score = Number(grade.score) || 0;
+        if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
+          if (exam.dismissalGrade !== null && score <= exam.dismissalGrade) return { text: 'فصل', type: 'danger', kind: 'dismissal' };
+          if (score >= exam.passMark) return { text: 'ناجح', type: 'ok', kind: 'pass' };
+          return { text: 'محاسبة', type: 'warn', kind: 'accounting' };
+        }
         if (score >= exam.passMark) return { text: 'ناجح', type: 'ok', kind: 'pass' };
         if (score > exam.discountMark && score < exam.passMark) return { text: 'محاسبة', type: 'warn', kind: 'accounting' };
         return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
@@ -1414,8 +1427,9 @@ export const useTeacherStore = create<TeacherState>()(
         } else {
           set((s) => ({
             courseChapters: s.courseChapters.map((x) => x.id === courseChapterId
-              ? { ...x, active: false, archived: true, archive: s.students.filter((st) => st.courseId === cc.courseId).map((st) => ({ studentId: st.id, opportunities: st.opportunities, date: todayISO() })) }
+              ? { ...x, active: false, archived: false, archive: s.students.filter((st) => st.courseId === cc.courseId).map((st) => ({ studentId: st.id, opportunities: st.opportunities, date: todayISO() })) }
               : x),
+            students: s.students.map((st) => st.courseId === cc.courseId ? { ...st, opportunities: 0, baseOpportunities: 0 } : st),
           }));
           get().logAction('الفصول والفرص', 'إلغاء تفعيل فصل', `${chapter.name} - ${get().courseName(cc.courseId)}`);
         }
@@ -1628,6 +1642,10 @@ export const useTeacherStore = create<TeacherState>()(
       adjustOpportunities: (studentId, amount, reason) => {
         const stateBefore = get();
         const studentBefore = stateBefore.students.find((st) => st.id === studentId);
+        if (!studentBefore || !stateBefore.activeChapterForCourse(studentBefore.courseId)) {
+          get().logAction('إدارة الفرص', 'رفض حركة فرص بدون فصل نشط', `${studentBefore?.name || studentId} - ${reason}`);
+          return;
+        }
         const action = amount > 0 ? 'إضافة' : 'خصم';
         const log: OpportunityLog = { id: uid('ol'), studentId, examId: '', action, amount: Math.abs(amount), reason, date: todayISO(), chapterId: stateBefore.activeChapterForCourse(studentBefore?.courseId || '')?.id || '' };
         set((s) => {
@@ -1644,6 +1662,10 @@ export const useTeacherStore = create<TeacherState>()(
       },
       resetOpportunities: (studentId) => {
         const studentBefore = get().students.find((st) => st.id === studentId);
+        if (!studentBefore || !get().activeChapterForCourse(studentBefore.courseId)) {
+          get().logAction('إدارة الفرص', 'رفض إعادة تعيين بدون فصل نشط', studentBefore?.name || studentId);
+          return;
+        }
         const log: OpportunityLog = { id: uid('ol'), studentId, examId: '', action: 'إعادة تعيين', amount: studentBefore?.baseOpportunities || 0, reason: 'إعادة تعيين الفرص', date: todayISO(), chapterId: '' };
         set((s) => {
           const students = s.students.map((st) => st.id === studentId ? { ...st, opportunities: st.baseOpportunities } : st);
@@ -1653,6 +1675,27 @@ export const useTeacherStore = create<TeacherState>()(
         const updatedStudent = get().students.find(st => st.id === studentId);
         if (updatedStudent) syncToServer(get, () => studentApi.update(studentId, { opportunities: updatedStudent.opportunities }));
         syncToServer(get, () => opportunityLogApi.add(log as unknown as Record<string, unknown>));
+      },
+      undoOpportunityLog: (logId) => {
+        const log = get().opportunityLogs.find((item) => item.id === logId);
+        const student = log ? get().students.find((item) => item.id === log.studentId) : null;
+        if (!log || !student) return false;
+        if (!get().activeChapterForCourse(student.courseId)) {
+          get().logAction('إدارة الفرص', 'رفض تراجع بدون فصل نشط', `${student.name} - ${log.action}`);
+          return false;
+        }
+        if (log.action === 'إضافة') {
+          get().adjustOpportunities(log.studentId, -Math.abs(log.amount), `تراجع عن إضافة: ${log.reason || ''}`.trim());
+          get().logAction('إدارة الفرص', 'تراجع عن إضافة فرصة', `${student.name} - ${log.amount}`);
+          return true;
+        }
+        if (log.action === 'خصم') {
+          get().adjustOpportunities(log.studentId, Math.abs(log.amount), `تراجع عن خصم: ${log.reason || ''}`.trim());
+          get().logAction('إدارة الفرص', 'تراجع عن خصم فرصة', `${student.name} - ${log.amount}`);
+          return true;
+        }
+        get().logAction('إدارة الفرص', 'رفض تراجع حركة غير قابلة للعكس', `${student.name} - ${log.action}`);
+        return false;
       },
 
       addCorrectionSheet: (sheet) => {
@@ -2030,6 +2073,7 @@ export const useTeacherStore = create<TeacherState>()(
         whatsappQueue: state.whatsappQueue,
         leaderboardSettings: state.leaderboardSettings,
         theme: state.theme,
+        guideMode: state.guideMode,
         studentPageSize: state.studentPageSize,
         gradePageSize: state.gradePageSize,
         currentUserId: state.currentUserId,

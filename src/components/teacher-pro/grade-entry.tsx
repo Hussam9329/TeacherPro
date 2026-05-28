@@ -66,6 +66,19 @@ export function GradeEntryView() {
     setDrafts((prev) => ({ ...prev, [studentId]: { ...getDraft(studentId), ...patch } }));
   };
 
+  const canEditGradeForStudent = (studentId: string) => {
+    const student = students.find((item) => item.id === studentId);
+    const grade = getGrade(studentId);
+    if (!student) return false;
+    if (student.status !== "مفصول") return true;
+    return Boolean(
+      selectedExam &&
+      grade &&
+      grade.examId === selectedExam.id &&
+      (student.dismissalReason || "").includes(selectedExam.name),
+    );
+  };
+
   const examStudents = useMemo(() => {
     if (!selectedExam) return [];
     const selectedMainSites = splitSelection(selectedExam.mainSite);
@@ -73,7 +86,6 @@ export function GradeEntryView() {
 
     return students
       .filter((student) => {
-        if (student.status !== "نشط") return false;
         if (!selectedExam.courseIds.includes(student.courseId)) return false;
         if (!hasActiveChapterLink(courseChapters, student.courseId)) return false;
         if (selectedMainSites.length > 0 && !selectedMainSites.includes(student.mainSite)) return false;
@@ -97,6 +109,10 @@ export function GradeEntryView() {
 
   const saveGrade = async (studentId: string, draftOverride?: DraftGrade) => {
     if (!selectedExam) return;
+    if (!canEditGradeForStudent(studentId)) {
+      toast.error("هذا الطالب مفصول ولا يمكن تعديل درجته إلا داخل الامتحان الذي سبب الفصل");
+      return;
+    }
     const draft = draftOverride || getDraft(studentId);
     const status = draft.status;
     const score = status === "درجة" ? Number(toLatinDigits(draft.score)) : null;
@@ -230,21 +246,32 @@ export function GradeEntryView() {
                   const draft = getDraft(student.id);
                   const cls = grade ? classification(grade, selectedExam) : null;
                   const isSaving = Boolean(savingRows[student.id]);
+                  const canEdit = canEditGradeForStudent(student.id);
                   return (
                     <div key={student.id} className="grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm md:grid-cols-[1.4fr_120px_120px_1fr_120px]">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-bold">{student.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-bold">{student.name}</p>
+                          {student.status === "مفصول" && (
+                            <Badge variant={canEdit ? "secondary" : "destructive"} className="text-[10px]">
+                              {canEdit ? "مفصول - يمكن تصحيح سبب الفصل" : "مفصول - إدخال مقفل"}
+                            </Badge>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground">{student.code} - {courseName(student.courseId)}</p>
+                        {student.status === "مفصول" && student.dismissalReason && (
+                          <p className="mt-1 text-[11px] text-destructive">{student.dismissalReason}</p>
+                        )}
                       </div>
 
                       <Input
                         type="number"
                         min={0}
                         max={selectedExam.fullMark}
-                        disabled={draft.status !== "درجة"}
+                        disabled={!canEdit || draft.status !== "درجة"}
                         value={draft.status === "درجة" ? draft.score : ""}
                         onChange={(e) => updateDraft(student.id, { score: toLatinDigits(e.target.value), status: "درجة" })}
-                        onBlur={() => saveGrade(student.id)}
+                        onBlur={() => canEdit && saveGrade(student.id)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
                             event.preventDefault();
@@ -257,6 +284,7 @@ export function GradeEntryView() {
 
                       <Select
                         value={draft.status}
+                        disabled={!canEdit}
                         onValueChange={(value) => {
                           const nextDraft = { ...draft, status: value as DraftGrade["status"] };
                           updateDraft(student.id, { status: nextDraft.status });
@@ -273,8 +301,9 @@ export function GradeEntryView() {
 
                       <Input
                         value={draft.notes}
+                        disabled={!canEdit}
                         onChange={(e) => updateDraft(student.id, { notes: e.target.value })}
-                        onBlur={() => saveGrade(student.id)}
+                        onBlur={() => canEdit && saveGrade(student.id)}
                         placeholder="ملاحظات"
                         className="h-10"
                       />
