@@ -107,7 +107,6 @@ const menuItems: {
   { id: "whatsapp", title: "واتساب", sub: "رسائل", icon: MessageCircle },
   { id: "accounts", title: "إدارة الحسابات", sub: "صلاحيات", icon: Shield },
   { id: "logs", title: "السجلات", sub: "تدقيق", icon: ScrollText },
-  { id: "demo-copies", title: "نسخ الديمو", sub: "تجريبي", icon: Copy },
 ];
 
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
@@ -118,7 +117,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
   },
-  { title: "الإدارة", itemIds: ["accounts", "logs", "demo-copies"] },
+  { title: "الإدارة", itemIds: ["accounts", "logs"] },
 ];
 
 const familyItemIds = new Set<SectionId>(
@@ -157,7 +156,6 @@ import { ECorrectionView } from "./e-correction";
 import { WhatsAppView } from "./whatsapp";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
-import { DemoCopiesView } from "./demo-copies";
 import { LoadingState } from "./ui-kit";
 
 const sectionComponents: Record<SectionId, React.ComponentType> = {
@@ -178,7 +176,6 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   whatsapp: WhatsAppView,
   accounts: AccountsView,
   logs: LogsView,
-  "demo-copies": DemoCopiesView,
 };
 
 function downloadTextFile(
@@ -817,32 +814,6 @@ export function TeacherProLayout() {
       </aside>
 
       <main className="flex-1 flex flex-col min-h-screen min-w-0">
-        {/* Demo Banner */}
-        {isDemoActive() &&
-          (() => {
-            const demo = getActiveDemo();
-            return demo ? (
-              <div className="bg-gradient-to-l from-amber-500 to-orange-500 text-white px-4 py-2 flex items-center justify-between gap-3 z-40">
-                <div className="flex items-center gap-2">
-                  <Copy className="w-4 h-4" />
-                  <span className="font-semibold text-sm">
-                    أنت الآن في بيئة ديمو تجريبية - {demo.name}
-                  </span>
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="text-xs h-7"
-                  onClick={() => {
-                    exitDemoCopy();
-                    toast.success("تم الخروج من بيئة الديمو");
-                  }}
-                >
-                  خروج من الديمو
-                </Button>
-              </div>
-            ) : null;
-          })()}
         <header className="sticky top-0 z-30 border-b border-border/70 bg-background/75 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65">
           <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-6">
             <div className="flex items-center gap-3">

@@ -15,7 +15,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { DemoCopiesTab } from './demo-copies';
 import { useActionLock } from '@/hooks/use-action-lock';
 
 // ─── Permission categories for grouping ──────────────────────────────────────
@@ -23,7 +22,7 @@ import { useActionLock } from '@/hooks/use-action-lock';
 const PERMISSION_CATEGORIES = [
   'النظام', 'الدورات', 'المجموعات الإلكترونية', 'المواقع', 'الفصول',
   'الطلاب', 'الامتحانات', 'الدرجات', 'الفرص', 'التصحيح',
-  'واتساب', 'الحسابات', 'السجلات', 'نسخ الديمو',
+  'واتساب', 'الحسابات', 'السجلات',
 ];
 
 function getPermissionsByCategory(permissions: PermissionEntry[]) {
@@ -597,16 +596,12 @@ export function AccountsView() {
         <TabsList className="w-full max-w-lg">
           <TabsTrigger value="users" className="flex-1">المستخدمين</TabsTrigger>
           <TabsTrigger value="roles" className="flex-1">الأدوار والصلاحيات</TabsTrigger>
-          <TabsTrigger value="demos" className="flex-1">نسخ الديمو</TabsTrigger>
         </TabsList>
         <TabsContent value="users" className="mt-4">
           <UsersTab />
         </TabsContent>
         <TabsContent value="roles" className="mt-4">
           <RolesTab />
-        </TabsContent>
-        <TabsContent value="demos" className="mt-4">
-          <DemoCopiesTab />
         </TabsContent>
       </Tabs>
     </div>

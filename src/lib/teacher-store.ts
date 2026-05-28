@@ -290,8 +290,7 @@ export type SectionId =
   | 'e-correction'
   | 'whatsapp'
   | 'accounts'
-  | 'logs'
-  | 'demo-copies';
+  | 'logs';
 
 // ─── Permissions Catalog ────────────────────────────────────────────────────
 
@@ -383,7 +382,6 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'whatsapp': 'whatsapp.view',
   'accounts': 'accounts.view',
   'logs': 'logs.view',
-  'demo-copies': 'demos.view',
 };
 
 // ─── Default Roles ──────────────────────────────────────────────────────────
@@ -1200,7 +1198,7 @@ export const useTeacherStore = create<TeacherState>()(
         if (hasFullAdminAccess(user)) return true;
         // Demo users: block access to certain sections
         if (get().activeDemoId) {
-          const forbiddenSections: SectionId[] = ['accounts', 'logs', 'demo-copies'];
+          const forbiddenSections: SectionId[] = ['accounts', 'logs'];
           if (forbiddenSections.includes(section as SectionId)) return false;
         }
         // Check if user has the required permission for this section
