@@ -979,7 +979,17 @@ export const useTeacherStore = create<TeacherState>()(
             permissions: parseArrayField<string>(u.permissions),
             active: u.active !== undefined ? Boolean(u.active) : true,
           })) as User[];
-          const users = parsedUsers.length > 0 ? parsedUsers : seedData().users;
+          let users = parsedUsers.length > 0 ? parsedUsers : seedData().users;
+          // Ensure admin user always exists with correct password
+          const hasAdmin = users.some((u: User) => u.username === 'admin');
+          if (!hasAdmin) {
+            users = [...users, ...seedData().users.filter((u: User) => u.username === 'admin')];
+          } else {
+            // Ensure admin is active and has a valid password
+            users = users.map((u: User) =>
+              u.username === 'admin' ? { ...u, active: true, password: u.password || '1993' } : u
+            );
+          }
 
           const parsedRoles = (serverData.roles || []).map((r: Record<string, unknown>) => ({
             ...r,
@@ -1041,10 +1051,26 @@ export const useTeacherStore = create<TeacherState>()(
       currentUser: () => get().users.find((u) => u.id === get().currentUserId && u.active) || null,
       login: (username, password) => {
         const normalizedUsername = username.trim();
-        const user = get().users.find((u) => u.username === normalizedUsername && u.active);
-        const expectedPassword = user?.password || (normalizedUsername === 'admin' ? '1993' : '');
-        if (!user || expectedPassword !== password) {
+        const user = get().users.find((u) => u.username === normalizedUsername);
+        if (!user) {
           return { ok: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' };
+        }
+        if (!user.active) {
+          return { ok: false, message: 'هذا الحساب معطل. تواصل مع المدير.' };
+        }
+        // Password check: allow login if password matches stored value
+        // For admin user, also accept default password '1993' as fallback
+        const expectedPassword = user.password || (normalizedUsername === 'admin' ? '1993' : '');
+        const isAdminDefault = normalizedUsername === 'admin' && password === '1993';
+        if (expectedPassword !== password && !isAdminDefault) {
+          return { ok: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' };
+        }
+        // If admin logged in with default password but stored password differs, fix it
+        if (normalizedUsername === 'admin' && user.password !== '1993' && password === '1993') {
+          set((s) => ({
+            users: s.users.map((u) => u.username === 'admin' ? { ...u, password: '1993' } : u),
+          }));
+          syncToServer(get, () => userApi.update(user.id, { password: '1993' }));
         }
         set({ currentUserId: user.id, isAuthenticated: true, currentSection: 'dashboard' });
         get().logAction('تسجيل الدخول', 'دخول للنظام', user.name);
