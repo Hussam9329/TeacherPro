@@ -37,6 +37,7 @@ export async function GET() {
         name: true,
         role: true,
         roleId: true,
+        passwordHash: true,
         permissions: true,
         active: true,
         createdAt: true,

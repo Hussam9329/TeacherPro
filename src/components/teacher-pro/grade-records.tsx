@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useTeacherStore } from "@/lib/teacher-store";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -25,9 +25,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
+
+type GradeStatus = "درجة" | "غائب" | "مجاز" | "غش";
 
 export function GradeRecordsView() {
   const {
@@ -47,74 +57,71 @@ export function GradeRecordsView() {
   const [accountingChecked, setAccountingChecked] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [deleteDialog, setDeleteDialog] = useState({
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, id: "", label: "" });
+  const [editDialog, setEditDialog] = useState({
     open: false,
     id: "",
-    label: "",
+    status: "درجة" as GradeStatus,
+    score: "",
+    notes: "",
+    accountingChecked: false,
   });
-  const { locked: isDeletingGrade, runLocked: runDeleteGradeLocked } =
-    useActionLock();
+  const { locked: isDeletingGrade, runLocked: runDeleteGradeLocked } = useActionLock();
 
   const filtered = useMemo(() => {
-    return grades.filter((g) => {
-      const student = students.find((s) => s.id === g.studentId);
-      const exam = exams.find((e) => e.id === g.examId);
+    return grades.filter((grade) => {
+      const student = students.find((item) => item.id === grade.studentId);
+      const exam = exams.find((item) => item.id === grade.examId);
       if (!student || !exam) return false;
-      if (
-        search &&
-        !searchAny(search, [student.name, student.code, student.telegram])
-      )
-        return false;
-      if (filterExamId && g.examId !== filterExamId) return false;
-      if (filterStatus && g.status !== filterStatus) return false;
-      if (filterCourseId && !exam.courseIds.includes(filterCourseId))
-        return false;
-      if (accountingChecked && !g.accountingChecked) return false;
+      if (search && !searchAny(search, [student.name, student.code, student.telegram, exam.name])) return false;
+      if (filterExamId && grade.examId !== filterExamId) return false;
+      if (filterStatus && grade.status !== filterStatus) return false;
+      if (filterCourseId && !exam.courseIds.includes(filterCourseId)) return false;
+      if (accountingChecked && !grade.accountingChecked) return false;
       return true;
     });
-  }, [
-    grades,
-    students,
-    exams,
-    search,
-    filterExamId,
-    filterStatus,
-    filterCourseId,
-    accountingChecked,
-  ]);
+  }, [grades, students, exams, search, filterExamId, filterStatus, filterCourseId, accountingChecked]);
 
-  const totalPages = Math.ceil(filtered.length / pageSize);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const handleEditGrade = (gradeId: string) => {
-    const grade = grades.find((g) => g.id === gradeId);
+  const openEditGradeDialog = (gradeId: string) => {
+    const grade = grades.find((item) => item.id === gradeId);
     if (!grade) return;
-    const nextStatus = prompt(
-      "الحالة: درجة / غائب / مجاز / غش",
-      grade.status,
-    ) as "درجة" | "غائب" | "مجاز" | "غش" | null;
-    if (!nextStatus || !["درجة", "غائب", "مجاز", "غش"].includes(nextStatus))
+    setEditDialog({
+      open: true,
+      id: grade.id,
+      status: grade.status as GradeStatus,
+      score: grade.score !== null && grade.score !== undefined ? String(grade.score) : "",
+      notes: grade.notes || "",
+      accountingChecked: grade.accountingChecked,
+    });
+  };
+
+  const handleSaveEditGrade = () => {
+    const grade = grades.find((item) => item.id === editDialog.id);
+    const exam = grade ? exams.find((item) => item.id === grade.examId) : null;
+    if (!grade || !exam) return;
+    const score = editDialog.status === "درجة" ? Number(toLatinDigits(editDialog.score)) : null;
+    if (editDialog.status === "درجة" && (!Number.isFinite(score) || score === null || score < 0 || score > exam.fullMark)) {
+      toast.error(`الدرجة يجب أن تكون بين 0 و ${exam.fullMark}`);
       return;
-    const nextScore =
-      nextStatus === "درجة"
-        ? Number(prompt("الدرجة", String(grade.score ?? 0)) || 0)
-        : null;
-    const notes = prompt("الملاحظات", grade.notes) ?? grade.notes;
-    updateGrade(gradeId, { status: nextStatus, score: nextScore, notes });
-    toast.success("تم تعديل السجل");
+    }
+    updateGrade(editDialog.id, {
+      status: editDialog.status,
+      score,
+      notes: editDialog.notes,
+      accountingChecked: editDialog.accountingChecked,
+    });
+    setEditDialog({ open: false, id: "", status: "درجة", score: "", notes: "", accountingChecked: false });
+    toast.success("تم تعديل الدرجة وإعادة الاحتساب");
   };
 
   const openDeleteGradeDialog = (gradeId: string) => {
-    const grade = grades.find((g) => g.id === gradeId);
-    const student = grade
-      ? students.find((s) => s.id === grade.studentId)
-      : null;
-    const exam = grade ? exams.find((e) => e.id === grade.examId) : null;
-    setDeleteDialog({
-      open: true,
-      id: gradeId,
-      label: [student?.name, exam?.name].filter(Boolean).join(" - "),
-    });
+    const grade = grades.find((item) => item.id === gradeId);
+    const student = grade ? students.find((item) => item.id === grade.studentId) : null;
+    const exam = grade ? exams.find((item) => item.id === grade.examId) : null;
+    setDeleteDialog({ open: true, id: gradeId, label: [student?.name, exam?.name].filter(Boolean).join(" - ") });
   };
 
   const handleDeleteGrade = runDeleteGradeLocked(async () => {
@@ -124,33 +131,13 @@ export function GradeRecordsView() {
   });
 
   const exportCSV = () => {
-    const headers = [
-      "الطالب",
-      "الكود",
-      "التليكرام",
-      "الامتحان",
-      "الحالة",
-      "الدرجة",
-      "التصنيف",
-      "محاسبة",
-      "ملاحظات",
-    ];
-    const rows = filtered.map((g) => {
-      const student = students.find((s) => s.id === g.studentId);
-      const exam = exams.find((e) => e.id === g.examId);
-      const cls = classification(g, exam!);
-      return [
-        student?.name || "",
-        student?.code || "",
-        student?.telegram || "",
-        exam?.name || "",
-        g.status,
-        g.score?.toString() || "",
-        cls.text,
-        g.accountingChecked ? "نعم" : "لا",
-        g.notes,
-      ]
-        .map((v) => `"${v}"`)
+    const headers = ["الطالب", "الكود", "التليكرام", "الامتحان", "الحالة", "الدرجة", "التصنيف", "محاسبة", "ملاحظات"];
+    const rows = filtered.map((grade) => {
+      const student = students.find((item) => item.id === grade.studentId);
+      const exam = exams.find((item) => item.id === grade.examId);
+      const cls = exam ? classification(grade, exam) : { text: "" };
+      return [student?.name || "", student?.code || "", student?.telegram || "", exam?.name || "", grade.status, grade.score?.toString() || "", cls.text, grade.accountingChecked ? "نعم" : "لا", grade.notes || ""]
+        .map((value) => `"${String(value).replaceAll('"', '""')}"`)
         .join(",");
     });
     const csv = "\ufeff" + [headers.join(","), ...rows].join("\n");
@@ -166,274 +153,118 @@ export function GradeRecordsView() {
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
       <Card>
         <CardContent className="p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             <div className="space-y-1">
-              <Label htmlFor="grade-records-search" className="text-xs">
-                بحث
-              </Label>
-              <Input
-                id="grade-records-search"
-                name="search"
-                autoComplete="off"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="اسم / كود / تليكرام"
-              />
+              <Label htmlFor="grade-records-search" className="text-xs">بحث</Label>
+              <Input id="grade-records-search" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تليكرام / امتحان" />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="grade-records-exam" className="text-xs">
-                الامتحان
-              </Label>
-              <Select
-                name="examId"
-                value={filterExamId}
-                onValueChange={(v) => {
-                  setFilterExamId(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="grade-records-exam">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {exams.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+              <Label htmlFor="grade-records-exam" className="text-xs">الامتحان</Label>
+              <Select value={filterExamId || "all"} onValueChange={(v) => { setFilterExamId(v === "all" ? "" : v); setPage(1); }}>
+                <SelectTrigger id="grade-records-exam"><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectContent><SelectItem value="all">الكل</SelectItem>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="grade-records-status" className="text-xs">
-                الحالة
-              </Label>
-              <Select
-                name="status"
-                value={filterStatus}
-                onValueChange={(v) => {
-                  setFilterStatus(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="grade-records-status">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="درجة">درجة</SelectItem>
-                  <SelectItem value="غائب">غائب</SelectItem>
-                  <SelectItem value="مجاز">مجاز</SelectItem>
-                  <SelectItem value="غش">غش</SelectItem>
-                </SelectContent>
+              <Label htmlFor="grade-records-status" className="text-xs">الحالة</Label>
+              <Select value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
+                <SelectTrigger id="grade-records-status"><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectContent><SelectItem value="all">الكل</SelectItem><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="مجاز">مجاز</SelectItem><SelectItem value="غش">غش</SelectItem></SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="grade-records-course" className="text-xs">
-                الدورة
-              </Label>
-              <Select
-                name="courseId"
-                value={filterCourseId}
-                onValueChange={(v) => {
-                  setFilterCourseId(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="grade-records-course">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {courses.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+              <Label htmlFor="grade-records-course" className="text-xs">الدورة</Label>
+              <Select value={filterCourseId || "all"} onValueChange={(v) => { setFilterCourseId(v === "all" ? "" : v); setPage(1); }}>
+                <SelectTrigger id="grade-records-course"><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectContent><SelectItem value="all">الكل</SelectItem>{courses.map((course) => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="flex items-center gap-2 pt-5">
-              <Checkbox
-                id="grade-records-accounting"
-                name="accounting"
-                checked={accountingChecked}
-                onCheckedChange={(v) => {
-                  setAccountingChecked(!!v);
-                  setPage(1);
-                }}
-              />
-              <Label htmlFor="grade-records-accounting" className="text-xs">
-                محاسبة فقط
-              </Label>
+              <Checkbox id="grade-records-accounting" checked={accountingChecked} onCheckedChange={(value) => { setAccountingChecked(!!value); setPage(1); }} />
+              <Label htmlFor="grade-records-accounting" className="text-xs">محاسبة فقط</Label>
             </div>
-            <div className="space-y-1">
-              <span className="text-xs font-medium">تصدير</span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full h-9"
-                onClick={exportCSV}
-              >
-                تصدير CSV
-              </Button>
-            </div>
+            <div className="space-y-1"><span className="text-xs font-medium">تصدير</span><Button variant="outline" size="sm" className="h-9 w-full" onClick={exportCSV}>تصدير CSV</Button></div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Count */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>
-          عرض {paged.length} من {filtered.length} سجل
-        </span>
+        <span>عرض {paged.length} من {filtered.length} سجل</span>
         <div className="flex items-center gap-2">
-          <Label htmlFor="grade-records-pageSize" className="text-xs">
-            حجم الصفحة:
-          </Label>
-          <Select
-            name="pageSize"
-            value={String(pageSize)}
-            onValueChange={(v) => {
-              setPageSize(Number(v));
-              setPage(1);
-            }}
-          >
-            <SelectTrigger id="grade-records-pageSize" className="w-20 h-8">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10</SelectItem>
-              <SelectItem value="50">50</SelectItem>
-              <SelectItem value="100">100</SelectItem>
-            </SelectContent>
+          <Label htmlFor="grade-records-pageSize" className="text-xs">حجم الصفحة:</Label>
+          <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
+            <SelectTrigger id="grade-records-pageSize" className="h-8 w-20"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="10">10</SelectItem><SelectItem value="50">50</SelectItem><SelectItem value="100">100</SelectItem></SelectContent>
           </Select>
         </div>
       </div>
 
-      {/* Grade Cards */}
       <div className="space-y-2">
-        {paged.map((g) => {
-          const student = students.find((s) => s.id === g.studentId);
-          const exam = exams.find((e) => e.id === g.examId);
+        {paged.map((grade) => {
+          const student = students.find((item) => item.id === grade.studentId);
+          const exam = exams.find((item) => item.id === grade.examId);
           if (!student || !exam) return null;
-          const cls = classification(g, exam);
-
+          const cls = classification(grade, exam);
           return (
-            <div
-              key={g.id}
-              className="flex items-center justify-between gap-3 p-3 rounded-2xl border bg-card/80 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium text-sm truncate">{student.name}</p>
-                  <Badge variant="outline" className="text-[10px]">
-                    {student.code}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                  <span>{student.telegram}</span>
-                  <span>•</span>
-                  <span>{exam.name}</span>
-                  <span>•</span>
-                  <span>{g.createdAt}</span>
-                </div>
+            <div key={grade.id} className="flex items-center justify-between gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2"><p className="truncate text-sm font-medium">{student.name}</p><Badge variant="outline" className="text-[10px]">{student.code}</Badge></div>
+                <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground"><span>{student.telegram}</span><span>•</span><span>{exam.name}</span><span>•</span><span>{grade.createdAt}</span></div>
               </div>
               <div className="flex items-center gap-2">
-                {g.score !== null && (
-                  <span className="font-bold">
-                    {g.score}/{exam.fullMark}
-                  </span>
-                )}
-                <Badge
-                  variant={
-                    cls.type === "ok"
-                      ? "default"
-                      : cls.type === "danger"
-                        ? "destructive"
-                        : cls.type === "warn"
-                          ? "secondary"
-                          : "outline"
-                  }
-                >
-                  {cls.text}
-                </Badge>
-                {g.accountingChecked && <Badge variant="outline">محاسبة</Badge>}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleEditGrade(g.id)}
-                >
-                  تعديل
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => openDeleteGradeDialog(g.id)}
-                >
-                  حذف
-                </Button>
+                {grade.score !== null && <span className="font-bold">{grade.score}/{exam.fullMark}</span>}
+                <Badge variant={cls.type === "ok" ? "default" : cls.type === "danger" ? "destructive" : cls.type === "warn" ? "secondary" : "outline"}>{cls.text}</Badge>
+                {grade.accountingChecked && <Badge variant="outline">محاسبة</Badge>}
+                <Button variant="secondary" size="sm" onClick={() => openEditGradeDialog(grade.id)}>تعديل</Button>
+                <Button variant="destructive" size="sm" onClick={() => openDeleteGradeDialog(grade.id)}>حذف</Button>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-          >
-            السابق
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {page} / {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            التالي
-          </Button>
+          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((prev) => prev - 1)}>السابق</Button>
+          <span className="text-sm text-muted-foreground">{page} / {totalPages}</span>
+          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((prev) => prev + 1)}>التالي</Button>
         </div>
       )}
 
-      <AlertDialog
-        open={deleteDialog.open}
-        onOpenChange={(open) => setDeleteDialog((prev) => ({ ...prev, open }))}
-      >
+      <Dialog open={editDialog.open} onOpenChange={(open) => setEditDialog((prev) => ({ ...prev, open }))}>
+        <DialogContent dir="rtl">
+          <DialogHeader><DialogTitle>تعديل درجة الطالب</DialogTitle></DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label>الحالة</Label>
+              <Select value={editDialog.status} onValueChange={(value) => setEditDialog((prev) => ({ ...prev, status: value as GradeStatus }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="مجاز">مجاز</SelectItem><SelectItem value="غش">غش</SelectItem></SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>الدرجة</Label>
+              <Input type="number" disabled={editDialog.status !== "درجة"} value={editDialog.score} onChange={(e) => setEditDialog((prev) => ({ ...prev, score: toLatinDigits(e.target.value) }))} />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label>الملاحظات</Label>
+              <Input value={editDialog.notes} onChange={(e) => setEditDialog((prev) => ({ ...prev, notes: e.target.value }))} placeholder="سبب الإجازة أو ملاحظة التصحيح" />
+            </div>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <Checkbox checked={editDialog.accountingChecked} onCheckedChange={(value) => setEditDialog((prev) => ({ ...prev, accountingChecked: Boolean(value) }))} />
+              تم تدقيقه من المحاسبة
+            </label>
+          </div>
+          <DialogFooter><Button variant="ghost" onClick={() => setEditDialog({ open: false, id: "", status: "درجة", score: "", notes: "", accountingChecked: false })}>إلغاء</Button><Button onClick={handleSaveEditGrade}>حفظ التعديل</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog((prev) => ({ ...prev, open }))}>
         <AlertDialogContent dir="rtl">
-          <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-            <AlertDialogDescription>
-              هل أنت متأكد من حذف سجل الدرجة
-              {deleteDialog.label ? ` (${deleteDialog.label})` : ""}؟ لا يمكن
-              التراجع عن هذه العملية.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteGrade}
-              disabled={isDeletingGrade}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isDeletingGrade ? "جاري الحذف..." : "حذف"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          <AlertDialogHeader><AlertDialogTitle>تأكيد الحذف</AlertDialogTitle><AlertDialogDescription>هل أنت متأكد من حذف سجل الدرجة{deleteDialog.label ? ` (${deleteDialog.label})` : ""}؟ لا يمكن التراجع عن هذه العملية.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel>إلغاء</AlertDialogCancel><AlertDialogAction onClick={handleDeleteGrade} disabled={isDeletingGrade} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingGrade ? "جاري الحذف..." : "حذف"}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

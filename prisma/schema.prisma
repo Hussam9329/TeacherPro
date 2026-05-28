@@ -113,6 +113,8 @@ model Exam {
   opportunitiesPenalty String
   dismissalGrade     Int?
   active             Boolean @default(true)
+  scheduledActivateAt   DateTime?
+  scheduledDeactivateAt DateTime?
   attendanceClosed   Boolean @default(false)
   attendance         String  @default("[]")
   groupId            String?

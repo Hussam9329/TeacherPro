@@ -172,6 +172,7 @@ export function StudentRegistryView() {
     setSection,
     courseName,
     groupName,
+    activeChapterForCourse,
   } = useTeacherStore();
 
   const [search, setSearch] = useState("");
@@ -825,9 +826,15 @@ export function StudentRegistryView() {
                 </div>
                 <div>
                   <span className="text-muted-foreground text-xs">الفرص</span>
-                  <p className="font-medium text-xs">
-                    {student.opportunities} / {student.baseOpportunities}
-                  </p>
+                  {activeChapterForCourse(student.courseId) ? (
+                    <p className="font-medium text-xs">
+                      {student.opportunities} / {student.baseOpportunities}
+                    </p>
+                  ) : (
+                    <p className="font-semibold text-xs text-destructive">
+                      0 / 0 - لم يتم اختيار الفصل لهم بعد
+                    </p>
+                  )}
                 </div>
                 <div>
                   <span className="text-muted-foreground text-xs">تليكرام</span>
@@ -1497,8 +1504,14 @@ export function StudentRegistryView() {
                 <div>
                   <span className="text-muted-foreground">الفرص:</span>{" "}
                   <strong>
-                    {fileDialog.student.opportunities} /{" "}
-                    {fileDialog.student.baseOpportunities}
+                    {activeChapterForCourse(fileDialog.student.courseId) ? (
+                      <>
+                        {fileDialog.student.opportunities} /{" "}
+                        {fileDialog.student.baseOpportunities}
+                      </>
+                    ) : (
+                      "0 / 0 - لم يتم اختيار الفصل لهم بعد"
+                    )}
                   </strong>
                 </div>
                 <div>

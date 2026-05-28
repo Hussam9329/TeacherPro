@@ -28,6 +28,7 @@ export async function GET() {
         name: true,
         role: true,
         roleId: true,
+        passwordHash: true,
         permissions: true,
         active: true,
         createdAt: true,
@@ -36,7 +37,12 @@ export async function GET() {
         logs: true,
       },
     });
-    return NextResponse.json({ users });
+    return NextResponse.json({
+      users: users.map(({ passwordHash, ...user }) => ({
+        ...user,
+        password: passwordHash || undefined,
+      })),
+    });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل المستخدمين حالياً.');
   }

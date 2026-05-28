@@ -105,6 +105,8 @@ export interface Exam {
   opportunitiesPenalty: number | 'فصل مؤقت';
   dismissalGrade: number | null;
   active: boolean;
+  scheduledActivateAt?: string;
+  scheduledDeactivateAt?: string;
   attendanceClosed: boolean;
   attendance: string[];
 }
@@ -278,6 +280,7 @@ export type SectionId =
   | 'chapters'
   | 'student-register'
   | 'student-registry'
+  | 'accounting'
   | 'exam-new'
   | 'grade-entry'
   | 'exam-records'
@@ -328,6 +331,8 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   { id: 'students.add', label: 'تسجيل طالب', category: 'الطلاب', level: 'write', description: 'تسجيل طالب جديد' },
   { id: 'students.edit', label: 'تعديل بيانات طالب', category: 'الطلاب', level: 'write', description: 'تعديل بيانات طالب' },
   { id: 'students.delete', label: 'حذف طالب', category: 'الطلاب', level: 'delete', description: 'حذف طالب من النظام' },
+  { id: 'accounting.view', label: 'عرض الأقساط والمحاسبة', category: 'الطلاب', level: 'read', description: 'عرض تفاصيل الأقساط والمحاسبة للدورات الخاصة' },
+  { id: 'accounting.manage', label: 'إدارة الأقساط والمحاسبة', category: 'الطلاب', level: 'manage', description: 'تسجيل دفعات الأقساط ومتابعة المتبقي' },
   // الامتحانات
   { id: 'exams.view', label: 'عرض الامتحانات', category: 'الامتحانات', level: 'read', description: 'عرض قائمة الامتحانات' },
   { id: 'exams.add', label: 'إضافة امتحان', category: 'الامتحانات', level: 'write', description: 'إنشاء امتحان جديد' },
@@ -367,6 +372,7 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'chapters': 'chapters.view',
   'student-register': 'students.add',
   'student-registry': 'students.view',
+  'accounting': 'accounting.view',
   'exam-new': 'exams.add',
   'grade-entry': 'grades.add',
   'exam-records': 'exams.view',
@@ -477,6 +483,7 @@ interface TeacherState {
   studentPageSize: number;
   gradePageSize: number;
   currentUserId: string;
+  isAuthenticated: boolean;
 
   loadFromServer: () => Promise<boolean>;
 
@@ -486,6 +493,7 @@ interface TeacherState {
   toggleTheme: () => void;
 
   currentUser: () => User | null;
+  login: (username: string, password: string) => { ok: boolean; message: string };
   canAccess: (section: SectionId | string) => boolean;
   logout: () => void;
 
@@ -535,6 +543,7 @@ interface TeacherState {
   addGrade: (grade: Omit<Grade, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateGrade: (id: string, updates: Partial<Grade>) => void;
   deleteGrade: (id: string) => boolean;
+  recalculateAcademicEffects: () => void;
 
   adjustOpportunities: (studentId: string, amount: number, reason: string) => void;
   resetOpportunities: (studentId: string) => void;
@@ -623,7 +632,7 @@ function seedData() {
   const roles: Role[] = DEFAULT_ROLES.map(r => ({ ...r, permissions: [...r.permissions] }));
 
   const users: User[] = [
-    { id: 'u_admin', username: 'admin', name: 'مدير النظام', roleId: 'role_admin', role: 'مدير عام', permissions: [...ALL_PERMISSION_IDS], active: true, password: 'admin123' },
+    { id: 'u_admin', username: 'admin', name: 'مدير النظام', roleId: 'role_admin', role: 'مدير عام', permissions: [...ALL_PERMISSION_IDS], active: true, password: '1993' },
   ];
 
   return {
@@ -748,6 +757,103 @@ function mergeDefaultRoles(roles: Role[]): Role[] {
   ];
 }
 
+
+function isRuleManagedDismissal(student: Student): boolean {
+  const reason = student.dismissalReason || '';
+  return [
+    'غياب امتحان',
+    'أول حالة غش',
+    'غش متكرر',
+    'درجة فصل',
+    'درجة صفر',
+    'انتهاء الفرص',
+  ].some((part) => reason.includes(part));
+}
+
+function examPenaltyValue(exam: Exam): number {
+  return typeof exam.opportunitiesPenalty === 'number'
+    ? exam.opportunitiesPenalty
+    : Number(exam.opportunitiesPenalty) || 1;
+}
+
+function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'students' | 'grades' | 'exams'>): Student[] {
+  const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
+  return state.students.map((student) => {
+    const manualDismissal = student.status === 'مفصول' && !isRuleManagedDismissal(student);
+    if (manualDismissal) return student;
+
+    let opportunities = Number(student.baseOpportunities || 0);
+    let dismissalType = '';
+    let dismissalReason = '';
+    let dismissalPriority = -1;
+    let cheatCount = 0;
+
+    const studentGrades = state.grades
+      .filter((grade) => grade.studentId === student.id)
+      .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+
+    const setDismissal = (type: string, reason: string, priority: number) => {
+      if (priority >= dismissalPriority) {
+        dismissalType = type;
+        dismissalReason = reason;
+        dismissalPriority = priority;
+      }
+    };
+
+    for (const grade of studentGrades) {
+      const exam = examsById.get(grade.examId);
+      if (!exam) continue;
+      if (grade.status === 'مجاز') continue;
+
+      if (grade.status === 'غش') {
+        cheatCount += 1;
+        if (cheatCount === 1) {
+          opportunities = 0;
+          setDismissal('فصل مؤقت', `أول حالة غش في امتحان: ${exam.name}`, 80);
+        } else {
+          setDismissal('فصل نهائي', `غش متكرر في امتحان: ${exam.name}`, 100);
+        }
+        continue;
+      }
+
+      if (grade.status === 'غائب') {
+        if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
+          setDismissal('فصل مؤقت', `غياب امتحان ${exam.type}: ${exam.name}`, 70);
+        } else {
+          opportunities -= examPenaltyValue(exam);
+        }
+        continue;
+      }
+
+      if (grade.status === 'درجة' && grade.score !== null) {
+        const score = Number(grade.score);
+        if (score <= exam.discountMark) {
+          opportunities -= examPenaltyValue(exam);
+          if ((exam.type === 'تراكمي' || exam.type === 'فاينل') && exam.dismissalGrade !== null && score <= exam.dismissalGrade) {
+            setDismissal('فصل مؤقت', `درجة فصل (${score}): ${exam.name}`, 75);
+          }
+        }
+        if (score === 0 && (exam.type === 'تراكمي' || exam.type === 'فاينل')) {
+          setDismissal('فصل مؤقت', `درجة صفر في امتحان ${exam.type}: ${exam.name}`, 76);
+        }
+      }
+    }
+
+    opportunities = Math.max(0, opportunities);
+    if (opportunities === 0 && Number(student.baseOpportunities || 0) > 0 && !dismissalType) {
+      setDismissal('فصل مؤقت', 'انتهاء الفرص', 60);
+    }
+
+    return {
+      ...student,
+      opportunities,
+      status: dismissalType ? 'مفصول' : 'نشط',
+      dismissalType,
+      dismissalReason,
+    };
+  });
+}
+
 function syncToServer(getState: () => TeacherState, action: () => unknown): void {
   if (getState().activeDemoId) return;
   void Promise.resolve()
@@ -768,6 +874,7 @@ export const useTeacherStore = create<TeacherState>()(
       studentPageSize: 10,
       gradePageSize: 10,
       currentUserId: 'u_admin',
+      isAuthenticated: false,
       dbConnected: false,
       dbLoading: false,
 
@@ -840,6 +947,8 @@ export const useTeacherStore = create<TeacherState>()(
             opportunitiesPenalty: ex.opportunitiesPenalty === 'فصل مؤقت' ? 'فصل مؤقت' as const : Number(ex.opportunitiesPenalty || 1),
             dismissalGrade: ex.dismissalGrade === null || ex.dismissalGrade === undefined ? null : Number(ex.dismissalGrade),
             active: Boolean(ex.active),
+            scheduledActivateAt: ex.scheduledActivateAt ? String(ex.scheduledActivateAt).slice(0, 10) : '',
+            scheduledDeactivateAt: ex.scheduledDeactivateAt ? String(ex.scheduledDeactivateAt).slice(0, 10) : '',
             attendanceClosed: Boolean(ex.attendanceClosed),
             date: ex.date ? String(ex.date).slice(0, 10) : todayISO(),
           })) as Exam[];
@@ -866,6 +975,7 @@ export const useTeacherStore = create<TeacherState>()(
 
           const parsedUsers = (serverData.users || []).map((u: Record<string, unknown>) => ({
             ...u,
+            password: String(u.password || u.passwordHash || (u.username === 'admin' ? '1993' : '')),
             permissions: parseArrayField<string>(u.permissions),
             active: u.active !== undefined ? Boolean(u.active) : true,
           })) as User[];
@@ -929,7 +1039,19 @@ export const useTeacherStore = create<TeacherState>()(
       }),
 
       currentUser: () => get().users.find((u) => u.id === get().currentUserId && u.active) || null,
+      login: (username, password) => {
+        const normalizedUsername = username.trim();
+        const user = get().users.find((u) => u.username === normalizedUsername && u.active);
+        const expectedPassword = user?.password || (normalizedUsername === 'admin' ? '1993' : '');
+        if (!user || expectedPassword !== password) {
+          return { ok: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' };
+        }
+        set({ currentUserId: user.id, isAuthenticated: true, currentSection: 'dashboard' });
+        get().logAction('تسجيل الدخول', 'دخول للنظام', user.name);
+        return { ok: true, message: 'تم تسجيل الدخول بنجاح' };
+      },
       canAccess: (section) => {
+        if (!get().isAuthenticated && !get().activeDemoId) return false;
         const user = get().currentUser();
         if (!user) return false;
         // Admin role always has access
@@ -951,8 +1073,8 @@ export const useTeacherStore = create<TeacherState>()(
           return;
         }
         const admin = get().users.find((u) => u.roleId === 'role_admin' && u.active);
-        set({ currentUserId: admin?.id || 'u_admin', currentSection: 'dashboard' });
-        get().logAction('تسجيل الدخول', 'تسجيل خروج', 'رجوع إلى مدير النظام المحلي');
+        set({ currentUserId: admin?.id || 'u_admin', currentSection: 'dashboard', isAuthenticated: false });
+        get().logAction('تسجيل الدخول', 'تسجيل خروج', 'إغلاق جلسة المستخدم');
       },
 
       courseName: (id) => get().courses.find((c) => c.id === id)?.name || 'غير محدد',
@@ -1269,6 +1391,7 @@ export const useTeacherStore = create<TeacherState>()(
         set((s) => ({ exams: s.exams.map((e) => e.id === id ? { ...e, ...updates } : e) }));
         get().logAction('الامتحانات', 'تعديل امتحان', get().exams.find((e) => e.id === id)?.name || id);
         syncToServer(get, () => examApi.update(id, updates as Record<string, unknown>));
+        get().recalculateAcademicEffects();
       },
       toggleExam: (id) => {
         const exam = get().exams.find((e) => e.id === id);
@@ -1311,53 +1434,25 @@ export const useTeacherStore = create<TeacherState>()(
       addGrade: (gradeData) => {
         const stateBefore = get();
         const existing = stateBefore.grades.find((g) => g.studentId === gradeData.studentId && g.examId === gradeData.examId);
-        const oldSame = existing && existing.status === gradeData.status && existing.score === gradeData.score;
         const grade: Grade = existing
-          ? { ...existing, ...gradeData, updatedAt: todayISO() }
+          ? {
+              ...existing,
+              ...gradeData,
+              accountingChecked: gradeData.accountingChecked ?? existing.accountingChecked,
+              updatedAt: todayISO(),
+            }
           : { ...gradeData, id: uid('gr'), createdAt: todayISO(), updatedAt: todayISO() };
 
         set((s) => ({ grades: existing ? s.grades.map((g) => g.id === existing.id ? grade : g) : [...s.grades, grade] }));
         get().logAction('الدرجات', existing ? 'تعديل درجة' : 'إدخال درجة', `${get().studentName(grade.studentId)} - ${stateBefore.exams.find((e) => e.id === grade.examId)?.name || ''}`);
-        // Sync grade to DB
         syncToServer(get, () => gradeApi.add(grade as unknown as Record<string, unknown>));
-
-        const exam = stateBefore.exams.find((e) => e.id === grade.examId);
-        const student = stateBefore.students.find((s) => s.id === grade.studentId);
-        if (!exam || !student || oldSame) return;
-
-        if (gradeData.status === 'غائب') {
-          if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
-            get().dismissStudent(grade.studentId, 'فصل مؤقت', `غياب امتحان ${exam.type}: ${exam.name}`);
-          } else {
-            const penalty = typeof exam.opportunitiesPenalty === 'number' ? exam.opportunitiesPenalty : 1;
-            get().adjustOpportunities(grade.studentId, -penalty, `غياب امتحان يومي: ${exam.name}`);
-          }
-        } else if (gradeData.status === 'غش') {
-          const previousCheatCount = stateBefore.grades.filter((g) => g.studentId === grade.studentId && g.status === 'غش' && g.id !== existing?.id).length;
-          if (previousCheatCount === 0) {
-            get().dismissStudent(grade.studentId, 'فصل مؤقت', `أول حالة غش في امتحان: ${exam.name}`);
-            get().adjustOpportunities(grade.studentId, -student.opportunities, `غش أول - حجز جميع الفرص: ${exam.name}`);
-          } else {
-            get().dismissStudent(grade.studentId, 'فصل نهائي', `غش متكرر في امتحان: ${exam.name}`);
-          }
-        } else if (gradeData.status === 'درجة' && gradeData.score !== null) {
-          const score = Number(gradeData.score);
-          if (score <= exam.discountMark) {
-            const penalty = typeof exam.opportunitiesPenalty === 'number' ? exam.opportunitiesPenalty : 1;
-            get().adjustOpportunities(grade.studentId, -penalty, `درجة مخصومة (${score}/${exam.fullMark}): ${exam.name}`);
-            if ((exam.type === 'تراكمي' || exam.type === 'فاينل') && exam.dismissalGrade !== null && score <= exam.dismissalGrade) {
-              get().dismissStudent(grade.studentId, 'فصل مؤقت', `درجة فصل (${score}): ${exam.name}`);
-            }
-          }
-          if (score === 0 && (exam.type === 'تراكمي' || exam.type === 'فاينل')) {
-            get().dismissStudent(grade.studentId, 'فصل مؤقت', `درجة صفر في امتحان ${exam.type}: ${exam.name}`);
-          }
-        }
+        get().recalculateAcademicEffects();
       },
       updateGrade: (id, updates) => {
         set((s) => ({ grades: s.grades.map((g) => g.id === id ? { ...g, ...updates, updatedAt: todayISO() } : g) }));
         get().logAction('الدرجات', 'تعديل مباشر للدرجة', id);
         syncToServer(get, () => gradeApi.update(id, updates as Record<string, unknown>));
+        get().recalculateAcademicEffects();
       },
       deleteGrade: (id) => {
         const grade = get().grades.find((g) => g.id === id);
@@ -1365,7 +1460,30 @@ export const useTeacherStore = create<TeacherState>()(
         set((s) => ({ grades: s.grades.filter((g) => g.id !== id) }));
         get().logAction('الدرجات', 'حذف درجة', `${get().studentName(grade.studentId)} - ${get().exams.find((e) => e.id === grade.examId)?.name || ''}`);
         syncToServer(get, () => gradeApi.remove(id));
+        get().recalculateAcademicEffects();
         return true;
+      },
+      recalculateAcademicEffects: () => {
+        const before = get().students;
+        const recalculated = recalculateStudentsFromAcademicRules(get());
+        set({ students: recalculated });
+        recalculated.forEach((student) => {
+          const oldStudent = before.find((item) => item.id === student.id);
+          if (!oldStudent) return;
+          if (
+            oldStudent.opportunities !== student.opportunities ||
+            oldStudent.status !== student.status ||
+            oldStudent.dismissalType !== student.dismissalType ||
+            oldStudent.dismissalReason !== student.dismissalReason
+          ) {
+            syncToServer(get, () => studentApi.update(student.id, {
+              opportunities: student.opportunities,
+              status: student.status,
+              dismissalType: student.dismissalType,
+              dismissalReason: student.dismissalReason,
+            }));
+          }
+        });
       },
       adjustOpportunities: (studentId, amount, reason) => {
         const stateBefore = get();
@@ -1657,7 +1775,7 @@ export const useTeacherStore = create<TeacherState>()(
         if (demo.expiresAt && new Date(demo.expiresAt) < new Date()) return;
         const mainSnapshot = state.mainSnapshotBeforeDemo || snapshotOperationalData(state);
         const demoData = restoreOperationalData(demo.snapshot);
-        set({ ...demoData, mainSnapshotBeforeDemo: mainSnapshot, activeDemoId: id, currentUserId: demo.demoUserId, currentSection: 'dashboard' });
+        set({ ...demoData, mainSnapshotBeforeDemo: mainSnapshot, activeDemoId: id, currentUserId: demo.demoUserId, currentSection: 'dashboard', isAuthenticated: true });
         get().logAction('نسخ الديمو', 'دخول نسخة ديمو', demo.name);
       },
       exitDemoCopy: () => {
@@ -1674,6 +1792,7 @@ export const useTeacherStore = create<TeacherState>()(
           mainSnapshotBeforeDemo: null,
           currentUserId: 'u_admin',
           currentSection: 'dashboard',
+          isAuthenticated: false,
         }));
         syncToServer(get, () => demoCopyApi.update(demo.id, { snapshot: currentSnapshot }));
         get().logAction('نسخ الديمو', 'خروج من نسخة ديمو', demo.name);

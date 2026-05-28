@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,75 +16,116 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
-import { useActionLock } from "@/hooks/use-action-lock";
+import { searchAny } from "@/lib/validation";
+import { hasActiveChapterLink, isExamAvailableForEntry, splitSelection } from "@/lib/exam-utils";
+
+type DraftGrade = {
+  status: "درجة" | "غائب" | "مجاز" | "غش";
+  score: string;
+  notes: string;
+};
+
+const statusOptions: DraftGrade["status"][] = ["درجة", "غائب", "مجاز", "غش"];
 
 export function GradeEntryView() {
   const {
     exams,
     students,
     grades,
+    courses,
+    courseChapters,
     addGrade,
-    updateGrade,
     courseName,
     classification,
   } = useTeacherStore();
-  const { locked: isSavingGrade, runLocked: runSaveGradeLocked } =
-    useActionLock();
 
   const [selectedExamId, setSelectedExamId] = useState("");
+  const [search, setSearch] = useState("");
+  const [filterCourseId, setFilterCourseId] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, DraftGrade>>({});
+  const [savingRows, setSavingRows] = useState<Record<string, boolean>>({});
+  const [savedRows, setSavedRows] = useState<Record<string, string>>({});
 
   const selectedExam = exams.find((e) => e.id === selectedExamId);
-  const activeExams = exams.filter((e) => e.active);
+  const activeExams = exams.filter((e) => isExamAvailableForEntry(e));
 
-  // Get students for the selected exam
+  const getGrade = (studentId: string) =>
+    grades.find((g) => g.studentId === studentId && g.examId === selectedExamId);
+
+  const getDraft = (studentId: string): DraftGrade => {
+    const existing = getGrade(studentId);
+    return drafts[studentId] || {
+      status: (existing?.status as DraftGrade["status"]) || "درجة",
+      score: existing?.score !== null && existing?.score !== undefined ? String(existing.score) : "",
+      notes: existing?.notes || "",
+    };
+  };
+
+  const updateDraft = (studentId: string, patch: Partial<DraftGrade>) => {
+    setDrafts((prev) => ({ ...prev, [studentId]: { ...getDraft(studentId), ...patch } }));
+  };
+
   const examStudents = useMemo(() => {
     if (!selectedExam) return [];
+    const selectedMainSites = splitSelection(selectedExam.mainSite);
+    const selectedGroupIds = splitSelection(selectedExam.groupId);
+
     return students
-      .filter(
-        (s) =>
-          selectedExam.courseIds.includes(s.courseId) && s.status === "نشط",
-      )
+      .filter((student) => {
+        if (student.status !== "نشط") return false;
+        if (!selectedExam.courseIds.includes(student.courseId)) return false;
+        if (!hasActiveChapterLink(courseChapters, student.courseId)) return false;
+        if (selectedMainSites.length > 0 && !selectedMainSites.includes(student.mainSite)) return false;
+        if (selectedGroupIds.length > 0 && !selectedGroupIds.includes(student.groupId)) return false;
+        if (filterCourseId && student.courseId !== filterCourseId) return false;
+        if (search && !searchAny(search, [student.name, student.code, student.telegram, student.phone])) return false;
+        const grade = grades.find((g) => g.studentId === student.id && g.examId === selectedExam.id);
+        if (filterStatus === "غير مسجل" && grade) return false;
+        if (filterStatus && filterStatus !== "غير مسجل" && grade?.status !== filterStatus) return false;
+        return true;
+      })
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
-  }, [selectedExam, students]);
+  }, [selectedExam, students, grades, courseChapters, search, filterCourseId, filterStatus]);
 
-  // Get or create grade for student
-  const getGrade = (studentId: string) =>
-    grades.find(
-      (g) => g.studentId === studentId && g.examId === selectedExamId,
-    );
+  const missingChapterCourses = useMemo(() => {
+    if (!selectedExam) return [];
+    return selectedExam.courseIds
+      .filter((courseId) => !hasActiveChapterLink(courseChapters, courseId))
+      .map((courseId) => courseName(courseId));
+  }, [selectedExam, courseChapters, courseName]);
 
-  const [editGrade, setEditGrade] = useState<string | null>(null);
-  const [editScore, setEditScore] = useState("");
-  const [editStatus, setEditStatus] = useState("درجة");
-  const [editNotes, setEditNotes] = useState("");
+  const saveGrade = async (studentId: string, draftOverride?: DraftGrade) => {
+    if (!selectedExam) return;
+    const draft = draftOverride || getDraft(studentId);
+    const status = draft.status;
+    const score = status === "درجة" ? Number(toLatinDigits(draft.score)) : null;
 
-  const handleSaveGrade = runSaveGradeLocked(async (studentId: string) => {
-    if (!selectedExamId) return;
+    if (status === "درجة") {
+      if (!Number.isFinite(score) || score === null || score < 0 || score > selectedExam.fullMark) {
+        toast.error(`الدرجة يجب أن تكون بين 0 و ${selectedExam.fullMark}`);
+        return;
+      }
+    }
 
-    const status = editStatus as "درجة" | "غائب" | "مجاز" | "غش";
-    const score = status === "درجة" ? Number(editScore) || 0 : null;
-
+    setSavingRows((prev) => ({ ...prev, [studentId]: true }));
+    const existing = getGrade(studentId);
     addGrade({
       studentId,
-      examId: selectedExamId,
+      examId: selectedExam.id,
       status,
       score,
-      accountingChecked: false,
-      notes: editNotes,
+      accountingChecked: existing?.accountingChecked || false,
+      notes: draft.notes,
     });
+    setSavingRows((prev) => ({ ...prev, [studentId]: false }));
+    setSavedRows((prev) => ({ ...prev, [studentId]: new Date().toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" }) }));
+    toast.success("تم الحفظ تلقائياً");
+  };
 
-    setEditGrade(null);
-    setEditScore("");
-    setEditNotes("");
-    toast.success("تم حفظ الدرجة");
-  });
-
-  const startEdit = (studentId: string) => {
-    const existing = getGrade(studentId);
-    setEditGrade(studentId);
-    setEditStatus(existing?.status || "درجة");
-    setEditScore(existing?.score?.toString() || "");
-    setEditNotes(existing?.notes || "");
+  const handleQuickScan = () => {
+    const code = window.prompt("امسح QR/باركود أو اكتب كود الطالب للبحث");
+    if (code?.trim()) setSearch(code.trim());
   };
 
   return (
@@ -94,8 +135,8 @@ export function GradeEntryView() {
           <CardTitle>تسجيل الدرجات</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="space-y-2">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
+            <div className="space-y-2 lg:col-span-2">
               <Label htmlFor="grade-entry-exam">اختر الامتحان</Label>
               <Select name="examId" value={selectedExamId} onValueChange={setSelectedExamId}>
                 <SelectTrigger id="grade-entry-exam">
@@ -111,31 +152,69 @@ export function GradeEntryView() {
               </Select>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="grade-entry-search">بحث الطالب</Label>
+              <Input
+                id="grade-entry-search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="اسم / كود / تليكرام"
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="grade-entry-course">الدورة</Label>
+              <Select value={filterCourseId || "all"} onValueChange={(v) => setFilterCourseId(v === "all" ? "" : v)}>
+                <SelectTrigger id="grade-entry-course">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {courses
+                    .filter((course) => selectedExam?.courseIds.includes(course.id))
+                    .map((course) => (
+                      <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="grade-entry-status-filter">حالة الدرجة</Label>
+              <Select value={filterStatus || "all"} onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}>
+                <SelectTrigger id="grade-entry-status-filter">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="غير مسجل">غير مسجل</SelectItem>
+                  {statusOptions.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleQuickScan}>بحث / مسح QR</Button>
             {selectedExam && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 rounded-2xl bg-muted/60">
-                <div>
-                  <span className="text-muted-foreground text-xs">النوع:</span>{" "}
-                  <Badge>{selectedExam.type}</Badge>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">النجاح:</span>{" "}
-                  {selectedExam.passMark}
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">الخصم:</span>{" "}
-                  {selectedExam.discountMark}
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">الفصل:</span>{" "}
-                  {selectedExam.dismissalGrade || "لا يوجد"}
-                </div>
+              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                <Badge>{selectedExam.type}</Badge>
+                <span>النجاح: {selectedExam.passMark}</span>
+                <span>الخصم: {selectedExam.discountMark}</span>
+                <span>الفصل: {selectedExam.dismissalGrade || "لا يوجد"}</span>
               </div>
             )}
           </div>
+
+          {missingChapterCourses.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+              الدورات التالية غير مربوطة بفصل نشط ولن تظهر ضمن إدخال الدرجات: {missingChapterCourses.join("، ")}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Grade Entry Table */}
       {selectedExam && (
         <Card>
           <CardHeader>
@@ -143,124 +222,77 @@ export function GradeEntryView() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {examStudents.map((student) => {
-                const grade = getGrade(student.id);
-                const isEditing = editGrade === student.id;
-                const cls = grade ? classification(grade, selectedExam) : null;
-
-                return (
-                  <div
-                    key={student.id}
-                    className="p-3 rounded-2xl border bg-card/80 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {student.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {student.code} - {courseName(student.courseId)}
-                        </p>
+              {examStudents.length === 0 ? (
+                <p className="empty-state">لا يوجد طلاب مطابقون للفلاتر أو للدورات المربوطة بفصل نشط.</p>
+              ) : (
+                examStudents.map((student) => {
+                  const grade = getGrade(student.id);
+                  const draft = getDraft(student.id);
+                  const cls = grade ? classification(grade, selectedExam) : null;
+                  const isSaving = Boolean(savingRows[student.id]);
+                  return (
+                    <div key={student.id} className="grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm md:grid-cols-[1.4fr_120px_120px_1fr_120px]">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">{student.name}</p>
+                        <p className="text-xs text-muted-foreground">{student.code} - {courseName(student.courseId)}</p>
                       </div>
 
-                      {grade && !isEditing && (
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant={
-                              cls?.type === "ok"
-                                ? "default"
-                                : cls?.type === "danger"
-                                  ? "destructive"
-                                  : cls?.type === "warn"
-                                    ? "secondary"
-                                    : "outline"
-                            }
-                          >
-                            {cls?.text || grade.status}
-                          </Badge>
-                          {grade.score !== null && (
-                            <span className="text-sm font-bold">
-                              {grade.score}/{selectedExam.fullMark}
-                            </span>
-                          )}
-                        </div>
-                      )}
+                      <Input
+                        type="number"
+                        min={0}
+                        max={selectedExam.fullMark}
+                        disabled={draft.status !== "درجة"}
+                        value={draft.status === "درجة" ? draft.score : ""}
+                        onChange={(e) => updateDraft(student.id, { score: toLatinDigits(e.target.value), status: "درجة" })}
+                        onBlur={() => saveGrade(student.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            void saveGrade(student.id);
+                          }
+                        }}
+                        placeholder="الدرجة"
+                        className="h-10"
+                      />
 
-                      {isEditing ? (
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Select
-                            name={`status-${student.id}`}
-                            value={editStatus}
-                            onValueChange={setEditStatus}
-                          >
-                            <SelectTrigger
-                              id={`grade-entry-status-${student.id}`}
-                              className="w-28 h-8"
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="درجة">درجة</SelectItem>
-                              <SelectItem value="غائب">غائب</SelectItem>
-                              <SelectItem value="مجاز">مجاز</SelectItem>
-                              <SelectItem value="غش">غش</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {editStatus === "درجة" && (
-                            <Input
-                              id={`grade-entry-score-${student.id}`}
-                              name={`score-${student.id}`}
-                              type="number"
-                              autoComplete="off"
-                              className="w-20 h-8"
-                              value={editScore}
-                              onChange={(e) =>
-                                setEditScore(toLatinDigits(e.target.value))
-                              }
-                              placeholder="الدرجة"
-                              title="اكتب درجة الطالب رقماً فقط"
-                            />
-                          )}
-                          <Input
-                            id={`grade-entry-notes-${student.id}`}
-                            name={`notes-${student.id}`}
-                            autoComplete="off"
-                            className="w-32 h-8"
-                            value={editNotes}
-                            onChange={(e) => setEditNotes(e.target.value)}
-                            placeholder="ملاحظات"
-                            title="اكتب سبب الإجازة أو أي ملاحظة إدارية مهمة"
-                          />
-                          <Button
-                            size="sm"
-                            onClick={() => handleSaveGrade(student.id)}
-                            disabled={isSavingGrade}
-                            title="يحفظ الدرجة ويطبق القوانين تلقائياً"
-                          >
-                            {isSavingGrade ? "جاري الحفظ..." : "حفظ"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setEditGrade(null)}
-                            title="يغلق الإدخال بدون حفظ تغيير جديد"
-                          >
-                            إلغاء
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => startEdit(student.id)}
-                        >
-                          {grade ? "تعديل" : "إدخال"}
-                        </Button>
-                      )}
+                      <Select
+                        value={draft.status}
+                        onValueChange={(value) => {
+                          const nextDraft = { ...draft, status: value as DraftGrade["status"] };
+                          updateDraft(student.id, { status: nextDraft.status });
+                          void saveGrade(student.id, nextDraft);
+                        }}
+                      >
+                        <SelectTrigger className="h-10">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statusOptions.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+
+                      <Input
+                        value={draft.notes}
+                        onChange={(e) => updateDraft(student.id, { notes: e.target.value })}
+                        onBlur={() => saveGrade(student.id)}
+                        placeholder="ملاحظات"
+                        className="h-10"
+                      />
+
+                      <div className="flex items-center justify-end gap-2">
+                        {grade && cls && (
+                          <Badge variant={cls.type === "ok" ? "default" : cls.type === "danger" ? "destructive" : cls.type === "warn" ? "secondary" : "outline"}>
+                            {cls.text}
+                          </Badge>
+                        )}
+                        <Badge variant={savedRows[student.id] ? "default" : "outline"} className="text-[10px]">
+                          {isSaving ? "جاري الحفظ" : savedRows[student.id] ? `تم ${savedRows[student.id]}` : grade ? "محفوظ" : "غير محفوظ"}
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </CardContent>
         </Card>

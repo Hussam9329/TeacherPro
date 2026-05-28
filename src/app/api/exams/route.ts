@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
         opportunitiesPenalty: String(body.opportunitiesPenalty ?? 1),
         dismissalGrade: body.dismissalGrade === null || body.dismissalGrade === undefined ? null : Number(body.dismissalGrade),
         active: body.active ?? true,
+        scheduledActivateAt: body.scheduledActivateAt ? new Date(String(body.scheduledActivateAt)) : null,
+        scheduledDeactivateAt: body.scheduledDeactivateAt ? new Date(String(body.scheduledDeactivateAt)) : null,
         attendanceClosed: body.attendanceClosed ?? false,
         attendance: JSON.stringify(body.attendance || []),
       },
@@ -76,7 +78,9 @@ export async function PUT(req: NextRequest) {
     if (data.passMark !== undefined) data.passMark = Number(data.passMark);
     if (data.discountMark !== undefined) data.discountMark = Number(data.discountMark);
     if (data.opportunitiesPenalty !== undefined) data.opportunitiesPenalty = String(data.opportunitiesPenalty);
-    if (data.dismissalGrade !== undefined) data.dismissalGrade = data.dismissalGrade === null ? null : Number(data.dismissalGrade);
+    if (data.dismissalGrade !== undefined) data.dismissalGrade = data.dismissalGrade === null || data.dismissalGrade === "" ? null : Number(data.dismissalGrade);
+    if (data.scheduledActivateAt !== undefined) data.scheduledActivateAt = data.scheduledActivateAt ? new Date(String(data.scheduledActivateAt)) : null;
+    if (data.scheduledDeactivateAt !== undefined) data.scheduledDeactivateAt = data.scheduledDeactivateAt ? new Date(String(data.scheduledDeactivateAt)) : null;
     if (data.attendance !== undefined) data.attendance = JSON.stringify(data.attendance || []);
     const exam = await db.exam.update({ where: { id }, data });
     return NextResponse.json({ exam });

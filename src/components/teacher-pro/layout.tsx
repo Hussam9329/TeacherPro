@@ -29,8 +29,12 @@ import {
   LogOut,
   Copy,
   ChevronDown,
+  WalletCards,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -83,6 +87,12 @@ const menuItems: {
     sub: "بطاقات",
     icon: ClipboardList,
   },
+  {
+    id: "accounting",
+    title: "الأقساط والمحاسبة",
+    sub: "متابعة",
+    icon: WalletCards,
+  },
   { id: "exam-new", title: "إضافة الامتحان", sub: "القواعد", icon: FileText },
   { id: "grade-entry", title: "تسجيل الدرجات", sub: "إدخال", icon: PenTool },
   { id: "exam-records", title: "سجل الامتحانات", sub: "PDF", icon: FileCheck },
@@ -102,7 +112,7 @@ const menuItems: {
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
   { title: "الدورات", itemIds: ["course-new", "group-new", "site-management"] },
   { title: "الفرص", itemIds: ["chapters", "opportunities"] },
-  { title: "الطلاب", itemIds: ["student-register", "student-registry"] },
+  { title: "الطلاب", itemIds: ["student-register", "student-registry", "accounting"] },
   {
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
@@ -140,6 +150,7 @@ import { ExamNewView } from "./exam-new";
 import { GradeEntryView } from "./grade-entry";
 import { ExamRecordsView } from "./exam-records";
 import { GradeRecordsView } from "./grade-records";
+import { AccountingView } from "./accounting";
 import { OpportunitiesView } from "./opportunities";
 import { ECorrectionView } from "./e-correction";
 import { WhatsAppView } from "./whatsapp";
@@ -156,6 +167,7 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   chapters: ChaptersView,
   "student-register": StudentRegisterView,
   "student-registry": StudentRegistryView,
+  accounting: AccountingView,
   "exam-new": ExamNewView,
   "grade-entry": GradeEntryView,
   "exam-records": ExamRecordsView,
@@ -182,6 +194,81 @@ function downloadTextFile(
   URL.revokeObjectURL(url);
 }
 
+type LoginScreenProps = {
+  theme: string;
+  toggleTheme: () => void;
+  login: (username: string, password: string) => { ok: boolean; message: string };
+};
+
+function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("1993");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoading(true);
+    const result = login(username, password);
+    setLoading(false);
+    if (result.ok) toast.success(result.message);
+    else toast.error(result.message);
+  };
+
+  return (
+    <div className="app-bg min-h-screen flex items-center justify-center bg-background p-4" dir="rtl">
+      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,rgba(147,51,234,0.18),transparent_32rem)]" />
+      <div className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-border/70 bg-card/95 shadow-2xl backdrop-blur-xl">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-primary via-fuchsia-500 to-indigo-500" />
+        <div className="p-7 space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h1 className="text-3xl font-extrabold text-gradient-brand">TeacherPro</h1>
+              <p className="mt-1 text-sm text-muted-foreground">تسجيل دخول مدير النظام</p>
+            </div>
+            <Button variant="outline" size="icon" className="rounded-full" onClick={toggleTheme} type="button">
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="login-username">اسم المستخدم</Label>
+              <Input
+                id="login-username"
+                autoComplete="username"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="admin"
+                className="h-12 rounded-2xl"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="login-password">الرمز</Label>
+              <Input
+                id="login-password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="1993"
+                className="h-12 rounded-2xl"
+              />
+            </div>
+            <Button type="submit" className="h-12 w-full rounded-2xl text-base font-bold" disabled={loading}>
+              <KeyRound className="ml-2 h-4 w-4" />
+              {loading ? "جاري الدخول..." : "دخول للنظام"}
+            </Button>
+          </form>
+
+          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-xs leading-6 text-muted-foreground">
+            الحساب الافتراضي: <b>admin</b> — الرمز: <b>1993</b>. يمكن لاحقاً إدارة الحسابات والصلاحيات من داخل النظام.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TeacherProLayout() {
   const {
     currentSection,
@@ -196,6 +283,8 @@ export function TeacherProLayout() {
     exportMonthlyReport,
     currentUser,
     canAccess,
+    isAuthenticated,
+    login,
     logout,
     activeDemoId,
     isDemoActive,
@@ -363,6 +452,10 @@ export function TeacherProLayout() {
     setPendingBackupContent(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
+  if (!isAuthenticated && !activeDemoId) {
+    return <LoginScreen theme={theme} toggleTheme={toggleTheme} login={login} />;
+  }
 
   return (
     <div className="app-bg min-h-screen flex bg-background" dir="rtl">
