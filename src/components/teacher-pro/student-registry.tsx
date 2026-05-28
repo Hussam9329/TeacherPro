@@ -343,9 +343,9 @@ export function StudentRegistryView() {
               <Input id="registry-search" name="search" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تلكرام / هاتف" />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="registry-filterCourseType" className="text-xs">نوع الدورة</Label>
+              <Label htmlFor="registry-courseType" className="text-xs">نوع الدورة</Label>
               <Select value={filterCourseType} onValueChange={v => { setFilterCourseType(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger id="registry-filterCourseType"><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="registry-courseType"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   <SelectItem value="خاصة">خاصة</SelectItem>
@@ -354,9 +354,9 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="registry-filterCourseId" className="text-xs">الدورة</Label>
+              <Label htmlFor="registry-course" className="text-xs">الدورة</Label>
               <Select value={filterCourseId} onValueChange={v => { setFilterCourseId(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger id="registry-filterCourseId"><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="registry-course"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {courses.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -364,9 +364,9 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="registry-filterGroupId" className="text-xs">الكروب</Label>
+              <Label htmlFor="registry-group" className="text-xs">الكروب</Label>
               <Select value={filterGroupId} onValueChange={v => { setFilterGroupId(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger id="registry-filterGroupId"><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="registry-group"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {groups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}
@@ -374,9 +374,9 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="registry-filterStatus" className="text-xs">الحالة</Label>
+              <Label htmlFor="registry-status" className="text-xs">الحالة</Label>
               <Select value={filterStatus} onValueChange={v => { setFilterStatus(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger id="registry-filterStatus"><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="registry-status"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   <SelectItem value="نشط">نشط</SelectItem>
@@ -385,9 +385,9 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="registry-filterGender" className="text-xs">الجنس</Label>
+              <Label htmlFor="registry-gender" className="text-xs">الجنس</Label>
               <Select value={filterGender} onValueChange={v => { setFilterGender(v === 'all' ? '' : v); setPage(1); }}>
-                <SelectTrigger id="registry-filterGender"><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectTrigger id="registry-gender"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   <SelectItem value="ذكر">ذكر</SelectItem>

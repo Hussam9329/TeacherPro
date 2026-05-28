@@ -139,10 +139,9 @@ export function WhatsAppView() {
 
               {command === 'رسالة حرة' && (
                 <div className="space-y-2">
-                  <Label htmlFor="whatsapp-free-message">نص الرسالة</Label>
+                  <Label htmlFor="whatsapp-message">نص الرسالة</Label>
                   <textarea
-                    id="whatsapp-free-message"
-                    name="whatsapp-free-message"
+                    id="whatsapp-message" name="freeMessage"
                     className="w-full min-h-36 rounded-2xl border bg-background/70 px-3.5 py-3 text-sm shadow-xs backdrop-blur"
                     value={freeMessage}
                     onChange={e => setFreeMessage(e.target.value)}

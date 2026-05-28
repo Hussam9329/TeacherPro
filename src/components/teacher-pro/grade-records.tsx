@@ -86,11 +86,11 @@ export function GradeRecordsView() {
         <CardContent className="p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             <div className="space-y-1">
-              <Label className="text-xs" htmlFor="grade-records-search">بحث</Label>
-              <Input id="grade-records-search" name="grade-records-search" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تلكرام" />
+              <Label htmlFor="grade-records-search" className="text-xs">بحث</Label>
+              <Input id="grade-records-search" name="search" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تلكرام" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs" htmlFor="grade-records-exam">الامتحان</Label>
+              <Label htmlFor="grade-records-exam" className="text-xs">الامتحان</Label>
               <Select value={filterExamId} onValueChange={v => { setFilterExamId(v === 'all' ? '' : v); setPage(1); }}>
                 <SelectTrigger id="grade-records-exam"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
@@ -100,7 +100,7 @@ export function GradeRecordsView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs" htmlFor="grade-records-status">الحالة</Label>
+              <Label htmlFor="grade-records-status" className="text-xs">الحالة</Label>
               <Select value={filterStatus} onValueChange={v => { setFilterStatus(v === 'all' ? '' : v); setPage(1); }}>
                 <SelectTrigger id="grade-records-status"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
@@ -113,7 +113,7 @@ export function GradeRecordsView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs" htmlFor="grade-records-course">الدورة</Label>
+              <Label htmlFor="grade-records-course" className="text-xs">الدورة</Label>
               <Select value={filterCourseId} onValueChange={v => { setFilterCourseId(v === 'all' ? '' : v); setPage(1); }}>
                 <SelectTrigger id="grade-records-course"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
@@ -138,9 +138,9 @@ export function GradeRecordsView() {
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>عرض {paged.length} من {filtered.length} سجل</span>
         <div className="flex items-center gap-2">
-          <Label className="text-xs" htmlFor="grade-records-page-size">حجم الصفحة:</Label>
+          <Label htmlFor="grade-records-pageSize" className="text-xs">حجم الصفحة:</Label>
           <Select value={String(pageSize)} onValueChange={v => { setPageSize(Number(v)); setPage(1); }}>
-            <SelectTrigger id="grade-records-page-size" className="w-20 h-8"><SelectValue /></SelectTrigger>
+            <SelectTrigger id="grade-records-pageSize" className="w-20 h-8"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="10">10</SelectItem>
               <SelectItem value="50">50</SelectItem>

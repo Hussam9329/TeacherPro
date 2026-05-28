@@ -99,6 +99,7 @@ export interface ServerData {
   correctionSheets?: Array<Record<string, unknown>>;
   users?: Array<Record<string, unknown>>;
   roles?: Array<Record<string, unknown>>;
+  demoCopies?: Array<Record<string, unknown>>;
   logs?: Array<Record<string, unknown>>;
   whatsappReports?: Array<Record<string, unknown>>;
   whatsappQueue?: Array<Record<string, unknown>>;
@@ -111,11 +112,9 @@ export interface ServerData {
 export async function loadAllFromServer(): Promise<ServerData | null> {
   const data = await apiGet<ServerData>('backup');
   if (!data) return null;
-  // Check if there's actual data (not just empty arrays)
-  const hasData = Object.values(data).some(
-    (val) => Array.isArray(val) && val.length > 0
-  );
-  return hasData ? data : null;
+  // An empty-but-valid database response is still a successful connection.
+  // The store decides which default records should be filled in locally/seeded safely.
+  return data;
 }
 
 // ─── Course API ───────────────────────────────────────────────────────────────

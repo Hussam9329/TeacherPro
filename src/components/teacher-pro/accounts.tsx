@@ -235,7 +235,7 @@ function RolesTab() {
               <Input id="role-name" name="roleName" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="اسم الدور بالعربية" />
             </div>
             <div className="space-y-2">
-              <Label>الصلاحيات</Label>
+              <Label htmlFor="role-perms">الصلاحيات</Label>
               <PermissionChecklist perms={newRolePerms} onChange={setNewRolePerms} />
             </div>
           </div>
@@ -507,8 +507,8 @@ function UsersTab() {
               <Input id="new-username" name="username" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))} placeholder="username" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="new-fullname">الاسم الكامل</Label>
-              <Input id="new-fullname" name="name" value={newUser.name} onChange={e => setNewUser(p => ({ ...p, name: e.target.value }))} placeholder="الاسم" />
+              <Label htmlFor="new-name">الاسم الكامل</Label>
+              <Input id="new-name" name="name" value={newUser.name} onChange={e => setNewUser(p => ({ ...p, name: e.target.value }))} placeholder="الاسم" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-password">كلمة المرور</Label>
@@ -527,7 +527,7 @@ function UsersTab() {
             </div>
             <Separator />
             <div className="space-y-2">
-              <Label>الصلاحيات</Label>
+              <Label htmlFor="new-perms">الصلاحيات</Label>
               <PermissionChecklist perms={newUser.permissions} onChange={(permissions) => setNewUser(prev => ({ ...prev, permissions }))} />
             </div>
           </div>

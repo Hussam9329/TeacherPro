@@ -17,49 +17,26 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
-  // Special endpoint: reset courses to defaults
+  // Special endpoint: seed missing default courses without touching existing records.
   if (body._action === 'seed-defaults') {
-    try {
-      // Delete dependent records first (Student has onDelete: Restrict on courseId)
-      await db.whatsAppMessage.deleteMany({});
-      await db.correctionSheet.deleteMany({});
-      await db.opportunityLog.deleteMany({});
-      await db.grade.deleteMany({});
-      await db.student.deleteMany({});
-      await db.site.deleteMany({});
-      await db.courseChapter.deleteMany({});
-      await db.group.deleteMany({});
-      await db.exam.deleteMany({});
-      await db.course.deleteMany({});
-
-      for (const c of DEFAULT_COURSES) {
-        await db.course.create({ data: { ...c, createdAt: '2026-06-01T00:00:00.000Z' } });
-      }
-      const courses = await db.course.findMany({ orderBy: { createdAt: 'desc' } });
-      return NextResponse.json({ courses });
-    } catch (e) {
-      console.error('[seed-defaults] Error:', e);
-      return NextResponse.json({ error: 'Failed to seed defaults' }, { status: 500 });
-    }
+    await Promise.all(DEFAULT_COURSES.map((course) => db.course.upsert({
+      where: { id: course.id },
+      update: { name: course.name, type: course.type },
+      create: course,
+    })));
+    const courses = await db.course.findMany({ orderBy: { createdAt: 'desc' } });
+    return NextResponse.json({ courses });
   }
 
-  try {
-    // Use upsert to avoid errors if course already exists
-    const course = await db.course.upsert({
-      where: { id: body.id },
-      update: { name: body.name, type: body.type, active: body.active ?? true },
-      create: {
-        id: body.id,
-        name: body.name,
-        type: body.type,
-        active: body.active ?? true,
-      },
-    });
-    return NextResponse.json({ course }, { status: 201 });
-  } catch (e) {
-    console.error('[courses POST] Error:', e);
-    return NextResponse.json({ error: 'Failed to create course' }, { status: 500 });
-  }
+  const course = await db.course.create({
+    data: {
+      id: body.id,
+      name: body.name,
+      type: body.type,
+      active: body.active ?? true,
+    },
+  });
+  return NextResponse.json({ course }, { status: 201 });
 }
 
 export async function PUT(req: NextRequest) {

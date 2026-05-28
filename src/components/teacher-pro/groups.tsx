@@ -154,11 +154,11 @@ export function GroupsView() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="edit-group-name">اسم الكروب</Label>
-              <Input id="edit-group-name" name="name" value={editDialog.groupName} onChange={e => setEditDialog(prev => ({ ...prev, groupName: e.target.value }))} />
+              <Input id="edit-group-name" name="groupName" value={editDialog.groupName} onChange={e => setEditDialog(prev => ({ ...prev, groupName: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-group-electronic">معرف الكروب الإلكتروني</Label>
-              <Input id="edit-group-electronic" name="electronicGroup" value={editDialog.electronic} onChange={e => setEditDialog(prev => ({ ...prev, electronic: e.target.value }))} placeholder="@group" />
+              <Input id="edit-group-electronic" name="electronic" value={editDialog.electronic} onChange={e => setEditDialog(prev => ({ ...prev, electronic: e.target.value }))} placeholder="@group" />
             </div>
           </div>
           <DialogFooter>

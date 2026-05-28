@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const demoCopy = await db.demoCopy.create({
     data: {
+      id: body.id,
       name: body.name,
       description: body.description || '',
       expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
@@ -32,9 +33,9 @@ export async function PUT(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
   const updateData: Record<string, unknown> = { ...data };
-  if (data.expiresAt) updateData.expiresAt = new Date(data.expiresAt);
-  if (data.snapshot && typeof data.snapshot !== 'string') updateData.snapshot = JSON.stringify(data.snapshot);
-  if (data.limits && typeof data.limits !== 'string') updateData.limits = JSON.stringify(data.limits);
+  if (data.expiresAt !== undefined) updateData.expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
+  if (data.snapshot !== undefined && typeof data.snapshot !== 'string') updateData.snapshot = JSON.stringify(data.snapshot);
+  if (data.limits !== undefined && typeof data.limits !== 'string') updateData.limits = JSON.stringify(data.limits);
 
   const demoCopy = await db.demoCopy.update({ where: { id }, data: updateData });
   return NextResponse.json({ demoCopy });

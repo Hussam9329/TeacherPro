@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import {
   courseApi, groupApi, siteApi, chapterApi, courseChapterApi,
-  studentApi, examApi, gradeApi, correctionSheetApi,
+  studentApi, examApi, gradeApi, opportunityLogApi, correctionSheetApi,
   userApi, roleApi, logApi, demoCopyApi, pushAllToServer,
   loadAllFromServer, type ServerData,
 } from './api';
@@ -443,6 +443,7 @@ export interface BackupShape {
   whatsappReports?: WhatsAppReport[];
   whatsappQueue?: WhatsAppMessage[];
   leaderboardSettings?: LeaderboardSettings;
+  demoCopies?: DemoCopy[];
 }
 
 // ─── Store State ────────────────────────────────────────────────────────────
@@ -466,6 +467,7 @@ interface TeacherState {
   leaderboardSettings: LeaderboardSettings;
   demoCopies: DemoCopy[];
   activeDemoId: string | null;
+  mainSnapshotBeforeDemo: BackupShape | null;
   dbConnected: boolean;
   dbLoading: boolean;
 
@@ -643,6 +645,7 @@ function seedData() {
     leaderboardSettings: { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] as string[] },
     demoCopies: [] as DemoCopy[],
     activeDemoId: null as string | null,
+    mainSnapshotBeforeDemo: null as BackupShape | null,
   };
 }
 
@@ -682,6 +685,76 @@ function migrateOldUser(user: Record<string, unknown>, defaultRoles: Role[]): Re
   };
 }
 
+function parseArrayField<T = unknown>(val: unknown): T[] {
+  if (Array.isArray(val)) return val as T[];
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      return Array.isArray(parsed) ? parsed as T[] : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+
+function parseRecordField<T>(val: unknown, fallback: T): T {
+  if (val && typeof val === 'object' && !Array.isArray(val)) return val as T;
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as T : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
+function cloneBackupValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function snapshotOperationalData(state: TeacherState): BackupShape {
+  const snapshot: BackupShape = {};
+  DEMO_DATA_KEYS.forEach((key) => {
+    (snapshot as Record<string, unknown>)[key] = cloneBackupValue(state[key as keyof TeacherState] ?? (key === 'leaderboardSettings' ? { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] } : []));
+  });
+  return snapshot;
+}
+
+function restoreOperationalData(snapshot: BackupShape): Partial<TeacherState> {
+  const restored: Partial<TeacherState> = {};
+  DEMO_DATA_KEYS.forEach((key) => {
+    (restored as Record<string, unknown>)[key] = cloneBackupValue(snapshot[key] ?? (key === 'leaderboardSettings' ? { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] } : []));
+  });
+  return restored;
+}
+
+function mergeDefaultCourses(courses: Course[]): Course[] {
+  const existingIds = new Set(courses.map((course) => course.id));
+  return [
+    ...courses,
+    ...DEFAULT_COURSES.filter((course) => !existingIds.has(course.id)).map((course) => ({ ...course })),
+  ];
+}
+
+function mergeDefaultRoles(roles: Role[]): Role[] {
+  const existingIds = new Set(roles.map((role) => role.id));
+  return [
+    ...roles,
+    ...DEFAULT_ROLES.filter((role) => !existingIds.has(role.id)).map((role) => ({ ...role, permissions: [...role.permissions] })),
+  ];
+}
+
+function syncToServer(getState: () => TeacherState, action: () => unknown): void {
+  if (getState().activeDemoId) return;
+  void Promise.resolve()
+    .then(action)
+    .catch((error) => console.warn('[Store] Server sync failed:', error));
+}
+
 // ─── Store ───────────────────────────────────────────────────────────────────
 
 export const useTeacherStore = create<TeacherState>()(
@@ -699,6 +772,7 @@ export const useTeacherStore = create<TeacherState>()(
       dbLoading: false,
 
       loadFromServer: async () => {
+        if (get().activeDemoId) return true;
         set({ dbLoading: true });
         try {
           const serverData = await loadAllFromServer();
@@ -707,16 +781,7 @@ export const useTeacherStore = create<TeacherState>()(
             return false;
           }
 
-          // Parse server data and populate store
-          const parseArrayField = (val: unknown): unknown[] => {
-            if (Array.isArray(val)) return val;
-            if (typeof val === 'string') { try { return JSON.parse(val); } catch { return []; } }
-            return [];
-          };
-
-          const courses = DEFAULT_COURSES.map(c => ({ ...c })) as Course[];
-
-          // Sync default courses to the database as well
+          // Seed missing default courses only. The API uses upsert and never deletes existing courses.
           try {
             await fetch('/api/courses', {
               method: 'POST',
@@ -724,8 +789,15 @@ export const useTeacherStore = create<TeacherState>()(
               body: JSON.stringify({ _action: 'seed-defaults' }),
             });
           } catch (e) {
-            console.warn('[Store] Failed to seed courses to database:', e);
+            console.warn('[Store] Failed to seed missing default courses:', e);
           }
+
+          const serverCourses = (serverData.courses || []).map((c: Record<string, unknown>) => ({
+            ...c,
+            createdAt: c.createdAt ? String(c.createdAt).slice(0, 10) : todayISO(),
+            active: c.active !== undefined ? Boolean(c.active) : true,
+          })) as Course[];
+          const courses = mergeDefaultCourses(serverCourses);
 
           const groups = (serverData.groups || []).map((g: Record<string, unknown>) => ({
             ...g, active: Boolean(g.active),
@@ -741,7 +813,7 @@ export const useTeacherStore = create<TeacherState>()(
 
           const courseChapters = (serverData.courseChapters || []).map((cc: Record<string, unknown>) => ({
             ...cc, active: Boolean(cc.active), archived: Boolean(cc.archived),
-            archive: parseArrayField(cc.archive),
+            archive: parseArrayField<ArchiveEntry>(cc.archive),
           })) as CourseChapter[];
 
           const students = (serverData.students || []).map((st: Record<string, unknown>) => ({
@@ -751,15 +823,15 @@ export const useTeacherStore = create<TeacherState>()(
             paidAmount: Number(st.paidAmount || 0),
             opportunities: Number(st.opportunities || 0),
             baseOpportunities: Number(st.baseOpportunities || 0),
-            installments: parseArrayField(st.installments),
+            installments: parseArrayField<Installment>(st.installments),
             accountingStart: st.accountingStart === null || st.accountingStart === undefined ? '' : String(st.accountingStart),
             createdAt: st.createdAt ? String(st.createdAt).slice(0, 10) : todayISO(),
           })) as Student[];
 
           const exams = (serverData.exams || []).map((ex: Record<string, unknown>) => ({
             ...ex,
-            courseIds: parseArrayField(ex.courseIds),
-            attendance: parseArrayField(ex.attendance),
+            courseIds: parseArrayField<string>(ex.courseIds),
+            attendance: parseArrayField<string>(ex.attendance),
             mainSite: ex.mainSite ? String(ex.mainSite) : '',
             groupId: ex.groupId ? String(ex.groupId) : '',
             fullMark: Number(ex.fullMark || 100),
@@ -792,27 +864,44 @@ export const useTeacherStore = create<TeacherState>()(
             sumErrors: Number(cs.sumErrors || 0),
           })) as CorrectionSheet[];
 
-          const users = (serverData.users || []).map((u: Record<string, unknown>) => ({
+          const parsedUsers = (serverData.users || []).map((u: Record<string, unknown>) => ({
             ...u,
-            permissions: parseArrayField(u.permissions),
-            active: Boolean(u.active),
+            permissions: parseArrayField<string>(u.permissions),
+            active: u.active !== undefined ? Boolean(u.active) : true,
           })) as User[];
+          const users = parsedUsers.length > 0 ? parsedUsers : seedData().users;
 
-          const roles = (serverData.roles || []).map((r: Record<string, unknown>) => ({
+          const parsedRoles = (serverData.roles || []).map((r: Record<string, unknown>) => ({
             ...r,
-            permissions: parseArrayField(r.permissions),
+            permissions: parseArrayField<string>(r.permissions),
             isDefault: Boolean(r.isDefault),
           })) as Role[];
+          const roles = mergeDefaultRoles(parsedRoles);
 
           const logs = (serverData.logs || []).map((l: Record<string, unknown>) => ({
-            ...l,
+            id: String(l.id || uid('log')),
+            user: String(l.user || l.userName || 'مدير النظام'),
+            module: String(l.module || ''),
+            action: String(l.action || ''),
+            details: String(l.details || ''),
             time: l.time ? String(l.time) : nowText(),
           })) as LogEntry[];
+
+          const demoCopies = (serverData.demoCopies || []).map((d: Record<string, unknown>) => ({
+            ...d,
+            expiresAt: d.expiresAt ? String(d.expiresAt) : null,
+            active: d.active !== undefined ? Boolean(d.active) : true,
+            createdFromData: Boolean(d.createdFromData),
+            snapshot: parseRecordField<BackupShape>(d.snapshot, {}),
+            limits: parseRecordField<DemoUsageLimits>(d.limits, { ...DEFAULT_DEMO_LIMITS }),
+            createdAt: d.createdAt ? String(d.createdAt).slice(0, 10) : todayISO(),
+            durationDays: Number(d.durationDays || 7),
+          })) as DemoCopy[];
 
           set({
             courses, groups, sites, chapters, courseChapters, students,
             exams, grades, opportunityLogs, correctionSheets, users,
-            roles, logs, dbConnected: true, dbLoading: false,
+            roles, logs, demoCopies, dbConnected: true, dbLoading: false,
           });
           return true;
         } catch (e) {
@@ -887,26 +976,29 @@ export const useTeacherStore = create<TeacherState>()(
       },
 
       logAction: (module, action, details = '') => {
-        const user = get().currentUser()?.name || 'مدير النظام';
-        set((s) => ({ logs: [{ id: uid('log'), user, module, action, details, time: nowText() }, ...s.logs] }));
+        const currentUser = get().currentUser();
+        const user = currentUser?.name || 'مدير النظام';
+        const log: LogEntry = { id: uid('log'), user, module, action, details, time: nowText() };
+        set((s) => ({ logs: [log, ...s.logs] }));
+        syncToServer(get, () => logApi.add({ ...log, userName: user, userId: currentUser?.id }));
       },
 
       addCourse: (name, type) => {
         const course: Course = { id: uid('c'), name, type, createdAt: todayISO(), active: true };
         set((s) => ({ courses: [...s.courses, course] }));
         get().logAction('الدورات', 'إضافة دورة', name);
-        courseApi.add(course);
+        syncToServer(get, () => courseApi.add(course));
       },
       updateCourse: (id, updates) => {
         set((s) => ({ courses: s.courses.map((c) => c.id === id ? { ...c, ...updates } : c) }));
         get().logAction('الدورات', 'تعديل دورة', get().courseName(id));
-        courseApi.update(id, updates as Record<string, unknown>);
+        syncToServer(get, () => courseApi.update(id, updates as Record<string, unknown>));
       },
       toggleCourse: (id) => {
         const course = get().courses.find((c) => c.id === id);
         set((s) => ({ courses: s.courses.map((c) => c.id === id ? { ...c, active: !c.active } : c) }));
         get().logAction('الدورات', course?.active ? 'تعطيل دورة' : 'تفعيل دورة', course?.name || id);
-        courseApi.update(id, { active: !course?.active });
+        syncToServer(get, () => courseApi.update(id, { active: !course?.active }));
       },
       deleteCourse: (id) => {
         const state = get();
@@ -917,9 +1009,9 @@ export const useTeacherStore = create<TeacherState>()(
           return false;
         }
         // Delete related groups/sites/courseChapters from DB
-        state.groups.filter(g => g.courseId === id).forEach(g => groupApi.remove(g.id));
-        state.sites.filter(s => s.courseId === id).forEach(s => siteApi.remove(s.id));
-        state.courseChapters.filter(cc => cc.courseId === id).forEach(cc => courseChapterApi.remove(cc.id));
+        state.groups.filter(g => g.courseId === id).forEach(g => syncToServer(get, () => groupApi.remove(g.id)));
+        state.sites.filter(s => s.courseId === id).forEach(s => syncToServer(get, () => siteApi.remove(s.id)));
+        state.courseChapters.filter(cc => cc.courseId === id).forEach(cc => syncToServer(get, () => courseChapterApi.remove(cc.id)));
         set((s) => ({
           courses: s.courses.filter((c) => c.id !== id),
           groups: s.groups.filter((g) => g.courseId !== id),
@@ -927,7 +1019,7 @@ export const useTeacherStore = create<TeacherState>()(
           courseChapters: s.courseChapters.filter((cc) => cc.courseId !== id),
         }));
         get().logAction('الدورات', 'حذف دورة', course.name);
-        courseApi.remove(id);
+        syncToServer(get, () => courseApi.remove(id));
         return true;
       },
 
@@ -935,18 +1027,18 @@ export const useTeacherStore = create<TeacherState>()(
         const group: Group = { id: uid('g'), name, courseId, electronicGroup, active: true };
         set((s) => ({ groups: [...s.groups, group] }));
         get().logAction('الكروبات', 'إضافة كروب', `${name} - ${get().courseName(courseId)}`);
-        groupApi.add(group);
+        syncToServer(get, () => groupApi.add(group));
       },
       updateGroup: (id, updates) => {
         set((s) => ({ groups: s.groups.map((g) => g.id === id ? { ...g, ...updates } : g) }));
         get().logAction('الكروبات', 'تعديل كروب', get().groupName(id));
-        groupApi.update(id, updates as Record<string, unknown>);
+        syncToServer(get, () => groupApi.update(id, updates as Record<string, unknown>));
       },
       toggleGroup: (id) => {
         const group = get().groups.find((g) => g.id === id);
         set((s) => ({ groups: s.groups.map((g) => g.id === id ? { ...g, active: !g.active } : g) }));
         get().logAction('الكروبات', group?.active ? 'تعطيل كروب' : 'تفعيل كروب', group?.name || id);
-        groupApi.update(id, { active: !group?.active });
+        syncToServer(get, () => groupApi.update(id, { active: !group?.active }));
       },
       deleteGroup: (id) => {
         const state = get();
@@ -958,7 +1050,7 @@ export const useTeacherStore = create<TeacherState>()(
         }
         set((s) => ({ groups: s.groups.filter((g) => g.id !== id) }));
         get().logAction('الكروبات', 'حذف كروب', group.name);
-        groupApi.remove(id);
+        syncToServer(get, () => groupApi.remove(id));
         return true;
       },
 
@@ -966,25 +1058,25 @@ export const useTeacherStore = create<TeacherState>()(
         const site: Site = { id: uid('s'), courseId, main, sub, active: true };
         set((s) => ({ sites: [...s.sites, site] }));
         get().logAction('المواقع', 'إضافة موقع', `${main} - ${sub}`);
-        siteApi.add(site);
+        syncToServer(get, () => siteApi.add(site));
       },
       updateSite: (id, updates) => {
         set((s) => ({ sites: s.sites.map((site) => site.id === id ? { ...site, ...updates } : site) }));
         get().logAction('المواقع', 'تعديل موقع', id);
-        siteApi.update(id, updates as Record<string, unknown>);
+        syncToServer(get, () => siteApi.update(id, updates as Record<string, unknown>));
       },
       toggleSite: (id) => {
         const site = get().sites.find((si) => si.id === id);
         set((s) => ({ sites: s.sites.map((si) => si.id === id ? { ...si, active: !si.active } : si) }));
         get().logAction('المواقع', site?.active ? 'تعطيل موقع' : 'تفعيل موقع', site ? `${site.main} - ${site.sub}` : id);
-        siteApi.update(id, { active: !site?.active });
+        syncToServer(get, () => siteApi.update(id, { active: !site?.active }));
       },
       deleteSite: (id) => {
         const site = get().sites.find((si) => si.id === id);
         if (!site) return false;
         set((s) => ({ sites: s.sites.filter((si) => si.id !== id) }));
         get().logAction('المواقع', 'حذف موقع', `${site.main} - ${site.sub}`);
-        siteApi.remove(id);
+        syncToServer(get, () => siteApi.remove(id));
         return true;
       },
 
@@ -992,12 +1084,12 @@ export const useTeacherStore = create<TeacherState>()(
         const chapter: Chapter = { id: uid('ch'), name, opportunities };
         set((s) => ({ chapters: [...s.chapters, chapter] }));
         get().logAction('الفصول والفرص', 'إضافة فصل', name);
-        chapterApi.add(chapter);
+        syncToServer(get, () => chapterApi.add(chapter));
       },
       updateChapter: (id, updates) => {
         set((s) => ({ chapters: s.chapters.map((ch) => ch.id === id ? { ...ch, ...updates } : ch) }));
         get().logAction('الفصول والفرص', 'تعديل فصل', get().chapterName(id));
-        chapterApi.update(id, updates as Record<string, unknown>);
+        syncToServer(get, () => chapterApi.update(id, updates as Record<string, unknown>));
       },
       deleteChapter: (id) => {
         const chapter = get().chapters.find((ch) => ch.id === id);
@@ -1007,10 +1099,10 @@ export const useTeacherStore = create<TeacherState>()(
           return false;
         }
         // Delete related courseChapters from DB
-        get().courseChapters.filter(cc => cc.chapterId === id).forEach(cc => courseChapterApi.remove(cc.id));
+        get().courseChapters.filter(cc => cc.chapterId === id).forEach(cc => syncToServer(get, () => courseChapterApi.remove(cc.id)));
         set((s) => ({ chapters: s.chapters.filter((ch) => ch.id !== id), courseChapters: s.courseChapters.filter((cc) => cc.chapterId !== id) }));
         get().logAction('الفصول والفرص', 'حذف فصل', chapter.name);
-        chapterApi.remove(id);
+        syncToServer(get, () => chapterApi.remove(id));
         return true;
       },
       attachChapter: (courseId, chapterId) => {
@@ -1018,7 +1110,7 @@ export const useTeacherStore = create<TeacherState>()(
         const cc: CourseChapter = { id: uid('cc'), courseId, chapterId, active: false, archived: false, archive: [] };
         set((s) => ({ courseChapters: [...s.courseChapters, cc] }));
         get().logAction('الفصول والفرص', 'ربط فصل بدورة', `${get().chapterName(chapterId)} - ${get().courseName(courseId)}`);
-        courseChapterApi.add({ ...cc, archive: JSON.stringify(cc.archive) });
+        syncToServer(get, () => courseChapterApi.add({ ...cc, archive: JSON.stringify(cc.archive) }));
       },
       toggleChapter: (courseChapterId, force = false) => {
         const state = get();
@@ -1051,9 +1143,9 @@ export const useTeacherStore = create<TeacherState>()(
         }
         // Sync the updated courseChapter to DB
         const updatedCc = get().courseChapters.find(x => x.id === courseChapterId);
-        if (updatedCc) courseChapterApi.update(courseChapterId, { active: updatedCc.active, archived: updatedCc.archived, archive: JSON.stringify(updatedCc.archive) });
+        if (updatedCc) syncToServer(get, () => courseChapterApi.update(courseChapterId, { active: updatedCc.active, archived: updatedCc.archived, archive: JSON.stringify(updatedCc.archive) }));
         // Sync updated students to DB
-        get().students.filter(st => st.courseId === cc.courseId).forEach(st => studentApi.update(st.id, { opportunities: st.opportunities, baseOpportunities: st.baseOpportunities }));
+        get().students.filter(st => st.courseId === cc.courseId).forEach(st => syncToServer(get, () => studentApi.update(st.id, { opportunities: st.opportunities, baseOpportunities: st.baseOpportunities })));
       },
       deleteCourseChapter: (courseChapterId) => {
         const cc = get().courseChapters.find((x) => x.id === courseChapterId);
@@ -1061,7 +1153,7 @@ export const useTeacherStore = create<TeacherState>()(
         if (cc.active) return false;
         set((s) => ({ courseChapters: s.courseChapters.filter((x) => x.id !== courseChapterId) }));
         get().logAction('الفصول والفرص', 'حذف ربط فصل بدورة', `${get().chapterName(cc.chapterId)} - ${get().courseName(cc.courseId)}`);
-        courseChapterApi.remove(courseChapterId);
+        syncToServer(get, () => courseChapterApi.remove(courseChapterId));
         return true;
       },
 
@@ -1089,7 +1181,7 @@ export const useTeacherStore = create<TeacherState>()(
         const student: Student = { ...sanitizedStudentData, id: uid('st'), code };
         set((s) => ({ students: [...s.students, student] }));
         get().logAction('تسجيل الطلاب', 'تسجيل طالب', `${student.name} - ${get().courseName(student.courseId)}`);
-        studentApi.add({ ...student, installments: student.installments });
+        syncToServer(get, () => studentApi.add({ ...student, installments: student.installments }));
         return { ok: true, message: 'تم تسجيل الطالب' };
       },
       updateStudent: (id, updates) => {
@@ -1113,16 +1205,16 @@ export const useTeacherStore = create<TeacherState>()(
         get().logAction('سجل الطلاب', 'تعديل بيانات طالب', get().studentName(id));
         const { id: _id, code: _code, ...apiUpdates } = merged;
         void _id; void _code;
-        studentApi.update(id, apiUpdates as Record<string, unknown>);
+        syncToServer(get, () => studentApi.update(id, apiUpdates as Record<string, unknown>));
         return { ok: true, message: 'تم تعديل بيانات الطالب' };
       },
       deleteStudent: (id) => {
         const student = get().students.find((st) => st.id === id);
         if (!student) return false;
         // Delete related records from DB
-        get().grades.filter(g => g.studentId === id).forEach(g => gradeApi.remove(g.id));
+        get().grades.filter(g => g.studentId === id).forEach(g => syncToServer(get, () => gradeApi.remove(g.id)));
         get().opportunityLogs.filter(l => l.studentId === id).forEach(() => {}); // logs cascade
-        get().correctionSheets.filter(sh => sh.studentId === id).forEach(sh => correctionSheetApi.remove(sh.id));
+        get().correctionSheets.filter(sh => sh.studentId === id).forEach(sh => syncToServer(get, () => correctionSheetApi.remove(sh.id)));
         set((s) => ({
           students: s.students.filter((st) => st.id !== id),
           grades: s.grades.filter((g) => g.studentId !== id),
@@ -1131,42 +1223,42 @@ export const useTeacherStore = create<TeacherState>()(
           whatsappQueue: s.whatsappQueue.filter((msg) => msg.studentId !== id),
         }));
         get().logAction('سجل الطلاب', 'حذف طالب مع سجلاته التابعة', `${student.name} - ${student.code}`);
-        studentApi.remove(id);
+        syncToServer(get, () => studentApi.remove(id));
         return true;
       },
       dismissStudent: (studentId, type, reason) => {
         set((s) => ({ students: s.students.map((st) => st.id === studentId ? { ...st, status: 'مفصول' as const, dismissalType: type, dismissalReason: reason } : st) }));
         get().logAction('الطلاب', `فصل الطالب (${type})`, `${get().studentName(studentId)} - ${reason}`);
-        studentApi.update(studentId, { status: 'مفصول', dismissalType: type, dismissalReason: reason });
+        syncToServer(get, () => studentApi.update(studentId, { status: 'مفصول', dismissalType: type, dismissalReason: reason }));
       },
       reactivateStudent: (studentId) => {
         set((s) => ({ students: s.students.map((st) => st.id === studentId ? { ...st, status: 'نشط' as const, dismissalType: '', dismissalReason: '' } : st) }));
         get().logAction('الطلاب', 'إعادة تفعيل طالب', get().studentName(studentId));
-        studentApi.update(studentId, { status: 'نشط', dismissalType: '', dismissalReason: '' });
+        syncToServer(get, () => studentApi.update(studentId, { status: 'نشط', dismissalType: '', dismissalReason: '' }));
       },
 
       addExam: (examData) => {
         const exam: Exam = { ...examData, id: uid('ex') };
         set((s) => ({ exams: [...s.exams, exam] }));
         get().logAction('الامتحانات', 'إضافة امتحان', exam.name);
-        examApi.add({ ...exam, courseIds: exam.courseIds, opportunitiesPenalty: String(exam.opportunitiesPenalty), attendance: exam.attendance });
+        syncToServer(get, () => examApi.add({ ...exam, courseIds: exam.courseIds, opportunitiesPenalty: String(exam.opportunitiesPenalty), attendance: exam.attendance }));
       },
       updateExam: (id, updates) => {
         set((s) => ({ exams: s.exams.map((e) => e.id === id ? { ...e, ...updates } : e) }));
         get().logAction('الامتحانات', 'تعديل امتحان', get().exams.find((e) => e.id === id)?.name || id);
-        examApi.update(id, updates as Record<string, unknown>);
+        syncToServer(get, () => examApi.update(id, updates as Record<string, unknown>));
       },
       toggleExam: (id) => {
         const exam = get().exams.find((e) => e.id === id);
         set((s) => ({ exams: s.exams.map((e) => e.id === id ? { ...e, active: !e.active } : e) }));
         get().logAction('الامتحانات', exam?.active ? 'تعطيل امتحان' : 'تفعيل امتحان', exam?.name || id);
-        examApi.update(id, { active: !exam?.active });
+        syncToServer(get, () => examApi.update(id, { active: !exam?.active }));
       },
       deleteExam: (id) => {
         const exam = get().exams.find((e) => e.id === id);
         if (!exam) return false;
         // Delete related grades from DB
-        get().grades.filter(g => g.examId === id).forEach(g => gradeApi.remove(g.id));
+        get().grades.filter(g => g.examId === id).forEach(g => syncToServer(get, () => gradeApi.remove(g.id)));
         set((s) => ({
           exams: s.exams.filter((e) => e.id !== id),
           grades: s.grades.filter((g) => g.examId !== id),
@@ -1174,7 +1266,7 @@ export const useTeacherStore = create<TeacherState>()(
           opportunityLogs: s.opportunityLogs.filter((log) => log.examId !== id),
         }));
         get().logAction('الامتحانات', 'حذف امتحان مع سجلاته التابعة', exam.name);
-        examApi.remove(id);
+        syncToServer(get, () => examApi.remove(id));
         return true;
       },
       toggleAttendance: (examId, studentId) => {
@@ -1186,12 +1278,12 @@ export const useTeacherStore = create<TeacherState>()(
           }),
         }));
         const updatedExam = get().exams.find(e => e.id === examId);
-        if (updatedExam) examApi.update(examId, { attendance: updatedExam.attendance });
+        if (updatedExam) syncToServer(get, () => examApi.update(examId, { attendance: updatedExam.attendance }));
       },
       closeAttendance: (examId) => {
         set((s) => ({ exams: s.exams.map((e) => e.id === examId ? { ...e, attendanceClosed: true } : e) }));
         get().logAction('الامتحانات', 'إغلاق الحضور', get().exams.find((e) => e.id === examId)?.name || examId);
-        examApi.update(examId, { attendanceClosed: true });
+        syncToServer(get, () => examApi.update(examId, { attendanceClosed: true }));
       },
 
       addGrade: (gradeData) => {
@@ -1205,7 +1297,7 @@ export const useTeacherStore = create<TeacherState>()(
         set((s) => ({ grades: existing ? s.grades.map((g) => g.id === existing.id ? grade : g) : [...s.grades, grade] }));
         get().logAction('الدرجات', existing ? 'تعديل درجة' : 'إدخال درجة', `${get().studentName(grade.studentId)} - ${stateBefore.exams.find((e) => e.id === grade.examId)?.name || ''}`);
         // Sync grade to DB
-        gradeApi.add(grade as unknown as Record<string, unknown>);
+        syncToServer(get, () => gradeApi.add(grade as unknown as Record<string, unknown>));
 
         const exam = stateBefore.exams.find((e) => e.id === grade.examId);
         const student = stateBefore.students.find((s) => s.id === grade.studentId);
@@ -1243,60 +1335,63 @@ export const useTeacherStore = create<TeacherState>()(
       updateGrade: (id, updates) => {
         set((s) => ({ grades: s.grades.map((g) => g.id === id ? { ...g, ...updates, updatedAt: todayISO() } : g) }));
         get().logAction('الدرجات', 'تعديل مباشر للدرجة', id);
-        gradeApi.update(id, updates as Record<string, unknown>);
+        syncToServer(get, () => gradeApi.update(id, updates as Record<string, unknown>));
       },
       deleteGrade: (id) => {
         const grade = get().grades.find((g) => g.id === id);
         if (!grade) return false;
         set((s) => ({ grades: s.grades.filter((g) => g.id !== id) }));
         get().logAction('الدرجات', 'حذف درجة', `${get().studentName(grade.studentId)} - ${get().exams.find((e) => e.id === grade.examId)?.name || ''}`);
-        gradeApi.remove(id);
+        syncToServer(get, () => gradeApi.remove(id));
         return true;
       },
       adjustOpportunities: (studentId, amount, reason) => {
+        const stateBefore = get();
+        const studentBefore = stateBefore.students.find((st) => st.id === studentId);
+        const action = amount > 0 ? 'إضافة' : 'خصم';
+        const log: OpportunityLog = { id: uid('ol'), studentId, examId: '', action, amount: Math.abs(amount), reason, date: todayISO(), chapterId: stateBefore.activeChapterForCourse(studentBefore?.courseId || '')?.id || '' };
         set((s) => {
           const students = s.students.map((st) => st.id === studentId ? { ...st, opportunities: Math.max(0, st.opportunities + amount) } : st);
-          const student = students.find((st) => st.id === studentId);
-          const action = amount > 0 ? 'إضافة' : 'خصم';
-          const log: OpportunityLog = { id: uid('ol'), studentId, examId: '', action, amount: Math.abs(amount), reason, date: todayISO(), chapterId: s.activeChapterForCourse(student?.courseId || '')?.id || '' };
           return { students, opportunityLogs: [log, ...s.opportunityLogs] };
         });
         get().logAction('إدارة الفرص', amount > 0 ? 'إضافة فرصة' : 'خصم فرصة', `${get().studentName(studentId)} - ${Math.abs(amount)} - ${reason}`);
         const student = get().students.find((s) => s.id === studentId);
-        if (student) studentApi.update(studentId, { opportunities: student.opportunities });
+        if (student) syncToServer(get, () => studentApi.update(studentId, { opportunities: student.opportunities }));
+        syncToServer(get, () => opportunityLogApi.add(log as unknown as Record<string, unknown>));
         if (student && student.opportunities === 0 && student.status === 'نشط') {
           get().dismissStudent(studentId, 'فصل مؤقت', 'انتهاء الفرص');
         }
       },
       resetOpportunities: (studentId) => {
         const studentBefore = get().students.find((st) => st.id === studentId);
+        const log: OpportunityLog = { id: uid('ol'), studentId, examId: '', action: 'إعادة تعيين', amount: studentBefore?.baseOpportunities || 0, reason: 'إعادة تعيين الفرص', date: todayISO(), chapterId: '' };
         set((s) => {
           const students = s.students.map((st) => st.id === studentId ? { ...st, opportunities: st.baseOpportunities } : st);
-          const log: OpportunityLog = { id: uid('ol'), studentId, examId: '', action: 'إعادة تعيين', amount: studentBefore?.baseOpportunities || 0, reason: 'إعادة تعيين الفرص', date: todayISO(), chapterId: '' };
           return { students, opportunityLogs: [log, ...s.opportunityLogs] };
         });
         get().logAction('إدارة الفرص', 'إعادة تعيين فرص', get().studentName(studentId));
         const updatedStudent = get().students.find(st => st.id === studentId);
-        if (updatedStudent) studentApi.update(studentId, { opportunities: updatedStudent.opportunities });
+        if (updatedStudent) syncToServer(get, () => studentApi.update(studentId, { opportunities: updatedStudent.opportunities }));
+        syncToServer(get, () => opportunityLogApi.add(log as unknown as Record<string, unknown>));
       },
 
       addCorrectionSheet: (sheet) => {
         const entry: CorrectionSheet = { ...sheet, id: uid('sh') };
         set((s) => ({ correctionSheets: [...s.correctionSheets, entry] }));
         get().logAction('التصحيح الإلكتروني', 'إضافة ورقة تصحيح', `${get().studentName(sheet.studentId)} - ${get().userName(sheet.correctorId)}`);
-        correctionSheetApi.add(entry as unknown as Record<string, unknown>);
+        syncToServer(get, () => correctionSheetApi.add(entry as unknown as Record<string, unknown>));
       },
       updateCorrectionSheet: (id, updates) => {
         set((s) => ({ correctionSheets: s.correctionSheets.map((sh) => sh.id === id ? { ...sh, ...updates } : sh) }));
         get().logAction('التصحيح الإلكتروني', 'تعديل ورقة تصحيح', id);
-        correctionSheetApi.update(id, updates as Record<string, unknown>);
+        syncToServer(get, () => correctionSheetApi.update(id, updates as Record<string, unknown>));
       },
       deleteCorrectionSheet: (id) => {
         const sheet = get().correctionSheets.find((sh) => sh.id === id);
         if (!sheet) return false;
         set((s) => ({ correctionSheets: s.correctionSheets.filter((sh) => sh.id !== id) }));
         get().logAction('التصحيح الإلكتروني', 'حذف ورقة تصحيح', `${get().studentName(sheet.studentId)} - ${get().userName(sheet.correctorId)}`);
-        correctionSheetApi.remove(id);
+        syncToServer(get, () => correctionSheetApi.remove(id));
         return true;
       },
 
@@ -1304,23 +1399,23 @@ export const useTeacherStore = create<TeacherState>()(
         const user: User = { ...userData, id: uid('u'), password: userData.password || '123456' };
         set((s) => ({ users: [...s.users, user] }));
         get().logAction('الحسابات', 'إضافة مستخدم', user.name);
-        userApi.add({ ...user, passwordHash: user.password, permissions: user.permissions });
+        syncToServer(get, () => userApi.add({ ...user, passwordHash: user.password, permissions: user.permissions }));
       },
       updateUser: (id, updates) => {
         set((s) => ({ users: s.users.map((u) => u.id === id ? { ...u, ...updates } : u) }));
         get().logAction('الحسابات', 'تعديل مستخدم', get().userName(id));
-        userApi.update(id, updates as Record<string, unknown>);
+        syncToServer(get, () => userApi.update(id, updates as Record<string, unknown>));
       },
       toggleUser: (id) => {
         const user = get().users.find((u) => u.id === id);
         set((s) => ({ users: s.users.map((u) => u.id === id ? { ...u, active: !u.active } : u) }));
         get().logAction('الحسابات', user?.active ? 'تعطيل مستخدم' : 'تفعيل مستخدم', user?.name || id);
-        userApi.update(id, { active: !user?.active });
+        syncToServer(get, () => userApi.update(id, { active: !user?.active }));
       },
       updateUserPermissions: (id, permissions) => {
         set((s) => ({ users: s.users.map((u) => u.id === id ? { ...u, permissions } : u) }));
         get().logAction('الحسابات', 'تحديث صلاحيات', get().userName(id));
-        userApi.update(id, { permissions });
+        syncToServer(get, () => userApi.update(id, { permissions }));
       },
       deleteUser: (id) => {
         const state = get();
@@ -1328,7 +1423,7 @@ export const useTeacherStore = create<TeacherState>()(
         if (!user || user.roleId === 'role_admin' || state.currentUserId === id) return false;
         set((s) => ({ users: s.users.filter((u) => u.id !== id) }));
         get().logAction('الحسابات', 'حذف مستخدم', user.name);
-        userApi.remove(id);
+        syncToServer(get, () => userApi.remove(id));
         return true;
       },
 
@@ -1336,12 +1431,12 @@ export const useTeacherStore = create<TeacherState>()(
         const role: Role = { ...roleData, id: uid('role') };
         set((s) => ({ roles: [...s.roles, role] }));
         get().logAction('الحسابات', 'إضافة دور', role.name);
-        roleApi.add(role as unknown as Record<string, unknown>);
+        syncToServer(get, () => roleApi.add(role as unknown as Record<string, unknown>));
       },
       updateRole: (id, updates) => {
         set((s) => ({ roles: s.roles.map((r) => r.id === id ? { ...r, ...updates } : r) }));
         get().logAction('الحسابات', 'تعديل دور', id);
-        roleApi.update(id, updates as Record<string, unknown>);
+        syncToServer(get, () => roleApi.update(id, updates as Record<string, unknown>));
       },
       deleteRole: (id) => {
         const state = get();
@@ -1352,8 +1447,8 @@ export const useTeacherStore = create<TeacherState>()(
         set((s) => ({ roles: s.roles.filter((r) => r.id !== id), users }));
         get().logAction('الحسابات', 'حذف دور', role.name);
         // Sync updated users to DB
-        users.filter(u => u.roleId === 'role_viewer' && state.users.find(su => su.id === u.id && su.roleId === id)).forEach(u => userApi.update(u.id, { roleId: 'role_viewer', permissions: u.permissions }));
-        roleApi.remove(id);
+        users.filter(u => u.roleId === 'role_viewer' && state.users.find(su => su.id === u.id && su.roleId === id)).forEach(u => syncToServer(get, () => userApi.update(u.id, { roleId: 'role_viewer', permissions: u.permissions })));
+        syncToServer(get, () => roleApi.remove(id));
         return true;
       },
 
@@ -1461,19 +1556,9 @@ export const useTeacherStore = create<TeacherState>()(
         };
 
         // Take a snapshot of current data (for operational data only)
-        const snapshot: BackupShape = {};
-        if (fromData) {
-          DEMO_DATA_KEYS.forEach(key => {
-            (snapshot as Record<string, unknown>)[key] = JSON.parse(JSON.stringify(state[key as keyof typeof state] || []));
-          });
-        } else {
-          DEMO_DATA_KEYS.forEach(key => {
-            const emptyVal = key === 'leaderboardSettings'
-              ? { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] as string[] }
-              : [];
-            (snapshot as Record<string, unknown>)[key] = emptyVal;
-          });
-        }
+        const snapshot = fromData
+          ? snapshotOperationalData(state)
+          : restoreOperationalData({ leaderboardSettings: { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] } }) as BackupShape;
 
         const demo: DemoCopy = {
           id: uid('demo'),
@@ -1494,6 +1579,8 @@ export const useTeacherStore = create<TeacherState>()(
           users: [...s.users, demoUser],
         }));
         get().logAction('نسخ الديمو', 'إنشاء نسخة ديمو', `${name} - ${durationDays} يوم - ${fromData ? 'من البيانات' : 'فارغ'}`);
+        syncToServer(get, () => userApi.add({ ...demoUser, passwordHash: demoUser.password, permissions: demoUser.permissions }));
+        syncToServer(get, () => demoCopyApi.add(demo as unknown as Record<string, unknown>));
         return demo.id;
       },
       deleteDemoCopy: (id) => {
@@ -1508,6 +1595,8 @@ export const useTeacherStore = create<TeacherState>()(
           users: s.users.filter(u => u.id !== demo.demoUserId),
         }));
         get().logAction('نسخ الديمو', 'حذف نسخة ديمو', demo.name);
+        syncToServer(get, () => demoCopyApi.remove(id));
+        syncToServer(get, () => userApi.remove(demo.demoUserId));
         return true;
       },
       toggleDemoCopy: (id) => {
@@ -1516,6 +1605,7 @@ export const useTeacherStore = create<TeacherState>()(
         }));
         const demo = get().demoCopies.find(d => d.id === id);
         get().logAction('نسخ الديمو', demo?.active ? 'تعطيل نسخة ديمو' : 'تفعيل نسخة ديمو', demo?.name || id);
+        if (demo) syncToServer(get, () => demoCopyApi.update(id, { active: demo.active }));
       },
       extendDemoCopy: (id, extraDays) => {
         set((s) => ({
@@ -1528,47 +1618,42 @@ export const useTeacherStore = create<TeacherState>()(
         }));
         const demo = get().demoCopies.find(d => d.id === id);
         get().logAction('نسخ الديمو', 'تمديد نسخة ديمو', `${demo?.name} - +${extraDays} يوم`);
+        if (demo) syncToServer(get, () => demoCopyApi.update(id, { expiresAt: demo.expiresAt, durationDays: demo.durationDays }));
       },
       resetDemoCopyData: (id) => {
         const demo = get().demoCopies.find(d => d.id === id);
         if (!demo) return;
-        // Restore the original snapshot data into the store
-        const resetData: Partial<TeacherState> = {};
-        DEMO_DATA_KEYS.forEach(key => {
-          (resetData as Record<string, unknown>)[key] = JSON.parse(JSON.stringify(demo.snapshot[key] ?? (key === 'leaderboardSettings' ? { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] } : [])));
-        });
-        set(resetData);
+        const resetData = restoreOperationalData(demo.snapshot);
+        if (get().activeDemoId === id) set(resetData);
         get().logAction('نسخ الديمو', 'تصفير بيانات الديمو', demo.name);
       },
       enterDemoCopy: (id) => {
-        const demo = get().demoCopies.find(d => d.id === id);
+        const state = get();
+        const demo = state.demoCopies.find(d => d.id === id);
         if (!demo || !demo.active) return;
         // Check if expired
         if (demo.expiresAt && new Date(demo.expiresAt) < new Date()) return;
-        // Load demo snapshot data
-        const demoData: Partial<TeacherState> = {};
-        DEMO_DATA_KEYS.forEach(key => {
-          (demoData as Record<string, unknown>)[key] = JSON.parse(JSON.stringify(demo.snapshot[key] ?? (key === 'leaderboardSettings' ? { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] } : [])));
-        });
-        set({ ...demoData, activeDemoId: id, currentUserId: demo.demoUserId, currentSection: 'dashboard' });
+        const mainSnapshot = state.mainSnapshotBeforeDemo || snapshotOperationalData(state);
+        const demoData = restoreOperationalData(demo.snapshot);
+        set({ ...demoData, mainSnapshotBeforeDemo: mainSnapshot, activeDemoId: id, currentUserId: demo.demoUserId, currentSection: 'dashboard' });
         get().logAction('نسخ الديمو', 'دخول نسخة ديمو', demo.name);
       },
       exitDemoCopy: () => {
-        const demo = get().demoCopies.find(d => d.id === get().activeDemoId);
-        if (!demo) { set({ activeDemoId: null }); return; }
-        // Save current demo state back to snapshot
-        const currentSnapshot: BackupShape = {};
-        DEMO_DATA_KEYS.forEach(key => {
-          (currentSnapshot as Record<string, unknown>)[key] = JSON.parse(JSON.stringify(get()[key as keyof typeof get] || []));
-        });
+        const state = get();
+        const activeDemoId = state.activeDemoId;
+        const demo = state.demoCopies.find(d => d.id === activeDemoId);
+        if (!demo) { set({ activeDemoId: null, mainSnapshotBeforeDemo: null }); return; }
+        const currentSnapshot = snapshotOperationalData(state);
+        const restoreData = state.mainSnapshotBeforeDemo ? restoreOperationalData(state.mainSnapshotBeforeDemo) : {};
         set((s) => ({
-          demoCopies: s.demoCopies.map(d => d.id === get().activeDemoId ? { ...d, snapshot: currentSnapshot } : d),
+          ...restoreData,
+          demoCopies: s.demoCopies.map(d => d.id === activeDemoId ? { ...d, snapshot: currentSnapshot } : d),
           activeDemoId: null,
+          mainSnapshotBeforeDemo: null,
           currentUserId: 'u_admin',
           currentSection: 'dashboard',
         }));
-        // Restore original data by importing the backup (we need to keep users/roles from main)
-        // For simplicity, just log the exit
+        syncToServer(get, () => demoCopyApi.update(demo.id, { snapshot: currentSnapshot }));
         get().logAction('نسخ الديمو', 'خروج من نسخة ديمو', demo.name);
       },
       isDemoActive: () => !!get().activeDemoId,
@@ -1646,6 +1731,7 @@ export const useTeacherStore = create<TeacherState>()(
         currentUserId: state.currentUserId,
         demoCopies: state.demoCopies,
         activeDemoId: state.activeDemoId,
+        mainSnapshotBeforeDemo: state.mainSnapshotBeforeDemo,
       }),
     }
   )

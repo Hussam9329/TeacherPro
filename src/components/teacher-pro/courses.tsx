@@ -59,6 +59,7 @@ export function CoursesView() {
               <Label htmlFor="courseName">اسم الدورة</Label>
               <Input
                 id="courseName"
+                name="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="مثال: أحياء السادس - دفعة جديدة"
@@ -131,7 +132,7 @@ export function CoursesView() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="course-edit-name">اسم الدورة</Label>
-              <Input id="course-edit-name" name="course-edit-name" value={editDialog.courseName} onChange={e => setEditDialog(prev => ({ ...prev, courseName: e.target.value }))} />
+              <Input id="course-edit-name" name="courseName" value={editDialog.courseName} onChange={e => setEditDialog(prev => ({ ...prev, courseName: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>

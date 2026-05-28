@@ -418,8 +418,7 @@ export function DemoCopiesTab() {
             <div className="space-y-2">
               <Label htmlFor="demo-name">اسم النسخة</Label>
               <Input
-                id="demo-name"
-                name="demo-name"
+                id="demo-name" name="name"
                 value={newDemo.name}
                 onChange={(e) =>
                   setNewDemo((p) => ({ ...p, name: e.target.value }))
@@ -430,8 +429,7 @@ export function DemoCopiesTab() {
             <div className="space-y-2">
               <Label htmlFor="demo-description">الوصف</Label>
               <Input
-                id="demo-description"
-                name="demo-description"
+                id="demo-description" name="description"
                 value={newDemo.description}
                 onChange={(e) =>
                   setNewDemo((p) => ({ ...p, description: e.target.value }))
@@ -442,8 +440,7 @@ export function DemoCopiesTab() {
             <div className="space-y-2">
               <Label htmlFor="demo-duration">مدة الصلاحية (بالأيام)</Label>
               <Input
-                id="demo-duration"
-                name="demo-duration"
+                id="demo-duration" name="durationDays"
                 type="number"
                 min={1}
                 max={365}
@@ -463,7 +460,7 @@ export function DemoCopiesTab() {
                   setNewDemo((p) => ({ ...p, fromData: !!v }))
                 }
               />
-              <Label>نسخ من البيانات الحالية</Label>
+              <Label htmlFor="demo-fromData">نسخ من البيانات الحالية</Label>
             </div>
             <Separator />
             <div className="space-y-3">
@@ -472,7 +469,7 @@ export function DemoCopiesTab() {
                   checked={useCustomLimits}
                   onCheckedChange={(v) => setUseCustomLimits(!!v)}
                 />
-                <Label>تخصيص حدود الاستخدام</Label>
+                <Label htmlFor="demo-customLimits">تخصيص حدود الاستخدام</Label>
               </div>
               {useCustomLimits && (
                 <ScrollArea className="max-h-48">
@@ -484,10 +481,10 @@ export function DemoCopiesTab() {
                       ][]
                     ).map(([key, val]) => (
                       <div key={key} className="space-y-1">
-                        <Label className="text-xs" htmlFor={`demo-limit-${key}`}>{LIMIT_LABELS[key]}</Label>
+                        <Label htmlFor={`demo-limit-${key}`} className="text-xs">{LIMIT_LABELS[key]}</Label>
                         <Input
                           id={`demo-limit-${key}`}
-                          name={`demo-limit-${key}`}
+                          name={`limit-${key}`}
                           type="number"
                           min={1}
                           value={val}
@@ -536,8 +533,7 @@ export function DemoCopiesTab() {
             <div className="space-y-2">
               <Label htmlFor="demo-extend-days">عدد الأيام الإضافية</Label>
               <Input
-                id="demo-extend-days"
-                name="demo-extend-days"
+                id="demo-extend-days" name="days"
                 type="number"
                 min={1}
                 max={365}

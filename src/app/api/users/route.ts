@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+function normalizePermissions(value: unknown): string {
+  if (Array.isArray(value)) return JSON.stringify(value);
+  if (typeof value === 'string') return value;
+  return '[]';
+}
+
 export async function GET() {
   const users = await db.appUser.findMany({
     orderBy: { name: 'asc' },
@@ -28,10 +34,10 @@ export async function POST(req: NextRequest) {
       id: body.id,
       username: body.username,
       name: body.name,
-      passwordHash: body.passwordHash,
+      passwordHash: body.passwordHash ?? body.password,
       role: body.role,
       roleId: body.roleId,
-      permissions: body.permissions ?? '[]',
+      permissions: normalizePermissions(body.permissions),
       active: body.active ?? true,
     },
   });
@@ -43,7 +49,15 @@ export async function PUT(req: NextRequest) {
   const body = await req.json();
   const { id, ...data } = body;
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
-  const user = await db.appUser.update({ where: { id }, data });
+
+  const updateData: Record<string, unknown> = { ...data };
+  if (updateData.permissions !== undefined) updateData.permissions = normalizePermissions(updateData.permissions);
+  if (updateData.password !== undefined) {
+    updateData.passwordHash = updateData.password;
+    delete updateData.password;
+  }
+
+  const user = await db.appUser.update({ where: { id }, data: updateData });
   const { passwordHash: _pw, ...safeUser } = user;
   return NextResponse.json({ user: safeUser });
 }

@@ -145,7 +145,7 @@ export function ExamNewView() {
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="exam-name">اسم الامتحان</Label>
-              <Input id="exam-name" name="exam-name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required placeholder="اختبار يومي - الخلية" />
+              <Input id="exam-name" name="name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required placeholder="اختبار يومي - الخلية" />
             </div>
 
             <div className="space-y-2">
@@ -161,7 +161,7 @@ export function ExamNewView() {
             </div>
 
             <div className="space-y-2">
-              <Label>الدورات</Label>
+              <Label htmlFor="exam-courses">الدورات</Label>
               <div className="space-y-2 border rounded-lg p-3 max-h-44 overflow-y-auto">
                 <div className="flex items-center gap-2 border-b pb-2">
                   <Checkbox checked={allCoursesSelected} onCheckedChange={toggleAllCourses} />
@@ -180,7 +180,7 @@ export function ExamNewView() {
             </div>
 
             <div className="space-y-2">
-              <Label>المناطق الرئيسية</Label>
+              <Label htmlFor="exam-mainSites">المناطق الرئيسية</Label>
               <div className="space-y-2 border rounded-lg p-3 max-h-44 overflow-y-auto">
                 <div className="flex items-center gap-2 border-b pb-2">
                   <Checkbox checked={allMainSitesSelected} onCheckedChange={toggleAllMainSites} />
@@ -196,7 +196,7 @@ export function ExamNewView() {
             </div>
 
             <div className="space-y-2">
-              <Label>الكروبات</Label>
+              <Label htmlFor="exam-groups">الكروبات</Label>
               <div className="space-y-2 border rounded-lg p-3 max-h-44 overflow-y-auto">
                 <div className="flex items-center gap-2 border-b pb-2">
                   <Checkbox checked={allGroupsSelected} disabled={availableGroups.length === 0} onCheckedChange={toggleAllGroups} />
@@ -217,39 +217,39 @@ export function ExamNewView() {
 
             <div className="space-y-2">
               <Label htmlFor="exam-date">تاريخ الامتحان</Label>
-              <Input id="exam-date" name="exam-date" type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+              <Input id="exam-date" name="date" type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="exam-full-mark">الدرجة الكاملة</Label>
-              <Input id="exam-full-mark" name="exam-full-mark" type="number" value={form.fullMark} onChange={e => setForm(p => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 100 }))} />
+              <Label htmlFor="exam-fullMark">الدرجة الكاملة</Label>
+              <Input id="exam-fullMark" name="fullMark" type="number" value={form.fullMark} onChange={e => setForm(p => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 100 }))} />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="exam-pass-mark">درجة النجاح</Label>
-              <Input id="exam-pass-mark" name="exam-pass-mark" type="number" value={form.passMark} onChange={e => setForm(p => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 60 }))} />
+              <Label htmlFor="exam-passMark">درجة النجاح</Label>
+              <Input id="exam-passMark" name="passMark" type="number" value={form.passMark} onChange={e => setForm(p => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 60 }))} />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="exam-discount-mark">درجة الخصم</Label>
-              <Input id="exam-discount-mark" name="exam-discount-mark" type="number" value={form.discountMark} onChange={e => setForm(p => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 45 }))} />
+              <Label htmlFor="exam-discountMark">درجة الخصم</Label>
+              <Input id="exam-discountMark" name="discountMark" type="number" value={form.discountMark} onChange={e => setForm(p => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 45 }))} />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="exam-opp-penalty">خصم الفرص</Label>
+              <Label htmlFor="exam-penalty">خصم الفرص</Label>
               {isCumulativeOrFinal ? (
                 <div className="p-2 rounded bg-amber-50 dark:bg-amber-950/40 text-sm">
                   فصل مؤقت تلقائياً عند الغياب
                 </div>
               ) : (
-                <Input id="exam-opp-penalty" name="exam-opp-penalty" type="number" min={0} value={form.opportunitiesPenaltyNum} onChange={e => setForm(p => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 1 }))} />
+                <Input id="exam-penalty" name="opportunitiesPenaltyNum" type="number" min={0} value={form.opportunitiesPenaltyNum} onChange={e => setForm(p => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 1 }))} />
               )}
             </div>
 
             {isCumulativeOrFinal && (
               <div className="space-y-2">
-                <Label htmlFor="exam-dismissal-grade">درجة الفصل</Label>
-                <Input id="exam-dismissal-grade" name="exam-dismissal-grade" type="number" value={form.dismissalGrade} onChange={e => setForm(p => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} placeholder="أدنى درجة للفصل" />
+                <Label htmlFor="exam-dismissalGrade">درجة الفصل</Label>
+                <Input id="exam-dismissalGrade" name="dismissalGrade" type="number" value={form.dismissalGrade} onChange={e => setForm(p => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} placeholder="أدنى درجة للفصل" />
               </div>
             )}
 

@@ -2,7 +2,24 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
 export async function GET() {
-  const [courses, groups, sites, chapters, courseChapters, students, exams, grades, opportunityLogs, correctionSheets, users, logs, whatsappReports, whatsappQueue] = await Promise.all([
+  const [
+    courses,
+    groups,
+    sites,
+    chapters,
+    courseChapters,
+    students,
+    exams,
+    grades,
+    opportunityLogs,
+    correctionSheets,
+    users,
+    roles,
+    logs,
+    whatsappReports,
+    whatsappQueue,
+    demoCopies,
+  ] = await Promise.all([
     db.course.findMany(),
     db.group.findMany(),
     db.site.findMany(),
@@ -13,11 +30,43 @@ export async function GET() {
     db.grade.findMany(),
     db.opportunityLog.findMany(),
     db.correctionSheet.findMany(),
-    db.appUser.findMany(),
+    db.appUser.findMany({
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        role: true,
+        roleId: true,
+        permissions: true,
+        active: true,
+        createdAt: true,
+      },
+    }),
+    db.role.findMany(),
     db.auditLog.findMany(),
     db.whatsAppReport.findMany(),
     db.whatsAppMessage.findMany(),
+    db.demoCopy.findMany(),
   ]);
 
-  return NextResponse.json({ version: 2, exportedAt: new Date().toISOString(), courses, groups, sites, chapters, courseChapters, students, exams, grades, opportunityLogs, correctionSheets, users, logs, whatsappReports, whatsappQueue });
+  return NextResponse.json({
+    version: 3,
+    exportedAt: new Date().toISOString(),
+    courses,
+    groups,
+    sites,
+    chapters,
+    courseChapters,
+    students,
+    exams,
+    grades,
+    opportunityLogs,
+    correctionSheets,
+    users,
+    roles,
+    logs,
+    whatsappReports,
+    whatsappQueue,
+    demoCopies,
+  });
 }
