@@ -140,6 +140,7 @@ export function OpportunitiesView() {
                 الدورة
               </Label>
               <Select
+                name="courseId"
                 value={filterCourseId}
                 onValueChange={(v) => {
                   setFilterCourseId(v === "all" ? "" : v);

@@ -97,7 +97,7 @@ export function GradeEntryView() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="grade-entry-exam">اختر الامتحان</Label>
-              <Select value={selectedExamId} onValueChange={setSelectedExamId}>
+              <Select name="examId" value={selectedExamId} onValueChange={setSelectedExamId}>
                 <SelectTrigger id="grade-entry-exam">
                   <SelectValue placeholder="اختر الامتحان" />
                 </SelectTrigger>
@@ -189,6 +189,7 @@ export function GradeEntryView() {
                       {isEditing ? (
                         <div className="flex items-center gap-2 flex-wrap">
                           <Select
+                            name={`status-${student.id}`}
                             value={editStatus}
                             onValueChange={setEditStatus}
                           >

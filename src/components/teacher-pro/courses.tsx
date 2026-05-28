@@ -120,6 +120,7 @@ export function CoursesView() {
             <div className="space-y-2">
               <Label htmlFor="course-type">نوع الدورة</Label>
               <Select
+                name="type"
                 value={type}
                 onValueChange={(v) => setType(v as "خاصة" | "عامة")}
               >

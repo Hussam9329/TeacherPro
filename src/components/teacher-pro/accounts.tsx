@@ -239,7 +239,7 @@ function RolesTab() {
               <Input id="role-name" name="roleName" autoComplete="off" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="اسم الدور بالعربية" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role-perms">الصلاحيات</Label>
+              <span className="text-sm font-medium leading-none">الصلاحيات</span>
               <PermissionChecklist perms={newRolePerms} onChange={setNewRolePerms} />
             </div>
           </div>
@@ -520,7 +520,7 @@ function UsersTab() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-role">الدور</Label>
-              <Select value={newUser.roleId} onValueChange={handleRoleChange}>
+              <Select name="roleId" value={newUser.roleId} onValueChange={handleRoleChange}>
                 <SelectTrigger id="new-role"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {roles.map(role => (
@@ -531,7 +531,7 @@ function UsersTab() {
             </div>
             <Separator />
             <div className="space-y-2">
-              <Label htmlFor="new-perms">الصلاحيات</Label>
+              <span className="text-sm font-medium leading-none">الصلاحيات</span>
               <PermissionChecklist perms={newUser.permissions} onChange={(permissions) => setNewUser(prev => ({ ...prev, permissions }))} />
             </div>
           </div>

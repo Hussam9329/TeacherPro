@@ -138,7 +138,7 @@ export function SitesView() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="site-course">الدورة</Label>
-                <Select value={courseId} onValueChange={setCourseId}>
+                <Select name="courseId" value={courseId} onValueChange={setCourseId}>
                   <SelectTrigger id="site-course">
                     <SelectValue placeholder="اختر الدورة" />
                   </SelectTrigger>
@@ -153,7 +153,7 @@ export function SitesView() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="site-mainSite">الموقع الرئيسي</Label>
-                <Select value={main} onValueChange={setMain}>
+                <Select name="mainSite" value={main} onValueChange={setMain}>
                   <SelectTrigger id="site-mainSite">
                     <SelectValue />
                   </SelectTrigger>
@@ -267,6 +267,7 @@ export function SitesView() {
             <div className="space-y-2">
               <Label htmlFor="edit-site-mainSite">الموقع الرئيسي</Label>
               <Select
+                name="mainSite"
                 value={editDialog.mainSite}
                 onValueChange={(value) =>
                   setEditDialog((prev) => ({ ...prev, mainSite: value }))

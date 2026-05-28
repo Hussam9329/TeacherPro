@@ -722,6 +722,7 @@ export function StudentRegisterView() {
                     نوع الدورة <RequiredMark />
                   </Label>
                   <Select
+                    name="courseType"
                     value={form.courseType}
                     onValueChange={handleCourseTypeChange}
                   >
@@ -747,6 +748,7 @@ export function StudentRegisterView() {
                     الدورة <RequiredMark />
                   </Label>
                   <Select
+                    name="courseId"
                     value={form.courseId}
                     onValueChange={handleCourseChange}
                     disabled={filteredCourses.length === 0}
@@ -943,6 +945,7 @@ export function StudentRegisterView() {
                     الموقع الرئيسي <RequiredMark />
                   </Label>
                   <Select
+                    name="mainSite"
                     value={form.mainSite}
                     onValueChange={(v) =>
                       setForm((prev) => ({ ...prev, mainSite: v, subSite: "" }))
@@ -991,6 +994,7 @@ export function StudentRegisterView() {
                     {subSiteOptions.length > 0 && <RequiredMark />}
                   </Label>
                   <Select
+                    name="subSite"
                     value={form.subSite}
                     onValueChange={(v) => updateForm("subSite", v)}
                     disabled={subSiteOptions.length === 0}
@@ -1032,6 +1036,7 @@ export function StudentRegisterView() {
                     المجموعة الإلكترونية <RequiredMark />
                   </Label>
                   <Select
+                    name="groupId"
                     value={form.groupId}
                     onValueChange={(v) => updateForm("groupId", v)}
                     disabled={!form.courseId || filteredGroups.length === 0}

@@ -456,6 +456,7 @@ export function DemoCopiesTab() {
             <div className="flex items-center gap-2">
               <Checkbox
                 id="demo-fromData"
+                name="fromData"
                 checked={newDemo.fromData}
                 onCheckedChange={(v) =>
                   setNewDemo((p) => ({ ...p, fromData: !!v }))
@@ -468,6 +469,7 @@ export function DemoCopiesTab() {
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="demo-customLimits"
+                  name="customLimits"
                   checked={useCustomLimits}
                   onCheckedChange={(v) => setUseCustomLimits(!!v)}
                 />

@@ -288,7 +288,7 @@ export function ChaptersView() {
             <form onSubmit={handleAttachChapter} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="chapter-course">اختر الدورة</Label>
-                <Select value={courseId} onValueChange={setCourseId}>
+                <Select name="courseId" value={courseId} onValueChange={setCourseId}>
                   <SelectTrigger id="chapter-course">
                     <SelectValue placeholder="اختر الدورة" />
                   </SelectTrigger>
@@ -303,7 +303,7 @@ export function ChaptersView() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="chapter-id">اختر الفصل المنهجي لإضافته</Label>
-                <Select value={chapterId} onValueChange={setChapterId}>
+                <Select name="chapterId" value={chapterId} onValueChange={setChapterId}>
                   <SelectTrigger id="chapter-id">
                     <SelectValue placeholder="اختر الفصل" />
                   </SelectTrigger>

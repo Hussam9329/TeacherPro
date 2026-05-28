@@ -261,6 +261,7 @@ export function ExamNewView() {
             <div className="space-y-2">
               <Label htmlFor="exam-type">نوع الامتحان</Label>
               <Select
+                name="type"
                 value={form.type}
                 onValueChange={(v) =>
                   setForm((p) => ({
@@ -281,7 +282,7 @@ export function ExamNewView() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="exam-courses">الدورات</Label>
+              <Label htmlFor="exam-all-courses">الدورات</Label>
               <div className="space-y-2 border rounded-lg p-3 max-h-44 overflow-y-auto">
                 <div className="flex items-center gap-2 border-b pb-2">
                   <Checkbox
@@ -329,7 +330,7 @@ export function ExamNewView() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="exam-mainSites">المناطق الرئيسية</Label>
+              <Label htmlFor="exam-all-sites">المناطق الرئيسية</Label>
               <div className="space-y-2 border rounded-lg p-3 max-h-44 overflow-y-auto">
                 <div className="flex items-center gap-2 border-b pb-2">
                   <Checkbox
@@ -359,7 +360,7 @@ export function ExamNewView() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="exam-groups">المجموعات الإلكترونية</Label>
+              <Label htmlFor="exam-all-groups">المجموعات الإلكترونية</Label>
               <div className="space-y-2 border rounded-lg p-3 max-h-44 overflow-y-auto">
                 <div className="flex items-center gap-2 border-b pb-2">
                   <Checkbox

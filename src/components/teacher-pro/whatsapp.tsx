@@ -94,7 +94,7 @@ export function WhatsAppView() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="whatsapp-command">نوع الأمر</Label>
-                  <Select value={command} onValueChange={v => setCommand(v as typeof command)}>
+                  <Select name="command" value={command} onValueChange={v => setCommand(v as typeof command)}>
                     <SelectTrigger id="whatsapp-command"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="QR">QR</SelectItem>
@@ -105,7 +105,7 @@ export function WhatsAppView() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="whatsapp-recipient">المستلم</Label>
-                  <Select value={recipient} onValueChange={v => setRecipient(v as typeof recipient)}>
+                  <Select name="recipient" value={recipient} onValueChange={v => setRecipient(v as typeof recipient)}>
                     <SelectTrigger id="whatsapp-recipient"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="الطالب">الطالب</SelectItem>
@@ -115,7 +115,7 @@ export function WhatsAppView() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="whatsapp-course">الدورة</Label>
-                  <Select value={filterCourseId} onValueChange={v => setFilterCourseId(v === 'all' ? '' : v)}>
+                  <Select name="courseId" value={filterCourseId} onValueChange={v => setFilterCourseId(v === 'all' ? '' : v)}>
                     <SelectTrigger id="whatsapp-course"><SelectValue placeholder="الكل" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">الكل</SelectItem>
@@ -127,7 +127,7 @@ export function WhatsAppView() {
 
               <div className="space-y-2">
                 <Label htmlFor="whatsapp-status">حالة الطلاب</Label>
-                <Select value={filterStatus} onValueChange={v => setFilterStatus(v === 'all' ? '' : v)}>
+                <Select name="status" value={filterStatus} onValueChange={v => setFilterStatus(v === 'all' ? '' : v)}>
                   <SelectTrigger id="whatsapp-status"><SelectValue placeholder="الكل" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">الكل</SelectItem>

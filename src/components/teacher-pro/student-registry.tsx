@@ -603,6 +603,7 @@ export function StudentRegistryView() {
                 نوع الدورة
               </Label>
               <Select
+                name="courseType"
                 value={filterCourseType}
                 onValueChange={(v) => {
                   setFilterCourseType(v === "all" ? "" : v);
@@ -624,6 +625,7 @@ export function StudentRegistryView() {
                 الدورة
               </Label>
               <Select
+                name="courseId"
                 value={filterCourseId}
                 onValueChange={(v) => {
                   setFilterCourseId(v === "all" ? "" : v);
@@ -648,6 +650,7 @@ export function StudentRegistryView() {
                 المجموعة الإلكترونية
               </Label>
               <Select
+                name="groupId"
                 value={filterGroupId}
                 onValueChange={(v) => {
                   setFilterGroupId(v === "all" ? "" : v);
@@ -672,6 +675,7 @@ export function StudentRegistryView() {
                 الحالة
               </Label>
               <Select
+                name="status"
                 value={filterStatus}
                 onValueChange={(v) => {
                   setFilterStatus(v === "all" ? "" : v);
@@ -693,6 +697,7 @@ export function StudentRegistryView() {
                 الجنس
               </Label>
               <Select
+                name="gender"
                 value={filterGender}
                 onValueChange={(v) => {
                   setFilterGender(v === "all" ? "" : v);
@@ -733,6 +738,7 @@ export function StudentRegistryView() {
             حجم الصفحة:
           </Label>
           <Select
+            name="pageSize"
             value={String(pageSize)}
             onValueChange={(v) => {
               setPageSize(Number(v));
@@ -998,6 +1004,7 @@ export function StudentRegistryView() {
             <div className="space-y-2">
               <Label htmlFor="edit-gender">الجنس</Label>
               <Select
+                name="gender"
                 value={editDialog.form.gender}
                 onValueChange={(v) => updateEditForm("gender", v)}
               >
@@ -1052,6 +1059,7 @@ export function StudentRegistryView() {
             <div className="space-y-2">
               <Label htmlFor="edit-courseType">نوع الدورة</Label>
               <Select
+                name="courseType"
                 value={editDialog.form.courseType}
                 onValueChange={(v) =>
                   setEditDialog((prev) => ({
@@ -1083,6 +1091,7 @@ export function StudentRegistryView() {
             <div className="space-y-2">
               <Label htmlFor="edit-courseId">اختر الدورة</Label>
               <Select
+                name="courseId"
                 value={editDialog.form.courseId}
                 onValueChange={(v) =>
                   setEditDialog((prev) => ({
@@ -1124,6 +1133,7 @@ export function StudentRegistryView() {
             <div className="space-y-2">
               <Label htmlFor="edit-mainSite">الموقع الرئيسي</Label>
               <Select
+                name="mainSite"
                 value={editDialog.form.mainSite}
                 onValueChange={(v) =>
                   setEditDialog((prev) => ({
@@ -1148,6 +1158,7 @@ export function StudentRegistryView() {
             <div className="space-y-2">
               <Label htmlFor="edit-subSite">الموقع الفرعي</Label>
               <Select
+                name="subSite"
                 value={editDialog.form.subSite}
                 onValueChange={(v) => updateEditForm("subSite", v)}
                 disabled={editSubSiteOptions.length === 0}
@@ -1183,6 +1194,7 @@ export function StudentRegistryView() {
             <div className="space-y-2">
               <Label htmlFor="edit-groupId">المجموعة الإلكترونية</Label>
               <Select
+                name="groupId"
                 value={editDialog.form.groupId}
                 onValueChange={(v) => updateEditForm("groupId", v)}
                 disabled={
@@ -1380,7 +1392,7 @@ export function StudentRegistryView() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="dismiss-type">نوع الفصل</Label>
-              <Select value={dismissType} onValueChange={setDismissType}>
+              <Select name="type" value={dismissType} onValueChange={setDismissType}>
                 <SelectTrigger id="dismiss-type">
                   <SelectValue />
                 </SelectTrigger>

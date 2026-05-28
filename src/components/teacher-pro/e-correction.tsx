@@ -228,6 +228,7 @@ export function ECorrectionView() {
                 الامتحان
               </Label>
               <Select
+                name="examId"
                 value={filterExamId}
                 onValueChange={(v) => setFilterExamId(v === "all" ? "" : v)}
               >
@@ -249,6 +250,7 @@ export function ECorrectionView() {
                 الحالة
               </Label>
               <Select
+                name="status"
                 value={filterStatus}
                 onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}
               >

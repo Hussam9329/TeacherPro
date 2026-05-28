@@ -191,6 +191,7 @@ export function GradeRecordsView() {
                 الامتحان
               </Label>
               <Select
+                name="examId"
                 value={filterExamId}
                 onValueChange={(v) => {
                   setFilterExamId(v === "all" ? "" : v);
@@ -215,6 +216,7 @@ export function GradeRecordsView() {
                 الحالة
               </Label>
               <Select
+                name="status"
                 value={filterStatus}
                 onValueChange={(v) => {
                   setFilterStatus(v === "all" ? "" : v);
@@ -238,6 +240,7 @@ export function GradeRecordsView() {
                 الدورة
               </Label>
               <Select
+                name="courseId"
                 value={filterCourseId}
                 onValueChange={(v) => {
                   setFilterCourseId(v === "all" ? "" : v);
@@ -260,6 +263,7 @@ export function GradeRecordsView() {
             <div className="flex items-center gap-2 pt-5">
               <Checkbox
                 id="grade-records-accounting"
+                name="accounting"
                 checked={accountingChecked}
                 onCheckedChange={(v) => {
                   setAccountingChecked(!!v);
@@ -295,6 +299,7 @@ export function GradeRecordsView() {
             حجم الصفحة:
           </Label>
           <Select
+            name="pageSize"
             value={String(pageSize)}
             onValueChange={(v) => {
               setPageSize(Number(v));

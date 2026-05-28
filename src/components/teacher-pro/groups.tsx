@@ -157,7 +157,7 @@ export function GroupsView() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="group-course">الدورة</Label>
-                <Select value={courseId} onValueChange={setCourseId}>
+                <Select name="courseId" value={courseId} onValueChange={setCourseId}>
                   <SelectTrigger id="group-course">
                     <SelectValue placeholder="اختر الدورة" />
                   </SelectTrigger>

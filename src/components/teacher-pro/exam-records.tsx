@@ -131,6 +131,7 @@ export function ExamRecordsView() {
                 نوع الامتحان
               </Label>
               <Select
+                name="type"
                 value={filterType}
                 onValueChange={(v) => setFilterType(v === "all" ? "" : v)}
               >
@@ -150,6 +151,7 @@ export function ExamRecordsView() {
                 الدورة
               </Label>
               <Select
+                name="courseId"
                 value={filterCourseId}
                 onValueChange={(v) => setFilterCourseId(v === "all" ? "" : v)}
               >
@@ -169,6 +171,7 @@ export function ExamRecordsView() {
             <div className="flex items-center gap-2 pt-5">
               <Checkbox
                 id="exam-records-accounting"
+                name="accounting"
                 checked={accountingFilter}
                 onCheckedChange={(v) => setAccountingFilter(!!v)}
               />

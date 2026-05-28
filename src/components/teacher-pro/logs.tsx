@@ -89,6 +89,7 @@ export function LogsView() {
                 الوحدة
               </Label>
               <Select
+                name="module"
                 value={filterModule}
                 onValueChange={(v) => {
                   setFilterModule(v === "all" ? "" : v);
@@ -113,6 +114,7 @@ export function LogsView() {
                 المستخدم
               </Label>
               <Select
+                name="userId"
                 value={filterUser}
                 onValueChange={(v) => {
                   setFilterUser(v === "all" ? "" : v);
@@ -137,6 +139,7 @@ export function LogsView() {
                 حجم الصفحة
               </Label>
               <Select
+                name="pageSize"
                 value={String(pageSize)}
                 onValueChange={(v) => {
                   setPageSize(Number(v));
