@@ -8,6 +8,7 @@ import {
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
 import { getRequiredTextError } from "@/lib/validation";
+import { normalizeArabicText } from "@/lib/route-helpers";
 
 
 function getPrismaStudentErrorResponse(error: unknown) {
@@ -31,12 +32,20 @@ function getPrismaStudentErrorResponse(error: unknown) {
   return NextResponse.json({ error: "تعذر حفظ بيانات الطالب حالياً. تحقق من الاتصال ثم حاول مرة أخرى." }, { status: 500 });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const query = new URL(req.url).searchParams.get("q") || "";
   const students = await db.student.findMany({
     orderBy: { createdAt: "desc" },
     include: { course: true, group: true },
   });
-  return NextResponse.json({ students });
+  const normalizedQuery = normalizeArabicText(query);
+  const filteredStudents = normalizedQuery
+    ? students.filter((student) =>
+        [student.name, student.phone, student.parentPhone, student.telegram, student.code]
+          .some((field) => normalizeArabicText(field).includes(normalizedQuery)),
+      )
+    : students;
+  return NextResponse.json({ students: filteredStudents });
 }
 
 export async function POST(req: NextRequest) {

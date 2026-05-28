@@ -107,7 +107,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
   },
-  { title: "الادارة", itemIds: ["accounts", "logs"] },
+  { title: "الإدارة", itemIds: ["accounts", "logs"] },
 ];
 
 const familyItemIds = new Set<SectionId>(

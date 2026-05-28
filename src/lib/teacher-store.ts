@@ -612,11 +612,11 @@ function firstAvailableSection(user: User | undefined, roles: Role[]): SectionId
 // ─── Default Courses ─────────────────────────────────────────────────────────
 
 const DEFAULT_COURSES: Course[] = [
-  { id: 'c_batch27_k1_elec', name: 'دفعة 2027 - الكورس الاول - امتحان الكتروني', type: 'عامة', createdAt: '2026-06-01', active: true },
-  { id: 'c_batch27_full_elec', name: 'دفعة 2027 - منهج كامل - امتحان الكتروني', type: 'عامة', createdAt: '2026-06-01', active: true },
-  { id: 'c_batch27_k1_att', name: 'دفعة 2027 - الكورس الاول - امتحان حضوري', type: 'عامة', createdAt: '2026-06-01', active: true },
+  { id: 'c_batch27_k1_elec', name: 'دفعة 2027 - الكورس الأول - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true },
+  { id: 'c_batch27_full_elec', name: 'دفعة 2027 - منهج كامل - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true },
+  { id: 'c_batch27_k1_att', name: 'دفعة 2027 - الكورس الأول - امتحان حضوري', type: 'عامة', createdAt: '2026-06-01', active: true },
   { id: 'c_batch27_full_att', name: 'دفعة 2027 - منهج كامل - امتحان حضوري', type: 'عامة', createdAt: '2026-06-01', active: true },
-  { id: 'c_batch27_exempt_elec', name: 'دفعة 2027 - منهج كامل (طلاب الاعفاء) - امتحان الكتروني', type: 'عامة', createdAt: '2026-06-01', active: true },
+  { id: 'c_batch27_exempt_elec', name: 'دفعة 2027 - منهج كامل (طلاب الإعفاء) - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true },
 ];
 
 function seedData() {

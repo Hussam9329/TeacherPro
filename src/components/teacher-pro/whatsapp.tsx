@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { EmptyState } from './ui-kit';
+import { useActionLock } from '@/hooks/use-action-lock';
 
 export function WhatsAppView() {
   const {
@@ -24,6 +26,7 @@ export function WhatsAppView() {
   const [filterStatus, setFilterStatus] = useState('');
   const [freeMessage, setFreeMessage] = useState('');
   const [showSendDialog, setShowSendDialog] = useState(false);
+  const { locked: isSchedulingMessages, runLocked: runScheduleMessagesLocked } = useActionLock();
 
   // Filter students for sending
   const targetStudents = useMemo(() => {
@@ -38,26 +41,30 @@ export function WhatsAppView() {
     if (command === 'رسالة حرة') return freeMessage;
 
     if (command === 'QR') {
-      return `السلام عليكم ورحمة الله وبركاته\nرمز QR للطالب ${student.name}\nالكود: ${student.code}\nيرجى المراسلة في حالة وجود مشكلة.\nادارة الاستاذ حسن فلاح - مدرس مادة الاحياء`;
+      return `السلام عليكم ورحمة الله وبركاته\nرمز QR للطالب ${student.name}\nالكود: ${student.code}\nيرجى المراسلة في حالة وجود مشكلة.\nإدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;
     }
 
     // Report
     if (student.status === 'مفصول') {
       if (student.dismissalType === 'فصل مؤقت' && student.dismissalReason.includes('غش')) {
-        return `السلام عليكم ورحمة الله وبركاته\nتم فصل الطالب ${student.name} فصلاً مؤقتاً بسبب قيام الطالب بالغش بالامتحان.\nيرجى مراسلة المعرف (@) على التلكرام لغرض اتمام اجراءات التعهد.\nادارة الاستاذ حسن فلاح - مدرس مادة الاحياء`;
+        return `السلام عليكم ورحمة الله وبركاته\nتم فصل الطالب ${student.name} فصلاً مؤقتاً بسبب قيام الطالب بالغش بالامتحان.\nيرجى مراسلة المعرف (@) على التليكرام لغرض إتمام إجراءات التعهد.\nإدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;
       }
       if (student.dismissalType === 'فصل مؤقت') {
-        return `السلام عليكم ورحمة الله وبركاته\nتم فصل الطالب ${student.name} فصلاً مؤقتاً بسبب انتهاء فرصه.\nيرجى مراسلة المعرف (@) على التلكرام لغرض اتمام اجراءات التعهد.\nادارة الاستاذ حسن فلاح - مدرس مادة الاحياء`;
+        return `السلام عليكم ورحمة الله وبركاته\nتم فصل الطالب ${student.name} فصلاً مؤقتاً بسبب انتهاء فرصه.\nيرجى مراسلة المعرف (@) على التليكرام لغرض إتمام إجراءات التعهد.\nإدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;
       }
-      return `السلام عليكم ورحمة الله وبركاته\nتم فصل الطالب ${student.name} فصلاً نهائياً بسبب عدم الالتزام بالتعهد السابق.\nشكرا جزيلاً\nادارة الاستاذ حسن فلاح - مدرس مادة الاحياء`;
+      return `السلام عليكم ورحمة الله وبركاته\nتم فصل الطالب ${student.name} فصلاً نهائياً بسبب عدم الالتزام بالتعهد السابق.\nشكراً جزيلاً\nإدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;
     }
 
-    return `السلام عليكم ورحمة الله وبركاته\nتقرير الطالب ${student.name}\nالكود: ${student.code}\nالفرص المتبقية: ${student.opportunities}/${student.baseOpportunities}\nادارة الاستاذ حسن فلاح - مدرس مادة الاحياء`;
+    return `السلام عليكم ورحمة الله وبركاته\nتقرير الطالب ${student.name}\nالكود: ${student.code}\nالفرص المتبقية: ${student.opportunities}/${student.baseOpportunities}\nإدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;
   };
 
-  const handleSend = () => {
+  const handleSend = runScheduleMessagesLocked(async () => {
     if (command === 'رسالة حرة' && !freeMessage.trim()) {
       toast.error('يرجى إدخال الرسالة');
+      return;
+    }
+    if (targetStudents.length === 0) {
+      toast.error('لا يوجد طلاب مطابقون للفلاتر الحالية');
       return;
     }
 
@@ -67,8 +74,8 @@ export function WhatsAppView() {
     });
 
     setShowSendDialog(false);
-    toast.success(`تم جدولة ${targetStudents.length} رسالة واتساب`);
-  };
+    toast.success(`تمت جدولة ${targetStudents.length} رسالة واتساب`);
+  });
 
   // Queue stats
   const scheduled = whatsappQueue.filter(m => m.status === 'مجدول').length;
@@ -178,7 +185,7 @@ export function WhatsAppView() {
               </div>
 
 
-              <Button className="w-full" onClick={() => setShowSendDialog(true)}>
+              <Button className="w-full" onClick={() => setShowSendDialog(true)} disabled={targetStudents.length === 0}>
                 إرسال {targetStudents.length} رسالة
               </Button>
             </CardContent>
@@ -198,7 +205,7 @@ export function WhatsAppView() {
             <CardContent>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {whatsappQueue.length === 0 ? (
-                  <p className="empty-state">الطابور فارغ</p>
+                  <EmptyState title="طابور الإرسال فارغ" description="بعد جدولة رسائل واتساب ستظهر هنا مع حالة كل رسالة." />
                 ) : (
                   whatsappQueue.slice(0, 50).map(msg => {
                     const student = students.find(s => s.id === msg.studentId);
@@ -241,7 +248,7 @@ export function WhatsAppView() {
             <CardContent>
               <div className="space-y-3">
                 {whatsappReports.length === 0 ? (
-                  <p className="empty-state">لا توجد تقارير</p>
+                  <EmptyState title="لا توجد تقارير إرسال" description="ستظهر تقارير التسليم والفشل بعد تنفيذ عمليات الإرسال." />
                 ) : (
                   whatsappReports.map(report => (
                     <div key={report.id} className="p-4 rounded-2xl border bg-card/80 shadow-sm">
@@ -283,7 +290,7 @@ export function WhatsAppView() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSendDialog(false)}>إلغاء</Button>
-            <Button onClick={handleSend}>تأكيد الإرسال</Button>
+            <Button onClick={handleSend} disabled={isSchedulingMessages}>{isSchedulingMessages ? 'جاري الجدولة...' : 'تأكيد الإرسال'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

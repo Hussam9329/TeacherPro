@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useTeacherStore, PERMISSION_CATALOG, type Role, type PermissionEntry } from '@/lib/teacher-store';
+import { useTeacherStore, PERMISSION_CATALOG, type PermissionEntry } from '@/lib/teacher-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { DemoCopiesTab } from './demo-copies';
+import { useActionLock } from '@/hooks/use-action-lock';
 
 // ─── Permission categories for grouping ──────────────────────────────────────
 
@@ -116,9 +117,12 @@ function RolesTab() {
   const [editRolePerms, setEditRolePerms] = useState<string[]>([]);
 
   const [deleteRoleDialog, setDeleteRoleDialog] = useState({ open: false, id: '', name: '' });
+  const { locked: isAddingRole, runLocked: runAddRoleLocked } = useActionLock();
+  const { locked: isSavingRole, runLocked: runSaveRoleLocked } = useActionLock();
+  const { locked: isDeletingRole, runLocked: runDeleteRoleLocked } = useActionLock();
 
 
-  const handleAddRole = () => {
+  const handleAddRole = runAddRoleLocked(async () => {
     if (!newRoleName.trim()) {
       toast.error('يرجى إدخال اسم الدور');
       return;
@@ -127,8 +131,8 @@ function RolesTab() {
     setShowAddRoleDialog(false);
     setNewRoleName('');
     setNewRolePerms([]);
-    toast.success('تم إضافة الدور');
-  };
+    toast.success('تمت إضافة الدور');
+  });
 
   const handleEditRole = (roleId: string) => {
     const role = roles.find(r => r.id === roleId);
@@ -137,7 +141,7 @@ function RolesTab() {
     setEditRolePerms([...role.permissions]);
   };
 
-  const handleSaveRole = () => {
+  const handleSaveRole = runSaveRoleLocked(async () => {
     if (!editRoleId) return;
     updateRole(editRoleId, { permissions: editRolePerms });
     // Also update all users with this role
@@ -152,13 +156,13 @@ function RolesTab() {
     setEditRoleId(null);
     setEditRolePerms([]);
     toast.success('تم تحديث صلاحيات الدور');
-  };
+  });
 
-  const handleDeleteRole = () => {
+  const handleDeleteRole = runDeleteRoleLocked(async () => {
     const ok = deleteRole(deleteRoleDialog.id);
     if (ok) { toast.success('تم حذف الدور'); } else { toast.error('لا يمكن حذف هذا الدور'); }
     setDeleteRoleDialog({ open: false, id: '', name: '' });
-  };
+  });
 
 
   return (
@@ -245,7 +249,7 @@ function RolesTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddRoleDialog(false)}>إلغاء</Button>
-            <Button onClick={handleAddRole}>إضافة</Button>
+            <Button onClick={handleAddRole} disabled={isAddingRole}>{isAddingRole ? 'جاري الإضافة...' : 'إضافة'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -264,7 +268,7 @@ function RolesTab() {
           <PermissionChecklist perms={editRolePerms} onChange={setEditRolePerms} />
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditRoleId(null); setEditRolePerms([]); }}>إلغاء</Button>
-            <Button onClick={handleSaveRole}>حفظ</Button>
+            <Button onClick={handleSaveRole} disabled={isSavingRole}>{isSavingRole ? 'جاري الحفظ...' : 'حفظ'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -280,8 +284,8 @@ function RolesTab() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteRole} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              حذف
+            <AlertDialogAction onClick={handleDeleteRole} disabled={isDeletingRole} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {isDeletingRole ? 'جاري الحذف...' : 'حذف'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -305,8 +309,12 @@ function UsersTab() {
 
   const [editUserDialog, setEditUserDialog] = useState({ open: false, id: '', name: '', password: '' });
   const [deleteUserDialog, setDeleteUserDialog] = useState({ open: false, id: '', userName: '' });
+  const { locked: isAddingUser, runLocked: runAddUserLocked } = useActionLock();
+  const { locked: isSavingUser, runLocked: runSaveUserLocked } = useActionLock();
+  const { locked: isSavingPermissions, runLocked: runSavePermissionsLocked } = useActionLock();
+  const { locked: isDeletingUser, runLocked: runDeleteUserLocked } = useActionLock();
 
-  const handleAddUser = () => {
+  const handleAddUser = runAddUserLocked(async () => {
     if (!newUser.username.trim() || !newUser.name.trim()) {
       toast.error('يرجى إدخال اسم المستخدم والاسم');
       return;
@@ -324,30 +332,30 @@ function UsersTab() {
     });
     setShowAddDialog(false);
     setNewUser({ username: '', name: '', password: '123456', roleId: 'role_checker', permissions: [] });
-    toast.success('تم إضافة المستخدم');
-  };
+    toast.success('تمت إضافة المستخدم');
+  });
 
   const openEditUserDialog = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
     setEditUserDialog({ open: true, id: userId, name: user.name, password: user.password || '123456' });
   };
-  const handleEditUserSave = () => {
+  const handleEditUserSave = runSaveUserLocked(async () => {
     if (!editUserDialog.name.trim()) { toast.error('يرجى إدخال الاسم'); return; }
     updateUser(editUserDialog.id, { name: editUserDialog.name.trim(), password: editUserDialog.password });
     setEditUserDialog({ open: false, id: '', name: '', password: '' });
     toast.success('تم تعديل المستخدم');
-  };
+  });
 
   const openDeleteUserDialog = (userId: string) => {
     const user = users.find(u => u.id === userId);
     setDeleteUserDialog({ open: true, id: userId, userName: user?.name || '' });
   };
-  const handleDeleteUserConfirm = () => {
+  const handleDeleteUserConfirm = runDeleteUserLocked(async () => {
     const ok = deleteUser(deleteUserDialog.id);
     if (ok) { toast.success('تم حذف المستخدم'); } else { toast.error('لا يمكن حذف هذا المستخدم'); }
     setDeleteUserDialog({ open: false, id: '', userName: '' });
-  };
+  });
 
   const handleEditPermissions = (userId: string) => {
     const user = users.find(u => u.id === userId);
@@ -356,12 +364,12 @@ function UsersTab() {
     setEditPerms([...user.permissions]);
   };
 
-  const handleSavePermissions = () => {
+  const handleSavePermissions = runSavePermissionsLocked(async () => {
     updateUserPermissions(editPermsId, editPerms);
     setEditPermsId('');
     setEditPerms([]);
     toast.success('تم تحديث الصلاحيات');
-  };
+  });
 
 
   const handleRoleChange = (roleId: string) => {
@@ -475,7 +483,7 @@ function UsersTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditUserDialog(prev => ({ ...prev, open: false }))}>إلغاء</Button>
-            <Button onClick={handleEditUserSave}>حفظ</Button>
+            <Button onClick={handleEditUserSave} disabled={isSavingUser}>{isSavingUser ? 'جاري الحفظ...' : 'حفظ'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -491,8 +499,8 @@ function UsersTab() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteUserConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              حذف
+            <AlertDialogAction onClick={handleDeleteUserConfirm} disabled={isDeletingUser} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {isDeletingUser ? 'جاري الحذف...' : 'حذف'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -508,15 +516,15 @@ function UsersTab() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="new-username">اسم المستخدم</Label>
-              <Input id="new-username" name="username" autoComplete="username" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))} placeholder="username" />
+              <Input id="new-username" name="username" autoComplete="username" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))} placeholder="مثال: teacher.admin" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-name">الاسم الكامل</Label>
-              <Input id="new-name" name="name" autoComplete="name" value={newUser.name} onChange={e => setNewUser(p => ({ ...p, name: e.target.value }))} placeholder="الاسم" />
+              <Input id="new-name" name="name" autoComplete="name" value={newUser.name} onChange={e => setNewUser(p => ({ ...p, name: e.target.value }))} placeholder="مثال: أحمد محمد" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-password">كلمة المرور</Label>
-              <Input id="new-password" name="password" autoComplete="new-password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="123456" type="password" />
+              <Input id="new-password" name="password" autoComplete="new-password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="كلمة مرور آمنة" type="password" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-role">الدور</Label>
@@ -537,7 +545,7 @@ function UsersTab() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddDialog(false)}>إلغاء</Button>
-            <Button onClick={handleAddUser}>إضافة</Button>
+            <Button onClick={handleAddUser} disabled={isAddingUser}>{isAddingUser ? 'جاري الإضافة...' : 'إضافة'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -552,7 +560,7 @@ function UsersTab() {
           <PermissionChecklist perms={editPerms} onChange={setEditPerms} />
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditPermsId(''); setEditPerms([]); }}>إلغاء</Button>
-            <Button onClick={handleSavePermissions}>حفظ</Button>
+            <Button onClick={handleSavePermissions} disabled={isSavingPermissions}>{isSavingPermissions ? 'جاري الحفظ...' : 'حفظ'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

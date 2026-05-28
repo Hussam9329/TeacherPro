@@ -35,6 +35,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { EmptyState } from './ui-kit';
+import { useActionLock } from '@/hooks/use-action-lock';
 import {
   Copy,
   Play,
@@ -128,8 +130,11 @@ export function DemoCopiesTab() {
     id: '',
     name: '',
   });
+  const { locked: isCreatingDemo, runLocked: runCreateDemoLocked } = useActionLock();
+  const { locked: isExtendingDemo, runLocked: runExtendDemoLocked } = useActionLock();
+  const { locked: isDeletingDemo, runLocked: runDeleteDemoLocked } = useActionLock();
 
-  const handleCreate = () => {
+  const handleCreate = runCreateDemoLocked(async () => {
     if (!newDemo.name.trim()) {
       toast.error('يرجى إدخال اسم النسخة');
       return;
@@ -146,9 +151,9 @@ export function DemoCopiesTab() {
     setUseCustomLimits(false);
     setCustomLimits({ ...DEFAULT_DEMO_LIMITS });
     toast.success('تم إنشاء نسخة الديمو');
-  };
+  });
 
-  const handleExtend = () => {
+  const handleExtend = runExtendDemoLocked(async () => {
     if (extendDialog.days <= 0) {
       toast.error('يرجى إدخال عدد أيام صحيح');
       return;
@@ -156,14 +161,14 @@ export function DemoCopiesTab() {
     extendDemoCopy(extendDialog.id, extendDialog.days);
     setExtendDialog({ open: false, id: '', name: '', days: 7 });
     toast.success('تم تمديد نسخة الديمو');
-  };
+  });
 
-  const handleDelete = () => {
+  const handleDelete = runDeleteDemoLocked(async () => {
     const ok = deleteDemoCopy(deleteDialog.id);
     if (ok) toast.success('تم حذف نسخة الديمو');
     else toast.error('لا يمكن حذف هذه النسخة');
     setDeleteDialog({ open: false, id: '', name: '' });
-  };
+  });
 
   const handleEnter = (id: string) => {
     enterDemoCopy(id);
@@ -217,14 +222,17 @@ export function DemoCopiesTab() {
 
       {/* Demo copies list */}
       {demoCopies.length === 0 ? (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <Copy className="w-12 h-12 mx-auto mb-4 text-muted-foreground/40" />
-            <p className="text-muted-foreground">
-              لا توجد نسخ ديمو بعد. أنشئ نسخة جديدة للتجربة.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Copy}
+          title="لا توجد نسخ ديمو بعد"
+          description="أنشئ نسخة ديمو لعزل التجارب والتدريب عن بياناتك الأساسية."
+          action={
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <Plus className="w-4 h-4 ml-2" />
+              إنشاء نسخة ديمو
+            </Button>
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {demoCopies.map((demo) => {
@@ -515,7 +523,7 @@ export function DemoCopiesTab() {
             >
               إلغاء
             </Button>
-            <Button onClick={handleCreate}>إنشاء</Button>
+            <Button onClick={handleCreate} disabled={isCreatingDemo}>{isCreatingDemo ? 'جاري الإنشاء...' : 'إنشاء'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -561,7 +569,7 @@ export function DemoCopiesTab() {
             >
               إلغاء
             </Button>
-            <Button onClick={handleExtend}>تمديد</Button>
+            <Button onClick={handleExtend} disabled={isExtendingDemo}>{isExtendingDemo ? 'جاري التمديد...' : 'تمديد'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -585,9 +593,10 @@ export function DemoCopiesTab() {
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
+              disabled={isDeletingDemo}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              حذف
+              {isDeletingDemo ? 'جاري الحذف...' : 'حذف'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
