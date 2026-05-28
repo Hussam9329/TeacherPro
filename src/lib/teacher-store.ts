@@ -1089,8 +1089,8 @@ export const useTeacherStore = create<TeacherState>()(
         if (!get().isAuthenticated && !get().activeDemoId) return false;
         const user = get().currentUser();
         if (!user) return false;
-        // Admin role always has access
-        if (user.roleId === 'role_admin') return true;
+        // Admin user always has full access
+        if (user.username === 'admin' || user.roleId === 'role_admin') return true;
         // Demo users: block access to certain sections
         if (get().activeDemoId) {
           const forbiddenSections: SectionId[] = ['accounts', 'logs', 'demo-copies'];
