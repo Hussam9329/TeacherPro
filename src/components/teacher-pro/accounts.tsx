@@ -23,7 +23,7 @@ import { useActionLock } from '@/hooks/use-action-lock';
 const PERMISSION_CATEGORIES = [
   'النظام', 'الدورات', 'المجموعات الإلكترونية', 'المواقع', 'الفصول',
   'الطلاب', 'الامتحانات', 'الدرجات', 'الفرص', 'التصحيح',
-  'واتساب', 'الحسابات', 'السجلات',
+  'واتساب', 'الحسابات', 'السجلات', 'نسخ الديمو',
 ];
 
 function getPermissionsByCategory(permissions: PermissionEntry[]) {
@@ -138,7 +138,7 @@ function RolesTab() {
     const role = roles.find(r => r.id === roleId);
     if (!role) return;
     setEditRoleId(roleId);
-    setEditRolePerms([...role.permissions]);
+    setEditRolePerms(role.id === 'role_admin' ? PERMISSION_CATALOG.map(p => p.id) : [...role.permissions]);
   };
 
   const handleSaveRole = runSaveRoleLocked(async () => {
@@ -178,13 +178,14 @@ function RolesTab() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {roles.map(role => {
           const userCount = users.filter(u => u.roleId === role.id).length;
+          const displayedRolePermissions = role.id === 'role_admin' ? PERMISSION_CATALOG.map(p => p.id) : role.permissions;
           return (
             <Card key={role.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <p className="font-bold">{role.name}</p>
-                    <p className="text-xs text-muted-foreground">{role.permissions.length} صلاحية</p>
+                    <p className="text-xs text-muted-foreground">{displayedRolePermissions.length} صلاحية</p>
                   </div>
                   <div className="flex gap-1">
                     {role.isDefault && <Badge variant="secondary" className="text-[10px]">افتراضي</Badge>}
@@ -196,18 +197,18 @@ function RolesTab() {
                   <div className="flex flex-wrap gap-1">
                     {PERMISSION_CATEGORIES.filter(cat => {
                       const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                      return catPerms.some(p => role.permissions.includes(p));
+                      return catPerms.some(p => displayedRolePermissions.includes(p));
                     }).slice(0, 5).map(cat => (
                       <Badge key={cat} variant="outline" className="text-[10px]">{cat}</Badge>
                     ))}
                     {PERMISSION_CATEGORIES.filter(cat => {
                       const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                      return catPerms.some(p => role.permissions.includes(p));
+                      return catPerms.some(p => displayedRolePermissions.includes(p));
                     }).length > 5 && (
                       <Badge variant="outline" className="text-[10px]">
                         +{PERMISSION_CATEGORIES.filter(cat => {
                           const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                          return catPerms.some(p => role.permissions.includes(p));
+                          return catPerms.some(p => displayedRolePermissions.includes(p));
                         }).length - 5}
                       </Badge>
                     )}
@@ -265,10 +266,10 @@ function RolesTab() {
                 : 'حدد الصلاحيات المطلوبة لهذا الدور'}
             </DialogDescription>
           </DialogHeader>
-          <PermissionChecklist perms={editRolePerms} onChange={setEditRolePerms} />
+          <PermissionChecklist perms={editRolePerms} onChange={setEditRolePerms} readOnly={editRoleId === 'role_admin'} />
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditRoleId(null); setEditRolePerms([]); }}>إلغاء</Button>
-            <Button onClick={handleSaveRole} disabled={isSavingRole}>{isSavingRole ? 'جاري الحفظ...' : 'حفظ'}</Button>
+            <Button onClick={handleSaveRole} disabled={isSavingRole || editRoleId === 'role_admin'}>{isSavingRole ? 'جاري الحفظ...' : editRoleId === 'role_admin' ? 'صلاحيات المدير كاملة دائماً' : 'حفظ'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -361,14 +362,17 @@ function UsersTab() {
     const user = users.find(u => u.id === userId);
     if (!user) return;
     setEditPermsId(userId);
-    setEditPerms([...user.permissions]);
+    const isAdminUser = user.username.trim().toLowerCase() === 'admin' || user.roleId === 'role_admin';
+    setEditPerms(isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : [...user.permissions]);
   };
 
   const handleSavePermissions = runSavePermissionsLocked(async () => {
-    updateUserPermissions(editPermsId, editPerms);
+    const editedUser = users.find(u => u.id === editPermsId);
+    const isAdminUser = editedUser?.username.trim().toLowerCase() === 'admin' || editedUser?.roleId === 'role_admin';
+    updateUserPermissions(editPermsId, isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : editPerms);
     setEditPermsId('');
     setEditPerms([]);
-    toast.success('تم تحديث الصلاحيات');
+    toast.success(isAdminUser ? 'صلاحيات المدير كاملة دائماً' : 'تم تحديث الصلاحيات');
   });
 
 
@@ -397,6 +401,8 @@ function UsersTab() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {users.map(user => {
           const userRole = roles.find(r => r.id === user.roleId);
+          const isAdminUser = user.username.trim().toLowerCase() === 'admin' || user.roleId === 'role_admin';
+          const displayedUserPermissions = isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : user.permissions;
           return (
             <Card key={user.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10">
               <CardContent className="p-4">
@@ -414,22 +420,22 @@ function UsersTab() {
                 </div>
 
                 <div className="mb-3">
-                  <p className="text-xs text-muted-foreground mb-1">الصلاحيات ({user.permissions.length})</p>
+                  <p className="text-xs text-muted-foreground mb-1">الصلاحيات ({displayedUserPermissions.length})</p>
                   <div className="flex flex-wrap gap-1">
                     {PERMISSION_CATEGORIES.filter(cat => {
                       const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                      return catPerms.some(p => user.permissions.includes(p));
+                      return catPerms.some(p => displayedUserPermissions.includes(p));
                     }).slice(0, 4).map(cat => (
                       <Badge key={cat} variant="outline" className="text-[10px]">{cat}</Badge>
                     ))}
                     {PERMISSION_CATEGORIES.filter(cat => {
                       const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                      return catPerms.some(p => user.permissions.includes(p));
+                      return catPerms.some(p => displayedUserPermissions.includes(p));
                     }).length > 4 && (
                       <Badge variant="outline" className="text-[10px]">
                         +{PERMISSION_CATEGORIES.filter(cat => {
                           const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                          return catPerms.some(p => user.permissions.includes(p));
+                          return catPerms.some(p => displayedUserPermissions.includes(p));
                         }).length - 4}
                       </Badge>
                     )}
@@ -438,7 +444,7 @@ function UsersTab() {
 
                 <div className="grid grid-cols-2 gap-2">
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => handleEditPermissions(user.id)}>
-                    الصلاحيات
+                    {isAdminUser ? 'صلاحيات كاملة' : 'الصلاحيات'}
                   </Button>
                   <Button variant="secondary" size="sm" className="text-xs" onClick={() => openEditUserDialog(user.id)}>
                     تعديل
@@ -447,15 +453,20 @@ function UsersTab() {
                     variant={user.active ? 'outline' : 'default'}
                     size="sm"
                     className="text-xs"
+                    disabled={user.username.trim().toLowerCase() === 'admin'}
                     onClick={() => {
+                      if (user.username.trim().toLowerCase() === 'admin') {
+                        toast.info('حساب admin يبقى فعال دائماً');
+                        return;
+                      }
                       toggleUser(user.id);
                       toast.success(user.active ? 'تم تعطيل المستخدم' : 'تم تفعيل المستخدم');
                     }}
                   >
-                    {user.active ? 'تعطيل' : 'تفعيل'}
+                    {user.username.trim().toLowerCase() === 'admin' ? 'فعال دائماً' : user.active ? 'تعطيل' : 'تفعيل'}
                   </Button>
-                  <Button variant="destructive" size="sm" className="text-xs" onClick={() => openDeleteUserDialog(user.id)}>
-                    حذف
+                  <Button variant="destructive" size="sm" className="text-xs" disabled={isAdminUser} onClick={() => openDeleteUserDialog(user.id)}>
+                    {isAdminUser ? 'محمي' : 'حذف'}
                   </Button>
                 </div>
               </CardContent>
@@ -557,10 +568,14 @@ function UsersTab() {
             <DialogTitle>تحديث الصلاحيات - {users.find(u => u.id === editPermsId)?.name}</DialogTitle>
             <DialogDescription>فعّل الصلاحيات التي تريد السماح بها فقط، ثم اضغط حفظ لتطبيقها.</DialogDescription>
           </DialogHeader>
-          <PermissionChecklist perms={editPerms} onChange={setEditPerms} />
+          <PermissionChecklist
+            perms={editPerms}
+            onChange={setEditPerms}
+            readOnly={users.find(u => u.id === editPermsId)?.username.trim().toLowerCase() === 'admin' || users.find(u => u.id === editPermsId)?.roleId === 'role_admin'}
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => { setEditPermsId(''); setEditPerms([]); }}>إلغاء</Button>
-            <Button onClick={handleSavePermissions} disabled={isSavingPermissions}>{isSavingPermissions ? 'جاري الحفظ...' : 'حفظ'}</Button>
+            <Button onClick={handleSavePermissions} disabled={isSavingPermissions}>{isSavingPermissions ? 'جاري الحفظ...' : (users.find(u => u.id === editPermsId)?.username.trim().toLowerCase() === 'admin' || users.find(u => u.id === editPermsId)?.roleId === 'role_admin') ? 'تأكيد الصلاحيات الكاملة' : 'حفظ'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

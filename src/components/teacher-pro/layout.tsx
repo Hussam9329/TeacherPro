@@ -107,6 +107,7 @@ const menuItems: {
   { id: "whatsapp", title: "واتساب", sub: "رسائل", icon: MessageCircle },
   { id: "accounts", title: "إدارة الحسابات", sub: "صلاحيات", icon: Shield },
   { id: "logs", title: "السجلات", sub: "تدقيق", icon: ScrollText },
+  { id: "demo-copies", title: "نسخ الديمو", sub: "تجريبي", icon: Copy },
 ];
 
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
@@ -117,7 +118,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
   },
-  { title: "الإدارة", itemIds: ["accounts", "logs"] },
+  { title: "الإدارة", itemIds: ["accounts", "logs", "demo-copies"] },
 ];
 
 const familyItemIds = new Set<SectionId>(
@@ -325,7 +326,7 @@ export function TeacherProLayout() {
     )
       return;
     event.preventDefault();
-    if (!canAccess(section)) return;
+    if (!isAdmin && !canAccess(section)) return;
     setSection(section);
     if (typeof window !== "undefined") {
       const nextUrl = new URL(window.location.href);
@@ -391,10 +392,11 @@ export function TeacherProLayout() {
   }, [sidebarOpen]);
 
   const user = currentUser();
+  const isAdmin = user?.username?.trim().toLowerCase() === "admin" || user?.roleId === "role_admin";
   const userPermsKey = user?.permissions?.join(",");
   const visibleMenuItems = useMemo(
-    () => menuItems.filter((item) => canAccess(item.id)),
-    [canAccess, user?.id, user?.roleId, userPermsKey],
+    () => (isAdmin ? menuItems : menuItems.filter((item) => canAccess(item.id))),
+    [canAccess, isAdmin, user?.id, user?.roleId, userPermsKey],
   );
   const visibleSectionIds = useMemo(
     () => new Set(visibleMenuItems.map((item) => item.id)),
@@ -437,7 +439,7 @@ export function TeacherProLayout() {
   ]);
 
   const CurrentComponent =
-    canAccess(currentSection) && visibleSectionIds.has(currentSection)
+    (isAdmin || canAccess(currentSection)) && visibleSectionIds.has(currentSection)
       ? sectionComponents[currentSection] || DashboardView
       : DashboardView;
   const currentMenu = menuItems.find((m) => m.id === currentSection);
@@ -889,7 +891,7 @@ export function TeacherProLayout() {
         <div className="page-enter flex-1 overflow-auto p-4 md:p-6 xl:p-8">
           <div className="content-container space-y-6">
             {dbLoading && <LoadingState />}
-            {canAccess(currentSection) ? (
+            {isAdmin || canAccess(currentSection) ? (
               <CurrentComponent />
             ) : (
               <div className="empty-state">لا توجد صلاحية لفتح هذا القسم.</div>

@@ -246,6 +246,7 @@ export const DEMO_ALLOWED_PERMISSIONS = [
   'sites.view', 'sites.add', 'sites.edit', 'sites.delete',
   'chapters.view', 'chapters.add', 'chapters.edit', 'chapters.delete',
   'students.view', 'students.add', 'students.edit', 'students.delete',
+  'accounting.view', 'accounting.manage',
   'exams.view', 'exams.add', 'exams.edit', 'exams.delete',
   'grades.view', 'grades.add', 'grades.edit', 'grades.delete',
   'opportunities.view', 'opportunities.manage',
@@ -387,15 +388,54 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
 
 // ─── Default Roles ──────────────────────────────────────────────────────────
 
-const ALL_PERMISSION_IDS = PERMISSION_CATALOG.map(p => p.id);
+const ALL_PERMISSION_IDS = Array.from(new Set(PERMISSION_CATALOG.map(p => p.id)));
 const ALL_VIEW_PERMISSION_IDS = PERMISSION_CATALOG.filter(p => p.level === 'read').map(p => p.id);
+
+const ADMIN_USERNAME = 'admin';
+const ADMIN_PASSWORD = '1993';
+const ADMIN_ROLE_ID = 'role_admin';
+const ADMIN_ROLE_NAME = 'مدير عام';
+const ADMIN_FULL_PERMISSIONS = [...ALL_PERMISSION_IDS];
+
+function isPrimaryAdminUser(user?: Pick<User, 'username'> | null): boolean {
+  return String(user?.username || '').trim().toLowerCase() === ADMIN_USERNAME;
+}
+
+function hasFullAdminAccess(user?: Pick<User, 'username' | 'roleId'> | null): boolean {
+  return isPrimaryAdminUser(user) || user?.roleId === ADMIN_ROLE_ID;
+}
+
+function normalizeAdminAccessUser(user: User): User {
+  if (isPrimaryAdminUser(user)) {
+    return {
+      ...user,
+      username: ADMIN_USERNAME,
+      name: user.name || 'مدير النظام',
+      roleId: ADMIN_ROLE_ID,
+      role: ADMIN_ROLE_NAME,
+      permissions: [...ADMIN_FULL_PERMISSIONS],
+      active: true,
+      password: ADMIN_PASSWORD,
+    };
+  }
+
+  if (user.roleId === ADMIN_ROLE_ID) {
+    return {
+      ...user,
+      role: user.role || ADMIN_ROLE_NAME,
+      permissions: [...ADMIN_FULL_PERMISSIONS],
+    };
+  }
+
+  return user;
+}
 
 const DEFAULT_ROLES: Role[] = [
   {
     id: 'role_admin',
     name: 'مدير عام',
     isDefault: true,
-    permissions: [...ALL_PERMISSION_IDS, 'demos.view', 'demos.manage'],
+    permissions: [...ADMIN_FULL_PERMISSIONS],
   },
   {
     id: 'role_supervisor',
@@ -632,7 +672,7 @@ function seedData() {
   const roles: Role[] = DEFAULT_ROLES.map(r => ({ ...r, permissions: [...r.permissions] }));
 
   const users: User[] = [
-    { id: 'u_admin', username: 'admin', name: 'مدير النظام', roleId: 'role_admin', role: 'مدير عام', permissions: [...ALL_PERMISSION_IDS], active: true, password: '1993' },
+    { id: 'u_admin', username: ADMIN_USERNAME, name: 'مدير النظام', roleId: ADMIN_ROLE_ID, role: ADMIN_ROLE_NAME, permissions: [...ADMIN_FULL_PERMISSIONS], active: true, password: ADMIN_PASSWORD },
   ];
 
   return {
@@ -750,9 +790,30 @@ function mergeDefaultCourses(courses: Course[]): Course[] {
 }
 
 function mergeDefaultRoles(roles: Role[]): Role[] {
-  const existingIds = new Set(roles.map((role) => role.id));
+  const normalizedRoles = roles.map((role) => {
+    const defaultRole = DEFAULT_ROLES.find((item) => item.id === role.id);
+    if (!defaultRole) {
+      return { ...role, permissions: Array.from(new Set(role.permissions || [])) };
+    }
+    if (role.id === ADMIN_ROLE_ID) {
+      return {
+        ...role,
+        name: ADMIN_ROLE_NAME,
+        isDefault: true,
+        permissions: [...ADMIN_FULL_PERMISSIONS],
+      };
+    }
+    return {
+      ...role,
+      name: role.name || defaultRole.name,
+      isDefault: role.isDefault || defaultRole.isDefault,
+      permissions: Array.from(new Set([...(defaultRole.permissions || []), ...(role.permissions || [])])),
+    };
+  });
+
+  const existingIds = new Set(normalizedRoles.map((role) => role.id));
   return [
-    ...roles,
+    ...normalizedRoles,
     ...DEFAULT_ROLES.filter((role) => !existingIds.has(role.id)).map((role) => ({ ...role, permissions: [...role.permissions] })),
   ];
 }
@@ -975,30 +1036,21 @@ export const useTeacherStore = create<TeacherState>()(
 
           const parsedUsers = (serverData.users || []).map((u: Record<string, unknown>) => ({
             ...u,
-            password: String(u.password || u.passwordHash || (u.username === 'admin' ? '1993' : '')),
+            password: String(u.password || u.passwordHash || (u.username === ADMIN_USERNAME ? ADMIN_PASSWORD : '')),
             permissions: parseArrayField<string>(u.permissions),
             active: u.active !== undefined ? Boolean(u.active) : true,
           })) as User[];
           const seedUsers = seedData().users;
+          const adminSeed = seedUsers.find((u: User) => u.username === ADMIN_USERNAME)!;
+          const previousSessionUser = get().users.find((u) => u.id === get().currentUserId);
+          const keepAdminSession = get().isAuthenticated && hasFullAdminAccess(previousSessionUser);
+
           let users = parsedUsers.length > 0 ? parsedUsers : seedUsers;
-          // Ensure admin user always exists with correct password, role, and permissions
-          const adminSeed = seedUsers.find((u: User) => u.username === 'admin');
-          const hasAdmin = users.some((u: User) => u.username === 'admin');
-          if (!hasAdmin && adminSeed) {
-            users = [...users, adminSeed];
-          } else {
-            // Ensure admin is active and has a valid password, roleId, and full permissions
-            users = users.map((u: User) =>
-              u.username === 'admin' ? {
-                ...u,
-                active: true,
-                password: u.password || '1993',
-                roleId: u.roleId || adminSeed?.roleId || 'role_admin',
-                role: u.role || adminSeed?.role || 'مدير عام',
-                permissions: (u.permissions && u.permissions.length > 0) ? u.permissions : (adminSeed?.permissions || [...ALL_PERMISSION_IDS]),
-              } : u
-            );
-          }
+          const hasPrimaryAdmin = users.some((u: User) => isPrimaryAdminUser(u));
+          users = hasPrimaryAdmin
+            ? users.map((u: User) => normalizeAdminAccessUser(u))
+            : [...users, { ...adminSeed }];
+          users = users.map((u: User) => normalizeAdminAccessUser(u));
 
           const parsedRoles = (serverData.roles || []).map((r: Record<string, unknown>) => ({
             ...r,
@@ -1006,6 +1058,15 @@ export const useTeacherStore = create<TeacherState>()(
             isDefault: Boolean(r.isDefault),
           })) as Role[];
           const roles = mergeDefaultRoles(parsedRoles);
+          const loadedAdmin = users.find((u) => isPrimaryAdminUser(u) && u.active) || users.find((u) => u.roleId === ADMIN_ROLE_ID && u.active);
+          const currentUserStillExists = users.some((u) => u.id === get().currentUserId && u.active);
+          const nextCurrentUserId = keepAdminSession && loadedAdmin
+            ? loadedAdmin.id
+            : currentUserStillExists
+              ? get().currentUserId
+              : get().isAuthenticated && loadedAdmin
+                ? loadedAdmin.id
+                : get().currentUserId;
 
           const logs = (serverData.logs || []).map((l: Record<string, unknown>) => ({
             id: String(l.id || uid('log')),
@@ -1030,8 +1091,32 @@ export const useTeacherStore = create<TeacherState>()(
           set({
             courses, groups, sites, chapters, courseChapters, students,
             exams, grades, opportunityLogs, correctionSheets, users,
-            roles, logs, demoCopies, dbConnected: true, dbLoading: false,
+            roles, logs, demoCopies, currentUserId: nextCurrentUserId, dbConnected: true, dbLoading: false,
           });
+
+          const adminAfterLoad = users.find((u) => isPrimaryAdminUser(u));
+          if (adminAfterLoad) {
+            syncToServer(get, () => userApi.update(adminAfterLoad.id, {
+              active: true,
+              password: ADMIN_PASSWORD,
+              roleId: ADMIN_ROLE_ID,
+              role: ADMIN_ROLE_NAME,
+              permissions: ADMIN_FULL_PERMISSIONS,
+            }));
+          }
+          const adminRoleAfterLoad = roles.find((role) => role.id === ADMIN_ROLE_ID);
+          if (adminRoleAfterLoad) {
+            syncToServer(get, async () => {
+              const result = await roleApi.update(ADMIN_ROLE_ID, {
+                name: ADMIN_ROLE_NAME,
+                isDefault: true,
+                permissions: ADMIN_FULL_PERMISSIONS,
+              });
+              if (!result.ok) {
+                await roleApi.add({ id: ADMIN_ROLE_ID, name: ADMIN_ROLE_NAME, isDefault: true, permissions: ADMIN_FULL_PERMISSIONS });
+              }
+            });
+          }
           return true;
         } catch (e) {
           console.warn('[Store] Failed to load from server:', e);
@@ -1057,40 +1142,62 @@ export const useTeacherStore = create<TeacherState>()(
         return { theme: next };
       }),
 
-      currentUser: () => get().users.find((u) => u.id === get().currentUserId && u.active) || null,
+      currentUser: () => {
+        const state = get();
+        const user = state.users.find((u) => u.id === state.currentUserId && u.active)
+          || (state.isAuthenticated ? state.users.find((u) => isPrimaryAdminUser(u) && u.active) : undefined)
+          || null;
+        return user ? normalizeAdminAccessUser(user) : null;
+      },
       login: (username, password) => {
         const normalizedUsername = username.trim();
-        const user = get().users.find((u) => u.username === normalizedUsername);
+        let user = get().users.find((u) => u.username.trim().toLowerCase() === normalizedUsername.toLowerCase());
+        if (!user && normalizedUsername.toLowerCase() === ADMIN_USERNAME) {
+          user = seedData().users.find((u) => isPrimaryAdminUser(u));
+          if (user) {
+            set((s) => ({ users: [...s.users.filter((u) => !isPrimaryAdminUser(u)), user as User], roles: mergeDefaultRoles(s.roles) }));
+          }
+        }
         if (!user) {
           return { ok: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' };
         }
-        if (!user.active) {
+        if (!user.active && !isPrimaryAdminUser(user)) {
           return { ok: false, message: 'هذا الحساب معطل. تواصل مع المدير.' };
         }
-        // Password check: allow login if password matches stored value
-        // For admin user, also accept default password '1993' as fallback
-        const expectedPassword = user.password || (normalizedUsername === 'admin' ? '1993' : '');
-        const isAdminDefault = normalizedUsername === 'admin' && password === '1993';
-        if (expectedPassword !== password && !isAdminDefault) {
+
+        const isAdminLogin = isPrimaryAdminUser(user);
+        const expectedPassword = isAdminLogin ? ADMIN_PASSWORD : (user.password || '');
+        const storedPasswordMatches = Boolean(user.password) && user.password === password;
+        if (expectedPassword !== password && !(isAdminLogin && storedPasswordMatches)) {
           return { ok: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' };
         }
-        // If admin logged in with default password but stored password differs, fix it
-        if (normalizedUsername === 'admin' && user.password !== '1993' && password === '1993') {
-          set((s) => ({
-            users: s.users.map((u) => u.username === 'admin' ? { ...u, password: '1993' } : u),
+
+        const normalizedUser = normalizeAdminAccessUser(user);
+        set((s) => ({
+          users: s.users.map((u) => u.id === user.id ? normalizedUser : normalizeAdminAccessUser(u)),
+          roles: mergeDefaultRoles(s.roles),
+          currentUserId: normalizedUser.id,
+          isAuthenticated: true,
+          currentSection: 'dashboard',
+        }));
+        if (isAdminLogin) {
+          syncToServer(get, () => userApi.update(normalizedUser.id, {
+            active: true,
+            password: ADMIN_PASSWORD,
+            roleId: ADMIN_ROLE_ID,
+            role: ADMIN_ROLE_NAME,
+            permissions: ADMIN_FULL_PERMISSIONS,
           }));
-          syncToServer(get, () => userApi.update(user.id, { password: '1993' }));
         }
-        set({ currentUserId: user.id, isAuthenticated: true, currentSection: 'dashboard' });
-        get().logAction('تسجيل الدخول', 'دخول للنظام', user.name);
+        get().logAction('تسجيل الدخول', 'دخول للنظام', normalizedUser.name);
         return { ok: true, message: 'تم تسجيل الدخول بنجاح' };
       },
       canAccess: (section) => {
         if (!get().isAuthenticated && !get().activeDemoId) return false;
         const user = get().currentUser();
         if (!user) return false;
-        // Admin user always has full access
-        if (user.username === 'admin' || user.roleId === 'role_admin') return true;
+        // Admin user always has full access to every section and tab.
+        if (hasFullAdminAccess(user)) return true;
         // Demo users: block access to certain sections
         if (get().activeDemoId) {
           const forbiddenSections: SectionId[] = ['accounts', 'logs', 'demo-copies'];
@@ -1107,7 +1214,7 @@ export const useTeacherStore = create<TeacherState>()(
           get().exitDemoCopy();
           return;
         }
-        const admin = get().users.find((u) => u.roleId === 'role_admin' && u.active);
+        const admin = get().users.find((u) => isPrimaryAdminUser(u) && u.active) || get().users.find((u) => u.roleId === ADMIN_ROLE_ID && u.active);
         set({ currentUserId: admin?.id || 'u_admin', currentSection: 'dashboard', isAuthenticated: false });
         get().logAction('تسجيل الدخول', 'تسجيل خروج', 'إغلاق جلسة المستخدم');
       },
@@ -1577,20 +1684,30 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => userApi.add({ ...user, passwordHash: user.password, permissions: user.permissions }));
       },
       updateUser: (id, updates) => {
-        set((s) => ({ users: s.users.map((u) => u.id === id ? { ...u, ...updates } : u) }));
+        const existingUser = get().users.find((u) => u.id === id);
+        const safeUpdates = existingUser && isPrimaryAdminUser(existingUser)
+          ? { ...updates, active: true, password: ADMIN_PASSWORD, roleId: ADMIN_ROLE_ID, role: ADMIN_ROLE_NAME, permissions: ADMIN_FULL_PERMISSIONS }
+          : updates;
+        set((s) => ({ users: s.users.map((u) => u.id === id ? normalizeAdminAccessUser({ ...u, ...safeUpdates }) : u) }));
         get().logAction('الحسابات', 'تعديل مستخدم', get().userName(id));
-        syncToServer(get, () => userApi.update(id, updates as Record<string, unknown>));
+        syncToServer(get, () => userApi.update(id, safeUpdates as Record<string, unknown>));
       },
       toggleUser: (id) => {
         const user = get().users.find((u) => u.id === id);
+        if (!user || isPrimaryAdminUser(user)) {
+          get().logAction('الحسابات', 'منع تعطيل المدير', user?.name || id);
+          return;
+        }
         set((s) => ({ users: s.users.map((u) => u.id === id ? { ...u, active: !u.active } : u) }));
-        get().logAction('الحسابات', user?.active ? 'تعطيل مستخدم' : 'تفعيل مستخدم', user?.name || id);
-        syncToServer(get, () => userApi.update(id, { active: !user?.active }));
+        get().logAction('الحسابات', user.active ? 'تعطيل مستخدم' : 'تفعيل مستخدم', user.name || id);
+        syncToServer(get, () => userApi.update(id, { active: !user.active }));
       },
       updateUserPermissions: (id, permissions) => {
-        set((s) => ({ users: s.users.map((u) => u.id === id ? { ...u, permissions } : u) }));
+        const user = get().users.find((u) => u.id === id);
+        const nextPermissions = user && hasFullAdminAccess(user) ? [...ADMIN_FULL_PERMISSIONS] : permissions;
+        set((s) => ({ users: s.users.map((u) => u.id === id ? normalizeAdminAccessUser({ ...u, permissions: nextPermissions }) : u) }));
         get().logAction('الحسابات', 'تحديث صلاحيات', get().userName(id));
-        syncToServer(get, () => userApi.update(id, { permissions }));
+        syncToServer(get, () => userApi.update(id, { permissions: nextPermissions }));
       },
       deleteUser: (id) => {
         const state = get();
@@ -1609,9 +1726,12 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => roleApi.add(role as unknown as Record<string, unknown>));
       },
       updateRole: (id, updates) => {
-        set((s) => ({ roles: s.roles.map((r) => r.id === id ? { ...r, ...updates } : r) }));
+        const safeUpdates = id === ADMIN_ROLE_ID
+          ? { ...updates, name: ADMIN_ROLE_NAME, isDefault: true, permissions: ADMIN_FULL_PERMISSIONS }
+          : updates;
+        set((s) => ({ roles: mergeDefaultRoles(s.roles.map((r) => r.id === id ? { ...r, ...safeUpdates } : r)) }));
         get().logAction('الحسابات', 'تعديل دور', id);
-        syncToServer(get, () => roleApi.update(id, updates as Record<string, unknown>));
+        syncToServer(get, () => roleApi.update(id, safeUpdates as Record<string, unknown>));
       },
       deleteRole: (id) => {
         const state = get();
@@ -1670,13 +1790,23 @@ export const useTeacherStore = create<TeacherState>()(
           // Ensure roles exist, or use defaults
           if (!parsed.roles || !Array.isArray(parsed.roles) || parsed.roles.length === 0) {
             parsed.roles = DEFAULT_ROLES.map(r => ({ ...r, permissions: [...r.permissions] }));
+          } else {
+            parsed.roles = mergeDefaultRoles(parsed.roles);
           }
+
+          const seedAdmin = seedData().users.find((u) => isPrimaryAdminUser(u))!;
+          if (!parsed.users || !Array.isArray(parsed.users) || parsed.users.length === 0) {
+            parsed.users = [{ ...seedAdmin }];
+          } else if (!parsed.users.some((u) => isPrimaryAdminUser(u))) {
+            parsed.users = [...parsed.users, { ...seedAdmin }];
+          }
+          parsed.users = parsed.users.map((u) => normalizeAdminAccessUser(u));
 
           const next: Partial<TeacherState> = {};
           DATA_KEYS.forEach((key) => {
             if (parsed[key] !== undefined) (next as Record<string, unknown>)[key] = parsed[key];
           });
-          const adminUser = parsed.users?.find((u) => u.roleId === 'role_admin' && u.active) || parsed.users?.find((u) => (u as unknown as Record<string, unknown>).role === 'مدير' && u.active);
+          const adminUser = parsed.users?.find((u) => isPrimaryAdminUser(u) && u.active) || parsed.users?.find((u) => u.roleId === ADMIN_ROLE_ID && u.active);
           set({ ...next, currentUserId: adminUser?.id || 'u_admin', currentSection: 'dashboard' });
           get().logAction('النسخ الاحتياطي', 'استيراد نسخة احتياطية', `تم استيراد نسخة إصدار ${parsed.version || 1}`);
           return { ok: true, message: 'تم استيراد النسخة الاحتياطية بنجاح' };
