@@ -979,15 +979,24 @@ export const useTeacherStore = create<TeacherState>()(
             permissions: parseArrayField<string>(u.permissions),
             active: u.active !== undefined ? Boolean(u.active) : true,
           })) as User[];
-          let users = parsedUsers.length > 0 ? parsedUsers : seedData().users;
-          // Ensure admin user always exists with correct password
+          const seedUsers = seedData().users;
+          let users = parsedUsers.length > 0 ? parsedUsers : seedUsers;
+          // Ensure admin user always exists with correct password, role, and permissions
+          const adminSeed = seedUsers.find((u: User) => u.username === 'admin');
           const hasAdmin = users.some((u: User) => u.username === 'admin');
-          if (!hasAdmin) {
-            users = [...users, ...seedData().users.filter((u: User) => u.username === 'admin')];
+          if (!hasAdmin && adminSeed) {
+            users = [...users, adminSeed];
           } else {
-            // Ensure admin is active and has a valid password
+            // Ensure admin is active and has a valid password, roleId, and full permissions
             users = users.map((u: User) =>
-              u.username === 'admin' ? { ...u, active: true, password: u.password || '1993' } : u
+              u.username === 'admin' ? {
+                ...u,
+                active: true,
+                password: u.password || '1993',
+                roleId: u.roleId || adminSeed?.roleId || 'role_admin',
+                role: u.role || adminSeed?.role || 'مدير عام',
+                permissions: (u.permissions && u.permissions.length > 0) ? u.permissions : (adminSeed?.permissions || [...ALL_PERMISSION_IDS]),
+              } : u
             );
           }
 

@@ -296,7 +296,14 @@ export function TeacherProLayout() {
   } = useTeacherStore();
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>({});
+  const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>(() => {
+    // Open all families by default
+    const initial: Record<string, boolean> = {};
+    menuFamilies.forEach((family) => {
+      initial[family.title] = true;
+    });
+    return initial;
+  });
   const [pendingBackupContent, setPendingBackupContent] = useState<
     string | null
   >(null);
