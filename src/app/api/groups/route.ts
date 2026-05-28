@@ -8,16 +8,23 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const group = await db.group.create({
-    data: {
-      id: body.id,
-      name: body.name,
-      electronicGroup: body.electronicGroup,
-      active: body.active ?? true,
-      courseId: body.courseId,
-    },
-  });
-  return NextResponse.json({ group }, { status: 201 });
+  try {
+    const group = await db.group.upsert({
+      where: { id: body.id },
+      update: { name: body.name, electronicGroup: body.electronicGroup, active: body.active ?? true, courseId: body.courseId },
+      create: {
+        id: body.id,
+        name: body.name,
+        electronicGroup: body.electronicGroup,
+        active: body.active ?? true,
+        courseId: body.courseId,
+      },
+    });
+    return NextResponse.json({ group }, { status: 201 });
+  } catch (e) {
+    console.error('[groups POST] Error:', e);
+    return NextResponse.json({ error: 'Failed to create group' }, { status: 500 });
+  }
 }
 
 export async function PUT(req: NextRequest) {

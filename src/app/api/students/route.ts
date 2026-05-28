@@ -53,36 +53,41 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'فترة السماح يجب أن تكون رقماً من 0 إلى 30' }, { status: 400 });
   }
 
-  const student = await db.student.create({
-    data: {
-      id: body.id,
-      name: String(body.name ?? '').trim(),
-      school: String(body.school ?? '').trim(),
-      gender: body.gender,
-      phone: sanitizePhoneInput(String(body.phone ?? '')),
-      parentPhone: sanitizePhoneInput(String(body.parentPhone ?? '')),
-      telegram: sanitizeTelegramInput(String(body.telegram ?? '')),
-      courseType: body.courseType,
-      mainSite: body.mainSite,
-      subSite: body.subSite,
-      receiptNo: body.receiptNo,
-      codeSequence: body.codeSequence,
-      code: body.code,
-      totalAmount: Number(body.totalAmount || 0),
-      paidAmount: Number(body.paidAmount || 0),
-      installments: JSON.stringify(body.installments || []),
-      status: body.status || 'نشط',
-      dismissalType: body.dismissalType,
-      dismissalReason: body.dismissalReason,
-      createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
-      accountingStart: body.accountingStart ? Number(body.accountingStart) : undefined,
-      opportunities: Number(body.opportunities || 0),
-      baseOpportunities: Number(body.baseOpportunities || 0),
-      courseId: body.courseId,
-      groupId: body.groupId || undefined,
-    },
-  });
-  return NextResponse.json({ student }, { status: 201 });
+  try {
+    const student = await db.student.create({
+      data: {
+        id: body.id,
+        name: String(body.name ?? '').trim(),
+        school: String(body.school ?? '').trim(),
+        gender: body.gender,
+        phone: sanitizePhoneInput(String(body.phone ?? '')),
+        parentPhone: sanitizePhoneInput(String(body.parentPhone ?? '')),
+        telegram: sanitizeTelegramInput(String(body.telegram ?? '')),
+        courseType: body.courseType,
+        mainSite: body.mainSite,
+        subSite: body.subSite,
+        receiptNo: body.receiptNo,
+        codeSequence: body.codeSequence,
+        code: body.code,
+        totalAmount: Number(body.totalAmount || 0),
+        paidAmount: Number(body.paidAmount || 0),
+        installments: JSON.stringify(body.installments || []),
+        status: body.status || 'نشط',
+        dismissalType: body.dismissalType,
+        dismissalReason: body.dismissalReason,
+        createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
+        accountingStart: body.accountingStart ? Number(body.accountingStart) : undefined,
+        opportunities: Number(body.opportunities || 0),
+        baseOpportunities: Number(body.baseOpportunities || 0),
+        courseId: body.courseId,
+        groupId: body.groupId || undefined,
+      },
+    });
+    return NextResponse.json({ student }, { status: 201 });
+  } catch (e) {
+    console.error('[students POST] Error:', e);
+    return NextResponse.json({ error: 'Failed to create student' }, { status: 500 });
+  }
 }
 
 export async function PUT(req: NextRequest) {

@@ -19,23 +19,47 @@ export async function POST(req: NextRequest) {
 
   // Special endpoint: reset courses to defaults
   if (body._action === 'seed-defaults') {
-    await db.course.deleteMany({});
-    for (const c of DEFAULT_COURSES) {
-      await db.course.create({ data: c });
+    try {
+      // Delete dependent records first (Student has onDelete: Restrict on courseId)
+      await db.whatsAppMessage.deleteMany({});
+      await db.correctionSheet.deleteMany({});
+      await db.opportunityLog.deleteMany({});
+      await db.grade.deleteMany({});
+      await db.student.deleteMany({});
+      await db.site.deleteMany({});
+      await db.courseChapter.deleteMany({});
+      await db.group.deleteMany({});
+      await db.exam.deleteMany({});
+      await db.course.deleteMany({});
+
+      for (const c of DEFAULT_COURSES) {
+        await db.course.create({ data: { ...c, createdAt: '2026-06-01T00:00:00.000Z' } });
+      }
+      const courses = await db.course.findMany({ orderBy: { createdAt: 'desc' } });
+      return NextResponse.json({ courses });
+    } catch (e) {
+      console.error('[seed-defaults] Error:', e);
+      return NextResponse.json({ error: 'Failed to seed defaults' }, { status: 500 });
     }
-    const courses = await db.course.findMany({ orderBy: { createdAt: 'desc' } });
-    return NextResponse.json({ courses });
   }
 
-  const course = await db.course.create({
-    data: {
-      id: body.id,
-      name: body.name,
-      type: body.type,
-      active: body.active ?? true,
-    },
-  });
-  return NextResponse.json({ course }, { status: 201 });
+  try {
+    // Use upsert to avoid errors if course already exists
+    const course = await db.course.upsert({
+      where: { id: body.id },
+      update: { name: body.name, type: body.type, active: body.active ?? true },
+      create: {
+        id: body.id,
+        name: body.name,
+        type: body.type,
+        active: body.active ?? true,
+      },
+    });
+    return NextResponse.json({ course }, { status: 201 });
+  } catch (e) {
+    console.error('[courses POST] Error:', e);
+    return NextResponse.json({ error: 'Failed to create course' }, { status: 500 });
+  }
 }
 
 export async function PUT(req: NextRequest) {
