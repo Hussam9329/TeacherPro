@@ -35,6 +35,8 @@ import {
 import { toast } from "sonner";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { MapPin } from "lucide-react";
+import { EmptyState } from "./ui-kit";
 
 export function SitesView() {
   const {
@@ -91,7 +93,7 @@ export function SitesView() {
   };
   const handleDeleteConfirm = runDeleteSiteLocked(async () => {
     const ok = deleteSite(deleteDialog.id);
-    ok ? toast.success("تم حذف الموقع") : toast.error("تعذر حذف الموقع");
+    ok ? toast.success("تم حذف الموقع") : toast.error("لا يمكن حذف الموقع لأنه مرتبط بطلاب. انقل الطلاب أولاً ثم حاول الحذف.");
     setDeleteDialog({ open: false, id: "", siteName: "" });
   });
 
@@ -190,7 +192,7 @@ export function SitesView() {
           <CardContent>
             <div className="space-y-3 max-h-[500px] overflow-y-auto">
               {sites.length === 0 ? (
-                <p className="empty-state">لا توجد مواقع بعد</p>
+                <EmptyState icon={MapPin} title="لا توجد مواقع بعد" description="أضف موقعاً فرعياً للدورة المختارة، وستظهر المواقع هنا جاهزة للاستخدام في تسجيل الطلاب." />
               ) : (
                 sites.map((site) => (
                   <div

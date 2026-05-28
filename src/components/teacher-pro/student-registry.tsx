@@ -57,6 +57,8 @@ import {
   TEXT_ONLY_PATTERN,
 } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { SearchX, UserPlus } from "lucide-react";
+import { EmptyState } from "./ui-kit";
 
 type StudentEditForm = {
   name: string;
@@ -167,6 +169,7 @@ export function StudentRegistryView() {
     reactivateStudent,
     updateStudent,
     deleteStudent,
+    setSection,
     courseName,
     groupName,
   } = useTeacherStore();
@@ -331,8 +334,8 @@ export function StudentRegistryView() {
       [
         Boolean(form.groupId),
         editFilteredGroups.length === 0
-          ? "لا توجد كروبات مسجلة لهذه الدورة"
-          : "الكروب الإلكتروني مطلوب",
+          ? "لا توجد مجموعات إلكترونية مسجلة لهذه الدورة"
+          : "المجموعة الإلكترونية مطلوبة",
       ],
       [Boolean(form.createdAt), "تاريخ إضافة الطالب مطلوب"],
       [form.accountingStart.trim() !== "", "فترة السماح مطلوبة"],
@@ -513,7 +516,7 @@ export function StudentRegistryView() {
       "الفرص",
       "الهاتف",
       "ولي الأمر",
-      "التلكرام",
+      "التليكرام",
       "المبلغ الكلي",
       "المبلغ المدفوع",
       "المبلغ المتبقي",
@@ -530,7 +533,7 @@ export function StudentRegistryView() {
       الفرص: String(s.opportunities),
       الهاتف: s.phone,
       "ولي الأمر": s.parentPhone,
-      التلكرام: s.telegram || "",
+      التليكرام: s.telegram || "",
       "المبلغ الكلي": String(s.totalAmount || 0),
       "المبلغ المدفوع": String(s.paidAmount || 0),
       "المبلغ المتبقي": String(
@@ -564,6 +567,16 @@ export function StudentRegistryView() {
   const studentGrades = (studentId: string) =>
     grades.filter((g) => g.studentId === studentId);
 
+  const resetFilters = () => {
+    setSearch("");
+    setFilterCourseType("");
+    setFilterCourseId("");
+    setFilterStatus("");
+    setFilterGender("");
+    setFilterGroupId("");
+    setPage(1);
+  };
+
   return (
     <div className="space-y-4">
       <Card>
@@ -582,7 +595,7 @@ export function StudentRegistryView() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="اسم / كود / تلكرام / هاتف"
+                placeholder="اسم / كود / تليكرام / هاتف"
               />
             </div>
             <div className="space-y-1">
@@ -632,7 +645,7 @@ export function StudentRegistryView() {
             </div>
             <div className="space-y-1">
               <Label htmlFor="registry-group" className="text-xs">
-                الكروب
+                المجموعة الإلكترونية
               </Label>
               <Select
                 value={filterGroupId}
@@ -738,6 +751,29 @@ export function StudentRegistryView() {
         </div>
       </div>
 
+      {students.length === 0 ? (
+        <EmptyState
+          icon={UserPlus}
+          title="لم تقم بإضافة طلاب بعد"
+          description="ابدأ بإضافة أول طالب، وبعدها ستظهر البطاقات والفلاتر والإحصائيات هنا تلقائياً."
+          action={
+            <Button onClick={() => setSection("student-register")} className="min-h-11 px-6">
+              إضافة طالب الآن
+            </Button>
+          }
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={SearchX}
+          title="لا توجد نتائج مطابقة"
+          description="الفلاتر تعمل معاً؛ غيّر شروط البحث أو امسح الفلاتر لعرض كل الطلاب."
+          action={
+            <Button variant="outline" onClick={resetFilters} className="min-h-11 px-6">
+              مسح الفلاتر
+            </Button>
+          }
+        />
+      ) : (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {paged.map((student) => (
           <Card
@@ -770,7 +806,7 @@ export function StudentRegistryView() {
                   </p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs">الكروب</span>
+                  <span className="text-muted-foreground text-xs">المجموعة الإلكترونية</span>
                   <p className="font-medium text-xs">
                     {groupName(student.groupId)}
                   </p>
@@ -788,7 +824,7 @@ export function StudentRegistryView() {
                   </p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs">تلكرام</span>
+                  <span className="text-muted-foreground text-xs">تليكرام</span>
                   <p className="text-xs">
                     {student.telegram ? (
                       <ContactLink href={telegramLink(student.telegram)}>
@@ -845,11 +881,11 @@ export function StudentRegistryView() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-xs"
+                  className="min-h-11 text-xs"
                   onClick={() => setFileDialog({ student, open: true })}
                 >
                   ملف الطالب
@@ -857,7 +893,7 @@ export function StudentRegistryView() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  className="text-xs"
+                  className="min-h-11 text-xs"
                   onClick={() => openEditDialog(student)}
                 >
                   تعديل
@@ -866,7 +902,7 @@ export function StudentRegistryView() {
                   <Button
                     variant="destructive"
                     size="sm"
-                    className="text-xs"
+                    className="min-h-11 text-xs"
                     onClick={() => setDismissDialog({ student, open: true })}
                   >
                     فصل
@@ -875,7 +911,7 @@ export function StudentRegistryView() {
                   <Button
                     variant="default"
                     size="sm"
-                    className="text-xs"
+                    className="min-h-11 text-xs"
                     onClick={() => handleReactivate(student.id)}
                   >
                     إعادة تفعيل
@@ -884,7 +920,7 @@ export function StudentRegistryView() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  className="text-xs"
+                  className="min-h-11 text-xs"
                   onClick={() => openDeleteDialog(student)}
                 >
                   حذف
@@ -894,6 +930,7 @@ export function StudentRegistryView() {
           </Card>
         ))}
       </div>
+      )}
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
@@ -974,7 +1011,7 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-telegram">معرف التلكرام</Label>
+              <Label htmlFor="edit-telegram">معرف التليكرام</Label>
               <Input
                 id="edit-telegram"
                 name="telegram"
@@ -1144,7 +1181,7 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-groupId">الكروب الإلكتروني</Label>
+              <Label htmlFor="edit-groupId">المجموعة الإلكترونية</Label>
               <Select
                 value={editDialog.form.groupId}
                 onValueChange={(v) => updateEditForm("groupId", v)}
@@ -1156,19 +1193,19 @@ export function StudentRegistryView() {
                   <SelectValue
                     placeholder={
                       editFilteredCourses.length === 0
-                        ? "لا توجد كروبات مسجلة"
+                        ? "لا توجد مجموعات إلكترونية مسجلة"
                         : !editDialog.form.courseId
                           ? "اختر الدورة أولاً"
                           : editFilteredGroups.length === 0
-                            ? "لا توجد كروبات مسجلة"
-                            : "اختر الكروب"
+                            ? "لا توجد مجموعات إلكترونية مسجلة"
+                            : "اختر المجموعة الإلكترونية"
                     }
                   />
                 </SelectTrigger>
                 <SelectContent>
                   {editFilteredCourses.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-muted-foreground">
-                      لا توجد كروبات مسجلة لهذا النوع
+                      لا توجد مجموعات إلكترونية مسجلة لهذا النوع
                     </div>
                   ) : !editDialog.form.courseId ? (
                     <div className="px-3 py-2 text-sm text-muted-foreground">
@@ -1176,7 +1213,7 @@ export function StudentRegistryView() {
                     </div>
                   ) : editFilteredGroups.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-muted-foreground">
-                      لا توجد كروبات مسجلة لهذه الدورة
+                      لا توجد مجموعات إلكترونية مسجلة لهذه الدورة
                     </div>
                   ) : (
                     editFilteredGroups.map((g) => (
@@ -1420,7 +1457,7 @@ export function StudentRegistryView() {
                   </ContactLink>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">التلكرام:</span>{" "}
+                  <span className="text-muted-foreground">التليكرام:</span>{" "}
                   {fileDialog.student.telegram ? (
                     <ContactLink
                       href={telegramLink(fileDialog.student.telegram)}
@@ -1436,7 +1473,7 @@ export function StudentRegistryView() {
                   <strong>{courseName(fileDialog.student.courseId)}</strong>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">الكروب:</span>{" "}
+                  <span className="text-muted-foreground">المجموعة الإلكترونية:</span>{" "}
                   <strong>{groupName(fileDialog.student.groupId)}</strong>
                 </div>
                 <div>

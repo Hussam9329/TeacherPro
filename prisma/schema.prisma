@@ -62,11 +62,14 @@ model CourseChapter {
 model Student {
   id              String   @id @default(cuid())
   name            String
+  nameKey         String?  @unique
   school          String   @default("")
   gender          String
   phone           String?
+  phoneKey        String?  @unique
   parentPhone     String?
   telegram        String?
+  telegramKey     String?  @unique
   courseType      String
   mainSite        String?
   subSite         String?

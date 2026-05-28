@@ -308,11 +308,11 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   { id: 'courses.add', label: 'إضافة دورة', category: 'الدورات', level: 'write', description: 'إنشاء دورة جديدة' },
   { id: 'courses.edit', label: 'تعديل دورة', category: 'الدورات', level: 'write', description: 'تعديل بيانات دورة' },
   { id: 'courses.delete', label: 'حذف دورة', category: 'الدورات', level: 'delete', description: 'حذف دورة من النظام' },
-  // الكروبات
-  { id: 'groups.view', label: 'عرض الكروبات', category: 'الكروبات', level: 'read', description: 'عرض قائمة الكروبات' },
-  { id: 'groups.add', label: 'إضافة كروب', category: 'الكروبات', level: 'write', description: 'إنشاء كروب جديد' },
-  { id: 'groups.edit', label: 'تعديل كروب', category: 'الكروبات', level: 'write', description: 'تعديل بيانات كروب' },
-  { id: 'groups.delete', label: 'حذف كروب', category: 'الكروبات', level: 'delete', description: 'حذف كروب من النظام' },
+  // المجموعات الإلكترونية
+  { id: 'groups.view', label: 'عرض المجموعات الإلكترونية', category: 'المجموعات الإلكترونية', level: 'read', description: 'عرض قائمة المجموعات الإلكترونية' },
+  { id: 'groups.add', label: 'إضافة مجموعة إلكترونية', category: 'المجموعات الإلكترونية', level: 'write', description: 'إنشاء مجموعة إلكترونية جديدة' },
+  { id: 'groups.edit', label: 'تعديل مجموعة إلكترونية', category: 'المجموعات الإلكترونية', level: 'write', description: 'تعديل بيانات مجموعة إلكترونية' },
+  { id: 'groups.delete', label: 'حذف مجموعة إلكترونية', category: 'المجموعات الإلكترونية', level: 'delete', description: 'حذف مجموعة إلكترونية من النظام' },
   // المواقع
   { id: 'sites.view', label: 'عرض المواقع', category: 'المواقع', level: 'read', description: 'عرض قائمة المواقع' },
   { id: 'sites.add', label: 'إضافة موقع', category: 'المواقع', level: 'write', description: 'إنشاء موقع جديد' },
@@ -1026,18 +1026,18 @@ export const useTeacherStore = create<TeacherState>()(
       addGroup: (name, courseId, electronicGroup) => {
         const group: Group = { id: uid('g'), name, courseId, electronicGroup, active: true };
         set((s) => ({ groups: [...s.groups, group] }));
-        get().logAction('الكروبات', 'إضافة كروب', `${name} - ${get().courseName(courseId)}`);
+        get().logAction('المجموعات الإلكترونية', 'إضافة مجموعة إلكترونية', `${name} - ${get().courseName(courseId)}`);
         syncToServer(get, () => groupApi.add(group));
       },
       updateGroup: (id, updates) => {
         set((s) => ({ groups: s.groups.map((g) => g.id === id ? { ...g, ...updates } : g) }));
-        get().logAction('الكروبات', 'تعديل كروب', get().groupName(id));
+        get().logAction('المجموعات الإلكترونية', 'تعديل مجموعة إلكترونية', get().groupName(id));
         syncToServer(get, () => groupApi.update(id, updates as Record<string, unknown>));
       },
       toggleGroup: (id) => {
         const group = get().groups.find((g) => g.id === id);
         set((s) => ({ groups: s.groups.map((g) => g.id === id ? { ...g, active: !g.active } : g) }));
-        get().logAction('الكروبات', group?.active ? 'تعطيل كروب' : 'تفعيل كروب', group?.name || id);
+        get().logAction('المجموعات الإلكترونية', group?.active ? 'تعطيل مجموعة إلكترونية' : 'تفعيل مجموعة إلكترونية', group?.name || id);
         syncToServer(get, () => groupApi.update(id, { active: !group?.active }));
       },
       deleteGroup: (id) => {
@@ -1045,11 +1045,11 @@ export const useTeacherStore = create<TeacherState>()(
         const group = state.groups.find((g) => g.id === id);
         if (!group) return false;
         if (state.students.some((s) => s.groupId === id) || state.exams.some((e) => e.groupId === id || e.groupId.split(',').includes(id))) {
-          get().logAction('الكروبات', 'رفض حذف كروب', `${group.name} مرتبط بطلاب أو امتحانات`);
+          get().logAction('المجموعات الإلكترونية', 'رفض حذف مجموعة إلكترونية', `${group.name} مرتبط بطلاب أو امتحانات`);
           return false;
         }
         set((s) => ({ groups: s.groups.filter((g) => g.id !== id) }));
-        get().logAction('الكروبات', 'حذف كروب', group.name);
+        get().logAction('المجموعات الإلكترونية', 'حذف مجموعة إلكترونية', group.name);
         syncToServer(get, () => groupApi.remove(id));
         return true;
       },
@@ -1072,11 +1072,27 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => siteApi.update(id, { active: !site?.active }));
       },
       deleteSite: (id) => {
-        const site = get().sites.find((si) => si.id === id);
+        const state = get();
+        const site = state.sites.find((si) => si.id === id);
         if (!site) return false;
+        const hasLinkedStudents = state.students.some((student) => (
+          student.courseId === site.courseId &&
+          student.mainSite === site.main &&
+          (student.subSite || '') === (site.sub || '')
+        ));
+        if (hasLinkedStudents) {
+          get().logAction('المواقع', 'رفض حذف موقع', `${site.main} - ${site.sub} مرتبط بطلاب`);
+          return false;
+        }
         set((s) => ({ sites: s.sites.filter((si) => si.id !== id) }));
         get().logAction('المواقع', 'حذف موقع', `${site.main} - ${site.sub}`);
-        syncToServer(get, () => siteApi.remove(id));
+        syncToServer(get, async () => {
+          const result = await siteApi.remove(id);
+          if (!result.ok) {
+            set((s) => ({ sites: s.sites.some((si) => si.id === id) ? s.sites : [...s.sites, site] }));
+            get().logAction('المواقع', 'تراجع حذف موقع', result.error || 'رفض الخادم حذف الموقع');
+          }
+        });
         return true;
       },
 
@@ -1181,7 +1197,13 @@ export const useTeacherStore = create<TeacherState>()(
         const student: Student = { ...sanitizedStudentData, id: uid('st'), code };
         set((s) => ({ students: [...s.students, student] }));
         get().logAction('تسجيل الطلاب', 'تسجيل طالب', `${student.name} - ${get().courseName(student.courseId)}`);
-        syncToServer(get, () => studentApi.add({ ...student, installments: student.installments }));
+        syncToServer(get, async () => {
+          const result = await studentApi.add({ ...student, installments: student.installments });
+          if (!result.ok) {
+            set((s) => ({ students: s.students.filter((st) => st.id !== student.id) }));
+            get().logAction('تسجيل الطلاب', 'تراجع تسجيل طالب', result.error || 'رفض الخادم حفظ الطالب');
+          }
+        });
         return { ok: true, message: 'تم تسجيل الطالب' };
       },
       updateStudent: (id, updates) => {
@@ -1503,7 +1525,7 @@ export const useTeacherStore = create<TeacherState>()(
           });
           const adminUser = parsed.users?.find((u) => u.roleId === 'role_admin' && u.active) || parsed.users?.find((u) => (u as unknown as Record<string, unknown>).role === 'مدير' && u.active);
           set({ ...next, currentUserId: adminUser?.id || 'u_admin', currentSection: 'dashboard' });
-          get().logAction('النسخ الاحتياطي', 'استيراد Backup', `تم استيراد نسخة إصدار ${parsed.version || 1}`);
+          get().logAction('النسخ الاحتياطي', 'استيراد نسخة احتياطية', `تم استيراد نسخة إصدار ${parsed.version || 1}`);
           return { ok: true, message: 'تم استيراد النسخة الاحتياطية بنجاح' };
         } catch (error) {
           return { ok: false, message: error instanceof Error ? error.message : 'تعذر قراءة الملف' };

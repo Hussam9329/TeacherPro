@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const body = await req.json();
   const { id, ...data } = body;
-  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+  if (!id) return NextResponse.json({ error: 'تعذر تحديد الموقع المطلوب' }, { status: 400 });
   const site = await db.site.update({ where: { id }, data });
   return NextResponse.json({ site });
 }
@@ -31,7 +31,26 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+  if (!id) return NextResponse.json({ error: 'تعذر تحديد الموقع المطلوب' }, { status: 400 });
+  const site = await db.site.findUnique({ where: { id } });
+  if (!site) {
+    return NextResponse.json({ error: 'الموقع غير موجود أو تم حذفه مسبقاً' }, { status: 404 });
+  }
+
+  const linkedStudentsCount = await db.student.count({
+    where: {
+      courseId: site.courseId,
+      mainSite: site.main,
+      subSite: site.sub || '',
+    },
+  });
+  if (linkedStudentsCount > 0) {
+    return NextResponse.json(
+      { error: 'لا يمكن حذف الموقع لأنه مرتبط بطلاب. انقل الطلاب أولاً ثم حاول الحذف.' },
+      { status: 409 },
+    );
+  }
+
   await db.site.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

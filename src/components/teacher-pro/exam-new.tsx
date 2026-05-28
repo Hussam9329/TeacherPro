@@ -122,7 +122,7 @@ export function ExamNewView() {
         return;
       }
       if (availableGroups.length > 0 && form.groupIds.length === 0) {
-        toast.error("يرجى اختيار كروب واحد على الأقل أو اختيار الكل");
+        toast.error("يرجى اختيار مجموعة إلكترونية واحدة على الأقل أو اختيار الكل");
         return;
       }
 
@@ -359,7 +359,7 @@ export function ExamNewView() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="exam-groups">الكروبات</Label>
+              <Label htmlFor="exam-groups">المجموعات الإلكترونية</Label>
               <div className="space-y-2 border rounded-lg p-3 max-h-44 overflow-y-auto">
                 <div className="flex items-center gap-2 border-b pb-2">
                   <Checkbox
@@ -378,11 +378,11 @@ export function ExamNewView() {
                 </div>
                 {form.courseIds.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    اختر دورة أولاً لعرض الكروبات
+                    اختر دورة أولاً لعرض المجموعات الإلكترونية
                   </p>
                 ) : availableGroups.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    لا توجد كروبات مسجلة لهذه الدورات
+                    لا توجد مجموعات إلكترونية مسجلة لهذه الدورات
                   </p>
                 ) : (
                   availableGroups.map((g) => (
@@ -592,7 +592,7 @@ export function ExamNewView() {
                     </div>
                     <div>
                       <span className="text-muted-foreground text-xs">
-                        الكروبات:
+                        المجموعات الإلكترونية:
                       </span>{" "}
                       {examGroupIds.map((id) => groupName(id)).join(", ") ||
                         "الكل"}
@@ -650,7 +650,7 @@ export function ExamNewView() {
             <div className="space-y-2">
               {selectedExamStudents.length === 0 ? (
                 <p className="empty-state">
-                  لا يوجد طلاب مطابقون للدورات والمناطق والكروبات المختارة.
+                  لا يوجد طلاب مطابقون للدورات والمناطق والمجموعات الإلكترونية المختارة.
                 </p>
               ) : (
                 selectedExamStudents.map((s) => (

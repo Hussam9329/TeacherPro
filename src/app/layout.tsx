@@ -23,7 +23,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased bg-background text-foreground">
         {children}
-        <Toaster position="top-center" dir="rtl" richColors closeButton />
+        <Toaster position="bottom-center" dir="rtl" richColors closeButton mobileOffset={12} />
       </body>
     </html>
   );

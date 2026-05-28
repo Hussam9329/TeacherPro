@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { SearchX } from 'lucide-react';
+import { CheckCircle2, Loader2, SearchX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -84,10 +84,12 @@ export function EmptyState({
   title = 'لا توجد بيانات',
   description = 'ستظهر النتائج هنا بعد إضافة البيانات أو تعديل الفلاتر.',
   icon: Icon = SearchX,
+  action,
 }: {
   title?: string;
   description?: string;
   icon?: IconComponent;
+  action?: React.ReactNode;
 }) {
   return (
     <div className="empty-state">
@@ -96,6 +98,72 @@ export function EmptyState({
       </div>
       <p className="font-bold text-foreground">{title}</p>
       <p className="mx-auto mt-1 max-w-md text-xs leading-6 text-muted-foreground">{description}</p>
+      {action && <div className="mt-4 flex justify-center">{action}</div>}
+    </div>
+  );
+}
+
+export function LoadingState({
+  title = 'جاري تحميل البيانات...',
+  description = 'نجهّز المعلومات من قاعدة البيانات، ستظهر النتائج بعد لحظات.',
+}: {
+  title?: string;
+  description?: string;
+}) {
+  return (
+    <div className="rounded-2xl border bg-card/85 p-4 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Loader2 className="size-5 animate-spin" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-foreground">{title}</p>
+          <p className="mt-1 text-xs leading-6 text-muted-foreground">{description}</p>
+          <div className="mt-3 space-y-2">
+            <div className="h-3 w-full animate-pulse rounded-full bg-muted" />
+            <div className="h-3 w-2/3 animate-pulse rounded-full bg-muted" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function StepProgress({
+  steps,
+}: {
+  steps: { label: string; complete: boolean }[];
+}) {
+  const completed = steps.filter((step) => step.complete).length;
+  const percent = steps.length ? Math.round((completed / steps.length) * 100) : 0;
+
+  return (
+    <div className="rounded-3xl border bg-muted/35 p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span className="font-black text-foreground">تقدّم النموذج</span>
+        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+          {completed} من {steps.length} خطوات مكتملة
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${percent}%` }} />
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {steps.map((step, index) => (
+          <div
+            key={step.label}
+            className={cn(
+              'flex items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-bold',
+              step.complete
+                ? 'border-primary/25 bg-primary/10 text-primary'
+                : 'border-border bg-background/60 text-muted-foreground',
+            )}
+          >
+            {step.complete ? <CheckCircle2 className="size-4" /> : <span className="flex size-4 items-center justify-center rounded-full border text-[10px]">{index + 1}</span>}
+            <span>{step.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

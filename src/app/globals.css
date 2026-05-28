@@ -406,3 +406,35 @@
     padding-inline: 0.75rem;
   }
 }
+
+@media (max-width: 640px) {
+  [data-sonner-toaster] {
+    inset-inline: 10px !important;
+    bottom: 10px !important;
+    top: auto !important;
+  }
+
+  [data-sonner-toast] {
+    max-width: calc(100vw - 20px) !important;
+    padding: 10px 12px !important;
+    font-size: 0.82rem !important;
+  }
+
+  input,
+  select,
+  textarea,
+  [role="combobox"] {
+    max-width: 100%;
+  }
+
+  .surface-card,
+  .soft-panel,
+  .filter-panel,
+  [data-slot="card"] {
+    min-width: 0;
+  }
+
+  .grid > * {
+    min-width: 0;
+  }
+}

@@ -34,6 +34,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { Users } from "lucide-react";
+import { EmptyState } from "./ui-kit";
 
 export function GroupsView() {
   const {
@@ -80,7 +82,7 @@ export function GroupsView() {
   };
   const handleEditSave = runSaveGroupLocked(async () => {
     if (!editDialog.groupName.trim()) {
-      toast.error("يرجى إدخال اسم الكروب");
+      toast.error("يرجى إدخال اسم المجموعة الإلكترونية");
       return;
     }
     updateGroup(editDialog.id, {
@@ -88,7 +90,7 @@ export function GroupsView() {
       electronicGroup: editDialog.electronic.trim(),
     });
     setEditDialog({ open: false, id: "", groupName: "", electronic: "" });
-    toast.success("تم تعديل الكروب");
+    toast.success("تم تعديل المجموعة الإلكترونية");
   });
 
   const openDeleteDialog = (id: string, groupName: string) => {
@@ -97,8 +99,8 @@ export function GroupsView() {
   const handleDeleteConfirm = runDeleteGroupLocked(async () => {
     const ok = deleteGroup(deleteDialog.id);
     ok
-      ? toast.success("تم حذف الكروب")
-      : toast.error("لا يمكن حذف الكروب لأنه مرتبط ببيانات أخرى");
+      ? toast.success("تم حذف المجموعة الإلكترونية")
+      : toast.error("لا يمكن حذف المجموعة الإلكترونية لأنها مرتبطة ببيانات أخرى");
     setDeleteDialog({ open: false, id: "", groupName: "" });
   });
 
@@ -106,7 +108,7 @@ export function GroupsView() {
     async (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       if (!name.trim()) {
-        toast.error("يرجى إدخال اسم الكروب");
+        toast.error("يرجى إدخال اسم المجموعة الإلكترونية");
         return;
       }
       if (!courseId) {
@@ -116,7 +118,7 @@ export function GroupsView() {
       addGroup(name.trim(), courseId, electronicGroup.trim());
       setName("");
       setElectronicGroup("");
-      toast.success("تمت إضافة الكروب");
+      toast.success("تمت إضافة المجموعة الإلكترونية");
     },
   );
 
@@ -124,11 +126,11 @@ export function GroupsView() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>إضافة كروب جديد</CardTitle>
+          <CardTitle>إضافة مجموعة إلكترونية جديدة</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground mb-4">
-            إدارة الكروبات المرتبطة بالدورات
+            إدارة المجموعات الإلكترونية المرتبطة بالدورات
           </p>
         </CardContent>
       </Card>
@@ -137,12 +139,12 @@ export function GroupsView() {
         {/* Add Group Form */}
         <Card>
           <CardHeader>
-            <CardTitle>إضافة كروب جديد</CardTitle>
+            <CardTitle>إضافة مجموعة إلكترونية جديدة</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="group-name">اسم الكروب</Label>
+                <Label htmlFor="group-name">اسم المجموعة الإلكترونية</Label>
                 <Input
                   id="group-name"
                   name="name"
@@ -150,7 +152,7 @@ export function GroupsView() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  placeholder="اسم الكروب"
+                  placeholder="اسم المجموعة الإلكترونية"
                 />
               </div>
               <div className="space-y-2">
@@ -169,7 +171,7 @@ export function GroupsView() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="group-electronic">الكروب الإلكتروني</Label>
+                <Label htmlFor="group-electronic">رابط المجموعة</Label>
                 <Input
                   id="group-electronic"
                   name="electronicGroup"
@@ -180,7 +182,7 @@ export function GroupsView() {
                 />
               </div>
               <Button type="submit" disabled={isAddingGroup} className="w-full">
-                {isAddingGroup ? "جاري الحفظ..." : "حفظ الكروب"}
+                {isAddingGroup ? "جاري الحفظ..." : "حفظ المجموعة الإلكترونية"}
               </Button>
             </form>
           </CardContent>
@@ -189,12 +191,12 @@ export function GroupsView() {
         {/* Groups List */}
         <Card>
           <CardHeader>
-            <CardTitle>الكروبات المرتبطة بالدورات</CardTitle>
+            <CardTitle>المجموعات الإلكترونية المرتبطة بالدورات</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3 max-h-[500px] overflow-y-auto">
               {groups.length === 0 ? (
-                <p className="empty-state">لا توجد كروبات بعد</p>
+                <EmptyState icon={Users} title="لا توجد مجموعات إلكترونية بعد" description="أنشئ أول مجموعة إلكترونية واربطها بالدورة المناسبة ليتمكن الطلاب من التسجيل عليها." />
               ) : (
                 groups.map((group) => (
                   <div
@@ -218,7 +220,7 @@ export function GroupsView() {
                       </div>
                       <div>
                         <span className="text-muted-foreground text-xs">
-                          الكروب الإلكتروني
+                          رابط المجموعة
                         </span>
                         <p className="font-medium">{group.electronicGroup}</p>
                       </div>
@@ -232,8 +234,8 @@ export function GroupsView() {
                           toggleGroup(group.id);
                           toast.success(
                             group.active
-                              ? "تم تعطيل الكروب"
-                              : "تم تفعيل الكروب",
+                              ? "تم تعطيل المجموعة الإلكترونية"
+                              : "تم تفعيل المجموعة الإلكترونية",
                           );
                         }}
                       >
@@ -274,12 +276,12 @@ export function GroupsView() {
       >
         <DialogContent dir="rtl">
           <DialogHeader>
-            <DialogTitle>تعديل الكروب</DialogTitle>
-            <DialogDescription>أدخل البيانات الجديدة للكروب</DialogDescription>
+            <DialogTitle>تعديل المجموعة الإلكترونية</DialogTitle>
+            <DialogDescription>أدخل البيانات الجديدة للمجموعة الإلكترونية</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-group-name">اسم الكروب</Label>
+              <Label htmlFor="edit-group-name">اسم المجموعة الإلكترونية</Label>
               <Input
                 id="edit-group-name"
                 name="groupName"
@@ -295,7 +297,7 @@ export function GroupsView() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-group-electronic">
-                معرف الكروب الإلكتروني
+                رابط المجموعة
               </Label>
               <Input
                 id="edit-group-electronic"
@@ -337,8 +339,8 @@ export function GroupsView() {
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تريد حذف الكروب &quot;{deleteDialog.groupName}&quot;؟ لا يمكن
-              حذف كروب مرتبط بطلاب أو امتحانات.
+              هل تريد حذف المجموعة الإلكترونية &quot;{deleteDialog.groupName}&quot;؟ لا يمكن
+              حذف مجموعة إلكترونية مرتبطة بطلاب أو امتحانات.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

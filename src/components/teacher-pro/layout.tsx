@@ -63,7 +63,7 @@ const menuItems: {
     sub: "الدورات",
     icon: BookOpen,
   },
-  { id: "group-new", title: "إضافة كروب جديد", sub: "الكروبات", icon: Users },
+  { id: "group-new", title: "إضافة مجموعة إلكترونية جديدة", sub: "المجموعات الإلكترونية", icon: Users },
   {
     id: "site-management",
     title: "إدارة مواقع الطلاب",
@@ -146,6 +146,7 @@ import { WhatsAppView } from "./whatsapp";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
 import { DemoCopiesView } from "./demo-copies";
+import { LoadingState } from "./ui-kit";
 
 const sectionComponents: Record<SectionId, React.ComponentType> = {
   dashboard: DashboardView,
@@ -688,7 +689,7 @@ export function TeacherProLayout() {
             onClick={() => fileInputRef.current?.click()}
           >
             <Upload className="w-4 h-4 ml-2" />
-            استيراد Backup
+            استيراد نسخة احتياطية
           </Button>
           <Button
             variant="ghost"
@@ -787,6 +788,7 @@ export function TeacherProLayout() {
 
         <div className="page-enter flex-1 overflow-auto p-4 md:p-6 xl:p-8">
           <div className="content-container space-y-6">
+            {dbLoading && <LoadingState />}
             {canAccess(currentSection) ? (
               <CurrentComponent />
             ) : (

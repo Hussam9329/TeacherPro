@@ -47,6 +47,7 @@ import {
   TEXT_ONLY_PATTERN,
 } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { StepProgress } from "./ui-kit";
 import {
   AlertCircle,
   Barcode,
@@ -241,6 +242,31 @@ export function StudentRegisterView() {
     [form.paidAmount],
   );
   const remainingAmount = Math.max(totalAmount - paidAmount, 0);
+  const formSteps = useMemo(
+    () => [
+      {
+        label: "بيانات الطالب",
+        complete: Boolean(form.name.trim() && form.school.trim() && form.phone.trim() && form.parentPhone.trim()),
+      },
+      {
+        label: "الدورة والموقع",
+        complete: Boolean(
+          form.courseId &&
+          form.groupId &&
+          form.mainSite &&
+          (subSiteOptions.length === 0 || form.subSite),
+        ),
+      },
+      {
+        label: "الإعدادات المالية",
+        complete: Boolean(
+          form.accountingStart.trim() !== "" &&
+          (!isPrivate || (form.receiptNo.trim() && form.codeSequence.trim() && form.totalAmount.trim() && form.paidAmount.trim())),
+        ),
+      },
+    ],
+    [form, isPrivate, subSiteOptions.length],
+  );
   const hasDraftData = useMemo(
     () =>
       hasMeaningfulDraftValue(form, [
@@ -339,8 +365,8 @@ export function StudentRegisterView() {
       [
         Boolean(form.groupId),
         filteredGroups.length === 0
-          ? "لا توجد كروبات إلكترونية لهذه الدورة"
-          : "يرجى اختيار الكروب الإلكتروني",
+          ? "لا توجد مجموعات إلكترونية لهذه الدورة"
+          : "يرجى اختيار المجموعة الإلكترونية",
       ],
       [form.accountingStart.trim() !== "", "فترة السماح مطلوبة"],
     ];
@@ -470,6 +496,7 @@ export function StudentRegisterView() {
 
         <CardContent className="p-4 md:p-6 lg:p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
+            <StepProgress steps={formSteps} />
             <input
               type="hidden"
               id="reg-createdAt"
@@ -671,7 +698,7 @@ export function StudentRegisterView() {
               <SectionTitle
                 icon={BookOpen}
                 title="تفاصيل الدورة"
-                description="اختيار نوع الدورة يحدد الدورات والكروبات والمواقع المتاحة تلقائياً."
+                description="اختيار نوع الدورة يحدد الدورات والمجموعات الإلكترونية والمواقع المتاحة تلقائياً."
                 actions={
                   isPrivate && (
                     <Button
@@ -1002,7 +1029,7 @@ export function StudentRegisterView() {
                     htmlFor="reg-groupId"
                     className="font-bold text-foreground"
                   >
-                    الكروب الإلكتروني <RequiredMark />
+                    المجموعة الإلكترونية <RequiredMark />
                   </Label>
                   <Select
                     value={form.groupId}
@@ -1019,8 +1046,8 @@ export function StudentRegisterView() {
                           !form.courseId
                             ? "اختر الدورة أولاً..."
                             : filteredGroups.length === 0
-                              ? "لا توجد كروبات إلكترونية"
-                              : "اختر الكروب الإلكتروني..."
+                              ? "لا توجد مجموعات إلكترونية"
+                              : "اختر المجموعة الإلكترونية..."
                         }
                       />
                     </SelectTrigger>
@@ -1031,7 +1058,7 @@ export function StudentRegisterView() {
                         </div>
                       ) : filteredGroups.length === 0 ? (
                         <div className="px-3 py-2 text-sm text-muted-foreground">
-                          لا توجد كروبات إلكترونية لهذه الدورة
+                          لا توجد مجموعات إلكترونية لهذه الدورة
                         </div>
                       ) : (
                         filteredGroups.map((g) => (
@@ -1120,8 +1147,8 @@ export function StudentRegisterView() {
               الخاصة فقط.
             </li>
             <li className="flex gap-2">
-              <Users className="mt-1 h-4 w-4 text-primary" /> الكروب الإلكتروني
-              يتغير حسب الدورة المختارة.
+              <Users className="mt-1 h-4 w-4 text-primary" /> تتغير المجموعة الإلكترونية
+              حسب الدورة المختارة.
             </li>
             <li className="flex gap-2">
               <VenusAndMars className="mt-1 h-4 w-4 text-primary" /> الجنس وفترة

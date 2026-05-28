@@ -127,7 +127,7 @@ export function GradeRecordsView() {
     const headers = [
       "الطالب",
       "الكود",
-      "التلكرام",
+      "التليكرام",
       "الامتحان",
       "الحالة",
       "الدرجة",
@@ -183,7 +183,7 @@ export function GradeRecordsView() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="اسم / كود / تلكرام"
+                placeholder="اسم / كود / تليكرام"
               />
             </div>
             <div className="space-y-1">

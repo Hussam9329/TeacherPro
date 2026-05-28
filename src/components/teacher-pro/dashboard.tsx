@@ -39,7 +39,7 @@ export function DashboardView() {
             <p className="mt-1 text-xs text-muted-foreground">أحدث عمليات النظام وسجل التغييرات</p>
           </div>
           <Button variant="outline" size="sm" onClick={() => setSection('logs')}>
-            عرض Log
+            عرض السجلات
           </Button>
         </CardHeader>
         <CardContent>

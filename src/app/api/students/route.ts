@@ -3,10 +3,33 @@ import { db } from "@/lib/db";
 import { getPhoneValidationError, sanitizePhoneInput } from "@/lib/format";
 import {
   getStudentDuplicateMessage,
+  getStudentUniqueKeys,
   isValidAccountingGraceDays,
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
 import { getRequiredTextError } from "@/lib/validation";
+
+
+function getPrismaStudentErrorResponse(error: unknown) {
+  const prismaError = error as { code?: string; meta?: { target?: unknown } };
+  if (prismaError.code === "P2002") {
+    const targetValue = prismaError.meta?.target;
+    const target = Array.isArray(targetValue) ? targetValue.join(",") : String(targetValue ?? "");
+    if (target.includes("telegramKey")) {
+      return NextResponse.json({ error: "معرف التليكرام مسجل مسبقاً لطالب آخر" }, { status: 409 });
+    }
+    if (target.includes("phoneKey")) {
+      return NextResponse.json({ error: "رقم الهاتف مسجل مسبقاً لطالب آخر" }, { status: 409 });
+    }
+    if (target.includes("nameKey")) {
+      return NextResponse.json({ error: "اسم الطالب مسجل مسبقاً لطالب آخر" }, { status: 409 });
+    }
+    return NextResponse.json({ error: "توجد بيانات فريدة مسجلة مسبقاً" }, { status: 409 });
+  }
+
+  console.error("[API] /api/students error:", error);
+  return NextResponse.json({ error: "تعذر حفظ بيانات الطالب حالياً. تحقق من الاتصال ثم حاول مرة أخرى." }, { status: 500 });
+}
 
 export async function GET() {
   const students = await db.student.findMany({
@@ -41,7 +64,7 @@ export async function POST(req: NextRequest) {
     ["gender", "الجنس مطلوب"],
     ["courseType", "نوع الدورة مطلوب"],
     ["courseId", "الدورة مطلوبة"],
-    ["groupId", "الكروب الإلكتروني مطلوب"],
+    ["groupId", "المجموعة الإلكترونية مطلوبة"],
     ["mainSite", "الموقع الرئيسي مطلوب"],
     ["createdAt", "تاريخ إضافة الطالب مطلوب"],
     ["accountingStart", "فترة السماح مطلوبة"],
@@ -107,8 +130,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const student = await db.student.create({
-    data: {
+  const uniqueKeys = getStudentUniqueKeys({
+    name: body.name,
+    phone: body.phone,
+    telegram: body.telegram,
+  });
+
+  try {
+    const student = await db.student.create({
+      data: {
       id: body.id,
       name: String(body.name ?? "").trim(),
       school: String(body.school ?? "").trim(),
@@ -135,17 +165,21 @@ export async function POST(req: NextRequest) {
       opportunities: Number(body.opportunities || 0),
       baseOpportunities: Number(body.baseOpportunities || 0),
       courseId: body.courseId,
-      groupId: body.groupId || undefined,
-    },
-  });
-  return NextResponse.json({ student }, { status: 201 });
+        ...uniqueKeys,
+        groupId: body.groupId || undefined,
+      },
+    });
+    return NextResponse.json({ student }, { status: 201 });
+  } catch (error) {
+    return getPrismaStudentErrorResponse(error);
+  }
 }
 
 export async function PUT(req: NextRequest) {
   const body = await req.json();
   const { id, ...data } = body;
   if (!id)
-    return NextResponse.json({ error: "id is required" }, { status: 400 });
+    return NextResponse.json({ error: "تعذر تحديد الطالب المطلوب" }, { status: 400 });
   if (data.name !== undefined) {
     const nameError = getRequiredTextError(
       String(data.name ?? ""),
@@ -202,6 +236,15 @@ export async function PUT(req: NextRequest) {
     if (duplicateMessage)
       return NextResponse.json({ error: duplicateMessage }, { status: 409 });
   }
+  const updateUniqueKeys = getStudentUniqueKeys({
+    name: data.name ?? undefined,
+    phone: data.phone ?? undefined,
+    telegram: data.telegram ?? undefined,
+  });
+  if (data.name !== undefined) data.nameKey = updateUniqueKeys.nameKey;
+  if (data.phone !== undefined) data.phoneKey = updateUniqueKeys.phoneKey;
+  if (data.telegram !== undefined) data.telegramKey = updateUniqueKeys.telegramKey;
+
   if (data.createdAt !== undefined)
     data.createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
   if (data.totalAmount !== undefined)
@@ -225,15 +268,23 @@ export async function PUT(req: NextRequest) {
     data.opportunities = Number(data.opportunities);
   if (data.baseOpportunities !== undefined)
     data.baseOpportunities = Number(data.baseOpportunities);
-  const student = await db.student.update({ where: { id }, data });
-  return NextResponse.json({ student });
+  try {
+    const student = await db.student.update({ where: { id }, data });
+    return NextResponse.json({ student });
+  } catch (error) {
+    return getPrismaStudentErrorResponse(error);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id)
-    return NextResponse.json({ error: "id is required" }, { status: 400 });
-  await db.student.delete({ where: { id } });
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ error: "تعذر تحديد الطالب المطلوب" }, { status: 400 });
+  try {
+    await db.student.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return getPrismaStudentErrorResponse(error);
+  }
 }

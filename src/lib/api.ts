@@ -9,6 +9,40 @@
 
 // ─── Generic Helpers ──────────────────────────────────────────────────────────
 
+function toUserFriendlyError(raw: unknown, fallback = 'تعذر تنفيذ العملية حالياً. حاول مرة أخرى.'): string {
+  const message = typeof raw === 'string' ? raw : fallback;
+  const normalized = message.toLowerCase();
+
+  if (!message.trim()) return fallback;
+  if (normalized.includes('failed to fetch') || normalized.includes('networkerror') || normalized.includes('network error')) {
+    return 'تعذر الاتصال بالخادم. تحقق من الإنترنت ثم حاول مرة أخرى.';
+  }
+  if (normalized.includes('unexpected token') || normalized.includes('json')) {
+    return 'استجابة الخادم غير مفهومة. حاول تحديث الصفحة.';
+  }
+  if (normalized.includes('id is required')) {
+    return 'تعذر تحديد السجل المطلوب. حدّث الصفحة ثم حاول مرة أخرى.';
+  }
+  if (normalized.includes('foreign key') || normalized.includes('constraint')) {
+    return 'لا يمكن تنفيذ العملية لأن السجل مرتبط ببيانات أخرى.';
+  }
+  if (/^http\s?\d{3}$/i.test(message.trim())) {
+    return 'تعذر تنفيذ العملية على الخادم. حاول مرة أخرى.';
+  }
+
+  return message;
+}
+
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const err = await res.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
+    return toUserFriendlyError(err?.error ?? err?.message, fallback);
+  }
+  const text = await res.text().catch(() => '');
+  return toUserFriendlyError(text, fallback);
+}
+
 export interface ApiResult {
   ok: boolean;
   error?: string;
@@ -22,13 +56,13 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-      console.warn(`[API] POST /api/${endpoint} failed:`, err);
-      return { ok: false, error: err.error || `HTTP ${res.status}` };
+      const error = await readApiError(res, `تعذر حفظ البيانات (رمز ${res.status})`);
+      console.warn(`[API] POST /api/${endpoint} failed:`, error);
+      return { ok: false, error };
     }
     return { ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Network error';
+    const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
     console.warn(`[API] POST /api/${endpoint} network error:`, e);
     return { ok: false, error: msg };
   }
@@ -42,13 +76,13 @@ async function apiPut(endpoint: string, data: Record<string, unknown>): Promise<
       body: JSON.stringify(data),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-      console.warn(`[API] PUT /api/${endpoint} failed:`, err);
-      return { ok: false, error: err.error || `HTTP ${res.status}` };
+      const error = await readApiError(res, `تعذر تحديث البيانات (رمز ${res.status})`);
+      console.warn(`[API] PUT /api/${endpoint} failed:`, error);
+      return { ok: false, error };
     }
     return { ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Network error';
+    const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
     console.warn(`[API] PUT /api/${endpoint} network error:`, e);
     return { ok: false, error: msg };
   }
@@ -60,13 +94,13 @@ async function apiDelete(endpoint: string, id: string): Promise<ApiResult> {
       method: 'DELETE',
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-      console.warn(`[API] DELETE /api/${endpoint} failed:`, err);
-      return { ok: false, error: err.error || `HTTP ${res.status}` };
+      const error = await readApiError(res, `تعذر حذف السجل (رمز ${res.status})`);
+      console.warn(`[API] DELETE /api/${endpoint} failed:`, error);
+      return { ok: false, error };
     }
     return { ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Network error';
+    const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
     console.warn(`[API] DELETE /api/${endpoint} network error:`, e);
     return { ok: false, error: msg };
   }
@@ -75,7 +109,10 @@ async function apiDelete(endpoint: string, id: string): Promise<ApiResult> {
 async function apiGet<T>(endpoint: string): Promise<T | null> {
   try {
     const res = await fetch(`/api/${endpoint}`);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[API] GET /api/${endpoint} failed:`, await readApiError(res, 'تعذر تحميل البيانات'));
+      return null;
+    }
     const json = await res.json();
     return json as T;
   } catch (e) {

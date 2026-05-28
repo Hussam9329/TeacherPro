@@ -34,6 +34,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { BookOpen } from "lucide-react";
+import { EmptyState } from "./ui-kit";
 
 export function CoursesView() {
   const { courses, addCourse, updateCourse, toggleCourse, deleteCourse } =
@@ -145,7 +147,7 @@ export function CoursesView() {
         <CardContent>
           <div className="space-y-3 max-h-[500px] overflow-y-auto">
             {courses.length === 0 ? (
-              <p className="empty-state">لا توجد دورات بعد</p>
+              <EmptyState icon={BookOpen} title="لا توجد دورات بعد" description="أضف أول دورة من النموذج المجاور لتظهر هنا وتبدأ ربط الطلاب والمجموعات الإلكترونية." />
             ) : (
               courses.map((course) => (
                 <div

@@ -81,7 +81,7 @@ function daysRemaining(demo: DemoCopy): number | null {
 const LIMIT_LABELS: Record<keyof DemoUsageLimits, string> = {
   students: 'الطلاب',
   courses: 'الدورات',
-  groups: 'الكروبات',
+  groups: 'المجموعات الإلكترونية',
   sites: 'المواقع',
   chapters: 'الفصول',
   exams: 'الامتحانات',
