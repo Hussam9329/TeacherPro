@@ -1,4 +1,4 @@
-export const TEXT_ONLY_PATTERN = "^[\\p{L}\\p{M}][\\p{L}\\p{M}\\s'.،-]*$";
+export const TEXT_ONLY_PATTERN = "^[\\p{L}\\p{M}][\\p{L}\\p{M}\\s'.،\\-]*$";
 
 const arabicMarks = /[\u064B-\u065F\u0670]/g;
 const hamzaMap: Record<string, string> = {
