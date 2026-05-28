@@ -374,7 +374,7 @@ export function TeacherProLayout() {
             <Download className="w-4 h-4 ml-2" />
             تصدير نسخة احتياطية
           </Button>
-          <input ref={fileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => handleImportBackup(e.target.files?.[0])} />
+          <input ref={fileInputRef} id="backup-import" name="backupFile" type="file" accept="application/json,.json" className="hidden" onChange={(e) => handleImportBackup(e.target.files?.[0])} />
           <Button variant="ghost" size="sm" className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" onClick={() => fileInputRef.current?.click()}>
             <Upload className="w-4 h-4 ml-2" />
             استيراد Backup

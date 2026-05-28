@@ -82,7 +82,7 @@ export function OpportunitiesView() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="space-y-1">
               <Label htmlFor="opp-search" className="text-xs">بحث</Label>
-              <Input id="opp-search" name="search" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود" />
+              <Input id="opp-search" name="search" autoComplete="off" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="opp-course" className="text-xs">الدورة</Label>
@@ -95,7 +95,7 @@ export function OpportunitiesView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">تصدير</Label>
+              <span className="text-xs font-medium">تصدير</span>
               <Button variant="outline" size="sm" className="w-full h-9" onClick={exportCSV}>تصدير CSV</Button>
             </div>
           </div>
@@ -259,11 +259,11 @@ export function OpportunitiesView() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="opp-amount">العدد</Label>
-                <Input id="opp-amount" name="amount" type="number" min={1} value={amount} onChange={e => setAmount(Number(toLatinDigits(e.target.value)) || 1)} />
+                <Input id="opp-amount" name="amount" type="number" min={1} autoComplete="off" value={amount} onChange={e => setAmount(Number(toLatinDigits(e.target.value)) || 1)} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="opp-reason">السبب</Label>
-                <Input id="opp-reason" name="reason" value={reason} onChange={e => setReason(e.target.value)} placeholder="سبب الحركة" />
+                <Input id="opp-reason" name="reason" autoComplete="off" value={reason} onChange={e => setReason(e.target.value)} placeholder="سبب الحركة" />
               </div>
             </div>
           ) : (

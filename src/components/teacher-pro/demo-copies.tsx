@@ -418,7 +418,7 @@ export function DemoCopiesTab() {
             <div className="space-y-2">
               <Label htmlFor="demo-name">اسم النسخة</Label>
               <Input
-                id="demo-name" name="name"
+                id="demo-name" name="name" autoComplete="off"
                 value={newDemo.name}
                 onChange={(e) =>
                   setNewDemo((p) => ({ ...p, name: e.target.value }))
@@ -429,7 +429,7 @@ export function DemoCopiesTab() {
             <div className="space-y-2">
               <Label htmlFor="demo-description">الوصف</Label>
               <Input
-                id="demo-description" name="description"
+                id="demo-description" name="description" autoComplete="off"
                 value={newDemo.description}
                 onChange={(e) =>
                   setNewDemo((p) => ({ ...p, description: e.target.value }))
@@ -440,7 +440,7 @@ export function DemoCopiesTab() {
             <div className="space-y-2">
               <Label htmlFor="demo-duration">مدة الصلاحية (بالأيام)</Label>
               <Input
-                id="demo-duration" name="durationDays"
+                id="demo-duration" name="durationDays" autoComplete="off"
                 type="number"
                 min={1}
                 max={365}
@@ -455,6 +455,7 @@ export function DemoCopiesTab() {
             </div>
             <div className="flex items-center gap-2">
               <Checkbox
+                id="demo-fromData"
                 checked={newDemo.fromData}
                 onCheckedChange={(v) =>
                   setNewDemo((p) => ({ ...p, fromData: !!v }))
@@ -466,6 +467,7 @@ export function DemoCopiesTab() {
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Checkbox
+                  id="demo-customLimits"
                   checked={useCustomLimits}
                   onCheckedChange={(v) => setUseCustomLimits(!!v)}
                 />
@@ -486,6 +488,7 @@ export function DemoCopiesTab() {
                           id={`demo-limit-${key}`}
                           name={`limit-${key}`}
                           type="number"
+                          autoComplete="off"
                           min={1}
                           value={val}
                           onChange={(e) =>
@@ -533,7 +536,7 @@ export function DemoCopiesTab() {
             <div className="space-y-2">
               <Label htmlFor="demo-extend-days">عدد الأيام الإضافية</Label>
               <Input
-                id="demo-extend-days" name="days"
+                id="demo-extend-days" name="days" autoComplete="off"
                 type="number"
                 min={1}
                 max={365}

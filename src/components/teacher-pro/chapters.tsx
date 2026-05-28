@@ -121,11 +121,11 @@ export function ChaptersView() {
             <form onSubmit={handleAddChapter} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="chapter-name">اسم الفصل المنهجي</Label>
-                <Input id="chapter-name" name="chapterName" value={chapterName_input} onChange={(e) => setChapterNameInput(e.target.value)} required placeholder="الفصل الأول - الخلية" />
+                <Input id="chapter-name" name="chapterName" autoComplete="off" value={chapterName_input} onChange={(e) => setChapterNameInput(e.target.value)} required placeholder="الفصل الأول - الخلية" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="chapter-opportunities">عدد الفرص لهذا الفصل</Label>
-                <Input id="chapter-opportunities" name="opportunities" type="number" min={0} value={opportunities} onChange={(e) => setOpportunities(Number(toLatinDigits(e.target.value)) || 0)} />
+                <Input id="chapter-opportunities" name="opportunities" type="number" min={0} autoComplete="off" value={opportunities} onChange={(e) => setOpportunities(Number(toLatinDigits(e.target.value)) || 0)} />
               </div>
               <Button type="submit" className="w-full">إضافة فصل منهجي</Button>
               <div className="rounded-2xl border bg-muted/30 p-3 space-y-2">
@@ -238,11 +238,11 @@ export function ChaptersView() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="chapter-edit-name">اسم الفصل</Label>
-              <Input id="chapter-edit-name" name="chName" value={editChapterDialog.chName} onChange={e => setEditChapterDialog(prev => ({ ...prev, chName: e.target.value }))} />
+              <Input id="chapter-edit-name" name="chName" autoComplete="off" value={editChapterDialog.chName} onChange={e => setEditChapterDialog(prev => ({ ...prev, chName: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="chapter-edit-opps">عدد الفرص</Label>
-              <Input id="chapter-edit-opps" name="opps" type="number" min={0} value={editChapterDialog.opps} onChange={e => setEditChapterDialog(prev => ({ ...prev, opps: Number(toLatinDigits(e.target.value)) || 0 }))} />
+              <Input id="chapter-edit-opps" name="opps" type="number" min={0} autoComplete="off" value={editChapterDialog.opps} onChange={e => setEditChapterDialog(prev => ({ ...prev, opps: Number(toLatinDigits(e.target.value)) || 0 }))} />
             </div>
           </div>
           <DialogFooter>

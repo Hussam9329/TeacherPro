@@ -340,7 +340,7 @@ export function StudentRegistryView() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
             <div className="space-y-1">
               <Label htmlFor="registry-search" className="text-xs">بحث</Label>
-              <Input id="registry-search" name="search" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تلكرام / هاتف" />
+              <Input id="registry-search" name="search" autoComplete="off" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تلكرام / هاتف" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="registry-courseType" className="text-xs">نوع الدورة</Label>
@@ -396,7 +396,7 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">تصدير</Label>
+              <span className="text-xs font-medium">تصدير</span>
               <Button variant="outline" size="sm" className="w-full h-9" onClick={exportCSV}>تصدير CSV</Button>
             </div>
           </div>
@@ -522,11 +522,11 @@ export function StudentRegistryView() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="edit-name">اسم الطالب</Label>
-              <Input id="edit-name" name="name" value={editDialog.form.name} onChange={e => updateEditForm('name', e.target.value)} required placeholder="اسم الطالب الرباعي" />
+              <Input id="edit-name" name="name" autoComplete="name" value={editDialog.form.name} onChange={e => updateEditForm('name', e.target.value)} required placeholder="اسم الطالب الرباعي" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-school">اسم المدرسة</Label>
-              <Input id="edit-school" name="school" value={editDialog.form.school} onChange={e => updateEditForm('school', e.target.value)} required placeholder="اسم المدرسة" />
+              <Input id="edit-school" name="school" autoComplete="organization" value={editDialog.form.school} onChange={e => updateEditForm('school', e.target.value)} required placeholder="اسم المدرسة" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-gender">الجنس</Label>
@@ -540,15 +540,15 @@ export function StudentRegistryView() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-telegram">معرف التلكرام</Label>
-              <Input id="edit-telegram" name="telegram" value={editDialog.form.telegram} onChange={e => updateEditTelegram(e.target.value)} placeholder="اختياري - username بدون @" />
+              <Input id="edit-telegram" name="telegram" autoComplete="username" value={editDialog.form.telegram} onChange={e => updateEditTelegram(e.target.value)} placeholder="اختياري - username بدون @" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-phone">رقم الطالب</Label>
-              <Input id="edit-phone" name="phone" value={editDialog.form.phone} onChange={e => updateEditPhone('phone', e.target.value)} inputMode="numeric" maxLength={11} pattern="07[0-9]{9}" required />
+              <Input id="edit-phone" name="phone" autoComplete="tel" value={editDialog.form.phone} onChange={e => updateEditPhone('phone', e.target.value)} inputMode="numeric" maxLength={11} pattern="07[0-9]{9}" required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-parentPhone">رقم ولي الأمر</Label>
-              <Input id="edit-parentPhone" name="parentPhone" value={editDialog.form.parentPhone} onChange={e => updateEditPhone('parentPhone', e.target.value)} inputMode="numeric" maxLength={11} pattern="07[0-9]{9}" required />
+              <Input id="edit-parentPhone" name="parentPhone" autoComplete="tel" value={editDialog.form.parentPhone} onChange={e => updateEditPhone('parentPhone', e.target.value)} inputMode="numeric" maxLength={11} pattern="07[0-9]{9}" required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-courseType">نوع الدورة</Label>
@@ -600,33 +600,33 @@ export function StudentRegistryView() {
               <>
                 <div className="space-y-2">
                   <Label htmlFor="edit-receiptNo">رقم الوصل</Label>
-                  <Input id="edit-receiptNo" name="receiptNo" value={editDialog.form.receiptNo} onChange={e => updateEditForm('receiptNo', e.target.value)} required />
+                  <Input id="edit-receiptNo" name="receiptNo" autoComplete="off" value={editDialog.form.receiptNo} onChange={e => updateEditForm('receiptNo', e.target.value)} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-codeSequence">تسلسل الكود</Label>
-                  <Input id="edit-codeSequence" name="codeSequence" value={editDialog.form.codeSequence} onChange={e => updateEditForm('codeSequence', e.target.value)} required />
+                  <Input id="edit-codeSequence" name="codeSequence" autoComplete="off" value={editDialog.form.codeSequence} onChange={e => updateEditForm('codeSequence', e.target.value)} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-totalAmount">المبلغ الكلي</Label>
-                  <Input id="edit-totalAmount" name="totalAmount" type="number" min={0} value={editDialog.form.totalAmount} onChange={e => updateEditForm('totalAmount', e.target.value)} required />
+                  <Input id="edit-totalAmount" name="totalAmount" type="number" min={0} autoComplete="off" value={editDialog.form.totalAmount} onChange={e => updateEditForm('totalAmount', e.target.value)} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-paidAmount">المبلغ المدفوع</Label>
-                  <Input id="edit-paidAmount" name="paidAmount" type="number" min={0} value={editDialog.form.paidAmount} onChange={e => updateEditForm('paidAmount', e.target.value)} required />
+                  <Input id="edit-paidAmount" name="paidAmount" type="number" min={0} autoComplete="off" value={editDialog.form.paidAmount} onChange={e => updateEditForm('paidAmount', e.target.value)} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-remainingAmount">المبلغ المتبقي</Label>
-                  <Input id="edit-remainingAmount" name="remainingAmount" value={String(editRemainingAmount)} readOnly className="font-bold text-destructive" />
+                  <Input id="edit-remainingAmount" name="remainingAmount" autoComplete="off" value={String(editRemainingAmount)} readOnly className="font-bold text-destructive" />
                 </div>
               </>
             )}
             <div className="space-y-2">
               <Label htmlFor="edit-createdAt">تاريخ إضافة الطالب</Label>
-              <Input id="edit-createdAt" name="createdAt" type="date" value={editDialog.form.createdAt} onChange={e => updateEditForm('createdAt', e.target.value)} required />
+              <Input id="edit-createdAt" name="createdAt" type="date" autoComplete="off" value={editDialog.form.createdAt} onChange={e => updateEditForm('createdAt', e.target.value)} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-accountingStart">فترة السماح</Label>
-              <Input id="edit-accountingStart" name="accountingStart" value={editDialog.form.accountingStart} onChange={e => updateEditAccountingDays(e.target.value)} inputMode="numeric" pattern="(?:[0-9]|[12][0-9]|30)" required placeholder="مثلاً 7" />
+              <Input id="edit-accountingStart" name="accountingStart" autoComplete="off" value={editDialog.form.accountingStart} onChange={e => updateEditAccountingDays(e.target.value)} inputMode="numeric" pattern="(?:[0-9]|[12][0-9]|30)" required placeholder="مثلاً 7" />
               <p className="text-xs leading-5 text-muted-foreground">الرقم من 0 إلى 30 هو عدد الأيام التي لا تُحتسب فيها النقاط.</p>
             </div>
           </div>
@@ -672,7 +672,7 @@ export function StudentRegistryView() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="dismiss-reason">سبب الفصل</Label>
-              <Input id="dismiss-reason" name="dismissReason" value={dismissReason} onChange={e => setDismissReason(e.target.value)} placeholder="سبب الفصل" />
+              <Input id="dismiss-reason" name="dismissReason" autoComplete="off" value={dismissReason} onChange={e => setDismissReason(e.target.value)} placeholder="سبب الفصل" />
             </div>
           </div>
           <DialogFooter>

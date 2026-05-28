@@ -72,22 +72,26 @@ function PermissionChecklist({
             <div key={cat} className="space-y-2">
               <div className="flex items-center gap-2">
                 <Checkbox
+                  id={`perm-cat-${cat}`}
+                  name={`perm-cat-${cat}`}
                   checked={allChecked ? true : someChecked ? 'indeterminate' : false}
                   onCheckedChange={() => toggleCategory(cat)}
                   disabled={readOnly}
                 />
-                <span className="font-semibold text-sm">{cat}</span>
+                <Label htmlFor={`perm-cat-${cat}`} className="font-semibold text-sm">{cat}</Label>
               </div>
               <div className="grid grid-cols-2 gap-1.5 pr-6">
                 {catPerms.map(perm => (
                   <div key={perm.id} className="flex items-center gap-1.5">
                     <Checkbox
+                      id={`perm-${perm.id}`}
+                      name={`perm-${perm.id}`}
                       checked={perms.includes(perm.id)}
                       onCheckedChange={() => togglePermission(perm.id)}
                       disabled={readOnly}
                       className="h-3.5 w-3.5"
                     />
-                    <span className="text-xs">{perm.label}</span>
+                    <Label htmlFor={`perm-${perm.id}`} className="text-xs">{perm.label}</Label>
                   </div>
                 ))}
               </div>
@@ -232,7 +236,7 @@ function RolesTab() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="role-name">اسم الدور</Label>
-              <Input id="role-name" name="roleName" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="اسم الدور بالعربية" />
+              <Input id="role-name" name="roleName" autoComplete="off" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="اسم الدور بالعربية" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="role-perms">الصلاحيات</Label>
@@ -462,11 +466,11 @@ function UsersTab() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="user-edit-name">الاسم الكامل</Label>
-              <Input id="user-edit-name" name="name" value={editUserDialog.name} onChange={e => setEditUserDialog(prev => ({ ...prev, name: e.target.value }))} />
+              <Input id="user-edit-name" name="name" autoComplete="name" value={editUserDialog.name} onChange={e => setEditUserDialog(prev => ({ ...prev, name: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="user-edit-password">كلمة المرور الجديدة</Label>
-              <Input id="user-edit-password" name="password" type="password" value={editUserDialog.password} onChange={e => setEditUserDialog(prev => ({ ...prev, password: e.target.value }))} />
+              <Input id="user-edit-password" name="password" type="password" autoComplete="new-password" value={editUserDialog.password} onChange={e => setEditUserDialog(prev => ({ ...prev, password: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>
@@ -504,15 +508,15 @@ function UsersTab() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="new-username">اسم المستخدم</Label>
-              <Input id="new-username" name="username" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))} placeholder="username" />
+              <Input id="new-username" name="username" autoComplete="username" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))} placeholder="username" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-name">الاسم الكامل</Label>
-              <Input id="new-name" name="name" value={newUser.name} onChange={e => setNewUser(p => ({ ...p, name: e.target.value }))} placeholder="الاسم" />
+              <Input id="new-name" name="name" autoComplete="name" value={newUser.name} onChange={e => setNewUser(p => ({ ...p, name: e.target.value }))} placeholder="الاسم" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-password">كلمة المرور</Label>
-              <Input id="new-password" name="password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="123456" type="password" />
+              <Input id="new-password" name="password" autoComplete="new-password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="123456" type="password" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-role">الدور</Label>

@@ -302,7 +302,7 @@ export function StudentRegisterView() {
 
         <CardContent className="p-4 md:p-6 lg:p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <input type="hidden" id="reg-createdAt" name="createdAt" value={form.createdAt} readOnly />
+            <input type="hidden" id="reg-createdAt" name="createdAt" value={form.createdAt} readOnly autoComplete="off" />
 
             <section className="surface-card p-5 md:p-6">
               <SectionTitle icon={User} title="بيانات الطالب" description="المعلومات الأساسية المطلوبة لإنشاء ملف الطالب." />
@@ -311,7 +311,7 @@ export function StudentRegisterView() {
                   <Label htmlFor="reg-name" className="font-bold text-foreground">اسم الطالب <RequiredMark /></Label>
                   <div className="relative">
                     <FieldIcon icon={User} />
-                    <Input id="reg-name" name="name" value={form.name} onChange={e => updateForm('name', e.target.value)} required placeholder="الاسم الرباعي واللقب" className={fieldBaseClass} />
+                    <Input id="reg-name" name="name" autoComplete="name" value={form.name} onChange={e => updateForm('name', e.target.value)} required placeholder="الاسم الرباعي واللقب" className={fieldBaseClass} />
                   </div>
                 </div>
 
@@ -319,12 +319,12 @@ export function StudentRegisterView() {
                   <Label htmlFor="reg-school" className="font-bold text-foreground">اسم المدرسة <RequiredMark /></Label>
                   <div className="relative">
                     <FieldIcon icon={School} />
-                    <Input id="reg-school" name="school" value={form.school} onChange={e => updateForm('school', e.target.value)} required placeholder="اسم المدرسة" className={fieldBaseClass} />
+                    <Input id="reg-school" name="school" autoComplete="organization" value={form.school} onChange={e => updateForm('school', e.target.value)} required placeholder="اسم المدرسة" className={fieldBaseClass} />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="font-bold text-foreground">الجنس <RequiredMark /></Label>
+                  <Label htmlFor="reg-gender-male" className="font-bold text-foreground">الجنس <RequiredMark /></Label>
                   {/* radios labelled by their own wrapping labels */}
                   <div className="flex gap-8">
                     <label className="inline-flex cursor-pointer items-center">
@@ -343,7 +343,7 @@ export function StudentRegisterView() {
                   <div className="relative">
                     <FieldIcon icon={Send} />
                     <Input
-                      id="reg-telegram" name="telegram"
+                      id="reg-telegram" name="telegram" autoComplete="username"
                       value={form.telegram}
                       onChange={e => setForm(prev => ({ ...prev, telegram: sanitizeTelegramInput(e.target.value) }))}
                       placeholder="username بدون @"
@@ -358,7 +358,7 @@ export function StudentRegisterView() {
                   <div className="relative">
                     <FieldIcon icon={Smartphone} />
                     <Input
-                      id="reg-phone" name="phone"
+                      id="reg-phone" name="phone" autoComplete="tel"
                       value={form.phone}
                       onChange={e => updatePhoneForm('phone', e.target.value)}
                       required
@@ -377,7 +377,7 @@ export function StudentRegisterView() {
                   <div className="relative">
                     <FieldIcon icon={PhoneCall} />
                     <Input
-                      id="reg-parentPhone" name="parentPhone"
+                      id="reg-parentPhone" name="parentPhone" autoComplete="tel"
                       value={form.parentPhone}
                       onChange={e => updatePhoneForm('parentPhone', e.target.value)}
                       required
@@ -451,14 +451,14 @@ export function StudentRegisterView() {
                       <Label htmlFor="reg-receiptNo" className="font-bold text-foreground">رقم الوصل <RequiredMark /></Label>
                       <div className="relative">
                         <FieldIcon icon={Receipt} className="text-primary" />
-                        <Input id="reg-receiptNo" name="receiptNo" value={form.receiptNo} onChange={e => updateForm('receiptNo', e.target.value)} required placeholder="أدخل رقم الوصل" className={privateFieldClass} />
+                        <Input id="reg-receiptNo" name="receiptNo" autoComplete="off" value={form.receiptNo} onChange={e => updateForm('receiptNo', e.target.value)} required placeholder="أدخل رقم الوصل" className={privateFieldClass} />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="reg-codeSequence" className="font-bold text-foreground">تسلسل الكود <RequiredMark /></Label>
                       <div className="relative">
                         <FieldIcon icon={Barcode} className="text-primary" />
-                        <Input id="reg-codeSequence" name="codeSequence" value={form.codeSequence} onChange={e => updateForm('codeSequence', e.target.value)} required placeholder="أدخل تسلسل الكود" className={privateFieldClass} />
+                        <Input id="reg-codeSequence" name="codeSequence" autoComplete="off" value={form.codeSequence} onChange={e => updateForm('codeSequence', e.target.value)} required placeholder="أدخل تسلسل الكود" className={privateFieldClass} />
                       </div>
                     </div>
                   </div>
@@ -472,21 +472,21 @@ export function StudentRegisterView() {
                       <div className="space-y-2">
                         <Label htmlFor="reg-totalAmount" className="font-bold text-foreground">المبلغ الكلي <RequiredMark /></Label>
                         <div className="relative">
-                          <Input id="reg-totalAmount" name="totalAmount" value={form.totalAmount} onChange={e => updateAmountForm('totalAmount', e.target.value)} required inputMode="numeric" placeholder="0" className={`${moneyFieldClass} font-tabular`} />
+                          <Input id="reg-totalAmount" name="totalAmount" autoComplete="off" value={form.totalAmount} onChange={e => updateAmountForm('totalAmount', e.target.value)} required inputMode="numeric" placeholder="0" className={`${moneyFieldClass} font-tabular`} />
                           <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-muted-foreground">د.ع</span>
                         </div>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="reg-paidAmount" className="font-bold text-foreground">المبلغ المدفوع <RequiredMark /></Label>
                         <div className="relative">
-                          <Input id="reg-paidAmount" name="paidAmount" value={form.paidAmount} onChange={e => updateAmountForm('paidAmount', e.target.value)} required inputMode="numeric" placeholder="0" className={`${moneyFieldClass} font-tabular`} />
+                          <Input id="reg-paidAmount" name="paidAmount" autoComplete="off" value={form.paidAmount} onChange={e => updateAmountForm('paidAmount', e.target.value)} required inputMode="numeric" placeholder="0" className={`${moneyFieldClass} font-tabular`} />
                           <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-muted-foreground">د.ع</span>
                         </div>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="reg-remainingAmount" className="font-bold text-foreground">المبلغ المتبقي</Label>
                         <div className="relative">
-                          <Input id="reg-remainingAmount" name="remainingAmount" value={String(remainingAmount)} readOnly placeholder="0" className="h-12 rounded-xl border-input bg-muted/55 pl-12 pr-4 font-bold text-destructive shadow-xs dark:bg-muted/25" />
+                          <Input id="reg-remainingAmount" name="remainingAmount" autoComplete="off" value={String(remainingAmount)} readOnly placeholder="0" className="h-12 rounded-xl border-input bg-muted/55 pl-12 pr-4 font-bold text-destructive shadow-xs dark:bg-muted/25" />
                           <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-muted-foreground">د.ع</span>
                         </div>
                         <p className="text-xs text-muted-foreground">المتبقي: {formatAmount(remainingAmount)} د.ع</p>
@@ -549,7 +549,7 @@ export function StudentRegisterView() {
               <div className="soft-panel">
                 <Label htmlFor="reg-accountingStart" className="mb-2 block font-bold text-foreground">فترة السماح (أيام)</Label>
                 <div className="flex flex-wrap items-center gap-4">
-                  <Input id="reg-accountingStart" name="accountingStart" value={form.accountingStart} onChange={e => updateGraceDays(e.target.value)} inputMode="numeric" pattern="(?:[0-9]|[12][0-9]|30)" required className="h-11 w-24 rounded-xl text-center font-tabular" />
+                  <Input id="reg-accountingStart" name="accountingStart" autoComplete="off" value={form.accountingStart} onChange={e => updateGraceDays(e.target.value)} inputMode="numeric" pattern="(?:[0-9]|[12][0-9]|30)" required className="h-11 w-24 rounded-xl text-center font-tabular" />
                   <span className="text-sm text-muted-foreground">أيام لا تُحتسب فيها النقاط</span>
                 </div>
               </div>

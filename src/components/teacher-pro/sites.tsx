@@ -95,7 +95,7 @@ export function SitesView() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="site-subSite">الموقع الفرعي</Label>
-                <Input id="site-subSite" name="sub" value={sub} onChange={(e) => setSub(e.target.value)} placeholder="المنصور / زيونة / بنوك" />
+                <Input id="site-subSite" name="sub" autoComplete="off" value={sub} onChange={(e) => setSub(e.target.value)} placeholder="المنصور / زيونة / بنوك" />
               </div>
               <Button type="submit" className="w-full">حفظ الموقع</Button>
             </form>
@@ -164,7 +164,7 @@ export function SitesView() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-site-subSite">الموقع الفرعي</Label>
-              <Input id="edit-site-subSite" name="subSite" value={editDialog.subSite} onChange={e => setEditDialog(prev => ({ ...prev, subSite: e.target.value }))} placeholder="المنصور / زيونة / بنوك" />
+              <Input id="edit-site-subSite" name="subSite" autoComplete="off" value={editDialog.subSite} onChange={e => setEditDialog(prev => ({ ...prev, subSite: e.target.value }))} placeholder="المنصور / زيونة / بنوك" />
             </div>
           </div>
           <DialogFooter>

@@ -87,7 +87,7 @@ export function GradeRecordsView() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             <div className="space-y-1">
               <Label htmlFor="grade-records-search" className="text-xs">بحث</Label>
-              <Input id="grade-records-search" name="search" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تلكرام" />
+              <Input id="grade-records-search" name="search" autoComplete="off" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تلكرام" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="grade-records-exam" className="text-xs">الامتحان</Label>
@@ -123,11 +123,11 @@ export function GradeRecordsView() {
               </Select>
             </div>
             <div className="flex items-center gap-2 pt-5">
-              <Checkbox checked={accountingChecked} onCheckedChange={v => { setAccountingChecked(!!v); setPage(1); }} />
-              <Label className="text-xs">محاسبة فقط</Label>
+              <Checkbox id="grade-records-accounting" checked={accountingChecked} onCheckedChange={v => { setAccountingChecked(!!v); setPage(1); }} />
+              <Label htmlFor="grade-records-accounting" className="text-xs">محاسبة فقط</Label>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">تصدير</Label>
+              <span className="text-xs font-medium">تصدير</span>
               <Button variant="outline" size="sm" className="w-full h-9" onClick={exportCSV}>تصدير CSV</Button>
             </div>
           </div>

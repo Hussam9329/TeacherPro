@@ -291,11 +291,11 @@ export function ECorrectionView() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="ecorrection-errors">أخطاء التصحيح</Label>
-              <Input id="ecorrection-errors" name="correctionErrors" type="number" min={0} value={completeDialog.correctionErrors} onChange={e => setCompleteDialog(prev => ({ ...prev, correctionErrors: Number(toLatinDigits(e.target.value)) || 0 }))} />
+              <Input id="ecorrection-errors" name="correctionErrors" type="number" min={0} autoComplete="off" value={completeDialog.correctionErrors} onChange={e => setCompleteDialog(prev => ({ ...prev, correctionErrors: Number(toLatinDigits(e.target.value)) || 0 }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="ecorrection-sum-errors">أخطاء الجمع</Label>
-              <Input id="ecorrection-sum-errors" name="sumErrors" type="number" min={0} value={completeDialog.sumErrors} onChange={e => setCompleteDialog(prev => ({ ...prev, sumErrors: Number(toLatinDigits(e.target.value)) || 0 }))} />
+              <Input id="ecorrection-sum-errors" name="sumErrors" type="number" min={0} autoComplete="off" value={completeDialog.sumErrors} onChange={e => setCompleteDialog(prev => ({ ...prev, sumErrors: Number(toLatinDigits(e.target.value)) || 0 }))} />
             </div>
           </div>
           <DialogFooter>

@@ -99,8 +99,8 @@ export function ExamRecordsView() {
               </Select>
             </div>
             <div className="flex items-center gap-2 pt-5">
-              <Checkbox checked={accountingFilter} onCheckedChange={v => setAccountingFilter(!!v)} />
-              <Label className="text-xs">محاسبة فقط</Label>
+              <Checkbox id="exam-records-accounting" checked={accountingFilter} onCheckedChange={v => setAccountingFilter(!!v)} />
+              <Label htmlFor="exam-records-accounting" className="text-xs">محاسبة فقط</Label>
             </div>
           </div>
         </CardContent>

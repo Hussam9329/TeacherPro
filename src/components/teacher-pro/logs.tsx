@@ -57,7 +57,7 @@ export function LogsView() {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             <div className="space-y-1">
               <Label htmlFor="logs-search" className="text-xs">بحث</Label>
-              <Input id="logs-search" name="search" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="إجراء / تفاصيل" />
+              <Input id="logs-search" name="search" autoComplete="off" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="إجراء / تفاصيل" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="logs-module" className="text-xs">الوحدة</Label>
@@ -92,7 +92,7 @@ export function LogsView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">تصدير</Label>
+              <span className="text-xs font-medium">تصدير</span>
               <Button variant="outline" size="sm" className="w-full h-9" onClick={exportLogs}>تصدير CSV</Button>
             </div>
           </div>

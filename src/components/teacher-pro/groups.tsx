@@ -70,7 +70,7 @@ export function GroupsView() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="group-name">اسم الكروب</Label>
-                <Input id="group-name" name="name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="اسم الكروب" />
+                <Input id="group-name" name="name" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} required placeholder="اسم الكروب" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="group-course">الدورة</Label>
@@ -87,7 +87,7 @@ export function GroupsView() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="group-electronic">الكروب الإلكتروني</Label>
-                <Input id="group-electronic" name="electronicGroup" value={electronicGroup} onChange={(e) => setElectronicGroup(e.target.value)} placeholder="@group" />
+                <Input id="group-electronic" name="electronicGroup" autoComplete="off" value={electronicGroup} onChange={(e) => setElectronicGroup(e.target.value)} placeholder="@group" />
               </div>
               <Button type="submit" className="w-full">حفظ الكروب</Button>
             </form>
@@ -154,11 +154,11 @@ export function GroupsView() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="edit-group-name">اسم الكروب</Label>
-              <Input id="edit-group-name" name="groupName" value={editDialog.groupName} onChange={e => setEditDialog(prev => ({ ...prev, groupName: e.target.value }))} />
+              <Input id="edit-group-name" name="groupName" autoComplete="off" value={editDialog.groupName} onChange={e => setEditDialog(prev => ({ ...prev, groupName: e.target.value }))} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-group-electronic">معرف الكروب الإلكتروني</Label>
-              <Input id="edit-group-electronic" name="electronic" value={editDialog.electronic} onChange={e => setEditDialog(prev => ({ ...prev, electronic: e.target.value }))} placeholder="@group" />
+              <Input id="edit-group-electronic" name="electronic" autoComplete="off" value={editDialog.electronic} onChange={e => setEditDialog(prev => ({ ...prev, electronic: e.target.value }))} placeholder="@group" />
             </div>
           </div>
           <DialogFooter>

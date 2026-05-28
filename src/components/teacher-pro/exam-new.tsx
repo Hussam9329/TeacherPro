@@ -145,7 +145,7 @@ export function ExamNewView() {
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="exam-name">اسم الامتحان</Label>
-              <Input id="exam-name" name="name" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required placeholder="اختبار يومي - الخلية" />
+              <Input id="exam-name" name="name" autoComplete="off" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required placeholder="اختبار يومي - الخلية" />
             </div>
 
             <div className="space-y-2">
@@ -164,15 +164,15 @@ export function ExamNewView() {
               <Label htmlFor="exam-courses">الدورات</Label>
               <div className="space-y-2 border rounded-lg p-3 max-h-44 overflow-y-auto">
                 <div className="flex items-center gap-2 border-b pb-2">
-                  <Checkbox checked={allCoursesSelected} onCheckedChange={toggleAllCourses} />
-                  <span className="text-sm font-bold">الكل</span>
+                  <Checkbox id="exam-all-courses" name="allCourses" checked={allCoursesSelected} onCheckedChange={toggleAllCourses} />
+                  <Label htmlFor="exam-all-courses" className="text-sm font-bold">الكل</Label>
                 </div>
                 {courses.length === 0 ? (
                   <p className="text-sm text-muted-foreground">لا توجد دورات مسجلة</p>
                 ) : courses.map(c => (
                   <div key={c.id} className="flex items-center gap-2">
-                    <Checkbox checked={form.courseIds.includes(c.id)} onCheckedChange={() => toggleCourseSelection(c.id)} />
-                    <span className="text-sm">{c.name}</span>
+                    <Checkbox id={`exam-course-${c.id}`} name={`course-${c.id}`} checked={form.courseIds.includes(c.id)} onCheckedChange={() => toggleCourseSelection(c.id)} />
+                    <Label htmlFor={`exam-course-${c.id}`} className="text-sm">{c.name}</Label>
                     <Badge variant={c.type === 'خاصة' ? 'default' : 'secondary'} className="text-[10px]">{c.type}</Badge>
                   </div>
                 ))}
@@ -183,13 +183,13 @@ export function ExamNewView() {
               <Label htmlFor="exam-mainSites">المناطق الرئيسية</Label>
               <div className="space-y-2 border rounded-lg p-3 max-h-44 overflow-y-auto">
                 <div className="flex items-center gap-2 border-b pb-2">
-                  <Checkbox checked={allMainSitesSelected} onCheckedChange={toggleAllMainSites} />
-                  <span className="text-sm font-bold">الكل</span>
+                  <Checkbox id="exam-all-sites" name="allSites" checked={allMainSitesSelected} onCheckedChange={toggleAllMainSites} />
+                  <Label htmlFor="exam-all-sites" className="text-sm font-bold">الكل</Label>
                 </div>
                 {availableMainSites.map(site => (
                   <div key={site} className="flex items-center gap-2">
-                    <Checkbox checked={form.mainSites.includes(site)} onCheckedChange={() => toggleMainSiteSelection(site)} />
-                    <span className="text-sm">{site}</span>
+                    <Checkbox id={`exam-site-${site}`} name={`site-${site}`} checked={form.mainSites.includes(site)} onCheckedChange={() => toggleMainSiteSelection(site)} />
+                    <Label htmlFor={`exam-site-${site}`} className="text-sm">{site}</Label>
                   </div>
                 ))}
               </div>
@@ -199,8 +199,8 @@ export function ExamNewView() {
               <Label htmlFor="exam-groups">الكروبات</Label>
               <div className="space-y-2 border rounded-lg p-3 max-h-44 overflow-y-auto">
                 <div className="flex items-center gap-2 border-b pb-2">
-                  <Checkbox checked={allGroupsSelected} disabled={availableGroups.length === 0} onCheckedChange={toggleAllGroups} />
-                  <span className="text-sm font-bold">الكل</span>
+                  <Checkbox id="exam-all-groups" name="allGroups" checked={allGroupsSelected} disabled={availableGroups.length === 0} onCheckedChange={toggleAllGroups} />
+                  <Label htmlFor="exam-all-groups" className="text-sm font-bold">الكل</Label>
                 </div>
                 {form.courseIds.length === 0 ? (
                   <p className="text-sm text-muted-foreground">اختر دورة أولاً لعرض الكروبات</p>
@@ -208,8 +208,8 @@ export function ExamNewView() {
                   <p className="text-sm text-muted-foreground">لا توجد كروبات مسجلة لهذه الدورات</p>
                 ) : availableGroups.map(g => (
                   <div key={g.id} className="flex items-center gap-2">
-                    <Checkbox checked={form.groupIds.includes(g.id)} onCheckedChange={() => toggleGroupSelection(g.id)} />
-                    <span className="text-sm">{g.name} - {courseName(g.courseId)}</span>
+                    <Checkbox id={`exam-group-${g.id}`} name={`group-${g.id}`} checked={form.groupIds.includes(g.id)} onCheckedChange={() => toggleGroupSelection(g.id)} />
+                    <Label htmlFor={`exam-group-${g.id}`} className="text-sm">{g.name} - {courseName(g.courseId)}</Label>
                   </div>
                 ))}
               </div>
@@ -217,22 +217,22 @@ export function ExamNewView() {
 
             <div className="space-y-2">
               <Label htmlFor="exam-date">تاريخ الامتحان</Label>
-              <Input id="exam-date" name="date" type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
+              <Input id="exam-date" name="date" type="date" autoComplete="off" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="exam-fullMark">الدرجة الكاملة</Label>
-              <Input id="exam-fullMark" name="fullMark" type="number" value={form.fullMark} onChange={e => setForm(p => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 100 }))} />
+              <Input id="exam-fullMark" name="fullMark" type="number" autoComplete="off" value={form.fullMark} onChange={e => setForm(p => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 100 }))} />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="exam-passMark">درجة النجاح</Label>
-              <Input id="exam-passMark" name="passMark" type="number" value={form.passMark} onChange={e => setForm(p => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 60 }))} />
+              <Input id="exam-passMark" name="passMark" type="number" autoComplete="off" value={form.passMark} onChange={e => setForm(p => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 60 }))} />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="exam-discountMark">درجة الخصم</Label>
-              <Input id="exam-discountMark" name="discountMark" type="number" value={form.discountMark} onChange={e => setForm(p => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 45 }))} />
+              <Input id="exam-discountMark" name="discountMark" type="number" autoComplete="off" value={form.discountMark} onChange={e => setForm(p => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 45 }))} />
             </div>
 
             <div className="space-y-2">
@@ -242,14 +242,14 @@ export function ExamNewView() {
                   فصل مؤقت تلقائياً عند الغياب
                 </div>
               ) : (
-                <Input id="exam-penalty" name="opportunitiesPenaltyNum" type="number" min={0} value={form.opportunitiesPenaltyNum} onChange={e => setForm(p => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 1 }))} />
+                <Input id="exam-penalty" name="opportunitiesPenaltyNum" type="number" min={0} autoComplete="off" value={form.opportunitiesPenaltyNum} onChange={e => setForm(p => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 1 }))} />
               )}
             </div>
 
             {isCumulativeOrFinal && (
               <div className="space-y-2">
                 <Label htmlFor="exam-dismissalGrade">درجة الفصل</Label>
-                <Input id="exam-dismissalGrade" name="dismissalGrade" type="number" value={form.dismissalGrade} onChange={e => setForm(p => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} placeholder="أدنى درجة للفصل" />
+                <Input id="exam-dismissalGrade" name="dismissalGrade" type="number" autoComplete="off" value={form.dismissalGrade} onChange={e => setForm(p => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} placeholder="أدنى درجة للفصل" />
               </div>
             )}
 
@@ -330,13 +330,18 @@ export function ExamNewView() {
                   <span className="text-sm">{s.name} ({s.code})</span>
                   <div className="flex items-center gap-2">
                     <Checkbox
+                      id={`exam-attendance-${s.id}`}
+                      name={`attendance-${s.id}`}
                       checked={selectedExam.attendance.includes(s.id)}
                       onCheckedChange={() => handleToggleAttendance(selectedExam.id, s.id)}
                       disabled={selectedExam.attendanceClosed}
+                      aria-label={`حضور ${s.name}`}
                     />
-                    <Badge variant={selectedExam.attendance.includes(s.id) ? 'default' : 'secondary'}>
-                      {selectedExam.attendance.includes(s.id) ? 'حاضر' : 'غائب'}
-                    </Badge>
+                    <Label htmlFor={`exam-attendance-${s.id}`}>
+                      <Badge variant={selectedExam.attendance.includes(s.id) ? 'default' : 'secondary'}>
+                        {selectedExam.attendance.includes(s.id) ? 'حاضر' : 'غائب'}
+                      </Badge>
+                    </Label>
                   </div>
                 </div>
               ))}

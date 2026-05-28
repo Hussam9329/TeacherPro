@@ -60,6 +60,7 @@ export function CoursesView() {
               <Input
                 id="courseName"
                 name="name"
+                autoComplete="off"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="مثال: أحياء السادس - دفعة جديدة"
@@ -132,7 +133,7 @@ export function CoursesView() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="course-edit-name">اسم الدورة</Label>
-              <Input id="course-edit-name" name="courseName" value={editDialog.courseName} onChange={e => setEditDialog(prev => ({ ...prev, courseName: e.target.value }))} />
+              <Input id="course-edit-name" name="courseName" autoComplete="off" value={editDialog.courseName} onChange={e => setEditDialog(prev => ({ ...prev, courseName: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>

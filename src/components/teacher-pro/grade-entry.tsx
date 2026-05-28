@@ -133,7 +133,7 @@ export function GradeEntryView() {
                       {isEditing ? (
                         <div className="flex items-center gap-2 flex-wrap">
                           <Select value={editStatus} onValueChange={setEditStatus}>
-                            <SelectTrigger id="grade-entry-status" className="w-28 h-8"><SelectValue /></SelectTrigger>
+                            <SelectTrigger id={`grade-entry-status-${student.id}`} className="w-28 h-8"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="درجة">درجة</SelectItem>
                               <SelectItem value="غائب">غائب</SelectItem>
@@ -142,9 +142,9 @@ export function GradeEntryView() {
                             </SelectContent>
                           </Select>
                           {editStatus === 'درجة' && (
-                            <Input id="grade-entry-score" name="score" type="number" className="w-20 h-8" value={editScore} onChange={e => setEditScore(toLatinDigits(e.target.value))} placeholder="الدرجة" title="اكتب درجة الطالب رقماً فقط" />
+                            <Input id={`grade-entry-score-${student.id}`} name={`score-${student.id}`} type="number" autoComplete="off" className="w-20 h-8" value={editScore} onChange={e => setEditScore(toLatinDigits(e.target.value))} placeholder="الدرجة" title="اكتب درجة الطالب رقماً فقط" />
                           )}
-                          <Input id="grade-entry-notes" name="notes" className="w-32 h-8" value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="ملاحظات" title="اكتب سبب الإجازة أو أي ملاحظة إدارية مهمة" />
+                          <Input id={`grade-entry-notes-${student.id}`} name={`notes-${student.id}`} autoComplete="off" className="w-32 h-8" value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="ملاحظات" title="اكتب سبب الإجازة أو أي ملاحظة إدارية مهمة" />
                           <Button size="sm" onClick={() => handleSaveGrade(student.id)} title="يحفظ الدرجة ويطبق القوانين تلقائياً">حفظ</Button>
                           <Button size="sm" variant="ghost" onClick={() => setEditGrade(null)} title="يغلق الإدخال بدون حفظ تغيير جديد">إلغاء</Button>
                         </div>
