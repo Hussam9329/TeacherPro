@@ -3,16 +3,21 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
 model Course {
   id        String   @id @default(cuid())
   name      String
-  type      String
+  type      String   // خاصة/عامة - للمنطق المالي القديم
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  availablePrograms  String @default("[]") // JSON: ["منهج كامل","كورسات"]
+  availableStudyTypes String @default("[]") // JSON: ["إلكتروني","حضوري","مدمج"]
+  locationConfig     String @default("{}") // JSON: { studyType: { scopes, baghdadMode, baghdadSites, provinces } }
+
   groups    Group[]
   sites     Site[]
   students  Student[]
@@ -70,7 +75,14 @@ model Student {
   parentPhone     String?
   telegram        String?
   telegramKey     String?  @unique
-  courseType      String
+
+  courseType      String   // خاصة/عامة - للمنطق المالي القديم
+  courseProgram   String?  // منهج كامل / كورسات
+  courseTerm      String?  // الكورس الأول / الكورس الثاني (فقط عند كورسات)
+  studyType       String?  // إلكتروني / حضوري / مدمج
+  locationScope   String?  // بغداد / محافظات
+  baghdadMode     String?  // عموم بغداد / بغداد - مخصص
+
   mainSite        String?
   subSite         String?
   receiptNo       String?

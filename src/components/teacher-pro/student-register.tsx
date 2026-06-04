@@ -32,10 +32,11 @@ import {
   toLatinDigits,
 } from "@/lib/format";
 import {
-  PUBLIC_MAIN_SITE_OPTIONS,
-  PRIVATE_BAGHDAD_SUB_SITES,
-  IRAQI_PROVINCES,
-} from "@/lib/iraq";
+  COURSE_PROGRAMS, COURSE_TERMS, STUDY_TYPES,
+  type CourseProgram, type CourseTerm, type StudyType,
+  getAvailablePrograms, getAvailableStudyTypes, getCourseLocationConfig,
+  getBaghdadSites, getProvinceOptions, getLocationScopes, getBaghdadMode,
+} from "@/lib/course-config";
 import {
   getStudentDuplicateMessage,
   isValidAccountingGraceDays,
@@ -91,6 +92,11 @@ type StudentRegisterForm = {
   parentPhone: string;
   telegram: string;
   courseType: CourseType;
+  courseProgram: string;
+  courseTerm: string;
+  studyType: string;
+  locationScope: string;
+  baghdadMode: string;
   courseId: string;
   groupId: string;
   mainSite: string;
@@ -127,9 +133,14 @@ function emptyForm(): StudentRegisterForm {
     parentPhone: "",
     telegram: "",
     courseType: "عامة",
+    courseProgram: "",
+    courseTerm: "",
+    studyType: "",
+    locationScope: "",
+    baghdadMode: "",
     courseId: "",
     groupId: "",
-    mainSite: "بغداد",
+    mainSite: "",
     subSite: "",
     receiptNo: "",
     codeSequence: "",
@@ -211,8 +222,8 @@ export function StudentRegisterView() {
   const isPrivate = form.courseType === "خاصة";
 
   const filteredCourses = useMemo(
-    () => courses.filter((c) => c.type === form.courseType && c.active),
-    [courses, form.courseType],
+    () => courses.filter((c) => c.active),
+    [courses],
   );
 
   const filteredGroups = useMemo(
@@ -220,18 +231,74 @@ export function StudentRegisterView() {
     [groups, form.courseId],
   );
 
-  const mainSiteOptions = useMemo(() => {
-    if (isPrivate) return ["بغداد"];
-    return [...PUBLIC_MAIN_SITE_OPTIONS];
-  }, [isPrivate]);
+  const selectedCourse = useMemo(
+    () => courses.find((c) => c.id === form.courseId),
+    [courses, form.courseId],
+  );
+
+  const courseAvailablePrograms = useMemo(
+    () => (selectedCourse ? getAvailablePrograms(selectedCourse) : []),
+    [selectedCourse],
+  );
+
+  const courseAvailableStudyTypes = useMemo(
+    () => (selectedCourse ? getAvailableStudyTypes(selectedCourse) : []),
+    [selectedCourse],
+  );
+
+  const courseLocationScopes = useMemo(
+    () => (selectedCourse && form.studyType ? getLocationScopes(selectedCourse, form.studyType) : []),
+    [selectedCourse, form.studyType],
+  );
+
+  const courseBaghdadMode = useMemo(
+    () => (selectedCourse && form.studyType ? getBaghdadMode(selectedCourse, form.studyType) : undefined),
+    [selectedCourse, form.studyType],
+  );
+
+  const courseBaghdadSites = useMemo(
+    () => (selectedCourse && form.studyType ? getBaghdadSites(selectedCourse, form.studyType) : []),
+    [selectedCourse, form.studyType],
+  );
+
+  const courseProvinces = useMemo(
+    () => (selectedCourse && form.studyType ? getProvinceOptions(selectedCourse, form.studyType) : []),
+    [selectedCourse, form.studyType],
+  );
 
   const subSiteOptions = useMemo<string[]>(() => {
-    if (isPrivate && form.mainSite === "بغداد")
-      return [...PRIVATE_BAGHDAD_SUB_SITES];
-    if (!isPrivate && form.mainSite === "بغداد") return [];
-    if (!isPrivate && form.mainSite === "محافظات") return [...IRAQI_PROVINCES];
+    if (!selectedCourse || !form.studyType) return [];
+    if (form.locationScope === "بغداد") {
+      if (courseBaghdadMode === "عموم بغداد") return [];
+      if (courseBaghdadMode === "بغداد - مخصص") return courseBaghdadSites;
+    }
+    if (form.locationScope === "محافظات") return courseProvinces;
     return [];
-  }, [isPrivate, form.mainSite]);
+  }, [selectedCourse, form.studyType, form.locationScope, courseBaghdadMode, courseBaghdadSites, courseProvinces]);
+
+  // Effective courseProgram: auto-select when only one option
+  const effectiveCourseProgram = useMemo(
+    () => courseAvailablePrograms.length === 1 ? courseAvailablePrograms[0] : form.courseProgram,
+    [courseAvailablePrograms, form.courseProgram],
+  );
+
+  // Effective baghdadMode: auto-set from course config
+  const effectiveBaghdadMode = useMemo(
+    () => courseBaghdadMode || form.baghdadMode,
+    [courseBaghdadMode, form.baghdadMode],
+  );
+
+  // Effective subSite: auto-resolve for عموم بغداد
+  const effectiveSubSite = useMemo(
+    () => (form.locationScope === "بغداد" && courseBaghdadMode === "عموم بغداد") ? "عموم بغداد" : form.subSite,
+    [form.locationScope, courseBaghdadMode, form.subSite],
+  );
+
+  // Effective mainSite: derived from locationScope
+  const effectiveMainSite = useMemo(
+    () => form.locationScope || form.mainSite,
+    [form.locationScope, form.mainSite],
+  );
 
   const totalAmount = useMemo(
     () => amountValue(form.totalAmount),
@@ -252,9 +319,12 @@ export function StudentRegisterView() {
         label: "الدورة والموقع",
         complete: Boolean(
           form.courseId &&
-          form.groupId &&
-          form.mainSite &&
-          (subSiteOptions.length === 0 || form.subSite),
+          effectiveCourseProgram &&
+          (effectiveCourseProgram !== "كورسات" || form.courseTerm) &&
+          (courseAvailableStudyTypes.length === 0 || form.studyType) &&
+          (courseLocationScopes.length === 0 || form.locationScope) &&
+          (subSiteOptions.length === 0 || effectiveSubSite) &&
+          form.groupId,
         ),
       },
       {
@@ -265,7 +335,7 @@ export function StudentRegisterView() {
         ),
       },
     ],
-    [form, isPrivate, subSiteOptions.length],
+    [form, isPrivate, courseAvailableStudyTypes, courseLocationScopes, subSiteOptions.length, effectiveCourseProgram, effectiveSubSite],
   );
   const hasDraftData = useMemo(
     () =>
@@ -273,6 +343,11 @@ export function StudentRegisterView() {
         "createdAt",
         "gender",
         "courseType",
+        "courseProgram",
+        "courseTerm",
+        "studyType",
+        "locationScope",
+        "baghdadMode",
         "mainSite",
         "accountingStart",
       ]),
@@ -330,7 +405,12 @@ export function StudentRegisterView() {
       courseType: nextType,
       courseId: "",
       groupId: "",
-      mainSite: "بغداد",
+      courseProgram: "",
+      courseTerm: "",
+      studyType: "",
+      locationScope: "",
+      baghdadMode: "",
+      mainSite: "",
       subSite: "",
       receiptNo: nextType === "خاصة" ? prev.receiptNo : "",
       codeSequence: nextType === "خاصة" ? prev.codeSequence : "",
@@ -340,7 +420,18 @@ export function StudentRegisterView() {
   };
 
   const handleCourseChange = (value: string) => {
-    setForm((prev) => ({ ...prev, courseId: value, groupId: "", subSite: "" }));
+    setForm((prev) => ({
+      ...prev,
+      courseId: value,
+      courseProgram: "",
+      courseTerm: "",
+      studyType: "",
+      locationScope: "",
+      baghdadMode: "",
+      mainSite: "",
+      subSite: "",
+      groupId: "",
+    }));
   };
 
   const validateRequiredFields = () => {
@@ -354,14 +445,33 @@ export function StudentRegisterView() {
       [
         Boolean(form.courseId),
         filteredCourses.length === 0
-          ? "لا توجد دورات مسجلة لهذا النوع"
+          ? "لا توجد دورات مسجلة"
           : "يرجى اختيار الدورة",
       ],
-      [Boolean(form.mainSite), "الموقع الرئيسي مطلوب"],
-      [
-        subSiteOptions.length === 0 || Boolean(form.subSite),
-        "الموقع الفرعي مطلوب",
-      ],
+    ];
+
+    // Course program validation
+    if (courseAvailablePrograms.length > 1 && !form.courseProgram) {
+      return "يرجى اختيار نوع الدورة (منهج كامل/كورسات)";
+    }
+    // Course term validation (only if كورسات)
+    if (form.courseProgram === "كورسات" && !form.courseTerm) {
+      return "يرجى اختيار الكورس";
+    }
+    // Study type validation
+    if (courseAvailableStudyTypes.length > 0 && !form.studyType) {
+      return "يرجى اختيار نوع الدراسة";
+    }
+    // Location scope validation
+    if (courseLocationScopes.length > 0 && !form.locationScope) {
+      return "يرجى اختيار الموقع";
+    }
+    // Sub-site validation
+    if (subSiteOptions.length > 0 && !form.subSite) {
+      return "يرجى اختيار الموقع الفرعي";
+    }
+
+    requiredChecks.push(
       [
         Boolean(form.groupId),
         filteredGroups.length === 0
@@ -369,7 +479,7 @@ export function StudentRegisterView() {
           : "يرجى اختيار المجموعة الإلكترونية",
       ],
       [form.accountingStart.trim() !== "", "فترة السماح مطلوبة"],
-    ];
+    );
 
     if (isPrivate) {
       requiredChecks.push(
@@ -435,10 +545,15 @@ export function StudentRegisterView() {
         parentPhone: form.parentPhone.trim(),
         telegram: sanitizeTelegramInput(form.telegram),
         courseType: form.courseType,
+        courseProgram: effectiveCourseProgram,
+        courseTerm: effectiveCourseProgram === "كورسات" ? form.courseTerm : "",
+        studyType: form.studyType,
+        locationScope: form.locationScope,
+        baghdadMode: effectiveBaghdadMode,
         courseId: form.courseId,
         groupId: form.groupId,
-        mainSite: isPrivate ? "بغداد" : form.mainSite,
-        subSite: form.subSite,
+        mainSite: effectiveMainSite,
+        subSite: effectiveSubSite,
         receiptNo: isPrivate ? form.receiptNo.trim() : "",
         codeSequence: isPrivate ? form.codeSequence.trim() : "",
         totalAmount: isPrivate ? totalAmount : 0,
@@ -936,98 +1051,224 @@ export function StudentRegisterView() {
                 </div>
               )}
 
-              <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="reg-mainSite"
-                    className="font-bold text-foreground"
-                  >
-                    الموقع الرئيسي <RequiredMark />
-                  </Label>
-                  <Select
-                    name="mainSite"
-                    value={form.mainSite}
-                    onValueChange={(v) =>
-                      setForm((prev) => ({ ...prev, mainSite: v, subSite: "" }))
-                    }
-                    disabled={isPrivate}
-                  >
-                    <SelectTrigger
-                      id="reg-mainSite"
-                      className={`${selectTriggerClass} disabled:opacity-100`}
-                      aria-required="true"
+              {/* ── Course Program ── */}
+              {form.courseId && courseAvailablePrograms.length > 1 && (
+                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-courseProgram"
+                      className="font-bold text-foreground"
                     >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mainSiteOptions.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p
-                    className={
-                      isPrivate
-                        ? "text-xs font-bold text-primary"
-                        : "text-xs text-muted-foreground"
-                    }
-                  >
-                    {isPrivate ? (
-                      <>
-                        <Lock className="ml-1 inline h-3.5 w-3.5" /> تم تحديد
-                        بغداد تلقائياً للدورة الخاصة
-                      </>
-                    ) : (
-                      "اختر الموقع الرئيسي حسب الدورة"
-                    )}
-                  </p>
+                      نوع البرنامج <RequiredMark />
+                    </Label>
+                    <Select
+                      name="courseProgram"
+                      value={form.courseProgram}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          courseProgram: v,
+                          courseTerm: v === "كورسات" ? prev.courseTerm : "",
+                          studyType: "",
+                          locationScope: "",
+                          baghdadMode: "",
+                          mainSite: "",
+                          subSite: "",
+                          groupId: "",
+                        }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="reg-courseProgram"
+                        className={selectTriggerClass}
+                        aria-required="true"
+                      >
+                        <SelectValue placeholder="اختر نوع البرنامج..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {courseAvailablePrograms.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
+              )}
 
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="reg-subSite"
-                    className="font-bold text-foreground"
-                  >
-                    الموقع الفرعي{" "}
-                    {subSiteOptions.length > 0 && <RequiredMark />}
-                  </Label>
-                  <Select
-                    name="subSite"
-                    value={form.subSite}
-                    onValueChange={(v) => updateForm("subSite", v)}
-                    disabled={subSiteOptions.length === 0}
-                  >
-                    <SelectTrigger
-                      id="reg-subSite"
-                      className={selectTriggerClass}
-                      aria-required={subSiteOptions.length > 0}
+              {/* ── Course Term (only if كورسات) ── */}
+              {form.courseProgram === "كورسات" && (
+                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-courseTerm"
+                      className="font-bold text-foreground"
                     >
-                      <SelectValue
-                        placeholder={
-                          subSiteOptions.length === 0
-                            ? "لا توجد مواقع فرعية"
-                            : "اختر الموقع الفرعي..."
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {subSiteOptions.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-muted-foreground">
-                          لا توجد مواقع فرعية لهذا الموقع
-                        </div>
-                      ) : (
-                        subSiteOptions.map((s) => (
+                      الكورس <RequiredMark />
+                    </Label>
+                    <Select
+                      name="courseTerm"
+                      value={form.courseTerm}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          courseTerm: v,
+                          studyType: "",
+                          locationScope: "",
+                          baghdadMode: "",
+                          mainSite: "",
+                          subSite: "",
+                          groupId: "",
+                        }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="reg-courseTerm"
+                        className={selectTriggerClass}
+                        aria-required="true"
+                      >
+                        <SelectValue placeholder="اختر الكورس..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COURSE_TERMS.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Study Type ── */}
+              {form.courseId && courseAvailableStudyTypes.length > 0 && (
+                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-studyType"
+                      className="font-bold text-foreground"
+                    >
+                      نوع الدراسة <RequiredMark />
+                    </Label>
+                    <Select
+                      name="studyType"
+                      value={form.studyType}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          studyType: v,
+                          locationScope: "",
+                          baghdadMode: "",
+                          mainSite: "",
+                          subSite: "",
+                          groupId: "",
+                        }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="reg-studyType"
+                        className={selectTriggerClass}
+                        aria-required="true"
+                      >
+                        <SelectValue placeholder="اختر نوع الدراسة..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {courseAvailableStudyTypes.map((st) => (
+                          <SelectItem key={st} value={st}>
+                            {st}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Location Scope ── */}
+              {form.studyType && courseLocationScopes.length > 0 && (
+                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-locationScope"
+                      className="font-bold text-foreground"
+                    >
+                      الموقع <RequiredMark />
+                    </Label>
+                    <Select
+                      name="locationScope"
+                      value={form.locationScope}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          locationScope: v,
+                          mainSite: v,
+                          subSite: "",
+                        }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="reg-locationScope"
+                        className={selectTriggerClass}
+                        aria-required="true"
+                      >
+                        <SelectValue placeholder="اختر الموقع..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {courseLocationScopes.map((s) => (
                           <SelectItem key={s} value={s}>
                             {s}
                           </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
+                  {/* ── Sub-Site ── */}
+                  {subSiteOptions.length > 0 && (
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="reg-subSite"
+                        className="font-bold text-foreground"
+                      >
+                        الموقع الفرعي <RequiredMark />
+                      </Label>
+                      <Select
+                        name="subSite"
+                        value={form.subSite}
+                        onValueChange={(v) => updateForm("subSite", v)}
+                      >
+                        <SelectTrigger
+                          id="reg-subSite"
+                          className={selectTriggerClass}
+                          aria-required="true"
+                        >
+                          <SelectValue placeholder="اختر الموقع الفرعي..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subSiteOptions.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── عموم بغداد auto-resolved info ── */}
+              {form.locationScope === "بغداد" && courseBaghdadMode === "عموم بغداد" && (
+                <div className="mt-3 flex items-center gap-2 text-xs font-bold text-primary">
+                  <MapPin className="h-3.5 w-3.5" />
+                  تم تحديد الموقع تلقائياً: عموم بغداد
+                </div>
+              )}
+
+              {/* ── Group Selection ── */}
+              <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="space-y-2 md:col-span-2">
                   <Label
                     htmlFor="reg-groupId"

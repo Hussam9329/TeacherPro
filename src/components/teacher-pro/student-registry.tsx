@@ -41,10 +41,11 @@ import {
   toLatinDigits,
 } from "@/lib/format";
 import {
-  PUBLIC_MAIN_SITE_OPTIONS,
-  PRIVATE_BAGHDAD_SUB_SITES,
-  IRAQI_PROVINCES,
-} from "@/lib/iraq";
+  COURSE_PROGRAMS, COURSE_TERMS, STUDY_TYPES,
+  type CourseProgram, type CourseTerm, type StudyType,
+  getAvailablePrograms, getAvailableStudyTypes, getCourseLocationConfig,
+  getBaghdadSites, getProvinceOptions, getLocationScopes, getBaghdadMode,
+} from "@/lib/course-config";
 import {
   getStudentDuplicateMessage,
   isValidAccountingGraceDays,
@@ -68,6 +69,11 @@ type StudentEditForm = {
   parentPhone: string;
   telegram: string;
   courseType: "خاصة" | "عامة";
+  courseProgram: string;
+  courseTerm: string;
+  studyType: string;
+  locationScope: string;
+  baghdadMode: string;
   courseId: string;
   groupId: string;
   mainSite: string;
@@ -88,6 +94,11 @@ const emptyEditForm: StudentEditForm = {
   parentPhone: "",
   telegram: "",
   courseType: "خاصة",
+  courseProgram: "",
+  courseTerm: "",
+  studyType: "",
+  locationScope: "",
+  baghdadMode: "",
   courseId: "",
   groupId: "",
   mainSite: "بغداد",
@@ -109,6 +120,11 @@ function getStudentEditForm(student: Student): StudentEditForm {
     parentPhone: student.parentPhone,
     telegram: sanitizeTelegramInput(student.telegram),
     courseType: student.courseType,
+    courseProgram: student.courseProgram || "",
+    courseTerm: student.courseTerm || "",
+    studyType: student.studyType || "",
+    locationScope: student.locationScope || "",
+    baghdadMode: student.baghdadMode || "",
     courseId: student.courseId,
     groupId: student.groupId,
     mainSite: student.mainSite || "بغداد",
@@ -213,9 +229,8 @@ export function StudentRegistryView() {
   const editIsPrivate = editDialog.form.courseType === "خاصة";
 
   const editFilteredCourses = useMemo(
-    () =>
-      courses.filter((c) => c.type === editDialog.form.courseType && c.active),
-    [courses, editDialog.form.courseType],
+    () => courses.filter((c) => c.active),
+    [courses],
   );
 
   const editFilteredGroups = useMemo(
@@ -224,50 +239,103 @@ export function StudentRegistryView() {
     [groups, editDialog.form.courseId],
   );
 
-  const editMainSiteOptions = useMemo(() => {
-    if (editIsPrivate) return ["بغداد"];
-    return [...PUBLIC_MAIN_SITE_OPTIONS];
-  }, [editIsPrivate]);
+  const editSelectedCourse = useMemo(
+    () => courses.find((c) => c.id === editDialog.form.courseId),
+    [courses, editDialog.form.courseId],
+  );
+
+  const editAvailablePrograms = useMemo(
+    () => (editSelectedCourse ? getAvailablePrograms(editSelectedCourse) : []),
+    [editSelectedCourse],
+  );
+
+  const editAvailableStudyTypes = useMemo(
+    () => (editSelectedCourse ? getAvailableStudyTypes(editSelectedCourse) : []),
+    [editSelectedCourse],
+  );
+
+  const editLocationScopes = useMemo(
+    () => (editSelectedCourse && editDialog.form.studyType ? getLocationScopes(editSelectedCourse, editDialog.form.studyType) : []),
+    [editSelectedCourse, editDialog.form.studyType],
+  );
+
+  const editBaghdadMode = useMemo(
+    () => (editSelectedCourse && editDialog.form.studyType ? getBaghdadMode(editSelectedCourse, editDialog.form.studyType) : undefined),
+    [editSelectedCourse, editDialog.form.studyType],
+  );
+
+  const editBaghdadSites = useMemo(
+    () => (editSelectedCourse && editDialog.form.studyType ? getBaghdadSites(editSelectedCourse, editDialog.form.studyType) : []),
+    [editSelectedCourse, editDialog.form.studyType],
+  );
+
+  const editProvinces = useMemo(
+    () => (editSelectedCourse && editDialog.form.studyType ? getProvinceOptions(editSelectedCourse, editDialog.form.studyType) : []),
+    [editSelectedCourse, editDialog.form.studyType],
+  );
 
   const editSubSiteOptions = useMemo<string[]>(() => {
-    // خاصة + بغداد → المنصور، زيونة، البنوك
-    if (editIsPrivate && editDialog.form.mainSite === "بغداد")
-      return [...PRIVATE_BAGHDAD_SUB_SITES];
-    // عامة + بغداد → لا مواقع فرعية
-    if (!editIsPrivate && editDialog.form.mainSite === "بغداد") return [];
-    // عامة + محافظات → المحافظات الـ17
-    if (!editIsPrivate && editDialog.form.mainSite === "محافظات")
-      return [...IRAQI_PROVINCES];
+    if (!editSelectedCourse || !editDialog.form.studyType) return [];
+    if (editDialog.form.locationScope === "بغداد") {
+      if (editBaghdadMode === "عموم بغداد") return [];
+      if (editBaghdadMode === "بغداد - مخصص") return editBaghdadSites;
+    }
+    if (editDialog.form.locationScope === "محافظات") return editProvinces;
     return [];
-  }, [editIsPrivate, editDialog.form.mainSite]);
+  }, [editSelectedCourse, editDialog.form.studyType, editDialog.form.locationScope, editBaghdadMode, editBaghdadSites, editProvinces]);
 
   const editTotalAmount = Number(editDialog.form.totalAmount || 0);
   const editPaidAmount = Number(editDialog.form.paidAmount || 0);
   const editRemainingAmount = Math.max(editTotalAmount - editPaidAmount, 0);
 
+  // Reset dependent fields when course or studyType changes
   useEffect(() => {
     if (!editDialog.open) return;
-    let nextPatch: Partial<StudentEditForm> | null = null;
-    if (!editMainSiteOptions.includes(editDialog.form.mainSite)) {
-      nextPatch = { mainSite: editMainSiteOptions[0] || "", subSite: "" };
-    } else if (editSubSiteOptions.length === 0 && editDialog.form.subSite) {
-      nextPatch = { subSite: "" };
-    } else if (
-      editSubSiteOptions.length > 0 &&
-      !editSubSiteOptions.includes(editDialog.form.subSite)
-    ) {
-      nextPatch = { subSite: "" };
+    const patch: Partial<StudentEditForm> = {};
+    let needsPatch = false;
+
+    // Auto-select courseProgram if only one option
+    if (editAvailablePrograms.length === 1 && !editDialog.form.courseProgram) {
+      patch.courseProgram = editAvailablePrograms[0];
+      needsPatch = true;
     }
-    if (!nextPatch) return;
-    const patch = nextPatch;
+
+    // Auto-set baghdadMode from course config
+    if (editBaghdadMode && !editDialog.form.baghdadMode) {
+      patch.baghdadMode = editBaghdadMode;
+      needsPatch = true;
+    }
+
+    // Auto-resolve subSite for عموم بغداد
+    if (editDialog.form.locationScope === "بغداد" && editBaghdadMode === "عموم بغداد" && editDialog.form.subSite !== "عموم بغداد") {
+      patch.subSite = "عموم بغداد";
+      needsPatch = true;
+    }
+
+    // Reset subSite if not in options
+    if (editSubSiteOptions.length > 0 && editDialog.form.subSite && !editSubSiteOptions.includes(editDialog.form.subSite) && !(editDialog.form.locationScope === "بغداد" && editBaghdadMode === "عموم بغداد")) {
+      patch.subSite = "";
+      needsPatch = true;
+    }
+
+    // Clear subSite if no options available
+    if (editSubSiteOptions.length === 0 && editDialog.form.subSite && editDialog.form.subSite !== "عموم بغداد") {
+      patch.subSite = "";
+      needsPatch = true;
+    }
+
+    if (!needsPatch) return;
     queueMicrotask(() => {
       setEditDialog((prev) => ({ ...prev, form: { ...prev.form, ...patch } }));
     });
   }, [
     editDialog.open,
-    editDialog.form.mainSite,
+    editDialog.form.courseProgram,
+    editDialog.form.studyType,
+    editDialog.form.locationScope,
     editDialog.form.subSite,
-    editMainSiteOptions,
+    editAvailablePrograms,
+    editBaghdadMode,
     editSubSiteOptions,
   ]);
 
@@ -322,15 +390,8 @@ export function StudentRegistryView() {
       [
         Boolean(form.courseId),
         editFilteredCourses.length === 0
-          ? "لا توجد دورات مسجلة لهذا النوع"
+          ? "لا توجد دورات مسجلة"
           : "يرجى اختيار الدورة",
-      ],
-      [Boolean(form.mainSite), "الموقع الرئيسي مطلوب"],
-      [
-        editSubSiteOptions.length === 0 || Boolean(form.subSite),
-        editSubSiteOptions.length === 0
-          ? "لا توجد مناطق فرعية لهذا الموقع"
-          : "الموقع الفرعي مطلوب",
       ],
       [
         Boolean(form.groupId),
@@ -353,6 +414,23 @@ export function StudentRegistryView() {
 
     const missing = requiredChecks.find(([ok]) => !ok);
     if (missing) return missing[1];
+
+    // Course settings-based validation
+    if (editAvailablePrograms.length > 1 && !form.courseProgram) {
+      return "يرجى اختيار نوع الدورة (منهج كامل/كورسات)";
+    }
+    if (form.courseProgram === "كورسات" && !form.courseTerm) {
+      return "يرجى اختيار الكورس";
+    }
+    if (editAvailableStudyTypes.length > 0 && !form.studyType) {
+      return "يرجى اختيار نوع الدراسة";
+    }
+    if (editLocationScopes.length > 0 && !form.locationScope) {
+      return "يرجى اختيار الموقع";
+    }
+    if (editSubSiteOptions.length > 0 && !form.subSite) {
+      return "يرجى اختيار الموقع الفرعي";
+    }
 
     const nameError = getRequiredTextError(form.name, "اسم الطالب");
     if (nameError) return nameError;
@@ -407,10 +485,15 @@ export function StudentRegistryView() {
       parentPhone: form.parentPhone.trim(),
       telegram: sanitizeTelegramInput(form.telegram),
       courseType: form.courseType,
+      courseProgram: form.courseProgram || (editAvailablePrograms.length === 1 ? editAvailablePrograms[0] : ""),
+      courseTerm: form.courseProgram === "كورسات" ? form.courseTerm : "",
+      studyType: form.studyType,
+      locationScope: form.locationScope,
+      baghdadMode: form.baghdadMode || (editBaghdadMode || ""),
       courseId: form.courseId,
       groupId: form.groupId,
-      mainSite: form.mainSite,
-      subSite: form.subSite,
+      mainSite: form.locationScope || form.mainSite,
+      subSite: form.subSite || (editBaghdadMode === "عموم بغداد" ? "عموم بغداد" : ""),
       receiptNo: form.courseType === "خاصة" ? form.receiptNo.trim() : "",
       codeSequence: form.courseType === "خاصة" ? form.codeSequence.trim() : "",
       totalAmount:
@@ -449,7 +532,7 @@ export function StudentRegistryView() {
 
   const handleDeleteConfirm = runDeleteStudentLocked(async () => {
     const ok = deleteStudent(deleteDialog.id);
-    ok ? toast.success("تم حذف الطالب") : toast.error("تعذر حذف الطالب");
+    if (ok) { toast.success("تم حذف الطالب"); } else { toast.error("تعذر حذف الطالب"); }
     setDeleteDialog({ open: false, id: "", studentName: "" });
   });
 
@@ -514,6 +597,10 @@ export function StudentRegistryView() {
       "الجنس",
       "نوع الدورة",
       "الدورة",
+      "نوع البرنامج",
+      "الكورس",
+      "نوع الدراسة",
+      "نطاق الموقع",
       "الموقع",
       "الحالة",
       "الفرص",
@@ -531,6 +618,10 @@ export function StudentRegistryView() {
       الجنس: s.gender,
       "نوع الدورة": s.courseType,
       الدورة: courseName(s.courseId),
+      "نوع البرنامج": s.courseProgram || "",
+      "الكورس": s.courseTerm || "",
+      "نوع الدراسة": s.studyType || "",
+      "نطاق الموقع": s.locationScope || "",
       الموقع: `${s.mainSite} - ${s.subSite}`,
       الحالة: s.status,
       الفرص: String(s.opportunities),
@@ -845,6 +936,20 @@ export function StudentRegistryView() {
                   </p>
                 </div>
                 <div>
+                  <span className="text-muted-foreground text-xs">نوع الدورة</span>
+                  <p className="font-medium text-xs">
+                    {student.courseProgram 
+                      ? student.courseProgram === "كورسات" 
+                        ? `كورسات - ${student.courseTerm}` 
+                        : student.courseProgram
+                      : student.courseType}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-xs">نوع الدراسة</span>
+                  <p className="font-medium text-xs">{student.studyType || "-"}</p>
+                </div>
+                <div>
                   <span className="text-muted-foreground text-xs">المجموعة الإلكترونية</span>
                   <p className="font-medium text-xs">
                     {groupName(student.groupId)}
@@ -853,7 +958,9 @@ export function StudentRegistryView() {
                 <div>
                   <span className="text-muted-foreground text-xs">الموقع</span>
                   <p className="font-medium text-xs">
-                    {student.mainSite} - {student.subSite}
+                    {student.locationScope 
+                      ? `${student.locationScope} - ${student.subSite}`
+                      : `${student.mainSite} - ${student.subSite}`}
                   </p>
                 </div>
                 <div>
@@ -1108,6 +1215,11 @@ export function StudentRegistryView() {
                       courseType: v as "خاصة" | "عامة",
                       courseId: "",
                       groupId: "",
+                      courseProgram: "",
+                      courseTerm: "",
+                      studyType: "",
+                      locationScope: "",
+                      baghdadMode: "",
                       mainSite: "بغداد",
                       subSite: "",
                       receiptNo: v === "خاصة" ? prev.form.receiptNo : "",
@@ -1139,6 +1251,12 @@ export function StudentRegistryView() {
                       ...prev.form,
                       courseId: v,
                       groupId: "",
+                      courseProgram: "",
+                      courseTerm: "",
+                      studyType: "",
+                      locationScope: "",
+                      baghdadMode: "",
+                      mainSite: "",
                       subSite: "",
                     },
                   }))
@@ -1157,7 +1275,7 @@ export function StudentRegistryView() {
                 <SelectContent>
                   {editFilteredCourses.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-muted-foreground">
-                      لا توجد دورات مسجلة لهذا النوع
+                      لا توجد دورات مسجلة
                     </div>
                   ) : (
                     editFilteredCourses.map((c) => (
@@ -1169,67 +1287,148 @@ export function StudentRegistryView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-mainSite">الموقع الرئيسي</Label>
-              <Select
-                name="mainSite"
-                value={editDialog.form.mainSite}
-                onValueChange={(v) =>
-                  setEditDialog((prev) => ({
-                    ...prev,
-                    form: { ...prev.form, mainSite: v, subSite: "" },
-                  }))
-                }
-                disabled={editIsPrivate}
-              >
-                <SelectTrigger id="edit-mainSite">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {editMainSiteOptions.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-subSite">الموقع الفرعي</Label>
-              <Select
-                name="subSite"
-                value={editDialog.form.subSite}
-                onValueChange={(v) => updateEditForm("subSite", v)}
-                disabled={editSubSiteOptions.length === 0}
-              >
-                <SelectTrigger id="edit-subSite">
-                  <SelectValue
-                    placeholder={
-                      editSubSiteOptions.length === 0
-                        ? editIsPrivate
-                          ? "بغداد فقط - لا مواقع فرعية"
-                          : editDialog.form.mainSite === "بغداد"
-                            ? "بغداد فقط - لا مواقع فرعية"
-                            : "اختر المحافظة"
-                        : "اختر الموقع الفرعي"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {editSubSiteOptions.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">
-                      لا توجد مناطق فرعية
-                    </div>
-                  ) : (
-                    editSubSiteOptions.map((s) => (
+            {editDialog.form.courseId && editAvailablePrograms.length > 1 && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-courseProgram">نوع البرنامج</Label>
+                <Select
+                  name="courseProgram"
+                  value={editDialog.form.courseProgram}
+                  onValueChange={(v) =>
+                    setEditDialog((prev) => ({
+                      ...prev,
+                      form: {
+                        ...prev.form,
+                        courseProgram: v,
+                        courseTerm: v === "كورسات" ? prev.form.courseTerm : "",
+                        studyType: "",
+                        locationScope: "",
+                        baghdadMode: "",
+                        mainSite: "",
+                        subSite: "",
+                        groupId: "",
+                      },
+                    }))
+                  }
+                >
+                  <SelectTrigger id="edit-courseProgram">
+                    <SelectValue placeholder="اختر نوع البرنامج..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {editAvailablePrograms.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {editDialog.form.courseProgram === "كورسات" && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-courseTerm">الكورس</Label>
+                <Select
+                  name="courseTerm"
+                  value={editDialog.form.courseTerm}
+                  onValueChange={(v) => updateEditForm("courseTerm", v)}
+                >
+                  <SelectTrigger id="edit-courseTerm">
+                    <SelectValue placeholder="اختر الكورس..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COURSE_TERMS.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {editDialog.form.courseId && editAvailableStudyTypes.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-studyType">نوع الدراسة</Label>
+                <Select
+                  name="studyType"
+                  value={editDialog.form.studyType}
+                  onValueChange={(v) =>
+                    setEditDialog((prev) => ({
+                      ...prev,
+                      form: {
+                        ...prev.form,
+                        studyType: v,
+                        locationScope: "",
+                        baghdadMode: "",
+                        mainSite: "",
+                        subSite: "",
+                      },
+                    }))
+                  }
+                >
+                  <SelectTrigger id="edit-studyType">
+                    <SelectValue placeholder="اختر نوع الدراسة..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {editAvailableStudyTypes.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {editDialog.form.studyType && editLocationScopes.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-locationScope">الموقع</Label>
+                <Select
+                  name="locationScope"
+                  value={editDialog.form.locationScope}
+                  onValueChange={(v) =>
+                    setEditDialog((prev) => ({
+                      ...prev,
+                      form: {
+                        ...prev.form,
+                        locationScope: v,
+                        mainSite: v,
+                        subSite: "",
+                      },
+                    }))
+                  }
+                >
+                  <SelectTrigger id="edit-locationScope">
+                    <SelectValue placeholder="اختر الموقع..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {editLocationScopes.map((s) => (
                       <SelectItem key={s} value={s}>
                         {s}
                       </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {editDialog.form.locationScope && editSubSiteOptions.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="edit-subSite">الموقع الفرعي</Label>
+                <Select
+                  name="subSite"
+                  value={editDialog.form.subSite}
+                  onValueChange={(v) => updateEditForm("subSite", v)}
+                >
+                  <SelectTrigger id="edit-subSite">
+                    <SelectValue placeholder="اختر الموقع الفرعي..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {editSubSiteOptions.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="edit-groupId">المجموعة الإلكترونية</Label>
               <Select

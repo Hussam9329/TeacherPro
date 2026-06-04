@@ -9,6 +9,12 @@ import {
   loadAllFromServer, type ServerData,
 } from './api';
 import { getStudentDuplicateMessage, sanitizeTelegramInput } from './student-utils';
+import {
+  type CourseLocationConfig,
+  parseJsonArray,
+  parseJsonRecord,
+  stringifyJson,
+} from './course-config';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -18,6 +24,9 @@ export interface Course {
   type: 'خاصة' | 'عامة';
   createdAt: string;
   active: boolean;
+  availablePrograms: string[];
+  availableStudyTypes: string[];
+  locationConfig: CourseLocationConfig;
 }
 
 export interface Group {
@@ -72,6 +81,11 @@ export interface Student {
   parentPhone: string;
   telegram: string;
   courseType: 'خاصة' | 'عامة';
+  courseProgram: 'منهج كامل' | 'كورسات' | '';
+  courseTerm: 'الكورس الأول' | 'الكورس الثاني' | '';
+  studyType: 'إلكتروني' | 'حضوري' | 'مدمج' | '';
+  locationScope: 'بغداد' | 'محافظات' | '';
+  baghdadMode: 'عموم بغداد' | 'بغداد - مخصص' | '';
   courseId: string;
   groupId: string;
   mainSite: string;
@@ -275,9 +289,7 @@ export interface DemoCopy {
 
 export type SectionId =
   | 'dashboard'
-  | 'course-new'
-  | 'group-new'
-  | 'site-management'
+  | 'courses'
   | 'chapters'
   | 'student-register'
   | 'student-registry'
@@ -366,9 +378,7 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
 
 export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'dashboard': 'system.dashboard',
-  'course-new': 'courses.add',
-  'group-new': 'groups.add',
-  'site-management': 'sites.view',
+  'courses': 'courses.add',
   'chapters': 'chapters.view',
   'student-register': 'students.add',
   'student-registry': 'students.view',
@@ -545,8 +555,8 @@ interface TeacherState {
   activeChapterForCourse: (courseId: string) => Chapter | null;
   classification: (grade: Grade | undefined, exam: Exam) => { text: string; type: string; kind: string };
 
-  addCourse: (name: string, type: 'خاصة' | 'عامة') => void;
-  updateCourse: (id: string, updates: Partial<Omit<Course, 'id' | 'createdAt'>>) => void;
+  addCourse: (course: Omit<Course, 'id' | 'createdAt' | 'active'>) => void;
+  updateCourse: (id: string, updates: Partial<Omit<Course, 'id' | 'createdAt'>>) => { ok: boolean; message: string };
   toggleCourse: (id: string) => void;
   deleteCourse: (id: string) => boolean;
 
@@ -662,11 +672,11 @@ function firstAvailableSection(user: User | undefined, roles: Role[]): SectionId
 // ─── Default Courses ─────────────────────────────────────────────────────────
 
 const DEFAULT_COURSES: Course[] = [
-  { id: 'c_batch27_k1_elec', name: 'دفعة 2027 - الكورس الأول - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true },
-  { id: 'c_batch27_full_elec', name: 'دفعة 2027 - منهج كامل - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true },
-  { id: 'c_batch27_k1_att', name: 'دفعة 2027 - الكورس الأول - امتحان حضوري', type: 'عامة', createdAt: '2026-06-01', active: true },
-  { id: 'c_batch27_full_att', name: 'دفعة 2027 - منهج كامل - امتحان حضوري', type: 'عامة', createdAt: '2026-06-01', active: true },
-  { id: 'c_batch27_exempt_elec', name: 'دفعة 2027 - منهج كامل (طلاب الإعفاء) - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true },
+  { id: 'c_batch27_k1_elec', name: 'دفعة 2027 - الكورس الأول - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true, availablePrograms: ['منهج كامل'], availableStudyTypes: ['إلكتروني'], locationConfig: { 'إلكتروني': { scopes: ['بغداد', 'محافظات'], baghdadMode: 'عموم بغداد', baghdadSites: [], provinces: [] } } },
+  { id: 'c_batch27_full_elec', name: 'دفعة 2027 - منهج كامل - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true, availablePrograms: ['منهج كامل'], availableStudyTypes: ['إلكتروني'], locationConfig: { 'إلكتروني': { scopes: ['بغداد', 'محافظات'], baghdadMode: 'عموم بغداد', baghdadSites: [], provinces: [] } } },
+  { id: 'c_batch27_k1_att', name: 'دفعة 2027 - الكورس الأول - امتحان حضوري', type: 'عامة', createdAt: '2026-06-01', active: true, availablePrograms: ['منهج كامل'], availableStudyTypes: ['إلكتروني'], locationConfig: { 'إلكتروني': { scopes: ['بغداد', 'محافظات'], baghdadMode: 'عموم بغداد', baghdadSites: [], provinces: [] } } },
+  { id: 'c_batch27_full_att', name: 'دفعة 2027 - منهج كامل - امتحان حضوري', type: 'عامة', createdAt: '2026-06-01', active: true, availablePrograms: ['منهج كامل'], availableStudyTypes: ['إلكتروني'], locationConfig: { 'إلكتروني': { scopes: ['بغداد', 'محافظات'], baghdadMode: 'عموم بغداد', baghdadSites: [], provinces: [] } } },
+  { id: 'c_batch27_exempt_elec', name: 'دفعة 2027 - منهج كامل (طلاب الإعفاء) - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true, availablePrograms: ['منهج كامل'], availableStudyTypes: ['إلكتروني'], locationConfig: { 'إلكتروني': { scopes: ['بغداد', 'محافظات'], baghdadMode: 'عموم بغداد', baghdadSites: [], provinces: [] } } },
 ];
 
 function seedData() {
@@ -969,6 +979,9 @@ export const useTeacherStore = create<TeacherState>()(
             ...c,
             createdAt: c.createdAt ? String(c.createdAt).slice(0, 10) : todayISO(),
             active: c.active !== undefined ? Boolean(c.active) : true,
+            availablePrograms: parseJsonArray<string>(c.availablePrograms),
+            availableStudyTypes: parseJsonArray<string>(c.availableStudyTypes),
+            locationConfig: parseJsonRecord<CourseLocationConfig>(c.locationConfig, {}),
           })) as Course[];
           const courses = mergeDefaultCourses(serverCourses);
 
@@ -999,6 +1012,11 @@ export const useTeacherStore = create<TeacherState>()(
             installments: parseArrayField<Installment>(st.installments),
             accountingStart: st.accountingStart === null || st.accountingStart === undefined ? '' : String(st.accountingStart),
             createdAt: st.createdAt ? String(st.createdAt).slice(0, 10) : todayISO(),
+            courseProgram: String(st.courseProgram || ''),
+            courseTerm: String(st.courseTerm || ''),
+            studyType: String(st.studyType || ''),
+            locationScope: String(st.locationScope || ''),
+            baghdadMode: String(st.baghdadMode || ''),
           })) as Student[];
 
           const exams = (serverData.exams || []).map((ex: Record<string, unknown>) => ({
@@ -1258,16 +1276,45 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => logApi.add({ ...log, userName: user, userId: currentUser?.id }));
       },
 
-      addCourse: (name, type) => {
-        const course: Course = { id: uid('c'), name, type, createdAt: todayISO(), active: true };
-        set((s) => ({ courses: [...s.courses, course] }));
-        get().logAction('الدورات', 'إضافة دورة', name);
-        syncToServer(get, () => courseApi.add(course));
+      addCourse: (courseInput) => {
+        const nextCourse: Course = {
+          id: uid('c'),
+          createdAt: todayISO(),
+          active: true,
+          ...courseInput,
+        };
+        set((s) => ({ courses: [...s.courses, nextCourse] }));
+        get().logAction('الدورات', 'إضافة دورة', nextCourse.name);
+        syncToServer(get, () => courseApi.add(nextCourse));
       },
       updateCourse: (id, updates) => {
+        const course = get().courses.find(c => c.id === id);
+        if (!course) return { ok: false, message: 'الدورة غير موجودة' };
+
+        // Check if removing options used by students
+        if (updates.availablePrograms || updates.availableStudyTypes || updates.locationConfig) {
+          const courseStudents = get().students.filter(s => s.courseId === id);
+
+          for (const student of courseStudents) {
+            // Check courseProgram
+            if (student.courseProgram && updates.availablePrograms) {
+              if (!updates.availablePrograms.includes(student.courseProgram)) {
+                return { ok: false, message: `لا يمكن إزالة "${student.courseProgram}" لأنه مستخدم من طلاب مسجلين` };
+              }
+            }
+            // Check studyType
+            if (student.studyType && updates.availableStudyTypes) {
+              if (!updates.availableStudyTypes.includes(student.studyType)) {
+                return { ok: false, message: `لا يمكن إزالة "${student.studyType}" لأنه مستخدم من طلاب مسجلين` };
+              }
+            }
+          }
+        }
+
         set((s) => ({ courses: s.courses.map((c) => c.id === id ? { ...c, ...updates } : c) }));
         get().logAction('الدورات', 'تعديل دورة', get().courseName(id));
         syncToServer(get, () => courseApi.update(id, updates as Record<string, unknown>));
+        return { ok: true, message: '' };
       },
       toggleCourse: (id) => {
         const course = get().courses.find((c) => c.id === id);

@@ -9,6 +9,14 @@ import {
 } from "@/lib/student-utils";
 import { getRequiredTextError } from "@/lib/validation";
 import { normalizeArabicText } from "@/lib/route-helpers";
+import {
+  parseJsonArray,
+  parseJsonRecord,
+  type CourseLocationConfig,
+  type StudyType,
+  validateStudentCourseChoices,
+  resolveSubSite,
+} from '@/lib/course-config';
 
 
 function getPrismaStudentErrorResponse(error: unknown) {
@@ -145,6 +153,29 @@ export async function POST(req: NextRequest) {
     telegram: body.telegram,
   });
 
+  // Validate student course choices against course settings
+  const course = await db.course.findUnique({ where: { id: String(body.courseId ?? '') } });
+  if (!course) {
+    return NextResponse.json({ error: 'الدورة المحددة غير موجودة' }, { status: 400 });
+  }
+
+  const courseChoices = {
+    courseProgram: body.courseProgram,
+    courseTerm: body.courseProgram === 'كورسات' ? body.courseTerm : null,
+    studyType: body.studyType,
+    locationScope: body.locationScope,
+    baghdadMode: body.baghdadMode,
+    subSite: body.subSite,
+  };
+
+  const choiceValidation = validateStudentCourseChoices(course, courseChoices);
+  if (!choiceValidation.ok) {
+    return NextResponse.json({ error: choiceValidation.error }, { status: 400 });
+  }
+
+  // Auto-resolve subSite based on course settings
+  const resolvedSubSite = resolveSubSite(course, String(body.studyType ?? ''), String(body.locationScope ?? ''), String(body.baghdadMode ?? ''), String(body.subSite ?? ''));
+
   try {
     const student = await db.student.create({
       data: {
@@ -156,8 +187,13 @@ export async function POST(req: NextRequest) {
       parentPhone: sanitizePhoneInput(String(body.parentPhone ?? "")),
       telegram: sanitizeTelegramInput(String(body.telegram ?? "")),
       courseType: body.courseType,
-      mainSite: body.mainSite,
-      subSite: body.subSite,
+      courseProgram: body.courseProgram || null,
+      courseTerm: body.courseProgram === 'كورسات' ? (body.courseTerm || null) : null,
+      studyType: body.studyType || null,
+      locationScope: body.locationScope || null,
+      baghdadMode: body.baghdadMode || null,
+      mainSite: body.locationScope || body.mainSite,
+      subSite: resolvedSubSite || body.subSite,
       receiptNo: body.receiptNo,
       codeSequence: body.codeSequence,
       code: body.code,
@@ -277,6 +313,49 @@ export async function PUT(req: NextRequest) {
     data.opportunities = Number(data.opportunities);
   if (data.baseOpportunities !== undefined)
     data.baseOpportunities = Number(data.baseOpportunities);
+
+  // If course-related fields are being updated, validate against course settings
+  if (data.courseProgram !== undefined || data.studyType !== undefined || 
+      data.locationScope !== undefined || data.baghdadMode !== undefined || 
+      data.courseId !== undefined) {
+    const targetCourseId = data.courseId !== undefined ? data.courseId : 
+      (await db.student.findUnique({ where: { id }, select: { courseId: true } }))?.courseId;
+    
+    if (targetCourseId) {
+      const course = await db.course.findUnique({ where: { id: targetCourseId } });
+      if (course) {
+        const current = await db.student.findUnique({ where: { id }, select: { 
+          courseProgram: true, courseTerm: true, studyType: true, 
+          locationScope: true, baghdadMode: true, subSite: true 
+        }});
+        
+        const courseChoices = {
+          courseProgram: data.courseProgram ?? current?.courseProgram,
+          courseTerm: data.courseProgram === 'كورسات' ? (data.courseTerm ?? current?.courseTerm) : null,
+          studyType: data.studyType ?? current?.studyType,
+          locationScope: data.locationScope ?? current?.locationScope,
+          baghdadMode: data.baghdadMode ?? current?.baghdadMode,
+          subSite: data.subSite ?? current?.subSite,
+        };
+        
+        const choiceValidation = validateStudentCourseChoices(course, courseChoices);
+        if (!choiceValidation.ok) {
+          return NextResponse.json({ error: choiceValidation.error }, { status: 400 });
+        }
+        
+        // Auto-resolve subSite
+        const resolvedSubSite = resolveSubSite(
+          course, 
+          String(courseChoices.studyType ?? ''), 
+          String(courseChoices.locationScope ?? ''), 
+          String(courseChoices.baghdadMode ?? ''), 
+          String(courseChoices.subSite ?? '')
+        );
+        if (resolvedSubSite) data.subSite = resolvedSubSite;
+      }
+    }
+  }
+
   try {
     const student = await db.student.update({ where: { id }, data });
     return NextResponse.json({ student });

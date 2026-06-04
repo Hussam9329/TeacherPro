@@ -26,5 +26,8 @@ export const PUBLIC_MAIN_SITE_OPTIONS = ['بغداد', 'محافظات'] as cons
 /** المناطق الفرعية للدورة الخاصة في بغداد */
 export const PRIVATE_BAGHDAD_SUB_SITES = ['المنصور', 'زيونة', 'البنوك'] as const;
 
+/** مواقع بغداد المتاحة في إعدادات الدورة (صنع الدورة) */
+export const BAGHDAD_COURSE_SITES = ['المنصور', 'زيونة', 'البنوك'] as const;
+
 /** خيارات الموقع الرئيسي الكاملة (لإدارة المواقع والامتحانات) */
 export const MAIN_SITE_OPTIONS = ['بغداد', ...IRAQI_PROVINCES, 'أونلاين'] as const;

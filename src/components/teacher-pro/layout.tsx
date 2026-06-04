@@ -5,8 +5,6 @@ import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import {
   LayoutDashboard,
   BookOpen,
-  Users,
-  MapPin,
   BookMarked,
   UserPlus,
   ClipboardList,
@@ -62,17 +60,10 @@ const menuItems: {
     icon: LayoutDashboard,
   },
   {
-    id: "course-new",
-    title: "إضافة دورة جديدة",
-    sub: "الدورات",
+    id: "courses",
+    title: "الدورات",
+    sub: "صنع وإدارة",
     icon: BookOpen,
-  },
-  { id: "group-new", title: "إضافة مجموعة إلكترونية جديدة", sub: "المجموعات الإلكترونية", icon: Users },
-  {
-    id: "site-management",
-    title: "إدارة مواقع الطلاب",
-    sub: "المواقع",
-    icon: MapPin,
   },
   { id: "chapters", title: "الفصول والفرص", sub: "الفصول", icon: BookMarked },
   {
@@ -110,7 +101,7 @@ const menuItems: {
 ];
 
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
-  { title: "الدورات", itemIds: ["course-new", "group-new", "site-management"] },
+  { title: "الدورات", itemIds: ["courses"] },
   { title: "الفرص", itemIds: ["chapters", "opportunities"] },
   { title: "الطلاب", itemIds: ["student-register", "student-registry", "accounting"] },
   {
@@ -136,13 +127,15 @@ function readSectionFromLocation(): SectionId | null {
   );
   const hashSection = window.location.hash.replace(/^#/, "");
   const value = querySection || hashSection;
+  // Backward compatibility: redirect old section IDs
+  if (value === 'course-new' || value === 'group-new' || value === 'site-management') {
+    return 'courses' as SectionId;
+  }
   return sectionIds.has(value as SectionId) ? (value as SectionId) : null;
 }
 
 import { DashboardView } from "./dashboard";
 import { CoursesView } from "./courses";
-import { GroupsView } from "./groups";
-import { SitesView } from "./sites";
 import { ChaptersView } from "./chapters";
 import { StudentRegisterView } from "./student-register";
 import { StudentRegistryView } from "./student-registry";
@@ -160,9 +153,7 @@ import { LoadingState } from "./ui-kit";
 
 const sectionComponents: Record<SectionId, React.ComponentType> = {
   dashboard: DashboardView,
-  "course-new": CoursesView,
-  "group-new": GroupsView,
-  "site-management": SitesView,
+  courses: CoursesView,
   chapters: ChaptersView,
   "student-register": StudentRegisterView,
   "student-registry": StudentRegistryView,
