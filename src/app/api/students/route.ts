@@ -79,10 +79,7 @@ export async function POST(req: NextRequest) {
     ["name", "اسم الطالب مطلوب"],
     ["school", "اسم المدرسة مطلوب"],
     ["gender", "الجنس مطلوب"],
-    ["courseType", "نوع الدورة مطلوب"],
     ["courseId", "الدورة مطلوبة"],
-    ["groupId", "المجموعة الإلكترونية مطلوبة"],
-    ["mainSite", "الموقع الرئيسي مطلوب"],
     ["createdAt", "تاريخ إضافة الطالب مطلوب"],
     ["accountingStart", "فترة السماح مطلوبة"],
   ] as const;
@@ -95,39 +92,6 @@ export async function POST(req: NextRequest) {
   const nameError = getRequiredTextError(String(body.name ?? ""), "اسم الطالب");
   if (nameError)
     return NextResponse.json({ error: nameError }, { status: 400 });
-
-  const requiresSubSite =
-    body.courseType === "خاصة" || body.mainSite === "محافظات";
-  if (requiresSubSite && !String(body.subSite ?? "").trim()) {
-    return NextResponse.json({ error: "الموقع الفرعي مطلوب" }, { status: 400 });
-  }
-
-  if (body.courseType === "خاصة") {
-    if (!String(body.receiptNo ?? "").trim())
-      return NextResponse.json({ error: "رقم الوصل مطلوب" }, { status: 400 });
-    if (!String(body.codeSequence ?? "").trim())
-      return NextResponse.json({ error: "تسلسل الكود مطلوب" }, { status: 400 });
-    if (String(body.totalAmount ?? "").trim() === "")
-      return NextResponse.json(
-        { error: "المبلغ الكلي مطلوب" },
-        { status: 400 },
-      );
-    if (String(body.paidAmount ?? "").trim() === "")
-      return NextResponse.json(
-        { error: "المبلغ المدفوع مطلوب" },
-        { status: 400 },
-      );
-    if (Number(body.paidAmount || 0) > Number(body.totalAmount || 0))
-      return NextResponse.json(
-        { error: "المبلغ المدفوع لا يمكن أن يكون أكبر من المبلغ الكلي" },
-        { status: 400 },
-      );
-    if (!Array.isArray(body.installments) || body.installments.length === 0)
-      return NextResponse.json(
-        { error: "بيانات الدفعة الأولى مطلوبة" },
-        { status: 400 },
-      );
-  }
 
   const duplicateSource = await db.student.findMany({
     select: { id: true, name: true, phone: true, telegram: true },
@@ -186,7 +150,6 @@ export async function POST(req: NextRequest) {
       phone: sanitizePhoneInput(String(body.phone ?? "")),
       parentPhone: sanitizePhoneInput(String(body.parentPhone ?? "")),
       telegram: sanitizeTelegramInput(String(body.telegram ?? "")),
-      courseType: body.courseType,
       courseProgram: body.courseProgram || null,
       courseTerm: body.courseProgram === 'كورسات' ? (body.courseTerm || null) : null,
       studyType: body.studyType || null,

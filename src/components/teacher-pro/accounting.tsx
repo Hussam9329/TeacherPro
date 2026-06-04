@@ -46,10 +46,10 @@ export function AccountingView() {
     date: new Date().toISOString().slice(0, 10),
   });
 
-  const privateStudents = useMemo(() => students.filter((student) => student.courseType === "خاصة"), [students]);
+  const accountingStudents = useMemo(() => students.filter((student) => (student.totalAmount || 0) > 0), [students]);
 
   const filtered = useMemo(() => {
-    return privateStudents.filter((student) => {
+    return accountingStudents.filter((student) => {
       const remaining = Math.max((student.totalAmount || 0) - (student.paidAmount || 0), 0);
       if (search && !searchAny(search, [student.name, student.code, student.telegram, student.phone, student.parentPhone, student.receiptNo])) return false;
       if (filterCourseId && student.courseId !== filterCourseId) return false;
@@ -126,7 +126,7 @@ export function AccountingView() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle>الأقساط والمحاسبة للدورات الخاصة</CardTitle></CardHeader>
+        <CardHeader><CardTitle>الأقساط والمحاسبة</CardTitle></CardHeader>
         <CardContent>
           <div className="grid gap-3 md:grid-cols-4">
             <div className="space-y-1">
@@ -137,7 +137,7 @@ export function AccountingView() {
               <Label className="text-xs">الدورة</Label>
               <Select value={filterCourseId || "all"} onValueChange={(value) => setFilterCourseId(value === "all" ? "" : value)}>
                 <SelectTrigger><SelectValue placeholder="الكل" /></SelectTrigger>
-                <SelectContent><SelectItem value="all">الكل</SelectItem>{courses.filter((course) => course.type === "خاصة").map((course) => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent>
+                <SelectContent><SelectItem value="all">الكل</SelectItem>{courses.map((course) => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1">

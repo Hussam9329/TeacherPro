@@ -227,7 +227,7 @@ export function ExamNewView() {
                 {course.name}
               </Label>
               <Badge variant={eligible ? "outline" : "destructive"} className="text-[10px]">
-                {eligible ? course.type : "لم يتم اختيار فصل"}
+                {eligible ? (course.availablePrograms?.join('، ') || '—') : "لم يتم اختيار فصل"}
               </Badge>
             </div>
           );

@@ -346,12 +346,8 @@ export function ChaptersView() {
                   >
                     <div className="flex items-center justify-between mb-3">
                       <p className="font-bold">{course.name}</p>
-                      <Badge
-                        variant={
-                          course.type === "خاصة" ? "default" : "secondary"
-                        }
-                      >
-                        {course.type}
+                      <Badge variant="secondary">
+                        {course.availablePrograms?.join('، ') || '—'}
                       </Badge>
                     </div>
                     {linked.length === 0 ? (

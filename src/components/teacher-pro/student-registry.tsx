@@ -68,7 +68,6 @@ type StudentEditForm = {
   phone: string;
   parentPhone: string;
   telegram: string;
-  courseType: "خاصة" | "عامة";
   courseProgram: string;
   courseTerm: string;
   studyType: string;
@@ -76,7 +75,6 @@ type StudentEditForm = {
   baghdadMode: string;
   courseId: string;
   groupId: string;
-  mainSite: string;
   subSite: string;
   receiptNo: string;
   codeSequence: string;
@@ -93,7 +91,6 @@ const emptyEditForm: StudentEditForm = {
   phone: "",
   parentPhone: "",
   telegram: "",
-  courseType: "خاصة",
   courseProgram: "",
   courseTerm: "",
   studyType: "",
@@ -101,7 +98,6 @@ const emptyEditForm: StudentEditForm = {
   baghdadMode: "",
   courseId: "",
   groupId: "",
-  mainSite: "بغداد",
   subSite: "",
   receiptNo: "",
   codeSequence: "",
@@ -119,7 +115,6 @@ function getStudentEditForm(student: Student): StudentEditForm {
     phone: student.phone,
     parentPhone: student.parentPhone,
     telegram: sanitizeTelegramInput(student.telegram),
-    courseType: student.courseType,
     courseProgram: student.courseProgram || "",
     courseTerm: student.courseTerm || "",
     studyType: student.studyType || "",
@@ -127,7 +122,6 @@ function getStudentEditForm(student: Student): StudentEditForm {
     baghdadMode: student.baghdadMode || "",
     courseId: student.courseId,
     groupId: student.groupId,
-    mainSite: student.mainSite || "بغداد",
     subSite: student.subSite || "",
     receiptNo: student.receiptNo || "",
     codeSequence: student.codeSequence || "",
@@ -192,7 +186,6 @@ export function StudentRegistryView() {
   } = useTeacherStore();
 
   const [search, setSearch] = useState("");
-  const [filterCourseType, setFilterCourseType] = useState("");
   const [filterCourseId, setFilterCourseId] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterGender, setFilterGender] = useState("");
@@ -225,8 +218,6 @@ export function StudentRegistryView() {
     useActionLock();
   const { locked: isDeletingStudent, runLocked: runDeleteStudentLocked } =
     useActionLock();
-
-  const editIsPrivate = editDialog.form.courseType === "خاصة";
 
   const editFilteredCourses = useMemo(
     () => courses.filter((c) => c.active),
@@ -386,7 +377,6 @@ export function StudentRegistryView() {
       [Boolean(form.gender), "الجنس مطلوب"],
       [Boolean(form.phone.trim()), "رقم الطالب مطلوب"],
       [Boolean(form.parentPhone.trim()), "رقم ولي الأمر مطلوب"],
-      [Boolean(form.courseType), "نوع الدورة مطلوب"],
       [
         Boolean(form.courseId),
         editFilteredCourses.length === 0
@@ -403,14 +393,12 @@ export function StudentRegistryView() {
       [form.accountingStart.trim() !== "", "فترة السماح مطلوبة"],
     ];
 
-    if (form.courseType === "خاصة") {
-      requiredChecks.push(
-        [Boolean(form.receiptNo.trim()), "رقم الوصل مطلوب"],
-        [Boolean(form.codeSequence.trim()), "تسلسل الكود مطلوب"],
-        [form.totalAmount.trim() !== "", "المبلغ الكلي مطلوب"],
-        [form.paidAmount.trim() !== "", "المبلغ المدفوع مطلوب"],
-      );
-    }
+    requiredChecks.push(
+      [Boolean(form.receiptNo.trim()), "رقم الوصل مطلوب"],
+      [Boolean(form.codeSequence.trim()), "تسلسل الكود مطلوب"],
+      [form.totalAmount.trim() !== "", "المبلغ الكلي مطلوب"],
+      [form.paidAmount.trim() !== "", "المبلغ المدفوع مطلوب"],
+    );
 
     const missing = requiredChecks.find(([ok]) => !ok);
     if (missing) return missing[1];
@@ -447,10 +435,7 @@ export function StudentRegistryView() {
 
     if (!isValidAccountingGraceDays(form.accountingStart))
       return "فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم";
-    if (
-      form.courseType === "خاصة" &&
-      Number(form.paidAmount || 0) > Number(form.totalAmount || 0)
-    )
+    if (Number(form.paidAmount || 0) > Number(form.totalAmount || 0))
       return "المبلغ المدفوع لا يمكن أن يكون أكبر من المبلغ الكلي";
 
     const duplicateMessage = getStudentDuplicateMessage(
@@ -484,7 +469,6 @@ export function StudentRegistryView() {
       phone: form.phone.trim(),
       parentPhone: form.parentPhone.trim(),
       telegram: sanitizeTelegramInput(form.telegram),
-      courseType: form.courseType,
       courseProgram: form.courseProgram || (editAvailablePrograms.length === 1 ? editAvailablePrograms[0] : ""),
       courseTerm: form.courseProgram === "كورسات" ? form.courseTerm : "",
       studyType: form.studyType,
@@ -492,26 +476,22 @@ export function StudentRegistryView() {
       baghdadMode: form.baghdadMode || (editBaghdadMode || ""),
       courseId: form.courseId,
       groupId: form.groupId,
-      mainSite: form.locationScope || form.mainSite,
+      mainSite: form.locationScope,
       subSite: form.subSite || (editBaghdadMode === "عموم بغداد" ? "عموم بغداد" : ""),
-      receiptNo: form.courseType === "خاصة" ? form.receiptNo.trim() : "",
-      codeSequence: form.courseType === "خاصة" ? form.codeSequence.trim() : "",
-      totalAmount:
-        form.courseType === "خاصة" ? Number(form.totalAmount) || 0 : 0,
-      paidAmount: form.courseType === "خاصة" ? Number(form.paidAmount) || 0 : 0,
-      installments:
-        form.courseType === "خاصة"
-          ? [
-              {
-                date:
-                  originalStudent?.installments?.[0]?.date ||
-                  new Date().toISOString().slice(0, 10),
-                amount: Number(form.paidAmount) || 0,
-                note:
-                  originalStudent?.installments?.[0]?.note || "دفعة التسجيل",
-              },
-            ]
-          : [],
+      receiptNo: form.receiptNo.trim(),
+      codeSequence: form.codeSequence.trim(),
+      totalAmount: Number(form.totalAmount) || 0,
+      paidAmount: Number(form.paidAmount) || 0,
+      installments: [
+        {
+          date:
+            originalStudent?.installments?.[0]?.date ||
+            new Date().toISOString().slice(0, 10),
+          amount: Number(form.paidAmount) || 0,
+          note:
+            originalStudent?.installments?.[0]?.note || "دفعة التسجيل",
+        },
+      ],
       createdAt: form.createdAt,
       accountingStart: form.accountingStart,
     });
@@ -550,7 +530,6 @@ export function StudentRegistryView() {
         ])
       )
         return false;
-      if (filterCourseType && s.courseType !== filterCourseType) return false;
       if (filterCourseId && s.courseId !== filterCourseId) return false;
       if (filterStatus && s.status !== filterStatus) return false;
       if (filterGender && s.gender !== filterGender) return false;
@@ -560,7 +539,6 @@ export function StudentRegistryView() {
   }, [
     students,
     search,
-    filterCourseType,
     filterCourseId,
     filterStatus,
     filterGender,
@@ -595,7 +573,6 @@ export function StudentRegistryView() {
       "الاسم",
       "المدرسة",
       "الجنس",
-      "نوع الدورة",
       "الدورة",
       "نوع البرنامج",
       "الكورس",
@@ -616,13 +593,12 @@ export function StudentRegistryView() {
       الاسم: s.name,
       المدرسة: s.school || "",
       الجنس: s.gender,
-      "نوع الدورة": s.courseType,
       الدورة: courseName(s.courseId),
       "نوع البرنامج": s.courseProgram || "",
       "الكورس": s.courseTerm || "",
       "نوع الدراسة": s.studyType || "",
       "نطاق الموقع": s.locationScope || "",
-      الموقع: `${s.mainSite} - ${s.subSite}`,
+      الموقع: `${s.locationScope || s.mainSite} - ${s.subSite}`,
       الحالة: s.status,
       الفرص: String(s.opportunities),
       الهاتف: s.phone,
@@ -663,7 +639,6 @@ export function StudentRegistryView() {
 
   const resetFilters = () => {
     setSearch("");
-    setFilterCourseType("");
     setFilterCourseId("");
     setFilterStatus("");
     setFilterGender("");
@@ -675,7 +650,7 @@ export function StudentRegistryView() {
     <div className="space-y-4">
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-7">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             <div className="space-y-1">
               <Label htmlFor="registry-search" className="text-xs">
                 بحث
@@ -691,28 +666,6 @@ export function StudentRegistryView() {
                 }}
                 placeholder="اسم / كود / تليكرام / هاتف"
               />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="registry-courseType" className="text-xs">
-                نوع الدورة
-              </Label>
-              <Select
-                name="courseType"
-                value={filterCourseType}
-                onValueChange={(v) => {
-                  setFilterCourseType(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="registry-courseType">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="خاصة">خاصة</SelectItem>
-                  <SelectItem value="عامة">عامة</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
             <div className="space-y-1">
               <Label htmlFor="registry-course" className="text-xs">
@@ -942,7 +895,7 @@ export function StudentRegistryView() {
                       ? student.courseProgram === "كورسات" 
                         ? `كورسات - ${student.courseTerm}` 
                         : student.courseProgram
-                      : student.courseType}
+                      : "-"}
                   </p>
                 </div>
                 <div>
@@ -958,9 +911,7 @@ export function StudentRegistryView() {
                 <div>
                   <span className="text-muted-foreground text-xs">الموقع</span>
                   <p className="font-medium text-xs">
-                    {student.locationScope 
-                      ? `${student.locationScope} - ${student.subSite}`
-                      : `${student.mainSite} - ${student.subSite}`}
+                    {`${student.locationScope || student.mainSite} - ${student.subSite}`}
                   </p>
                 </div>
                 <div>
@@ -1015,16 +966,14 @@ export function StudentRegistryView() {
                     {student.accountingStart || "0"} يوم
                   </p>
                 </div>
-                {student.courseType === "خاصة" && (
-                  <div>
-                    <span className="text-muted-foreground text-xs">
-                      الأقساط
-                    </span>
-                    <p className="font-medium text-xs">
-                      {student.paidAmount || 0} / {student.totalAmount || 0} د.ع
-                    </p>
-                  </div>
-                )}
+                <div>
+                  <span className="text-muted-foreground text-xs">
+                    الأقساط
+                  </span>
+                  <p className="font-medium text-xs">
+                    {student.paidAmount || 0} / {student.totalAmount || 0} د.ع
+                  </p>
+                </div>
               </div>
 
               {student.status === "مفصول" && (
@@ -1203,43 +1152,6 @@ export function StudentRegistryView() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-courseType">نوع الدورة</Label>
-              <Select
-                name="courseType"
-                value={editDialog.form.courseType}
-                onValueChange={(v) =>
-                  setEditDialog((prev) => ({
-                    ...prev,
-                    form: {
-                      ...prev.form,
-                      courseType: v as "خاصة" | "عامة",
-                      courseId: "",
-                      groupId: "",
-                      courseProgram: "",
-                      courseTerm: "",
-                      studyType: "",
-                      locationScope: "",
-                      baghdadMode: "",
-                      mainSite: "بغداد",
-                      subSite: "",
-                      receiptNo: v === "خاصة" ? prev.form.receiptNo : "",
-                      codeSequence: v === "خاصة" ? prev.form.codeSequence : "",
-                      totalAmount: v === "خاصة" ? prev.form.totalAmount : "",
-                      paidAmount: v === "خاصة" ? prev.form.paidAmount : "",
-                    },
-                  }))
-                }
-              >
-                <SelectTrigger id="edit-courseType">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="خاصة">خاصة</SelectItem>
-                  <SelectItem value="عامة">عامة</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="edit-courseId">اختر الدورة</Label>
               <Select
                 name="courseId"
@@ -1256,7 +1168,6 @@ export function StudentRegistryView() {
                       studyType: "",
                       locationScope: "",
                       baghdadMode: "",
-                      mainSite: "",
                       subSite: "",
                     },
                   }))
@@ -1303,7 +1214,6 @@ export function StudentRegistryView() {
                         studyType: "",
                         locationScope: "",
                         baghdadMode: "",
-                        mainSite: "",
                         subSite: "",
                         groupId: "",
                       },
@@ -1358,7 +1268,6 @@ export function StudentRegistryView() {
                         studyType: v,
                         locationScope: "",
                         baghdadMode: "",
-                        mainSite: "",
                         subSite: "",
                       },
                     }))
@@ -1389,7 +1298,6 @@ export function StudentRegistryView() {
                       form: {
                         ...prev.form,
                         locationScope: v,
-                        mainSite: v,
                         subSite: "",
                       },
                     }))
@@ -1475,9 +1383,7 @@ export function StudentRegistryView() {
                 </SelectContent>
               </Select>
             </div>
-            {editIsPrivate && (
-              <>
-                <div className="space-y-2">
+            <div className="space-y-2">
                   <Label htmlFor="edit-receiptNo">رقم الوصل</Label>
                   <Input
                     id="edit-receiptNo"
@@ -1544,8 +1450,6 @@ export function StudentRegistryView() {
                     className="font-bold text-destructive"
                   />
                 </div>
-              </>
-            )}
             <div className="space-y-2">
               <Label htmlFor="edit-createdAt">تاريخ إضافة الطالب</Label>
               <Input
@@ -1729,7 +1633,7 @@ export function StudentRegistryView() {
                 <div>
                   <span className="text-muted-foreground">الموقع:</span>{" "}
                   <strong>
-                    {fileDialog.student.mainSite} - {fileDialog.student.subSite}
+                    {fileDialog.student.locationScope || fileDialog.student.mainSite} - {fileDialog.student.subSite}
                   </strong>
                 </div>
                 <div>
@@ -1767,19 +1671,16 @@ export function StudentRegistryView() {
                     {fileDialog.student.accountingStart || "0"} يوم
                   </strong>
                 </div>
-                {fileDialog.student.courseType === "خاصة" && (
-                  <div>
+                <div>
                     <span className="text-muted-foreground">الأقساط:</span>{" "}
                     <strong>
                       {fileDialog.student.paidAmount || 0} /{" "}
                       {fileDialog.student.totalAmount || 0} د.ع
                     </strong>
                   </div>
-                )}
               </div>
 
-              {fileDialog.student.courseType === "خاصة" &&
-                fileDialog.student.installments.length > 0 && (
+              {fileDialog.student.installments.length > 0 && (
                   <div>
                     <h4 className="font-semibold mb-2">الأقساط</h4>
                     <div className="space-y-1">

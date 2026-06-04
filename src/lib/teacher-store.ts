@@ -21,7 +21,6 @@ import {
 export interface Course {
   id: string;
   name: string;
-  type: 'خاصة' | 'عامة';
   createdAt: string;
   active: boolean;
   availablePrograms: string[];
@@ -80,7 +79,6 @@ export interface Student {
   phone: string;
   parentPhone: string;
   telegram: string;
-  courseType: 'خاصة' | 'عامة';
   courseProgram: 'منهج كامل' | 'كورسات' | '';
   courseTerm: 'الكورس الأول' | 'الكورس الثاني' | '';
   studyType: 'إلكتروني' | 'حضوري' | 'مدمج' | '';
@@ -343,7 +341,7 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   { id: 'students.add', label: 'تسجيل طالب', category: 'الطلاب', level: 'write', description: 'تسجيل طالب جديد' },
   { id: 'students.edit', label: 'تعديل بيانات طالب', category: 'الطلاب', level: 'write', description: 'تعديل بيانات طالب' },
   { id: 'students.delete', label: 'حذف طالب', category: 'الطلاب', level: 'delete', description: 'حذف طالب من النظام' },
-  { id: 'accounting.view', label: 'عرض الأقساط والمحاسبة', category: 'الطلاب', level: 'read', description: 'عرض تفاصيل الأقساط والمحاسبة للدورات الخاصة' },
+  { id: 'accounting.view', label: 'عرض الأقساط والمحاسبة', category: 'الطلاب', level: 'read', description: 'عرض تفاصيل الأقساط والمحاسبة' },
   { id: 'accounting.manage', label: 'إدارة الأقساط والمحاسبة', category: 'الطلاب', level: 'manage', description: 'تسجيل دفعات الأقساط ومتابعة المتبقي' },
   // الامتحانات
   { id: 'exams.view', label: 'عرض الامتحانات', category: 'الامتحانات', level: 'read', description: 'عرض قائمة الامتحانات' },
@@ -671,13 +669,7 @@ function firstAvailableSection(user: User | undefined, roles: Role[]): SectionId
 
 // ─── Default Courses ─────────────────────────────────────────────────────────
 
-const DEFAULT_COURSES: Course[] = [
-  { id: 'c_batch27_k1_elec', name: 'دفعة 2027 - الكورس الأول - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true, availablePrograms: ['منهج كامل'], availableStudyTypes: ['إلكتروني'], locationConfig: { 'إلكتروني': { scopes: ['بغداد', 'محافظات'], baghdadMode: 'عموم بغداد', baghdadSites: [], provinces: [] } } },
-  { id: 'c_batch27_full_elec', name: 'دفعة 2027 - منهج كامل - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true, availablePrograms: ['منهج كامل'], availableStudyTypes: ['إلكتروني'], locationConfig: { 'إلكتروني': { scopes: ['بغداد', 'محافظات'], baghdadMode: 'عموم بغداد', baghdadSites: [], provinces: [] } } },
-  { id: 'c_batch27_k1_att', name: 'دفعة 2027 - الكورس الأول - امتحان حضوري', type: 'عامة', createdAt: '2026-06-01', active: true, availablePrograms: ['منهج كامل'], availableStudyTypes: ['إلكتروني'], locationConfig: { 'إلكتروني': { scopes: ['بغداد', 'محافظات'], baghdadMode: 'عموم بغداد', baghdadSites: [], provinces: [] } } },
-  { id: 'c_batch27_full_att', name: 'دفعة 2027 - منهج كامل - امتحان حضوري', type: 'عامة', createdAt: '2026-06-01', active: true, availablePrograms: ['منهج كامل'], availableStudyTypes: ['إلكتروني'], locationConfig: { 'إلكتروني': { scopes: ['بغداد', 'محافظات'], baghdadMode: 'عموم بغداد', baghdadSites: [], provinces: [] } } },
-  { id: 'c_batch27_exempt_elec', name: 'دفعة 2027 - منهج كامل (طلاب الإعفاء) - امتحان إلكتروني', type: 'عامة', createdAt: '2026-06-01', active: true, availablePrograms: ['منهج كامل'], availableStudyTypes: ['إلكتروني'], locationConfig: { 'إلكتروني': { scopes: ['بغداد', 'محافظات'], baghdadMode: 'عموم بغداد', baghdadSites: [], provinces: [] } } },
-];
+const DEFAULT_COURSES: Course[] = [];
 
 function seedData() {
   const roles: Role[] = DEFAULT_ROLES.map(r => ({ ...r, permissions: [...r.permissions] }));

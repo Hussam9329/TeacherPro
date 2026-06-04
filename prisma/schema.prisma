@@ -10,7 +10,6 @@ datasource db {
 model Course {
   id        String   @id @default(cuid())
   name      String
-  type      String   // خاصة/عامة - للمنطق المالي القديم
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
 
@@ -76,7 +75,6 @@ model Student {
   telegram        String?
   telegramKey     String?  @unique
 
-  courseType      String   // خاصة/عامة - للمنطق المالي القديم
   courseProgram   String?  // منهج كامل / كورسات
   courseTerm      String?  // الكورس الأول / الكورس الثاني (فقط عند كورسات)
   studyType       String?  // إلكتروني / حضوري / مدمج

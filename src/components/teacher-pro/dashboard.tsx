@@ -13,13 +13,13 @@ export function DashboardView() {
 
   const activeCount = students.filter(s => s.status === 'نشط').length;
   const dismissedCount = students.filter(s => s.status === 'مفصول').length;
-  const privateCount = students.filter(s => s.courseType === 'خاصة').length;
+  const totalStudents = students.length;
   const pendingSheets = correctionSheets.filter(s => s.status !== 'مكتمل').length;
 
   const kpiCards = [
     { label: 'طلاب نشطون', value: activeCount, icon: Users, tone: 'success' as const, hint: 'جاهزون للمتابعة' },
     { label: 'طلاب مفصولون', value: dismissedCount, icon: Shield, tone: 'warning' as const, hint: 'بحاجة لمراجعة' },
-    { label: 'طلاب الدورة الخاصة', value: privateCount, icon: BookOpen, tone: 'info' as const, hint: 'ضمن المسار الخاص' },
+    { label: 'إجمالي الطلاب', value: totalStudents, icon: BookOpen, tone: 'info' as const, hint: 'جميع المسجلين' },
     { label: 'أوراق بانتظار التصحيح', value: pendingSheets, icon: Clock, tone: 'danger' as const, hint: 'قيد المعالجة' },
   ];
 

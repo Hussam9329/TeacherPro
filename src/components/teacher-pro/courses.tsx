@@ -18,9 +18,6 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
@@ -37,7 +34,6 @@ import { EmptyState } from "./ui-kit";
 
 type CourseFormState = {
   name: string;
-  type: "خاصة" | "عامة";
   availablePrograms: CourseProgram[];
   availableStudyTypes: StudyType[];
   locationConfig: CourseLocationConfig;
@@ -46,7 +42,6 @@ type CourseFormState = {
 function emptyCourseForm(): CourseFormState {
   return {
     name: "",
-    type: "عامة",
     availablePrograms: [],
     availableStudyTypes: [],
     locationConfig: {},
@@ -220,32 +215,15 @@ function CourseBuilderForm({
           <Settings className="size-4 text-primary" />
           <span>بيانات أساسية</span>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="courseName">اسم الدورة *</Label>
-            <Input
-              id="courseName"
-              autoComplete="off"
-              value={form.name}
-              onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
-              placeholder="مثال: أحياء السادس - دفعة جديدة"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="course-financial-type">تصنيف الدورة المالي</Label>
-            <Select
-              value={form.type}
-              onValueChange={(v) => setForm(prev => ({ ...prev, type: v as "خاصة" | "عامة" }))}
-            >
-              <SelectTrigger id="course-financial-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="عامة">عامة</SelectItem>
-                <SelectItem value="خاصة">خاصة</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="courseName">اسم الدورة *</Label>
+          <Input
+            id="courseName"
+            autoComplete="off"
+            value={form.name}
+            onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
+            placeholder="مثال: أحياء السادس - دفعة جديدة"
+          />
         </div>
       </div>
 
@@ -443,7 +421,6 @@ export function CoursesView() {
     }
     addCourse({
       name: createForm.name.trim(),
-      type: createForm.type,
       availablePrograms: createForm.availablePrograms,
       availableStudyTypes: createForm.availableStudyTypes,
       locationConfig: createForm.locationConfig,
@@ -459,7 +436,6 @@ export function CoursesView() {
       courseId: course.id,
       form: {
         name: course.name,
-        type: course.type,
         availablePrograms: getAvailablePrograms(course),
         availableStudyTypes: getAvailableStudyTypes(course),
         locationConfig: JSON.parse(JSON.stringify(getCourseLocationConfig(course))),
@@ -474,7 +450,6 @@ export function CoursesView() {
     }
     const result = updateCourse(editDialog.courseId, {
       name: editDialog.form.name.trim(),
-      type: editDialog.form.type,
       availablePrograms: editDialog.form.availablePrograms,
       availableStudyTypes: editDialog.form.availableStudyTypes,
       locationConfig: editDialog.form.locationConfig,
@@ -558,7 +533,7 @@ export function CoursesView() {
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-sm leading-6">{course.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {course.createdAt} — تصنيف: {course.type}
+                          {course.createdAt}
                         </p>
                       </div>
                       <Badge variant={course.active ? "default" : "secondary"}>
