@@ -956,17 +956,6 @@ export const useTeacherStore = create<TeacherState>()(
             return false;
           }
 
-          // Seed missing default courses only. The API uses upsert and never deletes existing courses.
-          try {
-            await fetch('/api/courses', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ _action: 'seed-defaults' }),
-            });
-          } catch (e) {
-            console.warn('[Store] Failed to seed missing default courses:', e);
-          }
-
           const serverCourses = (serverData.courses || []).map((c: Record<string, unknown>) => ({
             ...c,
             createdAt: c.createdAt ? String(c.createdAt).slice(0, 10) : todayISO(),
