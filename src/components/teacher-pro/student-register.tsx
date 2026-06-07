@@ -33,7 +33,6 @@ import {
 } from "@/lib/course-config";
 import {
   getStudentDuplicateMessage,
-  isValidAccountingGraceDays,
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
 import {
@@ -45,19 +44,14 @@ import { useActionLock } from "@/hooks/use-action-lock";
 import { StepProgress } from "./ui-kit";
 import {
   AlertCircle,
-  Barcode,
   BookOpen,
-  Coins,
   MapPin,
   PhoneCall,
-  Receipt,
   Save,
   School,
   Smartphone,
   User,
   UserPlus,
-  VenusAndMars,
-  WalletCards,
 } from "lucide-react";
 import { Send } from "lucide-react";
 
@@ -65,8 +59,6 @@ const fieldBaseClass =
   "h-12 rounded-xl border-input bg-background/70 pr-10 pl-4 text-right shadow-xs backdrop-blur transition-all focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] dark:bg-input/30";
 const selectTriggerClass =
   "h-12 rounded-xl border-input bg-background/70 px-4 shadow-xs backdrop-blur focus:ring-ring/50 dark:bg-input/30";
-const moneyFieldClass =
-  "h-12 rounded-xl border-primary/20 bg-background/80 pl-12 pr-4 shadow-xs backdrop-blur focus-visible:border-primary/50 focus-visible:ring-primary/20 dark:bg-input/30";
 
 const STUDENT_DRAFT_KEY = "teacherpro:student-register-draft";
 
@@ -85,11 +77,6 @@ type StudentRegisterForm = {
   courseId: string;
   groupId: string;
   subSite: string;
-  receiptNo: string;
-  codeSequence: string;
-  totalAmount: string;
-  paidAmount: string;
-  accountingStart: string;
   createdAt: string;
 };
 
@@ -124,22 +111,10 @@ function emptyForm(): StudentRegisterForm {
     courseId: "",
     groupId: "",
     subSite: "",
-    receiptNo: "",
-    codeSequence: "",
-    totalAmount: "",
-    paidAmount: "",
-    accountingStart: "0",
     createdAt: todayISO(),
   };
 }
 
-function amountValue(value: string): number {
-  return Number(toLatinDigits(value).replace(/\D/g, "")) || 0;
-}
-
-function formatAmount(value: number): string {
-  return new Intl.NumberFormat("en-US").format(value);
-}
 
 function FieldIcon({
   icon: Icon,
@@ -290,15 +265,6 @@ export function StudentRegisterView() {
     });
   }, [courseAvailableStudyTypes, form.studyType]);
 
-  const totalAmount = useMemo(
-    () => amountValue(form.totalAmount),
-    [form.totalAmount],
-  );
-  const paidAmount = useMemo(
-    () => amountValue(form.paidAmount),
-    [form.paidAmount],
-  );
-  const remainingAmount = Math.max(totalAmount - paidAmount, 0);
   const formSteps = useMemo(
     () => [
       {
@@ -316,16 +282,7 @@ export function StudentRegisterView() {
           (subSiteOptions.length === 0 || effectiveSubSite)
         ),
       },
-      {
-        label: "الإعدادات المالية",
-        complete: Boolean(
-          form.accountingStart.trim() !== "" &&
-          form.receiptNo.trim() &&
-          form.codeSequence.trim() &&
-          form.totalAmount.trim() !== "" &&
-          form.paidAmount.trim() !== ""
-        ),
-      },
+
     ],
     [form, courseAvailableStudyTypes, courseLocationScopes, subSiteOptions.length, effectiveCourseProgram, effectiveSubSite],
   );
@@ -339,7 +296,6 @@ export function StudentRegisterView() {
         "studyType",
         "locationScope",
         "baghdadMode",
-        "accountingStart",
       ]),
     [form],
   );
@@ -367,22 +323,6 @@ export function StudentRegisterView() {
     setForm((prev) => ({ ...prev, [key]: toLatinDigits(value) }));
   };
 
-  const updateAmountForm = (
-    key: "totalAmount" | "paidAmount",
-    value: string,
-  ) => {
-    setForm((prev) => ({
-      ...prev,
-      [key]: toLatinDigits(value).replace(/\D/g, ""),
-    }));
-  };
-
-  const updateGraceDays = (value: string) => {
-    setForm((prev) => ({
-      ...prev,
-      accountingStart: toLatinDigits(value).replace(/\D/g, "").slice(0, 2),
-    }));
-  };
 
   const updatePhoneForm = (key: "phone" | "parentPhone", value: string) => {
     setForm((prev) => ({ ...prev, [key]: sanitizePhoneInput(value) }));
@@ -438,13 +378,6 @@ export function StudentRegisterView() {
       return "يرجى اختيار الموقع الفرعي";
     }
 
-    requiredChecks.push(
-      [form.accountingStart.trim() !== "", "فترة السماح مطلوبة"],
-      [Boolean(form.receiptNo.trim()), "رقم الوصل مطلوب"],
-      [Boolean(form.codeSequence.trim()), "تسلسل الكود مطلوب"],
-      [form.totalAmount.trim() !== "", "المبلغ الكلي مطلوب"],
-      [form.paidAmount.trim() !== "", "المبلغ المدفوع مطلوب"],
-    );
 
     const missing = requiredChecks.find(([ok]) => !ok);
     if (missing) return missing[1];
@@ -466,11 +399,6 @@ export function StudentRegisterView() {
     );
     if (parentPhoneError) return parentPhoneError;
 
-    if (!isValidAccountingGraceDays(form.accountingStart))
-      return "فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم";
-
-    if (paidAmount > totalAmount)
-      return "المبلغ المدفوع لا يمكن أن يكون أكبر من المبلغ الكلي";
 
     const duplicateMessage = getStudentDuplicateMessage(students, {
       name: form.name,
@@ -509,18 +437,10 @@ export function StudentRegisterView() {
         groupId: form.groupId,
         mainSite: form.locationScope,
         subSite: effectiveSubSite,
-        receiptNo: form.receiptNo.trim(),
-        codeSequence: form.codeSequence.trim(),
-        totalAmount,
-        paidAmount,
-        installments: paidAmount > 0
-          ? [{ date: todayISO(), amount: paidAmount, note: "دفعة التسجيل" }]
-          : [],
         status: "نشط",
         dismissalType: "",
         dismissalReason: "",
         createdAt: form.createdAt,
-        accountingStart: form.accountingStart,
         opportunities: chapter?.opportunities ?? 0,
         baseOpportunities: chapter?.opportunities ?? 0,
       });
@@ -812,157 +732,6 @@ export function StudentRegisterView() {
                 </div>
               </div>
 
-              <div className="mt-6 rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm md:p-6">
-                <div className="mb-5 flex items-center gap-3">
-                  <span className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                    <WalletCards className="size-5" />
-                  </span>
-                  <div>
-                    <h4 className="font-black text-foreground">
-                      البيانات المالية
-                    </h4>
-                    <p className="text-xs text-muted-foreground">
-                      بيانات الوصل والأقساط مطلوبة لكل تسجيل.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-receiptNo"
-                      className="font-bold text-foreground"
-                    >
-                      رقم الوصل <RequiredMark />
-                    </Label>
-                    <div className="relative">
-                      <FieldIcon icon={Receipt} className="text-primary" />
-                      <Input
-                        id="reg-receiptNo"
-                        name="receiptNo"
-                        autoComplete="off"
-                        value={form.receiptNo}
-                        onChange={(e) =>
-                          updateForm("receiptNo", e.target.value)
-                        }
-                        required
-                        placeholder="أدخل رقم الوصل"
-                        className={fieldBaseClass}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-codeSequence"
-                      className="font-bold text-foreground"
-                    >
-                      تسلسل الكود <RequiredMark />
-                    </Label>
-                    <div className="relative">
-                      <FieldIcon icon={Barcode} className="text-primary" />
-                      <Input
-                        id="reg-codeSequence"
-                        name="codeSequence"
-                        autoComplete="off"
-                        value={form.codeSequence}
-                        onChange={(e) =>
-                          updateForm("codeSequence", e.target.value)
-                        }
-                        required
-                        placeholder="أدخل تسلسل الكود"
-                        className={fieldBaseClass}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 border-t border-primary/20 pt-6">
-                  <h4 className="mb-4 flex items-center font-black text-foreground">
-                    <Coins className="ml-2 h-5 w-5 text-primary" />
-                    نظام الأقساط
-                  </h4>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="reg-totalAmount"
-                        className="font-bold text-foreground"
-                      >
-                        المبلغ الكلي <RequiredMark />
-                      </Label>
-                      <div className="relative">
-                        <Input
-                          id="reg-totalAmount"
-                          name="totalAmount"
-                          autoComplete="off"
-                          value={form.totalAmount}
-                          onChange={(e) =>
-                            updateAmountForm("totalAmount", e.target.value)
-                          }
-                          required
-                          inputMode="numeric"
-                          placeholder="0"
-                          className={`${moneyFieldClass} font-tabular`}
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-muted-foreground">
-                          د.ع
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="reg-paidAmount"
-                        className="font-bold text-foreground"
-                      >
-                        المبلغ المدفوع <RequiredMark />
-                      </Label>
-                      <div className="relative">
-                        <Input
-                          id="reg-paidAmount"
-                          name="paidAmount"
-                          autoComplete="off"
-                          value={form.paidAmount}
-                          onChange={(e) =>
-                            updateAmountForm("paidAmount", e.target.value)
-                          }
-                          required
-                          inputMode="numeric"
-                          placeholder="0"
-                          className={`${moneyFieldClass} font-tabular`}
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-muted-foreground">
-                          د.ع
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="reg-remainingAmount"
-                        className="font-bold text-foreground"
-                      >
-                        المبلغ المتبقي
-                      </Label>
-                      <div className="relative">
-                        <Input
-                          id="reg-remainingAmount"
-                          name="remainingAmount"
-                          autoComplete="off"
-                          value={String(remainingAmount)}
-                          readOnly
-                          placeholder="0"
-                          className="h-12 rounded-xl border-input bg-muted/55 pl-12 pr-4 font-bold text-destructive shadow-xs dark:bg-muted/25"
-                        />
-                        <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 font-bold text-muted-foreground">
-                          د.ع
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        المتبقي: {formatAmount(remainingAmount)} د.ع
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* ── Course Program ── */}
               {form.courseId && courseAvailablePrograms.length > 1 && (
                 <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -1226,43 +995,11 @@ export function StudentRegisterView() {
               </div>
             </section>
 
-            <section className="surface-card p-5 md:p-6">
-              <SectionTitle
-                icon={VenusAndMars}
-                title="إعدادات التسجيل"
-                description="بيانات مساعدة لاكتمال ملف الطالب ونظام المحاسبة."
-              />
-              <div className="soft-panel">
-                <Label
-                  htmlFor="reg-accountingStart"
-                  className="mb-2 block font-bold text-foreground"
-                >
-                  فترة السماح (أيام)
-                </Label>
-                <div className="flex flex-wrap items-center gap-4">
-                  <Input
-                    id="reg-accountingStart"
-                    name="accountingStart"
-                    autoComplete="off"
-                    value={form.accountingStart}
-                    onChange={(e) => updateGraceDays(e.target.value)}
-                    inputMode="numeric"
-                    pattern="(?:[0-9]|[12][0-9]|30)"
-                    required
-                    className="h-11 w-24 rounded-xl text-center font-tabular"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    أيام لا تُحتسب فيها النقاط
-                  </span>
-                </div>
-              </div>
-            </section>
-
             <div className="flex flex-col gap-3 rounded-3xl border bg-muted/35 p-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-start gap-2 text-sm leading-6 text-muted-foreground">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span>
-                  جميع البيانات المالية مطلوبة لكل تسجيل بما فيها رقم الوصل وتسلسل الكود والأقساط.
+                  راجع بيانات الطالب والدورة قبل الحفظ.
                 </span>
               </div>
               <Button

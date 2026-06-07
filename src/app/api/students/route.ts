@@ -4,7 +4,6 @@ import { getPhoneValidationError, sanitizePhoneInput } from "@/lib/format";
 import {
   getStudentDuplicateMessage,
   getStudentUniqueKeys,
-  isValidAccountingGraceDays,
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
 import { getRequiredTextError } from "@/lib/validation";
@@ -77,7 +76,6 @@ export async function POST(req: NextRequest) {
     ["gender", "الجنس مطلوب"],
     ["courseId", "الدورة مطلوبة"],
     ["createdAt", "تاريخ إضافة الطالب مطلوب"],
-    ["accountingStart", "فترة السماح مطلوبة"],
   ] as const;
   const missingField = requiredFields.find(
     ([key]) => !String(body[key] ?? "").trim(),
@@ -100,12 +98,6 @@ export async function POST(req: NextRequest) {
   if (duplicateMessage)
     return NextResponse.json({ error: duplicateMessage }, { status: 409 });
 
-  if (!isValidAccountingGraceDays(String(body.accountingStart ?? ""))) {
-    return NextResponse.json(
-      { error: "فترة السماح يجب أن تكون رقماً من 0 إلى 30" },
-      { status: 400 },
-    );
-  }
 
   const uniqueKeys = getStudentUniqueKeys({
     name: body.name,
@@ -153,19 +145,11 @@ export async function POST(req: NextRequest) {
       baghdadMode: body.baghdadMode || null,
       mainSite: body.locationScope || body.mainSite,
       subSite: resolvedSubSite || body.subSite,
-      receiptNo: body.receiptNo,
-      codeSequence: body.codeSequence,
       code: body.code,
-      totalAmount: Number(body.totalAmount || 0),
-      paidAmount: Number(body.paidAmount || 0),
-      installments: JSON.stringify(body.installments || []),
       status: body.status || "نشط",
       dismissalType: body.dismissalType,
       dismissalReason: body.dismissalReason,
       createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
-      accountingStart: body.accountingStart
-        ? Number(body.accountingStart)
-        : undefined,
       opportunities: Number(body.opportunities || 0),
       baseOpportunities: Number(body.baseOpportunities || 0),
       courseId: body.courseId,
@@ -182,6 +166,9 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const body = await req.json();
   const { id, ...data } = body;
+  for (const obsoleteKey of ["receiptNo", "codeSequence", "totalAmount", "paidAmount", "installments", "accountingStart"]) {
+    delete data[obsoleteKey];
+  }
   if (!id)
     return NextResponse.json({ error: "تعذر تحديد الطالب المطلوب" }, { status: 400 });
   if (data.name !== undefined) {
@@ -251,23 +238,6 @@ export async function PUT(req: NextRequest) {
 
   if (data.createdAt !== undefined)
     data.createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
-  if (data.totalAmount !== undefined)
-    data.totalAmount = Number(data.totalAmount || 0);
-  if (data.paidAmount !== undefined)
-    data.paidAmount = Number(data.paidAmount || 0);
-  if (data.installments !== undefined)
-    data.installments = JSON.stringify(data.installments || []);
-  if (data.accountingStart !== undefined) {
-    if (!isValidAccountingGraceDays(String(data.accountingStart ?? ""))) {
-      return NextResponse.json(
-        { error: "فترة السماح يجب أن تكون رقماً من 0 إلى 30" },
-        { status: 400 },
-      );
-    }
-    data.accountingStart = data.accountingStart
-      ? Number(data.accountingStart)
-      : null;
-  }
   if (data.opportunities !== undefined)
     data.opportunities = Number(data.opportunities);
   if (data.baseOpportunities !== undefined)

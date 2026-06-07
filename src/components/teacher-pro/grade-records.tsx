@@ -14,7 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,7 +53,6 @@ export function GradeRecordsView() {
   const [filterExamId, setFilterExamId] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterCourseId, setFilterCourseId] = useState("");
-  const [accountingChecked, setAccountingChecked] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, id: "", label: "" });
@@ -64,7 +62,6 @@ export function GradeRecordsView() {
     status: "درجة" as GradeStatus,
     score: "",
     notes: "",
-    accountingChecked: false,
   });
   const { locked: isDeletingGrade, runLocked: runDeleteGradeLocked } = useActionLock();
 
@@ -77,10 +74,9 @@ export function GradeRecordsView() {
       if (filterExamId && grade.examId !== filterExamId) return false;
       if (filterStatus && grade.status !== filterStatus) return false;
       if (filterCourseId && !exam.courseIds.includes(filterCourseId)) return false;
-      if (accountingChecked && !grade.accountingChecked) return false;
       return true;
     });
-  }, [grades, students, exams, search, filterExamId, filterStatus, filterCourseId, accountingChecked]);
+  }, [grades, students, exams, search, filterExamId, filterStatus, filterCourseId]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -94,7 +90,6 @@ export function GradeRecordsView() {
       status: grade.status as GradeStatus,
       score: grade.score !== null && grade.score !== undefined ? String(grade.score) : "",
       notes: grade.notes || "",
-      accountingChecked: grade.accountingChecked,
     });
   };
 
@@ -111,9 +106,8 @@ export function GradeRecordsView() {
       status: editDialog.status,
       score,
       notes: editDialog.notes,
-      accountingChecked: editDialog.accountingChecked,
     });
-    setEditDialog({ open: false, id: "", status: "درجة", score: "", notes: "", accountingChecked: false });
+    setEditDialog({ open: false, id: "", status: "درجة", score: "", notes: "" });
     toast.success("تم تعديل الدرجة وإعادة الاحتساب");
   };
 
@@ -131,12 +125,12 @@ export function GradeRecordsView() {
   });
 
   const exportCSV = () => {
-    const headers = ["الطالب", "الكود", "التليكرام", "الامتحان", "الحالة", "الدرجة", "التصنيف", "محاسبة", "ملاحظات"];
+    const headers = ["الطالب", "الكود", "التليكرام", "الامتحان", "الحالة", "الدرجة", "التصنيف", "ملاحظات"];
     const rows = filtered.map((grade) => {
       const student = students.find((item) => item.id === grade.studentId);
       const exam = exams.find((item) => item.id === grade.examId);
       const cls = exam ? classification(grade, exam) : { text: "" };
-      return [student?.name || "", student?.code || "", student?.telegram || "", exam?.name || "", grade.status, grade.score?.toString() || "", cls.text, grade.accountingChecked ? "نعم" : "لا", grade.notes || ""]
+      return [student?.name || "", student?.code || "", student?.telegram || "", exam?.name || "", grade.status, grade.score?.toString() || "", cls.text, grade.notes || ""]
         .map((value) => `"${String(value).replaceAll('"', '""')}"`)
         .join(",");
     });
@@ -181,10 +175,6 @@ export function GradeRecordsView() {
                 <SelectContent><SelectItem value="all">الكل</SelectItem>{courses.map((course) => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-2 pt-5">
-              <Checkbox id="grade-records-accounting" checked={accountingChecked} onCheckedChange={(value) => { setAccountingChecked(!!value); setPage(1); }} />
-              <Label htmlFor="grade-records-accounting" className="text-xs">محاسبة فقط</Label>
-            </div>
             <div className="space-y-1"><span className="text-xs font-medium">تصدير</span><Button variant="outline" size="sm" className="h-9 w-full" onClick={exportCSV}>تصدير CSV</Button></div>
           </div>
         </CardContent>
@@ -216,7 +206,6 @@ export function GradeRecordsView() {
               <div className="flex items-center gap-2">
                 {grade.score !== null && <span className="font-bold">{grade.score}/{exam.fullMark}</span>}
                 <Badge variant={cls.type === "ok" ? "default" : cls.type === "danger" ? "destructive" : cls.type === "warn" ? "secondary" : "outline"}>{cls.text}</Badge>
-                {grade.accountingChecked && <Badge variant="outline">محاسبة</Badge>}
                 <Button variant="secondary" size="sm" onClick={() => openEditGradeDialog(grade.id)}>تعديل</Button>
                 <Button variant="destructive" size="sm" onClick={() => openDeleteGradeDialog(grade.id)}>حذف</Button>
               </div>
@@ -252,12 +241,8 @@ export function GradeRecordsView() {
               <Label>الملاحظات</Label>
               <Input value={editDialog.notes} onChange={(e) => setEditDialog((prev) => ({ ...prev, notes: e.target.value }))} placeholder="سبب الإجازة أو ملاحظة التصحيح" />
             </div>
-            <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <Checkbox checked={editDialog.accountingChecked} onCheckedChange={(value) => setEditDialog((prev) => ({ ...prev, accountingChecked: Boolean(value) }))} />
-              تم تدقيقه من المحاسبة
-            </label>
           </div>
-          <DialogFooter><Button variant="ghost" onClick={() => setEditDialog({ open: false, id: "", status: "درجة", score: "", notes: "", accountingChecked: false })}>إلغاء</Button><Button onClick={handleSaveEditGrade}>حفظ التعديل</Button></DialogFooter>
+          <DialogFooter><Button variant="ghost" onClick={() => setEditDialog({ open: false, id: "", status: "درجة", score: "", notes: "" })}>إلغاء</Button><Button onClick={handleSaveEditGrade}>حفظ التعديل</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

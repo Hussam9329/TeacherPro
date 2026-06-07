@@ -87,7 +87,3 @@ export function getStudentDuplicateMessage(
   }
   return 'لا يمكن إضافة الطالب بسبب وجود بيانات مكررة';
 }
-
-export function isValidAccountingGraceDays(value: string): boolean {
-  return /^(?:[0-9]|[12][0-9]|30)$/.test(toLatinDigits(value).trim());
-}

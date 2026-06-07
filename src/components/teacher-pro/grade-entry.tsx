@@ -125,13 +125,11 @@ export function GradeEntryView() {
     }
 
     setSavingRows((prev) => ({ ...prev, [studentId]: true }));
-    const existing = getGrade(studentId);
     addGrade({
       studentId,
       examId: selectedExam.id,
       status,
       score,
-      accountingChecked: existing?.accountingChecked || false,
       notes: draft.notes,
     });
     setSavingRows((prev) => ({ ...prev, [studentId]: false }));

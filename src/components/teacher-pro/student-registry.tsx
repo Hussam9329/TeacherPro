@@ -35,7 +35,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
-  formatNumberLatin,
   getPhoneValidationError,
   sanitizePhoneInput,
   toLatinDigits,
@@ -47,7 +46,6 @@ import {
 } from "@/lib/course-config";
 import {
   getStudentDuplicateMessage,
-  isValidAccountingGraceDays,
   normalizeTelegramIdentifier,
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
@@ -75,12 +73,7 @@ type StudentEditForm = {
   courseId: string;
   groupId: string;
   subSite: string;
-  receiptNo: string;
-  codeSequence: string;
-  totalAmount: string;
-  paidAmount: string;
   createdAt: string;
-  accountingStart: string;
 };
 
 const emptyEditForm: StudentEditForm = {
@@ -98,12 +91,7 @@ const emptyEditForm: StudentEditForm = {
   courseId: "",
   groupId: "",
   subSite: "",
-  receiptNo: "",
-  codeSequence: "",
-  totalAmount: "",
-  paidAmount: "",
   createdAt: new Date().toISOString().slice(0, 10),
-  accountingStart: "",
 };
 
 function getStudentEditForm(student: Student): StudentEditForm {
@@ -122,16 +110,7 @@ function getStudentEditForm(student: Student): StudentEditForm {
     courseId: student.courseId,
     groupId: student.groupId,
     subSite: student.subSite || "",
-    receiptNo: student.receiptNo || "",
-    codeSequence: student.codeSequence || "",
-    totalAmount: student.totalAmount ? String(student.totalAmount) : "",
-    paidAmount: student.paidAmount
-      ? String(student.paidAmount)
-      : student.installments?.[0]?.amount
-        ? String(student.installments[0].amount)
-        : "",
     createdAt: student.createdAt || new Date().toISOString().slice(0, 10),
-    accountingStart: student.accountingStart || "",
   };
 }
 
@@ -170,7 +149,6 @@ export function StudentRegistryView() {
     students,
     courses,
     groups,
-    sites,
     exams,
     grades,
     opportunityLogs,
@@ -281,9 +259,6 @@ export function StudentRegistryView() {
     return [];
   }, [editSelectedCourse, editDialog.form.studyType, editDialog.form.locationScope, editBaghdadMode, editBaghdadSites, editProvinces]);
 
-  const editTotalAmount = Number(editDialog.form.totalAmount || 0);
-  const editPaidAmount = Number(editDialog.form.paidAmount || 0);
-  const editRemainingAmount = Math.max(editTotalAmount - editPaidAmount, 0);
 
   // Reset dependent fields when course or studyType changes
   useEffect(() => {
@@ -375,15 +350,6 @@ export function StudentRegistryView() {
     }));
   };
 
-  const updateEditAccountingDays = (value: string) => {
-    setEditDialog((prev) => ({
-      ...prev,
-      form: {
-        ...prev.form,
-        accountingStart: toLatinDigits(value).replace(/\D/g, "").slice(0, 2),
-      },
-    }));
-  };
 
   const validateEditForm = () => {
     const form = editDialog.form;
@@ -406,15 +372,8 @@ export function StudentRegistryView() {
           : "المجموعة الإلكترونية مطلوبة",
       ],
       [Boolean(form.createdAt), "تاريخ إضافة الطالب مطلوب"],
-      [form.accountingStart.trim() !== "", "فترة السماح مطلوبة"],
     ];
 
-    requiredChecks.push(
-      [Boolean(form.receiptNo.trim()), "رقم الوصل مطلوب"],
-      [Boolean(form.codeSequence.trim()), "تسلسل الكود مطلوب"],
-      [form.totalAmount.trim() !== "", "المبلغ الكلي مطلوب"],
-      [form.paidAmount.trim() !== "", "المبلغ المدفوع مطلوب"],
-    );
 
     const missing = requiredChecks.find(([ok]) => !ok);
     if (missing) return missing[1];
@@ -449,10 +408,6 @@ export function StudentRegistryView() {
     );
     if (parentPhoneError) return parentPhoneError;
 
-    if (!isValidAccountingGraceDays(form.accountingStart))
-      return "فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم";
-    if (Number(form.paidAmount || 0) > Number(form.totalAmount || 0))
-      return "المبلغ المدفوع لا يمكن أن يكون أكبر من المبلغ الكلي";
 
     const duplicateMessage = getStudentDuplicateMessage(
       students,
@@ -476,7 +431,6 @@ export function StudentRegistryView() {
       return;
     }
 
-    const originalStudent = students.find((s) => s.id === editDialog.id);
     const form = editDialog.form;
     const result = updateStudent(editDialog.id, {
       name: form.name.trim(),
@@ -494,22 +448,7 @@ export function StudentRegistryView() {
       groupId: form.groupId,
       mainSite: form.locationScope,
       subSite: form.subSite || (editBaghdadMode === "عموم بغداد" ? "عموم بغداد" : ""),
-      receiptNo: form.receiptNo.trim(),
-      codeSequence: form.codeSequence.trim(),
-      totalAmount: Number(form.totalAmount) || 0,
-      paidAmount: Number(form.paidAmount) || 0,
-      installments: [
-        {
-          date:
-            originalStudent?.installments?.[0]?.date ||
-            new Date().toISOString().slice(0, 10),
-          amount: Number(form.paidAmount) || 0,
-          note:
-            originalStudent?.installments?.[0]?.note || "دفعة التسجيل",
-        },
-      ],
       createdAt: form.createdAt,
-      accountingStart: form.accountingStart,
     });
 
     if (!result.ok) {
@@ -600,9 +539,6 @@ export function StudentRegistryView() {
       "الهاتف",
       "ولي الأمر",
       "التليكرام",
-      "المبلغ الكلي",
-      "المبلغ المدفوع",
-      "المبلغ المتبقي",
     ];
     const rows = filtered.map((s) => ({
       الكود: s.code,
@@ -620,11 +556,6 @@ export function StudentRegistryView() {
       الهاتف: s.phone,
       "ولي الأمر": s.parentPhone,
       التليكرام: s.telegram || "",
-      "المبلغ الكلي": String(s.totalAmount || 0),
-      "المبلغ المدفوع": String(s.paidAmount || 0),
-      "المبلغ المتبقي": String(
-        Math.max((s.totalAmount || 0) - (s.paidAmount || 0), 0),
-      ),
     }));
     const csv =
       "\ufeff" +
@@ -972,22 +903,6 @@ export function StudentRegistryView() {
                     <ContactLink href={whatsappLink(student.parentPhone)}>
                       {student.parentPhone}
                     </ContactLink>
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">
-                    فترة السماح
-                  </span>
-                  <p className="font-medium text-xs">
-                    {student.accountingStart || "0"} يوم
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">
-                    الأقساط
-                  </span>
-                  <p className="font-medium text-xs">
-                    {student.paidAmount || 0} / {student.totalAmount || 0} د.ع
                   </p>
                 </div>
               </div>
@@ -1400,73 +1315,6 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-2">
-                  <Label htmlFor="edit-receiptNo">رقم الوصل</Label>
-                  <Input
-                    id="edit-receiptNo"
-                    name="receiptNo"
-                    autoComplete="off"
-                    value={editDialog.form.receiptNo}
-                    onChange={(e) =>
-                      updateEditForm("receiptNo", e.target.value)
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-codeSequence">تسلسل الكود</Label>
-                  <Input
-                    id="edit-codeSequence"
-                    name="codeSequence"
-                    autoComplete="off"
-                    value={editDialog.form.codeSequence}
-                    onChange={(e) =>
-                      updateEditForm("codeSequence", e.target.value)
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-totalAmount">المبلغ الكلي</Label>
-                  <Input
-                    id="edit-totalAmount"
-                    name="totalAmount"
-                    type="number"
-                    min={0}
-                    autoComplete="off"
-                    value={editDialog.form.totalAmount}
-                    onChange={(e) =>
-                      updateEditForm("totalAmount", e.target.value)
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-paidAmount">المبلغ المدفوع</Label>
-                  <Input
-                    id="edit-paidAmount"
-                    name="paidAmount"
-                    type="number"
-                    min={0}
-                    autoComplete="off"
-                    value={editDialog.form.paidAmount}
-                    onChange={(e) =>
-                      updateEditForm("paidAmount", e.target.value)
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-remainingAmount">المبلغ المتبقي</Label>
-                  <Input
-                    id="edit-remainingAmount"
-                    name="remainingAmount"
-                    autoComplete="off"
-                    value={String(editRemainingAmount)}
-                    readOnly
-                    className="font-bold text-destructive"
-                  />
-                </div>
-            <div className="space-y-2">
               <Label htmlFor="edit-createdAt">تاريخ إضافة الطالب</Label>
               <Input
                 id="edit-createdAt"
@@ -1477,23 +1325,6 @@ export function StudentRegistryView() {
                 onChange={(e) => updateEditForm("createdAt", e.target.value)}
                 required
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-accountingStart">فترة السماح</Label>
-              <Input
-                id="edit-accountingStart"
-                name="accountingStart"
-                autoComplete="off"
-                value={editDialog.form.accountingStart}
-                onChange={(e) => updateEditAccountingDays(e.target.value)}
-                inputMode="numeric"
-                pattern="(?:[0-9]|[12][0-9]|30)"
-                required
-                placeholder="مثلاً 7"
-              />
-              <p className="text-xs leading-5 text-muted-foreground">
-                الرقم من 0 إلى 30 هو عدد الأيام التي لا تُحتسب فيها النقاط.
-              </p>
             </div>
           </div>
           <DialogFooter>
@@ -1681,40 +1512,7 @@ export function StudentRegistryView() {
                   <span className="text-muted-foreground">تاريخ التسجيل:</span>{" "}
                   <strong>{fileDialog.student.createdAt}</strong>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">فترة السماح:</span>{" "}
-                  <strong>
-                    {fileDialog.student.accountingStart || "0"} يوم
-                  </strong>
-                </div>
-                <div>
-                    <span className="text-muted-foreground">الأقساط:</span>{" "}
-                    <strong>
-                      {fileDialog.student.paidAmount || 0} /{" "}
-                      {fileDialog.student.totalAmount || 0} د.ع
-                    </strong>
-                  </div>
               </div>
-
-              {fileDialog.student.installments.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold mb-2">الأقساط</h4>
-                    <div className="space-y-1">
-                      {fileDialog.student.installments.map((inst, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between text-sm p-2 rounded-xl bg-muted/60"
-                        >
-                          <span>{inst.date}</span>
-                          <span>{formatNumberLatin(inst.amount)} د.ع</span>
-                          <span className="text-muted-foreground">
-                            {inst.note}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
               <Separator />
 

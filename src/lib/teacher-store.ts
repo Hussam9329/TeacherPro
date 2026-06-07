@@ -70,11 +70,6 @@ export interface CourseChapter {
   archive: ArchiveEntry[];
 }
 
-export interface Installment {
-  date: string;
-  amount: number;
-  note: string;
-}
 
 export interface Student {
   id: string;
@@ -93,17 +88,11 @@ export interface Student {
   groupId: string;
   mainSite: string;
   subSite: string;
-  receiptNo: string;
-  codeSequence: string;
   code: string;
-  totalAmount: number;
-  paidAmount: number;
-  installments: Installment[];
   status: 'نشط' | 'مفصول';
   dismissalType: string;
   dismissalReason: string;
   createdAt: string;
-  accountingStart: string;
   opportunities: number;
   baseOpportunities: number;
 }
@@ -124,8 +113,6 @@ export interface Exam {
   active: boolean;
   scheduledActivateAt?: string;
   scheduledDeactivateAt?: string;
-  attendanceClosed: boolean;
-  attendance: string[];
 }
 
 export interface Grade {
@@ -134,7 +121,6 @@ export interface Grade {
   examId: string;
   status: 'درجة' | 'غائب' | 'مجاز' | 'غش';
   score: number | null;
-  accountingChecked: boolean;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -585,8 +571,6 @@ interface TeacherState {
   updateExam: (id: string, updates: Partial<Omit<Exam, 'id'>>) => void;
   toggleExam: (id: string) => void;
   deleteExam: (id: string) => boolean;
-  toggleAttendance: (examId: string, studentId: string) => void;
-  closeAttendance: (examId: string) => void;
 
   addGrade: (grade: Omit<Grade, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateGrade: (id: string, updates: Partial<Grade>) => void;
@@ -987,12 +971,8 @@ export const useTeacherStore = create<TeacherState>()(
           const students = (serverData.students || []).map((st: Record<string, unknown>) => ({
             ...st,
             school: String(st.school || ''),
-            totalAmount: Number(st.totalAmount || 0),
-            paidAmount: Number(st.paidAmount || 0),
             opportunities: Number(st.opportunities || 0),
             baseOpportunities: Number(st.baseOpportunities || 0),
-            installments: parseArrayField<Installment>(st.installments),
-            accountingStart: st.accountingStart === null || st.accountingStart === undefined ? '' : String(st.accountingStart),
             createdAt: st.createdAt ? String(st.createdAt).slice(0, 10) : todayISO(),
             courseProgram: String(st.courseProgram || ''),
             courseTerm: String(st.courseTerm || ''),
@@ -1004,7 +984,6 @@ export const useTeacherStore = create<TeacherState>()(
           const exams = (serverData.exams || []).map((ex: Record<string, unknown>) => ({
             ...ex,
             courseIds: parseArrayField<string>(ex.courseIds),
-            attendance: parseArrayField<string>(ex.attendance),
             mainSite: ex.mainSite ? String(ex.mainSite) : '',
             groupId: ex.groupId ? String(ex.groupId) : '',
             fullMark: Number(ex.fullMark || 100),
@@ -1015,14 +994,12 @@ export const useTeacherStore = create<TeacherState>()(
             active: Boolean(ex.active),
             scheduledActivateAt: ex.scheduledActivateAt ? String(ex.scheduledActivateAt).slice(0, 10) : '',
             scheduledDeactivateAt: ex.scheduledDeactivateAt ? String(ex.scheduledDeactivateAt).slice(0, 10) : '',
-            attendanceClosed: Boolean(ex.attendanceClosed),
             date: ex.date ? String(ex.date).slice(0, 10) : todayISO(),
           })) as Exam[];
 
           const grades = (serverData.grades || []).map((g: Record<string, unknown>) => ({
             ...g,
             score: g.score === null || g.score === undefined ? null : Number(g.score),
-            accountingChecked: Boolean(g.accountingChecked),
             createdAt: g.createdAt ? String(g.createdAt).slice(0, 10) : todayISO(),
             updatedAt: g.updatedAt ? String(g.updatedAt).slice(0, 10) : todayISO(),
           })) as Grade[];
@@ -1243,10 +1220,10 @@ export const useTeacherStore = create<TeacherState>()(
         if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
           if (exam.dismissalGrade !== null && score <= exam.dismissalGrade) return { text: 'فصل', type: 'danger', kind: 'dismissal' };
           if (score >= exam.passMark) return { text: 'ناجح', type: 'ok', kind: 'pass' };
-          return { text: 'محاسبة', type: 'warn', kind: 'accounting' };
+          return { text: 'راسب', type: 'danger', kind: 'fail' };
         }
         if (score >= exam.passMark) return { text: 'ناجح', type: 'ok', kind: 'pass' };
-        if (score > exam.discountMark && score < exam.passMark) return { text: 'محاسبة', type: 'warn', kind: 'accounting' };
+        if (score > exam.discountMark && score < exam.passMark) return { text: 'دون النجاح', type: 'warn', kind: 'below-pass' };
         return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
       },
 
@@ -1512,7 +1489,7 @@ export const useTeacherStore = create<TeacherState>()(
         set((s) => ({ students: [...s.students, student] }));
         get().logAction('تسجيل الطلاب', 'تسجيل طالب', `${student.name} - ${get().courseName(student.courseId)}`);
         syncToServer(get, async () => {
-          const result = await studentApi.add({ ...student, installments: student.installments });
+          const result = await studentApi.add(student as unknown as Record<string, unknown>);
           if (!result.ok) {
             set((s) => ({ students: s.students.filter((st) => st.id !== student.id) }));
             get().logAction('تسجيل الطلاب', 'تراجع تسجيل طالب', result.error || 'رفض الخادم حفظ الطالب');
@@ -1577,7 +1554,7 @@ export const useTeacherStore = create<TeacherState>()(
         const exam: Exam = { ...examData, id: uid('ex') };
         set((s) => ({ exams: [...s.exams, exam] }));
         get().logAction('الامتحانات', 'إضافة امتحان', exam.name);
-        syncToServer(get, () => examApi.add({ ...exam, courseIds: exam.courseIds, opportunitiesPenalty: String(exam.opportunitiesPenalty), attendance: exam.attendance }));
+        syncToServer(get, () => examApi.add({ ...exam, courseIds: exam.courseIds, opportunitiesPenalty: String(exam.opportunitiesPenalty) }));
       },
       updateExam: (id, updates) => {
         set((s) => ({ exams: s.exams.map((e) => e.id === id ? { ...e, ...updates } : e) }));
@@ -1606,22 +1583,6 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => examApi.remove(id));
         return true;
       },
-      toggleAttendance: (examId, studentId) => {
-        set((s) => ({
-          exams: s.exams.map((e) => {
-            if (e.id !== examId || e.attendanceClosed) return e;
-            const attendance = e.attendance.includes(studentId) ? e.attendance.filter((id) => id !== studentId) : [...e.attendance, studentId];
-            return { ...e, attendance };
-          }),
-        }));
-        const updatedExam = get().exams.find(e => e.id === examId);
-        if (updatedExam) syncToServer(get, () => examApi.update(examId, { attendance: updatedExam.attendance }));
-      },
-      closeAttendance: (examId) => {
-        set((s) => ({ exams: s.exams.map((e) => e.id === examId ? { ...e, attendanceClosed: true } : e) }));
-        get().logAction('الامتحانات', 'إغلاق الحضور', get().exams.find((e) => e.id === examId)?.name || examId);
-        syncToServer(get, () => examApi.update(examId, { attendanceClosed: true }));
-      },
 
       addGrade: (gradeData) => {
         const stateBefore = get();
@@ -1630,7 +1591,6 @@ export const useTeacherStore = create<TeacherState>()(
           ? {
               ...existing,
               ...gradeData,
-              accountingChecked: gradeData.accountingChecked ?? existing.accountingChecked,
               updatedAt: todayISO(),
             }
           : { ...gradeData, id: uid('gr'), createdAt: todayISO(), updatedAt: todayISO() };
@@ -2065,7 +2025,7 @@ export const useTeacherStore = create<TeacherState>()(
     }),
     {
       name: 'teacher-pro-store-v4',
-      version: 6,
+      version: 7,
       migrate: (persistedState: unknown, version: number) => {
         const state = (persistedState ?? {}) as Record<string, unknown>;
         const nextState: Record<string, unknown> = { ...state };
@@ -2075,21 +2035,6 @@ export const useTeacherStore = create<TeacherState>()(
           nextState.courses = DEFAULT_COURSES.map(c => ({ ...c }));
         }
 
-        // Migration v4 → v5: normalize new student registration fields
-        if (version < 5 && Array.isArray(nextState.students)) {
-          nextState.students = nextState.students.map((student) => {
-            const st = student as Record<string, unknown>;
-            const firstInstallmentAmount = Array.isArray(st.installments)
-              ? Number((st.installments[0] as Record<string, unknown> | undefined)?.amount || 0)
-              : 0;
-            return {
-              ...st,
-              school: String(st.school || ''),
-              totalAmount: Number(st.totalAmount || 0),
-              paidAmount: Number(st.paidAmount || firstInstallmentAmount || 0),
-            };
-          });
-        }
 
         if (version < 6 && Array.isArray(nextState.courses)) {
           nextState.courses = nextState.courses.map((course) => {
@@ -2101,6 +2046,24 @@ export const useTeacherStore = create<TeacherState>()(
               studyTypesByProgram: getStudyTypesByProgram(c),
             };
           });
+        }
+
+        // Migration v6 → v7: remove obsolete financial, installment, attendance, and accounting-review fields from local snapshots.
+        if (version < 7) {
+          const stripKeys = (item: unknown, keys: string[]) => {
+            const copy = { ...(item as Record<string, unknown>) };
+            keys.forEach((key) => delete copy[key]);
+            return copy;
+          };
+          if (Array.isArray(nextState.students)) {
+            nextState.students = nextState.students.map((student) => stripKeys(student, ["receiptNo", "codeSequence", "totalAmount", "paidAmount", "installments", "accountingStart"]));
+          }
+          if (Array.isArray(nextState.exams)) {
+            nextState.exams = nextState.exams.map((exam) => stripKeys(exam, ["attendance", "attendanceClosed"]));
+          }
+          if (Array.isArray(nextState.grades)) {
+            nextState.grades = nextState.grades.map((grade) => stripKeys(grade, ["accountingChecked"]));
+          }
         }
 
         return nextState;

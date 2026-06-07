@@ -52,8 +52,6 @@ export async function POST(req: NextRequest) {
         active: body.active ?? true,
         scheduledActivateAt: body.scheduledActivateAt ? new Date(String(body.scheduledActivateAt)) : null,
         scheduledDeactivateAt: body.scheduledDeactivateAt ? new Date(String(body.scheduledDeactivateAt)) : null,
-        attendanceClosed: body.attendanceClosed ?? false,
-        attendance: JSON.stringify(body.attendance || []),
       },
     });
     return NextResponse.json({ exam }, { status: 201 });
@@ -66,6 +64,9 @@ export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
     const { id, ...data } = body;
+    for (const obsoleteKey of ["attendance", "attendanceClosed"]) {
+      delete data[obsoleteKey];
+    }
     if (!id) return validationError('تعذر تحديد الامتحان المطلوب');
     if (data.name !== undefined) {
       const nameError = requireText(data.name, 'اسم الامتحان');
@@ -81,7 +82,6 @@ export async function PUT(req: NextRequest) {
     if (data.dismissalGrade !== undefined) data.dismissalGrade = data.dismissalGrade === null || data.dismissalGrade === "" ? null : Number(data.dismissalGrade);
     if (data.scheduledActivateAt !== undefined) data.scheduledActivateAt = data.scheduledActivateAt ? new Date(String(data.scheduledActivateAt)) : null;
     if (data.scheduledDeactivateAt !== undefined) data.scheduledDeactivateAt = data.scheduledDeactivateAt ? new Date(String(data.scheduledDeactivateAt)) : null;
-    if (data.attendance !== undefined) data.attendance = JSON.stringify(data.attendance || []);
     const exam = await db.exam.update({ where: { id }, data });
     return NextResponse.json({ exam });
   } catch (error) {

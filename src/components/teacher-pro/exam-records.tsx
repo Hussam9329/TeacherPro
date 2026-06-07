@@ -66,7 +66,6 @@ export function ExamRecordsView() {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("");
   const [filterCourseId, setFilterCourseId] = useState("");
-  const [accountingFilter, setAccountingFilter] = useState(false);
   const [reportOptions, setReportOptions] = useState<ReportOptions>(defaultReportOptions);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, id: "", name: "" });
@@ -92,7 +91,7 @@ export function ExamRecordsView() {
         const cls = classification(grade, exam);
         return { grade, student, cls };
       })
-      .filter((row) => row.student && (!accountingFilter || row.cls.kind === "accounting"))
+      .filter((row) => row.student)
       .sort((a, b) => (a.student?.name || "").localeCompare(b.student?.name || "", "ar"));
   };
 
@@ -137,8 +136,8 @@ export function ExamRecordsView() {
     if (!exam) return;
     const rows = examRows(examId);
     const passCount = rows.filter((row) => row.cls.kind === "pass").length;
-    const accountingCount = rows.filter((row) => row.cls.kind === "accounting").length;
-    const deductedCount = rows.filter((row) => row.cls.kind === "deducted").length;
+    const belowPassCount = rows.filter((row) => row.cls.kind === "below-pass" || row.cls.kind === "fail").length;
+    const deductedCount = rows.filter((row) => row.cls.kind === "deducted" || row.cls.kind === "dismissal" || row.cls.kind === "cheat").length;
 
     const tableRows = rows.map((row, index) => `
       <tr>
@@ -193,8 +192,8 @@ tr:nth-child(even) td { background: #f8fafc; }
   <section class="stats">
     <div class="stat"><strong>${rows.length}</strong><span>إجمالي السجلات</span></div>
     <div class="stat"><strong>${passCount}</strong><span>ناجح</span></div>
-    <div class="stat"><strong>${accountingCount}</strong><span>محاسبة</span></div>
-    <div class="stat"><strong>${deductedCount}</strong><span>مخصوم / غائب</span></div>
+    <div class="stat"><strong>${belowPassCount}</strong><span>دون النجاح</span></div>
+    <div class="stat"><strong>${deductedCount}</strong><span>خصم / فصل / غش</span></div>
   </section>
   <table><thead><tr><th>#</th><th>الكود</th><th>الطالب</th><th>الدورة</th><th>الحالة</th><th>الدرجة</th><th>التصنيف</th>${extraHeaders}</tr></thead><tbody>${tableRows}</tbody></table>
   <div class="footer"><span>تم إنشاء التقرير آلياً</span><span>${new Date().toLocaleString("ar-IQ")}</span></div>
@@ -243,7 +242,7 @@ tr:nth-child(even) td { background: #f8fafc; }
     <div className="space-y-4">
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="space-y-1 lg:col-span-2">
               <Label htmlFor="exam-records-search" className="text-xs">بحث</Label>
               <Input id="exam-records-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم الامتحان / التاريخ / الدورة" />
@@ -262,10 +261,6 @@ tr:nth-child(even) td { background: #f8fafc; }
                 <SelectContent><SelectItem value="all">الكل</SelectItem>{courses.map((course) => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-2 pt-5">
-              <Checkbox id="exam-records-accounting" checked={accountingFilter} onCheckedChange={(v) => setAccountingFilter(!!v)} />
-              <Label htmlFor="exam-records-accounting" className="text-xs">محاسبة فقط</Label>
-            </div>
             <div className="space-y-1">
               <span className="text-xs font-medium">تخصيص التقرير</span>
               <Button variant="outline" size="sm" className="h-9 w-full" onClick={() => setCustomizeOpen(true)}>تخصيص PDF</Button>
@@ -278,8 +273,7 @@ tr:nth-child(even) td { background: #f8fafc; }
         {filteredExams.map((exam) => {
           const rows = examRows(exam.id);
           const passCount = rows.filter((row) => row.cls.kind === "pass").length;
-          const failCount = rows.filter((row) => row.cls.kind === "deducted").length;
-          const absentCount = rows.filter((row) => row.grade.status === "غائب").length;
+          const notPassedCount = rows.filter((row) => row.cls.kind !== "pass" && row.cls.kind !== "leave").length;
           return (
             <Card key={exam.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10">
               <CardHeader className="pb-2">
@@ -302,7 +296,7 @@ tr:nth-child(even) td { background: #f8fafc; }
               <CardContent>
                 <div className="mb-3 grid grid-cols-3 gap-2 text-center">
                   <div className="rounded bg-emerald-50 p-2 dark:bg-emerald-950/40"><p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{passCount}</p><p className="text-[10px] text-muted-foreground">ناجح</p></div>
-                  <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40"><p className="text-lg font-bold text-rose-600 dark:text-rose-400">{failCount + absentCount}</p><p className="text-[10px] text-muted-foreground">راسب/غائب</p></div>
+                  <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40"><p className="text-lg font-bold text-rose-600 dark:text-rose-400">{notPassedCount}</p><p className="text-[10px] text-muted-foreground">غير ناجح/غائب</p></div>
                   <div className="rounded bg-sky-50 p-2 dark:bg-sky-950/40"><p className="text-lg font-bold text-sky-600 dark:text-sky-400">{rows.length}</p><p className="text-[10px] text-muted-foreground">إجمالي</p></div>
                 </div>
                 <div className="max-h-60 space-y-1 overflow-y-auto">

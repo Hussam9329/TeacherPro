@@ -34,7 +34,6 @@ export async function POST(req: NextRequest) {
       update: {
         status: body.status,
         score: body.score === null || body.score === undefined ? null : Number(body.score),
-        accountingChecked: Boolean(body.accountingChecked),
         notes: body.notes,
       },
       create: {
@@ -43,7 +42,6 @@ export async function POST(req: NextRequest) {
         examId: body.examId,
         status: body.status,
         score: body.score === null || body.score === undefined ? null : Number(body.score),
-        accountingChecked: Boolean(body.accountingChecked),
         notes: body.notes,
       },
     });
@@ -57,9 +55,9 @@ export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
     const { id, ...data } = body;
+    delete data.accountingChecked;
     if (!id) return validationError('تعذر تحديد الدرجة المطلوبة');
     if (data.score !== undefined) data.score = data.score === null ? null : Number(data.score);
-    if (data.accountingChecked !== undefined) data.accountingChecked = Boolean(data.accountingChecked);
     const grade = await db.grade.update({ where: { id }, data });
     return NextResponse.json({ grade });
   } catch (error) {

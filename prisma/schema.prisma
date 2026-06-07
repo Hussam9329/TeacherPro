@@ -84,16 +84,10 @@ model Student {
 
   mainSite        String?
   subSite         String?
-  receiptNo       String?
-  codeSequence    String?
   code            String   @unique
-  totalAmount     Int      @default(0)
-  paidAmount      Int      @default(0)
-  installments    String   @default("[]")
   status          String   @default("نشط")
   dismissalType   String?
   dismissalReason String?
-  accountingStart Int?
   opportunities   Int      @default(0)
   baseOpportunities Int    @default(0)
   createdAt       DateTime @default(now())
@@ -126,8 +120,6 @@ model Exam {
   active             Boolean @default(true)
   scheduledActivateAt   DateTime?
   scheduledDeactivateAt DateTime?
-  attendanceClosed   Boolean @default(false)
-  attendance         String  @default("[]")
   groupId            String?
   grades             Grade[]
   correctionSheets   CorrectionSheet[]
@@ -141,7 +133,6 @@ model Grade {
   id                String   @id @default(cuid())
   status            String
   score             Int?
-  accountingChecked Boolean  @default(false)
   notes             String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

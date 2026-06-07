@@ -121,8 +121,6 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
     opportunitiesPenalty: isCumulativeOrFinal ? "فصل مؤقت" : form.opportunitiesPenaltyNum,
     dismissalGrade: isCumulativeOrFinal && form.dismissalGrade ? Number(form.dismissalGrade) : null,
     ...applyStatus(form),
-    attendanceClosed: false,
-    attendance: [],
   };
 }
 
@@ -132,21 +130,16 @@ export function ExamNewView() {
     groups,
     sites,
     exams,
-    students,
     courseChapters,
     addExam,
     updateExam,
     toggleExam,
-    toggleAttendance,
-    closeAttendance,
     courseName,
     groupName,
   } = useTeacherStore();
 
   const [form, setForm] = useState<ExamFormState>(() => emptyForm());
   const [editDialog, setEditDialog] = useState<{ open: boolean; id: string; form: ExamFormState }>({ open: false, id: "", form: emptyForm() });
-  const [selectedExamId, setSelectedExamId] = useState("");
-  const selectedExam = exams.find((e) => e.id === selectedExamId);
   const { locked: isAddingExam, runLocked: runAddExamLocked } = useActionLock();
 
   const activeCourses = useMemo(() => courses.filter((course) => course.active), [courses]);
@@ -265,18 +258,6 @@ export function ExamNewView() {
     </>
   );
 
-  const selectedExamStudents = useMemo(() => {
-    if (!selectedExam) return [];
-    const selectedMainSites = splitSelection(selectedExam.mainSite);
-    const selectedGroupIds = splitSelection(selectedExam.groupId);
-    return students.filter((s) => {
-      if (!selectedExam.courseIds.includes(s.courseId)) return false;
-      if (!hasActiveChapterLink(courseChapters, s.courseId)) return false;
-      if (selectedMainSites.length > 0 && !selectedMainSites.includes(s.mainSite)) return false;
-      if (selectedGroupIds.length > 0 && !selectedGroupIds.includes(s.groupId)) return false;
-      return true;
-    });
-  }, [selectedExam, students, courseChapters]);
 
   const saveExamEdit = () => {
     const error = validateForm(editDialog.form);
@@ -285,11 +266,7 @@ export function ExamNewView() {
       return;
     }
     const payload = buildExamPayload(editDialog.form);
-    updateExam(editDialog.id, {
-      ...payload,
-      attendanceClosed: exams.find((exam) => exam.id === editDialog.id)?.attendanceClosed || false,
-      attendance: exams.find((exam) => exam.id === editDialog.id)?.attendance || [],
-    });
+    updateExam(editDialog.id, payload);
     setEditDialog({ open: false, id: "", form: emptyForm() });
     toast.success("تم تعديل الامتحان وإعادة احتساب تأثيراته على الطلاب");
   };
@@ -430,7 +407,6 @@ export function ExamNewView() {
                   <div className="mb-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
                     <div><span className="text-xs text-muted-foreground">النجاح:</span> {exam.passMark}</div>
                     <div><span className="text-xs text-muted-foreground">الخصم:</span> {exam.discountMark}</div>
-                    <div><span className="text-xs text-muted-foreground">الحضور:</span> {exam.attendance.length} طالب</div>
                     <div><span className="text-xs text-muted-foreground">الدورات:</span> {exam.courseIds.map((id) => courseName(id)).join("، ")}</div>
                     <div><span className="text-xs text-muted-foreground">المناطق:</span> {examMainSites.join("، ") || "الكل"}</div>
                     <div><span className="text-xs text-muted-foreground">المجموعات:</span> {examGroupIds.map((id) => groupName(id)).join("، ") || "الكل"}</div>
@@ -440,7 +416,6 @@ export function ExamNewView() {
                   <div className="flex flex-wrap gap-2">
                     <Button variant="outline" size="sm" onClick={() => toggleExam(exam.id)}>{exam.active ? "تعطيل" : "تفعيل"}</Button>
                     <Button variant="secondary" size="sm" onClick={() => setEditDialog({ open: true, id: exam.id, form: formFromExam(exam) })}>تعديل كل التفاصيل</Button>
-                    <Button variant="outline" size="sm" onClick={() => setSelectedExamId(exam.id)}>إدارة الحضور ({exam.attendance.length})</Button>
                   </div>
                 </div>
               );
@@ -448,36 +423,6 @@ export function ExamNewView() {
           </div>
         </CardContent>
       </Card>
-
-      {selectedExam && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>إدارة الحضور - {selectedExam.name}</CardTitle>
-            <div className="flex gap-2">
-              {!selectedExam.attendanceClosed && <Button size="sm" onClick={() => { closeAttendance(selectedExam.id); toast.success("تم إغلاق الحضور"); }}>إغلاق الحضور</Button>}
-              <Button variant="ghost" size="sm" onClick={() => setSelectedExamId("")}>إغلاق</Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {selectedExamStudents.length === 0 ? <p className="empty-state">لا يوجد طلاب مطابقون للدورات والمناطق والمجموعات المختارة أو لا توجد فصول مفعلة.</p> : selectedExamStudents.map((student) => {
-                const dismissedButNotThisExam = student.status === "مفصول" && !(student.dismissalReason || "").includes(selectedExam.name);
-                return (
-                <div key={student.id} className="flex items-center justify-between rounded-xl bg-muted/60 p-2">
-                  <span className="flex flex-wrap items-center gap-2 text-sm">
-                    {student.name} ({student.code})
-                    {student.status === "مفصول" && <Badge variant={dismissedButNotThisExam ? "destructive" : "secondary"} className="text-[10px]">مفصول</Badge>}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Checkbox checked={selectedExam.attendance.includes(student.id)} onCheckedChange={() => toggleAttendance(selectedExam.id, student.id)} disabled={selectedExam.attendanceClosed || dismissedButNotThisExam} />
-                    <Badge variant={selectedExam.attendance.includes(student.id) ? "default" : "secondary"}>{selectedExam.attendance.includes(student.id) ? "حاضر" : "غائب"}</Badge>
-                  </div>
-                </div>
-              );})}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <Dialog open={editDialog.open} onOpenChange={(open) => setEditDialog((prev) => ({ ...prev, open }))}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl" dir="rtl">
