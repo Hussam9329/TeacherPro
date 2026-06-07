@@ -27,7 +27,6 @@ import {
   LogOut,
   Copy,
   ChevronDown,
-  WalletCards,
   KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -78,16 +77,10 @@ const menuItems: {
     sub: "بطاقات",
     icon: ClipboardList,
   },
-  {
-    id: "accounting",
-    title: "الأقساط والمحاسبة",
-    sub: "متابعة",
-    icon: WalletCards,
-  },
   { id: "exam-new", title: "إضافة الامتحان", sub: "القواعد", icon: FileText },
   { id: "grade-entry", title: "تسجيل الدرجات", sub: "إدخال", icon: PenTool },
   { id: "exam-records", title: "سجل الامتحانات", sub: "PDF", icon: FileCheck },
-  { id: "grade-records", title: "سجل الدرجات", sub: "محاسبة", icon: BarChart3 },
+  { id: "grade-records", title: "سجل الدرجات", sub: "سجل", icon: BarChart3 },
   { id: "opportunities", title: "إدارة الفرص", sub: "خصم/إضافة", icon: Target },
   {
     id: "e-correction",
@@ -103,7 +96,7 @@ const menuItems: {
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
   { title: "الدورات", itemIds: ["courses"] },
   { title: "الفرص", itemIds: ["chapters", "opportunities"] },
-  { title: "الطلاب", itemIds: ["student-register", "student-registry", "accounting"] },
+  { title: "الطلاب", itemIds: ["student-register", "student-registry"] },
   {
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
@@ -143,7 +136,6 @@ import { ExamNewView } from "./exam-new";
 import { GradeEntryView } from "./grade-entry";
 import { ExamRecordsView } from "./exam-records";
 import { GradeRecordsView } from "./grade-records";
-import { AccountingView } from "./accounting";
 import { OpportunitiesView } from "./opportunities";
 import { ECorrectionView } from "./e-correction";
 import { WhatsAppView } from "./whatsapp";
@@ -157,7 +149,6 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   chapters: ChaptersView,
   "student-register": StudentRegisterView,
   "student-registry": StudentRegistryView,
-  accounting: AccountingView,
   "exam-new": ExamNewView,
   "grade-entry": GradeEntryView,
   "exam-records": ExamRecordsView,

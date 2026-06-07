@@ -11,9 +11,13 @@ import {
 import { getStudentDuplicateMessage, sanitizeTelegramInput } from './student-utils';
 import {
   type CourseLocationConfig,
+  type StudyTypesByProgram,
+  getAvailablePrograms,
+  getAvailableStudyTypes,
+  getAvailableStudyTypesForProgram,
+  getStudyTypesByProgram,
   parseJsonArray,
   parseJsonRecord,
-  stringifyJson,
 } from './course-config';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -25,6 +29,7 @@ export interface Course {
   active: boolean;
   availablePrograms: string[];
   availableStudyTypes: string[];
+  studyTypesByProgram: StudyTypesByProgram;
   locationConfig: CourseLocationConfig;
 }
 
@@ -258,7 +263,6 @@ export const DEMO_ALLOWED_PERMISSIONS = [
   'sites.view', 'sites.add', 'sites.edit', 'sites.delete',
   'chapters.view', 'chapters.add', 'chapters.edit', 'chapters.delete',
   'students.view', 'students.add', 'students.edit', 'students.delete',
-  'accounting.view', 'accounting.manage',
   'exams.view', 'exams.add', 'exams.edit', 'exams.delete',
   'grades.view', 'grades.add', 'grades.edit', 'grades.delete',
   'opportunities.view', 'opportunities.manage',
@@ -291,7 +295,6 @@ export type SectionId =
   | 'chapters'
   | 'student-register'
   | 'student-registry'
-  | 'accounting'
   | 'exam-new'
   | 'grade-entry'
   | 'exam-records'
@@ -341,8 +344,6 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   { id: 'students.add', label: 'تسجيل طالب', category: 'الطلاب', level: 'write', description: 'تسجيل طالب جديد' },
   { id: 'students.edit', label: 'تعديل بيانات طالب', category: 'الطلاب', level: 'write', description: 'تعديل بيانات طالب' },
   { id: 'students.delete', label: 'حذف طالب', category: 'الطلاب', level: 'delete', description: 'حذف طالب من النظام' },
-  { id: 'accounting.view', label: 'عرض الأقساط والمحاسبة', category: 'الطلاب', level: 'read', description: 'عرض تفاصيل الأقساط والمحاسبة' },
-  { id: 'accounting.manage', label: 'إدارة الأقساط والمحاسبة', category: 'الطلاب', level: 'manage', description: 'تسجيل دفعات الأقساط ومتابعة المتبقي' },
   // الامتحانات
   { id: 'exams.view', label: 'عرض الامتحانات', category: 'الامتحانات', level: 'read', description: 'عرض قائمة الامتحانات' },
   { id: 'exams.add', label: 'إضافة امتحان', category: 'الامتحانات', level: 'write', description: 'إنشاء امتحان جديد' },
@@ -380,7 +381,6 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'chapters': 'chapters.view',
   'student-register': 'students.add',
   'student-registry': 'students.view',
-  'accounting': 'accounting.view',
   'exam-new': 'exams.add',
   'grade-entry': 'grades.add',
   'exam-records': 'exams.view',
@@ -961,7 +961,8 @@ export const useTeacherStore = create<TeacherState>()(
             createdAt: c.createdAt ? String(c.createdAt).slice(0, 10) : todayISO(),
             active: c.active !== undefined ? Boolean(c.active) : true,
             availablePrograms: parseJsonArray<string>(c.availablePrograms),
-            availableStudyTypes: parseJsonArray<string>(c.availableStudyTypes),
+            availableStudyTypes: getAvailableStudyTypes(c),
+            studyTypesByProgram: getStudyTypesByProgram(c),
             locationConfig: parseJsonRecord<CourseLocationConfig>(c.locationConfig, {}),
           })) as Course[];
           const courses = mergeDefaultCourses(serverCourses);
@@ -1263,38 +1264,47 @@ export const useTeacherStore = create<TeacherState>()(
           createdAt: todayISO(),
           active: true,
           ...courseInput,
+          availableStudyTypes: getAvailableStudyTypes(courseInput),
+          studyTypesByProgram: getStudyTypesByProgram(courseInput),
         };
         set((s) => ({ courses: [...s.courses, nextCourse] }));
         get().logAction('الدورات', 'إضافة دورة', nextCourse.name);
-        syncToServer(get, () => courseApi.add(nextCourse));
+        syncToServer(get, () => courseApi.add(nextCourse as unknown as Record<string, unknown>));
       },
       updateCourse: (id, updates) => {
         const course = get().courses.find(c => c.id === id);
         if (!course) return { ok: false, message: 'الدورة غير موجودة' };
 
         // Check if removing options used by students
-        if (updates.availablePrograms || updates.availableStudyTypes || updates.locationConfig) {
+        if (updates.availablePrograms || updates.studyTypesByProgram || updates.availableStudyTypes || updates.locationConfig) {
           const courseStudents = get().students.filter(s => s.courseId === id);
+          const draftCourse = { ...course, ...updates };
+          const nextPrograms = getAvailablePrograms(draftCourse);
 
           for (const student of courseStudents) {
-            // Check courseProgram
-            if (student.courseProgram && updates.availablePrograms) {
-              if (!updates.availablePrograms.includes(student.courseProgram)) {
-                return { ok: false, message: `لا يمكن إزالة "${student.courseProgram}" لأنه مستخدم من طلاب مسجلين` };
-              }
+            if (student.courseProgram && !nextPrograms.includes(student.courseProgram as any)) {
+              return { ok: false, message: `لا يمكن إزالة "${student.courseProgram}" لأنه مستخدم من طلاب مسجلين` };
             }
-            // Check studyType
-            if (student.studyType && updates.availableStudyTypes) {
-              if (!updates.availableStudyTypes.includes(student.studyType)) {
-                return { ok: false, message: `لا يمكن إزالة "${student.studyType}" لأنه مستخدم من طلاب مسجلين` };
+            if (student.courseProgram && student.studyType) {
+              const nextStudyTypes = getAvailableStudyTypesForProgram(draftCourse, student.courseProgram);
+              if (!nextStudyTypes.includes(student.studyType as any)) {
+                return { ok: false, message: `لا يمكن إزالة "${student.studyType}" من "${student.courseProgram}" لأنه مستخدم من طلاب مسجلين` };
               }
             }
           }
         }
 
-        set((s) => ({ courses: s.courses.map((c) => c.id === id ? { ...c, ...updates } : c) }));
+        const normalizedUpdates = updates.studyTypesByProgram || updates.availablePrograms
+          ? {
+              ...updates,
+              availableStudyTypes: getAvailableStudyTypes({ ...course, ...updates }),
+              studyTypesByProgram: getStudyTypesByProgram({ ...course, ...updates }),
+            }
+          : updates;
+
+        set((s) => ({ courses: s.courses.map((c) => c.id === id ? { ...c, ...normalizedUpdates } : c) }));
         get().logAction('الدورات', 'تعديل دورة', get().courseName(id));
-        syncToServer(get, () => courseApi.update(id, updates as Record<string, unknown>));
+        syncToServer(get, () => courseApi.update(id, normalizedUpdates as Record<string, unknown>));
         return { ok: true, message: '' };
       },
       toggleCourse: (id) => {
@@ -2055,7 +2065,7 @@ export const useTeacherStore = create<TeacherState>()(
     }),
     {
       name: 'teacher-pro-store-v4',
-      version: 5,
+      version: 6,
       migrate: (persistedState: unknown, version: number) => {
         const state = (persistedState ?? {}) as Record<string, unknown>;
         const nextState: Record<string, unknown> = { ...state };
@@ -2077,6 +2087,18 @@ export const useTeacherStore = create<TeacherState>()(
               school: String(st.school || ''),
               totalAmount: Number(st.totalAmount || 0),
               paidAmount: Number(st.paidAmount || firstInstallmentAmount || 0),
+            };
+          });
+        }
+
+        if (version < 6 && Array.isArray(nextState.courses)) {
+          nextState.courses = nextState.courses.map((course) => {
+            const c = course as Record<string, unknown>;
+            return {
+              ...c,
+              availablePrograms: getAvailablePrograms(c),
+              availableStudyTypes: getAvailableStudyTypes(c),
+              studyTypesByProgram: getStudyTypesByProgram(c),
             };
           });
         }

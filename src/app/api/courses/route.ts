@@ -1,7 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
-import { parseJsonArray, parseJsonRecord, stringifyJson, type CourseLocationConfig, type StudyType, COURSE_PROGRAMS, STUDY_TYPES, LOCATION_SCOPES, BAGHDAD_MODES } from '@/lib/course-config';
+import {
+  parseJsonArray,
+  parseJsonRecord,
+  stringifyJson,
+  getAvailablePrograms,
+  getAvailableStudyTypes,
+  getAvailableStudyTypesForProgram,
+  getCourseLocationConfig,
+  type CourseLocationConfig,
+  type StudyTypesByProgram,
+  type StudyType,
+  COURSE_PROGRAMS,
+  STUDY_TYPES,
+  LOCATION_SCOPES,
+  BAGHDAD_MODES,
+} from '@/lib/course-config';
 import { IRAQI_PROVINCES } from '@/lib/iraq';
 
 function validateCoursePayload(body: Record<string, unknown>, isUpdate = false): string | null {
@@ -17,12 +32,21 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
     if (!COURSE_PROGRAMS.includes(p as any)) return `نوع الدورة "${p}" غير صالح`;
   }
 
-  // Validate availableStudyTypes
-  const studyTypes = parseJsonArray<string>(body.availableStudyTypes);
-  if (studyTypes.length === 0) return 'يجب اختيار خيار واحد على الأقل من نوع الدراسة';
-  for (const st of studyTypes) {
-    if (!STUDY_TYPES.includes(st as any)) return `نوع الدراسة "${st}" غير صالح`;
+  // Validate study types per course program
+  const studyTypesByProgram = parseJsonRecord<StudyTypesByProgram>(body.studyTypesByProgram, {});
+  const studyTypesSet = new Set<string>();
+  for (const program of programs) {
+    const studyTypes = parseJsonArray<string>(studyTypesByProgram[program as keyof StudyTypesByProgram]);
+    if (studyTypes.length === 0) return `يجب اختيار نوع دراسة واحد على الأقل لنوع الدورة "${program}"`;
+    for (const st of studyTypes) {
+      if (!STUDY_TYPES.includes(st as any)) return `نوع الدراسة "${st}" غير صالح`;
+      studyTypesSet.add(st);
+    }
   }
+
+  // Keep availableStudyTypes as the normalized union for backward compatibility.
+  const studyTypes = Array.from(studyTypesSet);
+  if (studyTypes.length === 0) return 'يجب اختيار خيار واحد على الأقل من نوع الدراسة';
 
   // Validate locationConfig
   const locationConfig = parseJsonRecord<CourseLocationConfig>(body.locationConfig, {});
@@ -72,13 +96,15 @@ export async function POST(req: NextRequest) {
     const validationMessage = validateCoursePayload(body);
     if (validationMessage) return validationError(validationMessage);
 
+    const studyTypes = getAvailableStudyTypes(body);
     const course = await db.course.create({
       data: {
         id: body.id,
         name: String(body.name ?? '').trim(),
         active: body.active ?? true,
         availablePrograms: stringifyJson(body.availablePrograms || []),
-        availableStudyTypes: stringifyJson(body.availableStudyTypes || []),
+        availableStudyTypes: stringifyJson(studyTypes),
+        studyTypesByProgram: stringifyJson(body.studyTypesByProgram || {}),
         locationConfig: stringifyJson(body.locationConfig || {}),
       },
     });
@@ -99,23 +125,36 @@ export async function PUT(req: NextRequest) {
       data.name = String(data.name ?? '').trim();
     }
 
-    // Check if removing options used by students
-    const existingStudents = await db.student.findMany({
-      where: { courseId: id },
-      select: { courseProgram: true, courseTerm: true, studyType: true, locationScope: true, baghdadMode: true, subSite: true }
-    });
+    const existingCourse = await db.course.findUnique({ where: { id } });
+    if (!existingCourse) return validationError('الدورة غير موجودة', 404);
 
-    if (data.availablePrograms !== undefined || data.availableStudyTypes !== undefined || data.locationConfig !== undefined) {
-      const newPrograms = data.availablePrograms ? parseJsonArray<string>(data.availablePrograms) : [];
-      const newStudyTypes = data.availableStudyTypes ? parseJsonArray<string>(data.availableStudyTypes) : [];
-      const newLocationConfig = data.locationConfig ? parseJsonRecord<CourseLocationConfig>(data.locationConfig, {}) : {};
+    if (data.availablePrograms !== undefined || data.studyTypesByProgram !== undefined || data.locationConfig !== undefined) {
+      const draftCourse = {
+        availablePrograms: data.availablePrograms ?? existingCourse.availablePrograms,
+        availableStudyTypes: data.availableStudyTypes ?? existingCourse.availableStudyTypes,
+        studyTypesByProgram: data.studyTypesByProgram ?? existingCourse.studyTypesByProgram,
+        locationConfig: data.locationConfig ?? existingCourse.locationConfig,
+      };
+
+      const validationMessage = validateCoursePayload({ ...draftCourse, name: data.name ?? existingCourse.name }, true);
+      if (validationMessage) return validationError(validationMessage);
+
+      const newPrograms = getAvailablePrograms(draftCourse);
+      const newLocationConfig = getCourseLocationConfig(draftCourse);
+      const existingStudents = await db.student.findMany({
+        where: { courseId: id },
+        select: { courseProgram: true, courseTerm: true, studyType: true, locationScope: true, baghdadMode: true, subSite: true }
+      });
 
       for (const student of existingStudents) {
-        if (student.courseProgram && newPrograms.length > 0 && !newPrograms.includes(student.courseProgram)) {
+        if (student.courseProgram && !newPrograms.includes(student.courseProgram as any)) {
           return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
         }
-        if (student.studyType && newStudyTypes.length > 0 && !newStudyTypes.includes(student.studyType)) {
-          return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
+        if (student.courseProgram && student.studyType) {
+          const newStudyTypesForProgram = getAvailableStudyTypesForProgram(draftCourse, student.courseProgram);
+          if (!newStudyTypesForProgram.includes(student.studyType as any)) {
+            return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
+          }
         }
         if (student.studyType && student.locationScope) {
           const studyConfig = newLocationConfig[student.studyType as StudyType];
@@ -136,8 +175,15 @@ export async function PUT(req: NextRequest) {
       }
     }
 
+    if (data.studyTypesByProgram !== undefined) data.studyTypesByProgram = stringifyJson(data.studyTypesByProgram);
     if (data.availablePrograms !== undefined) data.availablePrograms = stringifyJson(data.availablePrograms);
-    if (data.availableStudyTypes !== undefined) data.availableStudyTypes = stringifyJson(data.availableStudyTypes);
+    if (data.studyTypesByProgram !== undefined || data.availableStudyTypes !== undefined || data.availablePrograms !== undefined) {
+      data.availableStudyTypes = stringifyJson(getAvailableStudyTypes({
+        availablePrograms: data.availablePrograms ?? existingCourse.availablePrograms,
+        availableStudyTypes: data.availableStudyTypes ?? existingCourse.availableStudyTypes,
+        studyTypesByProgram: data.studyTypesByProgram ?? existingCourse.studyTypesByProgram,
+      }));
+    }
     if (data.locationConfig !== undefined) data.locationConfig = stringifyJson(data.locationConfig);
 
     const course = await db.course.update({ where: { id }, data });

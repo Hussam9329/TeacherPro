@@ -14,7 +14,8 @@ model Course {
   createdAt DateTime @default(now())
 
   availablePrograms  String @default("[]") // JSON: ["منهج كامل","كورسات"]
-  availableStudyTypes String @default("[]") // JSON: ["إلكتروني","حضوري","مدمج"]
+  availableStudyTypes String @default("[]") // JSON union: ["إلكتروني","حضوري","مدمج"]
+  studyTypesByProgram String @default("{}") // JSON: { "منهج كامل": ["إلكتروني"], "كورسات": ["حضوري"] }
   locationConfig     String @default("{}") // JSON: { studyType: { scopes, baghdadMode, baghdadSites, provinces } }
 
   groups    Group[]

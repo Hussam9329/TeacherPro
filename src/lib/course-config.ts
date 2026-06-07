@@ -26,6 +26,7 @@ export type StudyLocationConfig = {
 };
 
 export type CourseLocationConfig = Partial<Record<StudyType, StudyLocationConfig>>;
+export type StudyTypesByProgram = Partial<Record<CourseProgram, StudyType[]>>;
 
 // ─── JSON Helpers ────────────────────────────────────────────────────────────
 
@@ -63,15 +64,63 @@ export function stringifyJson(value: unknown) {
 export type CourseSettingsSource = {
   availablePrograms?: unknown;
   availableStudyTypes?: unknown;
+  studyTypesByProgram?: unknown;
   locationConfig?: unknown;
 };
 
+function isCourseProgram(value: unknown): value is CourseProgram {
+  return COURSE_PROGRAMS.includes(value as CourseProgram);
+}
+
+function isStudyType(value: unknown): value is StudyType {
+  return STUDY_TYPES.includes(value as StudyType);
+}
+
+function uniqueCoursePrograms(values: unknown[]): CourseProgram[] {
+  return Array.from(new Set(values.filter(isCourseProgram)));
+}
+
+function uniqueStudyTypes(values: unknown[]): StudyType[] {
+  return Array.from(new Set(values.filter(isStudyType)));
+}
+
+function getLegacyAvailableStudyTypes(course: CourseSettingsSource): StudyType[] {
+  return uniqueStudyTypes(parseJsonArray<unknown>(course.availableStudyTypes));
+}
+
 export function getAvailablePrograms(course: CourseSettingsSource): CourseProgram[] {
-  return parseJsonArray<CourseProgram>(course.availablePrograms);
+  return uniqueCoursePrograms(parseJsonArray<unknown>(course.availablePrograms));
+}
+
+export function getStudyTypesByProgram(course: CourseSettingsSource): StudyTypesByProgram {
+  const programs = getAvailablePrograms(course);
+  const legacyStudyTypes = getLegacyAvailableStudyTypes(course);
+  const rawMap = parseJsonRecord<Record<string, unknown>>(course.studyTypesByProgram, {});
+  const result: StudyTypesByProgram = {};
+
+  for (const program of programs) {
+    const selected = parseJsonArray<unknown>(rawMap[program]);
+    const normalized = uniqueStudyTypes(selected);
+
+    // توافق خلفي: الدورات القديمة كانت تحفظ نوع الدراسة كقائمة عامة.
+    result[program] = normalized.length > 0 ? normalized : [...legacyStudyTypes];
+  }
+
+  return result;
 }
 
 export function getAvailableStudyTypes(course: CourseSettingsSource): StudyType[] {
-  return parseJsonArray<StudyType>(course.availableStudyTypes);
+  const mappedStudyTypes = Object.values(getStudyTypesByProgram(course)).flat();
+  return uniqueStudyTypes(mappedStudyTypes.length > 0 ? mappedStudyTypes : getLegacyAvailableStudyTypes(course));
+}
+
+export function getAvailableStudyTypesForProgram(
+  course: CourseSettingsSource,
+  program?: string | null,
+): StudyType[] {
+  if (!program || !isCourseProgram(program)) return [];
+  const byProgram = getStudyTypesByProgram(course);
+  return uniqueStudyTypes(byProgram[program] || []);
 }
 
 export function getCourseLocationConfig(course: CourseSettingsSource): CourseLocationConfig {
@@ -142,14 +191,13 @@ export function validateStudentCourseChoices(
   choices: StudentCourseChoices,
 ): ValidationResult {
   const availablePrograms = getAvailablePrograms(course);
-  const availableStudyTypes = getAvailableStudyTypes(course);
 
   // 1. التحقق من courseProgram
   if (!choices.courseProgram) {
-    return { ok: false, error: "نوع البرنامج مطلوب" };
+    return { ok: false, error: "نوع الدورة مطلوب" };
   }
   if (!availablePrograms.includes(choices.courseProgram as CourseProgram)) {
-    return { ok: false, error: `نوع البرنامج "${choices.courseProgram}" غير متاح في هذه الدورة` };
+    return { ok: false, error: `نوع الدورة "${choices.courseProgram}" غير متاح في هذه الدورة` };
   }
 
   // 2. إذا كورسات، يجب اختيار كورس
@@ -159,12 +207,13 @@ export function validateStudentCourseChoices(
     }
   }
 
-  // 3. التحقق من studyType
+  // 3. التحقق من studyType حسب نوع الدورة المختار
+  const availableStudyTypes = getAvailableStudyTypesForProgram(course, choices.courseProgram);
   if (!choices.studyType) {
     return { ok: false, error: "نوع الدراسة مطلوب" };
   }
   if (!availableStudyTypes.includes(choices.studyType as StudyType)) {
-    return { ok: false, error: `نوع الدراسة "${choices.studyType}" غير متاح في هذه الدورة` };
+    return { ok: false, error: `نوع الدراسة "${choices.studyType}" غير متاح لنوع الدورة "${choices.courseProgram}"` };
   }
 
   // 4. التحقق من locationScope
@@ -248,8 +297,6 @@ export function findUsedOptionsToRemove(
 
   const oldPrograms = getAvailablePrograms(oldCourse);
   const newPrograms = getAvailablePrograms(newCourse);
-  const oldStudyTypes = getAvailableStudyTypes(oldCourse);
-  const newStudyTypes = getAvailableStudyTypes(newCourse);
 
   for (const student of students) {
     // تحقق من courseProgram
@@ -258,7 +305,7 @@ export function findUsedOptionsToRemove(
       oldPrograms.includes(student.courseProgram as CourseProgram) &&
       !newPrograms.includes(student.courseProgram as CourseProgram)
     ) {
-      errors.push(`نوع البرنامج "${student.courseProgram}" مستخدم من طالب ولا يمكن إزالته`);
+      errors.push(`نوع الدورة "${student.courseProgram}" مستخدم من طالب ولا يمكن إزالته`);
     }
 
     // تحقق من courseTerm (فقط إذا كان كورسات)
@@ -269,13 +316,12 @@ export function findUsedOptionsToRemove(
       }
     }
 
-    // تحقق من studyType
-    if (
-      student.studyType &&
-      oldStudyTypes.includes(student.studyType as StudyType) &&
-      !newStudyTypes.includes(student.studyType as StudyType)
-    ) {
-      errors.push(`نوع الدراسة "${student.studyType}" مستخدم من طالب ولا يمكن إزالته`);
+    // تحقق من studyType حسب نوع الدورة
+    if (student.courseProgram && student.studyType) {
+      const newStudyTypesForProgram = getAvailableStudyTypesForProgram(newCourse, student.courseProgram);
+      if (!newStudyTypesForProgram.includes(student.studyType as StudyType)) {
+        errors.push(`نوع الدراسة "${student.studyType}" مستخدم مع نوع الدورة "${student.courseProgram}" ولا يمكن إزالته`);
+      }
     }
 
     // تحقق من locationScope

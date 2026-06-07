@@ -10,10 +10,6 @@ import {
 import { getRequiredTextError } from "@/lib/validation";
 import { normalizeArabicText } from "@/lib/route-helpers";
 import {
-  parseJsonArray,
-  parseJsonRecord,
-  type CourseLocationConfig,
-  type StudyType,
   validateStudentCourseChoices,
   resolveSubSite,
 } from '@/lib/course-config';

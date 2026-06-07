@@ -157,7 +157,7 @@ export async function loadAllFromServer(): Promise<ServerData | null> {
 // ─── Course API ───────────────────────────────────────────────────────────────
 
 export const courseApi = {
-  add: (course: { id: string; name: string; type: string; createdAt: string; active: boolean }) =>
+  add: (course: Record<string, unknown>) =>
     apiPost('courses', course),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut('courses', { id, ...updates }),

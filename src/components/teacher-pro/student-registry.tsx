@@ -41,9 +41,8 @@ import {
   toLatinDigits,
 } from "@/lib/format";
 import {
-  COURSE_PROGRAMS, COURSE_TERMS, STUDY_TYPES,
-  type CourseProgram, type CourseTerm, type StudyType,
-  getAvailablePrograms, getAvailableStudyTypes, getCourseLocationConfig,
+  COURSE_TERMS,
+  getAvailablePrograms, getAvailableStudyTypesForProgram,
   getBaghdadSites, getProvinceOptions, getLocationScopes, getBaghdadMode,
 } from "@/lib/course-config";
 import {
@@ -240,9 +239,16 @@ export function StudentRegistryView() {
     [editSelectedCourse],
   );
 
+  const editEffectiveCourseProgram = useMemo(
+    () => editAvailablePrograms.length === 1 ? editAvailablePrograms[0] : editDialog.form.courseProgram,
+    [editAvailablePrograms, editDialog.form.courseProgram],
+  );
+
   const editAvailableStudyTypes = useMemo(
-    () => (editSelectedCourse ? getAvailableStudyTypes(editSelectedCourse) : []),
-    [editSelectedCourse],
+    () => (editSelectedCourse && editEffectiveCourseProgram
+      ? getAvailableStudyTypesForProgram(editSelectedCourse, editEffectiveCourseProgram)
+      : []),
+    [editSelectedCourse, editEffectiveCourseProgram],
   );
 
   const editLocationScopes = useMemo(
@@ -291,6 +297,15 @@ export function StudentRegistryView() {
       needsPatch = true;
     }
 
+    if (editDialog.form.studyType && !editAvailableStudyTypes.includes(editDialog.form.studyType as any)) {
+      patch.studyType = "";
+      patch.locationScope = "";
+      patch.baghdadMode = "";
+      patch.subSite = "";
+      patch.groupId = "";
+      needsPatch = true;
+    }
+
     // Auto-set baghdadMode from course config
     if (editBaghdadMode && !editDialog.form.baghdadMode) {
       patch.baghdadMode = editBaghdadMode;
@@ -326,6 +341,7 @@ export function StudentRegistryView() {
     editDialog.form.locationScope,
     editDialog.form.subSite,
     editAvailablePrograms,
+    editAvailableStudyTypes,
     editBaghdadMode,
     editSubSiteOptions,
   ]);
@@ -407,7 +423,7 @@ export function StudentRegistryView() {
     if (editAvailablePrograms.length > 1 && !form.courseProgram) {
       return "يرجى اختيار نوع الدورة (منهج كامل/كورسات)";
     }
-    if (form.courseProgram === "كورسات" && !form.courseTerm) {
+    if (editEffectiveCourseProgram === "كورسات" && !form.courseTerm) {
       return "يرجى اختيار الكورس";
     }
     if (editAvailableStudyTypes.length > 0 && !form.studyType) {
@@ -469,11 +485,11 @@ export function StudentRegistryView() {
       phone: form.phone.trim(),
       parentPhone: form.parentPhone.trim(),
       telegram: sanitizeTelegramInput(form.telegram),
-      courseProgram: form.courseProgram || (editAvailablePrograms.length === 1 ? editAvailablePrograms[0] : ""),
-      courseTerm: form.courseProgram === "كورسات" ? form.courseTerm : "",
-      studyType: form.studyType,
-      locationScope: form.locationScope,
-      baghdadMode: form.baghdadMode || (editBaghdadMode || ""),
+      courseProgram: (editEffectiveCourseProgram || "") as any,
+      courseTerm: (editEffectiveCourseProgram === "كورسات" ? form.courseTerm : "") as any,
+      studyType: form.studyType as any,
+      locationScope: form.locationScope as any,
+      baghdadMode: (form.baghdadMode || (editBaghdadMode || "")) as any,
       courseId: form.courseId,
       groupId: form.groupId,
       mainSite: form.locationScope,
@@ -574,7 +590,7 @@ export function StudentRegistryView() {
       "المدرسة",
       "الجنس",
       "الدورة",
-      "نوع البرنامج",
+      "نوع الدورة",
       "الكورس",
       "نوع الدراسة",
       "نطاق الموقع",
@@ -594,7 +610,7 @@ export function StudentRegistryView() {
       المدرسة: s.school || "",
       الجنس: s.gender,
       الدورة: courseName(s.courseId),
-      "نوع البرنامج": s.courseProgram || "",
+      "نوع الدورة": s.courseProgram || "",
       "الكورس": s.courseTerm || "",
       "نوع الدراسة": s.studyType || "",
       "نطاق الموقع": s.locationScope || "",
@@ -1200,7 +1216,7 @@ export function StudentRegistryView() {
             </div>
             {editDialog.form.courseId && editAvailablePrograms.length > 1 && (
               <div className="space-y-2">
-                <Label htmlFor="edit-courseProgram">نوع البرنامج</Label>
+                <Label htmlFor="edit-courseProgram">نوع الدورة</Label>
                 <Select
                   name="courseProgram"
                   value={editDialog.form.courseProgram}
@@ -1221,7 +1237,7 @@ export function StudentRegistryView() {
                   }
                 >
                   <SelectTrigger id="edit-courseProgram">
-                    <SelectValue placeholder="اختر نوع البرنامج..." />
+                    <SelectValue placeholder="اختر نوع الدورة..." />
                   </SelectTrigger>
                   <SelectContent>
                     {editAvailablePrograms.map((p) => (
@@ -1233,7 +1249,7 @@ export function StudentRegistryView() {
                 </Select>
               </div>
             )}
-            {editDialog.form.courseProgram === "كورسات" && (
+            {editEffectiveCourseProgram === "كورسات" && (
               <div className="space-y-2">
                 <Label htmlFor="edit-courseTerm">الكورس</Label>
                 <Select

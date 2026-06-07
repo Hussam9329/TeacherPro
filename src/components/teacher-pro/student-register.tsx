@@ -28,7 +28,7 @@ import {
 } from "@/lib/format";
 import {
   COURSE_TERMS,
-  getAvailablePrograms, getAvailableStudyTypes,
+  getAvailablePrograms, getAvailableStudyTypesForProgram,
   getBaghdadSites, getProvinceOptions, getLocationScopes, getBaghdadMode,
 } from "@/lib/course-config";
 import {
@@ -220,9 +220,17 @@ export function StudentRegisterView() {
     [selectedCourse],
   );
 
+  // Effective courseProgram: auto-select when only one option
+  const effectiveCourseProgram = useMemo(
+    () => courseAvailablePrograms.length === 1 ? courseAvailablePrograms[0] : form.courseProgram,
+    [courseAvailablePrograms, form.courseProgram],
+  );
+
   const courseAvailableStudyTypes = useMemo(
-    () => (selectedCourse ? getAvailableStudyTypes(selectedCourse) : []),
-    [selectedCourse],
+    () => (selectedCourse && effectiveCourseProgram
+      ? getAvailableStudyTypesForProgram(selectedCourse, effectiveCourseProgram)
+      : []),
+    [selectedCourse, effectiveCourseProgram],
   );
 
   const courseLocationScopes = useMemo(
@@ -255,12 +263,6 @@ export function StudentRegisterView() {
     return [];
   }, [selectedCourse, form.studyType, form.locationScope, courseBaghdadMode, courseBaghdadSites, courseProvinces]);
 
-  // Effective courseProgram: auto-select when only one option
-  const effectiveCourseProgram = useMemo(
-    () => courseAvailablePrograms.length === 1 ? courseAvailablePrograms[0] : form.courseProgram,
-    [courseAvailablePrograms, form.courseProgram],
-  );
-
   // Effective baghdadMode: auto-set from course config
   const effectiveBaghdadMode = useMemo(
     () => courseBaghdadMode || form.baghdadMode,
@@ -272,6 +274,21 @@ export function StudentRegisterView() {
     () => (form.locationScope === "بغداد" && courseBaghdadMode === "عموم بغداد") ? "عموم بغداد" : form.subSite,
     [form.locationScope, courseBaghdadMode, form.subSite],
   );
+
+  useEffect(() => {
+    if (!form.studyType) return;
+    if (courseAvailableStudyTypes.includes(form.studyType as any)) return;
+    queueMicrotask(() => {
+      setForm((prev) => ({
+        ...prev,
+        studyType: "",
+        locationScope: "",
+        baghdadMode: "",
+        subSite: "",
+        groupId: "",
+      }));
+    });
+  }, [courseAvailableStudyTypes, form.studyType]);
 
   const totalAmount = useMemo(
     () => amountValue(form.totalAmount),
@@ -405,7 +422,7 @@ export function StudentRegisterView() {
       return "يرجى اختيار نوع الدورة (منهج كامل/كورسات)";
     }
     // Course term validation (only if كورسات)
-    if (form.courseProgram === "كورسات" && !form.courseTerm) {
+    if (effectiveCourseProgram === "كورسات" && !form.courseTerm) {
       return "يرجى اختيار الكورس";
     }
     // Study type validation
@@ -483,11 +500,11 @@ export function StudentRegisterView() {
         phone: form.phone.trim(),
         parentPhone: form.parentPhone.trim(),
         telegram: sanitizeTelegramInput(form.telegram),
-        courseProgram: effectiveCourseProgram,
-        courseTerm: effectiveCourseProgram === "كورسات" ? form.courseTerm : "",
-        studyType: form.studyType,
-        locationScope: form.locationScope,
-        baghdadMode: effectiveBaghdadMode,
+        courseProgram: effectiveCourseProgram as any,
+        courseTerm: (effectiveCourseProgram === "كورسات" ? form.courseTerm : "") as any,
+        studyType: form.studyType as any,
+        locationScope: form.locationScope as any,
+        baghdadMode: effectiveBaghdadMode as any,
         courseId: form.courseId,
         groupId: form.groupId,
         mainSite: form.locationScope,
@@ -954,7 +971,7 @@ export function StudentRegisterView() {
                       htmlFor="reg-courseProgram"
                       className="font-bold text-foreground"
                     >
-                      نوع البرنامج <RequiredMark />
+                      نوع الدورة <RequiredMark />
                     </Label>
                     <Select
                       name="courseProgram"
@@ -977,7 +994,7 @@ export function StudentRegisterView() {
                         className={selectTriggerClass}
                         aria-required="true"
                       >
-                        <SelectValue placeholder="اختر نوع البرنامج..." />
+                        <SelectValue placeholder="اختر نوع الدورة..." />
                       </SelectTrigger>
                       <SelectContent>
                         {courseAvailablePrograms.map((p) => (
@@ -992,7 +1009,7 @@ export function StudentRegisterView() {
               )}
 
               {/* ── Course Term (only if كورسات) ── */}
-              {form.courseProgram === "كورسات" && (
+              {effectiveCourseProgram === "كورسات" && (
                 <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label

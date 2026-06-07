@@ -5,9 +5,8 @@ import { useTeacherStore, type Course } from "@/lib/teacher-store";
 import {
   COURSE_PROGRAMS, STUDY_TYPES, LOCATION_SCOPES, BAGHDAD_MODES,
   type CourseProgram, type StudyType, type LocationScope, type BaghdadMode,
-  type StudyLocationConfig, type CourseLocationConfig,
-  parseJsonArray, parseJsonRecord, stringifyJson,
-  getAvailablePrograms, getAvailableStudyTypes, getCourseLocationConfig,
+  type StudyLocationConfig, type CourseLocationConfig, type StudyTypesByProgram,
+  getAvailablePrograms, getAvailableStudyTypes, getCourseLocationConfig, getStudyTypesByProgram,
 } from "@/lib/course-config";
 import { BAGHDAD_COURSE_SITES, IRAQI_PROVINCES } from "@/lib/iraq";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +35,7 @@ type CourseFormState = {
   name: string;
   availablePrograms: CourseProgram[];
   availableStudyTypes: StudyType[];
+  studyTypesByProgram: StudyTypesByProgram;
   locationConfig: CourseLocationConfig;
 };
 
@@ -44,6 +44,7 @@ function emptyCourseForm(): CourseFormState {
     name: "",
     availablePrograms: [],
     availableStudyTypes: [],
+    studyTypesByProgram: {},
     locationConfig: {},
   };
 }
@@ -86,6 +87,40 @@ function normalizeCourseLocationConfig(
   }
 
   return nextConfig;
+}
+
+function getStudyTypesFromProgramMap(
+  studyTypesByProgram: StudyTypesByProgram,
+  programs: CourseProgram[],
+): StudyType[] {
+  const values = programs.flatMap((program) => studyTypesByProgram[program] || []);
+  return Array.from(new Set(values));
+}
+
+function validateCourseForm(form: CourseFormState): string | null {
+  if (!form.name.trim()) return "يرجى إدخال اسم الدورة";
+  if (form.availablePrograms.length === 0) return "يجب اختيار نوع دورة واحد على الأقل";
+
+  for (const program of form.availablePrograms) {
+    if ((form.studyTypesByProgram[program] || []).length === 0) {
+      return `يجب اختيار نوع دراسة واحد على الأقل لنوع الدورة "${program}"`;
+    }
+  }
+
+  for (const studyType of form.availableStudyTypes) {
+    const config = form.locationConfig[studyType];
+    if (!config || config.scopes.length === 0) {
+      return `يجب تحديد إعدادات المواقع لنوع الدراسة "${studyType}"`;
+    }
+    if (config.scopes.includes("بغداد") && !config.baghdadMode) {
+      return `يجب اختيار نوع بغداد لنوع الدراسة "${studyType}"`;
+    }
+    if (config.baghdadMode === "بغداد - مخصص" && (!config.baghdadSites || config.baghdadSites.length === 0)) {
+      return `يجب اختيار موقع واحد على الأقل من مواقع بغداد لنوع الدراسة "${studyType}"`;
+    }
+  }
+
+  return null;
 }
 
 /** Generate a human-readable location summary for a course */
@@ -135,29 +170,46 @@ function CourseBuilderForm({
   submitDisabled: boolean;
 }) {
   const handleProgramToggle = (program: CourseProgram) => {
-    setForm(prev => ({
-      ...prev,
-      availablePrograms: toggleInArray(prev.availablePrograms, program),
-    }));
-  };
-
-  const handleStudyTypeToggle = (studyType: StudyType) => {
     setForm(prev => {
-      const nextTypes = toggleInArray(prev.availableStudyTypes, studyType);
-      const nextConfig = { ...prev.locationConfig };
-      const existingConfig = nextConfig[studyType];
-      // If unchecked, remove its config
-      if (!nextTypes.includes(studyType)) {
-        delete nextConfig[studyType];
-      } else if (!existingConfig) {
-        // If newly checked, create empty config
-        nextConfig[studyType] = { scopes: [] };
+      const nextPrograms = toggleInArray(prev.availablePrograms, program);
+      const nextStudyTypesByProgram: StudyTypesByProgram = { ...prev.studyTypesByProgram };
+
+      if (nextPrograms.includes(program)) {
+        nextStudyTypesByProgram[program] = nextStudyTypesByProgram[program] || [];
       } else {
-        nextConfig[studyType] = normalizeStudyLocationConfig(studyType, existingConfig);
+        delete nextStudyTypesByProgram[program];
       }
+
+      const nextStudyTypes = getStudyTypesFromProgramMap(nextStudyTypesByProgram, nextPrograms);
       return {
         ...prev,
-        availableStudyTypes: nextTypes,
+        availablePrograms: nextPrograms,
+        studyTypesByProgram: nextStudyTypesByProgram,
+        availableStudyTypes: nextStudyTypes,
+        locationConfig: normalizeCourseLocationConfig(prev.locationConfig, nextStudyTypes),
+      };
+    });
+  };
+
+  const handleStudyTypeToggle = (program: CourseProgram, studyType: StudyType) => {
+    setForm(prev => {
+      const currentProgramTypes = prev.studyTypesByProgram[program] || [];
+      const nextProgramTypes = toggleInArray(currentProgramTypes, studyType);
+      const nextStudyTypesByProgram: StudyTypesByProgram = {
+        ...prev.studyTypesByProgram,
+        [program]: nextProgramTypes,
+      };
+      const nextStudyTypes = getStudyTypesFromProgramMap(nextStudyTypesByProgram, prev.availablePrograms);
+      const nextConfig = normalizeCourseLocationConfig(prev.locationConfig, nextStudyTypes);
+
+      if (nextProgramTypes.includes(studyType) && !nextConfig[studyType]) {
+        nextConfig[studyType] = { scopes: [] };
+      }
+
+      return {
+        ...prev,
+        studyTypesByProgram: nextStudyTypesByProgram,
+        availableStudyTypes: nextStudyTypes,
         locationConfig: nextConfig,
       };
     });
@@ -291,26 +343,42 @@ function CourseBuilderForm({
         </div>
       </div>
 
-      <Separator />
+      {form.availablePrograms.length > 0 && (
+        <>
+          <Separator />
 
-      {/* نوع الدراسة */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-          <Monitor className="size-4 text-primary" />
-          <span>نوع الدراسة</span>
-        </div>
-        <div className="flex flex-wrap gap-4">
-          {STUDY_TYPES.map((st) => (
-            <label key={st} className="flex items-center gap-2 cursor-pointer">
-              <Checkbox
-                checked={form.availableStudyTypes.includes(st)}
-                onCheckedChange={() => handleStudyTypeToggle(st)}
-              />
-              <span className="text-sm">{st}</span>
-            </label>
-          ))}
-        </div>
-      </div>
+          {/* نوع الدراسة حسب نوع الدورة */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+              <Monitor className="size-4 text-primary" />
+              <span>نوع الدراسة لكل نوع دورة</span>
+            </div>
+            {form.availablePrograms.map((program) => (
+              <Card key={program} className="border-dashed bg-muted/20">
+                <CardHeader className="pb-3 pt-4 px-4">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <GraduationCap className="size-4 text-muted-foreground" />
+                    {program}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <div className="flex flex-wrap gap-4">
+                    {STUDY_TYPES.map((st) => (
+                      <label key={`${program}-${st}`} className="flex items-center gap-2 cursor-pointer">
+                        <Checkbox
+                          checked={(form.studyTypesByProgram[program] || []).includes(st)}
+                          onCheckedChange={() => handleStudyTypeToggle(program, st)}
+                        />
+                        <span className="text-sm">{st}</span>
+                      </label>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* إعداد المواقع لكل نوع دراسة */}
       {form.availableStudyTypes.length > 0 && (
@@ -319,7 +387,7 @@ function CourseBuilderForm({
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm font-bold text-foreground">
               <MapPin className="size-4 text-primary" />
-              <span>إعداد المواقع لكل نوع دراسة</span>
+              <span>إعداد المواقع لكل نوع دراسة مستخدم</span>
             </div>
             {form.availableStudyTypes.map((studyType) => {
               const studyConfig = form.locationConfig[studyType] || { scopes: [] };
@@ -421,7 +489,7 @@ function CourseBuilderForm({
       {/* Submit */}
       <Button
         onClick={onSubmit}
-        disabled={submitDisabled || !form.name.trim()}
+        disabled={submitDisabled || !form.name.trim() || form.availablePrograms.length === 0 || form.availableStudyTypes.length === 0}
         className="w-full"
       >
         {submitDisabled ? "جاري الحفظ..." : submitLabel}
@@ -459,14 +527,16 @@ export function CoursesView() {
 
   // ─── Create course handler ─────────────────────────────────────────────────
   const handleCreate = runAddCourseLocked(async () => {
-    if (!createForm.name.trim()) {
-      toast.error("يرجى إدخال اسم الدورة");
+    const validationMessage = validateCourseForm(createForm);
+    if (validationMessage) {
+      toast.error(validationMessage);
       return;
     }
     addCourse({
       name: createForm.name.trim(),
       availablePrograms: createForm.availablePrograms,
       availableStudyTypes: createForm.availableStudyTypes,
+      studyTypesByProgram: createForm.studyTypesByProgram,
       locationConfig: normalizeCourseLocationConfig(createForm.locationConfig, createForm.availableStudyTypes),
     });
     setCreateForm(emptyCourseForm());
@@ -482,6 +552,7 @@ export function CoursesView() {
         name: course.name,
         availablePrograms: getAvailablePrograms(course),
         availableStudyTypes: getAvailableStudyTypes(course),
+        studyTypesByProgram: getStudyTypesByProgram(course),
         locationConfig: normalizeCourseLocationConfig(
           JSON.parse(JSON.stringify(getCourseLocationConfig(course))),
           getAvailableStudyTypes(course),
@@ -491,14 +562,16 @@ export function CoursesView() {
   };
 
   const handleEditSave = runSaveCourseLocked(async () => {
-    if (!editDialog.form.name.trim()) {
-      toast.error("يرجى إدخال اسم الدورة");
+    const validationMessage = validateCourseForm(editDialog.form);
+    if (validationMessage) {
+      toast.error(validationMessage);
       return;
     }
     const result = updateCourse(editDialog.courseId, {
       name: editDialog.form.name.trim(),
       availablePrograms: editDialog.form.availablePrograms,
       availableStudyTypes: editDialog.form.availableStudyTypes,
+      studyTypesByProgram: editDialog.form.studyTypesByProgram,
       locationConfig: normalizeCourseLocationConfig(editDialog.form.locationConfig, editDialog.form.availableStudyTypes),
     });
     if (!result.ok) {
@@ -568,6 +641,7 @@ export function CoursesView() {
               courses.map((course) => {
                 const programs = getAvailablePrograms(course);
                 const studyTypes = getAvailableStudyTypes(course);
+                const studyTypesByProgram = getStudyTypesByProgram(course);
                 const locationSummary = buildLocationSummary(course);
 
                 return (
@@ -594,13 +668,7 @@ export function CoursesView() {
                         {programs.map((p) => (
                           <Badge key={p} variant="outline" className="text-xs">
                             <GraduationCap className="size-3 ml-1" />
-                            {p}
-                          </Badge>
-                        ))}
-                        {studyTypes.map((st) => (
-                          <Badge key={st} variant="outline" className="text-xs">
-                            <Monitor className="size-3 ml-1" />
-                            {st}
+                            {p}: {(studyTypesByProgram[p] || []).join("، ") || "بدون نوع دراسة"}
                           </Badge>
                         ))}
                       </div>
