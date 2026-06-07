@@ -42,7 +42,6 @@ export async function POST(req: NextRequest) {
         type: body.type,
         courseIds: JSON.stringify(parseCourseIds(body.courseIds)),
         mainSite: body.mainSite,
-        groupId: body.groupId || undefined,
         date: body.date ? new Date(body.date) : new Date(),
         fullMark: Number(body.fullMark || 100),
         passMark: Number(body.passMark || 50),
@@ -64,7 +63,7 @@ export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
     const { id, ...data } = body;
-    for (const obsoleteKey of ["attendance", "attendanceClosed"]) {
+    for (const obsoleteKey of ["attendance", "attendanceClosed", "groupId"]) {
       delete data[obsoleteKey];
     }
     if (!id) return validationError('تعذر تحديد الامتحان المطلوب');

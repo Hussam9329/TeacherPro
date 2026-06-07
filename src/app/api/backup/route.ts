@@ -4,7 +4,6 @@ import { db } from '@/lib/db';
 export async function GET() {
   const [
     courses,
-    groups,
     sites,
     chapters,
     courseChapters,
@@ -21,7 +20,6 @@ export async function GET() {
     demoCopies,
   ] = await Promise.all([
     db.course.findMany(),
-    db.group.findMany(),
     db.site.findMany(),
     db.chapter.findMany(),
     db.courseChapter.findMany(),
@@ -54,7 +52,6 @@ export async function GET() {
     version: 3,
     exportedAt: new Date().toISOString(),
     courses,
-    groups,
     sites,
     chapters,
     courseChapters,

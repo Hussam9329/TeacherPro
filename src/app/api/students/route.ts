@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   const query = new URL(req.url).searchParams.get("q") || "";
   const students = await db.student.findMany({
     orderBy: { createdAt: "desc" },
-    include: { course: true, group: true },
+    include: { course: true },
   });
   const normalizedQuery = normalizeArabicText(query);
   const filteredStudents = normalizedQuery
@@ -154,7 +154,6 @@ export async function POST(req: NextRequest) {
       baseOpportunities: Number(body.baseOpportunities || 0),
       courseId: body.courseId,
         ...uniqueKeys,
-        groupId: body.groupId || undefined,
       },
     });
     return NextResponse.json({ student }, { status: 201 });
@@ -166,7 +165,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const body = await req.json();
   const { id, ...data } = body;
-  for (const obsoleteKey of ["receiptNo", "codeSequence", "totalAmount", "paidAmount", "installments", "accountingStart"]) {
+  for (const obsoleteKey of ["receiptNo", "codeSequence", "totalAmount", "paidAmount", "installments", "accountingStart", "groupId"]) {
     delete data[obsoleteKey];
   }
   if (!id)

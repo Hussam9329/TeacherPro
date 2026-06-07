@@ -635,7 +635,7 @@ export function CoursesView() {
               <EmptyState
                 icon={BookOpen}
                 title="لا توجد دورات بعد"
-                description="أضف أول دورة من النموذج المجاور لتظهر هنا وتبدأ ربط الطلاب والمجموعات الإلكترونية."
+                description="أضف أول دورة من النموذج المجاور لتظهر هنا وتبدأ ربط الطلاب والمواقع."
               />
             ) : (
               courses.map((course) => {

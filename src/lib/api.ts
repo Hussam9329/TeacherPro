@@ -125,7 +125,6 @@ async function apiGet<T>(endpoint: string): Promise<T | null> {
 
 export interface ServerData {
   courses?: Array<Record<string, unknown>>;
-  groups?: Array<Record<string, unknown>>;
   sites?: Array<Record<string, unknown>>;
   chapters?: Array<Record<string, unknown>>;
   courseChapters?: Array<Record<string, unknown>>;
@@ -165,16 +164,6 @@ export const courseApi = {
     apiDelete('courses', id),
 };
 
-// ─── Group API ────────────────────────────────────────────────────────────────
-
-export const groupApi = {
-  add: (group: { id: string; name: string; courseId: string; electronicGroup: string; active: boolean }) =>
-    apiPost('groups', group),
-  update: (id: string, updates: Record<string, unknown>) =>
-    apiPut('groups', { id, ...updates }),
-  remove: (id: string) =>
-    apiDelete('groups', id),
-};
 
 // ─── Site API ─────────────────────────────────────────────────────────────────
 
@@ -306,7 +295,6 @@ export const demoCopyApi = {
 
 export async function pushAllToServer(data: {
   courses: Array<Record<string, unknown>>;
-  groups: Array<Record<string, unknown>>;
   sites: Array<Record<string, unknown>>;
   chapters: Array<Record<string, unknown>>;
   courseChapters: Array<Record<string, unknown>>;
@@ -326,9 +314,6 @@ export async function pushAllToServer(data: {
 
   for (const course of data.courses) {
     promises.push(apiPost('courses', course));
-  }
-  for (const group of data.groups) {
-    promises.push(apiPost('groups', group));
   }
   for (const site of data.sites) {
     promises.push(apiPost('sites', site));

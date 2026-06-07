@@ -35,7 +35,6 @@ type ExamFormState = {
   type: "يومي" | "تراكمي" | "فاينل";
   courseIds: string[];
   mainSites: string[];
-  groupIds: string[];
   date: string;
   fullMark: number;
   passMark: number;
@@ -57,7 +56,6 @@ function emptyForm(): ExamFormState {
     type: "يومي",
     courseIds: [],
     mainSites: [],
-    groupIds: [],
     date: todayISO(),
     fullMark: 100,
     passMark: 60,
@@ -76,7 +74,6 @@ function formFromExam(exam: Exam): ExamFormState {
     type: exam.type,
     courseIds: [...exam.courseIds],
     mainSites: splitSelection(exam.mainSite),
-    groupIds: splitSelection(exam.groupId),
     date: exam.date,
     fullMark: exam.fullMark,
     passMark: exam.passMark,
@@ -113,7 +110,6 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
     type: form.type,
     courseIds: form.courseIds,
     mainSite: form.mainSites.join(","),
-    groupId: form.groupIds.join(","),
     date: form.date,
     fullMark: form.fullMark,
     passMark: form.passMark,
@@ -127,7 +123,6 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
 export function ExamNewView() {
   const {
     courses,
-    groups,
     sites,
     exams,
     courseChapters,
@@ -135,7 +130,6 @@ export function ExamNewView() {
     updateExam,
     toggleExam,
     courseName,
-    groupName,
   } = useTeacherStore();
 
   const [form, setForm] = useState<ExamFormState>(() => emptyForm());
@@ -144,7 +138,6 @@ export function ExamNewView() {
 
   const activeCourses = useMemo(() => courses.filter((course) => course.active), [courses]);
 
-  const availableGroupsFor = (state: ExamFormState) => groups.filter((g) => state.courseIds.includes(g.courseId) && g.active);
   const availableMainSitesFor = (state: ExamFormState) => {
     const courseSites = sites
       .filter((s) => s.active && (state.courseIds.length === 0 || state.courseIds.includes(s.courseId)))
@@ -152,16 +145,14 @@ export function ExamNewView() {
     return [...new Set([...MAIN_SITE_OPTIONS, ...courseSites])];
   };
 
-  const availableGroups = useMemo(() => availableGroupsFor(form), [groups, form.courseIds]);
   const availableMainSites = useMemo(() => availableMainSitesFor(form), [sites, form.courseIds]);
 
   useEffect(() => {
     setForm((prev) => ({
       ...prev,
-      groupIds: prev.groupIds.filter((id) => availableGroups.some((g) => g.id === id)),
       mainSites: prev.mainSites.filter((site) => availableMainSites.includes(site)),
     }));
-  }, [availableGroups, availableMainSites]);
+  }, [availableMainSites]);
 
   const validateForm = (state: ExamFormState) => {
     if (!state.name.trim()) return "يرجى إدخال اسم الامتحان";
@@ -169,7 +160,6 @@ export function ExamNewView() {
     const invalidCourses = state.courseIds.filter((courseId) => !hasActiveChapterLink(courseChapters, courseId));
     if (invalidCourses.length > 0) return `لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourses.map(courseName).join("، ")}`;
     if (state.mainSites.length === 0) return "يرجى اختيار منطقة واحدة على الأقل أو اختيار الكل";
-    if (availableGroupsFor(state).length > 0 && state.groupIds.length === 0) return "يرجى اختيار مجموعة إلكترونية واحدة على الأقل أو اختيار الكل";
     if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ التفعيل المجدول";
     if (state.statusMode === "تعطيل مجدول" && !state.scheduledDeactivateAt) return "حدد تاريخ التعطيل المجدول";
     return null;
@@ -190,7 +180,6 @@ export function ExamNewView() {
   const toggleCourseSelection = (state: ExamFormState, courseId: string): ExamFormState => ({
     ...state,
     courseIds: toggleSelection(state.courseIds, courseId),
-    groupIds: [],
   });
 
   const renderCourseSelector = (state: ExamFormState, setState: (updater: (prev: ExamFormState) => ExamFormState) => void, allId: string) => {
@@ -202,7 +191,7 @@ export function ExamNewView() {
           <Checkbox
             id={allId}
             checked={allSelected}
-            onCheckedChange={() => setState((prev) => ({ ...prev, courseIds: allSelected ? [] : eligibleCourses.map((course) => course.id), groupIds: [] }))}
+            onCheckedChange={() => setState((prev) => ({ ...prev, courseIds: allSelected ? [] : eligibleCourses.map((course) => course.id) }))}
           />
           <Label htmlFor={allId} className="text-sm font-bold">الكل للدورات المربوطة بفصل</Label>
         </div>
@@ -273,10 +262,8 @@ export function ExamNewView() {
 
   const renderFormFields = (state: ExamFormState, setState: (updater: (prev: ExamFormState) => ExamFormState) => void, prefix: string) => {
     const isCumulativeOrFinal = state.type === "تراكمي" || state.type === "فاينل";
-    const groupsForState = availableGroupsFor(state);
     const mainSitesForState = availableMainSitesFor(state);
     const allMainSitesSelected = mainSitesForState.length > 0 && state.mainSites.length === mainSitesForState.length;
-    const allGroupsSelected = groupsForState.length > 0 && state.groupIds.length === groupsForState.length;
 
     return (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -324,21 +311,6 @@ export function ExamNewView() {
               <div key={site} className="flex items-center gap-2">
                 <Checkbox checked={state.mainSites.includes(site)} onCheckedChange={() => setState((p) => ({ ...p, mainSites: toggleSelection(p.mainSites, site) }))} />
                 <span className="text-sm">{site}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label>المجموعات الإلكترونية</Label>
-          <div className="space-y-2 border rounded-lg p-3 max-h-48 overflow-y-auto">
-            <div className="flex items-center gap-2 border-b pb-2">
-              <Checkbox checked={allGroupsSelected} disabled={groupsForState.length === 0} onCheckedChange={() => setState((p) => ({ ...p, groupIds: allGroupsSelected ? [] : groupsForState.map((group) => group.id) }))} />
-              <span className="text-sm font-bold">الكل</span>
-            </div>
-            {groupsForState.length === 0 ? <p className="text-sm text-muted-foreground">لا توجد مجموعات لهذه الدورات</p> : groupsForState.map((group) => (
-              <div key={group.id} className="flex items-center gap-2">
-                <Checkbox checked={state.groupIds.includes(group.id)} onCheckedChange={() => setState((p) => ({ ...p, groupIds: toggleSelection(p.groupIds, group.id) }))} />
-                <span className="text-sm">{group.name} - {courseName(group.courseId)}</span>
               </div>
             ))}
           </div>
@@ -391,7 +363,6 @@ export function ExamNewView() {
             {exams.map((exam) => {
               const status = getExamStatus(exam);
               const examMainSites = splitSelection(exam.mainSite);
-              const examGroupIds = splitSelection(exam.groupId);
               return (
                 <div key={exam.id} className="rounded-2xl border bg-card/80 p-4 shadow-sm">
                   <div className="mb-2 flex items-start justify-between gap-3">
@@ -409,7 +380,6 @@ export function ExamNewView() {
                     <div><span className="text-xs text-muted-foreground">الخصم:</span> {exam.discountMark}</div>
                     <div><span className="text-xs text-muted-foreground">الدورات:</span> {exam.courseIds.map((id) => courseName(id)).join("، ")}</div>
                     <div><span className="text-xs text-muted-foreground">المناطق:</span> {examMainSites.join("، ") || "الكل"}</div>
-                    <div><span className="text-xs text-muted-foreground">المجموعات:</span> {examGroupIds.map((id) => groupName(id)).join("، ") || "الكل"}</div>
                     {exam.scheduledActivateAt && <div><span className="text-xs text-muted-foreground">تفعيل:</span> {exam.scheduledActivateAt}</div>}
                     {exam.scheduledDeactivateAt && <div><span className="text-xs text-muted-foreground">تعطيل:</span> {exam.scheduledDeactivateAt}</div>}
                   </div>

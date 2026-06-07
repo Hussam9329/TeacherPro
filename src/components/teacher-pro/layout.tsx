@@ -121,7 +121,7 @@ function readSectionFromLocation(): SectionId | null {
   const hashSection = window.location.hash.replace(/^#/, "");
   const value = querySection || hashSection;
   // Backward compatibility: redirect old section IDs
-  if (value === 'course-new' || value === 'group-new' || value === 'site-management') {
+  if (value === 'course-new' || value === 'site-management') {
     return 'courses' as SectionId;
   }
   return sectionIds.has(value as SectionId) ? (value as SectionId) : null;

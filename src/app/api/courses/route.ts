@@ -207,7 +207,6 @@ export async function DELETE(req: NextRequest) {
     await db.$transaction(async (tx) => {
       await tx.courseChapter.deleteMany({ where: { courseId: id } });
       await tx.site.deleteMany({ where: { courseId: id } });
-      await tx.group.deleteMany({ where: { courseId: id } });
       await tx.course.delete({ where: { id } });
     });
     return NextResponse.json({ ok: true });

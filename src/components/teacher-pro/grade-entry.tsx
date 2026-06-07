@@ -82,14 +82,12 @@ export function GradeEntryView() {
   const examStudents = useMemo(() => {
     if (!selectedExam) return [];
     const selectedMainSites = splitSelection(selectedExam.mainSite);
-    const selectedGroupIds = splitSelection(selectedExam.groupId);
 
     return students
       .filter((student) => {
         if (!selectedExam.courseIds.includes(student.courseId)) return false;
         if (!hasActiveChapterLink(courseChapters, student.courseId)) return false;
         if (selectedMainSites.length > 0 && !selectedMainSites.includes(student.mainSite)) return false;
-        if (selectedGroupIds.length > 0 && !selectedGroupIds.includes(student.groupId)) return false;
         if (filterCourseId && student.courseId !== filterCourseId) return false;
         if (search && !searchAny(search, [student.name, student.code, student.telegram, student.phone])) return false;
         const grade = grades.find((g) => g.studentId === student.id && g.examId === selectedExam.id);

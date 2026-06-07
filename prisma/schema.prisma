@@ -18,21 +18,11 @@ model Course {
   studyTypesByProgram String @default("{}") // JSON: { "منهج كامل": ["إلكتروني"], "كورسات": ["حضوري"] }
   locationConfig     String @default("{}") // JSON: { studyType: { scopes, baghdadMode, baghdadSites, provinces } }
 
-  groups    Group[]
   sites     Site[]
   students  Student[]
   chapters  CourseChapter[]
 }
 
-model Group {
-  id              String   @id @default(cuid())
-  name            String
-  electronicGroup String?
-  active          Boolean  @default(true)
-  courseId        String
-  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  students        Student[]
-}
 
 model Site {
   id       String  @id @default(cuid())
@@ -92,16 +82,13 @@ model Student {
   baseOpportunities Int    @default(0)
   createdAt       DateTime @default(now())
   courseId        String
-  groupId         String?
   course          Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  group           Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
   grades          Grade[]
   opportunityLogs OpportunityLog[]
   correctionSheets CorrectionSheet[]
   whatsappMessages WhatsAppMessage[]
 
   @@index([courseId])
-  @@index([groupId])
   @@index([status])
 }
 
@@ -120,7 +107,6 @@ model Exam {
   active             Boolean @default(true)
   scheduledActivateAt   DateTime?
   scheduledDeactivateAt DateTime?
-  groupId            String?
   grades             Grade[]
   correctionSheets   CorrectionSheet[]
   opportunityLogs    OpportunityLog[]

@@ -71,7 +71,6 @@ type StudentEditForm = {
   locationScope: string;
   baghdadMode: string;
   courseId: string;
-  groupId: string;
   subSite: string;
   createdAt: string;
 };
@@ -89,7 +88,6 @@ const emptyEditForm: StudentEditForm = {
   locationScope: "",
   baghdadMode: "",
   courseId: "",
-  groupId: "",
   subSite: "",
   createdAt: new Date().toISOString().slice(0, 10),
 };
@@ -108,7 +106,6 @@ function getStudentEditForm(student: Student): StudentEditForm {
     locationScope: student.locationScope || "",
     baghdadMode: student.baghdadMode || "",
     courseId: student.courseId,
-    groupId: student.groupId,
     subSite: student.subSite || "",
     createdAt: student.createdAt || new Date().toISOString().slice(0, 10),
   };
@@ -148,7 +145,6 @@ export function StudentRegistryView() {
   const {
     students,
     courses,
-    groups,
     exams,
     grades,
     opportunityLogs,
@@ -158,7 +154,6 @@ export function StudentRegistryView() {
     deleteStudent,
     setSection,
     courseName,
-    groupName,
     activeChapterForCourse,
   } = useTeacherStore();
 
@@ -166,7 +161,6 @@ export function StudentRegistryView() {
   const [filterCourseId, setFilterCourseId] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterGender, setFilterGender] = useState("");
-  const [filterGroupId, setFilterGroupId] = useState("");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
@@ -201,11 +195,6 @@ export function StudentRegistryView() {
     [courses],
   );
 
-  const editFilteredGroups = useMemo(
-    () =>
-      groups.filter((g) => g.courseId === editDialog.form.courseId && g.active),
-    [groups, editDialog.form.courseId],
-  );
 
   const editSelectedCourse = useMemo(
     () => courses.find((c) => c.id === editDialog.form.courseId),
@@ -277,7 +266,6 @@ export function StudentRegistryView() {
       patch.locationScope = "";
       patch.baghdadMode = "";
       patch.subSite = "";
-      patch.groupId = "";
       needsPatch = true;
     }
 
@@ -365,12 +353,6 @@ export function StudentRegistryView() {
           ? "لا توجد دورات مسجلة"
           : "يرجى اختيار الدورة",
       ],
-      [
-        Boolean(form.groupId),
-        editFilteredGroups.length === 0
-          ? "لا توجد مجموعات إلكترونية مسجلة لهذه الدورة"
-          : "المجموعة الإلكترونية مطلوبة",
-      ],
       [Boolean(form.createdAt), "تاريخ إضافة الطالب مطلوب"],
     ];
 
@@ -445,7 +427,6 @@ export function StudentRegistryView() {
       locationScope: form.locationScope as any,
       baghdadMode: (form.baghdadMode || (editBaghdadMode || "")) as any,
       courseId: form.courseId,
-      groupId: form.groupId,
       mainSite: form.locationScope,
       subSite: form.subSite || (editBaghdadMode === "عموم بغداد" ? "عموم بغداد" : ""),
       createdAt: form.createdAt,
@@ -488,7 +469,6 @@ export function StudentRegistryView() {
       if (filterCourseId && s.courseId !== filterCourseId) return false;
       if (filterStatus && s.status !== filterStatus) return false;
       if (filterGender && s.gender !== filterGender) return false;
-      if (filterGroupId && s.groupId !== filterGroupId) return false;
       return true;
     });
   }, [
@@ -497,7 +477,6 @@ export function StudentRegistryView() {
     filterCourseId,
     filterStatus,
     filterGender,
-    filterGroupId,
   ]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
@@ -589,7 +568,6 @@ export function StudentRegistryView() {
     setFilterCourseId("");
     setFilterStatus("");
     setFilterGender("");
-    setFilterGroupId("");
     setPage(1);
   };
 
@@ -634,31 +612,6 @@ export function StudentRegistryView() {
                   {courses.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="registry-group" className="text-xs">
-                المجموعة الإلكترونية
-              </Label>
-              <Select
-                name="groupId"
-                value={filterGroupId}
-                onValueChange={(v) => {
-                  setFilterGroupId(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="registry-group">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {groups.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>
-                      {g.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -848,12 +801,6 @@ export function StudentRegistryView() {
                 <div>
                   <span className="text-muted-foreground text-xs">نوع الدراسة</span>
                   <p className="font-medium text-xs">{student.studyType || "-"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">المجموعة الإلكترونية</span>
-                  <p className="font-medium text-xs">
-                    {groupName(student.groupId)}
-                  </p>
                 </div>
                 <div>
                   <span className="text-muted-foreground text-xs">الموقع</span>
@@ -1093,8 +1040,7 @@ export function StudentRegistryView() {
                     form: {
                       ...prev.form,
                       courseId: v,
-                      groupId: "",
-                      courseProgram: "",
+                                          courseProgram: "",
                       courseTerm: "",
                       studyType: "",
                       locationScope: "",
@@ -1146,8 +1092,7 @@ export function StudentRegistryView() {
                         locationScope: "",
                         baghdadMode: "",
                         subSite: "",
-                        groupId: "",
-                      },
+                                            },
                     }))
                   }
                 >
@@ -1268,52 +1213,6 @@ export function StudentRegistryView() {
                 </Select>
               </div>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="edit-groupId">المجموعة الإلكترونية</Label>
-              <Select
-                name="groupId"
-                value={editDialog.form.groupId}
-                onValueChange={(v) => updateEditForm("groupId", v)}
-                disabled={
-                  !editDialog.form.courseId || editFilteredGroups.length === 0
-                }
-              >
-                <SelectTrigger id="edit-groupId">
-                  <SelectValue
-                    placeholder={
-                      editFilteredCourses.length === 0
-                        ? "لا توجد مجموعات إلكترونية مسجلة"
-                        : !editDialog.form.courseId
-                          ? "اختر الدورة أولاً"
-                          : editFilteredGroups.length === 0
-                            ? "لا توجد مجموعات إلكترونية مسجلة"
-                            : "اختر المجموعة الإلكترونية"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {editFilteredCourses.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">
-                      لا توجد مجموعات إلكترونية مسجلة لهذا النوع
-                    </div>
-                  ) : !editDialog.form.courseId ? (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">
-                      اختر الدورة أولاً
-                    </div>
-                  ) : editFilteredGroups.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">
-                      لا توجد مجموعات إلكترونية مسجلة لهذه الدورة
-                    </div>
-                  ) : (
-                    editFilteredGroups.map((g) => (
-                      <SelectItem key={g.id} value={g.id}>
-                        {g.name} - {g.electronicGroup}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
             <div className="space-y-2">
               <Label htmlFor="edit-createdAt">تاريخ إضافة الطالب</Label>
               <Input
@@ -1472,10 +1371,6 @@ export function StudentRegistryView() {
                 <div>
                   <span className="text-muted-foreground">الدورة:</span>{" "}
                   <strong>{courseName(fileDialog.student.courseId)}</strong>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">المجموعة الإلكترونية:</span>{" "}
-                  <strong>{groupName(fileDialog.student.groupId)}</strong>
                 </div>
                 <div>
                   <span className="text-muted-foreground">الموقع:</span>{" "}

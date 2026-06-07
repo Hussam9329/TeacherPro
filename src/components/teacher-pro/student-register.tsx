@@ -75,7 +75,6 @@ type StudentRegisterForm = {
   locationScope: string;
   baghdadMode: string;
   courseId: string;
-  groupId: string;
   subSite: string;
   createdAt: string;
 };
@@ -109,7 +108,6 @@ function emptyForm(): StudentRegisterForm {
     locationScope: "",
     baghdadMode: "",
     courseId: "",
-    groupId: "",
     subSite: "",
     createdAt: todayISO(),
   };
@@ -168,7 +166,7 @@ function SectionTitle({
 }
 
 export function StudentRegisterView() {
-  const { students, courses, groups, addStudent, activeChapterForCourse } =
+  const { students, courses, addStudent, activeChapterForCourse } =
     useTeacherStore();
   const [form, setForm] = useState<StudentRegisterForm>(() =>
     readStudentDraft(),
@@ -180,10 +178,6 @@ export function StudentRegisterView() {
     [courses],
   );
 
-  const filteredGroups = useMemo(
-    () => groups.filter((g) => g.courseId === form.courseId && g.active),
-    [groups, form.courseId],
-  );
 
   const selectedCourse = useMemo(
     () => courses.find((c) => c.id === form.courseId),
@@ -260,8 +254,7 @@ export function StudentRegisterView() {
         locationScope: "",
         baghdadMode: "",
         subSite: "",
-        groupId: "",
-      }));
+          }));
     });
   }, [courseAvailableStudyTypes, form.studyType]);
 
@@ -338,8 +331,7 @@ export function StudentRegisterView() {
       locationScope: "",
       baghdadMode: "",
       subSite: "",
-      groupId: "",
-    }));
+      }));
   };
 
   const validateRequiredFields = () => {
@@ -434,7 +426,6 @@ export function StudentRegisterView() {
         locationScope: form.locationScope as any,
         baghdadMode: effectiveBaghdadMode as any,
         courseId: form.courseId,
-        groupId: form.groupId,
         mainSite: form.locationScope,
         subSite: effectiveSubSite,
         status: "نشط",
@@ -685,7 +676,7 @@ export function StudentRegisterView() {
               <SectionTitle
                 icon={BookOpen}
                 title="تفاصيل الدورة"
-                description="اختيار الدورة يحدد المجموعات الإلكترونية والمواقع المتاحة تلقائياً."
+                description="اختيار الدورة يحدد المواقع المتاحة تلقائياً."
               />
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -754,8 +745,7 @@ export function StudentRegisterView() {
                           locationScope: "",
                           baghdadMode: "",
                           subSite: "",
-                          groupId: "",
-                        }))
+                                              }))
                       }
                     >
                       <SelectTrigger
@@ -798,8 +788,7 @@ export function StudentRegisterView() {
                           locationScope: "",
                           baghdadMode: "",
                           subSite: "",
-                          groupId: "",
-                        }))
+                                              }))
                       }
                     >
                       <SelectTrigger
@@ -841,8 +830,7 @@ export function StudentRegisterView() {
                           locationScope: "",
                           baghdadMode: "",
                           subSite: "",
-                          groupId: "",
-                        }))
+                                              }))
                       }
                     >
                       <SelectTrigger
@@ -943,56 +931,6 @@ export function StudentRegisterView() {
                   تم تحديد الموقع تلقائياً: عموم بغداد
                 </div>
               )}
-
-              {/* ── Group Selection ── */}
-              <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2">
-                <div className="space-y-2 md:col-span-2">
-                  <Label
-                    htmlFor="reg-groupId"
-                    className="font-bold text-foreground"
-                  >
-                    المجموعة الإلكترونية
-                  </Label>
-                  <Select
-                    name="groupId"
-                    value={form.groupId}
-                    onValueChange={(v) => updateForm("groupId", v)}
-                    disabled={!form.courseId || filteredGroups.length === 0}
-                  >
-                    <SelectTrigger
-                      id="reg-groupId"
-                      className={selectTriggerClass}
-                    >
-                      <SelectValue
-                        placeholder={
-                          !form.courseId
-                            ? "اختر الدورة أولاً..."
-                            : filteredGroups.length === 0
-                              ? "لا توجد مجموعات إلكترونية"
-                              : "اختر المجموعة الإلكترونية..."
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {!form.courseId ? (
-                        <div className="px-3 py-2 text-sm text-muted-foreground">
-                          اختر الدورة أولاً
-                        </div>
-                      ) : filteredGroups.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-muted-foreground">
-                          لا توجد مجموعات إلكترونية لهذه الدورة
-                        </div>
-                      ) : (
-                        filteredGroups.map((g) => (
-                          <SelectItem key={g.id} value={g.id}>
-                            {g.name} - {g.electronicGroup}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
             </section>
 
             <div className="flex flex-col gap-3 rounded-3xl border bg-muted/35 p-4 md:flex-row md:items-center md:justify-between">

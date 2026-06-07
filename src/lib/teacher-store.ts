@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import {
-  courseApi, groupApi, siteApi, chapterApi, courseChapterApi,
+  courseApi, siteApi, chapterApi, courseChapterApi,
   studentApi, examApi, gradeApi, opportunityLogApi, correctionSheetApi,
   userApi, roleApi, logApi, demoCopyApi, pushAllToServer,
   loadAllFromServer, type ServerData,
@@ -33,13 +33,6 @@ export interface Course {
   locationConfig: CourseLocationConfig;
 }
 
-export interface Group {
-  id: string;
-  name: string;
-  courseId: string;
-  electronicGroup: string;
-  active: boolean;
-}
 
 export interface Site {
   id: string;
@@ -85,7 +78,6 @@ export interface Student {
   locationScope: 'بغداد' | 'محافظات' | '';
   baghdadMode: 'عموم بغداد' | 'بغداد - مخصص' | '';
   courseId: string;
-  groupId: string;
   mainSite: string;
   subSite: string;
   code: string;
@@ -103,7 +95,6 @@ export interface Exam {
   type: 'يومي' | 'تراكمي' | 'فاينل';
   courseIds: string[];
   mainSite: string;
-  groupId: string;
   date: string;
   fullMark: number;
   passMark: number;
@@ -211,7 +202,6 @@ export interface LeaderboardSettings {
 export interface DemoUsageLimits {
   students: number;
   courses: number;
-  groups: number;
   sites: number;
   chapters: number;
   exams: number;
@@ -223,7 +213,6 @@ export interface DemoUsageLimits {
 export const DEFAULT_DEMO_LIMITS: DemoUsageLimits = {
   students: 30,
   courses: 3,
-  groups: 5,
   sites: 10,
   chapters: 5,
   exams: 5,
@@ -245,7 +234,6 @@ export const DEMO_FORBIDDEN_PERMISSIONS = [
 export const DEMO_ALLOWED_PERMISSIONS = [
   'system.dashboard',
   'courses.view', 'courses.add', 'courses.edit', 'courses.delete',
-  'groups.view', 'groups.add', 'groups.edit', 'groups.delete',
   'sites.view', 'sites.add', 'sites.edit', 'sites.delete',
   'chapters.view', 'chapters.add', 'chapters.edit', 'chapters.delete',
   'students.view', 'students.add', 'students.edit', 'students.delete',
@@ -310,11 +298,6 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   { id: 'courses.add', label: 'إضافة دورة', category: 'الدورات', level: 'write', description: 'إنشاء دورة جديدة' },
   { id: 'courses.edit', label: 'تعديل دورة', category: 'الدورات', level: 'write', description: 'تعديل بيانات دورة' },
   { id: 'courses.delete', label: 'حذف دورة', category: 'الدورات', level: 'delete', description: 'حذف دورة من النظام' },
-  // المجموعات الإلكترونية
-  { id: 'groups.view', label: 'عرض المجموعات الإلكترونية', category: 'المجموعات الإلكترونية', level: 'read', description: 'عرض قائمة المجموعات الإلكترونية' },
-  { id: 'groups.add', label: 'إضافة مجموعة إلكترونية', category: 'المجموعات الإلكترونية', level: 'write', description: 'إنشاء مجموعة إلكترونية جديدة' },
-  { id: 'groups.edit', label: 'تعديل مجموعة إلكترونية', category: 'المجموعات الإلكترونية', level: 'write', description: 'تعديل بيانات مجموعة إلكترونية' },
-  { id: 'groups.delete', label: 'حذف مجموعة إلكترونية', category: 'المجموعات الإلكترونية', level: 'delete', description: 'حذف مجموعة إلكترونية من النظام' },
   // المواقع
   { id: 'sites.view', label: 'عرض المواقع', category: 'المواقع', level: 'read', description: 'عرض قائمة المواقع' },
   { id: 'sites.add', label: 'إضافة موقع', category: 'المواقع', level: 'write', description: 'إنشاء موقع جديد' },
@@ -388,6 +371,11 @@ const ADMIN_PASSWORD = '1993';
 const ADMIN_ROLE_ID = 'role_admin';
 const ADMIN_ROLE_NAME = 'مدير عام';
 const ADMIN_FULL_PERMISSIONS = [...ALL_PERMISSION_IDS];
+const DEPRECATED_PERMISSION_IDS = new Set(['groups.view', 'groups.add', 'groups.edit', 'groups.delete']);
+
+function sanitizePermissionIds(permissions: string[] = []): string[] {
+  return Array.from(new Set(permissions.filter((permission) => !DEPRECATED_PERMISSION_IDS.has(permission))));
+}
 
 function isPrimaryAdminUser(user?: Pick<User, 'username'> | null): boolean {
   return String(user?.username || '').trim().toLowerCase() === ADMIN_USERNAME;
@@ -419,7 +407,7 @@ function normalizeAdminAccessUser(user: User): User {
     };
   }
 
-  return user;
+  return { ...user, permissions: sanitizePermissionIds(user.permissions || []) };
 }
 
 const DEFAULT_ROLES: Role[] = [
@@ -441,7 +429,7 @@ const DEFAULT_ROLES: Role[] = [
     isDefault: true,
     permissions: [
       'students.view', 'students.add', 'students.edit', 'students.delete',
-      'groups.view', 'courses.view', 'sites.view', 'chapters.view',
+      'courses.view', 'sites.view', 'chapters.view',
       'exams.view', 'grades.view',
     ],
   },
@@ -466,7 +454,6 @@ const DEFAULT_ROLES: Role[] = [
 
 export interface BackupShape {
   courses?: Course[];
-  groups?: Group[];
   sites?: Site[];
   chapters?: Chapter[];
   courseChapters?: CourseChapter[];
@@ -488,7 +475,6 @@ export interface BackupShape {
 
 interface TeacherState {
   courses: Course[];
-  groups: Group[];
   sites: Site[];
   chapters: Chapter[];
   courseChapters: CourseChapter[];
@@ -532,7 +518,6 @@ interface TeacherState {
   logout: () => void;
 
   courseName: (id: string) => string;
-  groupName: (id: string) => string;
   chapterName: (id: string) => string;
   studentName: (id: string) => string;
   userName: (id: string) => string;
@@ -544,10 +529,6 @@ interface TeacherState {
   toggleCourse: (id: string) => void;
   deleteCourse: (id: string) => boolean;
 
-  addGroup: (name: string, courseId: string, electronicGroup: string) => void;
-  updateGroup: (id: string, updates: Partial<Omit<Group, 'id'>>) => void;
-  toggleGroup: (id: string) => void;
-  deleteGroup: (id: string) => boolean;
 
   addSite: (courseId: string, main: string, sub: string) => void;
   updateSite: (id: string, updates: Partial<Omit<Site, 'id'>>) => void;
@@ -664,7 +645,6 @@ function seedData() {
 
   return {
     courses: [...DEFAULT_COURSES] as Course[],
-    groups: [] as Group[],
     sites: [] as Site[],
     chapters: [] as Chapter[],
     courseChapters: [] as CourseChapter[],
@@ -686,12 +666,12 @@ function seedData() {
 }
 
 const DATA_KEYS: (keyof BackupShape)[] = [
-  'courses', 'groups', 'sites', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
+  'courses', 'sites', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
   'opportunityLogs', 'correctionSheets', 'users', 'roles', 'logs', 'whatsappReports', 'whatsappQueue', 'leaderboardSettings',
 ];
 
 const DEMO_DATA_KEYS: (keyof BackupShape)[] = [
-  'courses', 'groups', 'sites', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
+  'courses', 'sites', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
   'opportunityLogs', 'correctionSheets', 'whatsappReports', 'whatsappQueue', 'leaderboardSettings',
 ];
 
@@ -763,7 +743,22 @@ function snapshotOperationalData(state: TeacherState): BackupShape {
 function restoreOperationalData(snapshot: BackupShape): Partial<TeacherState> {
   const restored: Partial<TeacherState> = {};
   DEMO_DATA_KEYS.forEach((key) => {
-    (restored as Record<string, unknown>)[key] = cloneBackupValue(snapshot[key] ?? (key === 'leaderboardSettings' ? { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] } : []));
+    let value: unknown = cloneBackupValue(snapshot[key] ?? (key === 'leaderboardSettings' ? { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] } : []));
+    if (key === 'students' && Array.isArray(value)) {
+      value = value.map((student) => {
+        const copy = { ...(student as Record<string, unknown>) };
+        delete copy.groupId;
+        return copy;
+      });
+    }
+    if (key === 'exams' && Array.isArray(value)) {
+      value = value.map((exam) => {
+        const copy = { ...(exam as Record<string, unknown>) };
+        delete copy.groupId;
+        return copy;
+      });
+    }
+    (restored as Record<string, unknown>)[key] = value;
   });
   return restored;
 }
@@ -780,7 +775,7 @@ function mergeDefaultRoles(roles: Role[]): Role[] {
   const normalizedRoles = roles.map((role) => {
     const defaultRole = DEFAULT_ROLES.find((item) => item.id === role.id);
     if (!defaultRole) {
-      return { ...role, permissions: Array.from(new Set(role.permissions || [])) };
+      return { ...role, permissions: sanitizePermissionIds(role.permissions || []) };
     }
     if (role.id === ADMIN_ROLE_ID) {
       return {
@@ -794,14 +789,14 @@ function mergeDefaultRoles(roles: Role[]): Role[] {
       ...role,
       name: role.name || defaultRole.name,
       isDefault: role.isDefault || defaultRole.isDefault,
-      permissions: Array.from(new Set([...(defaultRole.permissions || []), ...(role.permissions || [])])),
+      permissions: sanitizePermissionIds([...(defaultRole.permissions || []), ...(role.permissions || [])]),
     };
   });
 
   const existingIds = new Set(normalizedRoles.map((role) => role.id));
   return [
     ...normalizedRoles,
-    ...DEFAULT_ROLES.filter((role) => !existingIds.has(role.id)).map((role) => ({ ...role, permissions: [...role.permissions] })),
+    ...DEFAULT_ROLES.filter((role) => !existingIds.has(role.id)).map((role) => ({ ...role, permissions: sanitizePermissionIds(role.permissions) })),
   ];
 }
 
@@ -951,9 +946,6 @@ export const useTeacherStore = create<TeacherState>()(
           })) as Course[];
           const courses = mergeDefaultCourses(serverCourses);
 
-          const groups = (serverData.groups || []).map((g: Record<string, unknown>) => ({
-            ...g, active: Boolean(g.active),
-          })) as Group[];
 
           const sites = (serverData.sites || []).map((s: Record<string, unknown>) => ({
             ...s, active: Boolean(s.active),
@@ -968,8 +960,11 @@ export const useTeacherStore = create<TeacherState>()(
             archive: parseArrayField<ArchiveEntry>(cc.archive),
           })) as CourseChapter[];
 
-          const students = (serverData.students || []).map((st: Record<string, unknown>) => ({
-            ...st,
+          const students = (serverData.students || []).map((st: Record<string, unknown>) => {
+            const { groupId: _groupId, ...studentData } = st;
+            void _groupId;
+            return {
+            ...studentData,
             school: String(st.school || ''),
             opportunities: Number(st.opportunities || 0),
             baseOpportunities: Number(st.baseOpportunities || 0),
@@ -979,13 +974,16 @@ export const useTeacherStore = create<TeacherState>()(
             studyType: String(st.studyType || ''),
             locationScope: String(st.locationScope || ''),
             baghdadMode: String(st.baghdadMode || ''),
-          })) as Student[];
+          };
+          }) as Student[];
 
-          const exams = (serverData.exams || []).map((ex: Record<string, unknown>) => ({
-            ...ex,
+          const exams = (serverData.exams || []).map((ex: Record<string, unknown>) => {
+            const { groupId: _groupId, ...examData } = ex;
+            void _groupId;
+            return {
+            ...examData,
             courseIds: parseArrayField<string>(ex.courseIds),
             mainSite: ex.mainSite ? String(ex.mainSite) : '',
-            groupId: ex.groupId ? String(ex.groupId) : '',
             fullMark: Number(ex.fullMark || 100),
             passMark: Number(ex.passMark || 50),
             discountMark: Number(ex.discountMark || 0),
@@ -995,7 +993,8 @@ export const useTeacherStore = create<TeacherState>()(
             scheduledActivateAt: ex.scheduledActivateAt ? String(ex.scheduledActivateAt).slice(0, 10) : '',
             scheduledDeactivateAt: ex.scheduledDeactivateAt ? String(ex.scheduledDeactivateAt).slice(0, 10) : '',
             date: ex.date ? String(ex.date).slice(0, 10) : todayISO(),
-          })) as Exam[];
+          };
+          }) as Exam[];
 
           const grades = (serverData.grades || []).map((g: Record<string, unknown>) => ({
             ...g,
@@ -1019,7 +1018,7 @@ export const useTeacherStore = create<TeacherState>()(
           const parsedUsers = (serverData.users || []).map((u: Record<string, unknown>) => ({
             ...u,
             password: String(u.password || u.passwordHash || (u.username === ADMIN_USERNAME ? ADMIN_PASSWORD : '')),
-            permissions: parseArrayField<string>(u.permissions),
+            permissions: sanitizePermissionIds(parseArrayField<string>(u.permissions)),
             active: u.active !== undefined ? Boolean(u.active) : true,
           })) as User[];
           const seedUsers = seedData().users;
@@ -1036,7 +1035,7 @@ export const useTeacherStore = create<TeacherState>()(
 
           const parsedRoles = (serverData.roles || []).map((r: Record<string, unknown>) => ({
             ...r,
-            permissions: parseArrayField<string>(r.permissions),
+            permissions: sanitizePermissionIds(parseArrayField<string>(r.permissions)),
             isDefault: Boolean(r.isDefault),
           })) as Role[];
           const roles = mergeDefaultRoles(parsedRoles);
@@ -1071,7 +1070,7 @@ export const useTeacherStore = create<TeacherState>()(
           })) as DemoCopy[];
 
           set({
-            courses, groups, sites, chapters, courseChapters, students,
+            courses, sites, chapters, courseChapters, students,
             exams, grades, opportunityLogs, correctionSheets, users,
             roles, logs, demoCopies, currentUserId: nextCurrentUserId, dbConnected: true, dbLoading: false,
           });
@@ -1203,7 +1202,6 @@ export const useTeacherStore = create<TeacherState>()(
       },
 
       courseName: (id) => get().courses.find((c) => c.id === id)?.name || 'غير محدد',
-      groupName: (id) => get().groups.find((g) => g.id === id)?.name || 'غير محدد',
       chapterName: (id) => get().chapters.find((c) => c.id === id)?.name || 'غير محدد',
       studentName: (id) => get().students.find((s) => s.id === id)?.name || 'غير محدد',
       userName: (id) => get().users.find((u) => u.id === id)?.name || id || 'غير محدد',
@@ -1298,49 +1296,16 @@ export const useTeacherStore = create<TeacherState>()(
           get().logAction('الدورات', 'رفض حذف دورة', `${course.name} مرتبطة بطلاب أو امتحانات`);
           return false;
         }
-        // Delete related groups/sites/courseChapters from DB
-        state.groups.filter(g => g.courseId === id).forEach(g => syncToServer(get, () => groupApi.remove(g.id)));
+        // Delete related sites/courseChapters from DB
         state.sites.filter(s => s.courseId === id).forEach(s => syncToServer(get, () => siteApi.remove(s.id)));
         state.courseChapters.filter(cc => cc.courseId === id).forEach(cc => syncToServer(get, () => courseChapterApi.remove(cc.id)));
         set((s) => ({
           courses: s.courses.filter((c) => c.id !== id),
-          groups: s.groups.filter((g) => g.courseId !== id),
           sites: s.sites.filter((site) => site.courseId !== id),
           courseChapters: s.courseChapters.filter((cc) => cc.courseId !== id),
         }));
         get().logAction('الدورات', 'حذف دورة', course.name);
         syncToServer(get, () => courseApi.remove(id));
-        return true;
-      },
-
-      addGroup: (name, courseId, electronicGroup) => {
-        const group: Group = { id: uid('g'), name, courseId, electronicGroup, active: true };
-        set((s) => ({ groups: [...s.groups, group] }));
-        get().logAction('المجموعات الإلكترونية', 'إضافة مجموعة إلكترونية', `${name} - ${get().courseName(courseId)}`);
-        syncToServer(get, () => groupApi.add(group));
-      },
-      updateGroup: (id, updates) => {
-        set((s) => ({ groups: s.groups.map((g) => g.id === id ? { ...g, ...updates } : g) }));
-        get().logAction('المجموعات الإلكترونية', 'تعديل مجموعة إلكترونية', get().groupName(id));
-        syncToServer(get, () => groupApi.update(id, updates as Record<string, unknown>));
-      },
-      toggleGroup: (id) => {
-        const group = get().groups.find((g) => g.id === id);
-        set((s) => ({ groups: s.groups.map((g) => g.id === id ? { ...g, active: !g.active } : g) }));
-        get().logAction('المجموعات الإلكترونية', group?.active ? 'تعطيل مجموعة إلكترونية' : 'تفعيل مجموعة إلكترونية', group?.name || id);
-        syncToServer(get, () => groupApi.update(id, { active: !group?.active }));
-      },
-      deleteGroup: (id) => {
-        const state = get();
-        const group = state.groups.find((g) => g.id === id);
-        if (!group) return false;
-        if (state.students.some((s) => s.groupId === id) || state.exams.some((e) => e.groupId === id || e.groupId.split(',').includes(id))) {
-          get().logAction('المجموعات الإلكترونية', 'رفض حذف مجموعة إلكترونية', `${group.name} مرتبط بطلاب أو امتحانات`);
-          return false;
-        }
-        set((s) => ({ groups: s.groups.filter((g) => g.id !== id) }));
-        get().logAction('المجموعات الإلكترونية', 'حذف مجموعة إلكترونية', group.name);
-        syncToServer(get, () => groupApi.remove(id));
         return true;
       },
 
@@ -1743,7 +1708,7 @@ export const useTeacherStore = create<TeacherState>()(
       },
       updateUserPermissions: (id, permissions) => {
         const user = get().users.find((u) => u.id === id);
-        const nextPermissions = user && hasFullAdminAccess(user) ? [...ADMIN_FULL_PERMISSIONS] : permissions;
+        const nextPermissions = user && hasFullAdminAccess(user) ? [...ADMIN_FULL_PERMISSIONS] : sanitizePermissionIds(permissions);
         set((s) => ({ users: s.users.map((u) => u.id === id ? normalizeAdminAccessUser({ ...u, permissions: nextPermissions }) : u) }));
         get().logAction('الحسابات', 'تحديث صلاحيات', get().userName(id));
         syncToServer(get, () => userApi.update(id, { permissions: nextPermissions }));
@@ -1805,13 +1770,29 @@ export const useTeacherStore = create<TeacherState>()(
       exportBackup: () => {
         const state = get();
         const backup = DATA_KEYS.reduce((acc, key) => ({ ...acc, [key]: state[key as keyof TeacherState] }), {} as Record<string, unknown>);
-        return JSON.stringify({ version: 3, exportedAt: new Date().toISOString(), ...backup }, null, 2);
+        return JSON.stringify({ version: 4, exportedAt: new Date().toISOString(), ...backup }, null, 2);
       },
       importBackup: (jsonText) => {
         try {
           const parsed = JSON.parse(jsonText) as BackupShape & { version?: number };
           if (!parsed || !Array.isArray(parsed.students) || !Array.isArray(parsed.courses)) {
             return { ok: false, message: 'ملف النسخة الاحتياطية غير صحيح أو ناقص' };
+          }
+
+          delete (parsed as Record<string, unknown>).groups;
+          if (Array.isArray(parsed.students)) {
+            parsed.students = parsed.students.map((student) => {
+              const copy = { ...(student as unknown as Record<string, unknown>) };
+              delete copy.groupId;
+              return copy as unknown as Student;
+            });
+          }
+          if (Array.isArray(parsed.exams)) {
+            parsed.exams = parsed.exams.map((exam) => {
+              const copy = { ...(exam as unknown as Record<string, unknown>) };
+              delete copy.groupId;
+              return copy as unknown as Exam;
+            });
           }
 
           // Migrate old users (without roleId)
@@ -2011,7 +1992,6 @@ export const useTeacherStore = create<TeacherState>()(
         const currentMap: Record<keyof DemoUsageLimits, number> = {
           students: state.students.length,
           courses: state.courses.length,
-          groups: state.groups.length,
           sites: state.sites.length,
           chapters: state.chapters.length,
           exams: state.exams.length,
@@ -2025,7 +2005,7 @@ export const useTeacherStore = create<TeacherState>()(
     }),
     {
       name: 'teacher-pro-store-v4',
-      version: 7,
+      version: 8,
       migrate: (persistedState: unknown, version: number) => {
         const state = (persistedState ?? {}) as Record<string, unknown>;
         const nextState: Record<string, unknown> = { ...state };
@@ -2048,13 +2028,14 @@ export const useTeacherStore = create<TeacherState>()(
           });
         }
 
+        const stripKeys = (item: unknown, keys: string[]) => {
+          const copy = { ...(item as Record<string, unknown>) };
+          keys.forEach((key) => delete copy[key]);
+          return copy;
+        };
+
         // Migration v6 → v7: remove obsolete financial, installment, attendance, and accounting-review fields from local snapshots.
         if (version < 7) {
-          const stripKeys = (item: unknown, keys: string[]) => {
-            const copy = { ...(item as Record<string, unknown>) };
-            keys.forEach((key) => delete copy[key]);
-            return copy;
-          };
           if (Array.isArray(nextState.students)) {
             nextState.students = nextState.students.map((student) => stripKeys(student, ["receiptNo", "codeSequence", "totalAmount", "paidAmount", "installments", "accountingStart"]));
           }
@@ -2066,11 +2047,33 @@ export const useTeacherStore = create<TeacherState>()(
           }
         }
 
+        // Migration v7 → v8: remove obsolete electronic groups and their links from local snapshots.
+        if (version < 8) {
+          delete nextState.groups;
+          if (Array.isArray(nextState.students)) {
+            nextState.students = nextState.students.map((student) => stripKeys(student, ["groupId"]));
+          }
+          if (Array.isArray(nextState.exams)) {
+            nextState.exams = nextState.exams.map((exam) => stripKeys(exam, ["groupId"]));
+          }
+          if (Array.isArray(nextState.users)) {
+            nextState.users = nextState.users.map((user) => ({
+              ...(user as Record<string, unknown>),
+              permissions: sanitizePermissionIds(parseArrayField<string>((user as Record<string, unknown>).permissions)),
+            }));
+          }
+          if (Array.isArray(nextState.roles)) {
+            nextState.roles = nextState.roles.map((role) => ({
+              ...(role as Record<string, unknown>),
+              permissions: sanitizePermissionIds(parseArrayField<string>((role as Record<string, unknown>).permissions)),
+            }));
+          }
+        }
+
         return nextState;
       },
       partialize: (state) => ({
         courses: state.courses,
-        groups: state.groups,
         sites: state.sites,
         chapters: state.chapters,
         courseChapters: state.courseChapters,
