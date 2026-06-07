@@ -54,6 +54,40 @@ function toggleInArray<T>(arr: T[], item: T): T[] {
   return arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item];
 }
 
+function usesAutoGeneralBaghdad(studyType: StudyType): boolean {
+  return studyType === "إلكتروني" || studyType === "مدمج";
+}
+
+function normalizeStudyLocationConfig(studyType: StudyType, config: StudyLocationConfig): StudyLocationConfig {
+  const nextConfig: StudyLocationConfig = {
+    ...config,
+    scopes: [...(config.scopes || [])],
+  };
+
+  if (usesAutoGeneralBaghdad(studyType) && nextConfig.scopes.includes("بغداد")) {
+    nextConfig.baghdadMode = "عموم بغداد";
+    nextConfig.baghdadSites = undefined;
+  }
+
+  return nextConfig;
+}
+
+function normalizeCourseLocationConfig(
+  config: CourseLocationConfig,
+  studyTypes: StudyType[],
+): CourseLocationConfig {
+  const nextConfig: CourseLocationConfig = {};
+
+  for (const studyType of studyTypes) {
+    const studyConfig = config[studyType];
+    if (studyConfig) {
+      nextConfig[studyType] = normalizeStudyLocationConfig(studyType, studyConfig);
+    }
+  }
+
+  return nextConfig;
+}
+
 /** Generate a human-readable location summary for a course */
 function buildLocationSummary(course: Course): string {
   const config = getCourseLocationConfig(course);
@@ -61,8 +95,9 @@ function buildLocationSummary(course: Course): string {
   const parts: string[] = [];
 
   for (const st of studyTypes) {
-    const sc = config[st as StudyType];
-    if (!sc) continue;
+    const rawConfig = config[st as StudyType];
+    if (!rawConfig) continue;
+    const sc = normalizeStudyLocationConfig(st as StudyType, rawConfig);
     const segments: string[] = [];
     if (sc.scopes.includes("بغداد")) {
       if (sc.baghdadMode === "عموم بغداد") {
@@ -110,12 +145,15 @@ function CourseBuilderForm({
     setForm(prev => {
       const nextTypes = toggleInArray(prev.availableStudyTypes, studyType);
       const nextConfig = { ...prev.locationConfig };
+      const existingConfig = nextConfig[studyType];
       // If unchecked, remove its config
       if (!nextTypes.includes(studyType)) {
         delete nextConfig[studyType];
-      } else if (!nextConfig[studyType]) {
+      } else if (!existingConfig) {
         // If newly checked, create empty config
         nextConfig[studyType] = { scopes: [] };
+      } else {
+        nextConfig[studyType] = normalizeStudyLocationConfig(studyType, existingConfig);
       }
       return {
         ...prev,
@@ -138,6 +176,11 @@ function CourseBuilderForm({
       }
       if (!nextScopes.includes("محافظات")) {
         nextStudy.provinces = undefined;
+      }
+
+      if (nextScopes.includes("بغداد") && usesAutoGeneralBaghdad(studyType)) {
+        nextStudy.baghdadMode = "عموم بغداد";
+        nextStudy.baghdadSites = undefined;
       }
 
       return {
@@ -280,6 +323,7 @@ function CourseBuilderForm({
             </div>
             {form.availableStudyTypes.map((studyType) => {
               const studyConfig = form.locationConfig[studyType] || { scopes: [] };
+              const isAutoGeneralBaghdad = usesAutoGeneralBaghdad(studyType);
               return (
                 <Card key={studyType} className="border-dashed">
                   <CardHeader className="pb-3 pt-4 px-4">
@@ -303,7 +347,7 @@ function CourseBuilderForm({
                     </div>
 
                     {/* Baghdad options */}
-                    {studyConfig.scopes.includes("بغداد") && (
+                    {studyConfig.scopes.includes("بغداد") && !isAutoGeneralBaghdad && (
                       <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
                         <RadioGroup
                           value={studyConfig.baghdadMode || ""}
@@ -423,7 +467,7 @@ export function CoursesView() {
       name: createForm.name.trim(),
       availablePrograms: createForm.availablePrograms,
       availableStudyTypes: createForm.availableStudyTypes,
-      locationConfig: createForm.locationConfig,
+      locationConfig: normalizeCourseLocationConfig(createForm.locationConfig, createForm.availableStudyTypes),
     });
     setCreateForm(emptyCourseForm());
     toast.success("تمت إضافة الدورة");
@@ -438,7 +482,10 @@ export function CoursesView() {
         name: course.name,
         availablePrograms: getAvailablePrograms(course),
         availableStudyTypes: getAvailableStudyTypes(course),
-        locationConfig: JSON.parse(JSON.stringify(getCourseLocationConfig(course))),
+        locationConfig: normalizeCourseLocationConfig(
+          JSON.parse(JSON.stringify(getCourseLocationConfig(course))),
+          getAvailableStudyTypes(course),
+        ),
       },
     });
   };
@@ -452,7 +499,7 @@ export function CoursesView() {
       name: editDialog.form.name.trim(),
       availablePrograms: editDialog.form.availablePrograms,
       availableStudyTypes: editDialog.form.availableStudyTypes,
-      locationConfig: editDialog.form.locationConfig,
+      locationConfig: normalizeCourseLocationConfig(editDialog.form.locationConfig, editDialog.form.availableStudyTypes),
     });
     if (!result.ok) {
       toast.error(result.message);
