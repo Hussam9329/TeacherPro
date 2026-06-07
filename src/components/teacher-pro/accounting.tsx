@@ -58,7 +58,7 @@ export function AccountingView() {
       if (filterPayment === "overdue" && remaining === 0) return false;
       return true;
     });
-  }, [privateStudents, search, filterCourseId, filterPayment]);
+  }, [accountingStudents, search, filterCourseId, filterPayment]);
 
   const totals = useMemo(() => {
     return filtered.reduce(
