@@ -1055,7 +1055,7 @@ export function StudentRegisterView() {
                     className={fieldBaseClass}
                   />
                   <p className="text-xs leading-5 text-muted-foreground">
-                    بداية السماح: <span dir="ltr" className="font-semibold text-foreground">{formattedGraceStart}</span>
+                    بداية السماح: <span className="font-semibold text-foreground">{formattedGraceStart}</span>
                   </p>
                 </div>
 
@@ -1079,7 +1079,7 @@ export function StudentRegisterView() {
                   />
                   <p className="text-xs leading-5 text-muted-foreground">
                     {accountingGraceDays > 0
-                      ? <>تنتهي فترة السماح في <span dir="ltr" className="font-semibold text-foreground">{formattedGraceEnd}</span> حسب عدد الأيام المدخل.</>
+                      ? <>تنتهي فترة السماح في <span className="font-semibold text-foreground">{formattedGraceEnd}</span> حسب عدد الأيام المدخل.</>
                       : "لا توجد أيام سماح عند اختيار 0."}
                   </p>
                 </div>
