@@ -33,6 +33,8 @@ import {
 } from "@/lib/course-config";
 import {
   getStudentDuplicateMessage,
+  normalizePhoneForDuplicate,
+  normalizeTelegramIdentifier,
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
 import {
@@ -45,6 +47,7 @@ import { StepProgress } from "./ui-kit";
 import {
   AlertCircle,
   BookOpen,
+  CalendarDays,
   MapPin,
   PhoneCall,
   Save,
@@ -77,10 +80,42 @@ type StudentRegisterForm = {
   courseId: string;
   subSite: string;
   createdAt: string;
+  accountingGraceDays: string;
 };
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysToISODate(dateISO: string, days: number): string {
+  if (!dateISO) return "";
+  const date = new Date(`${dateISO}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatArabicDate(dateISO: string): string {
+  if (!dateISO) return "-";
+  const date = new Date(`${dateISO}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return dateISO;
+  return new Intl.DateTimeFormat("ar-IQ", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date);
+}
+
+function normalizeGraceDays(value: string): string {
+  const digits = toLatinDigits(value).replace(/\D/g, "");
+  if (!digits) return "";
+  return String(Math.min(Number(digits), 30));
+}
+
+function isValidGraceDays(value: string): boolean {
+  if (!/^\d+$/.test(value)) return false;
+  const days = Number(value);
+  return Number.isInteger(days) && days >= 0 && days <= 30;
 }
 
 function readStudentDraft(): StudentRegisterForm {
@@ -110,6 +145,7 @@ function emptyForm(): StudentRegisterForm {
     courseId: "",
     subSite: "",
     createdAt: todayISO(),
+    accountingGraceDays: "0",
   };
 }
 
@@ -244,6 +280,35 @@ export function StudentRegisterView() {
     [form.locationScope, courseBaghdadMode, form.subSite],
   );
 
+  const accountingGraceDays = useMemo(
+    () => Number(form.accountingGraceDays || 0),
+    [form.accountingGraceDays],
+  );
+
+  const accountingPeriodEnd = useMemo(
+    () => addDaysToISODate(form.createdAt, accountingGraceDays),
+    [form.createdAt, accountingGraceDays],
+  );
+
+  const accountingPeriodDescription = useMemo(
+    () => `إطار المحاسبة سيكون من ${formatArabicDate(form.createdAt)} إلى ${formatArabicDate(accountingPeriodEnd)}`,
+    [form.createdAt, accountingPeriodEnd],
+  );
+
+  const duplicatePhoneStudent = useMemo(() => {
+    const phoneKey = normalizePhoneForDuplicate(form.phone);
+    if (!phoneKey) return null;
+    return students.find((student) => normalizePhoneForDuplicate(student.phone) === phoneKey) ?? null;
+  }, [students, form.phone]);
+
+  const duplicateTelegramStudent = useMemo(() => {
+    const telegramKey = normalizeTelegramIdentifier(form.telegram);
+    if (!telegramKey) return null;
+    return students.find((student) => normalizeTelegramIdentifier(student.telegram) === telegramKey) ?? null;
+  }, [students, form.telegram]);
+
+  const hasDuplicateContact = Boolean(duplicatePhoneStudent || duplicateTelegramStudent);
+
   useEffect(() => {
     if (!form.studyType) return;
     if (courseAvailableStudyTypes.includes(form.studyType as any)) return;
@@ -275,6 +340,10 @@ export function StudentRegisterView() {
           (subSiteOptions.length === 0 || effectiveSubSite)
         ),
       },
+      {
+        label: "إعدادات التسجيل",
+        complete: Boolean(form.createdAt && isValidGraceDays(form.accountingGraceDays)),
+      },
 
     ],
     [form, courseAvailableStudyTypes, courseLocationScopes, subSiteOptions.length, effectiveCourseProgram, effectiveSubSite],
@@ -283,6 +352,7 @@ export function StudentRegisterView() {
     () =>
       hasMeaningfulDraftValue(form, [
         "createdAt",
+        "accountingGraceDays",
         "gender",
         "courseProgram",
         "courseTerm",
@@ -391,6 +461,10 @@ export function StudentRegisterView() {
     );
     if (parentPhoneError) return parentPhoneError;
 
+    if (!form.createdAt) return "تاريخ بداية حساب أيام المحاسبة مطلوب";
+    if (!isValidGraceDays(form.accountingGraceDays)) {
+      return "فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم";
+    }
 
     const duplicateMessage = getStudentDuplicateMessage(students, {
       name: form.name,
@@ -444,7 +518,7 @@ export function StudentRegisterView() {
       window.localStorage.removeItem(STUDENT_DRAFT_KEY);
       setForm(emptyForm());
       toast.success("تم حفظ بيانات الطالب", {
-        description: "تمت إضافة الطالب إلى سجل الطلاب بنجاح",
+        description: `${accountingPeriodDescription}، وتمت إضافة الطالب إلى سجل الطلاب بنجاح`,
       });
     },
   );
@@ -475,15 +549,6 @@ export function StudentRegisterView() {
         <CardContent className="p-4 md:p-6 lg:p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             <StepProgress steps={formSteps} />
-            <input
-              type="hidden"
-              id="reg-createdAt"
-              name="createdAt"
-              value={form.createdAt}
-              readOnly
-              autoComplete="off"
-            />
-
             <section className="surface-card p-5 md:p-6">
               <SectionTitle
                 icon={User}
@@ -614,6 +679,11 @@ export function StudentRegisterView() {
                       className={`${fieldBaseClass} text-left font-tabular`}
                     />
                   </div>
+                  {duplicateTelegramStudent && (
+                    <p className="text-xs font-bold text-destructive">
+                      معرف التليكرام مستخدم للطالب: {duplicateTelegramStudent.name}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -640,6 +710,11 @@ export function StudentRegisterView() {
                       className={`${fieldBaseClass} text-left font-tabular`}
                     />
                   </div>
+                  {duplicatePhoneStudent && (
+                    <p className="text-xs font-bold text-destructive">
+                      رقم الهاتف مستخدم للطالب: {duplicatePhoneStudent.name}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -933,6 +1008,60 @@ export function StudentRegisterView() {
               )}
             </section>
 
+            <section className="surface-card p-5 md:p-6">
+              <SectionTitle
+                icon={CalendarDays}
+                title="إعدادات التسجيل"
+                description="اختر التاريخ الذي يبدأ منه حساب أيام المحاسبة، ثم حدد فترة السماح بالأيام."
+              />
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="reg-createdAt" className="font-bold text-foreground">
+                    تاريخ بداية حساب أيام المحاسبة <RequiredMark />
+                  </Label>
+                  <Input
+                    id="reg-createdAt"
+                    name="createdAt"
+                    type="date"
+                    value={form.createdAt}
+                    onChange={(e) => updateForm("createdAt", e.target.value)}
+                    required
+                    className={fieldBaseClass}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="reg-accountingGraceDays" className="font-bold text-foreground">
+                    فترة السماح بالأيام <RequiredMark />
+                  </Label>
+                  <Input
+                    id="reg-accountingGraceDays"
+                    name="accountingGraceDays"
+                    value={form.accountingGraceDays}
+                    onChange={(e) => updateForm("accountingGraceDays", normalizeGraceDays(e.target.value))}
+                    required
+                    inputMode="numeric"
+                    min={0}
+                    max={30}
+                    pattern="(?:[0-9]|[12][0-9]|30)"
+                    placeholder="مثلاً 7"
+                    dir="ltr"
+                    className={`${fieldBaseClass} text-left font-tabular`}
+                  />
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    الرقم يمثل عدد الأيام من تاريخ البداية المختار، وليس من تاريخ اليوم تلقائياً.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 flex items-start gap-2 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-foreground">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <span>
+                  {accountingPeriodDescription}.
+                </span>
+              </div>
+            </section>
+
             <div className="flex flex-col gap-3 rounded-3xl border bg-muted/35 p-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-start gap-2 text-sm leading-6 text-muted-foreground">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -943,7 +1072,7 @@ export function StudentRegisterView() {
               <Button
                 type="submit"
                 size="lg"
-                disabled={isSubmitting}
+                disabled={isSubmitting || hasDuplicateContact}
                 className="h-14 min-w-56 rounded-2xl px-10 text-base font-black shadow-lg shadow-primary/20"
               >
                 <Save className="ml-2 h-5 w-5" />
