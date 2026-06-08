@@ -95,15 +95,28 @@ function calculateGracePeriodEnd(dateISO: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function formatArabicDate(dateISO: string): string {
+const GRACE_MONTH_NAMES = [
+  "يناير",
+  "فيبراير",
+  "مارس",
+  "ابريل",
+  "مايو",
+  "يونيو",
+  "يوليو",
+  "اغسطس",
+  "سيبتمبر",
+  "اكتوبر",
+  "نوفمبر",
+  "ديسمبر",
+];
+
+function formatGraceDate(dateISO: string): string {
   if (!dateISO) return "-";
-  const date = new Date(`${dateISO}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return dateISO;
-  return new Intl.DateTimeFormat("ar-IQ", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(date);
+  const [year, month, day] = dateISO.split("-");
+  const monthIndex = Number(month) - 1;
+  const monthName = GRACE_MONTH_NAMES[monthIndex];
+  if (!year || !monthName || !day) return dateISO;
+  return `${day.padStart(2, "0")} ${monthName} ${year}`;
 }
 
 function normalizeGraceDays(value: string): string {
@@ -290,12 +303,22 @@ export function StudentRegisterView() {
     [form.createdAt, accountingGraceDays],
   );
 
+  const formattedGraceStart = useMemo(
+    () => formatGraceDate(form.createdAt),
+    [form.createdAt],
+  );
+
+  const formattedGraceEnd = useMemo(
+    () => formatGraceDate(gracePeriodEnd),
+    [gracePeriodEnd],
+  );
+
   const gracePeriodDescription = useMemo(() => {
     if (accountingGraceDays <= 0) {
-      return "لا توجد فترة سماح، وسيبدأ احتساب نتائج الطالب من تاريخ التسجيل";
+      return `لا توجد فترة سماح، وسيبدأ احتساب نتائج الطالب من ${formattedGraceStart}`;
     }
-    return `لن يُحاسَب الطالب على أي امتحان أو إخفاق من ${formatArabicDate(form.createdAt)} إلى ${formatArabicDate(gracePeriodEnd)}`;
-  }, [form.createdAt, gracePeriodEnd, accountingGraceDays]);
+    return `لن يُحاسَب الطالب على أي امتحان أو إخفاق من ${formattedGraceStart} إلى ${formattedGraceEnd}`;
+  }, [formattedGraceStart, formattedGraceEnd, accountingGraceDays]);
 
   const duplicatePhoneStudent = useMemo(() => {
     const phoneKey = normalizePhoneForDuplicate(form.phone);
@@ -1031,6 +1054,9 @@ export function StudentRegisterView() {
                     required
                     className={fieldBaseClass}
                   />
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    بداية السماح: <span dir="ltr" className="font-semibold text-foreground">{formattedGraceStart}</span>
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -1052,7 +1078,9 @@ export function StudentRegisterView() {
                     className={`${fieldBaseClass} text-left font-tabular`}
                   />
                   <p className="text-xs leading-5 text-muted-foreground">
-                    خلال هذه الأيام يُحفظ الامتحان في السجل، لكن لا يخصم فرصاً ولا يسبب فصلاً أو محاسبة على الإخفاق.
+                    {accountingGraceDays > 0
+                      ? <>تنتهي فترة السماح في <span dir="ltr" className="font-semibold text-foreground">{formattedGraceEnd}</span> حسب عدد الأيام المدخل.</>
+                      : "لا توجد أيام سماح عند اختيار 0."}
                   </p>
                 </div>
               </div>
