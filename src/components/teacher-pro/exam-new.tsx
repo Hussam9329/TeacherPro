@@ -155,11 +155,22 @@ export function ExamNewView() {
   }, [availableMainSites]);
 
   const validateForm = (state: ExamFormState) => {
+    const fullMark = Number(state.fullMark);
+    const passMark = Number(state.passMark);
+    const discountMark = state.type === "تراكمي" || state.type === "فاينل"
+      ? 0
+      : Number(state.discountMark);
+
     if (!state.name.trim()) return "يرجى إدخال اسم الامتحان";
     if (state.courseIds.length === 0) return "يرجى اختيار دورة واحدة على الأقل";
     const invalidCourses = state.courseIds.filter((courseId) => !hasActiveChapterLink(courseChapters, courseId));
     if (invalidCourses.length > 0) return `لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourses.map(courseName).join("، ")}`;
     if (state.mainSites.length === 0) return "يرجى اختيار منطقة واحدة على الأقل أو اختيار الكل";
+    if (![fullMark, passMark, discountMark].every(Number.isFinite)) return "درجات الامتحان يجب أن تكون أرقاماً صحيحة";
+    if (fullMark <= 0) return "الدرجة الكاملة يجب أن تكون أكبر من صفر";
+    if (passMark < 0 || passMark > fullMark) return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
+    if (discountMark < 0 || discountMark > fullMark) return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
+    if (passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
     if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ التفعيل المجدول";
     if (state.statusMode === "تعطيل مجدول" && !state.scheduledDeactivateAt) return "حدد تاريخ التعطيل المجدول";
     return null;
@@ -326,6 +337,9 @@ export function ExamNewView() {
             onChange={(e) => setState((p) => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 0 }))}
           />
           {isCumulativeOrFinal && <p className="text-xs text-amber-600">معطل في التراكمي/الفاينل؛ الحكم يكون فقط من درجة الفصل.</p>}
+          {!isCumulativeOrFinal && Number(state.passMark) <= Number(state.discountMark) && (
+            <p className="text-xs text-destructive">درجة النجاح يجب أن تكون أكبر من درجة الخصم.</p>
+          )}
         </div>
         <div className="space-y-2">
           <Label>خصم الفرص</Label>

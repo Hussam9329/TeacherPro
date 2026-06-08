@@ -3,7 +3,18 @@ import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 
 function parseCourseIds(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    } catch {
+      return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+  }
+  return [];
 }
 
 function validateExamPayload(body: Record<string, unknown>) {
@@ -18,6 +29,7 @@ function validateExamPayload(body: Record<string, unknown>) {
   if (fullMark <= 0) return 'الدرجة الكاملة يجب أن تكون أكبر من صفر';
   if (passMark < 0 || passMark > fullMark) return 'درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة';
   if (discountMark < 0 || discountMark > fullMark) return 'درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة';
+  if (passMark <= discountMark) return 'درجة النجاح يجب أن تكون أكبر من درجة الخصم';
   return null;
 }
 
@@ -67,6 +79,8 @@ export async function PUT(req: NextRequest) {
       delete data[obsoleteKey];
     }
     if (!id) return validationError('تعذر تحديد الامتحان المطلوب');
+    const existingExam = await db.exam.findUnique({ where: { id } });
+    if (!existingExam) return validationError('الامتحان المطلوب غير موجود');
     if (data.name !== undefined) {
       const nameError = requireText(data.name, 'اسم الامتحان');
       if (nameError) return validationError(nameError);
@@ -81,6 +95,17 @@ export async function PUT(req: NextRequest) {
     if (data.dismissalGrade !== undefined) data.dismissalGrade = data.dismissalGrade === null || data.dismissalGrade === "" ? null : Number(data.dismissalGrade);
     if (data.scheduledActivateAt !== undefined) data.scheduledActivateAt = data.scheduledActivateAt ? new Date(String(data.scheduledActivateAt)) : null;
     if (data.scheduledDeactivateAt !== undefined) data.scheduledDeactivateAt = data.scheduledDeactivateAt ? new Date(String(data.scheduledDeactivateAt)) : null;
+
+    const candidateValidationMessage = validateExamPayload({
+      name: data.name ?? existingExam.name,
+      type: data.type ?? existingExam.type,
+      courseIds: data.courseIds ?? existingExam.courseIds,
+      fullMark: data.fullMark ?? existingExam.fullMark,
+      passMark: data.passMark ?? existingExam.passMark,
+      discountMark: data.discountMark ?? existingExam.discountMark,
+    });
+    if (candidateValidationMessage) return validationError(candidateValidationMessage);
+
     const exam = await db.exam.update({ where: { id }, data });
     return NextResponse.json({ exam });
   } catch (error) {

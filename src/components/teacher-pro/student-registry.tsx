@@ -116,13 +116,15 @@ function getStudentEditForm(student: Student): StudentEditForm {
 
 function whatsappLink(phone: string): string {
   const sanitized = sanitizePhoneInput(phone);
-  if (sanitized.startsWith("07") && sanitized.length === 11)
-    return `https://wa.me/964${sanitized.slice(1)}`;
-  return `https://wa.me/${sanitized}`;
+  const appPhone = sanitized.startsWith("07") && sanitized.length === 11
+    ? `964${sanitized.slice(1)}`
+    : sanitized;
+  return `whatsapp://send?phone=${encodeURIComponent(appPhone)}`;
 }
 
 function telegramLink(telegram: string): string {
-  return `https://t.me/${encodeURIComponent(normalizeTelegramIdentifier(telegram))}`;
+  const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
+  return `tg://resolve?domain=${encodeURIComponent(username)}`;
 }
 
 function normalizeGraceDaysInput(value: string): string {
@@ -147,12 +149,27 @@ function ContactLink({
   return (
     <a
       href={href}
-      target="_blank"
-      rel="noreferrer"
       className="font-medium text-primary underline-offset-4 hover:underline"
     >
       {children}
     </a>
+  );
+}
+
+function StudentFileItem({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <span className="text-muted-foreground">{label}:</span>{" "}
+      <strong>{children}</strong>
+    </div>
   );
 }
 
@@ -534,6 +551,7 @@ export function StudentRegistryView() {
       "الموقع",
       "الحالة",
       "الفرص",
+      "فترة السماح",
       "الهاتف",
       "ولي الأمر",
       "التليكرام",
@@ -1365,35 +1383,32 @@ export function StudentRegistryView() {
           </DialogHeader>
           {fileDialog.student && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <span className="text-muted-foreground">الكود:</span>{" "}
-                  <strong>{fileDialog.student.code}</strong>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">الجنس:</span>{" "}
-                  <strong>{fileDialog.student.gender}</strong>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">المدرسة:</span>{" "}
-                  <strong>{fileDialog.student.school || "-"}</strong>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">الهاتف:</span>{" "}
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                <StudentFileItem label="اسم الطالب">
+                  {fileDialog.student.name}
+                </StudentFileItem>
+                <StudentFileItem label="الكود">
+                  {fileDialog.student.code}
+                </StudentFileItem>
+                <StudentFileItem label="الجنس">
+                  {fileDialog.student.gender}
+                </StudentFileItem>
+                <StudentFileItem label="المدرسة">
+                  {fileDialog.student.school || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="رقم الطالب">
                   <ContactLink href={whatsappLink(fileDialog.student.phone)}>
                     {fileDialog.student.phone}
                   </ContactLink>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">ولي الأمر:</span>{" "}
+                </StudentFileItem>
+                <StudentFileItem label="رقم ولي الأمر">
                   <ContactLink
                     href={whatsappLink(fileDialog.student.parentPhone)}
                   >
                     {fileDialog.student.parentPhone}
                   </ContactLink>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">التليكرام:</span>{" "}
+                </StudentFileItem>
+                <StudentFileItem label="معرف التليكرام">
                   {fileDialog.student.telegram ? (
                     <ContactLink
                       href={telegramLink(fileDialog.student.telegram)}
@@ -1403,32 +1418,44 @@ export function StudentRegistryView() {
                   ) : (
                     "-"
                   )}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">الدورة:</span>{" "}
-                  <strong>{courseName(fileDialog.student.courseId)}</strong>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">الموقع:</span>{" "}
-                  <strong>
-                    {fileDialog.student.locationScope || fileDialog.student.mainSite} - {fileDialog.student.subSite}
-                  </strong>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">الفرص:</span>{" "}
-                  <strong>
-                    {activeChapterForCourse(fileDialog.student.courseId) ? (
-                      <>
-                        {fileDialog.student.opportunities} /{" "}
-                        {fileDialog.student.baseOpportunities}
-                      </>
-                    ) : (
-                      "0 / 0 - لم يتم اختيار الفصل لهم بعد"
-                    )}
-                  </strong>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">الحالة:</span>{" "}
+                </StudentFileItem>
+                <StudentFileItem label="الدورة">
+                  {courseName(fileDialog.student.courseId)}
+                </StudentFileItem>
+                <StudentFileItem label="نوع الدورة">
+                  {fileDialog.student.courseProgram || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="الكورس">
+                  {fileDialog.student.courseTerm || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="نوع الدراسة">
+                  {fileDialog.student.studyType || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="نطاق الموقع">
+                  {fileDialog.student.locationScope || fileDialog.student.mainSite || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="وضع بغداد">
+                  {fileDialog.student.baghdadMode || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="الموقع الفرعي">
+                  {fileDialog.student.subSite || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="الموقع الكامل">
+                  {`${fileDialog.student.locationScope || fileDialog.student.mainSite || "-"} - ${fileDialog.student.subSite || "-"}`}
+                </StudentFileItem>
+                <StudentFileItem label="الفصل النشط">
+                  {activeChapterForCourse(fileDialog.student.courseId)?.name || "لم يتم اختيار الفصل لهم بعد"}
+                </StudentFileItem>
+                <StudentFileItem label="الفرص">
+                  {activeChapterForCourse(fileDialog.student.courseId) ? (
+                    <>
+                      {fileDialog.student.opportunities} / {fileDialog.student.baseOpportunities}
+                    </>
+                  ) : (
+                    "0 / 0 - لم يتم اختيار الفصل لهم بعد"
+                  )}
+                </StudentFileItem>
+                <StudentFileItem label="الحالة">
                   <Badge
                     variant={
                       fileDialog.student.status === "نشط"
@@ -1438,15 +1465,23 @@ export function StudentRegistryView() {
                   >
                     {fileDialog.student.status}
                   </Badge>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">تاريخ التسجيل:</span>{" "}
-                  <strong>{fileDialog.student.createdAt}</strong>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">فترة السماح:</span>{" "}
-                  <strong>{fileDialog.student.accountingGraceDays ?? 0} يوم</strong>
-                </div>
+                </StudentFileItem>
+                {fileDialog.student.status === "مفصول" && (
+                  <>
+                    <StudentFileItem label="نوع الفصل">
+                      {fileDialog.student.dismissalType || "-"}
+                    </StudentFileItem>
+                    <StudentFileItem label="سبب الفصل" className="sm:col-span-2">
+                      {fileDialog.student.dismissalReason || "-"}
+                    </StudentFileItem>
+                  </>
+                )}
+                <StudentFileItem label="تاريخ التسجيل / بداية السماح">
+                  {fileDialog.student.createdAt}
+                </StudentFileItem>
+                <StudentFileItem label="فترة السماح">
+                  {fileDialog.student.accountingGraceDays ?? 0} يوم
+                </StudentFileItem>
               </div>
 
               <Separator />
