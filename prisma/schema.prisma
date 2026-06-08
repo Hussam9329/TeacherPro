@@ -80,6 +80,7 @@ model Student {
   dismissalReason String?
   opportunities   Int      @default(0)
   baseOpportunities Int    @default(0)
+  accountingGraceDays Int   @default(0)
   createdAt       DateTime @default(now())
   courseId        String
   course          Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)

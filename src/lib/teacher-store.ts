@@ -87,6 +87,7 @@ export interface Student {
   createdAt: string;
   opportunities: number;
   baseOpportunities: number;
+  accountingGraceDays: number;
 }
 
 export interface Exam {
@@ -522,7 +523,7 @@ interface TeacherState {
   studentName: (id: string) => string;
   userName: (id: string) => string;
   activeChapterForCourse: (courseId: string) => Chapter | null;
-  classification: (grade: Grade | undefined, exam: Exam) => { text: string; type: string; kind: string };
+  classification: (grade: Grade | undefined, exam: Exam, student?: Student) => { text: string; type: string; kind: string };
 
   addCourse: (course: Omit<Course, 'id' | 'createdAt' | 'active'>) => void;
   updateCourse: (id: string, updates: Partial<Omit<Course, 'id' | 'createdAt'>>) => { ok: boolean; message: string };
@@ -819,6 +820,29 @@ function examPenaltyValue(exam: Exam): number {
     : Number(exam.opportunitiesPenalty) || 1;
 }
 
+function normalizeGraceDaysValue(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.min(30, Math.max(0, Math.trunc(numeric)));
+}
+
+function parseDateOnly(value: string | undefined | null): Date | null {
+  if (!value) return null;
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isExamWithinStudentGracePeriod(student: Pick<Student, 'createdAt' | 'accountingGraceDays'>, exam: Pick<Exam, 'date'>): boolean {
+  const graceDays = normalizeGraceDaysValue(student.accountingGraceDays);
+  if (graceDays <= 0) return false;
+  const start = parseDateOnly(student.createdAt);
+  const examDate = parseDateOnly(exam.date);
+  if (!start || !examDate) return false;
+  const endExclusive = new Date(start);
+  endExclusive.setDate(endExclusive.getDate() + graceDays);
+  return examDate >= start && examDate < endExclusive;
+}
+
 function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'students' | 'grades' | 'exams'>): Student[] {
   const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
   return state.students.map((student) => {
@@ -847,6 +871,7 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
       if (grade.status === 'مجاز') continue;
+      if (isExamWithinStudentGracePeriod(student, exam)) continue;
 
       if (grade.status === 'غش') {
         cheatCount += 1;
@@ -968,6 +993,7 @@ export const useTeacherStore = create<TeacherState>()(
             school: String(st.school || ''),
             opportunities: Number(st.opportunities || 0),
             baseOpportunities: Number(st.baseOpportunities || 0),
+            accountingGraceDays: normalizeGraceDaysValue(st.accountingGraceDays),
             createdAt: st.createdAt ? String(st.createdAt).slice(0, 10) : todayISO(),
             courseProgram: String(st.courseProgram || ''),
             courseTerm: String(st.courseTerm || ''),
@@ -1209,8 +1235,9 @@ export const useTeacherStore = create<TeacherState>()(
         const cc = get().courseChapters.find((x) => x.courseId === courseId && x.active && !x.archived);
         return cc ? get().chapters.find((c) => c.id === cc.chapterId) || null : null;
       },
-      classification: (grade, exam) => {
+      classification: (grade, exam, student) => {
         if (!grade) return { text: 'غير مسجل', type: 'neutral', kind: 'missing' };
+        if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
         if (grade.status === 'مجاز') return { text: 'مجاز', type: 'info', kind: 'leave' };
         if (grade.status === 'غش') return { text: 'غش', type: 'danger', kind: 'cheat' };
         if (grade.status === 'غائب') return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
@@ -1438,6 +1465,7 @@ export const useTeacherStore = create<TeacherState>()(
           phone: studentData.phone.trim(),
           parentPhone: studentData.parentPhone.trim(),
           telegram: sanitizeTelegramInput(studentData.telegram),
+          accountingGraceDays: normalizeGraceDaysValue(studentData.accountingGraceDays),
         };
         const duplicateMessage = getStudentDuplicateMessage(state.students, sanitizedStudentData);
         if (duplicateMessage) {
@@ -1473,6 +1501,7 @@ export const useTeacherStore = create<TeacherState>()(
           phone: updates.phone !== undefined ? updates.phone.trim() : current.phone,
           parentPhone: updates.parentPhone !== undefined ? updates.parentPhone.trim() : current.parentPhone,
           telegram: updates.telegram !== undefined ? sanitizeTelegramInput(updates.telegram) : current.telegram,
+          accountingGraceDays: updates.accountingGraceDays !== undefined ? normalizeGraceDaysValue(updates.accountingGraceDays) : current.accountingGraceDays,
         };
         const duplicateMessage = getStudentDuplicateMessage(get().students, merged, id);
         if (duplicateMessage) {
@@ -2005,7 +2034,7 @@ export const useTeacherStore = create<TeacherState>()(
     }),
     {
       name: 'teacher-pro-store-v4',
-      version: 8,
+      version: 9,
       migrate: (persistedState: unknown, version: number) => {
         const state = (persistedState ?? {}) as Record<string, unknown>;
         const nextState: Record<string, unknown> = { ...state };
@@ -2068,6 +2097,14 @@ export const useTeacherStore = create<TeacherState>()(
               permissions: sanitizePermissionIds(parseArrayField<string>((role as Record<string, unknown>).permissions)),
             }));
           }
+        }
+
+        // Migration v8 → v9: preserve student grace days as an academic-protection field.
+        if (version < 9 && Array.isArray(nextState.students)) {
+          nextState.students = nextState.students.map((student) => ({
+            ...(student as Record<string, unknown>),
+            accountingGraceDays: normalizeGraceDaysValue((student as Record<string, unknown>).accountingGraceDays),
+          }));
         }
 
         return nextState;

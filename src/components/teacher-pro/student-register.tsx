@@ -87,11 +87,11 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function addDaysToISODate(dateISO: string, days: number): string {
-  if (!dateISO) return "";
+function calculateGracePeriodEnd(dateISO: string, days: number): string {
+  if (!dateISO || days <= 0) return "";
   const date = new Date(`${dateISO}T00:00:00`);
   if (Number.isNaN(date.getTime())) return "";
-  date.setDate(date.getDate() + days);
+  date.setDate(date.getDate() + days - 1);
   return date.toISOString().slice(0, 10);
 }
 
@@ -285,15 +285,17 @@ export function StudentRegisterView() {
     [form.accountingGraceDays],
   );
 
-  const accountingPeriodEnd = useMemo(
-    () => addDaysToISODate(form.createdAt, accountingGraceDays),
+  const gracePeriodEnd = useMemo(
+    () => calculateGracePeriodEnd(form.createdAt, accountingGraceDays),
     [form.createdAt, accountingGraceDays],
   );
 
-  const accountingPeriodDescription = useMemo(
-    () => `إطار المحاسبة سيكون من ${formatArabicDate(form.createdAt)} إلى ${formatArabicDate(accountingPeriodEnd)}`,
-    [form.createdAt, accountingPeriodEnd],
-  );
+  const gracePeriodDescription = useMemo(() => {
+    if (accountingGraceDays <= 0) {
+      return "لا توجد فترة سماح، وسيبدأ احتساب نتائج الطالب من تاريخ التسجيل";
+    }
+    return `لن يُحاسَب الطالب على أي امتحان أو إخفاق من ${formatArabicDate(form.createdAt)} إلى ${formatArabicDate(gracePeriodEnd)}`;
+  }, [form.createdAt, gracePeriodEnd, accountingGraceDays]);
 
   const duplicatePhoneStudent = useMemo(() => {
     const phoneKey = normalizePhoneForDuplicate(form.phone);
@@ -461,7 +463,7 @@ export function StudentRegisterView() {
     );
     if (parentPhoneError) return parentPhoneError;
 
-    if (!form.createdAt) return "تاريخ بداية حساب أيام المحاسبة مطلوب";
+    if (!form.createdAt) return "تاريخ تسجيل الطالب مطلوب";
     if (!isValidGraceDays(form.accountingGraceDays)) {
       return "فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم";
     }
@@ -508,6 +510,7 @@ export function StudentRegisterView() {
         createdAt: form.createdAt,
         opportunities: chapter?.opportunities ?? 0,
         baseOpportunities: chapter?.opportunities ?? 0,
+        accountingGraceDays,
       });
 
       if (!result.ok) {
@@ -518,7 +521,7 @@ export function StudentRegisterView() {
       window.localStorage.removeItem(STUDENT_DRAFT_KEY);
       setForm(emptyForm());
       toast.success("تم حفظ بيانات الطالب", {
-        description: `${accountingPeriodDescription}، وتمت إضافة الطالب إلى سجل الطلاب بنجاح`,
+        description: `${gracePeriodDescription}، وتمت إضافة الطالب إلى سجل الطلاب بنجاح`,
       });
     },
   );
@@ -1012,12 +1015,12 @@ export function StudentRegisterView() {
               <SectionTitle
                 icon={CalendarDays}
                 title="إعدادات التسجيل"
-                description="اختر التاريخ الذي يبدأ منه حساب أيام المحاسبة، ثم حدد فترة السماح بالأيام."
+                description="حدد تاريخ تسجيل الطالب وعدد أيام السماح التي لا يُحاسَب خلالها على الامتحانات أو الإخفاقات."
               />
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="reg-createdAt" className="font-bold text-foreground">
-                    تاريخ بداية حساب أيام المحاسبة <RequiredMark />
+                    تاريخ تسجيل الطالب / بداية فترة السماح <RequiredMark />
                   </Label>
                   <Input
                     id="reg-createdAt"
@@ -1049,7 +1052,7 @@ export function StudentRegisterView() {
                     className={`${fieldBaseClass} text-left font-tabular`}
                   />
                   <p className="text-xs leading-5 text-muted-foreground">
-                    الرقم يمثل عدد الأيام من تاريخ البداية المختار، وليس من تاريخ اليوم تلقائياً.
+                    خلال هذه الأيام يُحفظ الامتحان في السجل، لكن لا يخصم فرصاً ولا يسبب فصلاً أو محاسبة على الإخفاق.
                   </p>
                 </div>
               </div>
@@ -1057,7 +1060,7 @@ export function StudentRegisterView() {
               <div className="mt-5 flex items-start gap-2 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-foreground">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span>
-                  {accountingPeriodDescription}.
+                  {gracePeriodDescription}.
                 </span>
               </div>
             </section>

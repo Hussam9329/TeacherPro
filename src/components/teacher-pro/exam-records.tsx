@@ -88,7 +88,7 @@ export function ExamRecordsView() {
       .filter((grade) => grade.examId === examId)
       .map((grade) => {
         const student = students.find((item) => item.id === grade.studentId);
-        const cls = classification(grade, exam);
+        const cls = classification(grade, exam, student);
         return { grade, student, cls };
       })
       .filter((row) => row.student)

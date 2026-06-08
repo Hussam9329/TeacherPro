@@ -129,7 +129,7 @@ export function GradeRecordsView() {
     const rows = filtered.map((grade) => {
       const student = students.find((item) => item.id === grade.studentId);
       const exam = exams.find((item) => item.id === grade.examId);
-      const cls = exam ? classification(grade, exam) : { text: "" };
+      const cls = exam ? classification(grade, exam, student) : { text: "" };
       return [student?.name || "", student?.code || "", student?.telegram || "", exam?.name || "", grade.status, grade.score?.toString() || "", cls.text, grade.notes || ""]
         .map((value) => `"${String(value).replaceAll('"', '""')}"`)
         .join(",");
@@ -196,7 +196,7 @@ export function GradeRecordsView() {
           const student = students.find((item) => item.id === grade.studentId);
           const exam = exams.find((item) => item.id === grade.examId);
           if (!student || !exam) return null;
-          const cls = classification(grade, exam);
+          const cls = classification(grade, exam, student);
           return (
             <div key={grade.id} className="flex items-center justify-between gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg">
               <div className="min-w-0 flex-1">

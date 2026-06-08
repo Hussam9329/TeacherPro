@@ -73,6 +73,7 @@ type StudentEditForm = {
   courseId: string;
   subSite: string;
   createdAt: string;
+  accountingGraceDays: string;
 };
 
 const emptyEditForm: StudentEditForm = {
@@ -90,6 +91,7 @@ const emptyEditForm: StudentEditForm = {
   courseId: "",
   subSite: "",
   createdAt: new Date().toISOString().slice(0, 10),
+  accountingGraceDays: "0",
 };
 
 function getStudentEditForm(student: Student): StudentEditForm {
@@ -108,6 +110,7 @@ function getStudentEditForm(student: Student): StudentEditForm {
     courseId: student.courseId,
     subSite: student.subSite || "",
     createdAt: student.createdAt || new Date().toISOString().slice(0, 10),
+    accountingGraceDays: String(student.accountingGraceDays ?? 0),
   };
 }
 
@@ -120,6 +123,18 @@ function whatsappLink(phone: string): string {
 
 function telegramLink(telegram: string): string {
   return `https://t.me/${encodeURIComponent(normalizeTelegramIdentifier(telegram))}`;
+}
+
+function normalizeGraceDaysInput(value: string): string {
+  const digits = toLatinDigits(value).replace(/\D/g, "");
+  if (!digits) return "0";
+  return String(Math.min(Number(digits), 30));
+}
+
+function isValidGraceDays(value: string): boolean {
+  if (!/^\d+$/.test(value)) return false;
+  const days = Number(value);
+  return Number.isInteger(days) && days >= 0 && days <= 30;
 }
 
 function ContactLink({
@@ -390,6 +405,9 @@ export function StudentRegistryView() {
     );
     if (parentPhoneError) return parentPhoneError;
 
+    if (!isValidGraceDays(form.accountingGraceDays)) {
+      return "فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم";
+    }
 
     const duplicateMessage = getStudentDuplicateMessage(
       students,
@@ -430,6 +448,7 @@ export function StudentRegistryView() {
       mainSite: form.locationScope,
       subSite: form.subSite || (editBaghdadMode === "عموم بغداد" ? "عموم بغداد" : ""),
       createdAt: form.createdAt,
+      accountingGraceDays: Number(form.accountingGraceDays || 0),
     });
 
     if (!result.ok) {
@@ -532,6 +551,7 @@ export function StudentRegistryView() {
       الموقع: `${s.locationScope || s.mainSite} - ${s.subSite}`,
       الحالة: s.status,
       الفرص: String(s.opportunities),
+      "فترة السماح": `${s.accountingGraceDays ?? 0} يوم`,
       الهاتف: s.phone,
       "ولي الأمر": s.parentPhone,
       التليكرام: s.telegram || "",
@@ -1214,7 +1234,7 @@ export function StudentRegistryView() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="edit-createdAt">تاريخ إضافة الطالب</Label>
+              <Label htmlFor="edit-createdAt">تاريخ إضافة الطالب / بداية السماح</Label>
               <Input
                 id="edit-createdAt"
                 name="createdAt"
@@ -1224,6 +1244,22 @@ export function StudentRegistryView() {
                 onChange={(e) => updateEditForm("createdAt", e.target.value)}
                 required
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-accountingGraceDays">فترة السماح بالأيام</Label>
+              <Input
+                id="edit-accountingGraceDays"
+                name="accountingGraceDays"
+                inputMode="numeric"
+                min={0}
+                max={30}
+                pattern="(?:[0-9]|[12][0-9]|30)"
+                autoComplete="off"
+                value={editDialog.form.accountingGraceDays}
+                onChange={(e) => updateEditForm("accountingGraceDays", normalizeGraceDaysInput(e.target.value))}
+                required
+              />
+              <p className="text-xs text-muted-foreground">لا يُحاسَب الطالب على الامتحانات أو الإخفاقات خلال هذه الأيام.</p>
             </div>
           </div>
           <DialogFooter>
@@ -1406,6 +1442,10 @@ export function StudentRegistryView() {
                 <div>
                   <span className="text-muted-foreground">تاريخ التسجيل:</span>{" "}
                   <strong>{fileDialog.student.createdAt}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">فترة السماح:</span>{" "}
+                  <strong>{fileDialog.student.accountingGraceDays ?? 0} يوم</strong>
                 </div>
               </div>
 

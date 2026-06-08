@@ -13,6 +13,21 @@ import {
   resolveSubSite,
 } from '@/lib/course-config';
 
+function normalizeGraceDays(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.min(30, Math.max(0, Math.trunc(numeric)));
+}
+
+function validateGraceDays(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric < 0 || numeric > 30) {
+    return 'فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم';
+  }
+  return null;
+}
+
 
 function getPrismaStudentErrorResponse(error: unknown) {
   const prismaError = error as { code?: string; meta?: { target?: unknown } };
@@ -87,6 +102,10 @@ export async function POST(req: NextRequest) {
   if (nameError)
     return NextResponse.json({ error: nameError }, { status: 400 });
 
+  const graceDaysError = validateGraceDays(body.accountingGraceDays);
+  if (graceDaysError)
+    return NextResponse.json({ error: graceDaysError }, { status: 400 });
+
   const duplicateSource = await db.student.findMany({
     select: { id: true, name: true, phone: true, telegram: true },
   });
@@ -152,6 +171,7 @@ export async function POST(req: NextRequest) {
       createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
       opportunities: Number(body.opportunities || 0),
       baseOpportunities: Number(body.baseOpportunities || 0),
+      accountingGraceDays: normalizeGraceDays(body.accountingGraceDays),
       courseId: body.courseId,
         ...uniqueKeys,
       },
@@ -201,6 +221,12 @@ export async function PUT(req: NextRequest) {
   }
   if (data.telegram !== undefined)
     data.telegram = sanitizeTelegramInput(String(data.telegram ?? ""));
+  if (data.accountingGraceDays !== undefined) {
+    const graceDaysError = validateGraceDays(data.accountingGraceDays);
+    if (graceDaysError)
+      return NextResponse.json({ error: graceDaysError }, { status: 400 });
+    data.accountingGraceDays = normalizeGraceDays(data.accountingGraceDays);
+  }
   if (
     data.name !== undefined ||
     data.phone !== undefined ||

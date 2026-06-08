@@ -240,7 +240,7 @@ export function GradeEntryView() {
                 examStudents.map((student) => {
                   const grade = getGrade(student.id);
                   const draft = getDraft(student.id);
-                  const cls = grade ? classification(grade, selectedExam) : null;
+                  const cls = grade ? classification(grade, selectedExam, student) : null;
                   const isSaving = Boolean(savingRows[student.id]);
                   const canEdit = canEditGradeForStudent(student.id);
                   return (
