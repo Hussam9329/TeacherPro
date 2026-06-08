@@ -8,6 +8,7 @@ import {
   BookMarked,
   UserPlus,
   ClipboardList,
+  UserX,
   FileText,
   PenTool,
   FileCheck,
@@ -77,6 +78,7 @@ const menuItems: {
     sub: "بطاقات",
     icon: ClipboardList,
   },
+  { id: "dismissed-students", title: "المفصولون", sub: "قائمة", icon: UserX },
   { id: "exam-new", title: "إضافة الامتحان", sub: "القواعد", icon: FileText },
   { id: "grade-entry", title: "تسجيل الدرجات", sub: "إدخال", icon: PenTool },
   { id: "exam-records", title: "سجل الامتحانات", sub: "PDF", icon: FileCheck },
@@ -96,7 +98,7 @@ const menuItems: {
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
   { title: "الدورات", itemIds: ["courses"] },
   { title: "الفرص", itemIds: ["chapters", "opportunities"] },
-  { title: "الطلاب", itemIds: ["student-register", "student-registry"] },
+  { title: "الطلاب", itemIds: ["student-register", "student-registry", "dismissed-students"] },
   {
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
@@ -132,6 +134,7 @@ import { CoursesView } from "./courses";
 import { ChaptersView } from "./chapters";
 import { StudentRegisterView } from "./student-register";
 import { StudentRegistryView } from "./student-registry";
+import { DismissedStudentsView } from "./dismissed-students";
 import { ExamNewView } from "./exam-new";
 import { GradeEntryView } from "./grade-entry";
 import { ExamRecordsView } from "./exam-records";
@@ -149,6 +152,7 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   chapters: ChaptersView,
   "student-register": StudentRegisterView,
   "student-registry": StudentRegistryView,
+  "dismissed-students": DismissedStudentsView,
   "exam-new": ExamNewView,
   "grade-entry": GradeEntryView,
   "exam-records": ExamRecordsView,

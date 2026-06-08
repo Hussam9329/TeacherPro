@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 
-function validateGradePayload(body: Record<string, unknown>) {
+async function validateGradePayload(body: Record<string, unknown>) {
   const studentError = requireText(body.studentId, 'الطالب');
   if (studentError) return studentError;
   const examError = requireText(body.examId, 'الامتحان');
@@ -10,7 +10,11 @@ function validateGradePayload(body: Record<string, unknown>) {
   if (!['درجة', 'غائب', 'مجاز', 'غش'].includes(String(body.status ?? ''))) return 'حالة الدرجة غير صحيحة';
   if (body.status === 'درجة') {
     const score = Number(body.score);
-    if (!Number.isFinite(score) || score < 0) return 'الدرجة يجب أن تكون رقماً صحيحاً لا يقل عن صفر';
+    const exam = await db.exam.findUnique({ where: { id: String(body.examId) }, select: { fullMark: true } });
+    const fullMark = Number(exam?.fullMark ?? 0);
+    if (!Number.isFinite(score) || score < 0 || score > fullMark) {
+      return `الدرجة يجب أن تكون رقماً بين 0 و ${fullMark}`;
+    }
   }
   return null;
 }
@@ -27,7 +31,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const validationMessage = validateGradePayload(body);
+    const validationMessage = await validateGradePayload(body);
     if (validationMessage) return validationError(validationMessage);
     const grade = await db.grade.upsert({
       where: { studentId_examId: { studentId: body.studentId, examId: body.examId } },
@@ -58,6 +62,18 @@ export async function PUT(req: NextRequest) {
     delete data.accountingChecked;
     if (!id) return validationError('تعذر تحديد الدرجة المطلوبة');
     if (data.score !== undefined) data.score = data.score === null ? null : Number(data.score);
+    if (data.status === 'درجة' || data.score !== undefined) {
+      const current = await db.grade.findUnique({ where: { id }, include: { exam: true } });
+      if (!current) return validationError('سجل الدرجة غير موجود');
+      const nextStatus = String(data.status ?? current.status);
+      const nextScore = data.score !== undefined ? data.score : current.score;
+      if (nextStatus === 'درجة') {
+        const fullMark = Number(current.exam.fullMark || 0);
+        if (!Number.isFinite(Number(nextScore)) || Number(nextScore) < 0 || Number(nextScore) > fullMark) {
+          return validationError(`الدرجة يجب أن تكون رقماً بين 0 و ${fullMark}`);
+        }
+      }
+    }
     const grade = await db.grade.update({ where: { id }, data });
     return NextResponse.json({ grade });
   } catch (error) {

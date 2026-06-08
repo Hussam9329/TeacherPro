@@ -19,6 +19,7 @@ import {
   parseJsonArray,
   parseJsonRecord,
 } from './course-config';
+import { isGradeEntered } from './exam-utils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -270,6 +271,7 @@ export type SectionId =
   | 'chapters'
   | 'student-register'
   | 'student-registry'
+  | 'dismissed-students'
   | 'exam-new'
   | 'grade-entry'
   | 'exam-records'
@@ -351,6 +353,7 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'chapters': 'chapters.view',
   'student-register': 'students.add',
   'student-registry': 'students.view',
+  'dismissed-students': 'students.view',
   'exam-new': 'exams.add',
   'grade-entry': 'grades.add',
   'exam-records': 'exams.view',
@@ -822,6 +825,8 @@ function isRuleManagedDismissal(student: Student): boolean {
     'درجة فصل',
     'درجة صفر',
     'انتهاء الفرص',
+    'غياب امتحان',
+    'فصل امتحان',
   ].some((part) => reason.includes(part));
 }
 
@@ -881,6 +886,7 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
     for (const grade of studentGrades) {
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
+      if (!isGradeEntered(grade, exam)) continue;
       if (grade.status === 'مجاز') continue;
       if (isExamWithinStudentGracePeriod(student, exam)) continue;
 
@@ -1247,7 +1253,7 @@ export const useTeacherStore = create<TeacherState>()(
         return cc ? get().chapters.find((c) => c.id === cc.chapterId) || null : null;
       },
       classification: (grade, exam, student) => {
-        if (!grade) return { text: 'غير مسجل', type: 'neutral', kind: 'missing' };
+        if (!grade || !isGradeEntered(grade, exam)) return { text: 'غير مسجل', type: 'neutral', kind: 'missing' };
         if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
         if (grade.status === 'مجاز') return { text: 'مجاز', type: 'info', kind: 'leave' };
         if (grade.status === 'غش') return { text: 'غش', type: 'danger', kind: 'cheat' };

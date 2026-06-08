@@ -58,6 +58,8 @@ import { useActionLock } from "@/hooks/use-action-lock";
 import { SearchX, UserPlus } from "lucide-react";
 import { EmptyState } from "./ui-kit";
 
+type RegistryViewMode = "cards" | "table";
+
 type StudentEditForm = {
   name: string;
   school: string;
@@ -193,6 +195,7 @@ export function StudentRegistryView() {
   const [filterCourseId, setFilterCourseId] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterGender, setFilterGender] = useState("");
+  const [viewMode, setViewMode] = useState<RegistryViewMode>("cards");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
 
@@ -700,6 +703,13 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-1">
+              <Label htmlFor="registry-view" className="text-xs">طريقة العرض</Label>
+              <Select value={viewMode} onValueChange={(v) => setViewMode(v as RegistryViewMode)}>
+                <SelectTrigger id="registry-view"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="cards">الكارتات</SelectItem><SelectItem value="table">الجدول</SelectItem></SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
               <span className="text-xs font-medium">تصدير</span>
               <Button
                 variant="outline"
@@ -794,159 +804,93 @@ export function StudentRegistryView() {
             </Button>
           }
         />
-      ) : (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {paged.map((student) => (
-          <Card
-            key={student.id}
-            className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10"
-          >
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <p className="font-bold">{student.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {student.code}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {student.school || "بدون مدرسة"}
-                  </p>
+      ) : viewMode === "cards" ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {paged.map((student) => (
+            <Card key={student.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10">
+              <CardContent className="p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-bold">{student.name}</p>
+                    <p className="text-xs text-muted-foreground">{student.code} - {student.school || "بدون مدرسة"}</p>
+                  </div>
+                  <Badge variant={student.status === "نشط" ? "default" : "destructive"}>{student.status}</Badge>
                 </div>
-                <Badge
-                  variant={student.status === "نشط" ? "default" : "destructive"}
-                >
-                  {student.status}
-                </Badge>
-              </div>
 
-              <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                <div>
-                  <span className="text-muted-foreground text-xs">الدورة</span>
-                  <p className="font-medium text-xs">
-                    {courseName(student.courseId)}
-                  </p>
+                <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-xs text-muted-foreground">الدورة</span><p className="text-xs font-medium">{courseName(student.courseId)}</p></div>
+                  <div><span className="text-xs text-muted-foreground">نوع الدورة</span><p className="text-xs font-medium">{student.courseProgram ? student.courseProgram === "كورسات" ? `كورسات - ${student.courseTerm}` : student.courseProgram : "-"}</p></div>
+                  <div><span className="text-xs text-muted-foreground">نوع الدراسة</span><p className="text-xs font-medium">{student.studyType || "-"}</p></div>
+                  <div><span className="text-xs text-muted-foreground">الموقع</span><p className="text-xs font-medium">{`${student.locationScope || student.mainSite || "-"} - ${student.subSite || "-"}`}</p></div>
+                  <div><span className="text-xs text-muted-foreground">الفرص</span><p className="text-xs font-medium">{activeChapterForCourse(student.courseId) ? `${student.opportunities} / ${student.baseOpportunities}` : "0 / 0 - لم يتم اختيار الفصل"}</p></div>
+                  <div><span className="text-xs text-muted-foreground">السماح</span><p className="text-xs font-medium">{student.accountingGraceDays ?? 0} يوم</p></div>
+                  <div><span className="text-xs text-muted-foreground">تليكرام</span><p className="text-xs">{student.telegram ? <ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink> : "-"}</p></div>
+                  <div><span className="text-xs text-muted-foreground">رقم الطالب</span><p className="text-xs"><ContactLink href={whatsappLink(student.phone)}>{student.phone}</ContactLink></p></div>
+                  <div><span className="text-xs text-muted-foreground">ولي الأمر</span><p className="text-xs"><ContactLink href={whatsappLink(student.parentPhone)}>{student.parentPhone}</ContactLink></p></div>
                 </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">نوع الدورة</span>
-                  <p className="font-medium text-xs">
-                    {student.courseProgram 
-                      ? student.courseProgram === "كورسات" 
-                        ? `كورسات - ${student.courseTerm}` 
-                        : student.courseProgram
-                      : "-"}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">نوع الدراسة</span>
-                  <p className="font-medium text-xs">{student.studyType || "-"}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">الموقع</span>
-                  <p className="font-medium text-xs">
-                    {`${student.locationScope || student.mainSite} - ${student.subSite}`}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">الفرص</span>
-                  {activeChapterForCourse(student.courseId) ? (
-                    <p className="font-medium text-xs">
-                      {student.opportunities} / {student.baseOpportunities}
-                    </p>
-                  ) : (
-                    <p className="font-semibold text-xs text-destructive">
-                      0 / 0 - لم يتم اختيار الفصل لهم بعد
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">تليكرام</span>
-                  <p className="text-xs">
-                    {student.telegram ? (
-                      <ContactLink href={telegramLink(student.telegram)}>
-                        {student.telegram}
-                      </ContactLink>
-                    ) : (
-                      "-"
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">
-                    رقم الطالب
-                  </span>
-                  <p className="text-xs">
-                    <ContactLink href={whatsappLink(student.phone)}>
-                      {student.phone}
-                    </ContactLink>
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground text-xs">
-                    ولي الأمر
-                  </span>
-                  <p className="text-xs">
-                    <ContactLink href={whatsappLink(student.parentPhone)}>
-                      {student.parentPhone}
-                    </ContactLink>
-                  </p>
-                </div>
-              </div>
 
-              {student.status === "مفصول" && (
-                <div className="text-xs p-2 rounded bg-destructive/10 text-destructive mb-3">
-                  {student.dismissalType} - {student.dismissalReason}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="min-h-11 text-xs"
-                  onClick={() => setFileDialog({ student, open: true })}
-                >
-                  ملف الطالب
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="min-h-11 text-xs"
-                  onClick={() => openEditDialog(student)}
-                >
-                  تعديل
-                </Button>
-                {student.status === "نشط" ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="min-h-11 text-xs"
-                    onClick={() => setDismissDialog({ student, open: true })}
-                  >
-                    فصل
-                  </Button>
-                ) : (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="min-h-11 text-xs"
-                    onClick={() => handleReactivate(student.id)}
-                  >
-                    إعادة تفعيل
-                  </Button>
+                {student.status === "مفصول" && (
+                  <div className="mb-3 rounded bg-destructive/10 p-2 text-xs text-destructive">{student.dismissalType} - {student.dismissalReason}</div>
                 )}
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="min-h-11 text-xs"
-                  onClick={() => openDeleteDialog(student)}
-                >
-                  حذف
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <Button variant="outline" size="sm" className="min-h-11 text-xs" onClick={() => setFileDialog({ student, open: true })}>ملف الطالب</Button>
+                  <Button variant="secondary" size="sm" className="min-h-11 text-xs" onClick={() => openEditDialog(student)}>تعديل</Button>
+                  {student.status === "نشط" ? (
+                    <Button variant="destructive" size="sm" className="min-h-11 text-xs" onClick={() => setDismissDialog({ student, open: true })}>فصل</Button>
+                  ) : (
+                    <Button variant="default" size="sm" className="min-h-11 text-xs" onClick={() => handleReactivate(student.id)}>إعادة تفعيل</Button>
+                  )}
+                  <Button variant="destructive" size="sm" className="min-h-11 text-xs" onClick={() => openDeleteDialog(student)}>حذف</Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table className="responsive-table text-sm">
+            <thead>
+              <tr>
+                <th className="p-3 text-right">الطالب</th>
+                <th className="p-3 text-right">الكود</th>
+                <th className="p-3 text-right">الدورة</th>
+                <th className="p-3 text-right">الدراسة</th>
+                <th className="p-3 text-right">الموقع</th>
+                <th className="p-3 text-right">الهاتف</th>
+                <th className="p-3 text-right">التليكرام</th>
+                <th className="p-3 text-right">الفرص</th>
+                <th className="p-3 text-right">السماح</th>
+                <th className="p-3 text-right">الحالة</th>
+                <th className="p-3 text-right">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paged.map((student) => (
+                <tr key={student.id} className="border-t align-top">
+                  <td className="p-3 font-medium">{student.name}<div className="text-xs text-muted-foreground">{student.school || "بدون مدرسة"}</div></td>
+                  <td className="p-3">{student.code}</td>
+                  <td className="p-3">{courseName(student.courseId)}</td>
+                  <td className="p-3">{student.studyType || "—"}</td>
+                  <td className="p-3 min-w-40">{`${student.locationScope || student.mainSite || "-"} - ${student.subSite || "-"}`}</td>
+                  <td className="p-3"><ContactLink href={whatsappLink(student.phone)}>{student.phone}</ContactLink></td>
+                  <td className="p-3">{student.telegram ? <ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink> : "—"}</td>
+                  <td className="p-3">{activeChapterForCourse(student.courseId) ? `${student.opportunities} / ${student.baseOpportunities}` : "0 / 0"}</td>
+                  <td className="p-3">{student.accountingGraceDays ?? 0} يوم</td>
+                  <td className="p-3"><Badge variant={student.status === "نشط" ? "default" : "destructive"}>{student.status}</Badge></td>
+                  <td className="p-3 min-w-56">
+                    <div className="flex flex-wrap gap-1">
+                      <Button variant="outline" size="sm" onClick={() => setFileDialog({ student, open: true })}>ملف</Button>
+                      <Button variant="secondary" size="sm" onClick={() => openEditDialog(student)}>تعديل</Button>
+                      {student.status === "نشط" ? <Button variant="destructive" size="sm" onClick={() => setDismissDialog({ student, open: true })}>فصل</Button> : <Button size="sm" onClick={() => handleReactivate(student.id)}>تفعيل</Button>}
+                      <Button variant="destructive" size="sm" onClick={() => openDeleteDialog(student)}>حذف</Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {totalPages > 1 && (

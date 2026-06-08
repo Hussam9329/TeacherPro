@@ -17,7 +17,14 @@ import {
 import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
-import { hasActiveChapterLink, isExamAvailableForEntry, splitSelection } from "@/lib/exam-utils";
+import {
+  hasActiveChapterLink,
+  isExamAvailableForEntry,
+  isGradeEntered,
+  isScoreInsideExamRange,
+  splitSelection,
+  studentMatchesExamMainSites,
+} from "@/lib/exam-utils";
 
 type DraftGrade = {
   status: "درجة" | "غائب" | "مجاز" | "غش";
@@ -46,6 +53,7 @@ export function GradeEntryView() {
   const [drafts, setDrafts] = useState<Record<string, DraftGrade>>({});
   const [savingRows, setSavingRows] = useState<Record<string, boolean>>({});
   const [savedRows, setSavedRows] = useState<Record<string, string>>({});
+  const [editableRows, setEditableRows] = useState<Record<string, boolean>>({});
 
   const selectedExam = exams.find((e) => e.id === selectedExamId);
   const activeExams = exams.filter((e) => isExamAvailableForEntry(e));
@@ -87,12 +95,13 @@ export function GradeEntryView() {
       .filter((student) => {
         if (!selectedExam.courseIds.includes(student.courseId)) return false;
         if (!hasActiveChapterLink(courseChapters, student.courseId)) return false;
-        if (selectedMainSites.length > 0 && !selectedMainSites.includes(student.mainSite)) return false;
+        if (!studentMatchesExamMainSites(student, selectedMainSites)) return false;
         if (filterCourseId && student.courseId !== filterCourseId) return false;
-        if (search && !searchAny(search, [student.name, student.code, student.telegram, student.phone])) return false;
+        if (search && !searchAny(search, [student.name, student.code, student.telegram, student.phone, student.subSite, student.locationScope])) return false;
         const grade = grades.find((g) => g.studentId === student.id && g.examId === selectedExam.id);
-        if (filterStatus === "غير مسجل" && grade) return false;
-        if (filterStatus && filterStatus !== "غير مسجل" && grade?.status !== filterStatus) return false;
+        const entered = isGradeEntered(grade, selectedExam);
+        if (filterStatus === "غير مسجل" && entered) return false;
+        if (filterStatus && filterStatus !== "غير مسجل" && (!entered || grade?.status !== filterStatus)) return false;
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
@@ -113,11 +122,12 @@ export function GradeEntryView() {
     }
     const draft = draftOverride || getDraft(studentId);
     const status = draft.status;
-    const score = status === "درجة" ? Number(toLatinDigits(draft.score)) : null;
+    const normalizedScore = toLatinDigits(draft.score).trim();
+    const score = status === "درجة" ? Number(normalizedScore) : null;
 
     if (status === "درجة") {
-      if (!Number.isFinite(score) || score === null || score < 0 || score > selectedExam.fullMark) {
-        toast.error(`الدرجة يجب أن تكون بين 0 و ${selectedExam.fullMark}`);
+      if (!normalizedScore || !isScoreInsideExamRange(normalizedScore, selectedExam.fullMark)) {
+        toast.error(`لا تُعد الدرجة مدخلة إلا إذا كانت رقماً بين 0 و ${selectedExam.fullMark}`);
         return;
       }
     }
@@ -131,13 +141,21 @@ export function GradeEntryView() {
       notes: draft.notes,
     });
     setSavingRows((prev) => ({ ...prev, [studentId]: false }));
+    setEditableRows((prev) => ({ ...prev, [studentId]: false }));
     setSavedRows((prev) => ({ ...prev, [studentId]: new Date().toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" }) }));
-    toast.success("تم الحفظ تلقائياً");
+    toast.success("تم حفظ الدرجة");
   };
 
   const handleQuickScan = () => {
     const code = window.prompt("امسح QR/باركود أو اكتب كود الطالب للبحث");
     if (code?.trim()) setSearch(code.trim());
+  };
+
+  const handleExamChange = (examId: string) => {
+    setSelectedExamId(examId);
+    setDrafts({});
+    setEditableRows({});
+    setSavedRows({});
   };
 
   return (
@@ -150,7 +168,7 @@ export function GradeEntryView() {
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
             <div className="space-y-2 lg:col-span-2">
               <Label htmlFor="grade-entry-exam">اختر الامتحان</Label>
-              <Select name="examId" value={selectedExamId} onValueChange={setSelectedExamId}>
+              <Select name="examId" value={selectedExamId} onValueChange={handleExamChange}>
                 <SelectTrigger id="grade-entry-exam">
                   <SelectValue placeholder="اختر الامتحان" />
                 </SelectTrigger>
@@ -170,7 +188,7 @@ export function GradeEntryView() {
                 id="grade-entry-search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="اسم / كود / تليكرام"
+                placeholder="اسم / كود / تليكرام / محافظة"
                 autoComplete="off"
               />
             </div>
@@ -240,14 +258,18 @@ export function GradeEntryView() {
                 examStudents.map((student) => {
                   const grade = getGrade(student.id);
                   const draft = getDraft(student.id);
-                  const cls = grade ? classification(grade, selectedExam, student) : null;
+                  const entered = isGradeEntered(grade, selectedExam);
+                  const cls = entered && grade ? classification(grade, selectedExam, student) : null;
                   const isSaving = Boolean(savingRows[student.id]);
                   const canEdit = canEditGradeForStudent(student.id);
+                  const rowLocked = Boolean(entered && !editableRows[student.id]);
+                  const controlsDisabled = !canEdit || rowLocked;
                   return (
-                    <div key={student.id} className="grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm md:grid-cols-[1.4fr_120px_120px_1fr_120px]">
+                    <div key={student.id} className="grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate text-sm font-bold">{student.name}</p>
+                          <Badge variant="outline" className="text-[10px]">{student.subSite || student.locationScope || student.mainSite || "بدون موقع"}</Badge>
                           {student.status === "مفصول" && (
                             <Badge variant={canEdit ? "secondary" : "destructive"} className="text-[10px]">
                               {canEdit ? "مفصول - يمكن تصحيح سبب الفصل" : "مفصول - إدخال مقفل"}
@@ -264,27 +286,25 @@ export function GradeEntryView() {
                         type="number"
                         min={0}
                         max={selectedExam.fullMark}
-                        disabled={!canEdit || draft.status !== "درجة"}
+                        disabled={controlsDisabled || draft.status !== "درجة"}
                         value={draft.status === "درجة" ? draft.score : ""}
                         onChange={(e) => updateDraft(student.id, { score: toLatinDigits(e.target.value), status: "درجة" })}
-                        onBlur={() => canEdit && saveGrade(student.id)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
                             event.preventDefault();
                             void saveGrade(student.id);
                           }
                         }}
-                        placeholder="الدرجة"
+                        placeholder={`0 - ${selectedExam.fullMark}`}
                         className="h-10"
                       />
 
                       <Select
                         value={draft.status}
-                        disabled={!canEdit}
+                        disabled={controlsDisabled}
                         onValueChange={(value) => {
-                          const nextDraft = { ...draft, status: value as DraftGrade["status"] };
-                          updateDraft(student.id, { status: nextDraft.status });
-                          void saveGrade(student.id, nextDraft);
+                          const nextStatus = value as DraftGrade["status"];
+                          updateDraft(student.id, { status: nextStatus, score: nextStatus === "درجة" ? draft.score : "" });
                         }}
                       >
                         <SelectTrigger className="h-10">
@@ -297,22 +317,26 @@ export function GradeEntryView() {
 
                       <Input
                         value={draft.notes}
-                        disabled={!canEdit}
+                        disabled={controlsDisabled}
                         onChange={(e) => updateDraft(student.id, { notes: e.target.value })}
-                        onBlur={() => canEdit && saveGrade(student.id)}
                         placeholder="ملاحظات"
                         className="h-10"
                       />
 
-                      <div className="flex items-center justify-end gap-2">
-                        {grade && cls && (
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {cls && (
                           <Badge variant={cls.type === "ok" ? "default" : cls.type === "danger" ? "destructive" : cls.type === "warn" ? "secondary" : "outline"}>
                             {cls.text}
                           </Badge>
                         )}
                         <Badge variant={savedRows[student.id] ? "default" : "outline"} className="text-[10px]">
-                          {isSaving ? "جاري الحفظ" : savedRows[student.id] ? `تم ${savedRows[student.id]}` : grade ? "محفوظ" : "غير محفوظ"}
+                          {isSaving ? "جاري الحفظ" : savedRows[student.id] ? `تم ${savedRows[student.id]}` : entered ? "محفوظ" : "غير مدخل"}
                         </Badge>
+                        {rowLocked ? (
+                          <Button size="sm" variant="secondary" disabled={!canEdit} onClick={() => setEditableRows((prev) => ({ ...prev, [student.id]: true }))}>تعديل</Button>
+                        ) : (
+                          <Button size="sm" onClick={() => void saveGrade(student.id)} disabled={!canEdit || isSaving}>{isSaving ? "حفظ..." : "حفظ"}</Button>
+                        )}
                       </div>
                     </div>
                   );
