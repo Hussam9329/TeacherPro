@@ -62,6 +62,8 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
     if (config.scopes.includes('بغداد')) {
       if (!config.baghdadMode || !BAGHDAD_MODES.includes(config.baghdadMode as any))
         return `يجب اختيار نوع بغداد لنوع الدراسة "${studyType}"`;
+      if (studyType === 'حضوري' && config.baghdadMode !== 'بغداد - مخصص')
+        return 'نوع بغداد للدراسة الحضورية يجب أن يكون بغداد - مخصص';
       if (config.baghdadMode === 'بغداد - مخصص') {
         if (!config.baghdadSites || config.baghdadSites.length === 0)
           return `يجب اختيار موقع واحد على الأقل من مواقع بغداد لنوع الدراسة "${studyType}"`;

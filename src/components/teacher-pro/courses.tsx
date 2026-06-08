@@ -59,6 +59,10 @@ function usesAutoGeneralBaghdad(studyType: StudyType): boolean {
   return studyType === "إلكتروني" || studyType === "مدمج";
 }
 
+function usesForcedCustomBaghdad(studyType: StudyType): boolean {
+  return studyType === "حضوري";
+}
+
 function normalizeStudyLocationConfig(studyType: StudyType, config: StudyLocationConfig): StudyLocationConfig {
   const nextConfig: StudyLocationConfig = {
     ...config,
@@ -68,6 +72,11 @@ function normalizeStudyLocationConfig(studyType: StudyType, config: StudyLocatio
   if (usesAutoGeneralBaghdad(studyType) && nextConfig.scopes.includes("بغداد")) {
     nextConfig.baghdadMode = "عموم بغداد";
     nextConfig.baghdadSites = undefined;
+  }
+
+  if (usesForcedCustomBaghdad(studyType) && nextConfig.scopes.includes("بغداد")) {
+    nextConfig.baghdadMode = "بغداد - مخصص";
+    nextConfig.baghdadSites = nextConfig.baghdadSites || [];
   }
 
   return nextConfig;
@@ -235,6 +244,11 @@ function CourseBuilderForm({
         nextStudy.baghdadSites = undefined;
       }
 
+      if (nextScopes.includes("بغداد") && usesForcedCustomBaghdad(studyType)) {
+        nextStudy.baghdadMode = "بغداد - مخصص";
+        nextStudy.baghdadSites = nextStudy.baghdadSites || [];
+      }
+
       return {
         ...prev,
         locationConfig: { ...prev.locationConfig, [studyType]: nextStudy },
@@ -243,6 +257,7 @@ function CourseBuilderForm({
   };
 
   const handleBaghdadModeChange = (studyType: StudyType, mode: BaghdadMode) => {
+    if (usesForcedCustomBaghdad(studyType) && mode !== "بغداد - مخصص") return;
     setForm(prev => {
       const prevStudy = prev.locationConfig[studyType] || { scopes: [] };
       const nextStudy: StudyLocationConfig = {
@@ -392,6 +407,7 @@ function CourseBuilderForm({
             {form.availableStudyTypes.map((studyType) => {
               const studyConfig = form.locationConfig[studyType] || { scopes: [] };
               const isAutoGeneralBaghdad = usesAutoGeneralBaghdad(studyType);
+              const isForcedCustomBaghdad = usesForcedCustomBaghdad(studyType);
               return (
                 <Card key={studyType} className="border-dashed">
                   <CardHeader className="pb-3 pt-4 px-4">
@@ -418,20 +434,26 @@ function CourseBuilderForm({
                     {studyConfig.scopes.includes("بغداد") && !isAutoGeneralBaghdad && (
                       <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
                         <RadioGroup
-                          value={studyConfig.baghdadMode || ""}
+                          value={isForcedCustomBaghdad ? "بغداد - مخصص" : (studyConfig.baghdadMode || "")}
                           onValueChange={(v) => handleBaghdadModeChange(studyType, v as BaghdadMode)}
                           className="flex flex-wrap gap-4"
                         >
-                          {BAGHDAD_MODES.map((mode) => (
-                            <label key={mode} className="flex items-center gap-2 cursor-pointer">
-                              <RadioGroupItem value={mode} />
-                              <span className="text-sm">{mode}</span>
-                            </label>
-                          ))}
+                          {BAGHDAD_MODES.map((mode) => {
+                            const disabled = isForcedCustomBaghdad && mode === "عموم بغداد";
+                            return (
+                              <label
+                                key={mode}
+                                className={`flex items-center gap-2 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                              >
+                                <RadioGroupItem value={mode} disabled={disabled} />
+                                <span className="text-sm">{mode}</span>
+                              </label>
+                            );
+                          })}
                         </RadioGroup>
 
                         {/* Baghdad sites */}
-                        {studyConfig.baghdadMode === "بغداد - مخصص" && (
+                        {(isForcedCustomBaghdad || studyConfig.baghdadMode === "بغداد - مخصص") && (
                           <div className="flex flex-wrap gap-3 pt-1">
                             {BAGHDAD_COURSE_SITES.map((site) => (
                               <label key={site} className="flex items-center gap-2 cursor-pointer">
