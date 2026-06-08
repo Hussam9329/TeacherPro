@@ -334,6 +334,27 @@
   .page-enter {
     animation: page-in 220ms ease-out both;
   }
+
+  .app-scrollbar {
+    scrollbar-gutter: stable;
+  }
+
+  .app-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--primary) 48%, transparent);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  .app-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--primary) 68%, transparent);
+    background-clip: content-box;
+  }
 }
 
 @keyframes page-in {

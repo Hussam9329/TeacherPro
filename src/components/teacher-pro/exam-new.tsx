@@ -15,20 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { getExamStatus, hasActiveChapterLink, splitSelection } from "@/lib/exam-utils";
+import { hasActiveChapterLink } from "@/lib/exam-utils";
 
-type ExamStatusMode = "نشط" | "تفعيل مجدول" | "تعطيل مجدول" | "معطل";
+type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
 
 type ExamFormState = {
   name: string;
@@ -43,11 +36,14 @@ type ExamFormState = {
   dismissalGrade: string;
   statusMode: ExamStatusMode;
   scheduledActivateAt: string;
-  scheduledDeactivateAt: string;
 };
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function defaultDateTimeForDate(date: string) {
+  return `${date || todayISO()}T08:00`;
 }
 
 function emptyForm(): ExamFormState {
@@ -64,25 +60,6 @@ function emptyForm(): ExamFormState {
     dismissalGrade: "",
     statusMode: "نشط",
     scheduledActivateAt: "",
-    scheduledDeactivateAt: "",
-  };
-}
-
-function formFromExam(exam: Exam): ExamFormState {
-  return {
-    name: exam.name,
-    type: exam.type,
-    courseIds: [...exam.courseIds],
-    mainSites: splitSelection(exam.mainSite),
-    date: exam.date,
-    fullMark: exam.fullMark,
-    passMark: exam.passMark,
-    discountMark: exam.discountMark,
-    opportunitiesPenaltyNum: typeof exam.opportunitiesPenalty === "number" ? exam.opportunitiesPenalty : 1,
-    dismissalGrade: exam.dismissalGrade !== null ? String(exam.dismissalGrade) : "",
-    statusMode: getExamStatus(exam),
-    scheduledActivateAt: exam.scheduledActivateAt || "",
-    scheduledDeactivateAt: exam.scheduledDeactivateAt || "",
   };
 }
 
@@ -97,10 +74,7 @@ function applyStatus(form: ExamFormState) {
   if (form.statusMode === "معطل") {
     return { active: false, scheduledActivateAt: "", scheduledDeactivateAt: "" };
   }
-  if (form.statusMode === "تفعيل مجدول") {
-    return { active: false, scheduledActivateAt: form.scheduledActivateAt || form.date, scheduledDeactivateAt: "" };
-  }
-  return { active: true, scheduledActivateAt: "", scheduledDeactivateAt: form.scheduledDeactivateAt || form.date };
+  return { active: false, scheduledActivateAt: form.scheduledActivateAt, scheduledDeactivateAt: "" };
 }
 
 function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
@@ -124,16 +98,12 @@ export function ExamNewView() {
   const {
     courses,
     sites,
-    exams,
     courseChapters,
     addExam,
-    updateExam,
-    toggleExam,
     courseName,
   } = useTeacherStore();
 
   const [form, setForm] = useState<ExamFormState>(() => emptyForm());
-  const [editDialog, setEditDialog] = useState<{ open: boolean; id: string; form: ExamFormState }>({ open: false, id: "", form: emptyForm() });
   const { locked: isAddingExam, runLocked: runAddExamLocked } = useActionLock();
 
   const activeCourses = useMemo(() => courses.filter((course) => course.active), [courses]);
@@ -171,8 +141,7 @@ export function ExamNewView() {
     if (passMark < 0 || passMark > fullMark) return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
     if (discountMark < 0 || discountMark > fullMark) return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
     if (passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
-    if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ التفعيل المجدول";
-    if (state.statusMode === "تعطيل مجدول" && !state.scheduledDeactivateAt) return "حدد تاريخ التعطيل المجدول";
+    if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ ووقت التفعيل المجدول";
     return null;
   };
 
@@ -197,7 +166,7 @@ export function ExamNewView() {
     const eligibleCourses = activeCourses.filter((course) => hasActiveChapterLink(courseChapters, course.id));
     const allSelected = eligibleCourses.length > 0 && eligibleCourses.every((course) => state.courseIds.includes(course.id));
     return (
-      <div className="space-y-2 border rounded-lg p-3 max-h-48 overflow-y-auto">
+      <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-3">
         <div className="flex items-center gap-2 border-b pb-2">
           <Checkbox
             id={allId}
@@ -220,7 +189,7 @@ export function ExamNewView() {
                 {course.name}
               </Label>
               <Badge variant={eligible ? "outline" : "destructive"} className="text-[10px]">
-                {eligible ? (course.availablePrograms?.join('، ') || '—') : "لم يتم اختيار فصل"}
+                {eligible ? (course.availablePrograms?.join("، ") || "—") : "لم يتم اختيار فصل"}
               </Badge>
             </div>
           );
@@ -233,43 +202,36 @@ export function ExamNewView() {
     <>
       <div className="space-y-2">
         <Label htmlFor={`${prefix}-status`}>حالة الامتحان</Label>
-        <Select value={state.statusMode} onValueChange={(value) => setState((p) => ({ ...p, statusMode: value as ExamStatusMode }))}>
+        <Select
+          value={state.statusMode}
+          onValueChange={(value) => setState((p) => ({
+            ...p,
+            statusMode: value as ExamStatusMode,
+            scheduledActivateAt: value === "تفعيل مجدول" && !p.scheduledActivateAt ? defaultDateTimeForDate(p.date) : p.scheduledActivateAt,
+          }))}
+        >
           <SelectTrigger id={`${prefix}-status`}><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="نشط">نشط</SelectItem>
             <SelectItem value="تفعيل مجدول">تفعيل مجدول</SelectItem>
-            <SelectItem value="تعطيل مجدول">تعطيل مجدول</SelectItem>
             <SelectItem value="معطل">معطل</SelectItem>
           </SelectContent>
         </Select>
+        <p className="text-xs text-muted-foreground">تعطيل الامتحان المجدول يتم من سجل الامتحانات بعد إضافة الامتحان.</p>
       </div>
       {state.statusMode === "تفعيل مجدول" && (
         <div className="space-y-2">
-          <Label htmlFor={`${prefix}-activate`}>تاريخ التفعيل</Label>
-          <Input id={`${prefix}-activate`} type="date" value={state.scheduledActivateAt} onChange={(e) => setState((p) => ({ ...p, scheduledActivateAt: e.target.value }))} />
-        </div>
-      )}
-      {state.statusMode === "تعطيل مجدول" && (
-        <div className="space-y-2">
-          <Label htmlFor={`${prefix}-deactivate`}>تاريخ التعطيل</Label>
-          <Input id={`${prefix}-deactivate`} type="date" value={state.scheduledDeactivateAt} onChange={(e) => setState((p) => ({ ...p, scheduledDeactivateAt: e.target.value }))} />
+          <Label htmlFor={`${prefix}-activate`}>تاريخ ووقت التفعيل</Label>
+          <Input
+            id={`${prefix}-activate`}
+            type="datetime-local"
+            value={state.scheduledActivateAt}
+            onChange={(e) => setState((p) => ({ ...p, scheduledActivateAt: e.target.value }))}
+          />
         </div>
       )}
     </>
   );
-
-
-  const saveExamEdit = () => {
-    const error = validateForm(editDialog.form);
-    if (error) {
-      toast.error(error);
-      return;
-    }
-    const payload = buildExamPayload(editDialog.form);
-    updateExam(editDialog.id, payload);
-    setEditDialog({ open: false, id: "", form: emptyForm() });
-    toast.success("تم تعديل الامتحان وإعادة احتساب تأثيراته على الطلاب");
-  };
 
   const renderFormFields = (state: ExamFormState, setState: (updater: (prev: ExamFormState) => ExamFormState) => void, prefix: string) => {
     const isCumulativeOrFinal = state.type === "تراكمي" || state.type === "فاينل";
@@ -305,7 +267,18 @@ export function ExamNewView() {
         </div>
         <div className="space-y-2">
           <Label htmlFor={`${prefix}-date`}>تاريخ الامتحان</Label>
-          <Input id={`${prefix}-date`} type="date" value={state.date} onChange={(e) => setState((p) => ({ ...p, date: e.target.value }))} />
+          <Input
+            id={`${prefix}-date`}
+            type="date"
+            value={state.date}
+            onChange={(e) => setState((p) => ({
+              ...p,
+              date: e.target.value,
+              scheduledActivateAt: p.statusMode === "تفعيل مجدول" && (!p.scheduledActivateAt || p.scheduledActivateAt.startsWith(p.date))
+                ? defaultDateTimeForDate(e.target.value)
+                : p.scheduledActivateAt,
+            }))}
+          />
         </div>
         <div className="space-y-2 md:col-span-2 xl:col-span-1">
           <Label>الدورات</Label>
@@ -313,7 +286,7 @@ export function ExamNewView() {
         </div>
         <div className="space-y-2">
           <Label>الموقع الرئيسي</Label>
-          <div className="space-y-2 border rounded-lg p-3 max-h-48 overflow-y-auto">
+          <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-3">
             <div className="flex items-center gap-2 border-b pb-2">
               <Checkbox checked={allMainSitesSelected} onCheckedChange={() => setState((p) => ({ ...p, mainSites: allMainSitesSelected ? [] : [...mainSitesForState] }))} />
               <span className="text-sm font-bold">الكل</span>
@@ -369,55 +342,6 @@ export function ExamNewView() {
           </form>
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader><CardTitle>قائمة الامتحانات</CardTitle></CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {exams.map((exam) => {
-              const status = getExamStatus(exam);
-              const examMainSites = splitSelection(exam.mainSite);
-              return (
-                <div key={exam.id} className="rounded-2xl border bg-card/80 p-4 shadow-sm">
-                  <div className="mb-2 flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-bold">{exam.name}</p>
-                      <p className="text-xs text-muted-foreground">{exam.date} - {exam.type}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge>{exam.type}</Badge>
-                      <Badge variant={status === "نشط" ? "default" : status === "معطل" ? "secondary" : "outline"}>{status}</Badge>
-                    </div>
-                  </div>
-                  <div className="mb-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-                    <div><span className="text-xs text-muted-foreground">النجاح:</span> {exam.passMark}</div>
-                    <div><span className="text-xs text-muted-foreground">الخصم:</span> {exam.discountMark}</div>
-                    <div><span className="text-xs text-muted-foreground">الدورات:</span> {exam.courseIds.map((id) => courseName(id)).join("، ")}</div>
-                    <div><span className="text-xs text-muted-foreground">المناطق:</span> {examMainSites.join("، ") || "الكل"}</div>
-                    {exam.scheduledActivateAt && <div><span className="text-xs text-muted-foreground">تفعيل:</span> {exam.scheduledActivateAt}</div>}
-                    {exam.scheduledDeactivateAt && <div><span className="text-xs text-muted-foreground">تعطيل:</span> {exam.scheduledDeactivateAt}</div>}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" size="sm" onClick={() => toggleExam(exam.id)}>{exam.active ? "تعطيل" : "تفعيل"}</Button>
-                    <Button variant="secondary" size="sm" onClick={() => setEditDialog({ open: true, id: exam.id, form: formFromExam(exam) })}>تعديل كل التفاصيل</Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Dialog open={editDialog.open} onOpenChange={(open) => setEditDialog((prev) => ({ ...prev, open }))}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl" dir="rtl">
-          <DialogHeader><DialogTitle>تعديل الامتحان بالكامل</DialogTitle></DialogHeader>
-          {renderFormFields(editDialog.form, (updater) => setEditDialog((prev) => ({ ...prev, form: updater(prev.form) })), "edit-exam")}
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditDialog({ open: false, id: "", form: emptyForm() })}>إلغاء</Button>
-            <Button onClick={saveExamEdit}>حفظ التعديلات وإعادة الاحتساب</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

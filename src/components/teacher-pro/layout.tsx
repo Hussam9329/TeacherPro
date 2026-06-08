@@ -448,7 +448,7 @@ export function TeacherProLayout() {
   }
 
   return (
-    <div className="app-bg min-h-screen flex bg-background" dir="rtl">
+    <div className="app-bg flex h-screen min-h-screen overflow-hidden bg-background" dir="rtl">
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
@@ -523,7 +523,7 @@ export function TeacherProLayout() {
         </div>
 
         <div
-          className="relative flex-1 overflow-y-auto overscroll-contain py-3"
+          className="app-scrollbar relative flex-1 overflow-y-auto overscroll-contain py-3"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
           <nav className="space-y-3 px-3">
@@ -808,7 +808,7 @@ export function TeacherProLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-h-screen min-w-0">
+      <main className="flex h-screen min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="sticky top-0 z-30 border-b border-border/70 bg-background/75 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65">
           <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-6">
             <div className="flex items-center gap-3">
@@ -865,7 +865,7 @@ export function TeacherProLayout() {
           </div>
         </header>
 
-        <div className="page-enter flex-1 overflow-auto p-4 md:p-6 xl:p-8">
+        <div className="app-scrollbar page-enter flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 xl:p-8">
           <div className="content-container space-y-6">
             {dbLoading && <LoadingState />}
             {isAdmin || canAccess(currentSection) ? (

@@ -608,6 +608,17 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function normalizeDateTimeValue(value: unknown): string {
+  if (!value) return '';
+  const raw = String(value);
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) return raw.slice(0, 16);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) return '';
+  const pad = (num: number) => String(num).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function nowText(): string {
   const d = new Date();
   const date = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -1016,8 +1027,8 @@ export const useTeacherStore = create<TeacherState>()(
             opportunitiesPenalty: ex.opportunitiesPenalty === 'فصل مؤقت' ? 'فصل مؤقت' as const : Number(ex.opportunitiesPenalty || 1),
             dismissalGrade: ex.dismissalGrade === null || ex.dismissalGrade === undefined ? null : Number(ex.dismissalGrade),
             active: Boolean(ex.active),
-            scheduledActivateAt: ex.scheduledActivateAt ? String(ex.scheduledActivateAt).slice(0, 10) : '',
-            scheduledDeactivateAt: ex.scheduledDeactivateAt ? String(ex.scheduledDeactivateAt).slice(0, 10) : '',
+            scheduledActivateAt: normalizeDateTimeValue(ex.scheduledActivateAt),
+            scheduledDeactivateAt: normalizeDateTimeValue(ex.scheduledDeactivateAt),
             date: ex.date ? String(ex.date).slice(0, 10) : todayISO(),
           };
           }) as Exam[];

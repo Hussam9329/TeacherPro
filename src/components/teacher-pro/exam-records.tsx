@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { useTeacherStore } from "@/lib/teacher-store";
+import { useTeacherStore, type Exam } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,7 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { downloadTextFile, escapeHtml, getExamStatus } from "@/lib/exam-utils";
+import { downloadTextFile, escapeHtml, getExamStatus, splitSelection } from "@/lib/exam-utils";
 import { searchAny } from "@/lib/validation";
 
 type ReportOptions = {
@@ -44,12 +44,45 @@ type ReportOptions = {
   showNotes: boolean;
 };
 
+type ViewMode = "cards" | "table";
+
+type ExamDetailItem = {
+  label: string;
+  value: React.ReactNode;
+};
+
 const defaultReportOptions: ReportOptions = {
   orientation: "portrait",
   showPhone: false,
   showTelegram: true,
   showNotes: true,
 };
+
+function toDateTimeLocalValue(value?: string | null) {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return value.slice(0, 16);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${value}T08:00`;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const pad = (num: number) => String(num).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "—";
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) {
+    const [date, time] = value.slice(0, 16).split("T");
+    return `${date} ${time}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  return date.toLocaleString("ar-IQ", { dateStyle: "medium", timeStyle: "short" });
+}
+
+function defaultDeactivateDateTime(exam: Exam) {
+  return toDateTimeLocalValue(exam.scheduledDeactivateAt) || `${exam.date || new Date().toISOString().slice(0, 10)}T08:00`;
+}
 
 export function ExamRecordsView() {
   const {
@@ -58,6 +91,7 @@ export function ExamRecordsView() {
     students,
     courses,
     updateExam,
+    toggleExam,
     deleteExam,
     courseName,
     classification,
@@ -66,15 +100,17 @@ export function ExamRecordsView() {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("");
   const [filterCourseId, setFilterCourseId] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [reportOptions, setReportOptions] = useState<ReportOptions>(defaultReportOptions);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, id: "", name: "" });
   const [editDialog, setEditDialog] = useState({ open: false, id: "", name: "", passMark: "", discountMark: "", fullMark: "" });
+  const [deactivateDialog, setDeactivateDialog] = useState({ open: false, id: "", name: "", scheduledDeactivateAt: "" });
   const { locked: isDeletingExam, runLocked: runDeleteExamLocked } = useActionLock();
 
   const filteredExams = useMemo(() => {
     return exams.filter((exam) => {
-      if (search && !searchAny(search, [exam.name, exam.date, ...exam.courseIds.map(courseName)])) return false;
+      if (search && !searchAny(search, [exam.name, exam.date, getExamStatus(exam), exam.mainSite, ...exam.courseIds.map(courseName)])) return false;
       if (filterType && exam.type !== filterType) return false;
       if (filterCourseId && !exam.courseIds.includes(filterCourseId)) return false;
       return true;
@@ -93,6 +129,35 @@ export function ExamRecordsView() {
       })
       .filter((row) => row.student)
       .sort((a, b) => (a.student?.name || "").localeCompare(b.student?.name || "", "ar"));
+  };
+
+  const examStats = (examId: string) => {
+    const rows = examRows(examId);
+    return {
+      rows,
+      passCount: rows.filter((row) => row.cls.kind === "pass").length,
+      notPassedCount: rows.filter((row) => row.cls.kind !== "pass" && row.cls.kind !== "leave").length,
+    };
+  };
+
+  const examDetails = (exam: Exam, rowsCount: number): ExamDetailItem[] => {
+    const mainSites = splitSelection(exam.mainSite);
+    return [
+      { label: "اسم الامتحان", value: exam.name },
+      { label: "تاريخ الامتحان", value: exam.date || "—" },
+      { label: "نوع الامتحان", value: exam.type },
+      { label: "حالة الامتحان", value: getExamStatus(exam) },
+      { label: "الدورات", value: exam.courseIds.map(courseName).join("، ") || "—" },
+      { label: "الموقع", value: mainSites.join("، ") || "الكل" },
+      { label: "الدرجة الكاملة", value: exam.fullMark },
+      { label: "درجة النجاح", value: exam.passMark },
+      { label: "درجة الخصم", value: exam.discountMark },
+      { label: "خصم الفرص", value: exam.opportunitiesPenalty },
+      { label: "درجة الفصل", value: exam.dismissalGrade ?? "—" },
+      { label: "تفعيل مجدول", value: formatDateTime(exam.scheduledActivateAt) },
+      { label: "تعطيل مجدول", value: formatDateTime(exam.scheduledDeactivateAt) },
+      { label: "عدد سجلات الدرجات", value: rowsCount },
+    ];
   };
 
   const exportCSV = (examId: string) => {
@@ -216,15 +281,50 @@ tr:nth-child(even) td { background: #f8fafc; }
   };
 
   const handleEditExam = () => {
+    const fullMark = Number(editDialog.fullMark) || 100;
+    const passMark = Number(editDialog.passMark) || 60;
+    const discountMark = Number(editDialog.discountMark) || 0;
     if (!editDialog.name.trim()) return toast.error("اسم الامتحان مطلوب");
+    if (passMark <= discountMark) return toast.error("درجة النجاح يجب أن تكون أكبر من درجة الخصم");
     updateExam(editDialog.id, {
       name: editDialog.name.trim(),
-      fullMark: Number(editDialog.fullMark) || 100,
-      passMark: Number(editDialog.passMark) || 60,
-      discountMark: Number(editDialog.discountMark) || 0,
+      fullMark,
+      passMark,
+      discountMark,
     });
     setEditDialog({ open: false, id: "", name: "", passMark: "", discountMark: "", fullMark: "" });
     toast.success("تم تعديل الامتحان وإعادة الاحتساب");
+  };
+
+  const openScheduleDeactivateDialog = (examId: string) => {
+    const exam = exams.find((item) => item.id === examId);
+    if (!exam) return;
+    setDeactivateDialog({
+      open: true,
+      id: exam.id,
+      name: exam.name,
+      scheduledDeactivateAt: defaultDeactivateDateTime(exam),
+    });
+  };
+
+  const handleScheduleDeactivate = () => {
+    if (!deactivateDialog.scheduledDeactivateAt) {
+      toast.error("حدد تاريخ ووقت التعطيل المجدول");
+      return;
+    }
+    updateExam(deactivateDialog.id, {
+      active: true,
+      scheduledActivateAt: "",
+      scheduledDeactivateAt: deactivateDialog.scheduledDeactivateAt,
+    });
+    setDeactivateDialog({ open: false, id: "", name: "", scheduledDeactivateAt: "" });
+    toast.success("تمت جدولة تعطيل الامتحان");
+  };
+
+  const handleClearScheduledDeactivate = () => {
+    updateExam(deactivateDialog.id, { scheduledDeactivateAt: "" });
+    setDeactivateDialog({ open: false, id: "", name: "", scheduledDeactivateAt: "" });
+    toast.success("تم إلغاء التعطيل المجدول");
   };
 
   const openDeleteExamDialog = (examId: string) => {
@@ -238,14 +338,134 @@ tr:nth-child(even) td { background: #f8fafc; }
     setDeleteDialog({ open: false, id: "", name: "" });
   });
 
+  const renderExamActions = (exam: Exam) => (
+    <div className="flex flex-wrap gap-1">
+      <Button variant="ghost" size="sm" onClick={() => exportPDF(exam.id)}>PDF</Button>
+      <Button variant="ghost" size="sm" onClick={() => exportExcel(exam.id)}>Excel</Button>
+      <Button variant="ghost" size="sm" onClick={() => exportCSV(exam.id)}>CSV</Button>
+      <Button variant="outline" size="sm" onClick={() => toggleExam(exam.id)}>{exam.active ? "تعطيل الآن" : "تفعيل الآن"}</Button>
+      <Button variant="outline" size="sm" onClick={() => openScheduleDeactivateDialog(exam.id)}>تعطيل مجدول</Button>
+      <Button variant="secondary" size="sm" onClick={() => openEditExamDialog(exam.id)}>تعديل</Button>
+      <Button variant="destructive" size="sm" onClick={() => openDeleteExamDialog(exam.id)}>حذف</Button>
+    </div>
+  );
+
+  const renderCards = () => (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {filteredExams.map((exam) => {
+        const { rows, passCount, notPassedCount } = examStats(exam.id);
+        const details = examDetails(exam, rows.length);
+        return (
+          <Card key={exam.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10">
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base">{exam.name}</CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">{exam.date} - {exam.courseIds.map(courseName).join("، ")}</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <Badge>{exam.type}</Badge>
+                    <Badge variant="outline">{getExamStatus(exam)}</Badge>
+                  </div>
+                </div>
+                {renderExamActions(exam)}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+                <div className="rounded bg-emerald-50 p-2 dark:bg-emerald-950/40"><p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{passCount}</p><p className="text-[10px] text-muted-foreground">ناجح</p></div>
+                <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40"><p className="text-lg font-bold text-rose-600 dark:text-rose-400">{notPassedCount}</p><p className="text-[10px] text-muted-foreground">غير ناجح/غائب</p></div>
+                <div className="rounded bg-sky-50 p-2 dark:bg-sky-950/40"><p className="text-lg font-bold text-sky-600 dark:text-sky-400">{rows.length}</p><p className="text-[10px] text-muted-foreground">إجمالي</p></div>
+              </div>
+
+              <div className="mb-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-2 xl:grid-cols-3">
+                {details.map((item) => (
+                  <div key={item.label} className="rounded-xl border bg-muted/40 p-2">
+                    <p className="text-[10px] text-muted-foreground">{item.label}</p>
+                    <p className="mt-0.5 font-semibold">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="max-h-60 space-y-1 overflow-y-auto">
+                {rows.map((row) => (
+                  <div key={row.grade.id} className="flex items-center justify-between rounded-xl bg-muted/60 p-2 text-sm">
+                    <span className="truncate">{row.student?.name}</span>
+                    <div className="flex items-center gap-2">{row.grade.score !== null && <span className="font-bold">{row.grade.score}</span>}<Badge variant={row.cls.type === "ok" ? "default" : row.cls.type === "danger" ? "destructive" : row.cls.type === "warn" ? "secondary" : "outline"} className="text-[10px]">{row.cls.text}</Badge></div>
+                  </div>
+                ))}
+                {rows.length === 0 && <div className="empty-state py-6">لا توجد درجات مسجلة لهذا الامتحان بعد.</div>}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
+      {filteredExams.length === 0 && <div className="empty-state xl:col-span-2">لا توجد امتحانات مطابقة للفلاتر.</div>}
+    </div>
+  );
+
+  const renderTable = () => (
+    <div className="table-wrap">
+      <table className="responsive-table text-sm">
+        <thead>
+          <tr>
+            <th className="p-3 text-right">اسم الامتحان</th>
+            <th className="p-3 text-right">التاريخ</th>
+            <th className="p-3 text-right">النوع</th>
+            <th className="p-3 text-right">الحالة</th>
+            <th className="p-3 text-right">الدورات</th>
+            <th className="p-3 text-right">الموقع</th>
+            <th className="p-3 text-right">الكاملة</th>
+            <th className="p-3 text-right">النجاح</th>
+            <th className="p-3 text-right">الخصم</th>
+            <th className="p-3 text-right">خصم الفرص</th>
+            <th className="p-3 text-right">درجة الفصل</th>
+            <th className="p-3 text-right">تفعيل مجدول</th>
+            <th className="p-3 text-right">تعطيل مجدول</th>
+            <th className="p-3 text-right">السجلات</th>
+            <th className="p-3 text-right">الإجراءات</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredExams.map((exam) => {
+            const { rows } = examStats(exam.id);
+            return (
+              <tr key={exam.id} className="border-t align-top">
+                <td className="p-3 font-bold">{exam.name}</td>
+                <td className="p-3">{exam.date}</td>
+                <td className="p-3"><Badge>{exam.type}</Badge></td>
+                <td className="p-3"><Badge variant="outline">{getExamStatus(exam)}</Badge></td>
+                <td className="p-3 min-w-44">{exam.courseIds.map(courseName).join("، ") || "—"}</td>
+                <td className="p-3 min-w-36">{splitSelection(exam.mainSite).join("، ") || "الكل"}</td>
+                <td className="p-3">{exam.fullMark}</td>
+                <td className="p-3">{exam.passMark}</td>
+                <td className="p-3">{exam.discountMark}</td>
+                <td className="p-3">{exam.opportunitiesPenalty}</td>
+                <td className="p-3">{exam.dismissalGrade ?? "—"}</td>
+                <td className="p-3 min-w-36">{formatDateTime(exam.scheduledActivateAt)}</td>
+                <td className="p-3 min-w-36">{formatDateTime(exam.scheduledDeactivateAt)}</td>
+                <td className="p-3">{rows.length}</td>
+                <td className="p-3 min-w-80">{renderExamActions(exam)}</td>
+              </tr>
+            );
+          })}
+          {filteredExams.length === 0 && (
+            <tr>
+              <td colSpan={15} className="p-8 text-center text-muted-foreground">لا توجد امتحانات مطابقة للفلاتر.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <div className="space-y-1 lg:col-span-2">
               <Label htmlFor="exam-records-search" className="text-xs">بحث</Label>
-              <Input id="exam-records-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم الامتحان / التاريخ / الدورة" />
+              <Input id="exam-records-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم الامتحان / التاريخ / الدورة / الحالة" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="exam-records-type" className="text-xs">نوع الامتحان</Label>
@@ -262,6 +482,13 @@ tr:nth-child(even) td { background: #f8fafc; }
               </Select>
             </div>
             <div className="space-y-1">
+              <Label htmlFor="exam-records-view" className="text-xs">طريقة العرض</Label>
+              <Select value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
+                <SelectTrigger id="exam-records-view"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="cards">الكارتات</SelectItem><SelectItem value="table">الجدول</SelectItem></SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
               <span className="text-xs font-medium">تخصيص التقرير</span>
               <Button variant="outline" size="sm" className="h-9 w-full" onClick={() => setCustomizeOpen(true)}>تخصيص PDF</Button>
             </div>
@@ -269,49 +496,7 @@ tr:nth-child(even) td { background: #f8fafc; }
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {filteredExams.map((exam) => {
-          const rows = examRows(exam.id);
-          const passCount = rows.filter((row) => row.cls.kind === "pass").length;
-          const notPassedCount = rows.filter((row) => row.cls.kind !== "pass" && row.cls.kind !== "leave").length;
-          return (
-            <Card key={exam.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10">
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base">{exam.name}</CardTitle>
-                    <p className="mt-1 text-xs text-muted-foreground">{exam.date} - {exam.courseIds.map(courseName).join("، ")}</p>
-                    <Badge variant="outline" className="mt-2">{getExamStatus(exam)}</Badge>
-                  </div>
-                  <div className="flex flex-wrap justify-end gap-1">
-                    <Badge>{exam.type}</Badge>
-                    <Button variant="ghost" size="sm" onClick={() => exportPDF(exam.id)}>PDF</Button>
-                    <Button variant="ghost" size="sm" onClick={() => exportExcel(exam.id)}>Excel</Button>
-                    <Button variant="ghost" size="sm" onClick={() => exportCSV(exam.id)}>CSV</Button>
-                    <Button variant="secondary" size="sm" onClick={() => openEditExamDialog(exam.id)}>تعديل</Button>
-                    <Button variant="destructive" size="sm" onClick={() => openDeleteExamDialog(exam.id)}>حذف</Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-3 grid grid-cols-3 gap-2 text-center">
-                  <div className="rounded bg-emerald-50 p-2 dark:bg-emerald-950/40"><p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{passCount}</p><p className="text-[10px] text-muted-foreground">ناجح</p></div>
-                  <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40"><p className="text-lg font-bold text-rose-600 dark:text-rose-400">{notPassedCount}</p><p className="text-[10px] text-muted-foreground">غير ناجح/غائب</p></div>
-                  <div className="rounded bg-sky-50 p-2 dark:bg-sky-950/40"><p className="text-lg font-bold text-sky-600 dark:text-sky-400">{rows.length}</p><p className="text-[10px] text-muted-foreground">إجمالي</p></div>
-                </div>
-                <div className="max-h-60 space-y-1 overflow-y-auto">
-                  {rows.map((row) => (
-                    <div key={row.grade.id} className="flex items-center justify-between rounded-xl bg-muted/60 p-2 text-sm">
-                      <span className="truncate">{row.student?.name}</span>
-                      <div className="flex items-center gap-2">{row.grade.score !== null && <span className="font-bold">{row.grade.score}</span>}<Badge variant={row.cls.type === "ok" ? "default" : row.cls.type === "danger" ? "destructive" : row.cls.type === "warn" ? "secondary" : "outline"} className="text-[10px]">{row.cls.text}</Badge></div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      {viewMode === "cards" ? renderCards() : renderTable()}
 
       <Dialog open={customizeOpen} onOpenChange={setCustomizeOpen}>
         <DialogContent dir="rtl">
@@ -324,7 +509,7 @@ tr:nth-child(even) td { background: #f8fafc; }
                 <SelectContent><SelectItem value="portrait">A4 بالطول</SelectItem><SelectItem value="landscape">A4 بالعرض</SelectItem></SelectContent>
               </Select>
             </div>
-            {[ ["showTelegram", "إظهار التليكرام"], ["showPhone", "إظهار الهاتف"], ["showNotes", "إظهار الملاحظات"] ].map(([key, label]) => (
+            {[["showTelegram", "إظهار التليكرام"], ["showPhone", "إظهار الهاتف"], ["showNotes", "إظهار الملاحظات"]].map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 text-sm"><Checkbox checked={Boolean(reportOptions[key as keyof ReportOptions])} onCheckedChange={(value) => setReportOptions((prev) => ({ ...prev, [key]: Boolean(value) }))} />{label}</label>
             ))}
           </div>
@@ -341,7 +526,31 @@ tr:nth-child(even) td { background: #f8fafc; }
             <div className="space-y-1"><Label>درجة النجاح</Label><Input type="number" value={editDialog.passMark} onChange={(e) => setEditDialog((prev) => ({ ...prev, passMark: e.target.value }))} /></div>
             <div className="space-y-1"><Label>درجة الخصم</Label><Input type="number" value={editDialog.discountMark} onChange={(e) => setEditDialog((prev) => ({ ...prev, discountMark: e.target.value }))} /></div>
           </div>
+          {Number(editDialog.passMark) <= Number(editDialog.discountMark) && <p className="text-sm text-destructive">درجة النجاح يجب أن تكون أكبر من درجة الخصم.</p>}
           <DialogFooter><Button variant="ghost" onClick={() => setEditDialog({ open: false, id: "", name: "", passMark: "", discountMark: "", fullMark: "" })}>إلغاء</Button><Button onClick={handleEditExam}>حفظ</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deactivateDialog.open} onOpenChange={(open) => setDeactivateDialog((prev) => ({ ...prev, open }))}>
+        <DialogContent dir="rtl">
+          <DialogHeader><DialogTitle>تعطيل مجدول للامتحان</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">سيبقى الامتحان نشطًا إلى أن يصل تاريخ ووقت التعطيل المحدد.</p>
+            <div className="space-y-2">
+              <Label htmlFor="scheduled-deactivate-at">تاريخ ووقت التعطيل</Label>
+              <Input
+                id="scheduled-deactivate-at"
+                type="datetime-local"
+                value={deactivateDialog.scheduledDeactivateAt}
+                onChange={(e) => setDeactivateDialog((prev) => ({ ...prev, scheduledDeactivateAt: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeactivateDialog({ open: false, id: "", name: "", scheduledDeactivateAt: "" })}>إلغاء</Button>
+            <Button variant="outline" onClick={handleClearScheduledDeactivate}>إلغاء التعطيل المجدول</Button>
+            <Button onClick={handleScheduleDeactivate}>حفظ الجدولة</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
