@@ -530,6 +530,7 @@ export function StudentRegisterView() {
         status: "نشط",
         dismissalType: "",
         dismissalReason: "",
+        dismissalNotes: "",
         createdAt: form.createdAt,
         opportunities: chapter?.opportunities ?? 0,
         baseOpportunities: chapter?.opportunities ?? 0,

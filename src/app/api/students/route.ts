@@ -168,6 +168,7 @@ export async function POST(req: NextRequest) {
       status: body.status || "نشط",
       dismissalType: body.dismissalType,
       dismissalReason: body.dismissalReason,
+      dismissalNotes: body.dismissalNotes ? String(body.dismissalNotes) : null,
       createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
       opportunities: Number(body.opportunities || 0),
       baseOpportunities: Number(body.baseOpportunities || 0),

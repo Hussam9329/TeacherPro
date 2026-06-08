@@ -16,20 +16,34 @@ import {
 } from "@/components/ui/select";
 import { searchAny } from "@/lib/validation";
 import { toast } from "sonner";
+import { CustomFilterPresets, type FilterPresetValues } from "./custom-filter-presets";
 
 type ViewMode = "cards" | "table";
+type NotesFilter = "all" | "with-notes" | "without-notes";
 
 export function DismissedStudentsView() {
-  const { students, courses, courseName, reactivateStudent } = useTeacherStore();
+  const { students, courses, courseName, reactivateStudent, updateStudent } = useTeacherStore();
   const [search, setSearch] = useState("");
   const [filterCourseId, setFilterCourseId] = useState("");
+  const [filterDismissalType, setFilterDismissalType] = useState("");
+  const [filterNotes, setFilterNotes] = useState<NotesFilter>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+
+  const dismissedTypes = useMemo(
+    () => Array.from(new Set(students.filter((student) => student.status === "مفصول").map((student) => student.dismissalType || "مفصول"))).filter(Boolean),
+    [students],
+  );
 
   const dismissedStudents = useMemo(() => {
     return students
       .filter((student) => student.status === "مفصول")
       .filter((student) => {
+        const hasNotes = Boolean(String(student.dismissalNotes || "").trim());
         if (filterCourseId && student.courseId !== filterCourseId) return false;
+        if (filterDismissalType && (student.dismissalType || "مفصول") !== filterDismissalType) return false;
+        if (filterNotes === "with-notes" && !hasNotes) return false;
+        if (filterNotes === "without-notes" && hasNotes) return false;
         if (search && !searchAny(search, [
           student.name,
           student.code,
@@ -41,15 +55,59 @@ export function DismissedStudentsView() {
           student.locationScope,
           student.dismissalType,
           student.dismissalReason,
+          student.dismissalNotes,
         ])) return false;
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
-  }, [students, filterCourseId, search]);
+  }, [students, filterCourseId, filterDismissalType, filterNotes, search]);
 
   const handleReactivate = (studentId: string) => {
     reactivateStudent(studentId);
     toast.success("تمت إعادة تفعيل الطالب");
+  };
+
+  const handleSaveNote = (studentId: string) => {
+    const student = students.find((item) => item.id === studentId);
+    if (!student) return;
+    const nextNote = noteDrafts[studentId] ?? student.dismissalNotes ?? "";
+    const result = updateStudent(studentId, { dismissalNotes: nextNote });
+    if (result.ok) toast.success("تم حفظ ملاحظات الفصل");
+    else toast.error(result.message);
+  };
+
+  const applyPreset = (values: FilterPresetValues) => {
+    setSearch(String(values.search || ""));
+    setFilterCourseId(String(values.courseId || ""));
+    setFilterDismissalType(String(values.dismissalType || ""));
+    setFilterNotes((values.notesFilter as NotesFilter) || "all");
+    setViewMode((values.viewMode as ViewMode) || "cards");
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setFilterCourseId("");
+    setFilterDismissalType("");
+    setFilterNotes("all");
+    setViewMode("cards");
+  };
+
+  const renderNotesEditor = (student: typeof students[number]) => {
+    const value = noteDrafts[student.id] ?? student.dismissalNotes ?? "";
+    return (
+      <div className="space-y-2">
+        <Label className="text-xs">ملاحظات الفصل</Label>
+        <textarea
+          value={value}
+          onChange={(event) => setNoteDrafts((prev) => ({ ...prev, [student.id]: event.target.value }))}
+          placeholder="اكتب ملاحظات خاصة بهذا الطالب المفصول..."
+          className="min-h-20 w-full rounded-2xl border bg-background/70 px-3 py-2 text-sm shadow-xs outline-none focus:border-primary"
+        />
+        <Button size="sm" variant="outline" onClick={() => handleSaveNote(student.id)}>
+          حفظ الملاحظات
+        </Button>
+      </div>
+    );
   };
 
   return (
@@ -58,11 +116,11 @@ export function DismissedStudentsView() {
         <CardHeader>
           <CardTitle>الطلاب المفصولون</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
             <div className="space-y-1 md:col-span-2">
               <Label htmlFor="dismissed-search" className="text-xs">بحث ذكي</Label>
-              <Input id="dismissed-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم / كود / سبب الفصل / تليكرام" />
+              <Input id="dismissed-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم / كود / سبب / ملاحظات / تليكرام" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="dismissed-course" className="text-xs">الدورة</Label>
@@ -71,6 +129,27 @@ export function DismissedStudentsView() {
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {courses.map((course) => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="dismissed-type" className="text-xs">نوع الفصل</Label>
+              <Select value={filterDismissalType || "all"} onValueChange={(value) => setFilterDismissalType(value === "all" ? "" : value)}>
+                <SelectTrigger id="dismissed-type"><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {dismissedTypes.map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="dismissed-notes" className="text-xs">الملاحظات</Label>
+              <Select value={filterNotes} onValueChange={(value) => setFilterNotes(value as NotesFilter)}>
+                <SelectTrigger id="dismissed-notes"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="with-notes">لديهم ملاحظات</SelectItem>
+                  <SelectItem value="without-notes">بدون ملاحظات</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -85,6 +164,12 @@ export function DismissedStudentsView() {
               </Select>
             </div>
           </div>
+          <CustomFilterPresets
+            storageKey="teacherpro.dismissed.customFilters"
+            currentFilters={{ search, courseId: filterCourseId, dismissalType: filterDismissalType, notesFilter: filterNotes, viewMode }}
+            onApply={applyPreset}
+            onClear={clearFilters}
+          />
         </CardContent>
       </Card>
 
@@ -106,6 +191,7 @@ export function DismissedStudentsView() {
                 <div className="rounded-xl bg-muted/60 p-3 text-sm text-destructive">
                   {student.dismissalReason || "لا يوجد سبب مسجل"}
                 </div>
+                {renderNotesEditor(student)}
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                   <span>الهاتف: {student.phone || "—"}</span>
                   <span>ولي الأمر: {student.parentPhone || "—"}</span>
@@ -126,6 +212,7 @@ export function DismissedStudentsView() {
                 <th className="p-3 text-right">الدورة</th>
                 <th className="p-3 text-right">نوع الفصل</th>
                 <th className="p-3 text-right">السبب</th>
+                <th className="p-3 text-right">الملاحظات</th>
                 <th className="p-3 text-right">الفرص</th>
                 <th className="p-3 text-right">الإجراء</th>
               </tr>
@@ -138,6 +225,7 @@ export function DismissedStudentsView() {
                   <td className="p-3">{courseName(student.courseId)}</td>
                   <td className="p-3"><Badge variant="destructive">{student.dismissalType || "مفصول"}</Badge></td>
                   <td className="p-3 min-w-64 text-destructive">{student.dismissalReason || "—"}</td>
+                  <td className="p-3 min-w-72">{renderNotesEditor(student)}</td>
                   <td className="p-3">{student.opportunities}/{student.baseOpportunities}</td>
                   <td className="p-3"><Button size="sm" onClick={() => handleReactivate(student.id)}>إعادة تفعيل</Button></td>
                 </tr>

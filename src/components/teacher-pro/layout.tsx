@@ -103,6 +103,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
   },
+  { title: "المتابعة", itemIds: ["whatsapp"] },
   { title: "الإدارة", itemIds: ["accounts", "logs"] },
 ];
 

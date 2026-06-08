@@ -13,17 +13,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { toast } from 'sonner';
 import { EmptyState } from './ui-kit';
 import { useActionLock } from '@/hooks/use-action-lock';
+import { searchAny } from '@/lib/validation';
+import { CustomFilterPresets, type FilterPresetValues } from './custom-filter-presets';
 
 export function WhatsAppView() {
   const {
     students, courses, exams, opportunityLogs, whatsappReports, whatsappQueue,
-    queueWhatsAppMessage, markWhatsAppMessageStatus, dismissStudent,
+    queueWhatsAppMessage, markWhatsAppMessageStatus,
   } = useTeacherStore();
 
   const [command, setCommand] = useState<'QR' | 'تقرير' | 'رسالة حرة'>('QR');
   const [recipient, setRecipient] = useState<'الطالب' | 'ولي الأمر'>('ولي الأمر');
   const [filterCourseId, setFilterCourseId] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterHasPhone, setFilterHasPhone] = useState('');
   const [freeMessage, setFreeMessage] = useState('');
   const [showSendDialog, setShowSendDialog] = useState(false);
   const { locked: isSchedulingMessages, runLocked: runScheduleMessagesLocked } = useActionLock();
@@ -33,9 +37,13 @@ export function WhatsAppView() {
     return students.filter(s => {
       if (filterCourseId && s.courseId !== filterCourseId) return false;
       if (filterStatus && s.status !== filterStatus) return false;
+      const targetPhone = recipient === 'الطالب' ? s.phone : s.parentPhone;
+      if (filterHasPhone === 'with-phone' && !targetPhone) return false;
+      if (filterHasPhone === 'without-phone' && targetPhone) return false;
+      if (filterSearch && !searchAny(filterSearch, [s.name, s.code, s.phone, s.parentPhone, s.telegram, s.school, s.subSite, s.dismissalReason, s.dismissalNotes])) return false;
       return true;
     });
-  }, [students, filterCourseId, filterStatus]);
+  }, [students, filterCourseId, filterStatus, filterSearch, filterHasPhone, recipient]);
 
   const generateMessage = (student: typeof students[0]): string => {
     if (command === 'رسالة حرة') return freeMessage;
@@ -101,6 +109,22 @@ export function WhatsAppView() {
   const batchCount = whatsappQueue.length > 0 ? Math.ceil(whatsappQueue.length / 200) : 0;
   const cooldownTotal = batchCount > 1 ? (batchCount - 1) * 30 : 0;
 
+  const applyFilterPreset = (values: FilterPresetValues) => {
+    setFilterSearch(String(values.search || ''));
+    setFilterCourseId(String(values.courseId || ''));
+    setFilterStatus(String(values.status || ''));
+    setFilterHasPhone(String(values.hasPhone || ''));
+    if (values.recipient === 'الطالب' || values.recipient === 'ولي الأمر') setRecipient(values.recipient);
+    if (values.command === 'QR' || values.command === 'تقرير' || values.command === 'رسالة حرة') setCommand(values.command);
+  };
+
+  const clearFilters = () => {
+    setFilterSearch('');
+    setFilterCourseId('');
+    setFilterStatus('');
+    setFilterHasPhone('');
+  };
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="send" dir="rtl">
@@ -117,7 +141,7 @@ export function WhatsAppView() {
               <CardTitle>إرسال رسائل واتساب</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="whatsapp-command">نوع الأمر</Label>
                   <Select name="command" value={command} onValueChange={v => setCommand(v as typeof command)}>
@@ -140,6 +164,15 @@ export function WhatsAppView() {
                   </Select>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="whatsapp-search">بحث ذكي</Label>
+                  <Input
+                    id="whatsapp-search"
+                    value={filterSearch}
+                    onChange={(event) => setFilterSearch(event.target.value)}
+                    placeholder="اسم / كود / هاتف / ملاحظات"
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="whatsapp-course">الدورة</Label>
                   <Select name="courseId" value={filterCourseId} onValueChange={v => setFilterCourseId(v === 'all' ? '' : v)}>
                     <SelectTrigger id="whatsapp-course"><SelectValue placeholder="الكل" /></SelectTrigger>
@@ -151,17 +184,37 @@ export function WhatsAppView() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="whatsapp-status">حالة الطلاب</Label>
-                <Select name="status" value={filterStatus} onValueChange={v => setFilterStatus(v === 'all' ? '' : v)}>
-                  <SelectTrigger id="whatsapp-status"><SelectValue placeholder="الكل" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">الكل</SelectItem>
-                    <SelectItem value="نشط">نشط</SelectItem>
-                    <SelectItem value="مفصول">مفصول</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="whatsapp-status">حالة الطلاب</Label>
+                  <Select name="status" value={filterStatus || 'all'} onValueChange={v => setFilterStatus(v === 'all' ? '' : v)}>
+                    <SelectTrigger id="whatsapp-status"><SelectValue placeholder="الكل" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">الكل</SelectItem>
+                      <SelectItem value="نشط">نشط</SelectItem>
+                      <SelectItem value="مفصول">مفصول</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="whatsapp-phone-filter">توفر رقم المستلم</Label>
+                  <Select name="hasPhone" value={filterHasPhone || 'all'} onValueChange={v => setFilterHasPhone(v === 'all' ? '' : v)}>
+                    <SelectTrigger id="whatsapp-phone-filter"><SelectValue placeholder="الكل" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">الكل</SelectItem>
+                      <SelectItem value="with-phone">لديهم رقم</SelectItem>
+                      <SelectItem value="without-phone">بدون رقم</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+
+              <CustomFilterPresets
+                storageKey="teacherpro.whatsapp.customFilters"
+                currentFilters={{ search: filterSearch, courseId: filterCourseId, status: filterStatus, hasPhone: filterHasPhone, recipient, command }}
+                onApply={applyFilterPreset}
+                onClear={clearFilters}
+              />
 
               {command === 'رسالة حرة' && (
                 <div className="space-y-2">

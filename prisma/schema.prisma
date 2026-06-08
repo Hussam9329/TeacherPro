@@ -78,6 +78,7 @@ model Student {
   status          String   @default("نشط")
   dismissalType   String?
   dismissalReason String?
+  dismissalNotes  String?
   opportunities   Int      @default(0)
   baseOpportunities Int    @default(0)
   accountingGraceDays Int   @default(0)

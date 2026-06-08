@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { CustomFilterPresets, type FilterPresetValues } from "./custom-filter-presets";
 
 export function OpportunitiesView() {
   const {
@@ -39,6 +40,7 @@ export function OpportunitiesView() {
   } = useTeacherStore();
 
   const [filterCourseId, setFilterCourseId] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
@@ -57,13 +59,33 @@ export function OpportunitiesView() {
   const filtered = useMemo(() => {
     return students.filter((s) => {
       if (filterCourseId && s.courseId !== filterCourseId) return false;
-      if (search && !searchAny(search, [s.name, s.code])) return false;
+      if (filterStatus === 'active' && s.status !== 'نشط') return false;
+      if (filterStatus === 'dismissed' && s.status !== 'مفصول') return false;
+      if (filterStatus === 'has-opportunities' && !(s.opportunities > 0 && s.status === 'نشط')) return false;
+      if (filterStatus === 'no-opportunities' && !(s.opportunities === 0 && s.status === 'نشط')) return false;
+      if (filterStatus === 'temporary-dismissal' && !(s.status === 'مفصول' && s.dismissalType === 'فصل مؤقت')) return false;
+      if (filterStatus === 'final-dismissal' && !(s.status === 'مفصول' && s.dismissalType === 'فصل نهائي')) return false;
+      if (search && !searchAny(search, [s.name, s.code, s.phone, s.parentPhone, s.telegram, s.school, s.subSite, s.status, s.dismissalType, s.dismissalReason, s.dismissalNotes])) return false;
       return true;
     });
-  }, [students, filterCourseId, search]);
+  }, [students, filterCourseId, filterStatus, search]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  const applyFilterPreset = (values: FilterPresetValues) => {
+    setSearch(String(values.search || ""));
+    setFilterCourseId(String(values.courseId || ""));
+    setFilterStatus(String(values.status || ""));
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setFilterCourseId("");
+    setFilterStatus("");
+    setPage(1);
+  };
 
   const handleAction = runActionLocked(async () => {
     const selectedStudent = students.find((student) => student.id === actionDialog.studentId);
@@ -168,6 +190,32 @@ export function OpportunitiesView() {
               </Select>
             </div>
             <div className="space-y-1">
+              <Label htmlFor="opp-status" className="text-xs">
+                فلتر مخصص
+              </Label>
+              <Select
+                name="status"
+                value={filterStatus || "all"}
+                onValueChange={(v) => {
+                  setFilterStatus(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="opp-status">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="active">نشط</SelectItem>
+                  <SelectItem value="dismissed">مفصول</SelectItem>
+                  <SelectItem value="has-opportunities">لديهم فرص</SelectItem>
+                  <SelectItem value="no-opportunities">بدون فرص</SelectItem>
+                  <SelectItem value="temporary-dismissal">فصل مؤقت</SelectItem>
+                  <SelectItem value="final-dismissal">فصل نهائي</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
               <span className="text-xs font-medium">تصدير</span>
               <Button
                 variant="outline"
@@ -178,6 +226,14 @@ export function OpportunitiesView() {
                 تصدير CSV
               </Button>
             </div>
+          </div>
+          <div className="mt-3">
+            <CustomFilterPresets
+              storageKey="teacherpro.opportunities.customFilters"
+              currentFilters={{ search, courseId: filterCourseId, status: filterStatus }}
+              onApply={applyFilterPreset}
+              onClear={clearFilters}
+            />
           </div>
         </CardContent>
       </Card>
@@ -251,10 +307,20 @@ export function OpportunitiesView() {
                       <Badge variant="outline" className="text-[10px]">
                         {student.code}
                       </Badge>
+                      {student.status === "مفصول" && (
+                        <Badge variant="destructive" className="text-[10px]">
+                          {student.dismissalType || "مفصول"}
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {courseName(student.courseId)}
                     </p>
+                    {student.status === "مفصول" && student.dismissalReason && (
+                      <p className="mt-1 text-xs font-semibold text-destructive">
+                        {student.dismissalReason}
+                      </p>
+                    )}
                     {!hasChapter && (
                       <p className="mt-1 text-xs font-semibold text-destructive">
                         لم يتم اختيار الفصل لهم بعد؛ كل الإجراءات مقفلة.

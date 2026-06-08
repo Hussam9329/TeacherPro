@@ -57,6 +57,7 @@ import {
 import { useActionLock } from "@/hooks/use-action-lock";
 import { SearchX, UserPlus } from "lucide-react";
 import { EmptyState } from "./ui-kit";
+import { CustomFilterPresets, type FilterPresetValues } from "./custom-filter-presets";
 
 type RegistryViewMode = "cards" | "table";
 
@@ -224,6 +225,7 @@ export function StudentRegistryView() {
   }>({ student: null, open: false });
   const [dismissType, setDismissType] = useState("فصل مؤقت");
   const [dismissReason, setDismissReason] = useState("");
+  const [dismissNotes, setDismissNotes] = useState("");
 
   const [fileDialog, setFileDialog] = useState<{
     student: Student | null;
@@ -521,6 +523,9 @@ export function StudentRegistryView() {
           s.telegram,
           s.phone,
           s.parentPhone,
+          s.dismissalType,
+          s.dismissalReason,
+          s.dismissalNotes,
         ])
       )
         return false;
@@ -548,9 +553,10 @@ export function StudentRegistryView() {
       toast.error("يرجى إدخال سبب الفصل");
       return;
     }
-    dismissStudent(dismissDialog.student.id, dismissType, dismissReason.trim());
+    dismissStudent(dismissDialog.student.id, dismissType, dismissReason.trim(), dismissNotes.trim());
     setDismissDialog({ student: null, open: false });
     setDismissReason("");
+    setDismissNotes("");
     toast.success("تم فصل الطالب");
   };
 
@@ -623,11 +629,21 @@ export function StudentRegistryView() {
   const studentGrades = (studentId: string) =>
     grades.filter((g) => g.studentId === studentId);
 
+  const applyFilterPreset = (values: FilterPresetValues) => {
+    setSearch(String(values.search || ""));
+    setFilterCourseId(String(values.courseId || ""));
+    setFilterStatus(String(values.status || ""));
+    setFilterGender(String(values.gender || ""));
+    setViewMode((values.viewMode as RegistryViewMode) || "cards");
+    setPage(1);
+  };
+
   const resetFilters = () => {
     setSearch("");
     setFilterCourseId("");
     setFilterStatus("");
     setFilterGender("");
+    setViewMode("cards");
     setPage(1);
   };
 
@@ -740,6 +756,14 @@ export function StudentRegistryView() {
               </Button>
             </div>
           </div>
+          <div className="mt-3">
+            <CustomFilterPresets
+              storageKey="teacherpro.registry.customFilters"
+              currentFilters={{ search, courseId: filterCourseId, status: filterStatus, gender: filterGender, viewMode }}
+              onApply={applyFilterPreset}
+              onClear={resetFilters}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -849,7 +873,10 @@ export function StudentRegistryView() {
                 </div>
 
                 {student.status === "مفصول" && (
-                  <div className="mb-3 rounded bg-destructive/10 p-2 text-xs text-destructive">{student.dismissalType} - {student.dismissalReason}</div>
+                  <div className="mb-3 rounded bg-destructive/10 p-2 text-xs text-destructive">
+                    <div>{student.dismissalType} - {student.dismissalReason}</div>
+                    {student.dismissalNotes && <div className="mt-1 text-destructive/80">ملاحظات: {student.dismissalNotes}</div>}
+                  </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -1286,7 +1313,10 @@ export function StudentRegistryView() {
 
       <Dialog
         open={dismissDialog.open}
-        onOpenChange={(o) => setDismissDialog({ ...dismissDialog, open: o })}
+        onOpenChange={(o) => {
+          setDismissDialog({ ...dismissDialog, open: o });
+          if (!o) setDismissNotes("");
+        }}
       >
         <DialogContent dir="rtl">
           <DialogHeader>
@@ -1318,11 +1348,25 @@ export function StudentRegistryView() {
                 placeholder="سبب الفصل"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="dismiss-notes">ملاحظات الفصل</Label>
+              <textarea
+                id="dismiss-notes"
+                name="dismissNotes"
+                value={dismissNotes}
+                onChange={(e) => setDismissNotes(e.target.value)}
+                placeholder="ملاحظات خاصة بالطالب المفصول"
+                className="min-h-24 w-full rounded-2xl border bg-background/70 px-3 py-2 text-sm shadow-xs outline-none focus:border-primary"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setDismissDialog({ student: null, open: false })}
+              onClick={() => {
+                setDismissDialog({ student: null, open: false });
+                setDismissNotes("");
+              }}
             >
               إلغاء
             </Button>
@@ -1436,6 +1480,9 @@ export function StudentRegistryView() {
                     </StudentFileItem>
                     <StudentFileItem label="سبب الفصل" className="sm:col-span-2">
                       {fileDialog.student.dismissalReason || "-"}
+                    </StudentFileItem>
+                    <StudentFileItem label="ملاحظات الفصل" className="sm:col-span-2">
+                      {fileDialog.student.dismissalNotes || "-"}
                     </StudentFileItem>
                   </>
                 )}

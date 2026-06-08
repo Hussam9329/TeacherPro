@@ -86,6 +86,7 @@ export interface Student {
   status: 'نشط' | 'مفصول';
   dismissalType: string;
   dismissalReason: string;
+  dismissalNotes: string;
   createdAt: string;
   opportunities: number;
   baseOpportunities: number;
@@ -335,8 +336,8 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   { id: 'correction.view', label: 'عرض التصحيح', category: 'التصحيح', level: 'read', description: 'عرض لوحة التصحيح الإلكتروني' },
   { id: 'correction.manage', label: 'إدارة التصحيح', category: 'التصحيح', level: 'manage', description: 'إضافة وتعديل أوراق التصحيح' },
   // واتساب
-  { id: 'whatsapp.view', label: 'عرض واتساب', category: 'واتساب', level: 'read', description: 'عرض لوحة رسائل واتساب' },
-  { id: 'whatsapp.send', label: 'إرسال رسائل', category: 'واتساب', level: 'write', description: 'إرسال رسائل واتساب للطلاب' },
+  { id: 'whatsapp.view', label: 'عرض واتساب', category: 'المتابعة', level: 'read', description: 'عرض لوحة رسائل واتساب' },
+  { id: 'whatsapp.send', label: 'إرسال رسائل', category: 'المتابعة', level: 'write', description: 'إرسال رسائل واتساب للطلاب' },
   // الحسابات
   { id: 'accounts.view', label: 'عرض الحسابات', category: 'الحسابات', level: 'read', description: 'عرض قائمة الحسابات' },
   { id: 'accounts.manage', label: 'إدارة الحسابات', category: 'الحسابات', level: 'manage', description: 'إضافة وتعديل وحذف الحسابات' },
@@ -551,7 +552,7 @@ interface TeacherState {
   addStudent: (student: Omit<Student, 'id' | 'code'>) => { ok: boolean; message: string };
   updateStudent: (id: string, updates: Partial<Omit<Student, 'id' | 'code'>>) => { ok: boolean; message: string };
   deleteStudent: (id: string) => boolean;
-  dismissStudent: (studentId: string, type: string, reason: string) => void;
+  dismissStudent: (studentId: string, type: string, reason: string, notes?: string) => void;
   reactivateStudent: (studentId: string) => void;
 
   addExam: (exam: Omit<Exam, 'id'>) => void;
@@ -1068,6 +1069,7 @@ export const useTeacherStore = create<TeacherState>()(
             opportunities: Number(st.opportunities || 0),
             baseOpportunities: Number(st.baseOpportunities || 0),
             accountingGraceDays: normalizeGraceDaysValue(st.accountingGraceDays),
+            dismissalNotes: String(st.dismissalNotes || ''),
             createdAt: st.createdAt ? String(st.createdAt).slice(0, 10) : todayISO(),
             courseProgram: String(st.courseProgram || ''),
             courseTerm: String(st.courseTerm || ''),
@@ -1617,10 +1619,10 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => studentApi.remove(id));
         return true;
       },
-      dismissStudent: (studentId, type, reason) => {
-        set((s) => ({ students: s.students.map((st) => st.id === studentId ? { ...st, status: 'مفصول' as const, dismissalType: type, dismissalReason: reason } : st) }));
+      dismissStudent: (studentId, type, reason, notes = '') => {
+        set((s) => ({ students: s.students.map((st) => st.id === studentId ? { ...st, status: 'مفصول' as const, dismissalType: type, dismissalReason: reason, dismissalNotes: notes } : st) }));
         get().logAction('الطلاب', `فصل الطالب (${type})`, `${get().studentName(studentId)} - ${reason}`);
-        syncToServer(get, () => studentApi.update(studentId, { status: 'مفصول', dismissalType: type, dismissalReason: reason }));
+        syncToServer(get, () => studentApi.update(studentId, { status: 'مفصول', dismissalType: type, dismissalReason: reason, dismissalNotes: notes }));
       },
       reactivateStudent: (studentId) => {
         const stateBefore = get();
@@ -1643,12 +1645,12 @@ export const useTeacherStore = create<TeacherState>()(
           : null;
         set((s) => ({
           students: s.students.map((st) => st.id === studentId
-            ? { ...st, status: 'نشط' as const, dismissalType: '', dismissalReason: '', opportunities: shouldGrantFinalChance ? 1 : st.opportunities }
+            ? { ...st, status: 'نشط' as const, dismissalType: '', dismissalReason: '', dismissalNotes: '', opportunities: shouldGrantFinalChance ? 1 : st.opportunities }
             : st),
           opportunityLogs: finalChanceLog ? [finalChanceLog, ...s.opportunityLogs] : s.opportunityLogs,
         }));
         get().logAction('الطلاب', shouldGrantFinalChance ? 'إعادة تفعيل بتعهد وفرصة أخيرة' : 'إعادة تفعيل طالب', get().studentName(studentId));
-        syncToServer(get, () => studentApi.update(studentId, { status: 'نشط', dismissalType: '', dismissalReason: '', ...(shouldGrantFinalChance ? { opportunities: 1 } : {}) }));
+        syncToServer(get, () => studentApi.update(studentId, { status: 'نشط', dismissalType: '', dismissalReason: '', dismissalNotes: '', ...(shouldGrantFinalChance ? { opportunities: 1 } : {}) }));
         if (finalChanceLog) syncToServer(get, () => opportunityLogApi.add(finalChanceLog as unknown as Record<string, unknown>));
       },
 
@@ -1917,7 +1919,7 @@ export const useTeacherStore = create<TeacherState>()(
       exportBackup: () => {
         const state = get();
         const backup = DATA_KEYS.reduce((acc, key) => ({ ...acc, [key]: state[key as keyof TeacherState] }), {} as Record<string, unknown>);
-        return JSON.stringify({ version: 4, exportedAt: new Date().toISOString(), ...backup }, null, 2);
+        return JSON.stringify({ version: 5, exportedAt: new Date().toISOString(), ...backup }, null, 2);
       },
       importBackup: (jsonText) => {
         try {
@@ -1931,6 +1933,7 @@ export const useTeacherStore = create<TeacherState>()(
             parsed.students = parsed.students.map((student) => {
               const copy = { ...(student as unknown as Record<string, unknown>) };
               delete copy.groupId;
+              copy.dismissalNotes = String(copy.dismissalNotes || '');
               return copy as unknown as Student;
             });
           }
@@ -2152,7 +2155,7 @@ export const useTeacherStore = create<TeacherState>()(
     }),
     {
       name: 'teacher-pro-store-v4',
-      version: 9,
+      version: 10,
       migrate: (persistedState: unknown, version: number) => {
         const state = (persistedState ?? {}) as Record<string, unknown>;
         const nextState: Record<string, unknown> = { ...state };
@@ -2222,6 +2225,14 @@ export const useTeacherStore = create<TeacherState>()(
           nextState.students = nextState.students.map((student) => ({
             ...(student as Record<string, unknown>),
             accountingGraceDays: normalizeGraceDaysValue((student as Record<string, unknown>).accountingGraceDays),
+          }));
+        }
+
+        // Migration v9 → v10: add per-student dismissal notes.
+        if (version < 10 && Array.isArray(nextState.students)) {
+          nextState.students = nextState.students.map((student) => ({
+            ...(student as Record<string, unknown>),
+            dismissalNotes: String((student as Record<string, unknown>).dismissalNotes || ''),
           }));
         }
 
