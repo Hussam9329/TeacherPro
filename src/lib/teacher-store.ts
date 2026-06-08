@@ -19,7 +19,8 @@ import {
   parseJsonArray,
   parseJsonRecord,
 } from './course-config';
-import { isGradeEntered } from './exam-utils';
+import { isExamOnOrAfterStudentRegistration, isGradeEntered } from './exam-utils';
+import { toBaghdadDateTimeLocal } from './baghdad-time';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -614,13 +615,7 @@ function todayISO(): string {
 
 function normalizeDateTimeValue(value: unknown): string {
   if (!value) return '';
-  const raw = String(value);
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw)) return raw.slice(0, 16);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  const date = new Date(raw);
-  if (!Number.isFinite(date.getTime())) return '';
-  const pad = (num: number) => String(num).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return toBaghdadDateTimeLocal(value as string | Date);
 }
 
 function nowText(): string {
@@ -937,7 +932,9 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
       if (!isGradeEntered(grade, exam)) continue;
+      if (!isExamOnOrAfterStudentRegistration(student, exam)) continue;
       if (grade.status === 'مجاز') continue;
+      if (isExamWithinStudentGracePeriod(student, exam)) continue;
 
       if (grade.status === 'غش') {
         cheatCount += 1;
@@ -951,8 +948,6 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
         }
         continue;
       }
-
-      if (isExamWithinStudentGracePeriod(student, exam)) continue;
 
       if (grade.status === 'غائب') {
         if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
@@ -1317,9 +1312,10 @@ export const useTeacherStore = create<TeacherState>()(
       },
       classification: (grade, exam, student) => {
         if (!grade || !isGradeEntered(grade, exam)) return { text: 'غير مسجل', type: 'neutral', kind: 'missing' };
+        if (student && !isExamOnOrAfterStudentRegistration(student, exam)) return { text: 'قبل التسجيل', type: 'neutral', kind: 'before-registration' };
+        if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
         if (grade.status === 'مجاز') return { text: 'مجاز', type: 'info', kind: 'leave' };
         if (grade.status === 'غش') return { text: 'غش', type: 'danger', kind: 'cheat' };
-        if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
         if (grade.status === 'غائب') return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
         const score = Number(grade.score) || 0;
         if (exam.type === 'تراكمي' || exam.type === 'فاينل') {

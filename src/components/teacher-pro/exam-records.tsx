@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Exam } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
+import { formatBaghdadDateTime, toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { downloadTextFile, escapeHtml, getExamStatus, hasActiveChapterLink, splitSelection } from "@/lib/exam-utils";
@@ -80,25 +81,11 @@ const defaultReportOptions: ReportOptions = {
 };
 
 function toDateTimeLocalValue(value?: string | null) {
-  if (!value) return "";
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return value.slice(0, 16);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${value}T08:00`;
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "";
-  const pad = (num: number) => String(num).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return toBaghdadDateTimeLocal(value);
 }
 
 function formatDateTime(value?: string | null) {
-  if (!value) return "—";
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) {
-    const [date, time] = value.slice(0, 16).split("T");
-    return `${date} ${time}`;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return value;
-  return date.toLocaleString("ar-IQ", { dateStyle: "medium", timeStyle: "short" });
+  return formatBaghdadDateTime(value);
 }
 
 function defaultDeactivateDateTime(exam: Exam) {
@@ -162,7 +149,13 @@ export function ExamRecordsView() {
   const [deleteDialog, setDeleteDialog] = useState({ open: false, id: "", name: "" });
   const [editDialog, setEditDialog] = useState<FullExamEditState>(() => emptyEditState());
   const [deactivateDialog, setDeactivateDialog] = useState({ open: false, id: "", name: "", scheduledDeactivateAt: "" });
+  const [clockTick, setClockTick] = useState(0);
   const { locked: isDeletingExam, runLocked: runDeleteExamLocked } = useActionLock();
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockTick((tick) => tick + 1), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const filteredExams = useMemo(() => {
     return exams.filter((exam) => {
@@ -171,7 +164,7 @@ export function ExamRecordsView() {
       if (filterCourseId && !exam.courseIds.includes(filterCourseId)) return false;
       return true;
     });
-  }, [exams, search, filterType, filterCourseId, courseName]);
+  }, [exams, search, filterType, filterCourseId, courseName, clockTick]);
 
   const examRows = (examId: string) => {
     const exam = exams.find((item) => item.id === examId);

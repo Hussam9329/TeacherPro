@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { parseBaghdadDateTime } from '@/lib/baghdad-time';
 
 function parseCourseIds(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -30,6 +31,7 @@ function validateExamPayload(body: Record<string, unknown>) {
   if (passMark < 0 || passMark > fullMark) return 'درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة';
   if (discountMark < 0 || discountMark > fullMark) return 'درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة';
   if (passMark <= discountMark) return 'درجة النجاح يجب أن تكون أكبر من درجة الخصم';
+  if (String(body.type) === 'يومي' && Number(body.opportunitiesPenalty ?? 1) <= 0) return 'خصم الفرص يجب أن يكون أكبر من صفر';
   return null;
 }
 
@@ -61,8 +63,8 @@ export async function POST(req: NextRequest) {
         opportunitiesPenalty: String(body.opportunitiesPenalty ?? 1),
         dismissalGrade: body.dismissalGrade === null || body.dismissalGrade === undefined ? null : Number(body.dismissalGrade),
         active: body.active ?? true,
-        scheduledActivateAt: body.scheduledActivateAt ? new Date(String(body.scheduledActivateAt)) : null,
-        scheduledDeactivateAt: body.scheduledDeactivateAt ? new Date(String(body.scheduledDeactivateAt)) : null,
+        scheduledActivateAt: body.scheduledActivateAt ? parseBaghdadDateTime(String(body.scheduledActivateAt)) : null,
+        scheduledDeactivateAt: body.scheduledDeactivateAt ? parseBaghdadDateTime(String(body.scheduledDeactivateAt)) : null,
       },
     });
     return NextResponse.json({ exam }, { status: 201 });
@@ -93,8 +95,8 @@ export async function PUT(req: NextRequest) {
     if (data.discountMark !== undefined) data.discountMark = Number(data.discountMark);
     if (data.opportunitiesPenalty !== undefined) data.opportunitiesPenalty = String(data.opportunitiesPenalty);
     if (data.dismissalGrade !== undefined) data.dismissalGrade = data.dismissalGrade === null || data.dismissalGrade === "" ? null : Number(data.dismissalGrade);
-    if (data.scheduledActivateAt !== undefined) data.scheduledActivateAt = data.scheduledActivateAt ? new Date(String(data.scheduledActivateAt)) : null;
-    if (data.scheduledDeactivateAt !== undefined) data.scheduledDeactivateAt = data.scheduledDeactivateAt ? new Date(String(data.scheduledDeactivateAt)) : null;
+    if (data.scheduledActivateAt !== undefined) data.scheduledActivateAt = data.scheduledActivateAt ? parseBaghdadDateTime(String(data.scheduledActivateAt)) : null;
+    if (data.scheduledDeactivateAt !== undefined) data.scheduledDeactivateAt = data.scheduledDeactivateAt ? parseBaghdadDateTime(String(data.scheduledDeactivateAt)) : null;
 
     const candidateValidationMessage = validateExamPayload({
       name: data.name ?? existingExam.name,
@@ -103,6 +105,7 @@ export async function PUT(req: NextRequest) {
       fullMark: data.fullMark ?? existingExam.fullMark,
       passMark: data.passMark ?? existingExam.passMark,
       discountMark: data.discountMark ?? existingExam.discountMark,
+      opportunitiesPenalty: data.opportunitiesPenalty ?? existingExam.opportunitiesPenalty,
     });
     if (candidateValidationMessage) return validationError(candidateValidationMessage);
 

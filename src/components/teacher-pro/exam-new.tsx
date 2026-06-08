@@ -46,6 +46,10 @@ function defaultDateTimeForDate(date: string) {
   return `${date || todayISO()}T08:00`;
 }
 
+function numberInputValue(value: number | string) {
+  return Number(value) === 0 ? "" : String(value);
+}
+
 function emptyForm(): ExamFormState {
   return {
     name: "",
@@ -141,6 +145,7 @@ export function ExamNewView() {
     if (passMark < 0 || passMark > fullMark) return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
     if (discountMark < 0 || discountMark > fullMark) return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
     if (passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
+    if (!isCumulativeOrFinal && Number(state.opportunitiesPenaltyNum) <= 0) return "خصم الفرص يجب أن يكون أكبر من صفر";
     if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ ووقت التفعيل المجدول";
     return null;
   };
@@ -299,13 +304,13 @@ export function ExamNewView() {
             ))}
           </div>
         </div>
-        <div className="space-y-2"><Label>الدرجة الكاملة</Label><Input type="number" value={state.fullMark} onChange={(e) => setState((p) => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 100 }))} /></div>
-        <div className="space-y-2"><Label>درجة النجاح</Label><Input type="number" value={state.passMark} onChange={(e) => setState((p) => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 60 }))} /></div>
+        <div className="space-y-2"><Label>الدرجة الكاملة</Label><Input type="number" value={numberInputValue(state.fullMark)} onChange={(e) => setState((p) => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
+        <div className="space-y-2"><Label>درجة النجاح</Label><Input type="number" value={numberInputValue(state.passMark)} onChange={(e) => setState((p) => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
         <div className="space-y-2">
           <Label>درجة الخصم</Label>
           <Input
             type="number"
-            value={isCumulativeOrFinal ? 0 : state.discountMark}
+            value={isCumulativeOrFinal ? "" : numberInputValue(state.discountMark)}
             disabled={isCumulativeOrFinal}
             onChange={(e) => setState((p) => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 0 }))}
           />
@@ -319,9 +324,9 @@ export function ExamNewView() {
           <Input
             type="number"
             min={0}
-            value={isCumulativeOrFinal ? 0 : state.opportunitiesPenaltyNum}
+            value={isCumulativeOrFinal ? "" : numberInputValue(state.opportunitiesPenaltyNum)}
             disabled={isCumulativeOrFinal}
-            onChange={(e) => setState((p) => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 1 }))}
+            onChange={(e) => setState((p) => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 0 }))}
           />
           {isCumulativeOrFinal && <p className="text-xs text-amber-600">معطل في التراكمي/الفاينل؛ الغياب أو الغش أو درجة الفصل يعالج كفصل مؤقت فقط.</p>}
         </div>

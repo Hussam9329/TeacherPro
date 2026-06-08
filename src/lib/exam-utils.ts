@@ -1,3 +1,5 @@
+import { parseBaghdadDateTime } from './baghdad-time';
+
 export type ExamLike = {
   active: boolean;
   scheduledActivateAt?: string | null;
@@ -19,6 +21,14 @@ export type StudentSiteLike = {
   locationScope?: string | null;
 };
 
+export type StudentRegistrationLike = {
+  createdAt?: string | null;
+};
+
+export type ExamDateLike = {
+  date?: string | null;
+};
+
 export type ExamStatusLabel = 'نشط' | 'تفعيل مجدول' | 'تعطيل مجدول' | 'معطل';
 
 export function splitSelection(value?: string | null): string[] {
@@ -28,16 +38,32 @@ export function splitSelection(value?: string | null): string[] {
     .filter(Boolean);
 }
 
-function hasFutureDate(value?: string | null, now = new Date()): boolean {
-  if (!value) return false;
-  const date = new Date(value);
-  return Number.isFinite(date.getTime()) && date > now;
+function parseDateOnly(value?: string | null): Date | null {
+  if (!value) return null;
+  const match = String(value).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0));
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+export function isExamOnOrAfterStudentRegistration(student: StudentRegistrationLike, exam: ExamDateLike): boolean {
+  const registeredAt = parseDateOnly(student.createdAt);
+  const examDate = parseDateOnly(exam.date);
+  if (!registeredAt || !examDate) return true;
+  return examDate >= registeredAt;
 }
 
 export function getExamStatus(exam: ExamLike, now = new Date()): ExamStatusLabel {
-  if (!exam.active && hasFutureDate(exam.scheduledActivateAt, now)) return 'تفعيل مجدول';
-  if (exam.active && hasFutureDate(exam.scheduledDeactivateAt, now)) return 'تعطيل مجدول';
-  return exam.active ? 'نشط' : 'معطل';
+  const activateAt = parseBaghdadDateTime(exam.scheduledActivateAt);
+  const deactivateAt = parseBaghdadDateTime(exam.scheduledDeactivateAt);
+  const activatedBySchedule = Boolean(activateAt && activateAt <= now);
+  const effectivelyActive = Boolean(exam.active || activatedBySchedule);
+
+  if (!effectivelyActive && activateAt && activateAt > now) return 'تفعيل مجدول';
+  if (effectivelyActive && deactivateAt && deactivateAt > now) return 'تعطيل مجدول';
+  if (effectivelyActive && deactivateAt && deactivateAt <= now) return 'معطل';
+  return effectivelyActive ? 'نشط' : 'معطل';
 }
 
 export function isExamAvailableForEntry(exam: ExamLike, now = new Date()): boolean {

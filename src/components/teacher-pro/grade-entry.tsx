@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { searchAny } from "@/lib/validation";
 import {
   hasActiveChapterLink,
   isExamAvailableForEntry,
+  isExamOnOrAfterStudentRegistration,
   isGradeEntered,
   isScoreInsideExamRange,
   splitSelection,
@@ -54,9 +55,15 @@ export function GradeEntryView() {
   const [savingRows, setSavingRows] = useState<Record<string, boolean>>({});
   const [savedRows, setSavedRows] = useState<Record<string, string>>({});
   const [editableRows, setEditableRows] = useState<Record<string, boolean>>({});
+  const [clockTick, setClockTick] = useState(0);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockTick((tick) => tick + 1), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const selectedExam = exams.find((e) => e.id === selectedExamId);
-  const activeExams = exams.filter((e) => isExamAvailableForEntry(e));
+  const activeExams = useMemo(() => exams.filter((e) => isExamAvailableForEntry(e)), [exams, clockTick]);
 
   const getGrade = (studentId: string) =>
     grades.find((g) => g.studentId === studentId && g.examId === selectedExamId);
@@ -94,6 +101,7 @@ export function GradeEntryView() {
     return students
       .filter((student) => {
         if (!selectedExam.courseIds.includes(student.courseId)) return false;
+        if (!isExamOnOrAfterStudentRegistration(student, selectedExam)) return false;
         if (!hasActiveChapterLink(courseChapters, student.courseId)) return false;
         if (!studentMatchesExamMainSites(student, selectedMainSites)) return false;
         if (filterCourseId && student.courseId !== filterCourseId) return false;
@@ -114,7 +122,7 @@ export function GradeEntryView() {
       .map((courseId) => courseName(courseId));
   }, [selectedExam, courseChapters, courseName]);
 
-  const saveGrade = async (studentId: string, draftOverride?: DraftGrade) => {
+  const saveGrade = async (studentId: string, draftOverride?: DraftGrade, options: { silent?: boolean } = {}) => {
     if (!selectedExam) return;
     if (!canEditGradeForStudent(studentId)) {
       toast.error("هذا الطالب مفصول ولا يمكن تعديل درجته إلا داخل الامتحان الذي سبب الفصل");
@@ -143,7 +151,14 @@ export function GradeEntryView() {
     setSavingRows((prev) => ({ ...prev, [studentId]: false }));
     setEditableRows((prev) => ({ ...prev, [studentId]: false }));
     setSavedRows((prev) => ({ ...prev, [studentId]: new Date().toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" }) }));
-    toast.success("تم حفظ الدرجة");
+    if (!options.silent) toast.success("تم حفظ الدرجة");
+  };
+
+  const autoSaveGrade = (studentId: string, draftOverride?: DraftGrade) => {
+    if (!selectedExam || !canEditGradeForStudent(studentId)) return;
+    const draft = draftOverride || getDraft(studentId);
+    if (draft.status === "درجة" && !isScoreInsideExamRange(toLatinDigits(draft.score).trim(), selectedExam.fullMark)) return;
+    void saveGrade(studentId, draft, { silent: true });
   };
 
   const handleQuickScan = () => {
@@ -228,11 +243,18 @@ export function GradeEntryView() {
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleQuickScan}>بحث / مسح QR</Button>
             {selectedExam && (
-              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <Badge>{selectedExam.type}</Badge>
+                <span>الدرجة الكاملة: {selectedExam.fullMark}</span>
                 <span>النجاح: {selectedExam.passMark}</span>
-                <span>الخصم: {selectedExam.discountMark}</span>
-                <span>الفصل: {selectedExam.dismissalGrade || "لا يوجد"}</span>
+                {selectedExam.type === "يومي" ? (
+                  <>
+                    <span>الخصم: {selectedExam.discountMark}</span>
+                    <span>فرص الخصم: {selectedExam.opportunitiesPenalty}</span>
+                  </>
+                ) : (
+                  <span>درجة الفصل: {selectedExam.dismissalGrade ?? "لا يوجد"}</span>
+                )}
               </div>
             )}
           </div>
@@ -289,6 +311,7 @@ export function GradeEntryView() {
                         disabled={controlsDisabled || draft.status !== "درجة"}
                         value={draft.status === "درجة" ? draft.score : ""}
                         onChange={(e) => updateDraft(student.id, { score: toLatinDigits(e.target.value), status: "درجة" })}
+                        onBlur={() => autoSaveGrade(student.id)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
                             event.preventDefault();
@@ -304,7 +327,9 @@ export function GradeEntryView() {
                         disabled={controlsDisabled}
                         onValueChange={(value) => {
                           const nextStatus = value as DraftGrade["status"];
-                          updateDraft(student.id, { status: nextStatus, score: nextStatus === "درجة" ? draft.score : "" });
+                          const nextDraft = { ...draft, status: nextStatus, score: nextStatus === "درجة" ? draft.score : "" };
+                          updateDraft(student.id, nextDraft);
+                          if (nextStatus !== "درجة") autoSaveGrade(student.id, nextDraft);
                         }}
                       >
                         <SelectTrigger className="h-10">
@@ -319,6 +344,7 @@ export function GradeEntryView() {
                         value={draft.notes}
                         disabled={controlsDisabled}
                         onChange={(e) => updateDraft(student.id, { notes: e.target.value })}
+                        onBlur={() => { if (entered || isScoreInsideExamRange(toLatinDigits(getDraft(student.id).score).trim(), selectedExam.fullMark)) autoSaveGrade(student.id); }}
                         placeholder="ملاحظات"
                         className="h-10"
                       />
