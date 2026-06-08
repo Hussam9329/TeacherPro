@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -68,6 +69,22 @@ export function GradeRecordsView() {
   });
   const { locked: isDeletingGrade, runLocked: runDeleteGradeLocked } = useActionLock();
 
+  const isAcademicAccountingRow = (gradeId: string) => {
+    const grade = grades.find((item) => item.id === gradeId);
+    const exam = grade ? exams.find((item) => item.id === grade.examId) : null;
+    const student = grade ? students.find((item) => item.id === grade.studentId) : null;
+    return Boolean(grade && exam && classification(grade, exam, student || undefined).kind === "academic-accounting");
+  };
+
+  const toggleAcademicAccounting = (gradeId: string, checked: boolean) => {
+    if (!isAcademicAccountingRow(gradeId)) {
+      toast.error("التأشير متاح فقط لحالة محاسبة رسوب");
+      return;
+    }
+    updateGrade(gradeId, { academicAccountingChecked: checked });
+    toast.success(checked ? "تم تأشير محاسبة الرسوب" : "تم إلغاء تأشير محاسبة الرسوب");
+  };
+
   const filtered = useMemo(() => {
     return grades.filter((grade) => {
       const student = students.find((item) => item.id === grade.studentId);
@@ -75,11 +92,17 @@ export function GradeRecordsView() {
       if (!student || !exam || !isGradeEntered(grade, exam)) return false;
       if (search && !searchAny(search, [student.name, student.code, student.telegram, student.phone, student.subSite, student.locationScope, exam.name, grade.notes])) return false;
       if (filterExamId && grade.examId !== filterExamId) return false;
-      if (filterStatus && grade.status !== filterStatus) return false;
+      const cls = classification(grade, exam, student);
+      if (filterStatus) {
+        if (filterStatus === "محاسبة رسوب" && cls.kind !== "academic-accounting") return false;
+        else if (filterStatus === "الناجحين" && cls.kind !== "pass") return false;
+        else if (filterStatus === "المخصومين" && !["deducted", "dismissal", "cheat"].includes(cls.kind)) return false;
+        else if (!["محاسبة رسوب", "الناجحين", "المخصومين"].includes(filterStatus) && grade.status !== filterStatus) return false;
+      }
       if (filterCourseId && !exam.courseIds.includes(filterCourseId)) return false;
       return true;
     });
-  }, [grades, students, exams, search, filterExamId, filterStatus, filterCourseId]);
+  }, [grades, students, exams, search, filterExamId, filterStatus, filterCourseId, classification]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -109,6 +132,7 @@ export function GradeRecordsView() {
       status: editDialog.status,
       score,
       notes: editDialog.notes,
+      academicAccountingChecked: false,
     });
     setEditDialog({ open: false, id: "", status: "درجة", score: "", notes: "" });
     toast.success("تم تعديل الدرجة وإعادة الاحتساب");
@@ -128,12 +152,12 @@ export function GradeRecordsView() {
   });
 
   const exportCSV = () => {
-    const headers = ["الطالب", "الكود", "التليكرام", "الامتحان", "الحالة", "الدرجة", "التصنيف", "ملاحظات"];
+    const headers = ["الطالب", "الكود", "التليكرام", "الامتحان", "الحالة", "الدرجة", "محاسبة", "مؤشر المحاسبة", "ملاحظات"];
     const rows = filtered.map((grade) => {
       const student = students.find((item) => item.id === grade.studentId);
       const exam = exams.find((item) => item.id === grade.examId);
       const cls = exam ? classification(grade, exam, student) : { text: "" };
-      return [student?.name || "", student?.code || "", student?.telegram || "", exam?.name || "", grade.status, grade.score?.toString() || "", cls.text, grade.notes || ""]
+      return [student?.name || "", student?.code || "", student?.telegram || "", exam?.name || "", grade.status, grade.score?.toString() || "", cls.text, grade.academicAccountingChecked ? "تمت المحاسبة" : "", grade.notes || ""]
         .map((value) => `"${String(value).replaceAll('"', '""')}"`)
         .join(",");
     });
@@ -168,7 +192,7 @@ export function GradeRecordsView() {
               <Label htmlFor="grade-records-status" className="text-xs">الحالة</Label>
               <Select value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
                 <SelectTrigger id="grade-records-status"><SelectValue placeholder="الكل" /></SelectTrigger>
-                <SelectContent><SelectItem value="all">الكل</SelectItem><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="مجاز">مجاز</SelectItem><SelectItem value="غش">غش</SelectItem></SelectContent>
+                <SelectContent><SelectItem value="all">الكل</SelectItem><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="مجاز">مجاز</SelectItem><SelectItem value="غش">غش</SelectItem><SelectItem value="محاسبة رسوب">محاسبة رسوب</SelectItem><SelectItem value="الناجحين">الناجحين</SelectItem><SelectItem value="المخصومين">المخصومين</SelectItem></SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
@@ -217,6 +241,12 @@ export function GradeRecordsView() {
                 <div className="flex flex-wrap items-center gap-2">
                   {grade.score !== null && <span className="font-bold">{grade.score}/{exam.fullMark}</span>}
                   <Badge variant={cls.type === "ok" ? "default" : cls.type === "danger" ? "destructive" : cls.type === "warn" ? "secondary" : "outline"}>{cls.text}</Badge>
+                  {cls.kind === "academic-accounting" && (
+                    <label className="flex items-center gap-2 rounded-xl border px-2 py-1 text-xs">
+                      <Checkbox checked={Boolean(grade.academicAccountingChecked)} onCheckedChange={(checked) => toggleAcademicAccounting(grade.id, checked === true)} />
+                      <span>{grade.academicAccountingChecked ? "تمت المحاسبة" : "تأكيد المحاسبة"}</span>
+                    </label>
+                  )}
                   <Button variant="secondary" size="sm" onClick={() => openEditGradeDialog(grade.id)}>تعديل</Button>
                   <Button variant="destructive" size="sm" onClick={() => openDeleteGradeDialog(grade.id)}>حذف</Button>
                 </div>
@@ -235,7 +265,8 @@ export function GradeRecordsView() {
                 <th className="p-3 text-right">الامتحان</th>
                 <th className="p-3 text-right">الحالة</th>
                 <th className="p-3 text-right">الدرجة</th>
-                <th className="p-3 text-right">التصنيف</th>
+                <th className="p-3 text-right">محاسبة</th>
+                <th className="p-3 text-right">تأشير المحاسبة</th>
                 <th className="p-3 text-right">ملاحظات</th>
                 <th className="p-3 text-right">الإجراءات</th>
               </tr>
@@ -255,6 +286,14 @@ export function GradeRecordsView() {
                     <td className="p-3">{grade.status}</td>
                     <td className="p-3">{grade.score !== null ? `${grade.score}/${exam.fullMark}` : "—"}</td>
                     <td className="p-3"><Badge variant={cls.type === "ok" ? "default" : cls.type === "danger" ? "destructive" : cls.type === "warn" ? "secondary" : "outline"}>{cls.text}</Badge></td>
+                    <td className="p-3">
+                      {cls.kind === "academic-accounting" ? (
+                        <label className="inline-flex items-center gap-2 text-xs">
+                          <Checkbox checked={Boolean(grade.academicAccountingChecked)} onCheckedChange={(checked) => toggleAcademicAccounting(grade.id, checked === true)} />
+                          <span>{grade.academicAccountingChecked ? "تمت" : "لم تتم"}</span>
+                        </label>
+                      ) : "—"}
+                    </td>
                     <td className="p-3 min-w-48">{grade.notes || "—"}</td>
                     <td className="p-3 min-w-32"><div className="flex flex-wrap gap-1"><Button variant="secondary" size="sm" onClick={() => openEditGradeDialog(grade.id)}>تعديل</Button><Button variant="destructive" size="sm" onClick={() => openDeleteGradeDialog(grade.id)}>حذف</Button></div></td>
                   </tr>

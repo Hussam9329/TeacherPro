@@ -141,6 +141,25 @@ function isValidGraceDays(value: string): boolean {
   return Number.isInteger(days) && days >= 0 && days <= 30;
 }
 
+function graceEndDate(student: Student): string {
+  const start = new Date(`${String(student.createdAt || '').slice(0, 10)}T00:00:00`);
+  const days = Number(student.accountingGraceDays || 0);
+  if (!Number.isFinite(start.getTime()) || days <= 0) return String(student.createdAt || '').slice(0, 10) || '-';
+  const end = new Date(start);
+  end.setDate(end.getDate() + days - 1);
+  return end.toISOString().slice(0, 10);
+}
+
+function isStudentCurrentlyInGrace(student: Student): boolean {
+  const days = Number(student.accountingGraceDays || 0);
+  if (days <= 0) return false;
+  const start = new Date(`${String(student.createdAt || '').slice(0, 10)}T00:00:00`);
+  const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00`);
+  const endExclusive = new Date(start);
+  endExclusive.setDate(endExclusive.getDate() + days);
+  return Number.isFinite(start.getTime()) && today >= start && today < endExclusive;
+}
+
 function ContactLink({
   href,
   children,
@@ -1423,8 +1442,11 @@ export function StudentRegistryView() {
                 <StudentFileItem label="تاريخ التسجيل / بداية السماح">
                   {fileDialog.student.createdAt}
                 </StudentFileItem>
-                <StudentFileItem label="فترة السماح">
-                  {fileDialog.student.accountingGraceDays ?? 0} يوم
+                <StudentFileItem label="حالة المحاسبة" className="sm:col-span-2">
+                  <span className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1 text-sm ${isStudentCurrentlyInGrace(fileDialog.student) ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100" : "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"}`}>
+                    <span>{isStudentCurrentlyInGrace(fileDialog.student) ? "⚠️ ضمن أيام السماح" : "✓ المحاسبة فعّالة"}</span>
+                    <span>({fileDialog.student.accountingGraceDays ?? 0} يوم - تنتهي في {graceEndDate(fileDialog.student)})</span>
+                  </span>
                 </StudentFileItem>
               </div>
 

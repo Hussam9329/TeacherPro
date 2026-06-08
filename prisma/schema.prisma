@@ -121,6 +121,7 @@ model Grade {
   status            String
   score             Int?
   notes             String?
+  academicAccountingChecked Boolean @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   studentId         String

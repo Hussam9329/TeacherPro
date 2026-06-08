@@ -16,7 +16,7 @@ import { useActionLock } from '@/hooks/use-action-lock';
 
 export function WhatsAppView() {
   const {
-    students, courses, exams, whatsappReports, whatsappQueue,
+    students, courses, exams, opportunityLogs, whatsappReports, whatsappQueue,
     queueWhatsAppMessage, markWhatsAppMessageStatus, dismissStudent,
   } = useTeacherStore();
 
@@ -45,14 +45,33 @@ export function WhatsAppView() {
     }
 
     // Report
+    const studentOpportunityDetails = opportunityLogs
+      .filter((log) => log.studentId === student.id && (log.action.includes('خصم') || log.action.includes('فصل')))
+      .slice(0, 12)
+      .map((log) => {
+        const exam = exams.find((item) => item.id === log.examId);
+        return `- ${exam?.name || 'حركة فرص'} | ${log.date} | ${log.action}${log.amount ? ` ${log.amount}` : ''} | ${String(log.reason || '').replace(/^تلقائي:\s*/, '')}`;
+      })
+      .join('\n');
+    const detailsBlock = studentOpportunityDetails ? `\nتفاصيل الفرص/الامتحانات:\n${studentOpportunityDetails}` : '';
+
     if (student.status === 'مفصول') {
       if (student.dismissalType === 'فصل مؤقت' && student.dismissalReason.includes('غش')) {
-        return `السلام عليكم ورحمة الله وبركاته\nتم فصل الطالب ${student.name} فصلاً مؤقتاً بسبب قيام الطالب بالغش بالامتحان.\nيرجى مراسلة المعرف (@) على التليكرام لغرض إتمام إجراءات التعهد.\nإدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;
+        return `السلام عليكم ورحمة الله وبركاته
+تم فصل الطالب ${student.name} فصلاً مؤقتاً بسبب قيام الطالب بالغش بالامتحان.${detailsBlock}
+يرجى مراسلة المعرف (@) على التليكرام لغرض إتمام إجراءات التعهد.
+إدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;
       }
       if (student.dismissalType === 'فصل مؤقت') {
-        return `السلام عليكم ورحمة الله وبركاته\nتم فصل الطالب ${student.name} فصلاً مؤقتاً بسبب انتهاء فرصه.\nيرجى مراسلة المعرف (@) على التليكرام لغرض إتمام إجراءات التعهد.\nإدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;
+        return `السلام عليكم ورحمة الله وبركاته
+تم فصل الطالب ${student.name} فصلاً مؤقتاً بسبب انتهاء فرصه.${detailsBlock}
+يرجى مراسلة المعرف (@) على التليكرام لغرض إتمام إجراءات التعهد التي تتيح للطالب العودة بفرصة أخيرة.
+إدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;
       }
-      return `السلام عليكم ورحمة الله وبركاته\nتم فصل الطالب ${student.name} فصلاً نهائياً بسبب عدم الالتزام بالتعهد السابق.\nشكراً جزيلاً\nإدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;
+      return `السلام عليكم ورحمة الله وبركاته
+تم فصل الطالب ${student.name} فصلاً نهائياً بسبب عدم الالتزام بالتعهد السابق.${detailsBlock}
+شكراً جزيلاً
+إدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;
     }
 
     return `السلام عليكم ورحمة الله وبركاته\nتقرير الطالب ${student.name}\nالكود: ${student.code}\nالفرص المتبقية: ${student.opportunities}/${student.baseOpportunities}\nإدارة الاستاذ حسن فلاح - مدرس مادة الأحياء`;

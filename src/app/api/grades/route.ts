@@ -33,12 +33,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const validationMessage = await validateGradePayload(body);
     if (validationMessage) return validationError(validationMessage);
+    const checked = body.academicAccountingChecked === undefined
+      ? undefined
+      : Boolean(body.academicAccountingChecked);
     const grade = await db.grade.upsert({
       where: { studentId_examId: { studentId: body.studentId, examId: body.examId } },
       update: {
         status: body.status,
         score: body.score === null || body.score === undefined ? null : Number(body.score),
         notes: body.notes,
+        ...(checked !== undefined ? { academicAccountingChecked: checked } : {}),
       },
       create: {
         id: body.id,
@@ -47,6 +51,7 @@ export async function POST(req: NextRequest) {
         status: body.status,
         score: body.score === null || body.score === undefined ? null : Number(body.score),
         notes: body.notes,
+        academicAccountingChecked: Boolean(body.academicAccountingChecked),
       },
     });
     return NextResponse.json({ grade }, { status: 201 });
@@ -61,6 +66,7 @@ export async function PUT(req: NextRequest) {
     const { id, ...data } = body;
     delete data.accountingChecked;
     if (!id) return validationError('تعذر تحديد الدرجة المطلوبة');
+    if (data.academicAccountingChecked !== undefined) data.academicAccountingChecked = Boolean(data.academicAccountingChecked);
     if (data.score !== undefined) data.score = data.score === null ? null : Number(data.score);
     if (data.status === 'درجة' || data.score !== undefined) {
       const current = await db.grade.findUnique({ where: { id }, include: { exam: true } });

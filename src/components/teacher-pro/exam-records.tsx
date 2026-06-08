@@ -257,7 +257,7 @@ export function ExamRecordsView() {
     if (!exam) return;
     const rows = examRows(examId);
     const passCount = rows.filter((row) => row.cls.kind === "pass").length;
-    const belowPassCount = rows.filter((row) => row.cls.kind === "below-pass" || row.cls.kind === "fail").length;
+    const belowPassCount = rows.filter((row) => row.cls.kind === "academic-accounting" || row.cls.kind === "fail").length;
     const deductedCount = rows.filter((row) => row.cls.kind === "deducted" || row.cls.kind === "dismissal" || row.cls.kind === "cheat").length;
 
     const tableRows = rows.map((row, index) => `
@@ -313,7 +313,7 @@ tr:nth-child(even) td { background: #f8fafc; }
   <section class="stats">
     <div class="stat"><strong>${rows.length}</strong><span>إجمالي السجلات</span></div>
     <div class="stat"><strong>${passCount}</strong><span>ناجح</span></div>
-    <div class="stat"><strong>${belowPassCount}</strong><span>دون النجاح</span></div>
+    <div class="stat"><strong>${belowPassCount}</strong><span>محاسبة رسوب / رسوب</span></div>
     <div class="stat"><strong>${deductedCount}</strong><span>خصم / فصل / غش</span></div>
   </section>
   <table><thead><tr><th>#</th><th>الكود</th><th>الطالب</th><th>الدورة</th><th>الحالة</th><th>الدرجة</th><th>التصنيف</th>${extraHeaders}</tr></thead><tbody>${tableRows}</tbody></table>

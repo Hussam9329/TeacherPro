@@ -18,20 +18,21 @@ export async function POST(req: NextRequest) {
     if (studentError) return validationError(studentError);
     const actionError = requireText(body.action, 'نوع الحركة');
     if (actionError) return validationError(actionError);
+    const action = String(body.action ?? '');
     const amount = Number(body.amount || 0);
-    if (!Number.isFinite(amount) || amount <= 0) return validationError('عدد الفرص يجب أن يكون رقماً أكبر من صفر');
-    const log = await db.opportunityLog.create({
-      data: {
-        id: body.id,
-        action: body.action,
-        amount,
-        reason: body.reason,
-        date: body.date ? new Date(body.date) : new Date(),
-        chapterId: body.chapterId || undefined,
-        studentId: body.studentId,
-        examId: body.examId || undefined,
-      },
-    });
+    if (!Number.isFinite(amount) || (amount <= 0 && action !== 'فصل تلقائي')) return validationError('عدد الفرص يجب أن يكون رقماً أكبر من صفر');
+    const data = {
+      action,
+      amount,
+      reason: body.reason ? String(body.reason) : null,
+      date: body.date ? new Date(body.date) : new Date(),
+      chapterId: body.chapterId ? String(body.chapterId) : null,
+      studentId: String(body.studentId),
+      examId: body.examId ? String(body.examId) : null,
+    };
+    const log = body.id
+      ? await db.opportunityLog.upsert({ where: { id: String(body.id) }, update: data, create: { id: String(body.id), ...data } })
+      : await db.opportunityLog.create({ data });
     return NextResponse.json({ log }, { status: 201 });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حفظ حركة الفرص حالياً.');

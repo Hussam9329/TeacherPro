@@ -1,0 +1,155 @@
+"use client";
+
+import React, { useMemo, useState } from "react";
+import { useTeacherStore } from "@/lib/teacher-store";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { searchAny } from "@/lib/validation";
+import { toast } from "sonner";
+
+type ViewMode = "cards" | "table";
+
+export function DismissedStudentsView() {
+  const { students, courses, courseName, reactivateStudent } = useTeacherStore();
+  const [search, setSearch] = useState("");
+  const [filterCourseId, setFilterCourseId] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+
+  const dismissedStudents = useMemo(() => {
+    return students
+      .filter((student) => student.status === "مفصول")
+      .filter((student) => {
+        if (filterCourseId && student.courseId !== filterCourseId) return false;
+        if (search && !searchAny(search, [
+          student.name,
+          student.code,
+          student.phone,
+          student.parentPhone,
+          student.telegram,
+          student.school,
+          student.subSite,
+          student.locationScope,
+          student.dismissalType,
+          student.dismissalReason,
+        ])) return false;
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+  }, [students, filterCourseId, search]);
+
+  const handleReactivate = (studentId: string) => {
+    reactivateStudent(studentId);
+    toast.success("تمت إعادة تفعيل الطالب");
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>الطلاب المفصولون</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="space-y-1 md:col-span-2">
+              <Label htmlFor="dismissed-search" className="text-xs">بحث ذكي</Label>
+              <Input id="dismissed-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم / كود / سبب الفصل / تليكرام" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="dismissed-course" className="text-xs">الدورة</Label>
+              <Select value={filterCourseId || "all"} onValueChange={(value) => setFilterCourseId(value === "all" ? "" : value)}>
+                <SelectTrigger id="dismissed-course"><SelectValue placeholder="الكل" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {courses.map((course) => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="dismissed-view" className="text-xs">طريقة العرض</Label>
+              <Select value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)}>
+                <SelectTrigger id="dismissed-view"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cards">الكارتات</SelectItem>
+                  <SelectItem value="table">الجدول</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {viewMode === "cards" ? (
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {dismissedStudents.map((student) => (
+            <Card key={student.id}>
+              <CardContent className="space-y-3 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-bold">{student.name}</h3>
+                      <Badge variant="destructive">{student.dismissalType || "مفصول"}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{student.code} - {courseName(student.courseId)} - {student.subSite || student.locationScope || "بدون موقع"}</p>
+                  </div>
+                  <Button size="sm" onClick={() => handleReactivate(student.id)}>إعادة تفعيل</Button>
+                </div>
+                <div className="rounded-xl bg-muted/60 p-3 text-sm text-destructive">
+                  {student.dismissalReason || "لا يوجد سبب مسجل"}
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span>الهاتف: {student.phone || "—"}</span>
+                  <span>ولي الأمر: {student.parentPhone || "—"}</span>
+                  <span>التليكرام: {student.telegram || "—"}</span>
+                  <span>الفرص: {student.opportunities}/{student.baseOpportunities}</span>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <div className="table-wrap">
+          <table className="responsive-table text-sm">
+            <thead>
+              <tr>
+                <th className="p-3 text-right">الطالب</th>
+                <th className="p-3 text-right">الكود</th>
+                <th className="p-3 text-right">الدورة</th>
+                <th className="p-3 text-right">نوع الفصل</th>
+                <th className="p-3 text-right">السبب</th>
+                <th className="p-3 text-right">الفرص</th>
+                <th className="p-3 text-right">الإجراء</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dismissedStudents.map((student) => (
+                <tr key={student.id} className="border-t align-top">
+                  <td className="p-3 font-medium">{student.name}</td>
+                  <td className="p-3">{student.code}</td>
+                  <td className="p-3">{courseName(student.courseId)}</td>
+                  <td className="p-3"><Badge variant="destructive">{student.dismissalType || "مفصول"}</Badge></td>
+                  <td className="p-3 min-w-64 text-destructive">{student.dismissalReason || "—"}</td>
+                  <td className="p-3">{student.opportunities}/{student.baseOpportunities}</td>
+                  <td className="p-3"><Button size="sm" onClick={() => handleReactivate(student.id)}>إعادة تفعيل</Button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {dismissedStudents.length === 0 && (
+        <p className="empty-state">لا يوجد طلاب مفصولون حسب الفلترة الحالية.</p>
+      )}
+    </div>
+  );
+}

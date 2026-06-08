@@ -115,6 +115,7 @@ export interface Grade {
   status: 'درجة' | 'غائب' | 'مجاز' | 'غش';
   score: number | null;
   notes: string;
+  academicAccountingChecked: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -557,7 +558,7 @@ interface TeacherState {
   toggleExam: (id: string) => void;
   deleteExam: (id: string) => boolean;
 
-  addGrade: (grade: Omit<Grade, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  addGrade: (grade: Omit<Grade, 'id' | 'createdAt' | 'updatedAt' | 'academicAccountingChecked'> & { academicAccountingChecked?: boolean }) => void;
   updateGrade: (id: string, updates: Partial<Grade>) => void;
   deleteGrade: (id: string) => boolean;
   recalculateAcademicEffects: () => void;
@@ -859,28 +860,77 @@ function isExamWithinStudentGracePeriod(student: Pick<Student, 'createdAt' | 'ac
   return examDate >= start && examDate < endExclusive;
 }
 
-function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'students' | 'grades' | 'exams'>): Student[] {
+
+function isAutomaticOpportunityLog(log: OpportunityLog): boolean {
+  return log.action === 'خصم تلقائي' || log.action === 'فصل تلقائي' || String(log.reason || '').startsWith('تلقائي:');
+}
+
+function automaticOpportunityLogId(studentId: string, examId: string, action: string, reason: string): string {
+  const slug = `${action}-${reason}`
+    .replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, '-')
+    .slice(0, 32);
+  return `auto_${studentId}_${examId}_${slug}`;
+}
+
+function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'students' | 'grades' | 'exams' | 'courseChapters' | 'chapters' | 'opportunityLogs'>): { students: Student[]; opportunityLogs: OpportunityLog[] } {
   const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
-  return state.students.map((student) => {
+  const activeCourseChapterByCourse = new Map(
+    state.courseChapters
+      .filter((link) => link.active && !link.archived)
+      .map((link) => [link.courseId, link]),
+  );
+  const manualLogs = state.opportunityLogs.filter((log) => !isAutomaticOpportunityLog(log));
+  const automaticLogs: OpportunityLog[] = [];
+
+  const students = state.students.map((student) => {
     const manualDismissal = student.status === 'مفصول' && !isRuleManagedDismissal(student);
     if (manualDismissal) return student;
 
-    let opportunities = Number(student.baseOpportunities || 0);
+    const activeCourseChapter = activeCourseChapterByCourse.get(student.courseId);
+    const activeChapter = activeCourseChapter ? state.chapters.find((chapter) => chapter.id === activeCourseChapter.chapterId) : null;
+    let opportunities = Number(student.baseOpportunities || activeChapter?.opportunities || 0);
     let dismissalType = '';
     let dismissalReason = '';
     let dismissalPriority = -1;
     let cheatCount = 0;
 
+    const studentManualLogs = manualLogs
+      .filter((log) => log.studentId === student.id)
+      .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    const hasFinalChancePledge = studentManualLogs.some((log) => log.action === 'فرصة أخيرة بعد تعهد');
+    studentManualLogs.forEach((log) => {
+      const amount = Math.abs(Number(log.amount || 0));
+      if (!amount) return;
+      if (log.action === 'إضافة' || log.action === 'فرصة أخيرة بعد تعهد') opportunities += amount;
+      if (log.action === 'خصم') opportunities -= amount;
+      if (log.action === 'إعادة تعيين') opportunities = Number(student.baseOpportunities || activeChapter?.opportunities || 0);
+    });
+
     const studentGrades = state.grades
       .filter((grade) => grade.studentId === student.id)
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
 
-    const setDismissal = (type: string, reason: string, priority: number) => {
+    const addAutomaticLog = (exam: Exam, action: string, amount: number, reason: string) => {
+      if (amount <= 0 && action === 'خصم تلقائي') return;
+      automaticLogs.push({
+        id: automaticOpportunityLogId(student.id, exam.id, action, reason),
+        studentId: student.id,
+        examId: exam.id,
+        action,
+        amount: Math.max(0, Math.trunc(amount)),
+        reason: `تلقائي: ${reason}`,
+        date: exam.date || todayISO(),
+        chapterId: activeChapter?.id || activeCourseChapter?.chapterId || '',
+      });
+    };
+
+    const setDismissal = (type: string, reason: string, priority: number, exam?: Exam) => {
       if (priority >= dismissalPriority) {
         dismissalType = type;
         dismissalReason = reason;
         dismissalPriority = priority;
       }
+      if (exam) addAutomaticLog(exam, 'فصل تلقائي', 0, reason);
     };
 
     for (const grade of studentGrades) {
@@ -888,24 +938,29 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
       if (!exam) continue;
       if (!isGradeEntered(grade, exam)) continue;
       if (grade.status === 'مجاز') continue;
-      if (isExamWithinStudentGracePeriod(student, exam)) continue;
 
       if (grade.status === 'غش') {
         cheatCount += 1;
         if (cheatCount === 1) {
+          const deducted = Math.max(0, opportunities);
+          if (deducted > 0) addAutomaticLog(exam, 'خصم تلقائي', deducted, `غش أول في امتحان: ${exam.name} - خصم جميع الفرص`);
           opportunities = 0;
-          setDismissal('فصل مؤقت', `أول حالة غش في امتحان: ${exam.name}`, 80);
+          setDismissal('فصل مؤقت', `أول حالة غش في امتحان: ${exam.name}`, 80, exam);
         } else {
-          setDismissal('فصل نهائي', `غش متكرر في امتحان: ${exam.name}`, 100);
+          setDismissal('فصل نهائي', `غش متكرر في امتحان: ${exam.name}`, 100, exam);
         }
         continue;
       }
 
+      if (isExamWithinStudentGracePeriod(student, exam)) continue;
+
       if (grade.status === 'غائب') {
         if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
-          setDismissal('فصل مؤقت', `غياب امتحان ${exam.type}: ${exam.name}`, 70);
+          setDismissal('فصل مؤقت', `غياب امتحان ${exam.type}: ${exam.name}`, 70, exam);
         } else {
-          opportunities -= examPenaltyValue(exam);
+          const penalty = examPenaltyValue(exam);
+          opportunities -= penalty;
+          addAutomaticLog(exam, 'خصم تلقائي', penalty, `غياب في امتحان يومي: ${exam.name}`);
         }
         continue;
       }
@@ -913,33 +968,40 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
       if (grade.status === 'درجة' && grade.score !== null) {
         const score = Number(grade.score);
         if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
-          if (exam.dismissalGrade !== null && score <= exam.dismissalGrade) {
-            setDismissal('فصل مؤقت', `درجة فصل (${score}): ${exam.name}`, 75);
-          }
           if (score === 0) {
-            setDismissal('فصل مؤقت', `درجة صفر في امتحان ${exam.type}: ${exam.name}`, 76);
+            setDismissal('فصل مؤقت', `درجة صفر في امتحان ${exam.type}: ${exam.name}`, 76, exam);
+          } else if (exam.dismissalGrade !== null && score <= exam.dismissalGrade) {
+            setDismissal('فصل مؤقت', `درجة فصل (${score}): ${exam.name}`, 75, exam);
           }
           continue;
         }
         if (score <= exam.discountMark) {
-          opportunities -= examPenaltyValue(exam);
+          const penalty = examPenaltyValue(exam);
+          opportunities -= penalty;
+          addAutomaticLog(exam, 'خصم تلقائي', penalty, `درجة ${score} ضمن الخصم في امتحان: ${exam.name}`);
         }
       }
     }
 
     opportunities = Math.max(0, opportunities);
-    if (opportunities === 0 && Number(student.baseOpportunities || 0) > 0 && !dismissalType) {
-      setDismissal('فصل مؤقت', 'انتهاء الفرص', 60);
+    if (opportunities === 0 && Number(student.baseOpportunities || activeChapter?.opportunities || 0) > 0 && !dismissalType) {
+      setDismissal(
+        hasFinalChancePledge ? 'فصل نهائي' : 'فصل مؤقت',
+        hasFinalChancePledge ? 'عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة' : 'انتهاء الفرص',
+        hasFinalChancePledge ? 90 : 60,
+      );
     }
 
     return {
       ...student,
       opportunities,
-      status: dismissalType ? 'مفصول' : 'نشط',
+      status: (dismissalType ? 'مفصول' : 'نشط') as Student['status'],
       dismissalType,
       dismissalReason,
     };
   });
+
+  return { students, opportunityLogs: [...automaticLogs, ...manualLogs] };
 }
 
 function syncToServer(getState: () => TeacherState, action: () => unknown): void {
@@ -1042,6 +1104,7 @@ export const useTeacherStore = create<TeacherState>()(
           const grades = (serverData.grades || []).map((g: Record<string, unknown>) => ({
             ...g,
             score: g.score === null || g.score === undefined ? null : Number(g.score),
+            academicAccountingChecked: Boolean(g.academicAccountingChecked),
             createdAt: g.createdAt ? String(g.createdAt).slice(0, 10) : todayISO(),
             updatedAt: g.updatedAt ? String(g.updatedAt).slice(0, 10) : todayISO(),
           })) as Grade[];
@@ -1254,18 +1317,18 @@ export const useTeacherStore = create<TeacherState>()(
       },
       classification: (grade, exam, student) => {
         if (!grade || !isGradeEntered(grade, exam)) return { text: 'غير مسجل', type: 'neutral', kind: 'missing' };
-        if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
         if (grade.status === 'مجاز') return { text: 'مجاز', type: 'info', kind: 'leave' };
         if (grade.status === 'غش') return { text: 'غش', type: 'danger', kind: 'cheat' };
+        if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
         if (grade.status === 'غائب') return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
         const score = Number(grade.score) || 0;
         if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
-          if (exam.dismissalGrade !== null && score <= exam.dismissalGrade) return { text: 'فصل', type: 'danger', kind: 'dismissal' };
+          if (score === 0 || (exam.dismissalGrade !== null && score <= exam.dismissalGrade)) return { text: 'فصل', type: 'danger', kind: 'dismissal' };
           if (score >= exam.passMark) return { text: 'ناجح', type: 'ok', kind: 'pass' };
           return { text: 'راسب', type: 'danger', kind: 'fail' };
         }
         if (score >= exam.passMark) return { text: 'ناجح', type: 'ok', kind: 'pass' };
-        if (score > exam.discountMark && score < exam.passMark) return { text: 'دون النجاح', type: 'warn', kind: 'below-pass' };
+        if (score > exam.discountMark && score < exam.passMark) return { text: 'محاسبة رسوب', type: 'warn', kind: 'academic-accounting' };
         return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
       },
 
@@ -1438,16 +1501,24 @@ export const useTeacherStore = create<TeacherState>()(
           const notZero = state.students.filter((s) => s.courseId === cc.courseId && s.opportunities !== 0);
           if (notZero.length > 0 && !force) return;
           set((s) => {
+            const restoredArchive = new Map((cc.archive || []).map((entry) => [entry.studentId, entry.opportunities]));
             const courseChapters = s.courseChapters.map((x) => x.courseId === cc.courseId ? { ...x, active: false } : x);
             const idx = courseChapters.findIndex((x) => x.id === courseChapterId);
             if (idx >= 0) {
-              const archive = s.students.filter((st) => st.courseId === cc.courseId).map((st) => ({ studentId: st.id, opportunities: st.opportunities, date: todayISO() }));
-              courseChapters[idx] = { ...courseChapters[idx], active: true, archived: false, archive };
+              courseChapters[idx] = { ...courseChapters[idx], active: true, archived: false, archive: cc.archive || [] };
             }
-            const students = s.students.map((st) => st.courseId === cc.courseId ? { ...st, opportunities: chapter.opportunities, baseOpportunities: chapter.opportunities } : st);
+            const students = s.students.map((st) => {
+              if (st.courseId !== cc.courseId) return st;
+              const restored = restoredArchive.get(st.id);
+              return {
+                ...st,
+                opportunities: restored !== undefined ? Number(restored) : chapter.opportunities,
+                baseOpportunities: chapter.opportunities,
+              };
+            });
             return { courseChapters, students };
           });
-          get().logAction('الفصول والفرص', 'تفعيل فصل وأرشفة الفرص السابقة', `${chapter.name} - ${get().courseName(cc.courseId)}`);
+          get().logAction('الفصول والفرص', cc.archive?.length ? 'تفعيل فصل واسترجاع أرشيف الفرص' : 'تفعيل فصل ومنح فرص جديدة', `${chapter.name} - ${get().courseName(cc.courseId)}`);
         } else {
           set((s) => ({
             courseChapters: s.courseChapters.map((x) => x.id === courseChapterId
@@ -1556,9 +1627,33 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => studentApi.update(studentId, { status: 'مفصول', dismissalType: type, dismissalReason: reason }));
       },
       reactivateStudent: (studentId) => {
-        set((s) => ({ students: s.students.map((st) => st.id === studentId ? { ...st, status: 'نشط' as const, dismissalType: '', dismissalReason: '' } : st) }));
-        get().logAction('الطلاب', 'إعادة تفعيل طالب', get().studentName(studentId));
-        syncToServer(get, () => studentApi.update(studentId, { status: 'نشط', dismissalType: '', dismissalReason: '' }));
+        const stateBefore = get();
+        const studentBefore = stateBefore.students.find((st) => st.id === studentId);
+        const shouldGrantFinalChance = Boolean(
+          studentBefore?.dismissalType === 'فصل مؤقت' &&
+          String(studentBefore.dismissalReason || '').includes('انتهاء الفرص'),
+        );
+        const finalChanceLog: OpportunityLog | null = shouldGrantFinalChance && studentBefore
+          ? {
+              id: uid('ol'),
+              studentId,
+              examId: '',
+              action: 'فرصة أخيرة بعد تعهد',
+              amount: 1,
+              reason: 'إرجاع الطالب بعد التعهد بفرصة أخيرة',
+              date: todayISO(),
+              chapterId: stateBefore.activeChapterForCourse(studentBefore.courseId)?.id || '',
+            }
+          : null;
+        set((s) => ({
+          students: s.students.map((st) => st.id === studentId
+            ? { ...st, status: 'نشط' as const, dismissalType: '', dismissalReason: '', opportunities: shouldGrantFinalChance ? 1 : st.opportunities }
+            : st),
+          opportunityLogs: finalChanceLog ? [finalChanceLog, ...s.opportunityLogs] : s.opportunityLogs,
+        }));
+        get().logAction('الطلاب', shouldGrantFinalChance ? 'إعادة تفعيل بتعهد وفرصة أخيرة' : 'إعادة تفعيل طالب', get().studentName(studentId));
+        syncToServer(get, () => studentApi.update(studentId, { status: 'نشط', dismissalType: '', dismissalReason: '', ...(shouldGrantFinalChance ? { opportunities: 1 } : {}) }));
+        if (finalChanceLog) syncToServer(get, () => opportunityLogApi.add(finalChanceLog as unknown as Record<string, unknown>));
       },
 
       addExam: (examData) => {
@@ -1598,13 +1693,17 @@ export const useTeacherStore = create<TeacherState>()(
       addGrade: (gradeData) => {
         const stateBefore = get();
         const existing = stateBefore.grades.find((g) => g.studentId === gradeData.studentId && g.examId === gradeData.examId);
+        const normalizedGradeData = {
+          ...gradeData,
+          academicAccountingChecked: Boolean(gradeData.academicAccountingChecked),
+        };
         const grade: Grade = existing
           ? {
               ...existing,
-              ...gradeData,
+              ...normalizedGradeData,
               updatedAt: todayISO(),
             }
-          : { ...gradeData, id: uid('gr'), createdAt: todayISO(), updatedAt: todayISO() };
+          : { ...normalizedGradeData, id: uid('gr'), createdAt: todayISO(), updatedAt: todayISO() };
 
         set((s) => ({ grades: existing ? s.grades.map((g) => g.id === existing.id ? grade : g) : [...s.grades, grade] }));
         get().logAction('الدرجات', existing ? 'تعديل درجة' : 'إدخال درجة', `${get().studentName(grade.studentId)} - ${stateBefore.exams.find((e) => e.id === grade.examId)?.name || ''}`);
@@ -1627,11 +1726,12 @@ export const useTeacherStore = create<TeacherState>()(
         return true;
       },
       recalculateAcademicEffects: () => {
-        const before = get().students;
-        const recalculated = recalculateStudentsFromAcademicRules(get());
-        set({ students: recalculated });
-        recalculated.forEach((student) => {
-          const oldStudent = before.find((item) => item.id === student.id);
+        const before = get();
+        const recalculated = recalculateStudentsFromAcademicRules(before);
+        const oldAutomaticLogs = before.opportunityLogs.filter(isAutomaticOpportunityLog);
+        set({ students: recalculated.students, opportunityLogs: recalculated.opportunityLogs });
+        recalculated.students.forEach((student) => {
+          const oldStudent = before.students.find((item) => item.id === student.id);
           if (!oldStudent) return;
           if (
             oldStudent.opportunities !== student.opportunities ||
@@ -1647,6 +1747,11 @@ export const useTeacherStore = create<TeacherState>()(
             }));
           }
         });
+        const nextAutomaticLogs = recalculated.opportunityLogs.filter(isAutomaticOpportunityLog);
+        oldAutomaticLogs
+          .filter((oldLog) => !nextAutomaticLogs.some((nextLog) => nextLog.id === oldLog.id))
+          .forEach((oldLog) => syncToServer(get, () => opportunityLogApi.remove(oldLog.id)));
+        nextAutomaticLogs.forEach((log) => syncToServer(get, () => opportunityLogApi.add(log as unknown as Record<string, unknown>)));
       },
       adjustOpportunities: (studentId, amount, reason) => {
         const stateBefore = get();
