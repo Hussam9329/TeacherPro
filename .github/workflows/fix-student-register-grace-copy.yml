@@ -1,0 +1,75 @@
+name: Fix student register grace copy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'run-grace-copy.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-student-register-grace-copy:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update student registration grace labels
+        run: |
+          node <<'NODE'
+          const fs = require('fs')
+          const path = 'src/components/teacher-pro/student-register.tsx'
+          let content = fs.readFileSync(path, 'utf8')
+
+          function replaceOnce(from, to, label) {
+            if (content.includes(to)) {
+              console.log(`skip ${label}: already applied`)
+              return
+            }
+            if (!content.includes(from)) {
+              throw new Error(`Missing expected block for ${label}`)
+            }
+            content = content.replace(from, to)
+            console.log(`applied ${label}`)
+          }
+
+          replaceOnce(
+            'تاريخ تسجيل الطالب / بداية فترة السماح <RequiredMark />',
+            'تاريخ تسجيل الطالب <RequiredMark />',
+            'date label'
+          )
+
+          replaceOnce(
+            `                  <p className="text-xs leading-5 text-muted-foreground">\n                    بداية السماح: <span className="font-semibold text-foreground">{formattedGraceStart}</span>\n                  </p>\n`,
+            '',
+            'remove duplicate grace start under date'
+          )
+
+          replaceOnce(
+            `{accountingGraceDays > 0\n                      ? <>تنتهي فترة السماح في <span className="font-semibold text-foreground">{formattedGraceEnd}</span> حسب عدد الأيام المدخل.</>\n                      : "لا توجد أيام سماح عند اختيار 0."}`,
+            `{accountingGraceDays > 0\n                      ? <>تبدأ فترة السماح تلقائياً من <span className="font-semibold text-foreground">{formattedGraceStart}</span> وتنتهي في <span className="font-semibold text-foreground">{formattedGraceEnd}</span> حسب عدد الأيام المدخل.</>\n                      : "لا توجد أيام سماح عند اختيار 0."}`,
+            'move grace start under days field'
+          )
+
+          fs.writeFileSync(path, content)
+          NODE
+
+      - name: Commit changes and cleanup
+        run: |
+          rm -f .github/workflows/fix-student-register-grace-copy.yml run-grace-copy.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/teacher-pro/student-register.tsx .github/workflows/fix-student-register-grace-copy.yml run-grace-copy.txt
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Clarify student registration grace period copy"
+          git push
