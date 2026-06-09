@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'trigger-student-register-grace-copy.txt'
+      - '.github/workflows/fix-student-register-grace-copy.yml'
 
 permissions:
   contents: write
@@ -63,10 +63,10 @@ jobs:
 
       - name: Commit changes and cleanup
         run: |
-          rm -f .github/workflows/fix-student-register-grace-copy.yml trigger-student-register-grace-copy.txt
+          rm -f .github/workflows/fix-student-register-grace-copy.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/components/teacher-pro/student-register.tsx .github/workflows/fix-student-register-grace-copy.yml trigger-student-register-grace-copy.txt
+          git add src/components/teacher-pro/student-register.tsx .github/workflows/fix-student-register-grace-copy.yml
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
