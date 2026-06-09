@@ -1,0 +1,56 @@
+name: Remove guide mode
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/remove-guide-mode.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove guide mode code
+        run: |
+          node <<'NODE'
+          const fs = require('fs')
+          function patch(file, fn) {
+            const before = fs.readFileSync(file, 'utf8')
+            const after = fn(before)
+            if (after !== before) fs.writeFileSync(file, after)
+          }
+
+          patch('src/components/teacher-pro/layout.tsx', (s) => {
+            s = s.replace(`    guideMode,\n    toggleGuideMode,\n`, '')
+            s = s.replace(`          <Button\n            variant="ghost"\n            size="sm"\n            className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"\n            onClick={() => {\n              toggleGuideMode();\n              toast.success(guideMode ? "تم إخفاء وضع الإرشاد" : "تم إظهار وضع الإرشاد");\n            }}\n          >\n            {guideMode ? "إخفاء وضع الإرشاد" : "إظهار وضع الإرشاد"}\n          </Button>\n`, '')
+            s = s.replace(`              <Button\n                variant={guideMode ? "secondary" : "outline"}\n                size="sm"\n                onClick={() => {\n                  toggleGuideMode();\n                  toast.success(guideMode ? "تم إخفاء وضع الإرشاد" : "تم إظهار وضع الإرشاد");\n                }}\n                className="hidden rounded-full sm:inline-flex"\n              >\n                {guideMode ? "وضع الإرشاد مفعل" : "وضع الإرشاد مخفي"}\n              </Button>\n`, '')
+            return s
+          })
+
+          patch('src/lib/teacher-store.ts', (s) => {
+            s = s.replace(`  guideMode: boolean;\n`, '')
+            s = s.replace(`  toggleGuideMode: () => void;\n`, '')
+            s = s.replace(`      guideMode: true,\n`, '')
+            s = s.replace(`      toggleGuideMode: () => set((s) => ({ guideMode: !s.guideMode })),\n`, '')
+            return s
+          })
+          NODE
+      - name: Commit and cleanup
+        run: |
+          rm -f .github/workflows/remove-guide-mode.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/teacher-pro/layout.tsx src/lib/teacher-store.ts .github/workflows/remove-guide-mode.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Remove guide mode control"
+          git push
