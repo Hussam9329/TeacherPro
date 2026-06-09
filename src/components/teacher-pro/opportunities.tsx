@@ -25,12 +25,13 @@ import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { CustomFilterPresets, type FilterPresetValues } from "./custom-filter-presets";
 
 export function OpportunitiesView() {
   const {
     students,
     courses,
+    exams,
+    grades,
     opportunityLogs,
     adjustOpportunities,
     resetOpportunities,
@@ -44,6 +45,7 @@ export function OpportunitiesView() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
+  const [detailsStudentId, setDetailsStudentId] = useState("");
 
   // Action dialog
   const [actionDialog, setActionDialog] = useState<{
@@ -73,18 +75,52 @@ export function OpportunitiesView() {
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const applyFilterPreset = (values: FilterPresetValues) => {
-    setSearch(String(values.search || ""));
-    setFilterCourseId(String(values.courseId || ""));
-    setFilterStatus(String(values.status || ""));
-    setPage(1);
-  };
 
   const clearFilters = () => {
     setSearch("");
     setFilterCourseId("");
     setFilterStatus("");
     setPage(1);
+  };
+
+  const selectedDetailsStudent = useMemo(
+    () => students.find((student) => student.id === detailsStudentId) || null,
+    [students, detailsStudentId],
+  );
+
+  const selectedDetailsLogs = useMemo(() => {
+    if (!detailsStudentId) return [];
+    return opportunityLogs
+      .filter((log) => log.studentId === detailsStudentId)
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  }, [opportunityLogs, detailsStudentId]);
+
+  const selectedDetailsStats = useMemo(() => {
+    return selectedDetailsLogs.reduce(
+      (acc, log) => {
+        if (log.action === "خصم") acc.deducted += Number(log.amount) || 0;
+        if (log.action === "إضافة" || log.action === "فرصة أخيرة بعد تعهد") acc.added += Number(log.amount) || 0;
+        if (log.examId) acc.examLinked += 1;
+        return acc;
+      },
+      { deducted: 0, added: 0, examLinked: 0 },
+    );
+  }, [selectedDetailsLogs]);
+
+  const renderLogExamDetails = (log: typeof opportunityLogs[number]) => {
+    const exam = exams.find((item) => item.id === log.examId);
+    const grade = grades.find((item) => item.studentId === log.studentId && item.examId === log.examId);
+    if (!log.examId) return <div className="rounded-xl border bg-muted/40 p-3 text-xs text-muted-foreground">حركة يدوية من إدارة الفرص، وليست مرتبطة بامتحان محدد.</div>;
+    if (!exam) return <div className="rounded-xl border bg-muted/40 p-3 text-xs text-muted-foreground">الامتحان المرتبط بهذه الحركة غير موجود حالياً أو تم حذفه.</div>;
+    return (
+      <div className="grid gap-2 rounded-xl border bg-muted/40 p-3 text-xs leading-6 md:grid-cols-2">
+        <div><span className="font-bold text-foreground">الامتحان: </span><span className="text-muted-foreground">{exam.name}</span></div>
+        <div><span className="font-bold text-foreground">التاريخ: </span><span className="text-muted-foreground">{exam.date || "—"}</span></div>
+        <div><span className="font-bold text-foreground">النوع: </span><span className="text-muted-foreground">{exam.type}</span></div>
+        <div><span className="font-bold text-foreground">درجة الطالب: </span><span className="text-muted-foreground">{grade ? (grade.score !== null ? grade.status + " / " + grade.score : grade.status) : "لا توجد درجة مسجلة"}</span></div>
+        {grade?.notes ? <div className="md:col-span-2"><span className="font-bold text-foreground">ملاحظات الدرجة: </span><span className="text-muted-foreground">{grade.notes}</span></div> : null}
+      </div>
+    );
   };
 
   const handleAction = runActionLocked(async () => {
@@ -146,94 +182,30 @@ export function OpportunitiesView() {
     <div className="space-y-4">
       {/* Filters */}
       <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="opp-search" className="text-xs">
-                بحث
-              </Label>
-              <Input
-                id="opp-search"
-                name="search"
-                autoComplete="off"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="اسم / كود"
-              />
+        <CardHeader className="pb-2"><CardTitle className="text-base">فلاتر إدارة الفرص</CardTitle></CardHeader>
+        <CardContent className="p-4 pt-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <div className="space-y-1 xl:col-span-2">
+              <Label htmlFor="opp-search" className="text-xs font-bold">بحث عن طالب</Label>
+              <Input id="opp-search" name="search" autoComplete="off" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="اسم الطالب / الكود / الهاتف / المدرسة" />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="opp-course" className="text-xs">
-                الدورة
-              </Label>
-              <Select
-                name="courseId"
-                value={filterCourseId}
-                onValueChange={(v) => {
-                  setFilterCourseId(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="opp-course">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {courses.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+              <Label htmlFor="opp-course" className="text-xs font-bold">الدورة</Label>
+              <Select name="courseId" value={filterCourseId || "all"} onValueChange={(v) => { setFilterCourseId(v === "all" ? "" : v); setPage(1); }}>
+                <SelectTrigger id="opp-course"><SelectValue placeholder="كل الدورات" /></SelectTrigger>
+                <SelectContent><SelectItem value="all">كل الدورات</SelectItem>{courses.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="opp-status" className="text-xs">
-                فلتر مخصص
-              </Label>
-              <Select
-                name="status"
-                value={filterStatus || "all"}
-                onValueChange={(v) => {
-                  setFilterStatus(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="opp-status">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
+              <Label htmlFor="opp-status" className="text-xs font-bold">حالة الطالب / الفرص</Label>
+              <Select name="status" value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
+                <SelectTrigger id="opp-status"><SelectValue placeholder="كل الحالات" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="active">نشط</SelectItem>
-                  <SelectItem value="dismissed">مفصول</SelectItem>
-                  <SelectItem value="has-opportunities">لديهم فرص</SelectItem>
-                  <SelectItem value="no-opportunities">بدون فرص</SelectItem>
-                  <SelectItem value="temporary-dismissal">فصل مؤقت</SelectItem>
-                  <SelectItem value="final-dismissal">فصل نهائي</SelectItem>
+                  <SelectItem value="all">كل الحالات</SelectItem><SelectItem value="active">طلاب نشطون</SelectItem><SelectItem value="dismissed">طلاب مفصولون</SelectItem><SelectItem value="has-opportunities">نشط ولديه فرص</SelectItem><SelectItem value="no-opportunities">نشط بدون فرص</SelectItem><SelectItem value="temporary-dismissal">فصل مؤقت</SelectItem><SelectItem value="final-dismissal">فصل نهائي</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <span className="text-xs font-medium">تصدير</span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full h-9"
-                onClick={exportCSV}
-              >
-                تصدير CSV
-              </Button>
-            </div>
-          </div>
-          <div className="mt-3">
-            <CustomFilterPresets
-              storageKey="teacherpro.opportunities.customFilters"
-              currentFilters={{ search, courseId: filterCourseId, status: filterStatus }}
-              onApply={applyFilterPreset}
-              onClear={clearFilters}
-            />
+            <div className="flex items-end gap-2"><Button variant="outline" className="h-10 flex-1" onClick={clearFilters} disabled={!search && !filterCourseId && !filterStatus}>مسح</Button><Button variant="outline" className="h-10 flex-1" onClick={exportCSV}>CSV</Button></div>
           </div>
         </CardContent>
       </Card>
@@ -297,7 +269,7 @@ export function OpportunitiesView() {
               return (
                 <div
                   key={student.id}
-                  className="flex items-center gap-3 p-3 rounded-2xl border bg-card/80 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
+                  className="flex flex-col gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg lg:flex-row lg:items-center"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -358,7 +330,8 @@ export function OpportunitiesView() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-1">
+                  <div className="flex flex-wrap gap-1 lg:justify-end">
+                    <Button variant="outline" size="sm" className="text-xs" onClick={() => setDetailsStudentId(student.id)}>التفاصيل {opportunityLogs.filter((log) => log.studentId === student.id).length > 0 ? `(${opportunityLogs.filter((log) => log.studentId === student.id).length})` : ""}</Button>
                     <Button
                       variant="outline"
                       size="sm"
@@ -449,6 +422,7 @@ export function OpportunitiesView() {
             ) : (
               opportunityLogs.slice(0, 20).map((log) => {
                 const student = students.find((s) => s.id === log.studentId);
+                const exam = exams.find((item) => item.id === log.examId);
                 const canUndo = Boolean(student && activeChapterForCourse(student.courseId) && (log.action === "إضافة" || log.action === "خصم"));
                 return (
                   <div
@@ -461,6 +435,7 @@ export function OpportunitiesView() {
                       </span>
                       <span className="text-muted-foreground mx-2">•</span>
                       <span className="text-muted-foreground">{log.date}</span>
+                      {exam ? <span className="mx-2 text-xs font-bold text-primary">{exam.name}</span> : null}
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge
@@ -497,6 +472,36 @@ export function OpportunitiesView() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(detailsStudentId)} onOpenChange={(open) => !open && setDetailsStudentId("")}>
+        <DialogContent dir="rtl" className="max-w-3xl">
+          <DialogHeader><DialogTitle>تفاصيل فرص الطالب {selectedDetailsStudent ? "- " + selectedDetailsStudent.name : ""}</DialogTitle></DialogHeader>
+          {selectedDetailsStudent ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 rounded-2xl border bg-muted/40 p-4 text-sm md:grid-cols-4">
+                <div><p className="text-xs text-muted-foreground">الكود</p><p className="font-bold">{selectedDetailsStudent.code}</p></div>
+                <div><p className="text-xs text-muted-foreground">الدورة</p><p className="font-bold">{courseName(selectedDetailsStudent.courseId)}</p></div>
+                <div><p className="text-xs text-muted-foreground">الفرص الحالية</p><p className="font-bold">{selectedDetailsStudent.opportunities}/{selectedDetailsStudent.baseOpportunities}</p></div>
+                <div><p className="text-xs text-muted-foreground">الحالة</p><p className="font-bold">{selectedDetailsStudent.status}</p></div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-2xl border bg-card p-3 text-center"><p className="text-xl font-black text-rose-600">{selectedDetailsStats.deducted}</p><p className="text-xs text-muted-foreground">إجمالي المخصوم</p></div>
+                <div className="rounded-2xl border bg-card p-3 text-center"><p className="text-xl font-black text-emerald-600">{selectedDetailsStats.added}</p><p className="text-xs text-muted-foreground">إجمالي المضاف</p></div>
+                <div className="rounded-2xl border bg-card p-3 text-center"><p className="text-xl font-black text-primary">{selectedDetailsStats.examLinked}</p><p className="text-xs text-muted-foreground">حركات مرتبطة بامتحان</p></div>
+              </div>
+              <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
+                {selectedDetailsLogs.length === 0 ? <p className="empty-state py-8">لا توجد حركات فرص لهذا الطالب</p> : selectedDetailsLogs.map((log) => (
+                  <div key={log.id} className="space-y-3 rounded-2xl border bg-card p-4">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div className="flex flex-wrap items-center gap-2"><Badge variant={log.action === "خصم" ? "destructive" : log.action === "إضافة" ? "default" : "secondary"}>{log.action} {log.amount}</Badge><span className="text-sm font-bold text-foreground">{log.date}</span></div><span className="text-xs text-muted-foreground">الفصل: {log.chapterId || "غير محدد"}</span></div>
+                    <div className="rounded-xl bg-muted/40 p-3 text-sm leading-6"><span className="font-bold text-foreground">السبب: </span><span className="text-muted-foreground">{log.reason || "بدون سبب مكتوب"}</span></div>
+                    {renderLogExamDetails(log)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       {/* Action Dialog */}
       <Dialog
