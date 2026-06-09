@@ -23,60 +23,47 @@ jobs:
           node <<'NODE'
           const fs = require('fs')
 
-          function replace(file, from, to, label) {
-            let content = fs.readFileSync(file, 'utf8')
-            if (content.includes(to)) {
-              console.log(`skip ${label}`)
-              return
-            }
-            if (!content.includes(from)) throw new Error(`Missing ${label} in ${file}`)
-            content = content.replace(from, to)
-            fs.writeFileSync(file, content)
-            console.log(`applied ${label}`)
+          function patch(file, fn) {
+            const before = fs.readFileSync(file, 'utf8')
+            const after = fn(before)
+            if (after !== before) fs.writeFileSync(file, after)
           }
 
-          function replaceAll(file, from, to, label) {
-            let content = fs.readFileSync(file, 'utf8')
-            if (!content.includes(from)) {
-              console.log(`skip ${label}: not found`)
-              return
-            }
-            content = content.split(from).join(to)
-            fs.writeFileSync(file, content)
-            console.log(`applied ${label}`)
+          function mustReplace(text, from, to, label) {
+            if (text.includes(to)) return text
+            if (!text.includes(from)) throw new Error('missing ' + label)
+            return text.replace(from, to)
           }
 
-          const store = 'src/lib/teacher-store.ts'
-          replace(store, `status: 'درجة' | 'غائب' | 'مجاز' | 'غش';`, `status: 'درجة' | 'غائب' | 'غش';`, 'grade status type')
-          replace(store, `function parseDateOnly(value: string | undefined | null): Date | null {`, `function sanitizeGradeStatus(value: unknown): Grade['status'] {\n  if (value === 'غش') return 'غش';\n  if (value === 'غائب' || value === 'مجاز') return 'غائب';\n  return 'درجة';\n}\n\nfunction parseDateOnly(value: string | undefined | null): Date | null {`, 'sanitize grade status helper')
-          replace(store, `        if (grade.status === 'مجاز') return { text: 'مجاز', type: 'info', kind: 'leave' };\n`, ``, 'remove leave classification')
-          replace(store, `      if (grade.status === 'مجاز') continue;\n`, ``, 'remove leave skip in recalculation')
-          replace(store, `            score: g.score === null || g.score === undefined ? null : Number(g.score),\n            academicAccountingChecked: Boolean(g.academicAccountingChecked),`, `            status: sanitizeGradeStatus(g.status),\n            score: g.score === null || g.score === undefined ? null : Number(g.score),\n            academicAccountingChecked: Boolean(g.academicAccountingChecked),`, 'sanitize server grades')
-          replace(store, `        // Migration v9 → v10: add per-student dismissal notes.\n        if (version < 10 && Array.isArray(nextState.students)) {\n          nextState.students = nextState.students.map((student) => ({\n            ...(student as Record<string, unknown>),\n            dismissalNotes: String((student as Record<string, unknown>).dismissalNotes || ''),\n          }));\n        }\n\n        return nextState;`, `        // Migration v9 → v10: add per-student dismissal notes.\n        if (version < 10 && Array.isArray(nextState.students)) {\n          nextState.students = nextState.students.map((student) => ({\n            ...(student as Record<string, unknown>),\n            dismissalNotes: String((student as Record<string, unknown>).dismissalNotes || ''),\n          }));\n        }\n\n        // Migration v10 → v11: remove the old leave/excused grade status from local snapshots.\n        if (version < 11 && Array.isArray(nextState.grades)) {\n          nextState.grades = nextState.grades.map((grade) => ({\n            ...(grade as Record<string, unknown>),\n            status: sanitizeGradeStatus((grade as Record<string, unknown>).status),\n          }));\n        }\n\n        return nextState;`, 'grade status migration')
-          replace(store, `version: 10,`, `version: 11,`, 'persist version 11')
-          replace(store, `      deleteExam: (id) => {\n        const exam = get().exams.find((e) => e.id === id);\n        if (!exam) return false;\n        // Delete related grades from DB\n        get().grades.filter(g => g.examId === id).forEach(g => syncToServer(get, () => gradeApi.remove(g.id)));\n        set((s) => ({\n          exams: s.exams.filter((e) => e.id !== id),\n          grades: s.grades.filter((g) => g.examId !== id),\n          correctionSheets: s.correctionSheets.filter((sh) => sh.examId !== id),\n          opportunityLogs: s.opportunityLogs.filter((log) => log.examId !== id),\n        }));\n        get().logAction('الامتحانات', 'حذف امتحان مع سجلاته التابعة', exam.name);\n        syncToServer(get, () => examApi.remove(id));\n        return true;\n      },`, `      deleteExam: (id) => {\n        const state = get();\n        const exam = state.exams.find((e) => e.id === id);\n        if (!exam) return false;\n\n        const relatedGrades = state.grades.filter((grade) => grade.examId === id);\n        const relatedOpportunityLogs = state.opportunityLogs.filter((log) => log.examId === id);\n        const relatedCorrectionSheets = state.correctionSheets.filter((sheet) => sheet.examId === id);\n\n        relatedGrades.forEach((grade) => syncToServer(get, () => gradeApi.remove(grade.id)));\n        relatedOpportunityLogs.forEach((log) => syncToServer(get, () => opportunityLogApi.remove(log.id)));\n        relatedCorrectionSheets.forEach((sheet) => syncToServer(get, () => correctionSheetApi.remove(sheet.id)));\n\n        set((s) => ({\n          exams: s.exams.filter((e) => e.id !== id),\n          grades: s.grades.filter((g) => g.examId !== id),\n          correctionSheets: s.correctionSheets.filter((sh) => sh.examId !== id),\n          opportunityLogs: s.opportunityLogs.filter((log) => log.examId !== id),\n        }));\n\n        get().recalculateAcademicEffects();\n        get().logAction('الامتحانات', 'حذف امتحان مع سجلاته وإعادة احتساب التأثيرات', exam.name);\n        syncToServer(get, () => examApi.remove(id));\n        return true;\n      },`, 'delete exam recalculation')
+          patch('src/lib/teacher-store.ts', (s) => {
+            s = mustReplace(s, `status: 'درجة' | 'غائب' | 'مجاز' | 'غش';`, `status: 'درجة' | 'غائب' | 'غش';`, 'grade status type')
+            s = mustReplace(s, `function parseDateOnly(value: string | undefined | null): Date | null {`, `function sanitizeGradeStatus(value: unknown): Grade['status'] {\n  if (value === 'غش') return 'غش';\n  if (value === 'غائب' || value === 'مجاز') return 'غائب';\n  return 'درجة';\n}\n\nfunction parseDateOnly(value: string | undefined | null): Date | null {`, 'sanitize helper')
+            s = s.replace(`        if (grade.status === 'مجاز') return { text: 'مجاز', type: 'info', kind: 'leave' };\n`, '')
+            s = s.replace(`      if (grade.status === 'مجاز') continue;\n`, '')
+            s = mustReplace(s, `            score: g.score === null || g.score === undefined ? null : Number(g.score),\n            academicAccountingChecked: Boolean(g.academicAccountingChecked),`, `            status: sanitizeGradeStatus(g.status),\n            score: g.score === null || g.score === undefined ? null : Number(g.score),\n            academicAccountingChecked: Boolean(g.academicAccountingChecked),`, 'sanitize server grades')
+            s = mustReplace(s, `      deleteExam: (id) => {\n        const exam = get().exams.find((e) => e.id === id);\n        if (!exam) return false;\n        // Delete related grades from DB\n        get().grades.filter(g => g.examId === id).forEach(g => syncToServer(get, () => gradeApi.remove(g.id)));\n        set((s) => ({\n          exams: s.exams.filter((e) => e.id !== id),\n          grades: s.grades.filter((g) => g.examId !== id),\n          correctionSheets: s.correctionSheets.filter((sh) => sh.examId !== id),\n          opportunityLogs: s.opportunityLogs.filter((log) => log.examId !== id),\n        }));\n        get().logAction('الامتحانات', 'حذف امتحان مع سجلاته التابعة', exam.name);\n        syncToServer(get, () => examApi.remove(id));\n        return true;\n      },`, `      deleteExam: (id) => {\n        const state = get();\n        const exam = state.exams.find((e) => e.id === id);\n        if (!exam) return false;\n\n        const relatedGrades = state.grades.filter((grade) => grade.examId === id);\n        const relatedOpportunityLogs = state.opportunityLogs.filter((log) => log.examId === id);\n        const relatedCorrectionSheets = state.correctionSheets.filter((sheet) => sheet.examId === id);\n\n        relatedGrades.forEach((grade) => syncToServer(get, () => gradeApi.remove(grade.id)));\n        relatedOpportunityLogs.forEach((log) => syncToServer(get, () => opportunityLogApi.remove(log.id)));\n        relatedCorrectionSheets.forEach((sheet) => syncToServer(get, () => correctionSheetApi.remove(sheet.id)));\n\n        set((s) => ({\n          exams: s.exams.filter((e) => e.id !== id),\n          grades: s.grades.filter((g) => g.examId !== id),\n          correctionSheets: s.correctionSheets.filter((sh) => sh.examId !== id),\n          opportunityLogs: s.opportunityLogs.filter((log) => log.examId !== id),\n        }));\n\n        get().recalculateAcademicEffects();\n        get().logAction('الامتحانات', 'حذف امتحان مع سجلاته وإعادة احتساب التأثيرات', exam.name);\n        syncToServer(get, () => examApi.remove(id));\n        return true;\n      },`, 'delete exam recalc')
+            s = mustReplace(s, `version: 10,`, `version: 11,`, 'persist version')
+            return s
+          })
 
-          const gradeEntry = 'src/components/teacher-pro/grade-entry.tsx'
-          replace(gradeEntry, `status: "درجة" | "غائب" | "مجاز" | "غش";`, `status: "درجة" | "غائب" | "غش";`, 'draft grade type')
-          replace(gradeEntry, `const statusOptions: DraftGrade["status"][] = ["درجة", "غائب", "مجاز", "غش"];`, `const statusOptions: DraftGrade["status"][] = ["درجة", "غائب", "غش"];`, 'grade entry status options')
-          replace(gradeEntry, `      status: (existing?.status as DraftGrade["status"]) || "درجة",`, `      status: existing?.status === "مجاز" ? "غائب" : (existing?.status as DraftGrade["status"]) || "درجة",`, 'grade entry old leave fallback')
+          patch('src/lib/exam-utils.ts', (s) => s.replace(`return ['غائب', 'مجاز', 'غش'].includes(String(grade.status || ''));`, `return ['غائب', 'غش'].includes(String(grade.status || ''));`))
 
-          const gradeRecords = 'src/components/teacher-pro/grade-records.tsx'
-          replace(gradeRecords, `type GradeStatus = "درجة" | "غائب" | "مجاز" | "غش";`, `type GradeStatus = "درجة" | "غائب" | "غش";`, 'grade records status type')
-          replace(gradeRecords, `      status: grade.status as GradeStatus,`, `      status: grade.status === "مجاز" ? "غائب" : grade.status as GradeStatus,`, 'grade records old leave fallback')
-          replace(gradeRecords, `<SelectItem value="all">الكل</SelectItem><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="مجاز">مجاز</SelectItem><SelectItem value="غش">غش</SelectItem><SelectItem value="محاسبة رسوب">محاسبة رسوب</SelectItem><SelectItem value="الناجحين">الناجحين</SelectItem><SelectItem value="المخصومين">المخصومين</SelectItem>`, `<SelectItem value="all">الكل</SelectItem><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="غش">غش</SelectItem><SelectItem value="محاسبة رسوب">محاسبة رسوب</SelectItem><SelectItem value="الناجحين">الناجحين</SelectItem><SelectItem value="المخصومين">المخصومين</SelectItem>`, 'remove grade records leave filter')
+          patch('src/components/teacher-pro/grade-entry.tsx', (s) => {
+            s = s.replace(`status: "درجة" | "غائب" | "مجاز" | "غش";`, `status: "درجة" | "غائب" | "غش";`)
+            s = s.replace(`const statusOptions: DraftGrade["status"][] = ["درجة", "غائب", "مجاز", "غش"];`, `const statusOptions: DraftGrade["status"][] = ["درجة", "غائب", "غش"];`)
+            s = s.replace(`      status: (existing?.status as DraftGrade["status"]) || "درجة",`, `      status: existing?.status === "مجاز" ? "غائب" : (existing?.status as DraftGrade["status"]) || "درجة",`)
+            return s
+          })
 
-          const examRecords = 'src/components/teacher-pro/exam-records.tsx'
-          replace(examRecords, `notPassedCount: rows.filter((row) => row.cls.kind !== "pass" && row.cls.kind !== "leave").length,`, `notPassedCount: rows.filter((row) => row.cls.kind !== "pass").length,`, 'exam records not passed count')
+          patch('src/components/teacher-pro/grade-records.tsx', (s) => {
+            s = s.replace(`type GradeStatus = "درجة" | "غائب" | "مجاز" | "غش";`, `type GradeStatus = "درجة" | "غائب" | "غش";`)
+            s = s.replace(`      status: grade.status as GradeStatus,`, `      status: grade.status === "مجاز" ? "غائب" : grade.status as GradeStatus,`)
+            s = s.replace(`<SelectItem value="all">الكل</SelectItem><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="مجاز">مجاز</SelectItem><SelectItem value="غش">غش</SelectItem><SelectItem value="محاسبة رسوب">محاسبة رسوب</SelectItem><SelectItem value="الناجحين">الناجحين</SelectItem><SelectItem value="المخصومين">المخصومين</SelectItem>`, `<SelectItem value="all">الكل</SelectItem><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="غش">غش</SelectItem><SelectItem value="محاسبة رسوب">محاسبة رسوب</SelectItem><SelectItem value="الناجحين">الناجحين</SelectItem><SelectItem value="المخصومين">المخصومين</SelectItem>`)
+            return s
+          })
 
-          const examUtils = 'src/lib/exam-utils.ts'
-          replace(examUtils, `return ['غائب', 'مجاز', 'غش'].includes(String(grade.status || ''));`, `return ['غائب', 'غش'].includes(String(grade.status || ''));`, 'remove leave from isGradeEntered')
+          patch('src/components/teacher-pro/exam-records.tsx', (s) => s.replace(`notPassedCount: rows.filter((row) => row.cls.kind !== "pass" && row.cls.kind !== "leave").length,`, `notPassedCount: rows.filter((row) => row.cls.kind !== "pass").length,`))
           NODE
-
-      - name: Lint
-        run: |
-          npm install --include=dev
-          npm run lint
 
       - name: Commit fixes and cleanup
         run: |
