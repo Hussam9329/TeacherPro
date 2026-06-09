@@ -1184,6 +1184,10 @@ export const useTeacherStore = create<TeacherState>()(
             roles, logs, demoCopies, currentUserId: nextCurrentUserId, dbConnected: true, dbLoading: false,
           });
 
+          // Recalculate rule-managed opportunity and dismissal effects on every load.
+          // This also repairs stale effects left by exams/grades that were deleted before this fix.
+          get().recalculateAcademicEffects();
+
           const adminAfterLoad = users.find((u) => isPrimaryAdminUser(u));
           if (adminAfterLoad) {
             syncToServer(get, () => userApi.update(adminAfterLoad.id, {
@@ -2248,6 +2252,14 @@ export const useTeacherStore = create<TeacherState>()(
           nextState.students = nextState.students.map((student) => ({
             ...(student as Record<string, unknown>),
             dismissalNotes: String((student as Record<string, unknown>).dismissalNotes || ''),
+          }));
+        }
+
+        // Migration v10 → v11: remove the old leave/excused grade status from local snapshots.
+        if (version < 11 && Array.isArray(nextState.grades)) {
+          nextState.grades = nextState.grades.map((grade) => ({
+            ...(grade as Record<string, unknown>),
+            status: sanitizeGradeStatus((grade as Record<string, unknown>).status),
           }));
         }
 
