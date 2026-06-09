@@ -133,6 +133,37 @@ export interface OpportunityLog {
   chapterId: string;
 }
 
+export interface StudentLeave {
+  id: string;
+  studentId: string;
+  examId: string;
+  reason: string;
+  studyType: string;
+  date: string;
+  notes: string;
+}
+
+export interface StudentCall {
+  id: string;
+  studentId: string;
+  examId: string;
+  category: string;
+  target: string;
+  phone: string;
+  completed: boolean;
+  completedAt: string;
+  notes: string;
+  createdAt: string;
+}
+
+export interface StudentNote {
+  id: string;
+  studentId: string;
+  kind: string;
+  text: string;
+  date: string;
+}
+
 export interface CorrectionSheet {
   id: string;
   studentId: string;
@@ -280,6 +311,7 @@ export type SectionId =
   | 'exam-records'
   | 'grade-records'
   | 'opportunities'
+  | 'follow-up'
   | 'e-correction'
   | 'whatsapp'
   | 'accounts'
@@ -332,6 +364,8 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   // الفرص
   { id: 'opportunities.view', label: 'عرض الفرص', category: 'الفرص', level: 'read', description: 'عرض وإدارة فرص الطلاب' },
   { id: 'opportunities.manage', label: 'إدارة الفرص', category: 'الفرص', level: 'manage', description: 'إضافة وخصم فرص الطلاب' },
+  { id: 'follow-up.view', label: 'عرض المتابعة', category: 'المتابعة', level: 'read', description: 'عرض الإجازات والمكالمات وملف الطالب' },
+  { id: 'follow-up.manage', label: 'إدارة المتابعة', category: 'المتابعة', level: 'manage', description: 'إضافة الإجازات والمكالمات والملاحظات' },
   // التصحيح
   { id: 'correction.view', label: 'عرض التصحيح', category: 'التصحيح', level: 'read', description: 'عرض لوحة التصحيح الإلكتروني' },
   { id: 'correction.manage', label: 'إدارة التصحيح', category: 'التصحيح', level: 'manage', description: 'إضافة وتعديل أوراق التصحيح' },
@@ -362,6 +396,7 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'exam-records': 'exams.view',
   'grade-records': 'grades.view',
   'opportunities': 'opportunities.view',
+  'follow-up': 'follow-up.view',
   'e-correction': 'correction.view',
   'whatsapp': 'whatsapp.view',
   'accounts': 'accounts.view',
@@ -468,6 +503,9 @@ export interface BackupShape {
   exams?: Exam[];
   grades?: Grade[];
   opportunityLogs?: OpportunityLog[];
+  studentLeaves?: StudentLeave[];
+  studentCalls?: StudentCall[];
+  studentNotes?: StudentNote[];
   correctionSheets?: CorrectionSheet[];
   users?: User[];
   roles?: Role[];
@@ -489,6 +527,9 @@ interface TeacherState {
   exams: Exam[];
   grades: Grade[];
   opportunityLogs: OpportunityLog[];
+  studentLeaves: StudentLeave[];
+  studentCalls: StudentCall[];
+  studentNotes: StudentNote[];
   correctionSheets: CorrectionSheet[];
   users: User[];
   roles: Role[];
@@ -568,6 +609,13 @@ interface TeacherState {
   adjustOpportunities: (studentId: string, amount: number, reason: string) => void;
   resetOpportunities: (studentId: string) => void;
   undoOpportunityLog: (logId: string) => boolean;
+
+  addStudentLeave: (leave: Omit<StudentLeave, 'id'>) => void;
+  deleteStudentLeave: (id: string) => void;
+  addStudentCall: (call: Omit<StudentCall, 'id' | 'createdAt'>) => void;
+  updateStudentCall: (id: string, updates: Partial<StudentCall>) => void;
+  addStudentNote: (note: Omit<StudentNote, 'id'>) => void;
+  deleteStudentNote: (id: string) => void;
 
   addCorrectionSheet: (sheet: Omit<CorrectionSheet, 'id'>) => void;
   updateCorrectionSheet: (id: string, updates: Partial<CorrectionSheet>) => void;
@@ -664,6 +712,9 @@ function seedData() {
     exams: [] as Exam[],
     grades: [] as Grade[],
     opportunityLogs: [] as OpportunityLog[],
+    studentLeaves: [] as StudentLeave[],
+    studentCalls: [] as StudentCall[],
+    studentNotes: [] as StudentNote[],
     correctionSheets: [] as CorrectionSheet[],
     users,
     roles,
@@ -679,7 +730,7 @@ function seedData() {
 
 const DATA_KEYS: (keyof BackupShape)[] = [
   'courses', 'sites', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
-  'opportunityLogs', 'correctionSheets', 'users', 'roles', 'logs', 'whatsappReports', 'whatsappQueue', 'leaderboardSettings',
+  'opportunityLogs', 'studentLeaves', 'studentCalls', 'studentNotes', 'correctionSheets', 'users', 'roles', 'logs', 'whatsappReports', 'whatsappQueue', 'leaderboardSettings',
 ];
 
 const DEMO_DATA_KEYS: (keyof BackupShape)[] = [
@@ -874,7 +925,7 @@ function automaticOpportunityLogId(studentId: string, examId: string, action: st
   return `auto_${studentId}_${examId}_${slug}`;
 }
 
-function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'students' | 'grades' | 'exams' | 'courseChapters' | 'chapters' | 'opportunityLogs'>): { students: Student[]; opportunityLogs: OpportunityLog[] } {
+function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'students' | 'grades' | 'exams' | 'courseChapters' | 'chapters' | 'opportunityLogs' | 'studentLeaves'>): { students: Student[]; opportunityLogs: OpportunityLog[] } {
   const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
   const activeCourseChapterByCourse = new Map(
     state.courseChapters
@@ -883,6 +934,7 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
   );
   const manualLogs = state.opportunityLogs.filter((log) => !isAutomaticOpportunityLog(log));
   const automaticLogs: OpportunityLog[] = [];
+  const leaveKeys = new Set((state.studentLeaves || []).map((leave) => `${leave.studentId}:${leave.examId}`));
 
   const students = state.students.map((student) => {
     const manualDismissal = student.status === 'مفصول' && !isRuleManagedDismissal(student);
@@ -940,6 +992,7 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
       if (!exam) continue;
       if (!isGradeEntered(grade, exam)) continue;
       if (!isExamOnOrAfterStudentRegistration(student, exam)) continue;
+      if (leaveKeys.has(`${student.id}:${exam.id}`)) continue;
       if (isExamWithinStudentGracePeriod(student, exam)) continue;
 
       if (grade.status === 'غش') {
@@ -1791,6 +1844,34 @@ export const useTeacherStore = create<TeacherState>()(
           get().dismissStudent(studentId, 'فصل مؤقت', 'انتهاء الفرص');
         }
       },
+      addStudentLeave: (leaveData) => {
+        const leave: StudentLeave = { ...leaveData, id: uid('lv') };
+        set((s) => ({ studentLeaves: [leave, ...s.studentLeaves.filter((item) => !(item.studentId === leave.studentId && item.examId === leave.examId))] }));
+        get().logAction('المتابعة', 'إضافة إجازة', `${get().studentName(leave.studentId)} - ${leave.reason}`);
+        get().recalculateAcademicEffects();
+      },
+      deleteStudentLeave: (id) => {
+        set((s) => ({ studentLeaves: s.studentLeaves.filter((leave) => leave.id !== id) }));
+        get().logAction('المتابعة', 'حذف إجازة', id);
+        get().recalculateAcademicEffects();
+      },
+      addStudentCall: (callData) => {
+        const call: StudentCall = { ...callData, id: uid('call'), createdAt: todayISO() };
+        set((s) => ({ studentCalls: [call, ...s.studentCalls] }));
+        get().logAction('المتابعة', 'تسجيل مكالمة', get().studentName(call.studentId));
+      },
+      updateStudentCall: (id, updates) => {
+        set((s) => ({ studentCalls: s.studentCalls.map((call) => call.id === id ? { ...call, ...updates } : call) }));
+      },
+      addStudentNote: (noteData) => {
+        const note: StudentNote = { ...noteData, id: uid('note') };
+        set((s) => ({ studentNotes: [note, ...s.studentNotes] }));
+        get().logAction('المتابعة', 'إضافة ملاحظة', get().studentName(note.studentId));
+      },
+      deleteStudentNote: (id) => {
+        set((s) => ({ studentNotes: s.studentNotes.filter((note) => note.id !== id) }));
+      },
+
       resetOpportunities: (studentId) => {
         const studentBefore = get().students.find((st) => st.id === studentId);
         if (!studentBefore || !get().activeChapterForCourse(studentBefore.courseId)) {
@@ -2274,6 +2355,9 @@ export const useTeacherStore = create<TeacherState>()(
         exams: state.exams,
         grades: state.grades,
         opportunityLogs: state.opportunityLogs,
+        studentLeaves: state.studentLeaves,
+        studentCalls: state.studentCalls,
+        studentNotes: state.studentNotes,
         correctionSheets: state.correctionSheets,
         users: state.users,
         roles: state.roles,
