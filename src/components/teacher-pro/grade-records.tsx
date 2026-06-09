@@ -38,7 +38,7 @@ import { searchAny } from "@/lib/validation";
 import { isGradeEntered } from "@/lib/exam-utils";
 import { useActionLock } from "@/hooks/use-action-lock";
 
-type GradeStatus = "درجة" | "غائب" | "مجاز" | "غش";
+type GradeStatus = "درجة" | "غائب" | "غش";
 type ViewMode = "cards" | "table";
 
 export function GradeRecordsView() {
@@ -113,7 +113,7 @@ export function GradeRecordsView() {
     setEditDialog({
       open: true,
       id: grade.id,
-      status: grade.status as GradeStatus,
+      status: grade.status === "مجاز" ? "غائب" : grade.status as GradeStatus,
       score: grade.score !== null && grade.score !== undefined ? String(grade.score) : "",
       notes: grade.notes || "",
     });
@@ -192,7 +192,7 @@ export function GradeRecordsView() {
               <Label htmlFor="grade-records-status" className="text-xs">الحالة</Label>
               <Select value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
                 <SelectTrigger id="grade-records-status"><SelectValue placeholder="الكل" /></SelectTrigger>
-                <SelectContent><SelectItem value="all">الكل</SelectItem><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="مجاز">مجاز</SelectItem><SelectItem value="غش">غش</SelectItem><SelectItem value="محاسبة رسوب">محاسبة رسوب</SelectItem><SelectItem value="الناجحين">الناجحين</SelectItem><SelectItem value="المخصومين">المخصومين</SelectItem></SelectContent>
+                <SelectContent><SelectItem value="all">الكل</SelectItem><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="غش">غش</SelectItem><SelectItem value="محاسبة رسوب">محاسبة رسوب</SelectItem><SelectItem value="الناجحين">الناجحين</SelectItem><SelectItem value="المخصومين">المخصومين</SelectItem></SelectContent>
               </Select>
             </div>
             <div className="space-y-1">

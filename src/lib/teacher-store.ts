@@ -114,7 +114,7 @@ export interface Grade {
   id: string;
   studentId: string;
   examId: string;
-  status: 'درجة' | 'غائب' | 'مجاز' | 'غش';
+  status: 'درجة' | 'غائب' | 'غش';
   score: number | null;
   notes: string;
   academicAccountingChecked: boolean;
@@ -839,6 +839,12 @@ function normalizeGraceDaysValue(value: unknown): number {
   return Math.min(30, Math.max(0, Math.trunc(numeric)));
 }
 
+function sanitizeGradeStatus(value: unknown): Grade['status'] {
+  if (value === 'غش') return 'غش';
+  if (value === 'غائب' || value === 'مجاز') return 'غائب';
+  return 'درجة';
+}
+
 function parseDateOnly(value: string | undefined | null): Date | null {
   if (!value) return null;
   const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
@@ -934,7 +940,6 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
       if (!exam) continue;
       if (!isGradeEntered(grade, exam)) continue;
       if (!isExamOnOrAfterStudentRegistration(student, exam)) continue;
-      if (grade.status === 'مجاز') continue;
       if (isExamWithinStudentGracePeriod(student, exam)) continue;
 
       if (grade.status === 'غش') {
@@ -1100,6 +1105,7 @@ export const useTeacherStore = create<TeacherState>()(
 
           const grades = (serverData.grades || []).map((g: Record<string, unknown>) => ({
             ...g,
+            status: sanitizeGradeStatus(g.status),
             score: g.score === null || g.score === undefined ? null : Number(g.score),
             academicAccountingChecked: Boolean(g.academicAccountingChecked),
             createdAt: g.createdAt ? String(g.createdAt).slice(0, 10) : todayISO(),
@@ -1316,7 +1322,6 @@ export const useTeacherStore = create<TeacherState>()(
         if (!grade || !isGradeEntered(grade, exam)) return { text: 'غير مسجل', type: 'neutral', kind: 'missing' };
         if (student && !isExamOnOrAfterStudentRegistration(student, exam)) return { text: 'قبل التسجيل', type: 'neutral', kind: 'before-registration' };
         if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
-        if (grade.status === 'مجاز') return { text: 'مجاز', type: 'info', kind: 'leave' };
         if (grade.status === 'غش') return { text: 'غش', type: 'danger', kind: 'cheat' };
         if (grade.status === 'غائب') return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
         const score = Number(grade.score) || 0;
@@ -1673,17 +1678,27 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => examApi.update(id, { active: !exam?.active }));
       },
       deleteExam: (id) => {
-        const exam = get().exams.find((e) => e.id === id);
+        const state = get();
+        const exam = state.exams.find((e) => e.id === id);
         if (!exam) return false;
-        // Delete related grades from DB
-        get().grades.filter(g => g.examId === id).forEach(g => syncToServer(get, () => gradeApi.remove(g.id)));
+
+        const relatedGrades = state.grades.filter((grade) => grade.examId === id);
+        const relatedOpportunityLogs = state.opportunityLogs.filter((log) => log.examId === id);
+        const relatedCorrectionSheets = state.correctionSheets.filter((sheet) => sheet.examId === id);
+
+        relatedGrades.forEach((grade) => syncToServer(get, () => gradeApi.remove(grade.id)));
+        relatedOpportunityLogs.forEach((log) => syncToServer(get, () => opportunityLogApi.remove(log.id)));
+        relatedCorrectionSheets.forEach((sheet) => syncToServer(get, () => correctionSheetApi.remove(sheet.id)));
+
         set((s) => ({
           exams: s.exams.filter((e) => e.id !== id),
           grades: s.grades.filter((g) => g.examId !== id),
           correctionSheets: s.correctionSheets.filter((sh) => sh.examId !== id),
           opportunityLogs: s.opportunityLogs.filter((log) => log.examId !== id),
         }));
-        get().logAction('الامتحانات', 'حذف امتحان مع سجلاته التابعة', exam.name);
+
+        get().recalculateAcademicEffects();
+        get().logAction('الامتحانات', 'حذف امتحان مع سجلاته وإعادة احتساب التأثيرات', exam.name);
         syncToServer(get, () => examApi.remove(id));
         return true;
       },
@@ -2155,7 +2170,7 @@ export const useTeacherStore = create<TeacherState>()(
     }),
     {
       name: 'teacher-pro-store-v4',
-      version: 10,
+      version: 11,
       migrate: (persistedState: unknown, version: number) => {
         const state = (persistedState ?? {}) as Record<string, unknown>;
         const nextState: Record<string, unknown> = { ...state };

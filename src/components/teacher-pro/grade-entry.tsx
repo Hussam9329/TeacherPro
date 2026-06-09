@@ -28,12 +28,12 @@ import {
 } from "@/lib/exam-utils";
 
 type DraftGrade = {
-  status: "درجة" | "غائب" | "مجاز" | "غش";
+  status: "درجة" | "غائب" | "غش";
   score: string;
   notes: string;
 };
 
-const statusOptions: DraftGrade["status"][] = ["درجة", "غائب", "مجاز", "غش"];
+const statusOptions: DraftGrade["status"][] = ["درجة", "غائب", "غش"];
 
 export function GradeEntryView() {
   const {
@@ -71,7 +71,7 @@ export function GradeEntryView() {
   const getDraft = (studentId: string): DraftGrade => {
     const existing = getGrade(studentId);
     return drafts[studentId] || {
-      status: (existing?.status as DraftGrade["status"]) || "درجة",
+      status: existing?.status === "مجاز" ? "غائب" : (existing?.status as DraftGrade["status"]) || "درجة",
       score: existing?.score !== null && existing?.score !== undefined ? String(existing.score) : "",
       notes: existing?.notes || "",
     };

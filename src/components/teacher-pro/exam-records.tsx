@@ -185,7 +185,7 @@ export function ExamRecordsView() {
     return {
       rows,
       passCount: rows.filter((row) => row.cls.kind === "pass").length,
-      notPassedCount: rows.filter((row) => row.cls.kind !== "pass" && row.cls.kind !== "leave").length,
+      notPassedCount: rows.filter((row) => row.cls.kind !== "pass").length,
     };
   };
 
