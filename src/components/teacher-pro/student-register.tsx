@@ -1044,7 +1044,7 @@ export function StudentRegisterView() {
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="reg-createdAt" className="font-bold text-foreground">
-                    تاريخ تسجيل الطالب / بداية فترة السماح <RequiredMark />
+                    تاريخ تسجيل الطالب <RequiredMark />
                   </Label>
                   <Input
                     id="reg-createdAt"
@@ -1080,7 +1080,7 @@ export function StudentRegisterView() {
                   />
                   <p className="text-xs leading-5 text-muted-foreground">
                     {accountingGraceDays > 0
-                      ? <>تنتهي فترة السماح في <span className="font-semibold text-foreground">{formattedGraceEnd}</span> حسب عدد الأيام المدخل.</>
+                      ? <>تبدأ فترة السماح تلقائياً من <span className="font-semibold text-foreground">{formattedGraceStart}</span> وتنتهي في <span className="font-semibold text-foreground">{formattedGraceEnd}</span> حسب عدد الأيام المدخل.</>
                       : "لا توجد أيام سماح عند اختيار 0."}
                   </p>
                 </div>
