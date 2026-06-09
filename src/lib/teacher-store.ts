@@ -546,7 +546,6 @@ interface TeacherState {
   currentSection: SectionId;
   sidebarOpen: boolean;
   theme: 'light' | 'dark';
-  guideMode: boolean;
   studentPageSize: number;
   gradePageSize: number;
   currentUserId: string;
@@ -558,7 +557,6 @@ interface TeacherState {
   toggleSidebar: () => void;
   setSidebarOpen: (open: boolean) => void;
   toggleTheme: () => void;
-  toggleGuideMode: () => void;
 
   currentUser: () => User | null;
   login: (username: string, password: string) => { ok: boolean; message: string };
@@ -1075,7 +1073,6 @@ export const useTeacherStore = create<TeacherState>()(
       currentSection: 'dashboard' as SectionId,
       sidebarOpen: false,
       theme: 'light' as 'light' | 'dark',
-      guideMode: true,
       studentPageSize: 10,
       gradePageSize: 10,
       currentUserId: 'u_admin',
@@ -1288,7 +1285,6 @@ export const useTeacherStore = create<TeacherState>()(
         }
         return { theme: next };
       }),
-      toggleGuideMode: () => set((s) => ({ guideMode: !s.guideMode })),
 
       currentUser: () => {
         const state = get();
