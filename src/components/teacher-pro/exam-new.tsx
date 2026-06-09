@@ -131,7 +131,8 @@ export function ExamNewView() {
   const validateForm = (state: ExamFormState) => {
     const fullMark = Number(state.fullMark);
     const passMark = Number(state.passMark);
-    const discountMark = state.type === "تراكمي" || state.type === "فاينل"
+    const isCumulativeOrFinal = state.type === "تراكمي" || state.type === "فاينل";
+    const discountMark = isCumulativeOrFinal
       ? 0
       : Number(state.discountMark);
 
