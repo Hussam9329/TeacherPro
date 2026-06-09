@@ -390,6 +390,33 @@
   background-clip: content-box;
 }
 
+/* Unified destructive/delete buttons across legacy screens */
+button[data-slot="button"]:is(.text-red-600, .text-red-700, .text-rose-600, .text-rose-700, .text-destructive),
+button[data-slot="button"][class*="text-red-"],
+button[data-slot="button"][class*="text-rose-"],
+button[data-slot="button"][class*="text-destructive"] {
+  background: rgb(220 38 38) !important;
+  border-color: rgb(220 38 38) !important;
+  color: #fff !important;
+  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.18) !important;
+}
+
+button[data-slot="button"]:is(.text-red-600, .text-red-700, .text-rose-600, .text-rose-700, .text-destructive):hover,
+button[data-slot="button"][class*="text-red-"]:hover,
+button[data-slot="button"][class*="text-rose-"]:hover,
+button[data-slot="button"][class*="text-destructive"]:hover {
+  background: rgb(185 28 28) !important;
+  border-color: rgb(185 28 28) !important;
+  color: #fff !important;
+}
+
+button[data-slot="button"]:is(.text-red-600, .text-red-700, .text-rose-600, .text-rose-700, .text-destructive) svg,
+button[data-slot="button"][class*="text-red-"] svg,
+button[data-slot="button"][class*="text-rose-"] svg,
+button[data-slot="button"][class*="text-destructive"] svg {
+  color: #fff !important;
+}
+
 /* تحسين التمرير على الهواتف */
 .overscroll-contain {
   -webkit-overflow-scrolling: touch;
