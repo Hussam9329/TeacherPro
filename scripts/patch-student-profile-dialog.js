@@ -53,8 +53,9 @@ patchFile('src/components/teacher-pro/student-registry.tsx', (input) => {
     source = source.slice(0, start) + replacement + source.slice(end);
   }
 
+  // The old student file dialog used Separator; after replacement it is unused.
+  // Keep Dialog imports because edit/dismiss dialogs still use them.
   if (source.includes('<StudentProfileDialog')) {
-    source = source.replace(/import \{\n  Dialog,\n  DialogContent,\n  DialogHeader,\n  DialogTitle,\n  DialogFooter,\n  DialogDescription,\n\} from "@\/components\/ui\/dialog";\n/g, '');
     source = source.replace(/import \{ Separator \} from "@\/components\/ui\/separator";\n/g, '');
   }
 
