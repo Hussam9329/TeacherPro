@@ -35,6 +35,16 @@ type DraftGrade = {
 
 const statusOptions: DraftGrade["status"][] = ["درجة", "غائب", "غش"];
 
+function normalizeGradeScoreInput(value: string, fullMark: number) {
+  const normalized = toLatinDigits(value).trim();
+  if (!normalized) return "";
+  const score = Number(normalized);
+  if (!Number.isFinite(score)) return normalized;
+  if (score < 0) return "0";
+  if (score > fullMark) return String(fullMark);
+  return normalized;
+}
+
 export function GradeEntryView() {
   const {
     exams,
@@ -310,7 +320,13 @@ export function GradeEntryView() {
                         max={selectedExam.fullMark}
                         disabled={controlsDisabled || draft.status !== "درجة"}
                         value={draft.status === "درجة" ? draft.score : ""}
-                        onChange={(e) => updateDraft(student.id, { score: toLatinDigits(e.target.value), status: "درجة" })}
+                        onChange={(e) => {
+                          const nextScore = normalizeGradeScoreInput(e.target.value, selectedExam.fullMark);
+                          if (nextScore !== toLatinDigits(e.target.value).trim()) {
+                            toast.error(`درجة الطالب يجب أن تكون بين 0 و ${selectedExam.fullMark}`);
+                          }
+                          updateDraft(student.id, { score: nextScore, status: "درجة" });
+                        }}
                         onBlur={() => autoSaveGrade(student.id)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
