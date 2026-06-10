@@ -689,10 +689,14 @@ function seedData() {
 
 const DATA_KEYS: (keyof BackupShape)[] = [
   'courses', 'sites', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
+  'opportunityLogs', 'studentLeaves', 'studentCalls', 'studentNotes', 'correctionSheets',
+  'users', 'roles', 'logs', 'leaderboardSettings', 'demoCopies',
 ];
 
 const DEMO_DATA_KEYS: (keyof BackupShape)[] = [
   'courses', 'sites', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
+  'opportunityLogs', 'studentLeaves', 'studentCalls', 'studentNotes', 'correctionSheets',
+  'leaderboardSettings',
 ];
 
 // ─── Migrate old users (no roleId) ──────────────────────────────────────────
@@ -2312,7 +2316,6 @@ export const useTeacherStore = create<TeacherState>()(
         logs: state.logs,
         leaderboardSettings: state.leaderboardSettings,
         theme: state.theme,
-        guideMode: state.guideMode,
         studentPageSize: state.studentPageSize,
         gradePageSize: state.gradePageSize,
         currentUserId: state.currentUserId,

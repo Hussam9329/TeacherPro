@@ -20,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -32,7 +31,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
   getPhoneValidationError,
@@ -57,6 +55,7 @@ import {
 import { useActionLock } from "@/hooks/use-action-lock";
 import { SearchX, UserPlus } from "lucide-react";
 import { EmptyState } from "./ui-kit";
+import { StudentProfileDialog } from "./student-profile-dialog";
 import { CustomFilterPresets, type FilterPresetValues } from "./custom-filter-presets";
 
 type RegistryViewMode = "cards" | "table";
@@ -159,40 +158,6 @@ function isStudentCurrentlyInGrace(student: Student): boolean {
   const endExclusive = new Date(start);
   endExclusive.setDate(endExclusive.getDate() + days);
   return Number.isFinite(start.getTime()) && today >= start && today < endExclusive;
-}
-
-function ContactLink({
-  href,
-  children,
-}: {
-  href: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <a
-      href={href}
-      className="font-medium text-primary underline-offset-4 hover:underline"
-    >
-      {children}
-    </a>
-  );
-}
-
-function StudentFileItem({
-  label,
-  children,
-  className = "",
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={className}>
-      <span className="text-muted-foreground">{label}:</span>{" "}
-      <strong>{children}</strong>
-    </div>
-  );
 }
 
 export function StudentRegistryView() {
@@ -1377,202 +1342,20 @@ export function StudentRegistryView() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
+      <StudentProfileDialog
+        student={fileDialog.student}
         open={fileDialog.open}
-        onOpenChange={(o) => setFileDialog({ ...fileDialog, open: o })}
-      >
-        <DialogContent
-          dir="rtl"
-          className="max-w-2xl max-h-[80vh] overflow-y-auto"
-        >
-          <DialogHeader>
-            <DialogTitle>ملف الطالب - {fileDialog.student?.name}</DialogTitle>
-          </DialogHeader>
-          {fileDialog.student && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                <StudentFileItem label="اسم الطالب">
-                  {fileDialog.student.name}
-                </StudentFileItem>
-                <StudentFileItem label="الكود">
-                  {fileDialog.student.code}
-                </StudentFileItem>
-                <StudentFileItem label="الجنس">
-                  {fileDialog.student.gender}
-                </StudentFileItem>
-                <StudentFileItem label="المدرسة">
-                  {fileDialog.student.school || "-"}
-                </StudentFileItem>
-                <StudentFileItem label="رقم الطالب">
-                  <ContactLink href={whatsappLink(fileDialog.student.phone)}>
-                    {fileDialog.student.phone}
-                  </ContactLink>
-                </StudentFileItem>
-                <StudentFileItem label="رقم ولي الأمر">
-                  <ContactLink
-                    href={whatsappLink(fileDialog.student.parentPhone)}
-                  >
-                    {fileDialog.student.parentPhone}
-                  </ContactLink>
-                </StudentFileItem>
-                <StudentFileItem label="معرف التليكرام">
-                  {fileDialog.student.telegram ? (
-                    <ContactLink
-                      href={telegramLink(fileDialog.student.telegram)}
-                    >
-                      {fileDialog.student.telegram}
-                    </ContactLink>
-                  ) : (
-                    "-"
-                  )}
-                </StudentFileItem>
-                <StudentFileItem label="الدورة">
-                  {courseName(fileDialog.student.courseId)}
-                </StudentFileItem>
-                <StudentFileItem label="نوع الدورة">
-                  {fileDialog.student.courseProgram || "-"}
-                </StudentFileItem>
-                <StudentFileItem label="الكورس">
-                  {fileDialog.student.courseTerm || "-"}
-                </StudentFileItem>
-                <StudentFileItem label="نوع الدراسة">
-                  {fileDialog.student.studyType || "-"}
-                </StudentFileItem>
-                <StudentFileItem label="نطاق الموقع">
-                  {fileDialog.student.locationScope || fileDialog.student.mainSite || "-"}
-                </StudentFileItem>
-                <StudentFileItem label="وضع بغداد">
-                  {fileDialog.student.baghdadMode || "-"}
-                </StudentFileItem>
-                <StudentFileItem label="الموقع الفرعي">
-                  {fileDialog.student.subSite || "-"}
-                </StudentFileItem>
-                <StudentFileItem label="الموقع الكامل">
-                  {`${fileDialog.student.locationScope || fileDialog.student.mainSite || "-"} - ${fileDialog.student.subSite || "-"}`}
-                </StudentFileItem>
-                <StudentFileItem label="الفصل النشط">
-                  {activeChapterForCourse(fileDialog.student.courseId)?.name || "لم يتم اختيار الفصل لهم بعد"}
-                </StudentFileItem>
-                <StudentFileItem label="الفرص">
-                  {activeChapterForCourse(fileDialog.student.courseId) ? (
-                    <>
-                      {fileDialog.student.opportunities} / {fileDialog.student.baseOpportunities}
-                    </>
-                  ) : (
-                    "0 / 0 - لم يتم اختيار الفصل لهم بعد"
-                  )}
-                </StudentFileItem>
-                <StudentFileItem label="الحالة">
-                  <Badge
-                    variant={
-                      fileDialog.student.status === "نشط"
-                        ? "default"
-                        : "destructive"
-                    }
-                  >
-                    {fileDialog.student.status}
-                  </Badge>
-                </StudentFileItem>
-                {fileDialog.student.status === "مفصول" && (
-                  <>
-                    <StudentFileItem label="نوع الفصل">
-                      {fileDialog.student.dismissalType || "-"}
-                    </StudentFileItem>
-                    <StudentFileItem label="سبب الفصل" className="sm:col-span-2">
-                      {fileDialog.student.dismissalReason || "-"}
-                    </StudentFileItem>
-                    <StudentFileItem label="ملاحظات الفصل" className="sm:col-span-2">
-                      {fileDialog.student.dismissalNotes || "-"}
-                    </StudentFileItem>
-                  </>
-                )}
-                <StudentFileItem label="تاريخ التسجيل / بداية السماح">
-                  {fileDialog.student.createdAt}
-                </StudentFileItem>
-                <StudentFileItem label="حالة المحاسبة" className="sm:col-span-2">
-                  <span className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1 text-sm ${isStudentCurrentlyInGrace(fileDialog.student) ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100" : "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"}`}>
-                    <span>{isStudentCurrentlyInGrace(fileDialog.student) ? "⚠️ ضمن أيام السماح" : "✓ المحاسبة فعّالة"}</span>
-                    <span>({fileDialog.student.accountingGraceDays ?? 0} يوم - تنتهي في {graceEndDate(fileDialog.student)})</span>
-                  </span>
-                </StudentFileItem>
-              </div>
-
-              <Separator />
-
-              <div>
-                <h4 className="font-semibold mb-2">الدرجات الأخيرة</h4>
-                <div className="space-y-1">
-                  {studentGrades(fileDialog.student.id).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      لا توجد درجات
-                    </p>
-                  ) : (
-                    studentGrades(fileDialog.student.id)
-                      .slice(0, 5)
-                      .map((g) => {
-                        const exam = exams.find((e) => e.id === g.examId);
-                        return (
-                          <div
-                            key={g.id}
-                            className="flex items-center justify-between text-sm p-2 rounded-xl bg-muted/60"
-                          >
-                            <span>{exam?.name || "غير محدد"}</span>
-                            <Badge
-                              variant={
-                                g.status === "درجة" ? "default" : "secondary"
-                              }
-                            >
-                              {g.status}
-                            </Badge>
-                            {g.score !== null && (
-                              <span>
-                                {g.score}/{exam?.fullMark || 100}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })
-                  )}
-                </div>
-              </div>
-
-              <Separator />
-
-              <div>
-                <h4 className="font-semibold mb-2">سجل الفرص</h4>
-                <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {studentOppLogs(fileDialog.student.id).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      لا توجد حركات
-                    </p>
-                  ) : (
-                    studentOppLogs(fileDialog.student.id)
-                      .slice(0, 10)
-                      .map((l) => (
-                        <div
-                          key={l.id}
-                          className="flex items-center justify-between text-xs p-2 rounded-xl bg-muted/60"
-                        >
-                          <span>{l.date}</span>
-                          <Badge
-                            variant={
-                              l.action === "خصم" ? "destructive" : "default"
-                            }
-                          >
-                            {l.action} {l.amount}
-                          </Badge>
-                          <span className="text-muted-foreground">
-                            {l.reason}
-                          </span>
-                        </div>
-                      ))
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+        onOpenChange={(open) => setFileDialog((prev) => ({ ...prev, open }))}
+        exams={exams}
+        grades={grades}
+        opportunityLogs={opportunityLogs}
+        courseName={courseName}
+        activeChapterForCourse={activeChapterForCourse}
+        whatsappLink={whatsappLink}
+        telegramLink={telegramLink}
+        isStudentCurrentlyInGrace={isStudentCurrentlyInGrace}
+        graceEndDate={graceEndDate}
+      />
     </div>
   );
 }
