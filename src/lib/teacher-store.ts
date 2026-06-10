@@ -891,6 +891,10 @@ function isReactivationOpportunityLog(log: OpportunityLog): boolean {
   return log.action === 'إعادة تفعيل' || String(log.reason || '').includes('تثبيت إعادة التفعيل');
 }
 
+function isStudentExcusedForExam(state: Pick<TeacherState, 'studentLeaves'>, studentId: string, examId: string): boolean {
+  return state.studentLeaves.some((leave) => leave.studentId === studentId && leave.examId === examId);
+}
+
 function recalculateStudentsFromAcademicRules(
   state: Pick<TeacherState, 'students' | 'grades' | 'exams' | 'courseChapters' | 'chapters' | 'opportunityLogs' | 'studentLeaves'>,
   targetStudentIds?: Set<string>,
@@ -1792,6 +1796,11 @@ export const useTeacherStore = create<TeacherState>()(
 
       addGrade: (gradeData) => {
         const stateBefore = get();
+        if (isStudentExcusedForExam(stateBefore, gradeData.studentId, gradeData.examId)) {
+          const examName = stateBefore.exams.find((exam) => exam.id === gradeData.examId)?.name || '';
+          get().logAction('الدرجات', 'رفض إدخال درجة لطالب مجاز', `${get().studentName(gradeData.studentId)} - ${examName}`);
+          return;
+        }
         const existing = stateBefore.grades.find((g) => g.studentId === gradeData.studentId && g.examId === gradeData.examId);
         const normalizedGradeData = {
           ...gradeData,
@@ -1811,7 +1820,15 @@ export const useTeacherStore = create<TeacherState>()(
         get().recalculateAcademicEffects(grade.studentId);
       },
       updateGrade: (id, updates) => {
-        const existingGrade = get().grades.find((g) => g.id === id);
+        const stateBefore = get();
+        const existingGrade = stateBefore.grades.find((g) => g.id === id);
+        const nextStudentId = updates.studentId || existingGrade?.studentId || '';
+        const nextExamId = updates.examId || existingGrade?.examId || '';
+        if (nextStudentId && nextExamId && isStudentExcusedForExam(stateBefore, nextStudentId, nextExamId)) {
+          const examName = stateBefore.exams.find((exam) => exam.id === nextExamId)?.name || '';
+          get().logAction('الدرجات', 'رفض تعديل درجة لطالب مجاز', `${get().studentName(nextStudentId)} - ${examName}`);
+          return;
+        }
         const affectedStudentIds = [existingGrade?.studentId, updates.studentId].filter(Boolean) as string[];
         set((s) => ({ grades: s.grades.map((g) => g.id === id ? { ...g, ...updates, updatedAt: todayISO() } : g) }));
         get().logAction('الدرجات', 'تعديل مباشر للدرجة', id);
@@ -1883,8 +1900,16 @@ export const useTeacherStore = create<TeacherState>()(
       },
       addStudentLeave: (leaveData) => {
         const leave: StudentLeave = { ...leaveData, id: uid('lv') };
-        set((s) => ({ studentLeaves: [leave, ...s.studentLeaves.filter((item) => !(item.studentId === leave.studentId && item.examId === leave.examId))] }));
+        const existingGrade = get().grades.find((grade) => grade.studentId === leave.studentId && grade.examId === leave.examId);
+        set((s) => ({
+          studentLeaves: [leave, ...s.studentLeaves.filter((item) => !(item.studentId === leave.studentId && item.examId === leave.examId))],
+          grades: s.grades.filter((grade) => !(grade.studentId === leave.studentId && grade.examId === leave.examId)),
+        }));
         get().logAction('المتابعة', 'إضافة إجازة', `${get().studentName(leave.studentId)} - ${leave.reason}`);
+        if (existingGrade) {
+          get().logAction('الدرجات', 'إزالة درجة بسبب الإجازة', `${get().studentName(leave.studentId)} - ${get().exams.find((exam) => exam.id === leave.examId)?.name || ''}`);
+          syncToServer(get, () => gradeApi.remove(existingGrade.id));
+        }
         get().recalculateAcademicEffects(leave.studentId);
       },
       deleteStudentLeave: (id) => {

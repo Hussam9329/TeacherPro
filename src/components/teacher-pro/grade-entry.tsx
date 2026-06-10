@@ -52,6 +52,7 @@ export function GradeEntryView() {
     grades,
     courses,
     courseChapters,
+    studentLeaves,
     addGrade,
     courseName,
     classification,
@@ -91,6 +92,11 @@ export function GradeEntryView() {
     setDrafts((prev) => ({ ...prev, [studentId]: { ...getDraft(studentId), ...patch } }));
   };
 
+  const getStudentLeaveForSelectedExam = (studentId: string) => {
+    if (!selectedExam) return undefined;
+    return studentLeaves.find((leave) => leave.studentId === studentId && leave.examId === selectedExam.id);
+  };
+
   const canEditGradeForStudent = (studentId: string) => {
     const student = students.find((item) => item.id === studentId);
     const grade = getGrade(studentId);
@@ -116,14 +122,15 @@ export function GradeEntryView() {
         if (!studentMatchesExamMainSites(student, selectedMainSites)) return false;
         if (filterCourseId && student.courseId !== filterCourseId) return false;
         if (search && !searchAny(search, [student.name, student.code, student.telegram, student.phone, student.subSite, student.locationScope])) return false;
+        const hasLeave = studentLeaves.some((leave) => leave.studentId === student.id && leave.examId === selectedExam.id);
         const grade = grades.find((g) => g.studentId === student.id && g.examId === selectedExam.id);
-        const entered = isGradeEntered(grade, selectedExam);
-        if (filterStatus === "غير مسجل" && entered) return false;
-        if (filterStatus && filterStatus !== "غير مسجل" && (!entered || grade?.status !== filterStatus)) return false;
+        const entered = !hasLeave && isGradeEntered(grade, selectedExam);
+        if (filterStatus === "غير مسجل" && (entered || hasLeave)) return false;
+        if (filterStatus && filterStatus !== "غير مسجل" && (hasLeave || !entered || grade?.status !== filterStatus)) return false;
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
-  }, [selectedExam, students, grades, courseChapters, search, filterCourseId, filterStatus]);
+  }, [selectedExam, students, grades, studentLeaves, courseChapters, search, filterCourseId, filterStatus]);
 
   const missingChapterCourses = useMemo(() => {
     if (!selectedExam) return [];
@@ -134,6 +141,11 @@ export function GradeEntryView() {
 
   const saveGrade = async (studentId: string, draftOverride?: DraftGrade, options: { silent?: boolean } = {}) => {
     if (!selectedExam) return;
+    const leave = getStudentLeaveForSelectedExam(studentId);
+    if (leave) {
+      toast.error(`الطالب مجاز لهذا الامتحان ولا يمكن إدخال درجة له${leave.reason ? `: ${leave.reason}` : ""}`);
+      return;
+    }
     if (!canEditGradeForStudent(studentId)) {
       toast.error("هذا الطالب مفصول ولا يمكن تعديل درجته إلا داخل الامتحان الذي سبب الفصل");
       return;
@@ -165,7 +177,7 @@ export function GradeEntryView() {
   };
 
   const autoSaveGrade = (studentId: string, draftOverride?: DraftGrade) => {
-    if (!selectedExam || !canEditGradeForStudent(studentId)) return;
+    if (!selectedExam || getStudentLeaveForSelectedExam(studentId) || !canEditGradeForStudent(studentId)) return;
     const draft = draftOverride || getDraft(studentId);
     if (draft.status === "درجة" && !isScoreInsideExamRange(toLatinDigits(draft.score).trim(), selectedExam.fullMark)) return;
     void saveGrade(studentId, draft, { silent: true });
@@ -290,18 +302,22 @@ export function GradeEntryView() {
                 examStudents.map((student) => {
                   const grade = getGrade(student.id);
                   const draft = getDraft(student.id);
-                  const entered = isGradeEntered(grade, selectedExam);
-                  const cls = entered && grade ? classification(grade, selectedExam, student) : null;
+                  const leave = getStudentLeaveForSelectedExam(student.id);
+                  const entered = !leave && isGradeEntered(grade, selectedExam);
+                  const cls = leave ? { text: "الطالب مجاز", type: "info", kind: "leave" } : entered && grade ? classification(grade, selectedExam, student) : null;
                   const isSaving = Boolean(savingRows[student.id]);
                   const canEdit = canEditGradeForStudent(student.id);
-                  const rowLocked = Boolean(entered && !editableRows[student.id]);
-                  const controlsDisabled = !canEdit || rowLocked;
+                  const rowLocked = Boolean(!leave && entered && !editableRows[student.id]);
+                  const controlsDisabled = Boolean(leave) || !canEdit || rowLocked;
                   return (
                     <div key={student.id} className="grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="truncate text-sm font-bold">{student.name}</p>
                           <Badge variant="outline" className="text-[10px]">{student.subSite || student.locationScope || student.mainSite || "بدون موقع"}</Badge>
+                          {leave && (
+                            <Badge variant="secondary" className="text-[10px]">الطالب مجاز</Badge>
+                          )}
                           {student.status === "مفصول" && (
                             <Badge variant={canEdit ? "secondary" : "destructive"} className="text-[10px]">
                               {canEdit ? "مفصول - يمكن تصحيح سبب الفصل" : "مفصول - إدخال مقفل"}
@@ -309,6 +325,11 @@ export function GradeEntryView() {
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground">{student.code} - {courseName(student.courseId)}</p>
+                        {leave && (
+                          <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-300">
+                            الطالب مجاز لهذا الامتحان ولا يمكن إدخال درجة له{leave.reason ? `: ${leave.reason}` : ""}
+                          </p>
+                        )}
                         {student.status === "مفصول" && student.dismissalReason && (
                           <p className="mt-1 text-[11px] text-destructive">{student.dismissalReason}</p>
                         )}
@@ -319,7 +340,7 @@ export function GradeEntryView() {
                         min={0}
                         max={selectedExam.fullMark}
                         disabled={controlsDisabled || draft.status !== "درجة"}
-                        value={draft.status === "درجة" ? draft.score : ""}
+                        value={!leave && draft.status === "درجة" ? draft.score : ""}
                         onChange={(e) => {
                           const nextScore = normalizeGradeScoreInput(e.target.value, selectedExam.fullMark);
                           if (nextScore !== toLatinDigits(e.target.value).trim()) {
@@ -372,12 +393,12 @@ export function GradeEntryView() {
                           </Badge>
                         )}
                         <Badge variant={savedRows[student.id] ? "default" : "outline"} className="text-[10px]">
-                          {isSaving ? "جاري الحفظ" : savedRows[student.id] ? `تم ${savedRows[student.id]}` : entered ? "محفوظ" : "غير مدخل"}
+                          {isSaving ? "جاري الحفظ" : leave ? "الطالب مجاز" : savedRows[student.id] ? `تم ${savedRows[student.id]}` : entered ? "محفوظ" : "غير مدخل"}
                         </Badge>
                         {rowLocked ? (
                           <Button size="sm" variant="secondary" disabled={!canEdit} onClick={() => setEditableRows((prev) => ({ ...prev, [student.id]: true }))}>تعديل</Button>
                         ) : (
-                          <Button size="sm" onClick={() => void saveGrade(student.id)} disabled={!canEdit || isSaving}>{isSaving ? "حفظ..." : "حفظ"}</Button>
+                          <Button size="sm" onClick={() => void saveGrade(student.id)} disabled={Boolean(leave) || !canEdit || isSaving}>{isSaving ? "حفظ..." : "حفظ"}</Button>
                         )}
                       </div>
                     </div>
