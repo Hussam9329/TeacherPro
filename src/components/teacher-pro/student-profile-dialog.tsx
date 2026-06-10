@@ -103,7 +103,7 @@ export function StudentProfileDialog({
               <div className="min-w-0 space-y-2">
                 <DialogTitle className="text-xl font-black sm:text-2xl">ملف الطالب</DialogTitle>
                 <DialogDescription className="max-w-3xl text-xs leading-6 sm:text-sm">
-                  ملف مرن يجمع بيانات الطالب، الدرجات، الامتحانات، الفرص، والغيابات بطريقة مناسبة للابتوب والتابلت والآيباد.
+                  {student.name}
                 </DialogDescription>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Badge variant={student.status === "نشط" ? "default" : "destructive"}>{student.status}</Badge>
