@@ -567,7 +567,7 @@ interface TeacherState {
   addGrade: (grade: Omit<Grade, 'id' | 'createdAt' | 'updatedAt' | 'academicAccountingChecked'> & { academicAccountingChecked?: boolean }) => void;
   updateGrade: (id: string, updates: Partial<Grade>) => void;
   deleteGrade: (id: string) => boolean;
-  recalculateAcademicEffects: () => void;
+  recalculateAcademicEffects: (studentIds?: string | string[]) => void;
 
   adjustOpportunities: (studentId: string, amount: number, reason: string) => void;
   resetOpportunities: (studentId: string) => void;
@@ -887,7 +887,14 @@ function automaticOpportunityLogId(studentId: string, examId: string, action: st
   return `auto_${studentId}_${examId}_${slug}`;
 }
 
-function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'students' | 'grades' | 'exams' | 'courseChapters' | 'chapters' | 'opportunityLogs' | 'studentLeaves'>): { students: Student[]; opportunityLogs: OpportunityLog[] } {
+function isReactivationOpportunityLog(log: OpportunityLog): boolean {
+  return log.action === 'إعادة تفعيل' || String(log.reason || '').includes('تثبيت إعادة التفعيل');
+}
+
+function recalculateStudentsFromAcademicRules(
+  state: Pick<TeacherState, 'students' | 'grades' | 'exams' | 'courseChapters' | 'chapters' | 'opportunityLogs' | 'studentLeaves'>,
+  targetStudentIds?: Set<string>,
+): { students: Student[]; opportunityLogs: OpportunityLog[] } {
   const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
   const activeCourseChapterByCourse = new Map(
     state.courseChapters
@@ -895,12 +902,23 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
       .map((link) => [link.courseId, link]),
   );
   const manualLogs = state.opportunityLogs.filter((log) => !isAutomaticOpportunityLog(log));
+  const previousAutomaticLogs = state.opportunityLogs.filter(isAutomaticOpportunityLog);
+  const hasScopedRecalculation = Boolean(targetStudentIds?.size);
   const automaticLogs: OpportunityLog[] = [];
   const leaveKeys = new Set((state.studentLeaves || []).map((leave) => `${leave.studentId}:${leave.examId}`));
 
   const students = state.students.map((student) => {
+    const isTargetStudent = !hasScopedRecalculation || targetStudentIds?.has(student.id);
+    if (!isTargetStudent) return student;
+
     const manualDismissal = student.status === 'مفصول' && !isRuleManagedDismissal(student);
     if (manualDismissal) return student;
+
+    // إذا تمت إعادة تفعيل الطالب يدوياً، لا نعيد فصله بسبب درجات/غيابات قديمة
+    // عند تحميل البيانات أو عند إعادة احتساب جماعي. أما تعديل درجة الطالب نفسه
+    // فيُعاد احتسابه بصورة مستهدفة حتى يتأثر هو فقط بالتغيير الجديد.
+    const hasManualReactivation = student.status === 'نشط' && manualLogs.some((log) => log.studentId === student.id && isReactivationOpportunityLog(log));
+    if (!hasScopedRecalculation && hasManualReactivation) return student;
 
     const activeCourseChapter = activeCourseChapterByCourse.get(student.courseId);
     const activeChapter = activeCourseChapter ? state.chapters.find((chapter) => chapter.id === activeCourseChapter.chapterId) : null;
@@ -1028,7 +1046,11 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
     };
   });
 
-  return { students, opportunityLogs: [...automaticLogs, ...manualLogs] };
+  const keptAutomaticLogs = hasScopedRecalculation
+    ? previousAutomaticLogs.filter((log) => !targetStudentIds?.has(log.studentId))
+    : [];
+
+  return { students, opportunityLogs: [...automaticLogs, ...keptAutomaticLogs, ...manualLogs] };
 }
 
 function syncToServer(getState: () => TeacherState, action: () => unknown): void {
@@ -1688,6 +1710,18 @@ export const useTeacherStore = create<TeacherState>()(
           studentBefore?.dismissalType === 'فصل مؤقت' &&
           String(studentBefore.dismissalReason || '').includes('انتهاء الفرص'),
         );
+        const reactivationLog: OpportunityLog | null = studentBefore
+          ? {
+              id: uid('ol'),
+              studentId,
+              examId: '',
+              action: 'إعادة تفعيل',
+              amount: 0,
+              reason: 'تثبيت إعادة التفعيل: لا يعاد فصل الطالب بسبب سجلات قديمة إلا عند تعديل درجته هو',
+              date: todayISO(),
+              chapterId: stateBefore.activeChapterForCourse(studentBefore.courseId)?.id || '',
+            }
+          : null;
         const finalChanceLog: OpportunityLog | null = shouldGrantFinalChance && studentBefore
           ? {
               id: uid('ol'),
@@ -1704,10 +1738,11 @@ export const useTeacherStore = create<TeacherState>()(
           students: s.students.map((st) => st.id === studentId
             ? { ...st, status: 'نشط' as const, dismissalType: '', dismissalReason: '', dismissalNotes: '', opportunities: shouldGrantFinalChance ? 1 : st.opportunities }
             : st),
-          opportunityLogs: finalChanceLog ? [finalChanceLog, ...s.opportunityLogs] : s.opportunityLogs,
+          opportunityLogs: ([reactivationLog, finalChanceLog].filter(Boolean) as OpportunityLog[]).concat(s.opportunityLogs),
         }));
         get().logAction('الطلاب', shouldGrantFinalChance ? 'إعادة تفعيل بتعهد وفرصة أخيرة' : 'إعادة تفعيل طالب', get().studentName(studentId));
         syncToServer(get, () => studentApi.update(studentId, { status: 'نشط', dismissalType: '', dismissalReason: '', dismissalNotes: '', ...(shouldGrantFinalChance ? { opportunities: 1 } : {}) }));
+        if (reactivationLog) syncToServer(get, () => opportunityLogApi.add(reactivationLog as unknown as Record<string, unknown>));
         if (finalChanceLog) syncToServer(get, () => opportunityLogApi.add(finalChanceLog as unknown as Record<string, unknown>));
       },
 
@@ -1773,13 +1808,15 @@ export const useTeacherStore = create<TeacherState>()(
         set((s) => ({ grades: existing ? s.grades.map((g) => g.id === existing.id ? grade : g) : [...s.grades, grade] }));
         get().logAction('الدرجات', existing ? 'تعديل درجة' : 'إدخال درجة', `${get().studentName(grade.studentId)} - ${stateBefore.exams.find((e) => e.id === grade.examId)?.name || ''}`);
         syncToServer(get, () => gradeApi.add(grade as unknown as Record<string, unknown>));
-        get().recalculateAcademicEffects();
+        get().recalculateAcademicEffects(grade.studentId);
       },
       updateGrade: (id, updates) => {
+        const existingGrade = get().grades.find((g) => g.id === id);
+        const affectedStudentIds = [existingGrade?.studentId, updates.studentId].filter(Boolean) as string[];
         set((s) => ({ grades: s.grades.map((g) => g.id === id ? { ...g, ...updates, updatedAt: todayISO() } : g) }));
         get().logAction('الدرجات', 'تعديل مباشر للدرجة', id);
         syncToServer(get, () => gradeApi.update(id, updates as Record<string, unknown>));
-        get().recalculateAcademicEffects();
+        if (affectedStudentIds.length > 0) get().recalculateAcademicEffects(affectedStudentIds);
       },
       deleteGrade: (id) => {
         const grade = get().grades.find((g) => g.id === id);
@@ -1787,12 +1824,17 @@ export const useTeacherStore = create<TeacherState>()(
         set((s) => ({ grades: s.grades.filter((g) => g.id !== id) }));
         get().logAction('الدرجات', 'حذف درجة', `${get().studentName(grade.studentId)} - ${get().exams.find((e) => e.id === grade.examId)?.name || ''}`);
         syncToServer(get, () => gradeApi.remove(id));
-        get().recalculateAcademicEffects();
+        get().recalculateAcademicEffects(grade.studentId);
         return true;
       },
-      recalculateAcademicEffects: () => {
+      recalculateAcademicEffects: (studentIds) => {
         const before = get();
-        const recalculated = recalculateStudentsFromAcademicRules(before);
+        const targetStudentIds = Array.isArray(studentIds)
+          ? new Set(studentIds.filter(Boolean))
+          : studentIds
+            ? new Set([studentIds])
+            : undefined;
+        const recalculated = recalculateStudentsFromAcademicRules(before, targetStudentIds);
         const oldAutomaticLogs = before.opportunityLogs.filter(isAutomaticOpportunityLog);
         set({ students: recalculated.students, opportunityLogs: recalculated.opportunityLogs });
         recalculated.students.forEach((student) => {
@@ -1843,12 +1885,13 @@ export const useTeacherStore = create<TeacherState>()(
         const leave: StudentLeave = { ...leaveData, id: uid('lv') };
         set((s) => ({ studentLeaves: [leave, ...s.studentLeaves.filter((item) => !(item.studentId === leave.studentId && item.examId === leave.examId))] }));
         get().logAction('المتابعة', 'إضافة إجازة', `${get().studentName(leave.studentId)} - ${leave.reason}`);
-        get().recalculateAcademicEffects();
+        get().recalculateAcademicEffects(leave.studentId);
       },
       deleteStudentLeave: (id) => {
+        const deletedLeave = get().studentLeaves.find((leave) => leave.id === id);
         set((s) => ({ studentLeaves: s.studentLeaves.filter((leave) => leave.id !== id) }));
         get().logAction('المتابعة', 'حذف إجازة', id);
-        get().recalculateAcademicEffects();
+        if (deletedLeave) get().recalculateAcademicEffects(deletedLeave.studentId);
       },
       addStudentCall: (callData) => {
         const call: StudentCall = { ...callData, id: uid('call'), createdAt: todayISO() };

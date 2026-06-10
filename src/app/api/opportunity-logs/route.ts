@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
     if (actionError) return validationError(actionError);
     const action = String(body.action ?? '');
     const amount = Number(body.amount || 0);
-    if (!Number.isFinite(amount) || (amount <= 0 && action !== 'فصل تلقائي')) return validationError('عدد الفرص يجب أن يكون رقماً أكبر من صفر');
+    const allowsZeroAmount = action === 'فصل تلقائي' || action === 'إعادة تفعيل';
+    if (!Number.isFinite(amount) || amount < 0 || (amount === 0 && !allowsZeroAmount)) return validationError('عدد الفرص يجب أن يكون رقماً أكبر من صفر');
     const data = {
       action,
       amount,
