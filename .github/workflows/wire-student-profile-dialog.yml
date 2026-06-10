@@ -1,0 +1,61 @@
+name: Wire student profile dialog
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/wire-student-profile-dialog.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wire professional student profile dialog
+        run: |
+          node <<'NODE'
+          const fs = require('fs')
+          const file = 'src/components/teacher-pro/student-registry.tsx'
+          let s = fs.readFileSync(file, 'utf8')
+
+          function replaceOnce(from, to, label) {
+            if (s.includes(to)) {
+              console.log('skip ' + label)
+              return
+            }
+            if (!s.includes(from)) throw new Error('missing ' + label)
+            s = s.replace(from, to)
+            console.log('applied ' + label)
+          }
+
+          replaceOnce(
+            `import { EmptyState } from "./ui-kit";\nimport { CustomFilterPresets, type FilterPresetValues } from "./custom-filter-presets";`,
+            `import { EmptyState } from "./ui-kit";\nimport { StudentProfileDialog } from "./student-profile-dialog";\nimport { CustomFilterPresets, type FilterPresetValues } from "./custom-filter-presets";`,
+            'profile import'
+          )
+
+          const oldDialogStart = s.indexOf(`      <Dialog\n        open={fileDialog.open}\n        onOpenChange={(o) => setFileDialog({ ...fileDialog, open: o })}`)
+          const oldDialogEnd = s.indexOf(`\n      <AlertDialog\n        open={deleteDialog.open}`, oldDialogStart)
+          if (oldDialogStart === -1 || oldDialogEnd === -1) throw new Error('profile dialog block not found')
+          const newDialog = `      <StudentProfileDialog\n        student={fileDialog.student}\n        open={fileDialog.open}\n        onOpenChange={(open) => setFileDialog((prev) => ({ ...prev, open }))}\n        exams={exams}\n        grades={grades}\n        opportunityLogs={opportunityLogs}\n        courseName={courseName}\n        activeChapterForCourse={activeChapterForCourse}\n        whatsappLink={whatsappLink}\n        telegramLink={telegramLink}\n        isStudentCurrentlyInGrace={isStudentCurrentlyInGrace}\n        graceEndDate={graceEndDate}\n      />\n`
+          s = s.slice(0, oldDialogStart) + newDialog + s.slice(oldDialogEnd)
+          fs.writeFileSync(file, s)
+          NODE
+      - name: Commit and cleanup
+        run: |
+          rm -f .github/workflows/wire-student-profile-dialog.yml .github/workflows/improve-student-profile-dialog.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/teacher-pro/student-registry.tsx .github/workflows/wire-student-profile-dialog.yml .github/workflows/improve-student-profile-dialog.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Wire professional student profile dialog"
+          git push
