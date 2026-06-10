@@ -1957,19 +1957,6 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => roleApi.remove(id));
         return true;
       },
-
-        const report: WhatsAppReport = { id: uid('wa'), command, recipient, time: nowText(), total: students.length, delivered: [] as string[], failed: [] as string[] };
-        const queue: WhatsAppMessage[] = [];
-        students.forEach((s, idx) => {
-          const phone = recipient === 'الطالب' ? s.phone : s.parentPhone;
-          const personalized = message.replaceAll('{name}', s.name).replaceAll('{code}', s.code).replaceAll('{opportunities}', String(s.opportunities));
-          queue.push({ id: uid('msg'), studentId: s.id, phone, message: personalized, command, status: phone ? 'مجدول' : 'فشل', batch: Math.floor(idx / 200) + 1, cooldownMinutes: Math.floor(idx / 200) * 30, updatedAt: nowText(), lastError: phone ? '' : 'لا يوجد رقم هاتف' });
-          if (phone) report.delivered.push(phone); else report.failed.push(s.name);
-        });
-        get().logAction('واتساب', 'جدولة رسائل', `${students.length} رسالة - ${recipient}`);
-      },
-        get().logAction('واتساب', 'تحديث حالة رسالة', `${id} - ${status}`);
-      },
       exportBackup: () => {
         const state = get();
         const backup = DATA_KEYS.reduce((acc, key) => ({ ...acc, [key]: state[key as keyof TeacherState] }), {} as Record<string, unknown>);

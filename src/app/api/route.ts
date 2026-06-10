@@ -1,3 +1,6 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 
 export async function GET() {
@@ -11,7 +14,6 @@ export async function GET() {
       '/api/grades',
       '/api/logs',
       '/api/backup',
-      '/api/whatsapp/send',
     ],
   });
 }

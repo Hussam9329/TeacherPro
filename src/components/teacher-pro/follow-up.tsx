@@ -147,7 +147,7 @@ export function FollowUpView() {
   const getGrade = (studentId: string, examId: string) => grades.find((grade) => grade.studentId === studentId && grade.examId === examId);
 
   const buildCallRowsForExam = (exam: Exam): CallRow[] => {
-    return eligibleStudentsForExam(exam).flatMap((student) => {
+    return eligibleStudentsForExam(exam).flatMap<CallRow>((student) => {
       if (studentHasLeaveForExam(student.id, exam.id)) return [];
       const grade = getGrade(student.id, exam.id);
       const entered = isGradeEntered(grade, exam);

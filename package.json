@@ -4,13 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
-    "build": "DATABASE_URL=${DATABASE_URL:-postgresql://user:password@localhost:5432/db} prisma generate && next build && if [ -d .next/standalone ]; then mkdir -p .next/standalone/.next && cp -r .next/static .next/standalone/.next/ && if [ -d public ]; then cp -r public .next/standalone/; fi; fi",
-    "postinstall": "DATABASE_URL=${DATABASE_URL:-postgresql://user:password@localhost:5432/db} prisma generate || true",
-    "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
+    "build": "DATABASE_URL=${DATABASE_URL:-postgresql://user:password@localhost:5432/db} prisma generate && next build",
+    "postinstall": "DATABASE_URL=${DATABASE_URL:-postgresql://user:password@localhost:5432/db} prisma generate",
+    "start": "NODE_ENV=production node .next/standalone/server.js",
     "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev"
+    "db:migrate": "prisma migrate dev",
+    "vercel-build": "DATABASE_URL=${DATABASE_URL:-postgresql://user:password@localhost:5432/db} prisma generate && next build",
+    "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@prisma/client": "^6.11.1",
@@ -68,5 +70,8 @@
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20.19.0 <23"
   }
 }
