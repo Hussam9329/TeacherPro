@@ -829,6 +829,7 @@ function isRuleManagedDismissal(student: Student): boolean {
   const reason = student.dismissalReason || '';
   return [
     'غياب امتحان',
+    'غياب ضمن درجة الفصل',
     'أول حالة غش',
     'غش متكرر',
     'درجة فصل',
@@ -939,13 +940,24 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
       });
     };
 
+    const consumeAllRemainingOpportunities = (exam: Exam, reason: string) => {
+      const deducted = Math.max(0, Math.trunc(opportunities));
+      if (deducted > 0) {
+        addAutomaticLog(exam, 'خصم تلقائي', deducted, `${reason} - خصم جميع الفرص بسبب الفصل`);
+      }
+      opportunities = 0;
+    };
+
     const setDismissal = (type: string, reason: string, priority: number, exam?: Exam) => {
       if (priority >= dismissalPriority) {
         dismissalType = type;
         dismissalReason = reason;
         dismissalPriority = priority;
       }
-      if (exam) addAutomaticLog(exam, 'فصل تلقائي', 0, reason);
+      if (exam) {
+        consumeAllRemainingOpportunities(exam, reason);
+        addAutomaticLog(exam, 'فصل تلقائي', 0, reason);
+      }
     };
 
     for (const grade of studentGrades) {
@@ -1643,9 +1655,31 @@ export const useTeacherStore = create<TeacherState>()(
         return true;
       },
       dismissStudent: (studentId, type, reason, notes = '') => {
-        set((s) => ({ students: s.students.map((st) => st.id === studentId ? { ...st, status: 'مفصول' as const, dismissalType: type, dismissalReason: reason, dismissalNotes: notes } : st) }));
+        const stateBefore = get();
+        const studentBefore = stateBefore.students.find((student) => student.id === studentId);
+        const deductedOpportunities = Math.max(0, Math.trunc(Number(studentBefore?.opportunities || 0)));
+        const deductionLog: OpportunityLog | null = deductedOpportunities > 0
+          ? {
+              id: uid('ol'),
+              studentId,
+              examId: '',
+              action: 'خصم',
+              amount: deductedOpportunities,
+              reason: `فصل الطالب: ${reason}`,
+              date: todayISO(),
+              chapterId: stateBefore.activeChapterForCourse(studentBefore?.courseId || '')?.id || '',
+            }
+          : null;
+
+        set((s) => ({
+          students: s.students.map((st) => st.id === studentId
+            ? { ...st, status: 'مفصول' as const, dismissalType: type, dismissalReason: reason, dismissalNotes: notes, opportunities: 0 }
+            : st),
+          opportunityLogs: deductionLog ? [deductionLog, ...s.opportunityLogs] : s.opportunityLogs,
+        }));
         get().logAction('الطلاب', `فصل الطالب (${type})`, `${get().studentName(studentId)} - ${reason}`);
-        syncToServer(get, () => studentApi.update(studentId, { status: 'مفصول', dismissalType: type, dismissalReason: reason, dismissalNotes: notes }));
+        syncToServer(get, () => studentApi.update(studentId, { status: 'مفصول', dismissalType: type, dismissalReason: reason, dismissalNotes: notes, opportunities: 0 }));
+        if (deductionLog) syncToServer(get, () => opportunityLogApi.add(deductionLog as unknown as Record<string, unknown>));
       },
       reactivateStudent: (studentId) => {
         const stateBefore = get();
