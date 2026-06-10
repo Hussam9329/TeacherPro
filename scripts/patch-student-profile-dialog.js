@@ -54,7 +54,11 @@ patchFile('src/components/teacher-pro/student-registry.tsx', (input) => {
   }
 
   if (source.includes('<StudentProfileDialog')) {
-    source = source.replace(/import \{\n  Dialog,\n  DialogContent,\n  DialogHeader,\n  DialogTitle,\n  DialogFooter,\n  DialogDescription,\n\} from "@\/components\/ui\/dialog";\n/g, '');
+    // Keep Dialog primitives used by edit/dismiss dialogs; remove only no-longer-used DialogDescription.
+    source = source.replace(
+      /import \{\n  Dialog,\n  DialogContent,\n  DialogHeader,\n  DialogTitle,\n  DialogFooter,\n  DialogDescription,\n\} from "@\/components\/ui\/dialog";\n/g,
+      'import {\n  Dialog,\n  DialogContent,\n  DialogHeader,\n  DialogTitle,\n  DialogFooter,\n} from "@/components/ui/dialog";\n',
+    );
     source = source.replace(/import \{ Separator \} from "@\/components\/ui\/separator";\n/g, '');
   }
 
