@@ -11,7 +11,7 @@
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "vercel-build": "DATABASE_URL=${DATABASE_URL:-postgresql://user:password@localhost:5432/db} prisma generate && next build",
+    "vercel-build": "DATABASE_URL=${DATABASE_URL:-postgresql://user:password@localhost:5432/db} prisma generate && if [ -n \"$DATABASE_URL\" ]; then prisma migrate deploy; else echo \"Skipping prisma migrate deploy: DATABASE_URL is not set\"; fi && next build",
     "db:deploy": "prisma migrate deploy"
   },
   "dependencies": {

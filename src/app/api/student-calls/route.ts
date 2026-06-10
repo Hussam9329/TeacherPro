@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
-import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { findManyOrEmpty, requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 
 function dateOrNull(value: unknown): Date | null {
   if (!value) return null;
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const studentCalls = await db.studentCall.findMany({ orderBy: { createdAt: 'desc' } });
+    const studentCalls = await findManyOrEmpty(db.studentCall.findMany({ orderBy: { createdAt: 'desc' } }), 'StudentCall');
     return NextResponse.json({ studentCalls });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل المكالمات حالياً.');

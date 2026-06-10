@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
-import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { findManyOrEmpty, requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 
 function dateOrNow(value: unknown): Date {
   const date = value ? new Date(String(value)) : new Date();
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const studentLeaves = await db.studentLeave.findMany({ orderBy: { date: 'desc' } });
+    const studentLeaves = await findManyOrEmpty(db.studentLeave.findMany({ orderBy: { date: 'desc' } }), 'StudentLeave');
     return NextResponse.json({ studentLeaves });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل الإجازات حالياً.');
