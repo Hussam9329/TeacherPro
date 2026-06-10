@@ -20,7 +20,7 @@ if (!source.includes('import { StudentProfileDialog } from "./student-profile-di
 
 if (!source.includes('<StudentProfileDialog')) {
   const start = source.indexOf('      <Dialog\n        open={fileDialog.open}\n        onOpenChange={(o) => setFileDialog({ ...fileDialog, open: o })}');
-  const endMarker = '\n    </div>\n  );\n}';
+  const endMarker = '\n      <AlertDialog\n        open={deleteDialog.open}';
   const end = source.indexOf(endMarker, start);
   if (start === -1 || end === -1) {
     throw new Error('[student-profile-patch] old student file dialog block not found');
@@ -39,7 +39,8 @@ if (!source.includes('<StudentProfileDialog')) {
         telegramLink={telegramLink}
         isStudentCurrentlyInGrace={isStudentCurrentlyInGrace}
         graceEndDate={graceEndDate}
-      />`;
+      />
+`;
 
   source = source.slice(0, start) + replacement + source.slice(end);
   changed = true;
