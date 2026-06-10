@@ -15,7 +15,7 @@ type StudentProfileDialogProps = {
   grades: Grade[];
   opportunityLogs: OpportunityLog[];
   courseName: (courseId: string) => string;
-  activeChapterForCourse: (courseId: string) => { name: string } | undefined;
+  activeChapterForCourse: (courseId: string) => { name: string } | null | undefined;
   whatsappLink: (phone: string) => string;
   telegramLink: (telegram: string) => string;
   isStudentCurrentlyInGrace: (student: Student) => boolean;
