@@ -1,0 +1,438 @@
+name: Improve student profile dialog
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/improve-student-profile-dialog.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch student registry profile dialog
+        run: |
+          node <<'NODE'
+          const fs = require('fs')
+          const file = 'src/components/teacher-pro/student-registry.tsx'
+          let s = fs.readFileSync(file, 'utf8')
+
+          function replaceOnce(from, to, label) {
+            if (s.includes(to)) {
+              console.log('skip ' + label)
+              return
+            }
+            if (!s.includes(from)) throw new Error('missing ' + label)
+            s = s.replace(from, to)
+            console.log('applied ' + label)
+          }
+
+          replaceOnce(
+            `type RegistryViewMode = "cards" | "table";`,
+            `type RegistryViewMode = "cards" | "table";\ntype StudentFileTab = "grades" | "exams" | "opportunities" | "details";`,
+            'student file tab type'
+          )
+
+          replaceOnce(
+            `  const [fileDialog, setFileDialog] = useState<{\n    student: Student | null;\n    open: boolean;\n  }>({ student: null, open: false });`,
+            `  const [fileDialog, setFileDialog] = useState<{\n    student: Student | null;\n    open: boolean;\n  }>({ student: null, open: false });\n  const [studentFileTab, setStudentFileTab] = useState<StudentFileTab>("details");`,
+            'student file tab state'
+          )
+
+          // Reset tab to details when opening profile from cards/table
+          s = s.replaceAll(`onClick={() => setFileDialog({ student, open: true })}`, `onClick={() => { setStudentFileTab("details"); setFileDialog({ student, open: true }); }}`)
+          s = s.replaceAll(`onClick={() => setFileDialog({ student, open: true })}>ملف</Button>`, `onClick={() => { setStudentFileTab("details"); setFileDialog({ student, open: true }); }}>ملف</Button>`)
+
+          const oldDialog = `      <Dialog
+        open={fileDialog.open}
+        onOpenChange={(o) => setFileDialog({ ...fileDialog, open: o })}
+      >
+        <DialogContent
+          dir="rtl"
+          className="max-w-2xl max-h-[80vh] overflow-y-auto"
+        >
+          <DialogHeader>
+            <DialogTitle>ملف الطالب - {fileDialog.student?.name}</DialogTitle>
+          </DialogHeader>
+          {fileDialog.student && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                <StudentFileItem label="اسم الطالب">
+                  {fileDialog.student.name}
+                </StudentFileItem>
+                <StudentFileItem label="الكود">
+                  {fileDialog.student.code}
+                </StudentFileItem>
+                <StudentFileItem label="الجنس">
+                  {fileDialog.student.gender}
+                </StudentFileItem>
+                <StudentFileItem label="المدرسة">
+                  {fileDialog.student.school || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="رقم الطالب">
+                  <ContactLink href={whatsappLink(fileDialog.student.phone)}>
+                    {fileDialog.student.phone}
+                  </ContactLink>
+                </StudentFileItem>
+                <StudentFileItem label="رقم ولي الأمر">
+                  <ContactLink
+                    href={whatsappLink(fileDialog.student.parentPhone)}
+                  >
+                    {fileDialog.student.parentPhone}
+                  </ContactLink>
+                </StudentFileItem>
+                <StudentFileItem label="معرف التليكرام">
+                  {fileDialog.student.telegram ? (
+                    <ContactLink
+                      href={telegramLink(fileDialog.student.telegram)}
+                    >
+                      {fileDialog.student.telegram}
+                    </ContactLink>
+                  ) : (
+                    "-"
+                  )}
+                </StudentFileItem>
+                <StudentFileItem label="الدورة">
+                  {courseName(fileDialog.student.courseId)}
+                </StudentFileItem>
+                <StudentFileItem label="نوع الدورة">
+                  {fileDialog.student.courseProgram || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="الكورس">
+                  {fileDialog.student.courseTerm || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="نوع الدراسة">
+                  {fileDialog.student.studyType || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="نطاق الموقع">
+                  {fileDialog.student.locationScope || fileDialog.student.mainSite || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="وضع بغداد">
+                  {fileDialog.student.baghdadMode || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="الموقع الفرعي">
+                  {fileDialog.student.subSite || "-"}
+                </StudentFileItem>
+                <StudentFileItem label="الموقع الكامل">
+                  {\`${fileDialog.student.locationScope || fileDialog.student.mainSite || "-"} - ${fileDialog.student.subSite || "-"}\`}
+                </StudentFileItem>
+                <StudentFileItem label="الفصل النشط">
+                  {activeChapterForCourse(fileDialog.student.courseId)?.name || "لم يتم اختيار الفصل لهم بعد"}
+                </StudentFileItem>
+                <StudentFileItem label="الفرص">
+                  {activeChapterForCourse(fileDialog.student.courseId) ? (
+                    <>
+                      {fileDialog.student.opportunities} / {fileDialog.student.baseOpportunities}
+                    </>
+                  ) : (
+                    "0 / 0 - لم يتم اختيار الفصل لهم بعد"
+                  )}
+                </StudentFileItem>
+                <StudentFileItem label="الحالة">
+                  <Badge
+                    variant={
+                      fileDialog.student.status === "نشط"
+                        ? "default"
+                        : "destructive"
+                    }
+                  >
+                    {fileDialog.student.status}
+                  </Badge>
+                </StudentFileItem>
+                {fileDialog.student.status === "مفصول" && (
+                  <>
+                    <StudentFileItem label="نوع الفصل">
+                      {fileDialog.student.dismissalType || "-"}
+                    </StudentFileItem>
+                    <StudentFileItem label="سبب الفصل" className="sm:col-span-2">
+                      {fileDialog.student.dismissalReason || "-"}
+                    </StudentFileItem>
+                    <StudentFileItem label="ملاحظات الفصل" className="sm:col-span-2">
+                      {fileDialog.student.dismissalNotes || "-"}
+                    </StudentFileItem>
+                  </>
+                )}
+                <StudentFileItem label="تاريخ التسجيل / بداية السماح">
+                  {fileDialog.student.createdAt}
+                </StudentFileItem>
+                <StudentFileItem label="حالة المحاسبة" className="sm:col-span-2">
+                  <span className={\`inline-flex items-center gap-2 rounded-xl border px-3 py-1 text-sm ${isStudentCurrentlyInGrace(fileDialog.student) ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100" : "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100"}\`}>
+                    <span>{isStudentCurrentlyInGrace(fileDialog.student) ? "⚠️ ضمن أيام السماح" : "✓ المحاسبة فعّالة"}</span>
+                    <span>({fileDialog.student.accountingGraceDays ?? 0} يوم - تنتهي في {graceEndDate(fileDialog.student)})</span>
+                  </span>
+                </StudentFileItem>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h4 className="font-semibold mb-2">الدرجات الأخيرة</h4>
+                <div className="space-y-1">
+                  {studentGrades(fileDialog.student.id).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      لا توجد درجات
+                    </p>
+                  ) : (
+                    studentGrades(fileDialog.student.id)
+                      .slice(0, 5)
+                      .map((g) => {
+                        const exam = exams.find((e) => e.id === g.examId);
+                        return (
+                          <div
+                            key={g.id}
+                            className="flex items-center justify-between text-sm p-2 rounded-xl bg-muted/60"
+                          >
+                            <span>{exam?.name || "غير محدد"}</span>
+                            <Badge
+                              variant={
+                                g.status === "درجة" ? "default" : "secondary"
+                              }
+                            >
+                              {g.status}
+                            </Badge>
+                            {g.score !== null && (
+                              <span>
+                                {g.score}/{exam?.fullMark || 100}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div>
+                <h4 className="font-semibold mb-2">سجل الفرص</h4>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {studentOppLogs(fileDialog.student.id).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      لا توجد حركات
+                    </p>
+                  ) : (
+                    studentOppLogs(fileDialog.student.id)
+                      .slice(0, 10)
+                      .map((l) => (
+                        <div
+                          key={l.id}
+                          className="flex items-center justify-between text-xs p-2 rounded-xl bg-muted/60"
+                        >
+                          <span>{l.date}</span>
+                          <Badge
+                            variant={
+                              l.action === "خصم" ? "destructive" : "default"
+                            }
+                          >
+                            {l.action} {l.amount}
+                          </Badge>
+                          <span className="text-muted-foreground">
+                            {l.reason}
+                          </span>
+                        </div>
+                      ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>`
+
+          const newDialog = `      <Dialog
+        open={fileDialog.open}
+        onOpenChange={(o) => setFileDialog({ ...fileDialog, open: o })}
+      >
+        <DialogContent
+          dir="rtl"
+          className="max-w-5xl max-h-[88vh] overflow-y-auto p-0"
+        >
+          {fileDialog.student && (() => {
+            const student = fileDialog.student;
+            const gradesForStudent = studentGrades(student.id);
+            const opportunityRows = studentOppLogs(student.id);
+            const examRows = gradesForStudent
+              .map((grade) => ({ grade, exam: exams.find((exam) => exam.id === grade.examId) }))
+              .filter((row) => row.exam);
+            const examCount = new Set(gradesForStudent.map((grade) => grade.examId)).size;
+            const absentCount = gradesForStudent.filter((grade) => grade.status === "غائب").length;
+            const successCount = gradesForStudent.filter((grade) => {
+              const exam = exams.find((item) => item.id === grade.examId);
+              return grade.status === "درجة" && grade.score !== null && exam && Number(grade.score) >= Number(exam.passMark);
+            }).length;
+            const failedCount = gradesForStudent.filter((grade) => {
+              const exam = exams.find((item) => item.id === grade.examId);
+              return grade.status === "درجة" && grade.score !== null && exam && Number(grade.score) < Number(exam.passMark);
+            }).length;
+            const currentChapter = activeChapterForCourse(student.courseId);
+            const hasActiveChapter = Boolean(currentChapter);
+            const opportunityText = hasActiveChapter ? \`${student.opportunities} / ${student.baseOpportunities}\` : "0 / 0";
+            const fileTabs: { id: StudentFileTab; label: string; value: string | number; hint: string }[] = [
+              { id: "grades", label: "الدرجات", value: gradesForStudent.length, hint: "عرض كل درجات الطالب" },
+              { id: "exams", label: "الامتحانات", value: examCount, hint: "عدد الامتحانات المسجلة" },
+              { id: "opportunities", label: "الفرص", value: opportunityText, hint: "المتبقي / الأساسي" },
+              { id: "details", label: "التفاصيل والغيابات", value: absentCount, hint: "عدد الغيابات" },
+            ];
+
+            return (
+              <div className="overflow-hidden">
+                <DialogHeader className="border-b bg-gradient-to-l from-primary/12 via-purple-500/8 to-background p-6">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="space-y-2">
+                      <DialogTitle className="text-2xl font-black">ملف الطالب</DialogTitle>
+                      <DialogDescription className="text-sm leading-6">
+                        ملف احترافي يجمع بيانات الطالب، الدرجات، الامتحانات، الفرص، والغيابات في مكان واحد.
+                      </DialogDescription>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={student.status === "نشط" ? "default" : "destructive"}>{student.status}</Badge>
+                        <Badge variant="outline">{student.code}</Badge>
+                        <Badge variant="secondary">{courseName(student.courseId)}</Badge>
+                      </div>
+                    </div>
+                    <div className="rounded-3xl border bg-card/85 p-4 text-left shadow-sm lg:min-w-72">
+                      <p className="text-xs text-muted-foreground">اسم الطالب</p>
+                      <p className="text-xl font-black text-foreground">{student.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{student.school || "بدون مدرسة"}</p>
+                    </div>
+                  </div>
+                </DialogHeader>
+
+                <div className="space-y-5 p-6">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                    {fileTabs.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setStudentFileTab(item.id)}
+                        className={\`rounded-3xl border p-4 text-right shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
+                          studentFileTab === item.id
+                            ? "border-primary/45 bg-primary/10 text-primary"
+                            : "bg-card/80 hover:border-primary/25"
+                        }\`}
+                      >
+                        <p className="text-xs font-bold text-muted-foreground">{item.label}</p>
+                        <p className="mt-2 text-2xl font-black">{item.value}</p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">{item.hint}</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {studentFileTab === "details" && (
+                    <div className="space-y-4">
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-3xl border bg-card/80 p-4"><p className="text-xs text-muted-foreground">رقم الطالب</p><p className="font-bold"><ContactLink href={whatsappLink(student.phone)}>{student.phone}</ContactLink></p></div>
+                        <div className="rounded-3xl border bg-card/80 p-4"><p className="text-xs text-muted-foreground">رقم ولي الأمر</p><p className="font-bold"><ContactLink href={whatsappLink(student.parentPhone)}>{student.parentPhone}</ContactLink></p></div>
+                        <div className="rounded-3xl border bg-card/80 p-4"><p className="text-xs text-muted-foreground">التليكرام</p><p className="font-bold">{student.telegram ? <ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink> : "—"}</p></div>
+                        <div className="rounded-3xl border bg-card/80 p-4"><p className="text-xs text-muted-foreground">نوع الدراسة</p><p className="font-bold">{student.studyType || "—"}</p></div>
+                      </div>
+
+                      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+                        <div className="rounded-3xl border bg-card/80 p-5">
+                          <h4 className="mb-4 text-lg font-black">المعلومات العامة</h4>
+                          <div className="grid gap-3 text-sm md:grid-cols-2">
+                            <StudentFileItem label="الجنس">{student.gender}</StudentFileItem>
+                            <StudentFileItem label="نوع الدورة">{student.courseProgram || "—"}</StudentFileItem>
+                            <StudentFileItem label="الكورس">{student.courseTerm || "—"}</StudentFileItem>
+                            <StudentFileItem label="الموقع الكامل">{\`${student.locationScope || student.mainSite || "-"} - ${student.subSite || "-"}\`}</StudentFileItem>
+                            <StudentFileItem label="الفصل النشط">{currentChapter?.name || "لم يتم اختيار الفصل لهم بعد"}</StudentFileItem>
+                            <StudentFileItem label="تاريخ التسجيل">{student.createdAt}</StudentFileItem>
+                          </div>
+                        </div>
+
+                        <div className="rounded-3xl border bg-card/80 p-5">
+                          <h4 className="mb-4 text-lg font-black">ملخص الأداء</h4>
+                          <div className="grid grid-cols-2 gap-3 text-center">
+                            <div className="rounded-2xl bg-emerald-500/10 p-3"><p className="text-2xl font-black text-emerald-600">{successCount}</p><p className="text-xs text-muted-foreground">ناجح</p></div>
+                            <div className="rounded-2xl bg-red-500/10 p-3"><p className="text-2xl font-black text-red-600">{failedCount}</p><p className="text-xs text-muted-foreground">راسب</p></div>
+                            <div className="rounded-2xl bg-amber-500/10 p-3"><p className="text-2xl font-black text-amber-600">{absentCount}</p><p className="text-xs text-muted-foreground">غياب</p></div>
+                            <div className="rounded-2xl bg-primary/10 p-3"><p className="text-2xl font-black text-primary">{opportunityText}</p><p className="text-xs text-muted-foreground">فرص</p></div>
+                          </div>
+                          <div className="mt-4 rounded-2xl border p-3 text-xs leading-6 text-muted-foreground">
+                            {isStudentCurrentlyInGrace(student) ? "الطالب حالياً ضمن فترة السماح ولا يحاسب على الامتحانات داخلها." : "المحاسبة فعالة حسب تاريخ التسجيل وفترة السماح."}
+                          </div>
+                        </div>
+                      </div>
+
+                      {student.status === "مفصول" && (
+                        <div className="rounded-3xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                          <p className="font-black text-destructive">بيانات الفصل</p>
+                          <p className="mt-2">{student.dismissalType || "—"} - {student.dismissalReason || "—"}</p>
+                          {student.dismissalNotes && <p className="mt-1 text-muted-foreground">{student.dismissalNotes}</p>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {studentFileTab === "grades" && (
+                    <div className="rounded-3xl border bg-card/80 p-5">
+                      <h4 className="mb-4 text-lg font-black">درجات الطالب</h4>
+                      <div className="space-y-2">
+                        {gradesForStudent.length === 0 ? <p className="empty-state py-8">لا توجد درجات لهذا الطالب</p> : gradesForStudent.map((grade) => {
+                          const exam = exams.find((item) => item.id === grade.examId);
+                          return (
+                            <div key={grade.id} className="grid gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[1fr_auto_auto] md:items-center">
+                              <div><b>{exam?.name || "امتحان محذوف"}</b><p className="text-xs text-muted-foreground">{exam?.date || "—"}</p></div>
+                              <Badge variant={grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : "secondary"}>{grade.status}</Badge>
+                              <span className="font-black">{grade.score !== null ? \`${grade.score}/${exam?.fullMark || 100}\` : "—"}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {studentFileTab === "exams" && (
+                    <div className="rounded-3xl border bg-card/80 p-5">
+                      <h4 className="mb-4 text-lg font-black">امتحانات الطالب</h4>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {examRows.length === 0 ? <p className="empty-state py-8 md:col-span-2">لا توجد امتحانات مسجلة لهذا الطالب</p> : examRows.map(({ grade, exam }) => exam ? (
+                          <div key={grade.id} className="rounded-2xl border bg-background/60 p-4">
+                            <div className="flex items-start justify-between gap-3"><div><p className="font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {exam.date}</p></div><Badge>{grade.status}</Badge></div>
+                            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{grade.score ?? "—"}</b><p>درجة الطالب</p></div></div>
+                          </div>
+                        ) : null)}
+                      </div>
+                    </div>
+                  )}
+
+                  {studentFileTab === "opportunities" && (
+                    <div className="rounded-3xl border bg-card/80 p-5">
+                      <h4 className="mb-4 text-lg font-black">سجل الفرص</h4>
+                      <div className="mb-4 grid gap-3 md:grid-cols-3"><div className="rounded-2xl bg-primary/10 p-3 text-center"><p className="text-2xl font-black text-primary">{opportunityText}</p><p className="text-xs text-muted-foreground">الفرص الحالية</p></div><div className="rounded-2xl bg-red-500/10 p-3 text-center"><p className="text-2xl font-black text-red-600">{opportunityRows.filter((row) => row.action === "خصم").length}</p><p className="text-xs text-muted-foreground">حركات خصم</p></div><div className="rounded-2xl bg-emerald-500/10 p-3 text-center"><p className="text-2xl font-black text-emerald-600">{opportunityRows.filter((row) => row.action !== "خصم").length}</p><p className="text-xs text-muted-foreground">حركات إضافة/تعديل</p></div></div>
+                      <div className="space-y-2 max-h-72 overflow-y-auto">
+                        {opportunityRows.length === 0 ? <p className="empty-state py-8">لا توجد حركات فرص</p> : opportunityRows.map((row) => (
+                          <div key={row.id} className="grid gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_1fr] md:items-center"><span>{row.date}</span><Badge variant={row.action === "خصم" ? "destructive" : "default"}>{row.action} {row.amount}</Badge><span className="text-muted-foreground">{row.reason}</span></div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>`
+
+          replaceOnce(oldDialog, newDialog, 'student file dialog')
+          fs.writeFileSync(file, s)
+          NODE
+      - name: Commit and cleanup
+        run: |
+          rm -f .github/workflows/improve-student-profile-dialog.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/teacher-pro/student-registry.tsx .github/workflows/improve-student-profile-dialog.yml
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Improve student profile dialog"
+          git push
