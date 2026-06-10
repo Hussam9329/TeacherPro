@@ -1,0 +1,28 @@
+name: Diagnose TeacherPro build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-teacherpro-build.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --include=dev
+      - name: Run build patch
+        run: node scripts/patch-student-profile-dialog.js
+      - name: TypeScript check
+        run: npx tsc --noEmit
+      - name: Lint check
+        run: npm run lint
