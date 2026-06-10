@@ -88,7 +88,6 @@ model Student {
   grades          Grade[]
   opportunityLogs OpportunityLog[]
   correctionSheets CorrectionSheet[]
-  whatsappMessages WhatsAppMessage[]
 
   @@index([courseId])
   @@index([status])
@@ -211,34 +210,6 @@ model AuditLog {
   @@index([time])
 }
 
-model WhatsAppReport {
-  id        String   @id @default(cuid())
-  command   String
-  recipient String
-  total     Int
-  delivered String   @default("[]")
-  failed    String   @default("[]")
-  time      DateTime @default(now())
-}
-
-model WhatsAppMessage {
-  id                String   @id @default(cuid())
-  phone             String?
-  message           String
-  command           String
-  status            String   @default("مجدول")
-  batch             Int      @default(1)
-  cooldownMinutes   Int      @default(0)
-  providerMessageId String?
-  lastError         String?
-  updatedAt         DateTime @updatedAt
-  createdAt         DateTime @default(now())
-  studentId         String
-  student           Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  @@index([status])
-  @@index([studentId])
-}
 
 model DemoCopy {
   id              String    @id @default(cuid())

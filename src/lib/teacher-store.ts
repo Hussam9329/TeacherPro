@@ -203,29 +203,6 @@ export interface LogEntry {
   time: string;
 }
 
-export interface WhatsAppReport {
-  id: string;
-  command: string;
-  recipient: string;
-  time: string;
-  total: number;
-  delivered: string[];
-  failed: string[];
-}
-
-export interface WhatsAppMessage {
-  id: string;
-  studentId: string;
-  phone: string;
-  message: string;
-  command: string;
-  status: 'مجدول' | 'قيد الإرسال' | 'تم الإرسال' | 'فشل' | string;
-  batch: number;
-  cooldownMinutes: number;
-  providerMessageId?: string;
-  lastError?: string;
-  updatedAt?: string;
-}
 
 export interface LeaderboardSettings {
   correctionErrorPenalty: number;
@@ -243,7 +220,6 @@ export interface DemoUsageLimits {
   exams: number;
   grades: number;
   correction: number;
-  whatsapp: number;
 }
 
 export const DEFAULT_DEMO_LIMITS: DemoUsageLimits = {
@@ -254,7 +230,6 @@ export const DEFAULT_DEMO_LIMITS: DemoUsageLimits = {
   exams: 5,
   grades: 100,
   correction: 50,
-  whatsapp: 20,
 };
 
 /** Permissions that demo users are FORBIDDEN from accessing */
@@ -277,7 +252,6 @@ export const DEMO_ALLOWED_PERMISSIONS = [
   'grades.view', 'grades.add', 'grades.edit', 'grades.delete',
   'opportunities.view', 'opportunities.manage',
   'correction.view', 'correction.manage',
-  'whatsapp.view', 'whatsapp.send',
 ];
 
 export interface DemoCopy {
@@ -313,7 +287,6 @@ export type SectionId =
   | 'opportunities'
   | 'follow-up'
   | 'e-correction'
-  | 'whatsapp'
   | 'accounts'
   | 'logs';
 
@@ -369,9 +342,6 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   // التصحيح
   { id: 'correction.view', label: 'عرض التصحيح', category: 'التصحيح', level: 'read', description: 'عرض لوحة التصحيح الإلكتروني' },
   { id: 'correction.manage', label: 'إدارة التصحيح', category: 'التصحيح', level: 'manage', description: 'إضافة وتعديل أوراق التصحيح' },
-  // واتساب
-  { id: 'whatsapp.view', label: 'عرض واتساب', category: 'المتابعة', level: 'read', description: 'عرض لوحة رسائل واتساب' },
-  { id: 'whatsapp.send', label: 'إرسال رسائل', category: 'المتابعة', level: 'write', description: 'إرسال رسائل واتساب للطلاب' },
   // الحسابات
   { id: 'accounts.view', label: 'عرض الحسابات', category: 'الحسابات', level: 'read', description: 'عرض قائمة الحسابات' },
   { id: 'accounts.manage', label: 'إدارة الحسابات', category: 'الحسابات', level: 'manage', description: 'إضافة وتعديل وحذف الحسابات' },
@@ -398,7 +368,6 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'opportunities': 'opportunities.view',
   'follow-up': 'follow-up.view',
   'e-correction': 'correction.view',
-  'whatsapp': 'whatsapp.view',
   'accounts': 'accounts.view',
   'logs': 'logs.view',
 };
@@ -510,8 +479,6 @@ export interface BackupShape {
   users?: User[];
   roles?: Role[];
   logs?: LogEntry[];
-  whatsappReports?: WhatsAppReport[];
-  whatsappQueue?: WhatsAppMessage[];
   leaderboardSettings?: LeaderboardSettings;
   demoCopies?: DemoCopy[];
 }
@@ -534,8 +501,6 @@ interface TeacherState {
   users: User[];
   roles: Role[];
   logs: LogEntry[];
-  whatsappReports: WhatsAppReport[];
-  whatsappQueue: WhatsAppMessage[];
   leaderboardSettings: LeaderboardSettings;
   demoCopies: DemoCopy[];
   activeDemoId: string | null;
@@ -629,8 +594,6 @@ interface TeacherState {
   updateRole: (id: string, updates: Partial<Omit<Role, 'id'>>) => void;
   deleteRole: (id: string) => boolean;
 
-  queueWhatsAppMessage: (students: Student[], recipient: string, message: string, command: string) => void;
-  markWhatsAppMessageStatus: (id: string, status: WhatsAppMessage['status'], providerMessageId?: string, lastError?: string) => void;
 
   logAction: (module: string, action: string, details?: string) => void;
   exportBackup: () => string;
@@ -717,8 +680,6 @@ function seedData() {
     users,
     roles,
     logs: [] as LogEntry[],
-    whatsappReports: [] as WhatsAppReport[],
-    whatsappQueue: [] as WhatsAppMessage[],
     leaderboardSettings: { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] as string[] },
     demoCopies: [] as DemoCopy[],
     activeDemoId: null as string | null,
@@ -728,12 +689,10 @@ function seedData() {
 
 const DATA_KEYS: (keyof BackupShape)[] = [
   'courses', 'sites', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
-  'opportunityLogs', 'studentLeaves', 'studentCalls', 'studentNotes', 'correctionSheets', 'users', 'roles', 'logs', 'whatsappReports', 'whatsappQueue', 'leaderboardSettings',
 ];
 
 const DEMO_DATA_KEYS: (keyof BackupShape)[] = [
   'courses', 'sites', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
-  'opportunityLogs', 'correctionSheets', 'whatsappReports', 'whatsappQueue', 'leaderboardSettings',
 ];
 
 // ─── Migrate old users (no roleId) ──────────────────────────────────────────
@@ -1671,7 +1630,6 @@ export const useTeacherStore = create<TeacherState>()(
           grades: s.grades.filter((g) => g.studentId !== id),
           opportunityLogs: s.opportunityLogs.filter((log) => log.studentId !== id),
           correctionSheets: s.correctionSheets.filter((sh) => sh.studentId !== id),
-          whatsappQueue: s.whatsappQueue.filter((msg) => msg.studentId !== id),
         }));
         get().logAction('سجل الطلاب', 'حذف طالب مع سجلاته التابعة', `${student.name} - ${student.code}`);
         syncToServer(get, () => studentApi.remove(id));
@@ -1996,7 +1954,6 @@ export const useTeacherStore = create<TeacherState>()(
         return true;
       },
 
-      queueWhatsAppMessage: (students, recipient, message, command) => {
         const report: WhatsAppReport = { id: uid('wa'), command, recipient, time: nowText(), total: students.length, delivered: [] as string[], failed: [] as string[] };
         const queue: WhatsAppMessage[] = [];
         students.forEach((s, idx) => {
@@ -2005,11 +1962,8 @@ export const useTeacherStore = create<TeacherState>()(
           queue.push({ id: uid('msg'), studentId: s.id, phone, message: personalized, command, status: phone ? 'مجدول' : 'فشل', batch: Math.floor(idx / 200) + 1, cooldownMinutes: Math.floor(idx / 200) * 30, updatedAt: nowText(), lastError: phone ? '' : 'لا يوجد رقم هاتف' });
           if (phone) report.delivered.push(phone); else report.failed.push(s.name);
         });
-        set((s) => ({ whatsappReports: [report, ...s.whatsappReports], whatsappQueue: [...s.whatsappQueue, ...queue] }));
         get().logAction('واتساب', 'جدولة رسائل', `${students.length} رسالة - ${recipient}`);
       },
-      markWhatsAppMessageStatus: (id, status, providerMessageId, lastError) => {
-        set((s) => ({ whatsappQueue: s.whatsappQueue.map((m) => m.id === id ? { ...m, status, providerMessageId, lastError, updatedAt: nowText() } : m) }));
         get().logAction('واتساب', 'تحديث حالة رسالة', `${id} - ${status}`);
       },
       exportBackup: () => {
@@ -2096,7 +2050,6 @@ export const useTeacherStore = create<TeacherState>()(
           `عدد الامتحانات: ${state.exams.length}`,
           `درجات مدخلة/معدلة هذا الشهر: ${grades.length}`,
           `حركات الفرص هذا الشهر: ${oppLogs.length}`,
-          `رسائل واتساب في الطابور: ${state.whatsappQueue.length}`,
           '',
           'تفصيل الطلاب الجدد:',
           ...newStudents.map((s) => `- ${s.code} | ${s.name} | ${get().courseName(s.courseId)} | ${s.createdAt}`),
@@ -2243,7 +2196,6 @@ export const useTeacherStore = create<TeacherState>()(
           exams: state.exams.length,
           grades: state.grades.length,
           correction: state.correctionSheets.length,
-          whatsapp: state.whatsappQueue.length,
         };
         const current = currentMap[resource];
         return { current, limit, allowed: current < limit };
@@ -2358,8 +2310,6 @@ export const useTeacherStore = create<TeacherState>()(
         users: state.users,
         roles: state.roles,
         logs: state.logs,
-        whatsappReports: state.whatsappReports,
-        whatsappQueue: state.whatsappQueue,
         leaderboardSettings: state.leaderboardSettings,
         theme: state.theme,
         guideMode: state.guideMode,

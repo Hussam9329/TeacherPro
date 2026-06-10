@@ -137,8 +137,6 @@ export interface ServerData {
   roles?: Array<Record<string, unknown>>;
   demoCopies?: Array<Record<string, unknown>>;
   logs?: Array<Record<string, unknown>>;
-  whatsappReports?: Array<Record<string, unknown>>;
-  whatsappQueue?: Array<Record<string, unknown>>;
 }
 
 /**
@@ -306,8 +304,6 @@ export async function pushAllToServer(data: {
   users: Array<Record<string, unknown>>;
   roles: Array<Record<string, unknown>>;
   logs: Array<Record<string, unknown>>;
-  whatsappReports: Array<Record<string, unknown>>;
-  whatsappQueue: Array<Record<string, unknown>>;
 }): Promise<void> {
   // Push each entity type in parallel
   const promises: Promise<ApiResult>[] = [];
@@ -347,12 +343,6 @@ export async function pushAllToServer(data: {
   }
   for (const log of data.logs) {
     promises.push(apiPost('logs', log));
-  }
-  for (const report of data.whatsappReports) {
-    void report;
-  }
-  for (const msg of data.whatsappQueue) {
-    void msg;
   }
 
   await Promise.allSettled(promises);

@@ -15,7 +15,6 @@ import {
   BarChart3,
   Target,
   CheckSquare,
-  MessageCircle,
   PhoneCall,
   Shield,
   ScrollText,
@@ -92,7 +91,6 @@ const menuItems: {
     icon: CheckSquare,
   },
   { id: "follow-up", title: "المتابعة", sub: "إجازات ومكالمات", icon: PhoneCall },
-  { id: "whatsapp", title: "واتساب", sub: "رسائل", icon: MessageCircle },
   { id: "accounts", title: "إدارة الحسابات", sub: "صلاحيات", icon: Shield },
   { id: "logs", title: "السجلات", sub: "تدقيق", icon: ScrollText },
 ];
@@ -105,7 +103,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
   },
-  { title: "المتابعة", itemIds: ["follow-up", "whatsapp"] },
+  { title: "المتابعة", itemIds: ["follow-up"] },
   { title: "الإدارة", itemIds: ["accounts", "logs"] },
 ];
 
@@ -126,6 +124,7 @@ function readSectionFromLocation(): SectionId | null {
   const hashSection = window.location.hash.replace(/^#/, "");
   const value = querySection || hashSection;
   // Backward compatibility: redirect old section IDs
+  if (value === 'whatsapp') return 'follow-up' as SectionId;
   if (value === 'course-new' || value === 'site-management') {
     return 'courses' as SectionId;
   }
@@ -145,7 +144,6 @@ import { GradeRecordsView } from "./grade-records";
 import { OpportunitiesView } from "./opportunities";
 import { ECorrectionView } from "./e-correction";
 import { FollowUpView } from "./follow-up";
-import { WhatsAppView } from "./whatsapp";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
 import { LoadingState } from "./ui-kit";
@@ -164,7 +162,6 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   opportunities: OpportunitiesView,
   "follow-up": FollowUpView,
   "e-correction": ECorrectionView,
-  whatsapp: WhatsAppView,
   accounts: AccountsView,
   logs: LogsView,
 };

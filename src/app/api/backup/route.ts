@@ -15,8 +15,6 @@ export async function GET() {
     users,
     roles,
     logs,
-    whatsappReports,
-    whatsappQueue,
     demoCopies,
   ] = await Promise.all([
     db.course.findMany(),
@@ -43,8 +41,6 @@ export async function GET() {
     }),
     db.role.findMany(),
     db.auditLog.findMany(),
-    db.whatsAppReport.findMany(),
-    db.whatsAppMessage.findMany(),
     db.demoCopy.findMany(),
   ]);
 
@@ -63,8 +59,6 @@ export async function GET() {
     users,
     roles,
     logs,
-    whatsappReports,
-    whatsappQueue,
     demoCopies,
   });
 }
