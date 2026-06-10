@@ -60,6 +60,12 @@ patchFile('src/components/teacher-pro/student-registry.tsx', (input) => {
       'import {\n  Dialog,\n  DialogContent,\n  DialogHeader,\n  DialogTitle,\n  DialogFooter,\n} from "@/components/ui/dialog";\n',
     );
     source = source.replace(/import \{ Separator \} from "@\/components\/ui\/separator";\n/g, '');
+
+    // These helpers were only used by the old inline student-file dialog.
+    source = source.replace(
+      /\nfunction ContactLink\(\{[\s\S]*?\n\}\n\nfunction StudentFileItem\(\{[\s\S]*?\n\}\n\n(?=export function StudentRegistryView\(\))/,
+      '\n',
+    );
   }
 
   return source;
