@@ -971,7 +971,7 @@ function recalculateStudentsFromAcademicRules(state: Pick<TeacherState, 'student
 
       if (grade.status === 'غائب') {
         if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
-          setDismissal('فصل مؤقت', `غياب امتحان ${exam.type}: ${exam.name}`, 70, exam);
+          setDismissal('فصل مؤقت', `غياب ضمن درجة الفصل في امتحان ${exam.type}: ${exam.name}`, 75, exam);
         } else {
           const penalty = examPenaltyValue(exam);
           opportunities -= penalty;
@@ -1339,7 +1339,10 @@ export const useTeacherStore = create<TeacherState>()(
         if (student && !isExamOnOrAfterStudentRegistration(student, exam)) return { text: 'قبل التسجيل', type: 'neutral', kind: 'before-registration' };
         if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
         if (grade.status === 'غش') return { text: 'غش', type: 'danger', kind: 'cheat' };
-        if (grade.status === 'غائب') return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
+        if (grade.status === 'غائب') {
+          if (exam.type === 'تراكمي' || exam.type === 'فاينل') return { text: 'فصل', type: 'danger', kind: 'dismissal' };
+          return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
+        }
         const score = Number(grade.score) || 0;
         if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
           if (score === 0 || (exam.dismissalGrade !== null && score <= exam.dismissalGrade)) return { text: 'فصل', type: 'danger', kind: 'dismissal' };
