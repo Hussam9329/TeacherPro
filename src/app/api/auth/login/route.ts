@@ -2,10 +2,15 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { ensureInitialAdminSeed } from '@/lib/admin-seed';
+import { db } from '@/lib/db';
 import { findUserByUsername, setAuthCookie, toAuthPrincipal } from '@/lib/server-auth';
+import { hashPassword, isPasswordHash, verifyPassword } from '@/lib/passwords';
 
 export async function POST(req: NextRequest) {
   try {
+    await ensureInitialAdminSeed();
+
     const body = await req.json();
     const username = String(body.username || '').trim();
     const password = String(body.password || '');
@@ -14,13 +19,16 @@ export async function POST(req: NextRequest) {
     }
 
     const user = await findUserByUsername(username);
-    if (!user || !user.active) {
+    if (!user || !user.active || !(await verifyPassword(password, user.passwordHash))) {
       return NextResponse.json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة.' }, { status: 401 });
     }
 
-    // المرحلة الحالية تحمي الـ API بجلسة سيرفر. تشفير كلمات المرور يتم في patch منفصل.
-    if (String(user.passwordHash || '') !== password) {
-      return NextResponse.json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة.' }, { status: 401 });
+    // Legacy migration: old rows stored passwords as plain text. After a
+    // successful login, convert that one account to a proper hash silently.
+    if (!isPasswordHash(user.passwordHash)) {
+      const passwordHash = await hashPassword(password);
+      await db.appUser.update({ where: { id: user.id }, data: { passwordHash } });
+      user.passwordHash = passwordHash;
     }
 
     const res = NextResponse.json({ user: toAuthPrincipal(user) });

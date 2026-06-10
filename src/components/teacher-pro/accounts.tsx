@@ -346,12 +346,13 @@ function UsersTab() {
   const openEditUserDialog = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (!user) return;
-    setEditUserDialog({ open: true, id: userId, name: user.name, password: user.password || '123456' });
+    setEditUserDialog({ open: true, id: userId, name: user.name, password: '' });
   };
   const handleEditUserSave = runSaveUserLocked(async () => {
     if (!editUserDialog.name.trim()) { toast.error('يرجى إدخال الاسم'); return; }
-    if (!editUserDialog.password.trim()) { toast.error('يرجى إدخال رمز المرور'); return; }
-    updateUser(editUserDialog.id, { name: editUserDialog.name.trim(), password: editUserDialog.password.trim() });
+    const updates: { name: string; password?: string } = { name: editUserDialog.name.trim() };
+    if (editUserDialog.password.trim()) updates.password = editUserDialog.password.trim();
+    updateUser(editUserDialog.id, updates);
     setEditUserDialog({ open: false, id: '', name: '', password: '' });
     toast.success('تم تعديل المستخدم');
   });
@@ -489,7 +490,7 @@ function UsersTab() {
         <DialogContent dir="rtl">
           <DialogHeader>
             <DialogTitle>تعديل المستخدم</DialogTitle>
-            <DialogDescription>أدخل البيانات الجديدة للمستخدم</DialogDescription>
+            <DialogDescription>أدخل الاسم الجديد، واترك رمز المرور فارغاً إذا لا تريد تغييره</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -498,10 +499,10 @@ function UsersTab() {
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="user-edit-password">رمز المرور الجديد</Label>
+                <Label htmlFor="user-edit-password">رمز المرور الجديد — اختياري</Label>
                 <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditUserDialog(prev => ({ ...prev, password: generatePasscode() }))}>توليد رمز</Button>
               </div>
-              <Input id="user-edit-password" name="password" autoComplete="new-password" value={editUserDialog.password} onChange={e => setEditUserDialog(prev => ({ ...prev, password: e.target.value }))} />
+              <Input id="user-edit-password" name="password" autoComplete="new-password" value={editUserDialog.password} onChange={e => setEditUserDialog(prev => ({ ...prev, password: e.target.value }))} placeholder="اتركه فارغاً للإبقاء على الرمز الحالي" />
             </div>
           </div>
           <DialogFooter>

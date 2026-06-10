@@ -1191,7 +1191,9 @@ export const useTeacherStore = create<TeacherState>()(
 
           const parsedUsers = (serverData.users || []).map((u: Record<string, unknown>) => ({
             ...u,
-            password: String(u.password || u.passwordHash || (u.username === ADMIN_USERNAME ? ADMIN_PASSWORD : '')),
+            // Passwords are no longer returned by the API. Keep this field empty
+            // in client state unless the user explicitly enters a new password.
+            password: undefined,
             permissions: sanitizePermissionIds(parseArrayField<string>(u.permissions)),
             active: u.active !== undefined ? Boolean(u.active) : true,
           })) as User[];
@@ -1257,7 +1259,6 @@ export const useTeacherStore = create<TeacherState>()(
           if (adminAfterLoad) {
             syncToServer(get, () => userApi.update(adminAfterLoad.id, {
               active: true,
-              password: ADMIN_PASSWORD,
               roleId: ADMIN_ROLE_ID,
               role: ADMIN_ROLE_NAME,
               permissions: ADMIN_FULL_PERMISSIONS,
@@ -1351,6 +1352,7 @@ export const useTeacherStore = create<TeacherState>()(
           get().exitDemoCopy();
           return;
         }
+        void authApi.logout();
         const admin = get().users.find((u) => isPrimaryAdminUser(u) && u.active) || get().users.find((u) => u.roleId === ADMIN_ROLE_ID && u.active);
         set({ currentUserId: admin?.id || 'u_admin', currentSection: 'dashboard', isAuthenticated: false });
         get().logAction('تسجيل الدخول', 'تسجيل خروج', 'إغلاق جلسة المستخدم');
@@ -1989,12 +1991,12 @@ export const useTeacherStore = create<TeacherState>()(
         const user: User = { ...userData, id: uid('u'), password: userData.password || '123456' };
         set((s) => ({ users: [...s.users, user] }));
         get().logAction('الحسابات', 'إضافة مستخدم', user.name);
-        syncToServer(get, () => userApi.add({ ...user, passwordHash: user.password, permissions: user.permissions }));
+        syncToServer(get, () => userApi.add({ ...user, permissions: user.permissions }));
       },
       updateUser: (id, updates) => {
         const existingUser = get().users.find((u) => u.id === id);
         const safeUpdates = existingUser && isPrimaryAdminUser(existingUser)
-          ? { ...updates, active: true, password: ADMIN_PASSWORD, roleId: ADMIN_ROLE_ID, role: ADMIN_ROLE_NAME, permissions: ADMIN_FULL_PERMISSIONS }
+          ? { ...updates, active: true, roleId: ADMIN_ROLE_ID, role: ADMIN_ROLE_NAME, permissions: ADMIN_FULL_PERMISSIONS }
           : updates;
         set((s) => ({ users: s.users.map((u) => u.id === id ? normalizeAdminAccessUser({ ...u, ...safeUpdates }) : u) }));
         get().logAction('الحسابات', 'تعديل مستخدم', get().userName(id));
@@ -2191,7 +2193,7 @@ export const useTeacherStore = create<TeacherState>()(
           users: [...s.users, demoUser],
         }));
         get().logAction('نسخ الديمو', 'إنشاء نسخة ديمو', `${name} - ${durationDays} يوم - ${fromData ? 'من البيانات' : 'فارغ'}`);
-        syncToServer(get, () => userApi.add({ ...demoUser, passwordHash: demoUser.password, permissions: demoUser.permissions }));
+        syncToServer(get, () => userApi.add({ ...demoUser, permissions: demoUser.permissions }));
         syncToServer(get, () => demoCopyApi.add(demo as unknown as Record<string, unknown>));
         return demo.id;
       },
