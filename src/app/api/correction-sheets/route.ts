@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 
@@ -15,7 +16,10 @@ function validateCorrectionSheetPayload(body: Record<string, unknown>) {
   return null;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = await requirePermission(req, 'correction.view');
+  if (authError) return authError;
+
   try {
     const correctionSheets = await db.correctionSheet.findMany({
       orderBy: { startedAt: 'desc' },
@@ -28,6 +32,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requirePermission(req, 'correction.manage');
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const validationMessage = validateCorrectionSheetPayload(body);
@@ -56,6 +63,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const authError = await requirePermission(req, 'correction.manage');
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const { id, ...data } = body;
@@ -72,6 +82,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authError = await requirePermission(req, 'correction.manage');
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

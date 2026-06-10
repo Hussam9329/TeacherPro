@@ -2,10 +2,14 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = await requirePermission(req, 'opportunities.view');
+  if (authError) return authError;
+
   try {
     const opportunityLogs = await db.opportunityLog.findMany({ orderBy: { date: 'desc' } });
     return NextResponse.json({ opportunityLogs });
@@ -15,6 +19,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requirePermission(req, 'opportunities.manage');
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const studentError = requireText(body.studentId, 'الطالب');
@@ -44,6 +51,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authError = await requirePermission(req, 'opportunities.manage');
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

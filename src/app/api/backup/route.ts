@@ -1,10 +1,14 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAnyPermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = await requireAnyPermission(req, ['backup.view', 'accounts.manage', 'system.settings']);
+  if (authError) return authError;
+
   const [
     courses,
     sites,

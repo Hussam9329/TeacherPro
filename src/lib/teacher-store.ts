@@ -5,8 +5,8 @@ import { persist } from 'zustand/middleware';
 import {
   courseApi, siteApi, chapterApi, courseChapterApi,
   studentApi, examApi, gradeApi, opportunityLogApi, correctionSheetApi,
-  userApi, roleApi, logApi, demoCopyApi, pushAllToServer,
-  loadAllFromServer, type ServerData,
+  userApi, roleApi, logApi, demoCopyApi, authApi, pushAllToServer,
+  loadAllFromServer, type AuthApiUser, type ServerData,
 } from './api';
 import { getStudentDuplicateMessage, sanitizeTelegramInput } from './student-utils';
 import {
@@ -187,6 +187,19 @@ export interface User {
   password?: string;
 }
 
+
+function userFromAuthApi(authUser: AuthApiUser): User {
+  return {
+    id: authUser.id,
+    username: authUser.username,
+    name: authUser.name,
+    roleId: authUser.roleId || '',
+    role: authUser.role,
+    permissions: sanitizePermissionIds(authUser.permissions || []),
+    active: authUser.active,
+  };
+}
+
 export interface Role {
   id: string;
   name: string;
@@ -304,6 +317,7 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   // النظام
   { id: 'system.dashboard', label: 'لوحة النظام', category: 'النظام', level: 'read', description: 'عرض لوحة النظام والنظرة العامة' },
   { id: 'system.settings', label: 'إعدادات النظام', category: 'النظام', level: 'manage', description: 'تعديل إعدادات النظام' },
+  { id: 'backup.view', label: 'تصدير النسخ الاحتياطي', category: 'النظام', level: 'manage', description: 'تحميل نسخة احتياطية كاملة من بيانات النظام' },
   // الدورات
   { id: 'courses.view', label: 'عرض الدورات', category: 'الدورات', level: 'read', description: 'عرض قائمة الدورات' },
   { id: 'courses.add', label: 'إضافة دورة', category: 'الدورات', level: 'write', description: 'إنشاء دورة جديدة' },
@@ -524,7 +538,7 @@ interface TeacherState {
   toggleTheme: () => void;
 
   currentUser: () => User | null;
-  login: (username: string, password: string) => { ok: boolean; message: string };
+  login: (username: string, password: string) => Promise<{ ok: boolean; message: string }>;
   canAccess: (section: SectionId | string) => boolean;
   logout: () => void;
 
@@ -1294,47 +1308,25 @@ export const useTeacherStore = create<TeacherState>()(
           || null;
         return user ? normalizeAdminAccessUser(user) : null;
       },
-      login: (username, password) => {
-        const normalizedUsername = username.trim();
-        let user = get().users.find((u) => u.username.trim().toLowerCase() === normalizedUsername.toLowerCase());
-        if (!user && normalizedUsername.toLowerCase() === ADMIN_USERNAME) {
-          user = seedData().users.find((u) => isPrimaryAdminUser(u));
-          if (user) {
-            set((s) => ({ users: [...s.users.filter((u) => !isPrimaryAdminUser(u)), user as User], roles: mergeDefaultRoles(s.roles) }));
-          }
-        }
-        if (!user) {
-          return { ok: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' };
-        }
-        if (!user.active && !isPrimaryAdminUser(user)) {
-          return { ok: false, message: 'هذا الحساب معطل. تواصل مع المدير.' };
+      login: async (username, password) => {
+        const authResult = await authApi.login(username, password);
+        if (!authResult.ok || !authResult.user) {
+          return { ok: false, message: authResult.error || 'اسم المستخدم أو كلمة المرور غير صحيحة' };
         }
 
-        const isAdminLogin = isPrimaryAdminUser(user);
-        const expectedPassword = isAdminLogin ? ADMIN_PASSWORD : (user.password || '');
-        const storedPasswordMatches = Boolean(user.password) && user.password === password;
-        if (expectedPassword !== password && !(isAdminLogin && storedPasswordMatches)) {
-          return { ok: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' };
-        }
-
-        const normalizedUser = normalizeAdminAccessUser(user);
+        const sessionUser = normalizeAdminAccessUser(userFromAuthApi(authResult.user));
         set((s) => ({
-          users: s.users.map((u) => u.id === user.id ? normalizedUser : normalizeAdminAccessUser(u)),
+          users: s.users.some((u) => u.id === sessionUser.id)
+            ? s.users.map((u) => u.id === sessionUser.id ? { ...u, ...sessionUser } : normalizeAdminAccessUser(u))
+            : [...s.users.map((u) => normalizeAdminAccessUser(u)), sessionUser],
           roles: mergeDefaultRoles(s.roles),
-          currentUserId: normalizedUser.id,
+          currentUserId: sessionUser.id,
           isAuthenticated: true,
           currentSection: 'dashboard',
         }));
-        if (isAdminLogin) {
-          syncToServer(get, () => userApi.update(normalizedUser.id, {
-            active: true,
-            password: ADMIN_PASSWORD,
-            roleId: ADMIN_ROLE_ID,
-            role: ADMIN_ROLE_NAME,
-            permissions: ADMIN_FULL_PERMISSIONS,
-          }));
-        }
-        get().logAction('تسجيل الدخول', 'دخول للنظام', normalizedUser.name);
+
+        await get().loadFromServer();
+        get().logAction('تسجيل الدخول', 'دخول للنظام', sessionUser.name);
         return { ok: true, message: 'تم تسجيل الدخول بنجاح' };
       },
       canAccess: (section) => {

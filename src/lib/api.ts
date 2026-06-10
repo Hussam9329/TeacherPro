@@ -53,6 +53,7 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
     const res = await fetch(`/api/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify(data),
     });
     if (!res.ok) {
@@ -73,6 +74,7 @@ async function apiPut(endpoint: string, data: Record<string, unknown>): Promise<
     const res = await fetch(`/api/${endpoint}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify(data),
     });
     if (!res.ok) {
@@ -92,6 +94,7 @@ async function apiDelete(endpoint: string, id: string): Promise<ApiResult> {
   try {
     const res = await fetch(`/api/${endpoint}?id=${encodeURIComponent(id)}`, {
       method: 'DELETE',
+      credentials: 'same-origin',
     });
     if (!res.ok) {
       const error = await readApiError(res, `تعذر حذف السجل (رمز ${res.status})`);
@@ -106,20 +109,94 @@ async function apiDelete(endpoint: string, id: string): Promise<ApiResult> {
   }
 }
 
-async function apiGet<T>(endpoint: string): Promise<T | null> {
+interface ApiGetResponse<T> {
+  ok: boolean;
+  status: number;
+  data: T | null;
+  error?: string;
+}
+
+async function apiGetResponse<T>(endpoint: string, quietStatuses: number[] = []): Promise<ApiGetResponse<T>> {
   try {
-    const res = await fetch(`/api/${endpoint}`);
+    const res = await fetch(`/api/${endpoint}`, { credentials: 'same-origin' });
     if (!res.ok) {
-      console.warn(`[API] GET /api/${endpoint} failed:`, await readApiError(res, 'تعذر تحميل البيانات'));
-      return null;
+      const error = await readApiError(res, 'تعذر تحميل البيانات');
+      if (!quietStatuses.includes(res.status)) {
+        console.warn(`[API] GET /api/${endpoint} failed:`, error);
+      }
+      return { ok: false, status: res.status, data: null, error };
     }
     const json = await res.json();
-    return json as T;
+    return { ok: true, status: res.status, data: json as T };
   } catch (e) {
     console.warn(`[API] GET /api/${endpoint} error:`, e);
-    return null;
+    return { ok: false, status: 0, data: null, error: toUserFriendlyError(e instanceof Error ? e.message : 'Network error') };
   }
 }
+
+async function apiGet<T>(endpoint: string): Promise<T | null> {
+  const result = await apiGetResponse<T>(endpoint);
+  return result.ok ? result.data : null;
+}
+
+
+export interface AuthApiUser {
+  id: string;
+  username: string;
+  name: string;
+  role: string;
+  roleId: string | null;
+  permissions: string[];
+  active: boolean;
+  isAdmin?: boolean;
+}
+
+export interface AuthApiResult extends ApiResult {
+  user?: AuthApiUser;
+}
+
+export const authApi = {
+  login: async (username: string, password: string): Promise<AuthApiResult> => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ username, password }),
+      });
+      if (!res.ok) {
+        const error = await readApiError(res, 'تعذر تسجيل الدخول');
+        return { ok: false, error };
+      }
+      const json = await res.json() as { user?: AuthApiUser };
+      return { ok: true, user: json.user };
+    } catch (e) {
+      return { ok: false, error: toUserFriendlyError(e instanceof Error ? e.message : 'Network error') };
+    }
+  },
+  logout: async (): Promise<ApiResult> => {
+    try {
+      const res = await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      if (!res.ok) return { ok: false, error: await readApiError(res, 'تعذر تسجيل الخروج') };
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: toUserFriendlyError(e instanceof Error ? e.message : 'Network error') };
+    }
+  },
+  session: async (): Promise<AuthApiResult> => {
+    try {
+      const res = await fetch('/api/auth/session', { credentials: 'same-origin' });
+      if (!res.ok) return { ok: false, error: await readApiError(res, 'الجلسة منتهية') };
+      const json = await res.json() as { user?: AuthApiUser };
+      return { ok: true, user: json.user };
+    } catch (e) {
+      return { ok: false, error: toUserFriendlyError(e instanceof Error ? e.message : 'Network error') };
+    }
+  },
+};
 
 // ─── Data Loading from Server ─────────────────────────────────────────────────
 
@@ -144,11 +221,34 @@ export interface ServerData {
  * Returns null if the API is unavailable or returns empty data.
  */
 export async function loadAllFromServer(): Promise<ServerData | null> {
-  const data = await apiGet<ServerData>('backup');
-  if (!data) return null;
-  // An empty-but-valid database response is still a successful connection.
-  // The store decides which default records should be filled in locally/seeded safely.
-  return data;
+  const backup = await apiGetResponse<ServerData>('backup', [401, 403]);
+  if (backup.ok) return backup.data;
+  if (backup.status === 401) return null;
+
+  // Non-admin users may not have permission to the full backup endpoint.
+  // In that case, load only the endpoint groups their session is allowed to read.
+  const endpointLoaders = [
+    apiGetResponse<Pick<ServerData, 'courses'>>('courses', [403]),
+    apiGetResponse<Pick<ServerData, 'sites'>>('sites', [403]),
+    apiGetResponse<Pick<ServerData, 'chapters'>>('chapters', [403]),
+    apiGetResponse<Pick<ServerData, 'courseChapters'>>('course-chapters', [403]),
+    apiGetResponse<Pick<ServerData, 'students'>>('students', [403]),
+    apiGetResponse<Pick<ServerData, 'exams'>>('exams', [403]),
+    apiGetResponse<Pick<ServerData, 'grades'>>('grades', [403]),
+    apiGetResponse<Pick<ServerData, 'opportunityLogs'>>('opportunity-logs', [403]),
+    apiGetResponse<Pick<ServerData, 'correctionSheets'>>('correction-sheets', [403]),
+    apiGetResponse<Pick<ServerData, 'users'>>('users', [403]),
+    apiGetResponse<Pick<ServerData, 'roles'>>('roles', [403]),
+    apiGetResponse<Pick<ServerData, 'logs'>>('logs', [403]),
+    apiGetResponse<Pick<ServerData, 'demoCopies'>>('demo-copies', [403]),
+  ];
+  const results = await Promise.all(endpointLoaders);
+  const merged = results.reduce<ServerData>((acc, result) => {
+    if (result.ok && result.data) Object.assign(acc, result.data);
+    return acc;
+  }, {});
+
+  return Object.keys(merged).length > 0 ? merged : null;
 }
 
 // ─── Course API ───────────────────────────────────────────────────────────────

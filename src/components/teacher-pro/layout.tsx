@@ -183,7 +183,7 @@ function downloadTextFile(
 type LoginScreenProps = {
   theme: string;
   toggleTheme: () => void;
-  login: (username: string, password: string) => { ok: boolean; message: string };
+  login: (username: string, password: string) => Promise<{ ok: boolean; message: string }>;
 };
 
 function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
@@ -191,10 +191,10 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
   const [password, setPassword] = useState("1993");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
-    const result = login(username, password);
+    const result = await login(username, password);
     setLoading(false);
     if (result.ok) toast.success(result.message);
     else toast.error(result.message);

@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 
@@ -13,7 +14,10 @@ function validateChapterPayload(body: Record<string, unknown>) {
   return null;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = await requirePermission(req, 'chapters.view');
+  if (authError) return authError;
+
   try {
     const chapters = await db.chapter.findMany({ orderBy: { name: 'asc' }, include: { courseLinks: true } });
     return NextResponse.json({ chapters });
@@ -23,6 +27,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requirePermission(req, 'chapters.add');
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const validationMessage = validateChapterPayload(body);
@@ -41,6 +48,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const authError = await requirePermission(req, 'chapters.edit');
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const { id, ...data } = body;
@@ -63,6 +73,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authError = await requirePermission(req, 'chapters.delete');
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

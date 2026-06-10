@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from "next/server";
+import { requirePermission } from '@/lib/server-auth';
 import { db } from "@/lib/db";
 import { getPhoneValidationError, sanitizePhoneInput } from "@/lib/format";
 import {
@@ -54,6 +55,9 @@ function getPrismaStudentErrorResponse(error: unknown) {
 }
 
 export async function GET(req: NextRequest) {
+  const authError = await requirePermission(req, 'students.view');
+  if (authError) return authError;
+
   const query = new URL(req.url).searchParams.get("q") || "";
   const students = await db.student.findMany({
     orderBy: { createdAt: "desc" },
@@ -70,6 +74,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requirePermission(req, 'students.add');
+  if (authError) return authError;
+
   const body = await req.json();
 
   const phoneError = getPhoneValidationError(
@@ -187,6 +194,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const authError = await requirePermission(req, 'students.edit');
+  if (authError) return authError;
+
   const body = await req.json();
   const { id, ...data } = body;
   for (const obsoleteKey of ["receiptNo", "codeSequence", "totalAmount", "paidAmount", "installments", "accountingStart", "groupId"]) {
@@ -323,6 +333,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authError = await requirePermission(req, 'students.delete');
+  if (authError) return authError;
+
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id)

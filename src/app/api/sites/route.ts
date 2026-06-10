@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 
@@ -15,7 +16,10 @@ function validateSitePayload(body: Record<string, unknown>) {
   return null;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = await requirePermission(req, 'sites.view');
+  if (authError) return authError;
+
   try {
     const sites = await db.site.findMany({ orderBy: { main: 'asc' }, include: { course: true } });
     return NextResponse.json({ sites });
@@ -25,6 +29,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requirePermission(req, 'sites.add');
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const validationMessage = validateSitePayload(body);
@@ -45,6 +52,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const authError = await requirePermission(req, 'sites.edit');
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const { id, ...data } = body;
@@ -67,6 +77,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authError = await requirePermission(req, 'sites.delete');
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

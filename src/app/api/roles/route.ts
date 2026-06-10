@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 
@@ -11,7 +12,10 @@ function normalizePermissions(value: unknown): string {
   return '[]';
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authError = await requirePermission(req, 'accounts.view');
+  if (authError) return authError;
+
   try {
     const roles = await db.role.findMany({
       orderBy: { name: 'asc' },
@@ -24,6 +28,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = await requirePermission(req, 'accounts.manage');
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const nameError = requireText(body.name, 'اسم الدور');
@@ -43,6 +50,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const authError = await requirePermission(req, 'accounts.manage');
+  if (authError) return authError;
+
   try {
     const body = await req.json();
     const { id, ...data } = body;
@@ -61,6 +71,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const authError = await requirePermission(req, 'accounts.manage');
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
