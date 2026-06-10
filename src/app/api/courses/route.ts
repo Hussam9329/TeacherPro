@@ -74,11 +74,12 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
       }
     }
     if (config.scopes.includes('محافظات')) {
-      if (config.provinces && config.provinces.length > 0) {
-        for (const prov of config.provinces) {
-          if (!IRAQI_PROVINCES.includes(prov as any))
-            return `المحافظة "${prov}" غير صالحة`;
-        }
+      if (!config.provinces || config.provinces.length === 0) {
+        return `يجب اختيار محافظة واحدة على الأقل لنوع الدراسة "${studyType}"`;
+      }
+      for (const prov of config.provinces) {
+        if (!IRAQI_PROVINCES.includes(prov as any))
+          return `المحافظة "${prov}" غير صالحة`;
       }
     }
   }

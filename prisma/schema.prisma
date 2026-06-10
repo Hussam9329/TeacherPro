@@ -87,6 +87,9 @@ model Student {
   course          Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
   grades          Grade[]
   opportunityLogs OpportunityLog[]
+  studentLeaves   StudentLeave[]
+  studentCalls    StudentCall[]
+  studentNotes    StudentNote[]
   correctionSheets CorrectionSheet[]
 
   @@index([courseId])
@@ -111,6 +114,8 @@ model Exam {
   grades             Grade[]
   correctionSheets   CorrectionSheet[]
   opportunityLogs    OpportunityLog[]
+  studentLeaves      StudentLeave[]
+  studentCalls       StudentCall[]
 
   @@index([type])
   @@index([date])
@@ -144,6 +149,55 @@ model OpportunityLog {
   examId    String?
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam      Exam?    @relation(fields: [examId], references: [id], onDelete: SetNull)
+
+  @@index([studentId])
+  @@index([date])
+}
+
+model StudentLeave {
+  id        String   @id @default(cuid())
+  studentId String
+  examId    String
+  reason    String
+  studyType String   @default("")
+  date      DateTime @default(now())
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, examId])
+  @@index([studentId])
+  @@index([examId])
+  @@index([date])
+}
+
+model StudentCall {
+  id          String    @id @default(cuid())
+  studentId   String
+  examId      String
+  category    String    @default("")
+  target      String    @default("")
+  phone       String    @default("")
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  notes       String    @default("")
+  createdAt   DateTime  @default(now())
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam        Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([examId])
+  @@index([createdAt])
+}
+
+model StudentNote {
+  id        String   @id @default(cuid())
+  studentId String
+  kind      String   @default("")
+  text      String
+  date      DateTime @default(now())
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
   @@index([date])

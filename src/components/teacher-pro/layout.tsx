@@ -348,6 +348,15 @@ export function TeacherProLayout() {
     document.documentElement.classList.toggle("dark", theme === "dark");
   }, [theme]);
 
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      toast.error(detail?.message || "تعذر حفظ التغيير في الخادم وتم التراجع محلياً");
+    };
+    window.addEventListener("teacherpro:server-sync-error", handler);
+    return () => window.removeEventListener("teacherpro:server-sync-error", handler);
+  }, []);
+
   // تحميل البيانات من الخادم عند بدء التطبيق
   const [initDone, setInitDone] = useState(false);
   useEffect(() => {

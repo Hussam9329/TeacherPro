@@ -18,6 +18,9 @@ export async function GET(req: NextRequest) {
     exams,
     grades,
     opportunityLogs,
+    studentLeaves,
+    studentCalls,
+    studentNotes,
     correctionSheets,
     users,
     roles,
@@ -32,6 +35,9 @@ export async function GET(req: NextRequest) {
     db.exam.findMany(),
     db.grade.findMany(),
     db.opportunityLog.findMany(),
+    db.studentLeave.findMany(),
+    db.studentCall.findMany(),
+    db.studentNote.findMany(),
     db.correctionSheet.findMany(),
     db.appUser.findMany({
       select: {
@@ -51,7 +57,7 @@ export async function GET(req: NextRequest) {
   ]);
 
   return NextResponse.json({
-    version: 3,
+    version: 4,
     exportedAt: new Date().toISOString(),
     courses,
     sites,
@@ -61,6 +67,9 @@ export async function GET(req: NextRequest) {
     exams,
     grades,
     opportunityLogs,
+    studentLeaves,
+    studentCalls,
+    studentNotes,
     correctionSheets,
     users,
     roles,

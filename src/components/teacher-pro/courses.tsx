@@ -127,6 +127,9 @@ function validateCourseForm(form: CourseFormState): string | null {
     if (config.baghdadMode === "بغداد - مخصص" && (!config.baghdadSites || config.baghdadSites.length === 0)) {
       return `يجب اختيار موقع واحد على الأقل من مواقع بغداد لنوع الدراسة "${studyType}"`;
     }
+    if (config.scopes.includes("محافظات") && (!config.provinces || config.provinces.length === 0)) {
+      return `يجب اختيار محافظة واحدة على الأقل لنوع الدراسة "${studyType}"`;
+    }
   }
 
   return null;
@@ -152,8 +155,10 @@ function buildLocationSummary(course: Course): string {
         segments.push("بغداد");
       }
     }
-    if (sc.scopes.includes("محافظات") && sc.provinces && sc.provinces.length > 0) {
-      segments.push(`محافظات(${sc.provinces.join("، ")})`);
+    if (sc.scopes.includes("محافظات")) {
+      segments.push(sc.provinces && sc.provinces.length > 0
+        ? `محافظات(${sc.provinces.join("، ")})`
+        : "محافظات(غير محددة)");
     }
     if (segments.length > 0) {
       parts.push(`${st}: ${segments.join("، ")}`);

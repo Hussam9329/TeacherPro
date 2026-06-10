@@ -209,6 +209,9 @@ export interface ServerData {
   exams?: Array<Record<string, unknown>>;
   grades?: Array<Record<string, unknown>>;
   opportunityLogs?: Array<Record<string, unknown>>;
+  studentLeaves?: Array<Record<string, unknown>>;
+  studentCalls?: Array<Record<string, unknown>>;
+  studentNotes?: Array<Record<string, unknown>>;
   correctionSheets?: Array<Record<string, unknown>>;
   users?: Array<Record<string, unknown>>;
   roles?: Array<Record<string, unknown>>;
@@ -236,6 +239,9 @@ export async function loadAllFromServer(): Promise<ServerData | null> {
     apiGetResponse<Pick<ServerData, 'exams'>>('exams', [403]),
     apiGetResponse<Pick<ServerData, 'grades'>>('grades', [403]),
     apiGetResponse<Pick<ServerData, 'opportunityLogs'>>('opportunity-logs', [403]),
+    apiGetResponse<Pick<ServerData, 'studentLeaves'>>('student-leaves', [403]),
+    apiGetResponse<Pick<ServerData, 'studentCalls'>>('student-calls', [403]),
+    apiGetResponse<Pick<ServerData, 'studentNotes'>>('student-notes', [403]),
     apiGetResponse<Pick<ServerData, 'correctionSheets'>>('correction-sheets', [403]),
     apiGetResponse<Pick<ServerData, 'users'>>('users', [403]),
     apiGetResponse<Pick<ServerData, 'roles'>>('roles', [403]),
@@ -338,6 +344,36 @@ export const opportunityLogApi = {
     apiDelete('opportunity-logs', id),
 };
 
+
+// ─── Follow-up API ───────────────────────────────────────────────────────────
+
+export const studentLeaveApi = {
+  add: (leave: Record<string, unknown>) =>
+    apiPost('student-leaves', leave),
+  update: (id: string, updates: Record<string, unknown>) =>
+    apiPut('student-leaves', { id, ...updates }),
+  remove: (id: string) =>
+    apiDelete('student-leaves', id),
+};
+
+export const studentCallApi = {
+  add: (call: Record<string, unknown>) =>
+    apiPost('student-calls', call),
+  update: (id: string, updates: Record<string, unknown>) =>
+    apiPut('student-calls', { id, ...updates }),
+  remove: (id: string) =>
+    apiDelete('student-calls', id),
+};
+
+export const studentNoteApi = {
+  add: (note: Record<string, unknown>) =>
+    apiPost('student-notes', note),
+  update: (id: string, updates: Record<string, unknown>) =>
+    apiPut('student-notes', { id, ...updates }),
+  remove: (id: string) =>
+    apiDelete('student-notes', id),
+};
+
 // ─── CorrectionSheet API ──────────────────────────────────────────────────────
 
 export const correctionSheetApi = {
@@ -400,6 +436,9 @@ export async function pushAllToServer(data: {
   exams: Array<Record<string, unknown>>;
   grades: Array<Record<string, unknown>>;
   opportunityLogs: Array<Record<string, unknown>>;
+  studentLeaves?: Array<Record<string, unknown>>;
+  studentCalls?: Array<Record<string, unknown>>;
+  studentNotes?: Array<Record<string, unknown>>;
   correctionSheets: Array<Record<string, unknown>>;
   users: Array<Record<string, unknown>>;
   roles: Array<Record<string, unknown>>;
@@ -431,6 +470,15 @@ export async function pushAllToServer(data: {
   }
   for (const log of data.opportunityLogs) {
     promises.push(apiPost('opportunity-logs', log));
+  }
+  for (const leave of data.studentLeaves || []) {
+    promises.push(apiPost('student-leaves', leave));
+  }
+  for (const call of data.studentCalls || []) {
+    promises.push(apiPost('student-calls', call));
+  }
+  for (const note of data.studentNotes || []) {
+    promises.push(apiPost('student-notes', note));
   }
   for (const sheet of data.correctionSheets) {
     promises.push(apiPost('correction-sheets', sheet));
