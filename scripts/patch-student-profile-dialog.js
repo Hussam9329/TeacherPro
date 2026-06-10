@@ -54,18 +54,8 @@ patchFile('src/components/teacher-pro/student-registry.tsx', (input) => {
   }
 
   if (source.includes('<StudentProfileDialog')) {
+    source = source.replace(/import \{\n  Dialog,\n  DialogContent,\n  DialogHeader,\n  DialogTitle,\n  DialogFooter,\n  DialogDescription,\n\} from "@\/components\/ui\/dialog";\n/g, '');
     source = source.replace(/import \{ Separator \} from "@\/components\/ui\/separator";\n/g, '');
-    source = source.replace(
-      /import \{\n  Dialog,\n  DialogContent,\n  DialogHeader,\n  DialogTitle,\n  DialogFooter,\n  DialogDescription,\n\} from "@\/components\/ui\/dialog";\n/g,
-      `import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-`
-    );
   }
 
   return source;
