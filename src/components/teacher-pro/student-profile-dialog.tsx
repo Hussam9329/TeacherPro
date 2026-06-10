@@ -24,7 +24,7 @@ type StudentProfileDialogProps = {
 
 function ContactLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <a href={href} className="break-all font-bold text-primary underline-offset-4 hover:underline">
+    <a href={href} className="break-words font-bold text-primary underline-offset-4 hover:underline">
       {children || "—"}
     </a>
   );
@@ -96,10 +96,10 @@ export function StudentProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="flex max-h-[92dvh] w-[calc(100vw-1rem)] max-w-[1180px] overflow-hidden p-0 sm:w-[calc(100vw-2rem)] lg:max-h-[88vh]">
+      <DialogContent dir="rtl" className="flex max-h-[92dvh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[1180px] lg:max-h-[88vh]">
         <div className="flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl">
-          <DialogHeader className="shrink-0 border-b bg-gradient-to-l from-primary/15 via-purple-500/10 to-background p-4 sm:p-6">
-            <div className="grid min-w-0 gap-4 lg:grid-cols-[1fr_20rem] lg:items-start">
+          <DialogHeader className="shrink-0 border-b bg-gradient-to-l from-primary/15 via-purple-500/10 to-background p-4 text-right sm:p-6 sm:text-right">
+            <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
               <div className="min-w-0 space-y-2">
                 <DialogTitle className="text-xl font-black sm:text-2xl">ملف الطالب</DialogTitle>
                 <DialogDescription className="max-w-3xl text-xs leading-6 sm:text-sm">
