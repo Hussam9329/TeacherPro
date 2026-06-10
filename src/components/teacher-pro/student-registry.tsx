@@ -160,6 +160,40 @@ function isStudentCurrentlyInGrace(student: Student): boolean {
   return Number.isFinite(start.getTime()) && today >= start && today < endExclusive;
 }
 
+function ContactLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      className="break-all font-bold text-primary underline-offset-4 hover:underline"
+    >
+      {children || "—"}
+    </a>
+  );
+}
+
+function StudentFileItem({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <span className="text-muted-foreground">{label}:</span>{" "}
+      <strong>{children}</strong>
+    </div>
+  );
+}
+
 export function StudentRegistryView() {
   const {
     students,

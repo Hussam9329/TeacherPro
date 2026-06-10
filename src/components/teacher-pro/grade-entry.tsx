@@ -71,7 +71,7 @@ export function GradeEntryView() {
   const getDraft = (studentId: string): DraftGrade => {
     const existing = getGrade(studentId);
     return drafts[studentId] || {
-      status: existing?.status === "مجاز" ? "غائب" : (existing?.status as DraftGrade["status"]) || "درجة",
+      status: (existing?.status as string) === "مجاز" ? "غائب" : (existing?.status as DraftGrade["status"]) || "درجة",
       score: existing?.score !== null && existing?.score !== undefined ? String(existing.score) : "",
       notes: existing?.notes || "",
     };

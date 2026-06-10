@@ -113,7 +113,7 @@ export function GradeRecordsView() {
     setEditDialog({
       open: true,
       id: grade.id,
-      status: grade.status === "مجاز" ? "غائب" : grade.status as GradeStatus,
+      status: (grade.status as string) === "مجاز" ? "غائب" : grade.status as GradeStatus,
       score: grade.score !== null && grade.score !== undefined ? String(grade.score) : "",
       notes: grade.notes || "",
     });
@@ -320,7 +320,7 @@ export function GradeRecordsView() {
               <Label>الحالة</Label>
               <Select value={editDialog.status} onValueChange={(value) => setEditDialog((prev) => ({ ...prev, status: value as GradeStatus }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="مجاز">مجاز</SelectItem><SelectItem value="غش">غش</SelectItem></SelectContent>
+                <SelectContent><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="غش">غش</SelectItem></SelectContent>
               </Select>
             </div>
             <div className="space-y-1">

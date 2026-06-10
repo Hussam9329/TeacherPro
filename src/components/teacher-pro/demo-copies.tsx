@@ -88,7 +88,6 @@ const LIMIT_LABELS: Record<keyof DemoUsageLimits, string> = {
   exams: 'الامتحانات',
   grades: 'الدرجات',
   correction: 'التصحيح',
-  whatsapp: 'واتساب',
 };
 
 // ─── Demo Copies Tab (for Accounts page) ─────────────────────────────────────
