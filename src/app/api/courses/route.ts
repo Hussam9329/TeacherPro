@@ -23,6 +23,18 @@ import {
 } from '@/lib/course-config';
 import { IRAQI_PROVINCES } from '@/lib/iraq';
 
+function parseCourseIds(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+
 function validateCoursePayload(body: Record<string, unknown>, isUpdate = false): string | null {
   if (!isUpdate) {
     const nameError = requireText(body.name, 'اسم الدورة');
@@ -223,9 +235,15 @@ export async function DELETE(req: NextRequest) {
       return validationError('لا يمكن حذف الدورة لأنها مرتبطة بطلاب. انقل الطلاب أولاً.', 409);
     }
 
+    const relatedExam = (await db.exam.findMany({
+      select: { id: true, name: true, courseIds: true },
+    })).find((exam) => parseCourseIds(exam.courseIds).includes(id));
+    if (relatedExam) {
+      return validationError(`لا يمكن حذف الدورة لأنها مرتبطة بامتحان: ${relatedExam.name}. احذف أو عدّل الامتحان أولاً.`, 409);
+    }
+
     await db.$transaction(async (tx) => {
       await tx.courseChapter.deleteMany({ where: { courseId: id } });
-      await tx.site.deleteMany({ where: { courseId: id } });
       await tx.course.delete({ where: { id } });
     });
     return NextResponse.json({ ok: true });

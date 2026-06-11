@@ -1,11 +1,11 @@
-import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { randomBytes, scrypt, timingSafeEqual, type ScryptOptions } from 'node:crypto';
 
 export const PASSWORD_HASH_PREFIX = 'scrypt$1';
 
 const SCRYPT_KEY_LENGTH = 64;
-const SCRYPT_OPTIONS = { N: 16384, r: 8, p: 1 } as const;
+const SCRYPT_OPTIONS: ScryptOptions = { N: 16384, r: 8, p: 1 };
 
-async function deriveScrypt(password: string, salt: Buffer, options = SCRYPT_OPTIONS): Promise<Buffer> {
+async function deriveScrypt(password: string, salt: Buffer, options: ScryptOptions = SCRYPT_OPTIONS): Promise<Buffer> {
   return new Promise<Buffer>((resolve, reject) => {
     scrypt(password, salt, SCRYPT_KEY_LENGTH, options, (error, derivedKey) => {
       if (error) reject(error);

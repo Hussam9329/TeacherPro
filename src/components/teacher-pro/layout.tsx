@@ -364,6 +364,7 @@ export function TeacherProLayout() {
         console.log(
           "[TeacherPro] Using localStorage data (database not available)",
         );
+        toast.warning("أنت تعمل محلياً؛ البيانات قد لا تُحفظ في السيرفر إلى أن يعود اتصال قاعدة البيانات.");
       }
     });
   }, [initDone, loadFromServer]);
@@ -528,6 +529,11 @@ export function TeacherProLayout() {
               <LogOut className="w-3.5 h-3.5" />
             </Button>
           </div>
+          {!dbLoading && !dbConnected && (
+            <div className="mt-3 rounded-2xl border border-amber-300/30 bg-amber-500/10 px-3 py-2 text-xs leading-6 text-amber-100">
+              أنت تعمل محلياً؛ البيانات قد لا تُحفظ في السيرفر.
+            </div>
+          )}
         </div>
 
         <div
@@ -850,6 +856,12 @@ export function TeacherProLayout() {
             </div>
           </div>
         </header>
+
+        {!dbLoading && !dbConnected && (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100 md:px-6">
+            أنت تعمل محلياً؛ البيانات قد لا تُحفظ في السيرفر. تأكد من اتصال قاعدة البيانات قبل الاعتماد على التغييرات.
+          </div>
+        )}
 
         <div className="app-scrollbar page-enter flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 xl:p-8">
           <div className="content-container space-y-6">

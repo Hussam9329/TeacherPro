@@ -23,11 +23,6 @@ export function normalizeForSearch(value: unknown): string {
     .trim();
 }
 
-export function searchIncludes(source: unknown, query: string): boolean {
-  const normalizedQuery = normalizeForSearch(query);
-  if (!normalizedQuery) return true;
-  return normalizeForSearch(source).includes(normalizedQuery);
-}
 
 export function searchAny(query: string, fields: unknown[]): boolean {
   const normalizedQuery = normalizeForSearch(query);

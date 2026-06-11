@@ -127,9 +127,6 @@ export function getCourseLocationConfig(course: CourseSettingsSource): CourseLoc
   return parseJsonRecord<CourseLocationConfig>(course.locationConfig, {});
 }
 
-export function hasCourseProgram(course: CourseSettingsSource, program: CourseProgram) {
-  return getAvailablePrograms(course).includes(program);
-}
 
 // ─── Location Derivation Helpers ─────────────────────────────────────────────
 
@@ -273,83 +270,4 @@ export function resolveSubSite(
     return subSite || "";
   }
   return subSite || "";
-}
-
-/**
- * تحقق من أن تعديل إعدادات الدورة لا يزيل خيارات مستخدمة من طلاب
- * يُستخدم في courses PUT route
- */
-export type StudentChoicesSource = {
-  courseProgram?: string | null;
-  courseTerm?: string | null;
-  studyType?: string | null;
-  locationScope?: string | null;
-  baghdadMode?: string | null;
-  subSite?: string | null;
-};
-
-export function findUsedOptionsToRemove(
-  oldCourse: CourseSettingsSource,
-  newCourse: CourseSettingsSource,
-  students: StudentChoicesSource[],
-): string[] {
-  const errors: string[] = [];
-
-  const oldPrograms = getAvailablePrograms(oldCourse);
-  const newPrograms = getAvailablePrograms(newCourse);
-
-  for (const student of students) {
-    // تحقق من courseProgram
-    if (
-      student.courseProgram &&
-      oldPrograms.includes(student.courseProgram as CourseProgram) &&
-      !newPrograms.includes(student.courseProgram as CourseProgram)
-    ) {
-      errors.push(`نوع الدورة "${student.courseProgram}" مستخدم من طالب ولا يمكن إزالته`);
-    }
-
-    // تحقق من courseTerm (فقط إذا كان كورسات)
-    if (student.courseProgram === "كورسات" && student.courseTerm) {
-      const newProgramsIncludeKorrasat = newPrograms.includes("كورسات");
-      if (!newProgramsIncludeKorrasat) {
-        errors.push(`خيار "كورسات" مستخدم من طالب ولا يمكن إزالته`);
-      }
-    }
-
-    // تحقق من studyType حسب نوع الدورة
-    if (student.courseProgram && student.studyType) {
-      const newStudyTypesForProgram = getAvailableStudyTypesForProgram(newCourse, student.courseProgram);
-      if (!newStudyTypesForProgram.includes(student.studyType as StudyType)) {
-        errors.push(`نوع الدراسة "${student.studyType}" مستخدم مع نوع الدورة "${student.courseProgram}" ولا يمكن إزالته`);
-      }
-    }
-
-    // تحقق من locationScope
-    if (student.studyType && student.locationScope) {
-      const newScopes = getLocationScopes(newCourse, student.studyType);
-      if (!newScopes.includes(student.locationScope as LocationScope)) {
-        errors.push(`الموقع "${student.locationScope}" لنوع الدراسة "${student.studyType}" مستخدم من طالب ولا يمكن إزالته`);
-      }
-    }
-
-    // تحقق من subSite (بغداد - مخصص)
-    if (student.studyType && student.locationScope === "بغداد" && student.subSite) {
-      const newBaghdadSites = getBaghdadSites(newCourse, student.studyType);
-      const newBaghdadMode = getBaghdadMode(newCourse, student.studyType);
-      if (newBaghdadMode === "بغداد - مخصص" && newBaghdadSites.length > 0 && !newBaghdadSites.includes(student.subSite)) {
-        errors.push(`موقع بغداد "${student.subSite}" مستخدم من طالب ولا يمكن إزالته`);
-      }
-    }
-
-    // تحقق من subSite (محافظات)
-    if (student.studyType && student.locationScope === "محافظات" && student.subSite) {
-      const newProvinces = getProvinceOptions(newCourse, student.studyType);
-      if (newProvinces.length > 0 && !newProvinces.includes(student.subSite)) {
-        errors.push(`المحافظة "${student.subSite}" مستخدمة من طالب ولا يمكن إزالتها`);
-      }
-    }
-  }
-
-  // إزالة التكرار
-  return [...new Set(errors)];
 }

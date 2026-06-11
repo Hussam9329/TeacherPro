@@ -5,7 +5,7 @@ import { persist } from 'zustand/middleware';
 import {
   courseApi, chapterApi, courseChapterApi,
   studentApi, examApi, gradeApi, opportunityLogApi, studentLeaveApi, studentCallApi, studentNoteApi, correctionSheetApi,
-  userApi, roleApi, logApi, authApi, pushAllToServer,
+  userApi, roleApi, logApi, authApi,
   loadAllFromServer, type AuthApiUser, type ServerData,
 } from './api';
 import { getStudentDuplicateMessage, sanitizeTelegramInput } from './student-utils';
@@ -1128,9 +1128,8 @@ export const useTeacherStore = create<TeacherState>()(
             roles, logs, currentUserId: nextCurrentUserId, dbConnected: true, dbLoading: false,
           });
 
-          // Recalculate rule-managed opportunity and dismissal effects on every load.
-          // This also repairs stale effects left by exams/grades that were deleted before this fix.
-          get().recalculateAcademicEffects();
+          // لا نعيد احتساب الفصل والفرص عند فتح النظام فقط.
+          // إعادة الاحتساب تبقى مرتبطة بأحداث صريحة مثل إدخال/تعديل درجة أو تعديل امتحان.
 
           const adminAfterLoad = users.find((u) => isPrimaryAdminUser(u));
           if (adminAfterLoad) {

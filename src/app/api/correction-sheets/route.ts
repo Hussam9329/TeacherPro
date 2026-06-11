@@ -39,8 +39,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const validationMessage = validateCorrectionSheetPayload(body);
     if (validationMessage) return validationError(validationMessage);
-    const existing = await db.correctionSheet.findFirst({
-      where: { studentId: String(body.studentId), examId: String(body.examId) },
+    const existing = await db.correctionSheet.findUnique({
+      where: { studentId_examId: { studentId: String(body.studentId), examId: String(body.examId) } },
     });
     if (existing) return validationError('توجد ورقة تصحيح مسجلة لهذا الطالب في نفس الامتحان', 409);
     const correctionSheet = await db.correctionSheet.create({
@@ -58,6 +58,10 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ correctionSheet }, { status: 201 });
   } catch (error) {
+    const err = error as { code?: string };
+    if (err?.code === 'P2002') {
+      return validationError('توجد ورقة تصحيح مسجلة لهذا الطالب في نفس الامتحان', 409);
+    }
     return routeErrorResponse(error, 'تعذر حفظ ورقة التصحيح حالياً.');
   }
 }

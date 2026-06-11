@@ -206,6 +206,10 @@ model CorrectionSheet {
   student          Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam             Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
   corrector        AppUser  @relation(fields: [correctorId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, examId])
+  @@index([examId])
+  @@index([correctorId])
 }
 
 model Role {

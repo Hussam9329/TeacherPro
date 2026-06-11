@@ -111,11 +111,11 @@ export function ExamNewView() {
 
   const activeCourses = useMemo(() => courses.filter((course) => course.active), [courses]);
 
-  const availableMainSitesFor = (state: ExamFormState) => {
+  const availableMainSitesFor = (_state: ExamFormState): string[] => {
     return [...MAIN_SITE_OPTIONS];
   };
 
-  const availableMainSites = useMemo(() => availableMainSitesFor(form), [form.courseIds]);
+  const availableMainSites = useMemo(() => availableMainSitesFor(form), [form]);
 
   useEffect(() => {
     setForm((prev) => ({
