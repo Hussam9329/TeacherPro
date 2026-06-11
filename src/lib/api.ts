@@ -202,7 +202,6 @@ export const authApi = {
 
 export interface ServerData {
   courses?: Array<Record<string, unknown>>;
-  sites?: Array<Record<string, unknown>>;
   chapters?: Array<Record<string, unknown>>;
   courseChapters?: Array<Record<string, unknown>>;
   students?: Array<Record<string, unknown>>;
@@ -215,7 +214,6 @@ export interface ServerData {
   correctionSheets?: Array<Record<string, unknown>>;
   users?: Array<Record<string, unknown>>;
   roles?: Array<Record<string, unknown>>;
-  demoCopies?: Array<Record<string, unknown>>;
   logs?: Array<Record<string, unknown>>;
 }
 
@@ -232,7 +230,6 @@ export async function loadAllFromServer(): Promise<ServerData | null> {
   // In that case, load only the endpoint groups their session is allowed to read.
   const endpointLoaders = [
     apiGetResponse<Pick<ServerData, 'courses'>>('courses', [403]),
-    apiGetResponse<Pick<ServerData, 'sites'>>('sites', [403]),
     apiGetResponse<Pick<ServerData, 'chapters'>>('chapters', [403]),
     apiGetResponse<Pick<ServerData, 'courseChapters'>>('course-chapters', [403]),
     apiGetResponse<Pick<ServerData, 'students'>>('students', [403]),
@@ -246,7 +243,6 @@ export async function loadAllFromServer(): Promise<ServerData | null> {
     apiGetResponse<Pick<ServerData, 'users'>>('users', [403]),
     apiGetResponse<Pick<ServerData, 'roles'>>('roles', [403]),
     apiGetResponse<Pick<ServerData, 'logs'>>('logs', [403]),
-    apiGetResponse<Pick<ServerData, 'demoCopies'>>('demo-copies', [403]),
   ];
   const results = await Promise.all(endpointLoaders);
   const merged = results.reduce<ServerData>((acc, result) => {
@@ -268,17 +264,6 @@ export const courseApi = {
     apiDelete('courses', id),
 };
 
-
-// ─── Site API ─────────────────────────────────────────────────────────────────
-
-export const siteApi = {
-  add: (site: { id: string; courseId: string; main: string; sub: string; active: boolean }) =>
-    apiPost('sites', site),
-  update: (id: string, updates: Record<string, unknown>) =>
-    apiPut('sites', { id, ...updates }),
-  remove: (id: string) =>
-    apiDelete('sites', id),
-};
 
 // ─── Chapter API ──────────────────────────────────────────────────────────────
 
@@ -414,22 +399,10 @@ export const logApi = {
     apiPost('logs', log),
 };
 
-// ─── DemoCopy API ─────────────────────────────────────────────────────────────
-
-export const demoCopyApi = {
-  add: (demo: Record<string, unknown>) =>
-    apiPost('demo-copies', demo),
-  update: (id: string, updates: Record<string, unknown>) =>
-    apiPut('demo-copies', { id, ...updates }),
-  remove: (id: string) =>
-    apiDelete('demo-copies', id),
-};
-
 // ─── Push all localStorage data to server (initial sync) ─────────────────────
 
 export async function pushAllToServer(data: {
   courses: Array<Record<string, unknown>>;
-  sites: Array<Record<string, unknown>>;
   chapters: Array<Record<string, unknown>>;
   courseChapters: Array<Record<string, unknown>>;
   students: Array<Record<string, unknown>>;
@@ -449,9 +422,6 @@ export async function pushAllToServer(data: {
 
   for (const course of data.courses) {
     promises.push(apiPost('courses', course));
-  }
-  for (const site of data.sites) {
-    promises.push(apiPost('sites', site));
   }
   for (const chapter of data.chapters) {
     promises.push(apiPost('chapters', chapter));

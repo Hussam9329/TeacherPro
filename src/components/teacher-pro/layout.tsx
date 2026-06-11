@@ -26,7 +26,6 @@ import {
   Upload,
   FileBarChart,
   LogOut,
-  Copy,
   ChevronDown,
   KeyRound,
 } from "lucide-react";
@@ -272,10 +271,6 @@ export function TeacherProLayout() {
     isAuthenticated,
     login,
     logout,
-    activeDemoId,
-    isDemoActive,
-    getActiveDemo,
-    exitDemoCopy,
     dbConnected,
     dbLoading,
     loadFromServer,
@@ -456,7 +451,7 @@ export function TeacherProLayout() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  if (!isAuthenticated && !activeDemoId) {
+  if (!isAuthenticated) {
     return <LoginScreen theme={theme} toggleTheme={toggleTheme} login={login} />;
   }
 

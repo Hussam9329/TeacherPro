@@ -47,6 +47,7 @@ export function GradeRecordsView() {
     exams,
     students,
     courses,
+    opportunityLogs,
     updateGrade,
     deleteGrade,
     classification,
@@ -75,6 +76,18 @@ export function GradeRecordsView() {
     const student = grade ? students.find((item) => item.id === grade.studentId) : null;
     return Boolean(grade && exam && classification(grade, exam, student || undefined).kind === "academic-accounting");
   };
+
+  const studentHasManualReactivation = (studentId: string) =>
+    opportunityLogs.some((log) => log.studentId === studentId && log.action === "إعادة تفعيل");
+
+  const confirmReactivatedStudentGradeEdit = (studentId: string) => {
+    if (!studentHasManualReactivation(studentId)) return true;
+    const student = students.find((item) => item.id === studentId);
+    return window.confirm(
+      `تعديل درجة ${student?.name || "هذا الطالب"} سيعيد احتساب حالة الطالب وقد يعيده للمفصولين. هل تريد المتابعة؟`,
+    );
+  };
+
 
   const toggleAcademicAccounting = (gradeId: string, checked: boolean) => {
     if (!isAcademicAccountingRow(gradeId)) {
@@ -128,6 +141,8 @@ export function GradeRecordsView() {
       toast.error(`الدرجة يجب أن تكون بين 0 و ${exam.fullMark}`);
       return;
     }
+    if (!confirmReactivatedStudentGradeEdit(grade.studentId)) return;
+
     updateGrade(editDialog.id, {
       status: editDialog.status,
       score,

@@ -10,7 +10,6 @@ const DEFAULT_ADMIN_ROLE_NAME = 'مدير عام';
 const ADMIN_FULL_PERMISSIONS = [
   'system.dashboard', 'system.settings', 'backup.view',
   'courses.view', 'courses.add', 'courses.edit', 'courses.delete',
-  'sites.view', 'sites.add', 'sites.edit', 'sites.delete',
   'chapters.view', 'chapters.add', 'chapters.edit', 'chapters.delete',
   'students.view', 'students.add', 'students.edit', 'students.delete',
   'exams.view', 'exams.add', 'exams.edit', 'exams.delete',
@@ -20,7 +19,6 @@ const ADMIN_FULL_PERMISSIONS = [
   'correction.view', 'correction.manage',
   'accounts.view', 'accounts.manage',
   'logs.view',
-  'demos.view', 'demos.manage',
 ];
 
 function permissionsJson(): string {

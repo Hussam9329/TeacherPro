@@ -11,7 +11,7 @@ async function validateGradePayload(body: Record<string, unknown>) {
   if (studentError) return studentError;
   const examError = requireText(body.examId, 'الامتحان');
   if (examError) return examError;
-  if (!['درجة', 'غائب', 'مجاز', 'غش'].includes(String(body.status ?? ''))) return 'حالة الدرجة غير صحيحة';
+  if (!['درجة', 'غائب', 'غش'].includes(String(body.status ?? ''))) return 'حالة الدرجة غير صحيحة';
   if (body.status === 'درجة') {
     const score = Number(body.score);
     const exam = await db.exam.findUnique({ where: { id: String(body.examId) }, select: { fullMark: true } });
@@ -28,6 +28,8 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    // ترحيل آمن للبيانات القديمة: حالة الإجازة صارت تدار من StudentLeave وليس من grades.
+    await db.grade.updateMany({ where: { status: 'مجاز' }, data: { status: 'غائب' } }).catch(() => null);
     const grades = await db.grade.findMany({ orderBy: { updatedAt: 'desc' }, include: { student: true, exam: true } });
     return NextResponse.json({ grades });
   } catch (error) {
@@ -80,6 +82,7 @@ export async function PUT(req: NextRequest) {
     delete data.accountingChecked;
     if (!id) return validationError('تعذر تحديد الدرجة المطلوبة');
     if (data.academicAccountingChecked !== undefined) data.academicAccountingChecked = Boolean(data.academicAccountingChecked);
+    if (data.status !== undefined && !['درجة', 'غائب', 'غش'].includes(String(data.status))) return validationError('حالة الدرجة غير صحيحة');
     if (data.score !== undefined) data.score = data.score === null ? null : Number(data.score);
     if (data.status === 'درجة' || data.score !== undefined) {
       const current = await db.grade.findUnique({ where: { id }, include: { exam: true } });

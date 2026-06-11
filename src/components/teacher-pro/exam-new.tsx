@@ -101,7 +101,6 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
 export function ExamNewView() {
   const {
     courses,
-    sites,
     courseChapters,
     addExam,
     courseName,
@@ -113,13 +112,10 @@ export function ExamNewView() {
   const activeCourses = useMemo(() => courses.filter((course) => course.active), [courses]);
 
   const availableMainSitesFor = (state: ExamFormState) => {
-    const courseSites = sites
-      .filter((s) => s.active && (state.courseIds.length === 0 || state.courseIds.includes(s.courseId)))
-      .map((s) => s.main);
-    return [...new Set([...MAIN_SITE_OPTIONS, ...courseSites])];
+    return [...MAIN_SITE_OPTIONS];
   };
 
-  const availableMainSites = useMemo(() => availableMainSitesFor(form), [sites, form.courseIds]);
+  const availableMainSites = useMemo(() => availableMainSitesFor(form), [form.courseIds]);
 
   useEffect(() => {
     setForm((prev) => ({

@@ -53,6 +53,7 @@ export function GradeEntryView() {
     courses,
     courseChapters,
     studentLeaves,
+    opportunityLogs,
     addGrade,
     courseName,
     classification,
@@ -66,6 +67,7 @@ export function GradeEntryView() {
   const [savingRows, setSavingRows] = useState<Record<string, boolean>>({});
   const [savedRows, setSavedRows] = useState<Record<string, string>>({});
   const [editableRows, setEditableRows] = useState<Record<string, boolean>>({});
+  const [reactivationWarningsAccepted, setReactivationWarningsAccepted] = useState<Record<string, boolean>>({});
   const [clockTick, setClockTick] = useState(0);
 
   useEffect(() => {
@@ -109,6 +111,28 @@ export function GradeEntryView() {
       (student.dismissalReason || "").includes(selectedExam.name),
     );
   };
+
+  const studentHasManualReactivation = (studentId: string) =>
+    opportunityLogs.some((log) => log.studentId === studentId && log.action === "إعادة تفعيل");
+
+  const reactivationWarningKey = (studentId: string) => `${studentId}:${selectedExam?.id || ""}`;
+
+  const needsReactivationWarning = (studentId: string) =>
+    Boolean(selectedExam && studentHasManualReactivation(studentId) && !reactivationWarningsAccepted[reactivationWarningKey(studentId)]);
+
+  const confirmReactivatedStudentGradeEdit = (studentId: string) => {
+    if (!needsReactivationWarning(studentId)) return true;
+    const student = students.find((item) => item.id === studentId);
+    const confirmed = window.confirm(
+      `تعديل درجة ${student?.name || "هذا الطالب"} سيعيد احتساب حالة الطالب وقد يعيده للمفصولين. هل تريد المتابعة؟`,
+    );
+    if (confirmed) {
+      const key = reactivationWarningKey(studentId);
+      setReactivationWarningsAccepted((prev) => ({ ...prev, [key]: true }));
+    }
+    return confirmed;
+  };
+
 
   const examStudents = useMemo(() => {
     if (!selectedExam) return [];
@@ -162,6 +186,8 @@ export function GradeEntryView() {
       }
     }
 
+    if (!confirmReactivatedStudentGradeEdit(studentId)) return;
+
     setSavingRows((prev) => ({ ...prev, [studentId]: true }));
     addGrade({
       studentId,
@@ -177,7 +203,7 @@ export function GradeEntryView() {
   };
 
   const autoSaveGrade = (studentId: string, draftOverride?: DraftGrade) => {
-    if (!selectedExam || getStudentLeaveForSelectedExam(studentId) || !canEditGradeForStudent(studentId)) return;
+    if (!selectedExam || getStudentLeaveForSelectedExam(studentId) || !canEditGradeForStudent(studentId) || needsReactivationWarning(studentId)) return;
     const draft = draftOverride || getDraft(studentId);
     if (draft.status === "درجة" && !isScoreInsideExamRange(toLatinDigits(draft.score).trim(), selectedExam.fullMark)) return;
     void saveGrade(studentId, draft, { silent: true });
@@ -193,6 +219,7 @@ export function GradeEntryView() {
     setDrafts({});
     setEditableRows({});
     setSavedRows({});
+    setReactivationWarningsAccepted({});
   };
 
   return (
@@ -322,6 +349,9 @@ export function GradeEntryView() {
                             <Badge variant={canEdit ? "secondary" : "destructive"} className="text-[10px]">
                               {canEdit ? "مفصول - يمكن تصحيح سبب الفصل" : "مفصول - إدخال مقفل"}
                             </Badge>
+                          )}
+                          {studentHasManualReactivation(student.id) && (
+                            <Badge variant="outline" className="text-[10px]">إعادة تفعيل يدوي</Badge>
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground">{student.code} - {courseName(student.courseId)}</p>

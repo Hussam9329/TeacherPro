@@ -13,7 +13,6 @@ export async function GET(req: NextRequest) {
   try {
     const [
       courses,
-      sites,
       chapters,
       courseChapters,
       students,
@@ -27,10 +26,8 @@ export async function GET(req: NextRequest) {
       users,
       roles,
       logs,
-      demoCopies,
     ] = await Promise.all([
       db.course.findMany(),
-      db.site.findMany(),
       db.chapter.findMany(),
       db.courseChapter.findMany(),
       db.student.findMany(),
@@ -55,14 +52,12 @@ export async function GET(req: NextRequest) {
       }),
       db.role.findMany(),
       db.auditLog.findMany(),
-      db.demoCopy.findMany(),
     ]);
 
     return NextResponse.json({
       version: 4,
       exportedAt: new Date().toISOString(),
       courses,
-      sites,
       chapters,
       courseChapters,
       students,
@@ -76,7 +71,6 @@ export async function GET(req: NextRequest) {
       users,
       roles,
       logs,
-      demoCopies,
     });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل البيانات');

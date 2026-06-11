@@ -18,20 +18,10 @@ model Course {
   studyTypesByProgram String @default("{}") // JSON: { "منهج كامل": ["إلكتروني"], "كورسات": ["حضوري"] }
   locationConfig     String @default("{}") // JSON: { studyType: { scopes, baghdadMode, baghdadSites, provinces } }
 
-  sites     Site[]
   students  Student[]
   chapters  CourseChapter[]
 }
 
-
-model Site {
-  id       String  @id @default(cuid())
-  main     String
-  sub      String
-  active   Boolean @default(true)
-  courseId String
-  course   Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
-}
 
 model Chapter {
   id            String          @id @default(cuid())
@@ -262,22 +252,4 @@ model AuditLog {
 
   @@index([module])
   @@index([time])
-}
-
-
-model DemoCopy {
-  id              String    @id @default(cuid())
-  name            String
-  description     String    @default("")
-  expiresAt       DateTime?
-  active          Boolean   @default(true)
-  demoUserId      String
-  createdFromData Boolean   @default(false)
-  snapshot        String    @default("{}")
-  limits          String    @default("{}")
-  createdAt       DateTime  @default(now())
-  durationDays    Int       @default(7)
-
-  @@index([active])
-  @@index([expiresAt])
 }

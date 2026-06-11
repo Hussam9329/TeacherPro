@@ -131,7 +131,6 @@ export function ExamRecordsView() {
     grades,
     students,
     courses,
-    sites,
     courseChapters,
     updateExam,
     toggleExam,
@@ -324,11 +323,7 @@ tr:nth-child(even) td { background: #f8fafc; }
   };
 
   const availableMainSitesForEdit = (state: FullExamEditState) => {
-    const courseSites = sites
-      .filter((site) => site.active && (state.courseIds.length === 0 || state.courseIds.includes(site.courseId)))
-      .flatMap((site) => [site.main, site.sub])
-      .filter(Boolean);
-    return [...new Set([...MAIN_SITE_OPTIONS, ...courseSites])];
+    return [...MAIN_SITE_OPTIONS];
   };
 
   const openEditExamDialog = (examId: string) => {

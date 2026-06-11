@@ -3,9 +3,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import {
-  courseApi, siteApi, chapterApi, courseChapterApi,
+  courseApi, chapterApi, courseChapterApi,
   studentApi, examApi, gradeApi, opportunityLogApi, studentLeaveApi, studentCallApi, studentNoteApi, correctionSheetApi,
-  userApi, roleApi, logApi, demoCopyApi, authApi, pushAllToServer,
+  userApi, roleApi, logApi, authApi, pushAllToServer,
   loadAllFromServer, type AuthApiUser, type ServerData,
 } from './api';
 import { getStudentDuplicateMessage, sanitizeTelegramInput } from './student-utils';
@@ -35,14 +35,6 @@ export interface Course {
   locationConfig: CourseLocationConfig;
 }
 
-
-export interface Site {
-  id: string;
-  courseId: string;
-  main: string;
-  sub: string;
-  active: boolean;
-}
 
 export interface Chapter {
   id: string;
@@ -223,70 +215,6 @@ export interface LeaderboardSettings {
   excludedExamIds: string[];
 }
 
-// ─── Demo Copy Types ─────────────────────────────────────────────────────────
-
-export interface DemoUsageLimits {
-  students: number;
-  courses: number;
-  sites: number;
-  chapters: number;
-  exams: number;
-  grades: number;
-  correction: number;
-}
-
-export const DEFAULT_DEMO_LIMITS: DemoUsageLimits = {
-  students: 30,
-  courses: 3,
-  sites: 10,
-  chapters: 5,
-  exams: 5,
-  grades: 100,
-  correction: 50,
-};
-
-/** Permissions that demo users are FORBIDDEN from accessing */
-export const DEMO_FORBIDDEN_PERMISSIONS = [
-  'accounts.view',
-  'accounts.manage',
-  'demos.manage',
-  'logs.view',
-  'system.settings',
-];
-
-/** Permissions granted to demo users (read/write on operational data only) */
-export const DEMO_ALLOWED_PERMISSIONS = [
-  'system.dashboard',
-  'courses.view', 'courses.add', 'courses.edit', 'courses.delete',
-  'sites.view', 'sites.add', 'sites.edit', 'sites.delete',
-  'chapters.view', 'chapters.add', 'chapters.edit', 'chapters.delete',
-  'students.view', 'students.add', 'students.edit', 'students.delete',
-  'exams.view', 'exams.add', 'exams.edit', 'exams.delete',
-  'grades.view', 'grades.add', 'grades.edit', 'grades.delete',
-  'opportunities.view', 'opportunities.manage',
-  'follow-up.view', 'follow-up.manage',
-  'correction.view', 'correction.manage',
-];
-
-export interface DemoCopy {
-  id: string;
-  name: string;
-  description: string;
-  /** null = no expiry; otherwise ISO date string */
-  expiresAt: string | null;
-  active: boolean;
-  /** ID of the demo user auto-created for this copy */
-  demoUserId: string;
-  /** Whether the demo was created from current data or empty */
-  createdFromData: boolean;
-  /** Snapshot of data when the demo was created (for isolation) */
-  snapshot: BackupShape;
-  limits: DemoUsageLimits;
-  createdAt: string;
-  /** Duration in days for the demo */
-  durationDays: number;
-}
-
 export type SectionId =
   | 'dashboard'
   | 'courses'
@@ -324,11 +252,6 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   { id: 'courses.add', label: 'إضافة دورة', category: 'الدورات', level: 'write', description: 'إنشاء دورة جديدة' },
   { id: 'courses.edit', label: 'تعديل دورة', category: 'الدورات', level: 'write', description: 'تعديل بيانات دورة' },
   { id: 'courses.delete', label: 'حذف دورة', category: 'الدورات', level: 'delete', description: 'حذف دورة من النظام' },
-  // المواقع
-  { id: 'sites.view', label: 'عرض المواقع', category: 'المواقع', level: 'read', description: 'عرض قائمة المواقع' },
-  { id: 'sites.add', label: 'إضافة موقع', category: 'المواقع', level: 'write', description: 'إنشاء موقع جديد' },
-  { id: 'sites.edit', label: 'تعديل موقع', category: 'المواقع', level: 'write', description: 'تعديل بيانات موقع' },
-  { id: 'sites.delete', label: 'حذف موقع', category: 'المواقع', level: 'delete', description: 'حذف موقع من النظام' },
   // الفصول
   { id: 'chapters.view', label: 'عرض الفصول', category: 'الفصول', level: 'read', description: 'عرض قائمة الفصول' },
   { id: 'chapters.add', label: 'إضافة فصل', category: 'الفصول', level: 'write', description: 'إنشاء فصل جديد' },
@@ -362,9 +285,6 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   { id: 'accounts.manage', label: 'إدارة الحسابات', category: 'الحسابات', level: 'manage', description: 'إضافة وتعديل وحذف الحسابات' },
   // السجلات
   { id: 'logs.view', label: 'عرض السجلات', category: 'السجلات', level: 'read', description: 'عرض سجلات العمليات والتدقيق' },
-  // نسخ الديمو
-  { id: 'demos.view', label: 'عرض نسخ الديمو', category: 'نسخ الديمو', level: 'read', description: 'عرض قائمة نسخ الديمو المؤقتة' },
-  { id: 'demos.manage', label: 'إدارة نسخ الديمو', category: 'نسخ الديمو', level: 'manage', description: 'إنشاء وتعديل وحذف نسخ الديمو' },
 ];
 
 // ─── Section-to-Permission Mapping ──────────────────────────────────────────
@@ -397,7 +317,7 @@ const ADMIN_PASSWORD = '1993';
 const ADMIN_ROLE_ID = 'role_admin';
 const ADMIN_ROLE_NAME = 'مدير عام';
 const ADMIN_FULL_PERMISSIONS = [...ALL_PERMISSION_IDS];
-const DEPRECATED_PERMISSION_IDS = new Set(['groups.view', 'groups.add', 'groups.edit', 'groups.delete']);
+const DEPRECATED_PERMISSION_IDS = new Set(['groups.view', 'groups.add', 'groups.edit', 'groups.delete', 'sites.view', 'sites.add', 'sites.edit', 'sites.delete', 'demos.view', 'demos.manage']);
 
 function sanitizePermissionIds(permissions: string[] = []): string[] {
   return Array.from(new Set(permissions.filter((permission) => !DEPRECATED_PERMISSION_IDS.has(permission))));
@@ -447,7 +367,7 @@ const DEFAULT_ROLES: Role[] = [
     id: 'role_supervisor',
     name: 'مشرف',
     isDefault: true,
-    permissions: ALL_PERMISSION_IDS.filter(p => p !== 'accounts.manage' && p !== 'system.settings').concat(['demos.view', 'demos.manage']),
+    permissions: ALL_PERMISSION_IDS.filter(p => p !== 'accounts.manage' && p !== 'system.settings'),
   },
   {
     id: 'role_registrar',
@@ -455,7 +375,7 @@ const DEFAULT_ROLES: Role[] = [
     isDefault: true,
     permissions: [
       'students.view', 'students.add', 'students.edit', 'students.delete',
-      'courses.view', 'sites.view', 'chapters.view',
+      'courses.view', 'chapters.view',
       'exams.view', 'grades.view',
     ],
   },
@@ -480,7 +400,6 @@ const DEFAULT_ROLES: Role[] = [
 
 export interface BackupShape {
   courses?: Course[];
-  sites?: Site[];
   chapters?: Chapter[];
   courseChapters?: CourseChapter[];
   students?: Student[];
@@ -495,14 +414,12 @@ export interface BackupShape {
   roles?: Role[];
   logs?: LogEntry[];
   leaderboardSettings?: LeaderboardSettings;
-  demoCopies?: DemoCopy[];
 }
 
 // ─── Store State ────────────────────────────────────────────────────────────
 
 interface TeacherState {
   courses: Course[];
-  sites: Site[];
   chapters: Chapter[];
   courseChapters: CourseChapter[];
   students: Student[];
@@ -517,9 +434,6 @@ interface TeacherState {
   roles: Role[];
   logs: LogEntry[];
   leaderboardSettings: LeaderboardSettings;
-  demoCopies: DemoCopy[];
-  activeDemoId: string | null;
-  mainSnapshotBeforeDemo: BackupShape | null;
   dbConnected: boolean;
   dbLoading: boolean;
 
@@ -555,11 +469,6 @@ interface TeacherState {
   toggleCourse: (id: string) => void;
   deleteCourse: (id: string) => boolean;
 
-
-  addSite: (courseId: string, main: string, sub: string) => void;
-  updateSite: (id: string, updates: Partial<Omit<Site, 'id'>>) => void;
-  toggleSite: (id: string) => void;
-  deleteSite: (id: string) => boolean;
 
   addChapter: (name: string, opportunities: number) => void;
   updateChapter: (id: string, updates: Partial<Omit<Chapter, 'id'>>) => void;
@@ -614,18 +523,6 @@ interface TeacherState {
   exportBackup: () => string;
   importBackup: (jsonText: string) => { ok: boolean; message: string };
   exportMonthlyReport: (month?: string) => string;
-
-  // Demo Copies
-  createDemoCopy: (name: string, description: string, durationDays: number, fromData: boolean, limits?: DemoUsageLimits) => string;
-  deleteDemoCopy: (id: string) => boolean;
-  toggleDemoCopy: (id: string) => void;
-  extendDemoCopy: (id: string, extraDays: number) => void;
-  resetDemoCopyData: (id: string) => void;
-  enterDemoCopy: (id: string) => void;
-  exitDemoCopy: () => void;
-  isDemoActive: () => boolean;
-  getActiveDemo: () => DemoCopy | null;
-  checkDemoLimits: (resource: keyof DemoUsageLimits) => { current: number; limit: number; allowed: boolean };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -681,7 +578,6 @@ function seedData() {
 
   return {
     courses: [...DEFAULT_COURSES] as Course[],
-    sites: [] as Site[],
     chapters: [] as Chapter[],
     courseChapters: [] as CourseChapter[],
     students: [] as Student[],
@@ -696,23 +592,15 @@ function seedData() {
     roles,
     logs: [] as LogEntry[],
     leaderboardSettings: { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] as string[] },
-    demoCopies: [] as DemoCopy[],
-    activeDemoId: null as string | null,
-    mainSnapshotBeforeDemo: null as BackupShape | null,
   };
 }
 
 const DATA_KEYS: (keyof BackupShape)[] = [
-  'courses', 'sites', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
+  'courses', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
   'opportunityLogs', 'studentLeaves', 'studentCalls', 'studentNotes', 'correctionSheets',
-  'users', 'roles', 'logs', 'leaderboardSettings', 'demoCopies',
+  'users', 'roles', 'logs', 'leaderboardSettings',
 ];
 
-const DEMO_DATA_KEYS: (keyof BackupShape)[] = [
-  'courses', 'sites', 'chapters', 'courseChapters', 'students', 'exams', 'grades',
-  'opportunityLogs', 'studentLeaves', 'studentCalls', 'studentNotes', 'correctionSheets',
-  'leaderboardSettings',
-];
 
 // ─── Migrate old users (no roleId) ──────────────────────────────────────────
 
@@ -754,53 +642,6 @@ function parseArrayField<T = unknown>(val: unknown): T[] {
 }
 
 
-function parseRecordField<T>(val: unknown, fallback: T): T {
-  if (val && typeof val === 'object' && !Array.isArray(val)) return val as T;
-  if (typeof val === 'string') {
-    try {
-      const parsed = JSON.parse(val);
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as T : fallback;
-    } catch {
-      return fallback;
-    }
-  }
-  return fallback;
-}
-
-function cloneBackupValue<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function snapshotOperationalData(state: TeacherState): BackupShape {
-  const snapshot: BackupShape = {};
-  DEMO_DATA_KEYS.forEach((key) => {
-    (snapshot as Record<string, unknown>)[key] = cloneBackupValue(state[key as keyof TeacherState] ?? (key === 'leaderboardSettings' ? { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] } : []));
-  });
-  return snapshot;
-}
-
-function restoreOperationalData(snapshot: BackupShape): Partial<TeacherState> {
-  const restored: Partial<TeacherState> = {};
-  DEMO_DATA_KEYS.forEach((key) => {
-    let value: unknown = cloneBackupValue(snapshot[key] ?? (key === 'leaderboardSettings' ? { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] } : []));
-    if (key === 'students' && Array.isArray(value)) {
-      value = value.map((student) => {
-        const copy = { ...(student as Record<string, unknown>) };
-        delete copy.groupId;
-        return copy;
-      });
-    }
-    if (key === 'exams' && Array.isArray(value)) {
-      value = value.map((exam) => {
-        const copy = { ...(exam as Record<string, unknown>) };
-        delete copy.groupId;
-        return copy;
-      });
-    }
-    (restored as Record<string, unknown>)[key] = value;
-  });
-  return restored;
-}
 
 function mergeDefaultCourses(courses: Course[]): Course[] {
   const existingIds = new Set(courses.map((course) => course.id));
@@ -1097,7 +938,6 @@ function syncToServer(
   action: () => unknown,
   options: { description?: string; rollback?: () => void } = {},
 ): void {
-  if (getState().activeDemoId) return;
   void Promise.resolve()
     .then(action)
     .then((result) => {
@@ -1129,7 +969,6 @@ export const useTeacherStore = create<TeacherState>()(
       dbLoading: false,
 
       loadFromServer: async () => {
-        if (get().activeDemoId) return true;
         set({ dbLoading: true });
         try {
           const serverData = await loadAllFromServer();
@@ -1149,10 +988,6 @@ export const useTeacherStore = create<TeacherState>()(
           })) as Course[];
           const courses = mergeDefaultCourses(serverCourses);
 
-
-          const sites = (serverData.sites || []).map((s: Record<string, unknown>) => ({
-            ...s, active: Boolean(s.active),
-          })) as Site[];
 
           const chapters = (serverData.chapters || []).map((ch: Record<string, unknown>) => ({
             ...ch, opportunities: Number(ch.opportunities || 0),
@@ -1287,21 +1122,10 @@ export const useTeacherStore = create<TeacherState>()(
             time: l.time ? String(l.time) : nowText(),
           })) as LogEntry[];
 
-          const demoCopies = (serverData.demoCopies || []).map((d: Record<string, unknown>) => ({
-            ...d,
-            expiresAt: d.expiresAt ? String(d.expiresAt) : null,
-            active: d.active !== undefined ? Boolean(d.active) : true,
-            createdFromData: Boolean(d.createdFromData),
-            snapshot: parseRecordField<BackupShape>(d.snapshot, {}),
-            limits: parseRecordField<DemoUsageLimits>(d.limits, { ...DEFAULT_DEMO_LIMITS }),
-            createdAt: d.createdAt ? String(d.createdAt).slice(0, 10) : todayISO(),
-            durationDays: Number(d.durationDays || 7),
-          })) as DemoCopy[];
-
           set({
-            courses, sites, chapters, courseChapters, students,
+            courses, chapters, courseChapters, students,
             exams, grades, opportunityLogs, studentLeaves, studentCalls, studentNotes, correctionSheets, users,
-            roles, logs, demoCopies, currentUserId: nextCurrentUserId, dbConnected: true, dbLoading: false,
+            roles, logs, currentUserId: nextCurrentUserId, dbConnected: true, dbLoading: false,
           });
 
           // Recalculate rule-managed opportunity and dismissal effects on every load.
@@ -1384,27 +1208,17 @@ export const useTeacherStore = create<TeacherState>()(
         return { ok: true, message: 'تم تسجيل الدخول بنجاح' };
       },
       canAccess: (section) => {
-        if (!get().isAuthenticated && !get().activeDemoId) return false;
+        if (!get().isAuthenticated) return false;
         const user = get().currentUser();
         if (!user) return false;
         // Admin user always has full access to every section and tab.
         if (hasFullAdminAccess(user)) return true;
-        // Demo users: block access to certain sections
-        if (get().activeDemoId) {
-          const forbiddenSections: SectionId[] = ['accounts', 'logs'];
-          if (forbiddenSections.includes(section as SectionId)) return false;
-        }
         // Check if user has the required permission for this section
         const requiredPermission = SECTION_PERMISSIONS[section as SectionId];
         if (!requiredPermission) return false;
         return user.permissions.includes(requiredPermission);
       },
       logout: () => {
-        // If in demo mode, exit demo first
-        if (get().activeDemoId) {
-          get().exitDemoCopy();
-          return;
-        }
         void authApi.logout();
         const admin = get().users.find((u) => isPrimaryAdminUser(u) && u.active) || get().users.find((u) => u.roleId === ADMIN_ROLE_ID && u.active);
         set({ currentUserId: admin?.id || 'u_admin', currentSection: 'dashboard', isAuthenticated: false });
@@ -1518,58 +1332,14 @@ export const useTeacherStore = create<TeacherState>()(
           get().logAction('الدورات', 'رفض حذف دورة', `${course.name} مرتبطة بطلاب أو امتحانات`);
           return false;
         }
-        // Delete related sites/courseChapters from DB
-        state.sites.filter(s => s.courseId === id).forEach(s => syncToServer(get, () => siteApi.remove(s.id)));
+        // Delete related course/chapter links from DB
         state.courseChapters.filter(cc => cc.courseId === id).forEach(cc => syncToServer(get, () => courseChapterApi.remove(cc.id)));
         set((s) => ({
           courses: s.courses.filter((c) => c.id !== id),
-          sites: s.sites.filter((site) => site.courseId !== id),
           courseChapters: s.courseChapters.filter((cc) => cc.courseId !== id),
         }));
         get().logAction('الدورات', 'حذف دورة', course.name);
         syncToServer(get, () => courseApi.remove(id));
-        return true;
-      },
-
-      addSite: (courseId, main, sub) => {
-        const site: Site = { id: uid('s'), courseId, main, sub, active: true };
-        set((s) => ({ sites: [...s.sites, site] }));
-        get().logAction('المواقع', 'إضافة موقع', `${main} - ${sub}`);
-        syncToServer(get, () => siteApi.add(site));
-      },
-      updateSite: (id, updates) => {
-        set((s) => ({ sites: s.sites.map((site) => site.id === id ? { ...site, ...updates } : site) }));
-        get().logAction('المواقع', 'تعديل موقع', id);
-        syncToServer(get, () => siteApi.update(id, updates as Record<string, unknown>));
-      },
-      toggleSite: (id) => {
-        const site = get().sites.find((si) => si.id === id);
-        set((s) => ({ sites: s.sites.map((si) => si.id === id ? { ...si, active: !si.active } : si) }));
-        get().logAction('المواقع', site?.active ? 'تعطيل موقع' : 'تفعيل موقع', site ? `${site.main} - ${site.sub}` : id);
-        syncToServer(get, () => siteApi.update(id, { active: !site?.active }));
-      },
-      deleteSite: (id) => {
-        const state = get();
-        const site = state.sites.find((si) => si.id === id);
-        if (!site) return false;
-        const hasLinkedStudents = state.students.some((student) => (
-          student.courseId === site.courseId &&
-          student.mainSite === site.main &&
-          (student.subSite || '') === (site.sub || '')
-        ));
-        if (hasLinkedStudents) {
-          get().logAction('المواقع', 'رفض حذف موقع', `${site.main} - ${site.sub} مرتبط بطلاب`);
-          return false;
-        }
-        set((s) => ({ sites: s.sites.filter((si) => si.id !== id) }));
-        get().logAction('المواقع', 'حذف موقع', `${site.main} - ${site.sub}`);
-        syncToServer(get, async () => {
-          const result = await siteApi.remove(id);
-          if (!result.ok) {
-            set((s) => ({ sites: s.sites.some((si) => si.id === id) ? s.sites : [...s.sites, site] }));
-            get().logAction('المواقع', 'تراجع حذف موقع', result.error || 'رفض الخادم حذف الموقع');
-          }
-        });
         return true;
       },
 
@@ -2297,150 +2067,10 @@ export const useTeacherStore = create<TeacherState>()(
         return rows.join('\n');
       },
 
-      // ─── Demo Copy Functions ────────────────────────────────────────────────
-      createDemoCopy: (name, description, durationDays, fromData, limits) => {
-        const state = get();
-        const demoUserId = uid('demo_u');
-        const now = new Date();
-        const expiresAt = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000).toISOString();
-
-        // Create a demo user with restricted permissions
-        const demoUser: User = {
-          id: demoUserId,
-          username: `demo_${name.replace(/\s+/g, '_').toLowerCase()}`,
-          name: `ديمو: ${name}`,
-          roleId: 'role_viewer',
-          role: 'مستخدم ديمو',
-          permissions: [...DEMO_ALLOWED_PERMISSIONS],
-          active: true,
-          password: 'demo',
-        };
-
-        // Take a snapshot of current data (for operational data only)
-        const snapshot = fromData
-          ? snapshotOperationalData(state)
-          : restoreOperationalData({ leaderboardSettings: { correctionErrorPenalty: 3, sumErrorPenalty: 1, excludedExamIds: [] } }) as BackupShape;
-
-        const demo: DemoCopy = {
-          id: uid('demo'),
-          name,
-          description,
-          expiresAt,
-          active: true,
-          demoUserId,
-          createdFromData: fromData,
-          snapshot,
-          limits: limits || { ...DEFAULT_DEMO_LIMITS },
-          createdAt: todayISO(),
-          durationDays,
-        };
-
-        set((s) => ({
-          demoCopies: [...s.demoCopies, demo],
-          users: [...s.users, demoUser],
-        }));
-        get().logAction('نسخ الديمو', 'إنشاء نسخة ديمو', `${name} - ${durationDays} يوم - ${fromData ? 'من البيانات' : 'فارغ'}`);
-        syncToServer(get, () => userApi.add({ ...demoUser, permissions: demoUser.permissions }));
-        syncToServer(get, () => demoCopyApi.add(demo as unknown as Record<string, unknown>));
-        return demo.id;
-      },
-      deleteDemoCopy: (id) => {
-        const demo = get().demoCopies.find(d => d.id === id);
-        if (!demo) return false;
-        // If this demo is active, exit first
-        if (get().activeDemoId === id) {
-          get().exitDemoCopy();
-        }
-        set((s) => ({
-          demoCopies: s.demoCopies.filter(d => d.id !== id),
-          users: s.users.filter(u => u.id !== demo.demoUserId),
-        }));
-        get().logAction('نسخ الديمو', 'حذف نسخة ديمو', demo.name);
-        syncToServer(get, () => demoCopyApi.remove(id));
-        syncToServer(get, () => userApi.remove(demo.demoUserId));
-        return true;
-      },
-      toggleDemoCopy: (id) => {
-        set((s) => ({
-          demoCopies: s.demoCopies.map(d => d.id === id ? { ...d, active: !d.active } : d),
-        }));
-        const demo = get().demoCopies.find(d => d.id === id);
-        get().logAction('نسخ الديمو', demo?.active ? 'تعطيل نسخة ديمو' : 'تفعيل نسخة ديمو', demo?.name || id);
-        if (demo) syncToServer(get, () => demoCopyApi.update(id, { active: demo.active }));
-      },
-      extendDemoCopy: (id, extraDays) => {
-        set((s) => ({
-          demoCopies: s.demoCopies.map(d => {
-            if (d.id !== id) return d;
-            const currentExpiry = d.expiresAt ? new Date(d.expiresAt) : new Date();
-            const newExpiry = new Date(currentExpiry.getTime() + extraDays * 24 * 60 * 60 * 1000);
-            return { ...d, expiresAt: newExpiry.toISOString(), durationDays: d.durationDays + extraDays };
-          }),
-        }));
-        const demo = get().demoCopies.find(d => d.id === id);
-        get().logAction('نسخ الديمو', 'تمديد نسخة ديمو', `${demo?.name} - +${extraDays} يوم`);
-        if (demo) syncToServer(get, () => demoCopyApi.update(id, { expiresAt: demo.expiresAt, durationDays: demo.durationDays }));
-      },
-      resetDemoCopyData: (id) => {
-        const demo = get().demoCopies.find(d => d.id === id);
-        if (!demo) return;
-        const resetData = restoreOperationalData(demo.snapshot);
-        if (get().activeDemoId === id) set(resetData);
-        get().logAction('نسخ الديمو', 'تصفير بيانات الديمو', demo.name);
-      },
-      enterDemoCopy: (id) => {
-        const state = get();
-        const demo = state.demoCopies.find(d => d.id === id);
-        if (!demo || !demo.active) return;
-        // Check if expired
-        if (demo.expiresAt && new Date(demo.expiresAt) < new Date()) return;
-        const mainSnapshot = state.mainSnapshotBeforeDemo || snapshotOperationalData(state);
-        const demoData = restoreOperationalData(demo.snapshot);
-        set({ ...demoData, mainSnapshotBeforeDemo: mainSnapshot, activeDemoId: id, currentUserId: demo.demoUserId, currentSection: 'dashboard', isAuthenticated: true });
-        get().logAction('نسخ الديمو', 'دخول نسخة ديمو', demo.name);
-      },
-      exitDemoCopy: () => {
-        const state = get();
-        const activeDemoId = state.activeDemoId;
-        const demo = state.demoCopies.find(d => d.id === activeDemoId);
-        if (!demo) { set({ activeDemoId: null, mainSnapshotBeforeDemo: null }); return; }
-        const currentSnapshot = snapshotOperationalData(state);
-        const restoreData = state.mainSnapshotBeforeDemo ? restoreOperationalData(state.mainSnapshotBeforeDemo) : {};
-        set((s) => ({
-          ...restoreData,
-          demoCopies: s.demoCopies.map(d => d.id === activeDemoId ? { ...d, snapshot: currentSnapshot } : d),
-          activeDemoId: null,
-          mainSnapshotBeforeDemo: null,
-          currentUserId: 'u_admin',
-          currentSection: 'dashboard',
-          isAuthenticated: false,
-        }));
-        syncToServer(get, () => demoCopyApi.update(demo.id, { snapshot: currentSnapshot }));
-        get().logAction('نسخ الديمو', 'خروج من نسخة ديمو', demo.name);
-      },
-      isDemoActive: () => !!get().activeDemoId,
-      getActiveDemo: () => get().demoCopies.find(d => d.id === get().activeDemoId) || null,
-      checkDemoLimits: (resource) => {
-        const demo = get().demoCopies.find(d => d.id === get().activeDemoId);
-        if (!demo) return { current: 0, limit: Infinity, allowed: true };
-        const limit = demo.limits[resource];
-        const state = get();
-        const currentMap: Record<keyof DemoUsageLimits, number> = {
-          students: state.students.length,
-          courses: state.courses.length,
-          sites: state.sites.length,
-          chapters: state.chapters.length,
-          exams: state.exams.length,
-          grades: state.grades.length,
-          correction: state.correctionSheets.length,
-        };
-        const current = currentMap[resource];
-        return { current, limit, allowed: current < limit };
-      },
     }),
     {
       name: 'teacher-pro-store-v4',
-      version: 11,
+      version: 12,
       migrate: (persistedState: unknown, version: number) => {
         const state = (persistedState ?? {}) as Record<string, unknown>;
         const nextState: Record<string, unknown> = { ...state };
@@ -2529,11 +2159,30 @@ export const useTeacherStore = create<TeacherState>()(
           }));
         }
 
+        // Migration v11 → v12: remove deleted Demo Copies and legacy Sites Management snapshots.
+        if (version < 12) {
+          delete nextState.sites;
+          delete nextState.demoCopies;
+          delete nextState.activeDemoId;
+          delete nextState.mainSnapshotBeforeDemo;
+          if (Array.isArray(nextState.users)) {
+            nextState.users = nextState.users.map((user) => ({
+              ...(user as Record<string, unknown>),
+              permissions: sanitizePermissionIds(parseArrayField<string>((user as Record<string, unknown>).permissions)),
+            }));
+          }
+          if (Array.isArray(nextState.roles)) {
+            nextState.roles = nextState.roles.map((role) => ({
+              ...(role as Record<string, unknown>),
+              permissions: sanitizePermissionIds(parseArrayField<string>((role as Record<string, unknown>).permissions)),
+            }));
+          }
+        }
+
         return nextState;
       },
       partialize: (state) => ({
         courses: state.courses,
-        sites: state.sites,
         chapters: state.chapters,
         courseChapters: state.courseChapters,
         students: state.students,
@@ -2552,9 +2201,6 @@ export const useTeacherStore = create<TeacherState>()(
         studentPageSize: state.studentPageSize,
         gradePageSize: state.gradePageSize,
         currentUserId: state.currentUserId,
-        demoCopies: state.demoCopies,
-        activeDemoId: state.activeDemoId,
-        mainSnapshotBeforeDemo: state.mainSnapshotBeforeDemo,
       }),
     }
   )
