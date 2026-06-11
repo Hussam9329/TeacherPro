@@ -1288,7 +1288,8 @@ export const useTeacherStore = create<TeacherState>()(
           currentSection: 'dashboard',
         }));
 
-        await get().loadFromServer();
+        // loadFromServer() is handled by the layout's useEffect when isAuthenticated becomes true.
+        // Calling it here too causes a double-load that triggers React #185 infinite re-render.
         get().logAction('تسجيل الدخول', 'دخول للنظام', sessionUser.name);
         return { ok: true, message: 'تم تسجيل الدخول بنجاح' };
       },

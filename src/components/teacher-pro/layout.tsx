@@ -320,13 +320,15 @@ export function TeacherProLayout() {
   useEffect(() => {
     const applyUrlSection = () => {
       const urlSection = readSectionFromLocation();
-      if (urlSection && urlSection !== currentSection && canAccess(urlSection))
-        setSection(urlSection);
+      if (urlSection && canAccess(urlSection)) {
+        const urlSectionVisible = visibleMenuItems.some((item) => item.id === urlSection);
+        if (urlSectionVisible) setSection(urlSection);
+      }
     };
     applyUrlSection();
     window.addEventListener("popstate", applyUrlSection);
     return () => window.removeEventListener("popstate", applyUrlSection);
-  }, [currentSection, canAccess, setSection]);
+  }, [canAccess, setSection, visibleMenuItems]);
 
   useEffect(() => {
     const urlSection = readSectionFromLocation();
@@ -435,7 +437,7 @@ export function TeacherProLayout() {
   ]);
 
   const CurrentComponent =
-    (isAdmin || canAccess(currentSection)) && visibleSectionIds.has(currentSection)
+    (isAdmin || canAccess(currentSection)) && currentSectionVisible
       ? sectionComponents[currentSection] || DashboardView
       : DashboardView;
   const currentMenu = menuItems.find((m) => m.id === currentSection);
