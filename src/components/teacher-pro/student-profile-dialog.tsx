@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { type Exam, type Grade, type OpportunityLog, type Student, type StudentNote } from "@/lib/teacher-store";
 import { Badge } from "@/components/ui/badge";
 import { formatAppDate } from "@/lib/format";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { XIcon } from "lucide-react";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "actions";
 
@@ -111,7 +111,24 @@ export function StudentProfileDialog({
     return [...noteRows, ...opportunityRows].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   }, [student, studentActionNotes, studentOpportunities]);
 
-  if (!student) return null;
+  useEffect(() => {
+    if (!open) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onOpenChange(false);
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, onOpenChange]);
+
+  if (!open || !student) return null;
 
   const activeChapter = activeChapterForCourse(student.courseId);
   const examCount = new Set(studentGrades.map((grade) => grade.examId)).size;
@@ -137,16 +154,24 @@ export function StudentProfileDialog({
   ];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent dir="rtl" className="flex max-h-[92dvh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden p-0 sm:w-[calc(100vw-2rem)] sm:max-w-[1180px] lg:max-h-[88vh]">
+    <div dir="rtl" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 backdrop-blur-sm sm:p-4" role="dialog" aria-modal="true" aria-labelledby="student-profile-title">
+      <div className="flex max-h-[92dvh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border bg-popover/95 text-popover-foreground shadow-2xl backdrop-blur-xl sm:w-[calc(100vw-2rem)] sm:max-w-[1180px] sm:rounded-3xl lg:max-h-[88vh]">
         <div className="flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl">
-          <DialogHeader className="shrink-0 border-b bg-gradient-to-l from-primary/15 via-purple-500/10 to-background p-4 text-right sm:p-6 sm:text-right">
+          <div className="relative shrink-0 border-b bg-gradient-to-l from-primary/15 via-purple-500/10 to-background p-4 text-right sm:p-6 sm:text-right">
+            <button
+              type="button"
+              aria-label="إغلاق ملف الطالب"
+              onClick={() => onOpenChange(false)}
+              className="absolute left-4 top-4 rounded-full p-1 opacity-70 transition-opacity hover:bg-accent hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <XIcon className="size-4" />
+            </button>
             <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
               <div className="min-w-0 space-y-2">
-                <DialogTitle className="text-xl font-black sm:text-2xl">ملف الطالب</DialogTitle>
-                <DialogDescription className="max-w-3xl text-xs leading-6 sm:text-sm">
+                <h2 id="student-profile-title" className="text-xl font-black sm:text-2xl">ملف الطالب</h2>
+                <p className="max-w-3xl text-xs leading-6 text-muted-foreground sm:text-sm">
                   {student.name}
-                </DialogDescription>
+                </p>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Badge variant={student.status === "نشط" ? "default" : "destructive"}>{student.status}</Badge>
                   <Badge variant="outline">{student.code}</Badge>
@@ -159,7 +184,7 @@ export function StudentProfileDialog({
                 <p className="mt-1 break-words text-xs text-muted-foreground">{student.school || "بدون مدرسة"}</p>
               </div>
             </div>
-          </DialogHeader>
+          </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
             <div className="space-y-4 sm:space-y-5">
@@ -293,7 +318,7 @@ export function StudentProfileDialog({
             </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
