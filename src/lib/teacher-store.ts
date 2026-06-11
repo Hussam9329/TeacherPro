@@ -19,7 +19,7 @@ import {
   parseJsonArray,
   parseJsonRecord,
 } from './course-config';
-import { isExamOnOrAfterStudentRegistration, isGradeEntered } from './exam-utils';
+import { isExamAvailableForEntry, isExamOnOrAfterStudentRegistration, isGradeEntered } from './exam-utils';
 import { toBaghdadDateTimeLocal } from './baghdad-time';
 import { formatAppDate } from './format';
 
@@ -742,11 +742,11 @@ function isAutomaticOpportunityLog(log: OpportunityLog): boolean {
   return log.action === 'خصم تلقائي' || log.action === 'فصل تلقائي' || String(log.reason || '').startsWith('تلقائي:');
 }
 
-function automaticOpportunityLogId(studentId: string, examId: string, action: string, reason: string): string {
+function automaticOpportunityLogId(studentId: string, examId: string, sourceId: string, action: string, reason: string): string {
   const slug = `${action}-${reason}`
     .replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, '-')
     .slice(0, 32);
-  return `auto_${studentId}_${examId}_${slug}`;
+  return `auto_${studentId}_${examId}_${sourceId || 'exam'}_${slug}`;
 }
 
 function isReactivationOpportunityLog(log: OpportunityLog): boolean {
@@ -883,10 +883,10 @@ function recalculateStudentsFromAcademicRules(
       .filter((grade) => grade.studentId === student.id)
       .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
 
-    const addAutomaticLog = (exam: Exam, action: string, amount: number, reason: string) => {
+    const addAutomaticLog = (exam: Exam, sourceId: string, action: string, amount: number, reason: string) => {
       if (amount <= 0 && action === 'خصم تلقائي') return;
       automaticLogs.push({
-        id: automaticOpportunityLogId(student.id, exam.id, action, reason),
+        id: automaticOpportunityLogId(student.id, exam.id, sourceId, action, reason),
         studentId: student.id,
         examId: exam.id,
         action,
@@ -897,15 +897,15 @@ function recalculateStudentsFromAcademicRules(
       });
     };
 
-    const consumeAllRemainingOpportunities = (exam: Exam, reason: string) => {
+    const consumeAllRemainingOpportunities = (exam: Exam, sourceId: string, reason: string) => {
       const deducted = Math.max(0, Math.trunc(opportunities));
       if (deducted > 0) {
-        addAutomaticLog(exam, 'خصم تلقائي', deducted, `${reason} - خصم جميع الفرص بسبب الفصل`);
+        addAutomaticLog(exam, sourceId || exam.id, 'خصم تلقائي', deducted, `${reason} - خصم جميع الفرص بسبب الفصل`);
       }
       opportunities = 0;
     };
 
-    const setDismissal = (type: string, reason: string, priority: number, exam?: Exam) => {
+    const setDismissal = (type: string, reason: string, priority: number, exam?: Exam, sourceId?: string) => {
       const finalChanceViolation = hasFinalChancePledge && type === 'فصل مؤقت';
       const effectiveType = finalChanceViolation ? 'فصل نهائي' : type;
       const effectiveReason = finalChanceViolation ? `عدم الالتزام بالتعهد السابق - ${reason}` : reason;
@@ -916,14 +916,15 @@ function recalculateStudentsFromAcademicRules(
         dismissalPriority = effectivePriority;
       }
       if (exam) {
-        consumeAllRemainingOpportunities(exam, effectiveReason);
-        addAutomaticLog(exam, 'فصل تلقائي', 0, effectiveReason);
+        consumeAllRemainingOpportunities(exam, sourceId || exam.id, effectiveReason);
+        addAutomaticLog(exam, sourceId || exam.id, 'فصل تلقائي', 0, effectiveReason);
       }
     };
 
     for (const grade of studentGrades) {
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
+      if (!isExamAvailableForEntry(exam)) continue;
       if (!isGradeEntered(grade, exam)) continue;
       if (finalChanceStartDate && String(grade.updatedAt || grade.createdAt || '').slice(0, 10) < finalChanceStartDate) continue;
       if (!isExamOnOrAfterStudentRegistration(student, exam)) continue;
@@ -934,22 +935,22 @@ function recalculateStudentsFromAcademicRules(
         cheatCount += 1;
         if (cheatCount === 1) {
           const deducted = Math.max(0, opportunities);
-          if (deducted > 0) addAutomaticLog(exam, 'خصم تلقائي', deducted, `غش أول في امتحان: ${exam.name} - خصم جميع الفرص`);
+          if (deducted > 0) addAutomaticLog(exam, grade.id, 'خصم تلقائي', deducted, `غش أول في امتحان: ${exam.name} - خصم جميع الفرص`);
           opportunities = 0;
-          setDismissal('فصل مؤقت', `أول حالة غش في امتحان: ${exam.name}`, 80, exam);
+          setDismissal('فصل مؤقت', `أول حالة غش في امتحان: ${exam.name}`, 80, exam, grade.id);
         } else {
-          setDismissal('فصل نهائي', `غش متكرر في امتحان: ${exam.name}`, 100, exam);
+          setDismissal('فصل نهائي', `غش متكرر في امتحان: ${exam.name}`, 100, exam, grade.id);
         }
         continue;
       }
 
       if (grade.status === 'غائب') {
         if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
-          setDismissal('فصل مؤقت', `غياب ضمن درجة الفصل في امتحان ${exam.type}: ${exam.name}`, 75, exam);
+          setDismissal('فصل مؤقت', `غياب ضمن درجة الفصل في امتحان ${exam.type}: ${exam.name}`, 75, exam, grade.id);
         } else {
           const penalty = examPenaltyValue(exam);
           opportunities -= penalty;
-          addAutomaticLog(exam, 'خصم تلقائي', penalty, `غياب في امتحان يومي: ${exam.name}`);
+          addAutomaticLog(exam, grade.id, 'خصم تلقائي', penalty, `غياب في امتحان يومي: ${exam.name}`);
         }
         continue;
       }
@@ -958,16 +959,16 @@ function recalculateStudentsFromAcademicRules(
         const score = Number(grade.score);
         if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
           if (score === 0) {
-            setDismissal('فصل مؤقت', `درجة صفر في امتحان ${exam.type}: ${exam.name}`, 76, exam);
+            setDismissal('فصل مؤقت', `درجة صفر في امتحان ${exam.type}: ${exam.name}`, 76, exam, grade.id);
           } else if (exam.dismissalGrade !== null && score <= exam.dismissalGrade) {
-            setDismissal('فصل مؤقت', `درجة فصل (${score}): ${exam.name}`, 75, exam);
+            setDismissal('فصل مؤقت', `درجة فصل (${score}): ${exam.name}`, 75, exam, grade.id);
           }
           continue;
         }
         if (score <= exam.discountMark) {
           const penalty = examPenaltyValue(exam);
           opportunities -= penalty;
-          addAutomaticLog(exam, 'خصم تلقائي', penalty, `درجة ${score} ضمن الخصم في امتحان: ${exam.name}`);
+          addAutomaticLog(exam, grade.id, 'خصم تلقائي', penalty, `درجة ${score} ضمن الخصم في امتحان: ${exam.name}`);
         }
       }
     }
@@ -1735,6 +1736,7 @@ export const useTeacherStore = create<TeacherState>()(
         set((s) => ({ exams: s.exams.map((e) => e.id === id ? { ...e, active: !e.active } : e) }));
         get().logAction('الامتحانات', exam?.active ? 'تعطيل امتحان' : 'تفعيل امتحان', exam?.name || id);
         syncToServer(get, () => examApi.update(id, { active: !exam?.active }));
+        get().recalculateAcademicEffects();
       },
       deleteExam: (id) => {
         const state = get();
@@ -1762,7 +1764,9 @@ export const useTeacherStore = create<TeacherState>()(
         }));
 
         relatedGrades.forEach((grade) => syncToServer(get, () => gradeApi.remove(grade.id)));
-        relatedOpportunityLogs.forEach((log) => syncToServer(get, () => opportunityLogApi.remove(log.id)));
+        relatedOpportunityLogs
+          .filter(isAutomaticOpportunityLog)
+          .forEach((log) => syncToServer(get, () => opportunityLogApi.remove(log.id), { description: 'حذف إجراء تلقائي مرتبط بامتحان محذوف' }));
         relatedCorrectionSheets.forEach((sheet) => syncToServer(get, () => correctionSheetApi.remove(sheet.id)));
         relatedLeaves.forEach((leave) => syncToServer(get, () => studentLeaveApi.remove(leave.id)));
         relatedCalls.forEach((call) => syncToServer(get, () => studentCallApi.remove(call.id)));
@@ -1886,8 +1890,19 @@ export const useTeacherStore = create<TeacherState>()(
         const nextAutomaticLogs = recalculated.opportunityLogs.filter(isAutomaticOpportunityLog);
         oldAutomaticLogs
           .filter((oldLog) => !nextAutomaticLogs.some((nextLog) => nextLog.id === oldLog.id))
-          .forEach((oldLog) => syncToServer(get, () => opportunityLogApi.remove(oldLog.id)));
-        nextAutomaticLogs.forEach((log) => syncToServer(get, () => opportunityLogApi.add(log as unknown as Record<string, unknown>)));
+          .forEach((oldLog) => syncToServer(get, () => opportunityLogApi.remove(oldLog.id), { description: 'حذف إجراء تلقائي ملغى' }));
+        nextAutomaticLogs
+          .filter((nextLog) => {
+            const oldLog = oldAutomaticLogs.find((item) => item.id === nextLog.id);
+            return !oldLog
+              || oldLog.action !== nextLog.action
+              || oldLog.amount !== nextLog.amount
+              || oldLog.reason !== nextLog.reason
+              || oldLog.date !== nextLog.date
+              || oldLog.chapterId !== nextLog.chapterId
+              || oldLog.examId !== nextLog.examId;
+          })
+          .forEach((log) => syncToServer(get, () => opportunityLogApi.add(log as unknown as Record<string, unknown>), { description: 'حفظ إجراء تلقائي' }));
       },
       adjustOpportunities: (studentId, amount, reason) => {
         const stateBefore = get();

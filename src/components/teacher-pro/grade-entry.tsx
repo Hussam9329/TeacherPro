@@ -55,6 +55,7 @@ export function GradeEntryView() {
     studentLeaves,
     opportunityLogs,
     addGrade,
+    deleteGrade,
     courseName,
     classification,
   } = useTeacherStore();
@@ -108,6 +109,13 @@ export function GradeEntryView() {
     });
   };
 
+  const gradeHasAutomaticEffect = (studentId: string, examId: string) =>
+    opportunityLogs.some((log) => (
+      log.studentId === studentId &&
+      log.examId === examId &&
+      (log.action === "خصم تلقائي" || log.action === "فصل تلقائي" || String(log.reason || "").startsWith("تلقائي:"))
+    ));
+
   const canEditGradeForStudent = (studentId: string) => {
     const student = students.find((item) => item.id === studentId);
     const grade = getGrade(studentId);
@@ -117,7 +125,10 @@ export function GradeEntryView() {
       selectedExam &&
       grade &&
       grade.examId === selectedExam.id &&
-      (student.dismissalReason || "").includes(selectedExam.name),
+      (
+        (student.dismissalReason || "").includes(selectedExam.name) ||
+        gradeHasAutomaticEffect(studentId, selectedExam.id)
+      ),
     );
   };
 
@@ -207,14 +218,46 @@ export function GradeEntryView() {
     });
     setSavingRows((prev) => ({ ...prev, [studentId]: false }));
     setEditableRows((prev) => ({ ...prev, [studentId]: false }));
-    setSavedRows((prev) => ({ ...prev, [studentId]: new Date().toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" }) }));
+    setSavedRows((prev) => ({ ...prev, [studentId]: `تم ${new Date().toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" })}` }));
     if (!options.silent) toast.success("تم حفظ الدرجة");
   };
 
   const autoSaveGrade = (studentId: string, draftOverride?: DraftGrade) => {
     if (!selectedExam || getStudentLeaveForSelectedExam(studentId) || !canEditGradeForStudent(studentId) || needsReactivationWarning(studentId)) return;
     const draft = draftOverride || getDraft(studentId);
-    if (draft.status === "درجة" && !isScoreInsideExamRange(toLatinDigits(draft.score).trim(), selectedExam.fullMark)) return;
+    const existing = getGrade(studentId);
+    const normalizedScore = toLatinDigits(draft.score).trim();
+
+    if (draft.status === "درجة") {
+      if (!normalizedScore) {
+        if (existing) {
+          const deleted = deleteGrade(existing.id);
+          if (deleted) {
+            setDrafts((prev) => {
+              const next = { ...prev };
+              delete next[studentId];
+              return next;
+            });
+            setEditableRows((prev) => ({ ...prev, [studentId]: false }));
+            setSavedRows((prev) => ({ ...prev, [studentId]: "تم حذف الدرجة" }));
+          }
+        }
+        return;
+      }
+      if (!isScoreInsideExamRange(normalizedScore, selectedExam.fullMark)) return;
+    }
+
+    const nextScore = draft.status === "درجة" ? Number(normalizedScore) : null;
+    if (
+      existing &&
+      existing.status === draft.status &&
+      existing.score === nextScore &&
+      (existing.notes || "") === (draft.notes || "")
+    ) {
+      setEditableRows((prev) => ({ ...prev, [studentId]: false }));
+      return;
+    }
+
     void saveGrade(studentId, draft, { silent: true });
   };
 
@@ -432,7 +475,7 @@ export function GradeEntryView() {
                           </Badge>
                         )}
                         <Badge variant={savedRows[student.id] ? "default" : "outline"} className="text-[10px]">
-                          {isSaving ? "جاري الحفظ" : leave ? "الطالب مجاز" : savedRows[student.id] ? `تم ${savedRows[student.id]}` : entered ? "محفوظ" : "غير مدخل"}
+                          {isSaving ? "جاري الحفظ" : leave ? "الطالب مجاز" : savedRows[student.id] || (entered ? "محفوظ" : "غير مدخل")}
                         </Badge>
                         {rowLocked ? (
                           <Button size="sm" variant="secondary" disabled={!canEdit} onClick={() => setEditableRows((prev) => ({ ...prev, [student.id]: true }))}>تعديل</Button>
