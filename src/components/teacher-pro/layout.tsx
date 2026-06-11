@@ -318,19 +318,6 @@ export function TeacherProLayout() {
   };
 
   useEffect(() => {
-    const applyUrlSection = () => {
-      const urlSection = readSectionFromLocation();
-      if (urlSection && canAccess(urlSection)) {
-        const urlSectionVisible = visibleMenuItems.some((item) => item.id === urlSection);
-        if (urlSectionVisible) setSection(urlSection);
-      }
-    };
-    applyUrlSection();
-    window.addEventListener("popstate", applyUrlSection);
-    return () => window.removeEventListener("popstate", applyUrlSection);
-  }, [canAccess, setSection, visibleMenuItems]);
-
-  useEffect(() => {
     const urlSection = readSectionFromLocation();
     if (urlSection && urlSection !== currentSection) return;
     if (typeof window !== "undefined" && sectionIds.has(currentSection)) {
@@ -394,6 +381,21 @@ export function TeacherProLayout() {
     () => (isAdmin ? menuItems : menuItems.filter((item) => canAccess(item.id))),
     [canAccess, isAdmin, user?.id, user?.roleId, userPermsKey],
   );
+
+  // Apply URL section after visibleMenuItems is available
+  useEffect(() => {
+    const applyUrlSection = () => {
+      const urlSection = readSectionFromLocation();
+      if (urlSection && canAccess(urlSection)) {
+        const urlSectionVisible = visibleMenuItems.some((item) => item.id === urlSection);
+        if (urlSectionVisible) setSection(urlSection);
+      }
+    };
+    applyUrlSection();
+    window.addEventListener("popstate", applyUrlSection);
+    return () => window.removeEventListener("popstate", applyUrlSection);
+  }, [canAccess, setSection, visibleMenuItems]);
+
   const currentSectionVisible = useMemo(
     () => visibleMenuItems.some((item) => item.id === currentSection),
     [visibleMenuItems, currentSection],
