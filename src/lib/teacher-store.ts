@@ -1342,7 +1342,12 @@ export const useTeacherStore = create<TeacherState>()(
         const user = currentUser?.name || 'مدير النظام';
         const log: LogEntry = { id: uid('log'), user, module, action, details, time: nowText() };
         set((s) => ({ logs: [log, ...s.logs] }));
-        syncToServer(get, () => logApi.add({ ...log, userName: user, userId: currentUser?.id }));
+
+        // لا نحاول إرسال السجل قبل تسجيل الدخول؛ هذا يمنع أخطاء 401 المتكررة
+        // عند فتح الصفحة أو بعد تسجيل الخروج، مع إبقاء السجل محفوظاً محلياً.
+        if (get().isAuthenticated && currentUser?.id) {
+          syncToServer(get, () => logApi.add({ ...log, userName: user, userId: currentUser.id }));
+        }
       },
 
       addCourse: (courseInput) => {

@@ -355,7 +355,7 @@ export function TeacherProLayout() {
   // تحميل البيانات من الخادم عند بدء التطبيق
   const [initDone, setInitDone] = useState(false);
   useEffect(() => {
-    if (initDone) return;
+    if (initDone || !isAuthenticated) return;
     setInitDone(true);
     loadFromServer().then((ok) => {
       if (ok) {
@@ -367,7 +367,11 @@ export function TeacherProLayout() {
         toast.warning("أنت تعمل محلياً؛ البيانات قد لا تُحفظ في السيرفر إلى أن يعود اتصال قاعدة البيانات.");
       }
     });
-  }, [initDone, loadFromServer]);
+  }, [initDone, isAuthenticated, loadFromServer]);
+
+  useEffect(() => {
+    if (!isAuthenticated && initDone) setInitDone(false);
+  }, [initDone, isAuthenticated]);
 
   // منع تمرير الخلفية عند فتح القائمة على الموبايل
   useEffect(() => {
