@@ -111,18 +111,17 @@ export function ExamNewView() {
   const { locked: isAddingExam, runLocked: runAddExamLocked } = useActionLock();
 
   const activeCourses = useMemo(() => courses.filter((course) => course.active), [courses]);
+  const availableMainSites = useMemo<string[]>(() => [...MAIN_SITE_OPTIONS], []);
 
-  const availableMainSitesFor = (_state: ExamFormState): string[] => {
-    return [...MAIN_SITE_OPTIONS];
-  };
-
-  const availableMainSites = useMemo(() => availableMainSitesFor(form), [form]);
+  const availableMainSitesFor = (_state: ExamFormState): string[] => availableMainSites;
 
   useEffect(() => {
-    setForm((prev) => ({
-      ...prev,
-      mainSites: prev.mainSites.filter((site) => availableMainSites.includes(site)),
-    }));
+    const availableSet = new Set(availableMainSites);
+    setForm((prev) => {
+      const nextMainSites = prev.mainSites.filter((site) => availableSet.has(site));
+      if (nextMainSites.length === prev.mainSites.length) return prev;
+      return { ...prev, mainSites: nextMainSites };
+    });
   }, [availableMainSites]);
 
   const validateForm = (state: ExamFormState) => {
