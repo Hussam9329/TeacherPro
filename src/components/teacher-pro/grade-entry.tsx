@@ -96,7 +96,16 @@ export function GradeEntryView() {
 
   const getStudentLeaveForSelectedExam = (studentId: string) => {
     if (!selectedExam) return undefined;
-    return studentLeaves.find((leave) => leave.studentId === studentId && leave.examId === selectedExam.id);
+    const examDate = String(selectedExam.date || "").slice(0, 10);
+    return studentLeaves.find((leave) => {
+      if (leave.studentId !== studentId) return false;
+      if ((leave.leaveType || "exam") === "period") {
+        const from = String(leave.dateFrom || leave.date || "").slice(0, 10);
+        const to = String(leave.dateTo || leave.dateFrom || leave.date || "").slice(0, 10);
+        return Boolean(examDate && from && to && examDate >= from && examDate <= to);
+      }
+      return leave.examId === selectedExam.id;
+    });
   };
 
   const canEditGradeForStudent = (studentId: string) => {

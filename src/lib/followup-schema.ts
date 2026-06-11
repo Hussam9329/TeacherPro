@@ -5,10 +5,13 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS "StudentLeave" (
     "id" TEXT NOT NULL,
     "studentId" TEXT NOT NULL,
-    "examId" TEXT NOT NULL,
+    "examId" TEXT,
+    "leaveType" TEXT NOT NULL DEFAULT 'exam',
     "reason" TEXT NOT NULL,
     "studyType" TEXT NOT NULL DEFAULT '',
     "date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "dateFrom" TIMESTAMP(3),
+    "dateTo" TIMESTAMP(3),
     "notes" TEXT NOT NULL DEFAULT '',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "StudentLeave_pkey" PRIMARY KEY ("id")
@@ -38,6 +41,13 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "StudentLeave_studentId_idx" ON "StudentLeave"("studentId")`,
   `CREATE INDEX IF NOT EXISTS "StudentLeave_examId_idx" ON "StudentLeave"("examId")`,
   `CREATE INDEX IF NOT EXISTS "StudentLeave_date_idx" ON "StudentLeave"("date")`,
+  `ALTER TABLE "StudentLeave" ADD COLUMN IF NOT EXISTS "leaveType" TEXT NOT NULL DEFAULT 'exam'`,
+  `ALTER TABLE "StudentLeave" ADD COLUMN IF NOT EXISTS "dateFrom" TIMESTAMP(3)`,
+  `ALTER TABLE "StudentLeave" ADD COLUMN IF NOT EXISTS "dateTo" TIMESTAMP(3)`,
+  `ALTER TABLE "StudentLeave" ALTER COLUMN "examId" DROP NOT NULL`,
+  `UPDATE "StudentLeave" SET "leaveType" = COALESCE(NULLIF("leaveType", ''), 'exam'), "dateFrom" = COALESCE("dateFrom", "date"), "dateTo" = COALESCE("dateTo", "date")`,
+  `CREATE INDEX IF NOT EXISTS "StudentLeave_dateFrom_idx" ON "StudentLeave"("dateFrom")`,
+  `CREATE INDEX IF NOT EXISTS "StudentLeave_dateTo_idx" ON "StudentLeave"("dateTo")`,
   `CREATE INDEX IF NOT EXISTS "StudentCall_studentId_idx" ON "StudentCall"("studentId")`,
   `CREATE INDEX IF NOT EXISTS "StudentCall_examId_idx" ON "StudentCall"("examId")`,
   `CREATE INDEX IF NOT EXISTS "StudentCall_createdAt_idx" ON "StudentCall"("createdAt")`,
@@ -87,6 +97,7 @@ export async function ensureFollowupTables(): Promise<void> {
 
 export async function withFollowupTables<T>(operation: () => Promise<T>, label: string): Promise<T> {
   try {
+    await ensureFollowupTables();
     return await operation();
   } catch (error) {
     if (!isMissingDatabaseObjectError(error)) throw error;

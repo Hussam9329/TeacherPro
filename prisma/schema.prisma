@@ -145,21 +145,26 @@ model OpportunityLog {
 }
 
 model StudentLeave {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   studentId String
-  examId    String
+  examId    String?
+  leaveType String    @default("exam")
   reason    String
-  studyType String   @default("")
-  date      DateTime @default(now())
-  notes     String   @default("")
-  createdAt DateTime @default(now())
-  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studyType String    @default("")
+  date      DateTime  @default(now())
+  dateFrom  DateTime?
+  dateTo    DateTime?
+  notes     String    @default("")
+  createdAt DateTime  @default(now())
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam      Exam?     @relation(fields: [examId], references: [id], onDelete: Cascade)
 
   @@unique([studentId, examId])
   @@index([studentId])
   @@index([examId])
   @@index([date])
+  @@index([dateFrom])
+  @@index([dateTo])
 }
 
 model StudentCall {

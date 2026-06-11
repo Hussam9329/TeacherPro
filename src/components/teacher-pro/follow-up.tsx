@@ -21,8 +21,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { formatAppDate } from "@/lib/format";
+import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
+import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { searchAny } from "@/lib/validation";
+import { StudentProfileDialog } from "./student-profile-dialog";
 import {
   hasActiveChapterLink,
   isExamOnOrAfterStudentRegistration,
@@ -31,7 +33,7 @@ import {
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
 
-type FollowTab = "leaves" | "calls" | "profile" | "grade-lists";
+type FollowTab = "leaves" | "calls" | "grade-lists";
 type CallCategory = "absent" | "failed" | "low-pass" | "full" | "not-entered";
 type ContactTarget = "الطالب" | "ولي الأمر";
 
@@ -48,9 +50,12 @@ type CallRow = {
 const tabLabels: Record<FollowTab, string> = {
   leaves: "الإجازات",
   calls: "المكالمات",
-  profile: "ملف الطالب",
   "grade-lists": "قوائم الدرجات",
 };
+
+const leaveReasonOptions = ["حالة مرضية", "سفر", "حالة وفاة", "ظروف قاهرة", "أخرى"] as const;
+type LeaveReasonOption = typeof leaveReasonOptions[number];
+type LeaveMode = "exam" | "period";
 
 const callCategoryLabels: Record<CallCategory, string> = {
   absent: "الغائبون",
@@ -72,10 +77,37 @@ function phoneForWhatsApp(phone?: string) {
   return digits;
 }
 
-function formatScore(grade: Grade | undefined, exam: Exam) {
-  if (!grade) return "غير مدخل";
-  if (grade.status !== "درجة") return grade.status;
-  return `${grade.score ?? "—"}/${exam.fullMark}`;
+function whatsappLink(phone: string): string {
+  const digits = phoneForWhatsApp(sanitizePhoneInput(phone));
+  return digits ? `https://wa.me/${digits}` : "#";
+}
+
+function telegramLink(telegram: string): string {
+  const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
+  return username ? `https://t.me/${encodeURIComponent(username)}` : "#";
+}
+
+function graceEndDate(student: Student): string {
+  const start = new Date(`${String(student.createdAt || "").slice(0, 10)}T00:00:00`);
+  const days = Number(student.accountingGraceDays || 0);
+  if (!Number.isFinite(start.getTime()) || days <= 0) return formatAppDate(student.createdAt, String(student.createdAt || "").slice(0, 10) || "-");
+  const end = new Date(start);
+  end.setDate(end.getDate() + days - 1);
+  return formatAppDate(end);
+}
+
+function isStudentCurrentlyInGrace(student: Student): boolean {
+  const days = Number(student.accountingGraceDays || 0);
+  if (days <= 0) return false;
+  const start = new Date(`${String(student.createdAt || "").slice(0, 10)}T00:00:00`);
+  const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00`);
+  const endExclusive = new Date(start);
+  endExclusive.setDate(endExclusive.getDate() + days);
+  return Number.isFinite(start.getTime()) && today >= start && today < endExclusive;
+}
+
+function dayKey(value: string | null | undefined): string {
+  return String(value || "").slice(0, 10);
 }
 
 export function FollowUpView() {
@@ -83,27 +115,29 @@ export function FollowUpView() {
     students,
     exams,
     grades,
-    courses,
     courseChapters,
     studentLeaves,
     studentCalls,
     studentNotes,
+    opportunityLogs,
     addStudentLeave,
     deleteStudentLeave,
     addStudentCall,
     updateStudentCall,
-    addStudentNote,
-    deleteStudentNote,
     courseName,
-    classification,
+    activeChapterForCourse,
   } = useTeacherStore();
 
   const [tab, setTab] = useState<FollowTab>("leaves");
   const [globalSearch, setGlobalSearch] = useState("");
   const [leaveStudentId, setLeaveStudentId] = useState("");
+  const [leaveMode, setLeaveMode] = useState<LeaveMode>("exam");
   const [leaveExamId, setLeaveExamId] = useState("");
-  const [leaveReason, setLeaveReason] = useState("");
+  const [leaveReasonChoice, setLeaveReasonChoice] = useState<LeaveReasonOption>("حالة مرضية");
+  const [customLeaveReason, setCustomLeaveReason] = useState("");
   const [leaveDate, setLeaveDate] = useState(todayISO());
+  const [leaveDateFrom, setLeaveDateFrom] = useState(todayISO());
+  const [leaveDateTo, setLeaveDateTo] = useState(todayISO());
   const [leaveNotes, setLeaveNotes] = useState("");
 
   const [callExamId, setCallExamId] = useState("");
@@ -111,29 +145,37 @@ export function FollowUpView() {
   const [callSearch, setCallSearch] = useState("");
 
   const [profileStudentId, setProfileStudentId] = useState("");
-  const [profileSearch, setProfileSearch] = useState("");
-  const [noteText, setNoteText] = useState("");
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
 
   const [gradeListExamId, setGradeListExamId] = useState("");
   const [gradeListCategory, setGradeListCategory] = useState<CallCategory>("absent");
 
   const filteredStudents = useMemo(() => {
-    const query = globalSearch || profileSearch;
+    const query = globalSearch;
     return students
       .filter((student) => !query || searchAny(query, [student.name, student.code, student.phone, student.parentPhone, student.telegram, student.school, student.subSite, student.studyType]))
       .slice(0, 20);
-  }, [students, globalSearch, profileSearch]);
+  }, [students, globalSearch]);
 
   const selectedLeaveStudent = students.find((student) => student.id === leaveStudentId);
-  const selectedProfileStudent = students.find((student) => student.id === profileStudentId);
+  const selectedProfileStudent = students.find((student) => student.id === profileStudentId) || null;
+  const leaveReason = leaveReasonChoice === "أخرى" ? customLeaveReason.trim() : leaveReasonChoice;
 
-  const leavesByKey = useMemo(() => {
-    const keys = new Set<string>();
-    studentLeaves.forEach((leave) => keys.add(`${leave.studentId}:${leave.examId}`));
-    return keys;
-  }, [studentLeaves]);
+  const leaveAppliesToExam = (leave: { studentId: string; examId?: string; leaveType?: string; date?: string; dateFrom?: string; dateTo?: string }, studentId: string, exam: Exam) => {
+    if (leave.studentId !== studentId) return false;
+    if ((leave.leaveType || "exam") === "period") {
+      const examDate = dayKey(exam.date);
+      const from = dayKey(leave.dateFrom || leave.date);
+      const to = dayKey(leave.dateTo || leave.dateFrom || leave.date);
+      return Boolean(examDate && from && to && examDate >= from && examDate <= to);
+    }
+    return leave.examId === exam.id;
+  };
 
-  const studentHasLeaveForExam = (studentId: string, examId: string) => leavesByKey.has(`${studentId}:${examId}`);
+  const studentHasLeaveForExam = (studentId: string, examId: string) => {
+    const exam = exams.find((item) => item.id === examId);
+    return Boolean(exam && studentLeaves.some((leave) => leaveAppliesToExam(leave, studentId, exam)));
+  };
 
   const eligibleStudentsForExam = (exam: Exam) => {
     const selectedMainSites = splitSelection(exam.mainSite);
@@ -184,36 +226,54 @@ export function FollowUpView() {
       .filter((row) => callCategory === "all" || row.category === callCategory)
       .filter((row) => !callSearch || searchAny(callSearch, [row.student.name, row.student.code, row.student.phone, row.student.parentPhone, row.exam.name, row.reason]))
       .sort((a, b) => `${b.exam.date}-${a.student.name}`.localeCompare(`${a.exam.date}-${b.student.name}`, "ar"));
-  }, [exams, students, grades, courseChapters, callExamId, callCategory, callSearch, leavesByKey]);
+  }, [exams, students, grades, courseChapters, callExamId, callCategory, callSearch, studentLeaves]);
 
   const gradeListRows = useMemo(() => {
     const exam = exams.find((item) => item.id === gradeListExamId) || exams[0];
     if (!exam) return [];
     return buildCallRowsForExam(exam).filter((row) => row.category === gradeListCategory);
-  }, [exams, students, grades, courseChapters, gradeListExamId, gradeListCategory, leavesByKey]);
+  }, [exams, students, grades, courseChapters, gradeListExamId, gradeListCategory, studentLeaves]);
 
   const saveLeave = () => {
-    if (!leaveStudentId || !leaveExamId || !leaveReason.trim()) {
-      toast.error("اختر الطالب والامتحان واكتب سبب الإجازة");
+    if (!leaveStudentId || !leaveReason.trim()) {
+      toast.error("اختر الطالب وسبب الإجازة");
       return;
     }
-    const duplicate = studentLeaves.some((leave) => leave.studentId === leaveStudentId && leave.examId === leaveExamId);
+    if (leaveMode === "exam" && !leaveExamId) {
+      toast.error("اختر الامتحان المطلوب للإجازة");
+      return;
+    }
+    if (leaveMode === "period" && (!leaveDateFrom || !leaveDateTo)) {
+      toast.error("حدد بداية ونهاية فترة الإجازة");
+      return;
+    }
+    const from = leaveDateFrom <= leaveDateTo ? leaveDateFrom : leaveDateTo;
+    const to = leaveDateFrom <= leaveDateTo ? leaveDateTo : leaveDateFrom;
+    const duplicate = studentLeaves.some((leave) => {
+      if (leave.studentId !== leaveStudentId) return false;
+      if (leaveMode === "exam") return (leave.leaveType || "exam") === "exam" && leave.examId === leaveExamId;
+      return (leave.leaveType || "exam") === "period" && dayKey(leave.dateFrom || leave.date) === from && dayKey(leave.dateTo || leave.dateFrom || leave.date) === to;
+    });
     if (duplicate) {
-      toast.error("هذا الطالب لديه إجازة مسجلة لهذا الامتحان");
+      toast.error("هذا الطالب لديه إجازة مسجلة بنفس النطاق");
       return;
     }
     const student = students.find((item) => item.id === leaveStudentId);
     addStudentLeave({
       studentId: leaveStudentId,
-      examId: leaveExamId,
-      reason: leaveReason.trim(),
+      examId: leaveMode === "exam" ? leaveExamId : "",
+      leaveType: leaveMode,
+      reason: leaveReason,
       studyType: student?.studyType || "",
-      date: leaveDate || todayISO(),
+      date: leaveMode === "exam" ? (leaveDate || todayISO()) : from,
+      dateFrom: leaveMode === "exam" ? (leaveDate || todayISO()) : from,
+      dateTo: leaveMode === "exam" ? (leaveDate || todayISO()) : to,
       notes: leaveNotes.trim(),
     });
-    setLeaveReason("");
+    setCustomLeaveReason("");
+    setLeaveReasonChoice("حالة مرضية");
     setLeaveNotes("");
-    toast.success("تمت إضافة الإجازة وإعادة احتساب الطالب بدون محاسبة هذا الامتحان");
+    toast.success(leaveMode === "period" ? "تمت إضافة الإجازة للفترة وإلغاء محاسبة امتحاناتها" : "تمت إضافة الإجازة وإعادة احتساب الطالب بدون محاسبة هذا الامتحان");
   };
 
   const callLogForRow = (row: CallRow) => studentCalls.find((call) => call.studentId === row.student.id && call.examId === row.exam.id && call.category === row.category);
@@ -237,45 +297,41 @@ export function FollowUpView() {
 
   const openProfile = (studentId: string) => {
     setProfileStudentId(studentId);
-    setTab("profile");
+    setProfileDialogOpen(true);
   };
 
-  const addProfileNote = () => {
-    if (!selectedProfileStudent || !noteText.trim()) return;
-    addStudentNote({ studentId: selectedProfileStudent.id, kind: "ملاحظة", text: noteText.trim(), date: todayISO() });
-    setNoteText("");
-    toast.success("تم حفظ الملاحظة");
-  };
+  const studentRecordCount = (studentId: string) => (
+    grades.filter((grade) => grade.studentId === studentId).length +
+    studentLeaves.filter((leave) => leave.studentId === studentId).length +
+    studentCalls.filter((call) => call.studentId === studentId).length +
+    studentNotes.filter((note) => note.studentId === studentId).length +
+    opportunityLogs.filter((log) => log.studentId === studentId).length
+  );
 
-  const profileGrades = selectedProfileStudent
-    ? grades.filter((grade) => grade.studentId === selectedProfileStudent.id).map((grade) => ({ grade, exam: exams.find((exam) => exam.id === grade.examId) })).filter((row) => row.exam)
-    : [];
-  const profileLeaves = selectedProfileStudent ? studentLeaves.filter((leave) => leave.studentId === selectedProfileStudent.id) : [];
-  const profileCalls = selectedProfileStudent ? studentCalls.filter((call) => call.studentId === selectedProfileStudent.id) : [];
-  const profileNotes = selectedProfileStudent ? studentNotes.filter((note) => note.studentId === selectedProfileStudent.id) : [];
-
-  const renderStudentPicker = (mode: "leave" | "profile") => {
-    const selectedId = mode === "leave" ? leaveStudentId : profileStudentId;
-    const setSelected = mode === "leave" ? setLeaveStudentId : setProfileStudentId;
-    const searchValue = mode === "leave" ? globalSearch : profileSearch;
-    const setSearchValue = mode === "leave" ? setGlobalSearch : setProfileSearch;
+  const renderStudentPicker = () => {
     return (
       <div className="space-y-2">
-        <Label>{mode === "leave" ? "البحث العام عن الطالب" : "اختيار الطالب"}</Label>
-        <Input value={searchValue} onChange={(event) => setSearchValue(event.target.value)} placeholder="اسم / كود / هاتف / مدرسة" />
+        <Label>البحث العام عن الطالب</Label>
+        <Input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="اسم / كود / هاتف / مدرسة" />
         <div className="max-h-44 space-y-1 overflow-y-auto rounded-2xl border bg-muted/30 p-2">
           {filteredStudents.map((student) => (
             <button
               key={student.id}
               type="button"
-              onClick={() => setSelected(student.id)}
-              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-right text-sm transition ${selectedId === student.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              onClick={() => setLeaveStudentId(student.id)}
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-right text-sm transition ${leaveStudentId === student.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
             >
               <span>{student.name}</span>
               <span className="text-xs opacity-80">{student.code}</span>
             </button>
           ))}
         </div>
+        {selectedLeaveStudent && (
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card/80 p-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => openProfile(selectedLeaveStudent.id)}>ملف الطالب</Button>
+            <Badge variant="secondary">عدد السجلات: {studentRecordCount(selectedLeaveStudent.id)}</Badge>
+          </div>
+        )}
       </div>
     );
   };
@@ -287,14 +343,15 @@ export function FollowUpView() {
         {studentLeaves.length === 0 ? <p className="empty-state py-6">لا توجد إجازات مسجلة</p> : studentLeaves.map((leave) => {
           const student = students.find((item) => item.id === leave.studentId);
           const exam = exams.find((item) => item.id === leave.examId);
+          const isPeriod = (leave.leaveType || "exam") === "period";
           return (
-            <div key={leave.id} className="grid gap-2 rounded-2xl border bg-card/80 p-3 text-sm md:grid-cols-5 md:items-center">
+            <div key={leave.id} className="grid gap-2 rounded-2xl border bg-card/80 p-3 text-sm lg:grid-cols-[1.1fr_1fr_1.4fr_1fr_auto] lg:items-center">
               <b>{student?.name || "طالب محذوف"}</b>
               <span>{leave.reason}</span>
+              <span>{isPeriod ? `فترة: ${formatAppDate(leave.dateFrom || leave.date)} إلى ${formatAppDate(leave.dateTo || leave.dateFrom || leave.date)}` : (exam?.name || "امتحان محذوف")}</span>
               <span>{leave.studyType || student?.studyType || "—"}</span>
-              <span>{exam?.name || "امتحان محذوف"}</span>
-              <div className="flex items-center justify-between gap-2">
-                <span>{formatAppDate(leave.date)}</span>
+              <div className="flex items-center justify-end gap-2">
+                <Badge variant={isPeriod ? "secondary" : "outline"}>{isPeriod ? "فترة زمنية" : "حسب الامتحان"}</Badge>
                 <Button variant="ghost" size="sm" onClick={() => deleteStudentLeave(leave.id)}>حذف</Button>
               </div>
             </div>
@@ -326,7 +383,7 @@ export function FollowUpView() {
           <label className="flex items-center gap-1 text-xs">
             <input type="checkbox" checked={Boolean(call?.completed)} onChange={(event) => saveCallState(row, event.target.checked, target)} /> تمت
           </label>
-          <Button variant="ghost" size="sm" onClick={() => openProfile(row.student.id)}>الملف</Button>
+          <Button variant="ghost" size="sm" onClick={() => openProfile(row.student.id)}>ملف الطالب</Button>
         </div>
       </div>
     );
@@ -352,10 +409,21 @@ export function FollowUpView() {
           <Card>
             <CardHeader><CardTitle>إضافة إجازة</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              {renderStudentPicker("leave")}
-              <div className="space-y-2"><Label>الامتحان</Label><Select value={leaveExamId} onValueChange={setLeaveExamId}><SelectTrigger><SelectValue placeholder="اختر الامتحان" /></SelectTrigger><SelectContent>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name} - {formatAppDate(exam.date)}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>سبب الإجازة</Label><Input value={leaveReason} onChange={(event) => setLeaveReason(event.target.value)} placeholder="مرض / ظرف عائلي / سفر..." /></div>
-              <div className="space-y-2"><Label>تاريخ الإجازة</Label><DateInput value={leaveDate} onChange={setLeaveDate} /></div>
+              {renderStudentPicker()}
+              <div className="space-y-2"><Label>نوع الإجازة</Label><Select value={leaveMode} onValueChange={(value) => setLeaveMode(value as LeaveMode)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="exam">حسب الامتحان</SelectItem><SelectItem value="period">فترة زمنية</SelectItem></SelectContent></Select></div>
+              {leaveMode === "exam" ? (
+                <>
+                  <div className="space-y-2"><Label>الامتحان</Label><Select value={leaveExamId} onValueChange={setLeaveExamId}><SelectTrigger><SelectValue placeholder="اختر الامتحان" /></SelectTrigger><SelectContent>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name} - {formatAppDate(exam.date)}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="space-y-2"><Label>تاريخ الإجازة</Label><DateInput value={leaveDate} onChange={setLeaveDate} /></div>
+                </>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2"><Label>من</Label><DateInput value={leaveDateFrom} onChange={setLeaveDateFrom} /></div>
+                  <div className="space-y-2"><Label>إلى</Label><DateInput value={leaveDateTo} onChange={setLeaveDateTo} /></div>
+                </div>
+              )}
+              <div className="space-y-2"><Label>سبب الإجازة</Label><Select value={leaveReasonChoice} onValueChange={(value) => setLeaveReasonChoice(value as LeaveReasonOption)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{leaveReasonOptions.map((reason) => <SelectItem key={reason} value={reason}>{reason}</SelectItem>)}</SelectContent></Select></div>
+              {leaveReasonChoice === "أخرى" && <div className="space-y-2"><Label>السبب اليدوي</Label><Input value={customLeaveReason} onChange={(event) => setCustomLeaveReason(event.target.value)} placeholder="اكتب سبب الإجازة" /></div>}
               <div className="space-y-2"><Label>ملاحظات</Label><Input value={leaveNotes} onChange={(event) => setLeaveNotes(event.target.value)} placeholder="اختياري" /></div>
               {selectedLeaveStudent && <p className="rounded-xl bg-muted/50 p-2 text-xs text-muted-foreground">نوع الدراسة: <b>{selectedLeaveStudent.studyType || "—"}</b></p>}
               <Button className="w-full" onClick={saveLeave}>حفظ الإجازة</Button>
@@ -372,16 +440,25 @@ export function FollowUpView() {
         </div>
       )}
 
-      {tab === "profile" && (
-        <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
-          <Card><CardHeader><CardTitle>بحث ملف الطالب</CardTitle></CardHeader><CardContent>{renderStudentPicker("profile")}</CardContent></Card>
-          <Card><CardHeader><CardTitle>ملف الطالب</CardTitle></CardHeader><CardContent>{!selectedProfileStudent ? <p className="empty-state py-8">اختر طالباً لعرض ملفه</p> : <div className="space-y-4"><div className="grid gap-3 md:grid-cols-4"><div className="rounded-2xl border p-3"><p className="text-xs text-muted-foreground">الطالب</p><b>{selectedProfileStudent.name}</b></div><div className="rounded-2xl border p-3"><p className="text-xs text-muted-foreground">الدورة</p><b>{courseName(selectedProfileStudent.courseId)}</b></div><div className="rounded-2xl border p-3"><p className="text-xs text-muted-foreground">الفرص</p><b>{selectedProfileStudent.opportunities}/{selectedProfileStudent.baseOpportunities}</b></div><div className="rounded-2xl border p-3"><p className="text-xs text-muted-foreground">الحالة</p><b>{selectedProfileStudent.status}</b></div></div><div className="rounded-2xl border p-3"><h4 className="mb-2 font-bold">المعلومات العامة</h4><p className="text-sm text-muted-foreground">الهاتف: {selectedProfileStudent.phone || "—"} / ولي الأمر: {selectedProfileStudent.parentPhone || "—"} / المدرسة: {selectedProfileStudent.school || "—"} / نوع الدراسة: {selectedProfileStudent.studyType || "—"}</p></div><div className="grid gap-4 lg:grid-cols-2"><div className="rounded-2xl border p-3"><h4 className="mb-2 font-bold">سجل الامتحانات</h4><div className="space-y-2">{profileGrades.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد درجات</p> : profileGrades.map(({ grade, exam }) => exam ? <div key={grade.id} className="rounded-xl bg-muted/50 p-2 text-sm"><b>{exam.name}</b><p>{formatScore(grade, exam)} - {classification(grade, exam, selectedProfileStudent).text}</p></div> : null)}</div></div><div className="rounded-2xl border p-3"><h4 className="mb-2 font-bold">الإجازات</h4>{profileLeaves.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد إجازات</p> : profileLeaves.map((leave) => <p key={leave.id} className="rounded-xl bg-muted/50 p-2 text-sm">{formatAppDate(leave.date)} - {leave.reason}</p>)}</div><div className="rounded-2xl border p-3"><h4 className="mb-2 font-bold">سجل المكالمات</h4>{profileCalls.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد مكالمات</p> : profileCalls.map((call) => <p key={call.id} className="rounded-xl bg-muted/50 p-2 text-sm">{call.completed ? "تمت" : "غير مكتملة"} - {call.target} - {call.notes}</p>)}</div><div className="rounded-2xl border p-3"><h4 className="mb-2 font-bold">الملاحظات والمتابعات</h4><div className="mb-2 flex gap-2"><Input value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder="اكتب ملاحظة متابعة" /><Button onClick={addProfileNote}>حفظ</Button></div>{profileNotes.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد ملاحظات</p> : profileNotes.map((note) => <div key={note.id} className="mb-1 flex items-center justify-between rounded-xl bg-muted/50 p-2 text-sm"><span>{formatAppDate(note.date)} - {note.text}</span><Button variant="ghost" size="sm" onClick={() => deleteStudentNote(note.id)}>حذف</Button></div>)}</div></div></div>}</CardContent></Card>
-        </div>
-      )}
-
       {tab === "grade-lists" && (
         <div className="space-y-4"><Card><CardContent className="grid gap-3 p-4 md:grid-cols-2"><div className="space-y-2"><Label>الامتحان</Label><Select value={gradeListExamId || exams[0]?.id || ""} onValueChange={setGradeListExamId}><SelectTrigger><SelectValue placeholder="اختر الامتحان" /></SelectTrigger><SelectContent>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name} - {formatAppDate(exam.date)}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>القائمة</Label><Select value={gradeListCategory} onValueChange={(value) => setGradeListCategory(value as CallCategory)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(Object.keys(callCategoryLabels) as CallCategory[]).map((key) => <SelectItem key={key} value={key}>{callCategoryLabels[key]}</SelectItem>)}</SelectContent></Select></div></CardContent></Card><div className="space-y-2">{gradeListRows.length === 0 ? <p className="empty-state py-8">لا توجد أسماء في هذه القائمة</p> : gradeListRows.map(renderCallRow)}</div></div>
       )}
+
+      <StudentProfileDialog
+        student={selectedProfileStudent}
+        open={profileDialogOpen}
+        onOpenChange={setProfileDialogOpen}
+        exams={exams}
+        grades={grades}
+        opportunityLogs={opportunityLogs}
+        studentNotes={studentNotes}
+        courseName={courseName}
+        activeChapterForCourse={activeChapterForCourse}
+        whatsappLink={whatsappLink}
+        telegramLink={telegramLink}
+        isStudentCurrentlyInGrace={isStudentCurrentlyInGrace}
+        graceEndDate={graceEndDate}
+      />
     </div>
   );
 }

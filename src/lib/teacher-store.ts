@@ -126,13 +126,18 @@ export interface OpportunityLog {
   chapterId: string;
 }
 
+export type StudentLeaveType = 'exam' | 'period';
+
 export interface StudentLeave {
   id: string;
   studentId: string;
   examId: string;
+  leaveType: StudentLeaveType;
   reason: string;
   studyType: string;
   date: string;
+  dateFrom: string;
+  dateTo: string;
   notes: string;
 }
 
@@ -765,8 +770,61 @@ function hasFinalChanceForStudent(logs: OpportunityLog[], studentId: string): bo
   return logs.some((log) => log.studentId === studentId && isFinalChanceOpportunityLog(log));
 }
 
-function isStudentExcusedForExam(state: Pick<TeacherState, 'studentLeaves'>, studentId: string, examId: string): boolean {
-  return state.studentLeaves.some((leave) => leave.studentId === studentId && leave.examId === examId);
+function dayKey(value: string | Date | null | undefined): string {
+  if (!value) return '';
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : '';
+  return String(value || '').slice(0, 10);
+}
+
+function normalizeLeaveType(value: unknown): StudentLeaveType {
+  return value === 'period' ? 'period' : 'exam';
+}
+
+function normalizeStudentLeave(leaveInput: Partial<StudentLeave> | Record<string, unknown>): StudentLeave {
+  const leave = leaveInput as Partial<StudentLeave>;
+  const leaveType = normalizeLeaveType(leave.leaveType);
+  const date = dayKey(leave.date) || todayISO();
+  const dateFrom = dayKey(leave.dateFrom) || date;
+  const dateTo = dayKey(leave.dateTo) || dateFrom;
+  return {
+    id: String(leave.id || ''),
+    studentId: String(leave.studentId || ''),
+    examId: String(leave.examId || ''),
+    leaveType,
+    reason: String(leave.reason || ''),
+    studyType: String(leave.studyType || ''),
+    date,
+    dateFrom: dateFrom <= dateTo ? dateFrom : dateTo,
+    dateTo: dateFrom <= dateTo ? dateTo : dateFrom,
+    notes: String(leave.notes || ''),
+  };
+}
+
+function studentLeaveAppliesToExam(leave: StudentLeave, studentId: string, exam: Exam | undefined): boolean {
+  if (!exam || leave.studentId !== studentId) return false;
+  const normalized = normalizeStudentLeave(leave);
+  if (normalized.leaveType === 'period') {
+    const examDate = dayKey(exam.date);
+    return Boolean(examDate && examDate >= normalized.dateFrom && examDate <= normalized.dateTo);
+  }
+  return normalized.examId === exam.id;
+}
+
+function isStudentExcusedForExam(
+  state: Pick<TeacherState, 'studentLeaves' | 'exams'>,
+  studentId: string,
+  examId: string,
+): boolean {
+  const exam = state.exams.find((item) => item.id === examId);
+  return state.studentLeaves.some((leave) => studentLeaveAppliesToExam(leave, studentId, exam));
+}
+
+function affectedExamIdsForLeave(leave: StudentLeave, state: Pick<TeacherState, 'exams'>): string[] {
+  const normalized = normalizeStudentLeave(leave);
+  if (normalized.leaveType === 'exam') return normalized.examId ? [normalized.examId] : [];
+  return state.exams
+    .filter((exam) => studentLeaveAppliesToExam(normalized, normalized.studentId, exam))
+    .map((exam) => exam.id);
 }
 
 function recalculateStudentsFromAcademicRules(
@@ -783,7 +841,7 @@ function recalculateStudentsFromAcademicRules(
   const previousAutomaticLogs = state.opportunityLogs.filter(isAutomaticOpportunityLog);
   const hasScopedRecalculation = Boolean(targetStudentIds?.size);
   const automaticLogs: OpportunityLog[] = [];
-  const leaveKeys = new Set((state.studentLeaves || []).map((leave) => `${leave.studentId}:${leave.examId}`));
+  const normalizedLeaves = (state.studentLeaves || []).map((leave) => normalizeStudentLeave(leave));
 
   const students = state.students.map((student) => {
     const isTargetStudent = !hasScopedRecalculation || targetStudentIds?.has(student.id);
@@ -869,7 +927,7 @@ function recalculateStudentsFromAcademicRules(
       if (!isGradeEntered(grade, exam)) continue;
       if (finalChanceStartDate && String(grade.updatedAt || grade.createdAt || '').slice(0, 10) < finalChanceStartDate) continue;
       if (!isExamOnOrAfterStudentRegistration(student, exam)) continue;
-      if (leaveKeys.has(`${student.id}:${exam.id}`)) continue;
+      if (normalizedLeaves.some((leave) => studentLeaveAppliesToExam(leave, student.id, exam))) continue;
       if (isExamWithinStudentGracePeriod(student, exam)) continue;
 
       if (grade.status === 'غش') {
@@ -1077,12 +1135,12 @@ export const useTeacherStore = create<TeacherState>()(
             date: ol.date ? String(ol.date).slice(0, 10) : todayISO(),
           })) as OpportunityLog[];
 
-          const studentLeaves = (serverData.studentLeaves || []).map((leave: Record<string, unknown>) => ({
+          const studentLeaves = (serverData.studentLeaves || []).map((leave: Record<string, unknown>) => normalizeStudentLeave({
             ...leave,
             date: leave.date ? String(leave.date).slice(0, 10) : todayISO(),
-            notes: String(leave.notes || ''),
-            studyType: String(leave.studyType || ''),
-          })) as StudentLeave[];
+            dateFrom: leave.dateFrom ? String(leave.dateFrom).slice(0, 10) : (leave.date ? String(leave.date).slice(0, 10) : todayISO()),
+            dateTo: leave.dateTo ? String(leave.dateTo).slice(0, 10) : (leave.date ? String(leave.date).slice(0, 10) : todayISO()),
+          }));
 
           const studentCalls = (serverData.studentCalls || []).map((call: Record<string, unknown>) => ({
             ...call,
@@ -1259,6 +1317,7 @@ export const useTeacherStore = create<TeacherState>()(
         return cc ? get().chapters.find((c) => c.id === cc.chapterId) || null : null;
       },
       classification: (grade, exam, student) => {
+        if (student && get().studentLeaves.some((leave) => studentLeaveAppliesToExam(leave, student.id, exam))) return { text: 'مجاز', type: 'info', kind: 'excused' };
         if (!grade || !isGradeEntered(grade, exam)) return { text: 'غير مسجل', type: 'neutral', kind: 'missing' };
         if (student && !isExamOnOrAfterStudentRegistration(student, exam)) return { text: 'قبل التسجيل', type: 'neutral', kind: 'before-registration' };
         if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
@@ -1850,8 +1909,10 @@ export const useTeacherStore = create<TeacherState>()(
       },
       addStudentLeave: (leaveData) => {
         const stateBefore = get();
-        const leave: StudentLeave = { ...leaveData, id: uid('lv') };
-        const existingGrade = stateBefore.grades.find((grade) => grade.studentId === leave.studentId && grade.examId === leave.examId);
+        const leave: StudentLeave = normalizeStudentLeave({ ...leaveData, id: uid('lv') });
+        const affectedExamIds = affectedExamIdsForLeave(leave, stateBefore);
+        const affectedExamIdSet = new Set(affectedExamIds);
+        const existingGrades = stateBefore.grades.filter((grade) => grade.studentId === leave.studentId && affectedExamIdSet.has(grade.examId));
         const previousState = {
           students: stateBefore.students,
           grades: stateBefore.grades,
@@ -1859,25 +1920,49 @@ export const useTeacherStore = create<TeacherState>()(
           studentLeaves: stateBefore.studentLeaves,
           studentNotes: stateBefore.studentNotes,
         };
-        const removedGradeNote: StudentNote | null = existingGrade
+        const leaveLabel = leave.leaveType === 'period'
+          ? `فترة ${formatAppDate(leave.dateFrom)} إلى ${formatAppDate(leave.dateTo)}`
+          : `امتحان (${stateBefore.exams.find((exam) => exam.id === leave.examId)?.name || 'امتحان محذوف'})`;
+        const removedGradeNote: StudentNote | null = existingGrades.length
           ? {
               id: uid('note'),
               studentId: leave.studentId,
               kind: 'إجراء',
-              text: `حذف درجة بسبب تسجيل إجازة لامتحان (${stateBefore.exams.find((exam) => exam.id === leave.examId)?.name || 'امتحان محذوف'})`,
+              text: `إضافة إجازة ${leaveLabel}: حذف ${existingGrades.length} درجة وإلغاء أي إجراء أكاديمي تلقائي مرتبط بها`,
               date: todayISO(),
             }
-          : null;
+          : {
+              id: uid('note'),
+              studentId: leave.studentId,
+              kind: 'إجراء',
+              text: `إضافة إجازة ${leaveLabel}: إلغاء محاسبة الطالب ضمن نطاق الإجازة`,
+              date: todayISO(),
+            };
+
         set((s) => ({
-          studentLeaves: [leave, ...s.studentLeaves.filter((item) => !(item.studentId === leave.studentId && item.examId === leave.examId))],
-          grades: s.grades.filter((grade) => !(grade.studentId === leave.studentId && grade.examId === leave.examId)),
-          studentNotes: removedGradeNote ? [removedGradeNote, ...s.studentNotes] : s.studentNotes,
+          studentLeaves: [
+            leave,
+            ...s.studentLeaves.filter((item) => {
+              const normalized = normalizeStudentLeave(item);
+              if (normalized.id === leave.id) return false;
+              if (leave.leaveType === 'exam') return !(normalized.studentId === leave.studentId && normalized.leaveType === 'exam' && normalized.examId === leave.examId);
+              return !(
+                normalized.studentId === leave.studentId &&
+                normalized.leaveType === 'period' &&
+                normalized.dateFrom === leave.dateFrom &&
+                normalized.dateTo === leave.dateTo
+              );
+            }),
+          ],
+          grades: s.grades.filter((grade) => !(grade.studentId === leave.studentId && affectedExamIdSet.has(grade.examId))),
+          studentNotes: [removedGradeNote, ...s.studentNotes],
         }));
-        get().logAction('المتابعة', 'إضافة إجازة', `${get().studentName(leave.studentId)} - ${leave.reason}`);
-        if (existingGrade) {
-          get().logAction('الدرجات', 'إزالة درجة بسبب الإجازة', `${get().studentName(leave.studentId)} - ${get().exams.find((exam) => exam.id === leave.examId)?.name || ''}`);
-          if (removedGradeNote) syncToServer(get, () => studentNoteApi.add(removedGradeNote as unknown as Record<string, unknown>));
-        }
+        get().logAction('المتابعة', 'إضافة إجازة', `${get().studentName(leave.studentId)} - ${leave.reason} - ${leaveLabel}`);
+        existingGrades.forEach((grade) => {
+          const examName = stateBefore.exams.find((exam) => exam.id === grade.examId)?.name || '';
+          get().logAction('الدرجات', 'إزالة درجة بسبب الإجازة', `${get().studentName(leave.studentId)} - ${examName}`);
+        });
+        syncToServer(get, () => studentNoteApi.add(removedGradeNote as unknown as Record<string, unknown>));
         syncToServer(get, () => studentLeaveApi.add(leave as unknown as Record<string, unknown>), {
           description: 'إضافة إجازة',
           rollback: () => set(previousState),
@@ -1891,9 +1976,21 @@ export const useTeacherStore = create<TeacherState>()(
           students: stateBefore.students,
           opportunityLogs: stateBefore.opportunityLogs,
           studentLeaves: stateBefore.studentLeaves,
+          studentNotes: stateBefore.studentNotes,
         };
-        set((s) => ({ studentLeaves: s.studentLeaves.filter((leave) => leave.id !== id) }));
+        const actionNote: StudentNote | null = deletedLeave ? {
+          id: uid('note'),
+          studentId: deletedLeave.studentId,
+          kind: 'إجراء',
+          text: `حذف إجازة (${deletedLeave.reason}) وإعادة تفعيل محاسبة الطالب ضمن نطاقها`,
+          date: todayISO(),
+        } : null;
+        set((s) => ({
+          studentLeaves: s.studentLeaves.filter((leave) => leave.id !== id),
+          studentNotes: actionNote ? [actionNote, ...s.studentNotes] : s.studentNotes,
+        }));
         get().logAction('المتابعة', 'حذف إجازة', id);
+        if (actionNote) syncToServer(get, () => studentNoteApi.add(actionNote as unknown as Record<string, unknown>));
         syncToServer(get, () => studentLeaveApi.remove(id), {
           description: 'حذف إجازة',
           rollback: () => set(previousState),
@@ -2161,7 +2258,7 @@ export const useTeacherStore = create<TeacherState>()(
     }),
     {
       name: 'teacher-pro-store-v4',
-      version: 12,
+      version: 13,
       migrate: (persistedState: unknown, version: number) => {
         const state = (persistedState ?? {}) as Record<string, unknown>;
         const nextState: Record<string, unknown> = { ...state };
@@ -2268,6 +2365,11 @@ export const useTeacherStore = create<TeacherState>()(
               permissions: sanitizePermissionIds(parseArrayField<string>((role as Record<string, unknown>).permissions)),
             }));
           }
+        }
+
+        // Migration v12 → v13: add leave scope fields for exam/period leave records.
+        if (version < 13 && Array.isArray(nextState.studentLeaves)) {
+          nextState.studentLeaves = nextState.studentLeaves.map((leave) => normalizeStudentLeave(leave as Record<string, unknown>));
         }
 
         return nextState;

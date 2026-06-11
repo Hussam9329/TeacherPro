@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAnyPermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { findManyOrEmpty, routeErrorResponse } from '@/lib/route-helpers';
+import { withFollowupTables } from '@/lib/followup-schema';
 
 export async function GET(req: NextRequest) {
   const authError = await requireAnyPermission(req, ['backup.view', 'accounts.manage', 'system.settings']);
@@ -34,9 +35,9 @@ export async function GET(req: NextRequest) {
       db.exam.findMany(),
       db.grade.findMany(),
       db.opportunityLog.findMany(),
-      findManyOrEmpty(db.studentLeave.findMany(), 'StudentLeave'),
-      findManyOrEmpty(db.studentCall.findMany(), 'StudentCall'),
-      findManyOrEmpty(db.studentNote.findMany(), 'StudentNote'),
+      withFollowupTables(() => db.studentLeave.findMany(), 'StudentLeave'),
+      withFollowupTables(() => db.studentCall.findMany(), 'StudentCall'),
+      withFollowupTables(() => db.studentNote.findMany(), 'StudentNote'),
       findManyOrEmpty(db.correctionSheet.findMany(), 'CorrectionSheet'),
       db.appUser.findMany({
         select: {
