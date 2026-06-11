@@ -37,44 +37,43 @@ const buttonVariants = cva(
   },
 );
 
-function Button({
-  className,
-  variant,
-  size,
-  asChild = false,
-  onClick,
-  ...props
-}: React.ComponentProps<"button"> &
+type ButtonProps = React.ComponentPropsWithoutRef<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
-  }) {
-  const Comp = asChild ? Slot : "button";
-  const clickLockRef = React.useRef(false);
-
-  const handleClick: React.MouseEventHandler<HTMLButtonElement> = (event) => {
-    if (props.disabled) return;
-    if (clickLockRef.current) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-
-    clickLockRef.current = true;
-    window.setTimeout(() => {
-      clickLockRef.current = false;
-    }, 650);
-
-    onClick?.(event);
   };
 
-  return (
-    <Comp
-      data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
-      onClick={handleClick}
-      {...props}
-    />
-  );
-}
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, onClick, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button";
+    const clickLockRef = React.useRef(false);
+
+    const handleClick: React.MouseEventHandler<HTMLButtonElement> = (event) => {
+      if (props.disabled) return;
+      if (clickLockRef.current) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      clickLockRef.current = true;
+      window.setTimeout(() => {
+        clickLockRef.current = false;
+      }, 650);
+
+      onClick?.(event);
+    };
+
+    return (
+      <Comp
+        ref={ref}
+        data-slot="button"
+        className={cn(buttonVariants({ variant, size, className }))}
+        onClick={handleClick}
+        {...props}
+      />
+    );
+  },
+);
+Button.displayName = "Button";
 
 export { Button, buttonVariants };
