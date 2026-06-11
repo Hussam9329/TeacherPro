@@ -4,7 +4,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
-import { findManyOrEmpty, requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { withFollowupTables } from '@/lib/followup-schema';
 
 function dateOrNull(value: unknown): Date | null {
   if (!value) return null;
@@ -36,7 +37,10 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const studentCalls = await findManyOrEmpty(db.studentCall.findMany({ orderBy: { createdAt: 'desc' } }), 'StudentCall');
+    const studentCalls = await withFollowupTables(
+      () => db.studentCall.findMany({ orderBy: { createdAt: 'desc' } }),
+      'StudentCall',
+    );
     return NextResponse.json({ studentCalls });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل المكالمات حالياً.');
@@ -55,9 +59,12 @@ export async function POST(req: NextRequest) {
     const examError = requireText(data.examId, 'الامتحان');
     if (examError) return validationError(examError);
     const id = String(body.id || '').trim();
-    const studentCall = id
-      ? await db.studentCall.upsert({ where: { id }, update: data, create: { id, ...data } })
-      : await db.studentCall.create({ data });
+    const studentCall = await withFollowupTables(
+      () => id
+        ? db.studentCall.upsert({ where: { id }, update: data, create: { id, ...data } })
+        : db.studentCall.create({ data }),
+      'StudentCall',
+    );
     return NextResponse.json({ studentCall }, { status: 201 });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حفظ المكالمة حالياً.');
@@ -79,7 +86,10 @@ export async function PUT(req: NextRequest) {
     if (updates.completed !== undefined) data.completed = Boolean(updates.completed);
     if (updates.completedAt !== undefined) data.completedAt = dateOrNull(updates.completedAt);
     if (updates.notes !== undefined) data.notes = String(updates.notes ?? '');
-    const studentCall = await db.studentCall.update({ where: { id: String(id) }, data });
+    const studentCall = await withFollowupTables(
+      () => db.studentCall.update({ where: { id: String(id) }, data }),
+      'StudentCall',
+    );
     return NextResponse.json({ studentCall });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث المكالمة حالياً.');
@@ -94,7 +104,7 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد المكالمة المطلوبة');
-    await db.studentCall.delete({ where: { id } });
+    await withFollowupTables(() => db.studentCall.delete({ where: { id } }), 'StudentCall');
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حذف المكالمة حالياً.');

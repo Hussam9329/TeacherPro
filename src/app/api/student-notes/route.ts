@@ -4,7 +4,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
-import { findManyOrEmpty, requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { withFollowupTables } from '@/lib/followup-schema';
 
 function dateOrNow(value: unknown): Date {
   const date = value ? new Date(String(value)) : new Date();
@@ -25,7 +26,10 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const studentNotes = await findManyOrEmpty(db.studentNote.findMany({ orderBy: { date: 'desc' } }), 'StudentNote');
+    const studentNotes = await withFollowupTables(
+      () => db.studentNote.findMany({ orderBy: { date: 'desc' } }),
+      'StudentNote',
+    );
     return NextResponse.json({ studentNotes });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل الملاحظات حالياً.');
@@ -44,9 +48,12 @@ export async function POST(req: NextRequest) {
     const textError = requireText(data.text, 'نص الملاحظة');
     if (textError) return validationError(textError);
     const id = String(body.id || '').trim();
-    const studentNote = id
-      ? await db.studentNote.upsert({ where: { id }, update: data, create: { id, ...data } })
-      : await db.studentNote.create({ data });
+    const studentNote = await withFollowupTables(
+      () => id
+        ? db.studentNote.upsert({ where: { id }, update: data, create: { id, ...data } })
+        : db.studentNote.create({ data }),
+      'StudentNote',
+    );
     return NextResponse.json({ studentNote }, { status: 201 });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حفظ الملاحظة حالياً.');
@@ -65,7 +72,10 @@ export async function PUT(req: NextRequest) {
     if (updates.kind !== undefined) data.kind = String(updates.kind ?? '');
     if (updates.text !== undefined) data.text = String(updates.text ?? '').trim();
     if (updates.date !== undefined) data.date = dateOrNow(updates.date);
-    const studentNote = await db.studentNote.update({ where: { id: String(id) }, data });
+    const studentNote = await withFollowupTables(
+      () => db.studentNote.update({ where: { id: String(id) }, data }),
+      'StudentNote',
+    );
     return NextResponse.json({ studentNote });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث الملاحظة حالياً.');
@@ -80,7 +90,7 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد الملاحظة المطلوبة');
-    await db.studentNote.delete({ where: { id } });
+    await withFollowupTables(() => db.studentNote.delete({ where: { id } }), 'StudentNote');
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حذف الملاحظة حالياً.');

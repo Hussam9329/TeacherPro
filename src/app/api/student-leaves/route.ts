@@ -4,7 +4,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
-import { findManyOrEmpty, requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { withFollowupTables } from '@/lib/followup-schema';
 
 function dateOrNow(value: unknown): Date {
   const date = value ? new Date(String(value)) : new Date();
@@ -27,7 +28,10 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const studentLeaves = await findManyOrEmpty(db.studentLeave.findMany({ orderBy: { date: 'desc' } }), 'StudentLeave');
+    const studentLeaves = await withFollowupTables(
+      () => db.studentLeave.findMany({ orderBy: { date: 'desc' } }),
+      'StudentLeave',
+    );
     return NextResponse.json({ studentLeaves });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل الإجازات حالياً.');
@@ -49,7 +53,7 @@ export async function POST(req: NextRequest) {
     if (reasonError) return validationError(reasonError);
 
     const id = String(body.id || '').trim();
-    const leave = await db.$transaction(async (tx) => {
+    const leave = await withFollowupTables(() => db.$transaction(async (tx) => {
       const savedLeave = id
         ? await (async () => {
             await tx.studentLeave.deleteMany({
@@ -70,7 +74,7 @@ export async function POST(req: NextRequest) {
       // Keep it in the same transaction so refreshes match the UI.
       await tx.grade.deleteMany({ where: { studentId: data.studentId, examId: data.examId } });
       return savedLeave;
-    });
+    }), 'StudentLeave');
 
     return NextResponse.json({ studentLeave: leave }, { status: 201 });
   } catch (error) {
@@ -91,7 +95,10 @@ export async function PUT(req: NextRequest) {
     if (body.studyType !== undefined) data.studyType = String(body.studyType ?? '');
     if (body.date !== undefined) data.date = dateOrNow(body.date);
     if (body.notes !== undefined) data.notes = String(body.notes ?? '');
-    const studentLeave = await db.studentLeave.update({ where: { id }, data });
+    const studentLeave = await withFollowupTables(
+      () => db.studentLeave.update({ where: { id }, data }),
+      'StudentLeave',
+    );
     return NextResponse.json({ studentLeave });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث الإجازة حالياً.');
@@ -106,7 +113,7 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد الإجازة المطلوبة');
-    await db.studentLeave.delete({ where: { id } });
+    await withFollowupTables(() => db.studentLeave.delete({ where: { id } }), 'StudentLeave');
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حذف الإجازة حالياً.');
