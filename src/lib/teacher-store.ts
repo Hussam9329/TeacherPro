@@ -748,6 +748,23 @@ function isReactivationOpportunityLog(log: OpportunityLog): boolean {
   return log.action === 'إعادة تفعيل' || String(log.reason || '').includes('تثبيت إعادة التفعيل');
 }
 
+function isFinalChanceOpportunityLog(log: OpportunityLog): boolean {
+  return log.action === 'فرصة أخيرة بعد تعهد' || String(log.reason || '').includes('فرصة أخيرة');
+}
+
+function latestStudentLogDate(logs: OpportunityLog[], predicate: (log: OpportunityLog) => boolean): string {
+  const dates = logs
+    .filter(predicate)
+    .map((log) => String(log.date || '').slice(0, 10))
+    .filter(Boolean)
+    .sort();
+  return dates.length ? dates[dates.length - 1] : '';
+}
+
+function hasFinalChanceForStudent(logs: OpportunityLog[], studentId: string): boolean {
+  return logs.some((log) => log.studentId === studentId && isFinalChanceOpportunityLog(log));
+}
+
 function isStudentExcusedForExam(state: Pick<TeacherState, 'studentLeaves'>, studentId: string, examId: string): boolean {
   return state.studentLeaves.some((leave) => leave.studentId === studentId && leave.examId === examId);
 }
@@ -792,11 +809,14 @@ function recalculateStudentsFromAcademicRules(
     const studentManualLogs = manualLogs
       .filter((log) => log.studentId === student.id)
       .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-    const hasFinalChancePledge = studentManualLogs.some((log) => log.action === 'فرصة أخيرة بعد تعهد');
+    const hasFinalChancePledge = studentManualLogs.some(isFinalChanceOpportunityLog);
+    const finalChanceStartDate = latestStudentLogDate(studentManualLogs, isFinalChanceOpportunityLog);
     studentManualLogs.forEach((log) => {
+      if (finalChanceStartDate && !isFinalChanceOpportunityLog(log) && String(log.date || '').slice(0, 10) < finalChanceStartDate) return;
       const amount = Math.abs(Number(log.amount || 0));
-      if (!amount) return;
-      if (log.action === 'إضافة' || log.action === 'فرصة أخيرة بعد تعهد') opportunities += amount;
+      if (!amount && !isFinalChanceOpportunityLog(log)) return;
+      if (isFinalChanceOpportunityLog(log)) opportunities = amount || 1;
+      else if (log.action === 'إضافة') opportunities += amount;
       if (log.action === 'خصم') opportunities -= amount;
       if (log.action === 'إعادة تعيين') opportunities = Number(student.baseOpportunities || activeChapter?.opportunities || 0);
     });
@@ -828,14 +848,18 @@ function recalculateStudentsFromAcademicRules(
     };
 
     const setDismissal = (type: string, reason: string, priority: number, exam?: Exam) => {
-      if (priority >= dismissalPriority) {
-        dismissalType = type;
-        dismissalReason = reason;
-        dismissalPriority = priority;
+      const finalChanceViolation = hasFinalChancePledge && type === 'فصل مؤقت';
+      const effectiveType = finalChanceViolation ? 'فصل نهائي' : type;
+      const effectiveReason = finalChanceViolation ? `عدم الالتزام بالتعهد السابق - ${reason}` : reason;
+      const effectivePriority = finalChanceViolation ? Math.max(priority, 90) : priority;
+      if (effectivePriority >= dismissalPriority) {
+        dismissalType = effectiveType;
+        dismissalReason = effectiveReason;
+        dismissalPriority = effectivePriority;
       }
       if (exam) {
-        consumeAllRemainingOpportunities(exam, reason);
-        addAutomaticLog(exam, 'فصل تلقائي', 0, reason);
+        consumeAllRemainingOpportunities(exam, effectiveReason);
+        addAutomaticLog(exam, 'فصل تلقائي', 0, effectiveReason);
       }
     };
 
@@ -843,6 +867,7 @@ function recalculateStudentsFromAcademicRules(
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
       if (!isGradeEntered(grade, exam)) continue;
+      if (finalChanceStartDate && String(grade.updatedAt || grade.createdAt || '').slice(0, 10) < finalChanceStartDate) continue;
       if (!isExamOnOrAfterStudentRegistration(student, exam)) continue;
       if (leaveKeys.has(`${student.id}:${exam.id}`)) continue;
       if (isExamWithinStudentGracePeriod(student, exam)) continue;
@@ -1536,6 +1561,18 @@ export const useTeacherStore = create<TeacherState>()(
         const stateBefore = get();
         const studentBefore = stateBefore.students.find((student) => student.id === studentId);
         const deductedOpportunities = Math.max(0, Math.trunc(Number(studentBefore?.opportunities || 0)));
+        const finalChanceViolation = Boolean(studentBefore && hasFinalChanceForStudent(stateBefore.opportunityLogs, studentId) && type === 'فصل مؤقت');
+        const nextDismissalType = finalChanceViolation ? 'فصل نهائي' : type;
+        const nextDismissalReason = finalChanceViolation ? `عدم الالتزام بالتعهد السابق - ${reason}` : reason;
+        const actionNote: StudentNote | null = studentBefore
+          ? {
+              id: uid('note'),
+              studentId,
+              kind: 'إجراء',
+              text: `فصل الطالب (${nextDismissalType}): ${nextDismissalReason}${notes ? ` - ملاحظة: ${notes}` : ''}`,
+              date: todayISO(),
+            }
+          : null;
         const deductionLog: OpportunityLog | null = deductedOpportunities > 0
           ? {
               id: uid('ol'),
@@ -1543,7 +1580,7 @@ export const useTeacherStore = create<TeacherState>()(
               examId: '',
               action: 'خصم',
               amount: deductedOpportunities,
-              reason: `فصل الطالب: ${reason}`,
+              reason: `فصل الطالب: ${nextDismissalReason}`,
               date: todayISO(),
               chapterId: stateBefore.activeChapterForCourse(studentBefore?.courseId || '')?.id || '',
             }
@@ -1551,21 +1588,20 @@ export const useTeacherStore = create<TeacherState>()(
 
         set((s) => ({
           students: s.students.map((st) => st.id === studentId
-            ? { ...st, status: 'مفصول' as const, dismissalType: type, dismissalReason: reason, dismissalNotes: notes, opportunities: 0 }
+            ? { ...st, status: 'مفصول' as const, dismissalType: nextDismissalType, dismissalReason: nextDismissalReason, dismissalNotes: notes, opportunities: 0 }
             : st),
           opportunityLogs: deductionLog ? [deductionLog, ...s.opportunityLogs] : s.opportunityLogs,
+          studentNotes: actionNote ? [actionNote, ...s.studentNotes] : s.studentNotes,
         }));
-        get().logAction('الطلاب', `فصل الطالب (${type})`, `${get().studentName(studentId)} - ${reason}`);
-        syncToServer(get, () => studentApi.update(studentId, { status: 'مفصول', dismissalType: type, dismissalReason: reason, dismissalNotes: notes, opportunities: 0 }));
+        get().logAction('الطلاب', `فصل الطالب (${nextDismissalType})`, `${get().studentName(studentId)} - ${nextDismissalReason}`);
+        syncToServer(get, () => studentApi.update(studentId, { status: 'مفصول', dismissalType: nextDismissalType, dismissalReason: nextDismissalReason, dismissalNotes: notes, opportunities: 0 }));
         if (deductionLog) syncToServer(get, () => opportunityLogApi.add(deductionLog as unknown as Record<string, unknown>));
+        if (actionNote) syncToServer(get, () => studentNoteApi.add(actionNote as unknown as Record<string, unknown>));
       },
       reactivateStudent: (studentId) => {
         const stateBefore = get();
         const studentBefore = stateBefore.students.find((st) => st.id === studentId);
-        const shouldGrantFinalChance = Boolean(
-          studentBefore?.dismissalType === 'فصل مؤقت' &&
-          String(studentBefore.dismissalReason || '').includes('انتهاء الفرص'),
-        );
+        const shouldGrantFinalChance = Boolean(studentBefore?.status === 'مفصول');
         const reactivationLog: OpportunityLog | null = studentBefore
           ? {
               id: uid('ol'),
@@ -1573,7 +1609,7 @@ export const useTeacherStore = create<TeacherState>()(
               examId: '',
               action: 'إعادة تفعيل',
               amount: 0,
-              reason: 'تثبيت إعادة التفعيل: لا يعاد فصل الطالب بسبب سجلات قديمة إلا عند تعديل درجته هو',
+              reason: 'تثبيت إعادة التفعيل: لا يعاد فصل الطالب بسبب سجلات قديمة، وأي إجراء جديد بعد الفرصة يصبح نهائياً',
               date: todayISO(),
               chapterId: stateBefore.activeChapterForCourse(studentBefore.courseId)?.id || '',
             }
@@ -1585,9 +1621,20 @@ export const useTeacherStore = create<TeacherState>()(
               examId: '',
               action: 'فرصة أخيرة بعد تعهد',
               amount: 1,
-              reason: 'إرجاع الطالب بعد التعهد بفرصة أخيرة',
+              reason: 'إرجاع الطالب بعد إعادة التفعيل بفرصة واحدة فقط',
               date: todayISO(),
               chapterId: stateBefore.activeChapterForCourse(studentBefore.courseId)?.id || '',
+            }
+          : null;
+        const actionNote: StudentNote | null = studentBefore
+          ? {
+              id: uid('note'),
+              studentId,
+              kind: 'إجراء',
+              text: shouldGrantFinalChance
+                ? `إعادة تفعيل الطالب ومنحه فرصة واحدة بعد الفصل السابق: ${studentBefore.dismissalReason || studentBefore.dismissalType || 'بدون سبب مسجل'}`
+                : 'إعادة تفعيل الطالب',
+              date: todayISO(),
             }
           : null;
         set((s) => ({
@@ -1595,11 +1642,13 @@ export const useTeacherStore = create<TeacherState>()(
             ? { ...st, status: 'نشط' as const, dismissalType: '', dismissalReason: '', dismissalNotes: '', opportunities: shouldGrantFinalChance ? 1 : st.opportunities }
             : st),
           opportunityLogs: ([reactivationLog, finalChanceLog].filter(Boolean) as OpportunityLog[]).concat(s.opportunityLogs),
+          studentNotes: actionNote ? [actionNote, ...s.studentNotes] : s.studentNotes,
         }));
-        get().logAction('الطلاب', shouldGrantFinalChance ? 'إعادة تفعيل بتعهد وفرصة أخيرة' : 'إعادة تفعيل طالب', get().studentName(studentId));
+        get().logAction('الطلاب', shouldGrantFinalChance ? 'إعادة تفعيل بفرصة واحدة' : 'إعادة تفعيل طالب', get().studentName(studentId));
         syncToServer(get, () => studentApi.update(studentId, { status: 'نشط', dismissalType: '', dismissalReason: '', dismissalNotes: '', ...(shouldGrantFinalChance ? { opportunities: 1 } : {}) }));
         if (reactivationLog) syncToServer(get, () => opportunityLogApi.add(reactivationLog as unknown as Record<string, unknown>));
         if (finalChanceLog) syncToServer(get, () => opportunityLogApi.add(finalChanceLog as unknown as Record<string, unknown>));
+        if (actionNote) syncToServer(get, () => studentNoteApi.add(actionNote as unknown as Record<string, unknown>));
       },
 
       addExam: (examData) => {
@@ -1630,6 +1679,20 @@ export const useTeacherStore = create<TeacherState>()(
         const relatedCorrectionSheets = state.correctionSheets.filter((sheet) => sheet.examId === id);
         const relatedLeaves = state.studentLeaves.filter((leave) => leave.examId === id);
         const relatedCalls = state.studentCalls.filter((call) => call.examId === id);
+        const affectedStudentIds = Array.from(new Set([
+          ...relatedGrades.map((grade) => grade.studentId),
+          ...relatedOpportunityLogs.map((log) => log.studentId),
+          ...relatedLeaves.map((leave) => leave.studentId),
+          ...relatedCalls.map((call) => call.studentId),
+          ...relatedCorrectionSheets.map((sheet) => sheet.studentId),
+        ].filter((studentId): studentId is string => Boolean(studentId))));
+        const actionNotes: StudentNote[] = affectedStudentIds.map((studentId) => ({
+          id: uid('note'),
+          studentId,
+          kind: 'إجراء',
+          text: `حذف امتحان (${exam.name}) مع درجاته وإلغاء أي فصل أو خصم تلقائي مرتبط به`,
+          date: todayISO(),
+        }));
 
         relatedGrades.forEach((grade) => syncToServer(get, () => gradeApi.remove(grade.id)));
         relatedOpportunityLogs.forEach((log) => syncToServer(get, () => opportunityLogApi.remove(log.id)));
@@ -1644,9 +1707,11 @@ export const useTeacherStore = create<TeacherState>()(
           opportunityLogs: s.opportunityLogs.filter((log) => log.examId !== id),
           studentLeaves: s.studentLeaves.filter((leave) => leave.examId !== id),
           studentCalls: s.studentCalls.filter((call) => call.examId !== id),
+          studentNotes: actionNotes.length ? [...actionNotes, ...s.studentNotes] : s.studentNotes,
         }));
 
-        get().recalculateAcademicEffects();
+        actionNotes.forEach((note) => syncToServer(get, () => studentNoteApi.add(note as unknown as Record<string, unknown>)));
+        get().recalculateAcademicEffects(affectedStudentIds);
         get().logAction('الامتحانات', 'حذف امتحان مع سجلاته وإعادة احتساب التأثيرات', exam.name);
         syncToServer(get, () => examApi.remove(id));
         return true;
@@ -1705,13 +1770,22 @@ export const useTeacherStore = create<TeacherState>()(
         const stateBefore = get();
         const grade = stateBefore.grades.find((g) => g.id === id);
         if (!grade) return false;
-        const previousState = { students: stateBefore.students, grades: stateBefore.grades, opportunityLogs: stateBefore.opportunityLogs };
-        set((s) => ({ grades: s.grades.filter((g) => g.id !== id) }));
-        get().logAction('الدرجات', 'حذف درجة', `${get().studentName(grade.studentId)} - ${get().exams.find((e) => e.id === grade.examId)?.name || ''}`);
+        const examName = stateBefore.exams.find((e) => e.id === grade.examId)?.name || 'امتحان محذوف';
+        const previousState = { students: stateBefore.students, grades: stateBefore.grades, opportunityLogs: stateBefore.opportunityLogs, studentNotes: stateBefore.studentNotes };
+        const actionNote: StudentNote = {
+          id: uid('note'),
+          studentId: grade.studentId,
+          kind: 'إجراء',
+          text: `حذف درجة من امتحان (${examName}) وإعادة احتساب حالة الطالب والفرص`,
+          date: todayISO(),
+        };
+        set((s) => ({ grades: s.grades.filter((g) => g.id !== id), studentNotes: [actionNote, ...s.studentNotes] }));
+        get().logAction('الدرجات', 'حذف درجة', `${get().studentName(grade.studentId)} - ${examName}`);
         syncToServer(get, () => gradeApi.remove(id), {
           description: 'حذف درجة',
           rollback: () => set(previousState),
         });
+        syncToServer(get, () => studentNoteApi.add(actionNote as unknown as Record<string, unknown>));
         get().recalculateAcademicEffects(grade.studentId);
         return true;
       },
@@ -1766,7 +1840,12 @@ export const useTeacherStore = create<TeacherState>()(
         if (student) syncToServer(get, () => studentApi.update(studentId, { opportunities: student.opportunities }));
         syncToServer(get, () => opportunityLogApi.add(log as unknown as Record<string, unknown>));
         if (student && student.opportunities === 0 && student.status === 'نشط') {
-          get().dismissStudent(studentId, 'فصل مؤقت', 'انتهاء الفرص');
+          const hasFinalChance = hasFinalChanceForStudent(get().opportunityLogs, studentId);
+          get().dismissStudent(
+            studentId,
+            hasFinalChance ? 'فصل نهائي' : 'فصل مؤقت',
+            hasFinalChance ? 'عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة' : 'انتهاء الفرص',
+          );
         }
       },
       addStudentLeave: (leaveData) => {
@@ -1778,14 +1857,26 @@ export const useTeacherStore = create<TeacherState>()(
           grades: stateBefore.grades,
           opportunityLogs: stateBefore.opportunityLogs,
           studentLeaves: stateBefore.studentLeaves,
+          studentNotes: stateBefore.studentNotes,
         };
+        const removedGradeNote: StudentNote | null = existingGrade
+          ? {
+              id: uid('note'),
+              studentId: leave.studentId,
+              kind: 'إجراء',
+              text: `حذف درجة بسبب تسجيل إجازة لامتحان (${stateBefore.exams.find((exam) => exam.id === leave.examId)?.name || 'امتحان محذوف'})`,
+              date: todayISO(),
+            }
+          : null;
         set((s) => ({
           studentLeaves: [leave, ...s.studentLeaves.filter((item) => !(item.studentId === leave.studentId && item.examId === leave.examId))],
           grades: s.grades.filter((grade) => !(grade.studentId === leave.studentId && grade.examId === leave.examId)),
+          studentNotes: removedGradeNote ? [removedGradeNote, ...s.studentNotes] : s.studentNotes,
         }));
         get().logAction('المتابعة', 'إضافة إجازة', `${get().studentName(leave.studentId)} - ${leave.reason}`);
         if (existingGrade) {
           get().logAction('الدرجات', 'إزالة درجة بسبب الإجازة', `${get().studentName(leave.studentId)} - ${get().exams.find((exam) => exam.id === leave.examId)?.name || ''}`);
+          if (removedGradeNote) syncToServer(get, () => studentNoteApi.add(removedGradeNote as unknown as Record<string, unknown>));
         }
         syncToServer(get, () => studentLeaveApi.add(leave as unknown as Record<string, unknown>), {
           description: 'إضافة إجازة',

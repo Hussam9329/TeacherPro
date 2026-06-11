@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { type Exam, type Grade, type OpportunityLog, type Student } from "@/lib/teacher-store";
+import { type Exam, type Grade, type OpportunityLog, type Student, type StudentNote } from "@/lib/teacher-store";
 import { Badge } from "@/components/ui/badge";
 import { formatAppDate } from "@/lib/format";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-type StudentFileTab = "details" | "grades" | "exams" | "opportunities";
+type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "actions";
 
 type StudentProfileDialogProps = {
   student: Student | null;
@@ -15,6 +15,7 @@ type StudentProfileDialogProps = {
   exams: Exam[];
   grades: Grade[];
   opportunityLogs: OpportunityLog[];
+  studentNotes: StudentNote[];
   courseName: (courseId: string) => string;
   activeChapterForCourse: (courseId: string) => { name: string } | null | undefined;
   whatsappLink: (phone: string) => string;
@@ -45,6 +46,20 @@ function formatScore(grade: Grade, exam?: Exam) {
   return grade.score !== null ? `${grade.score}/${exam?.fullMark || 100}` : "—";
 }
 
+type StudentActionRow = {
+  id: string;
+  date: string;
+  title: string;
+  details: string;
+  tone: "default" | "danger" | "success" | "secondary";
+};
+
+function opportunityActionTone(action: string): StudentActionRow["tone"] {
+  if (action.includes("فصل") || action === "خصم") return "danger";
+  if (action.includes("إعادة تفعيل") || action.includes("فرصة")) return "success";
+  return "default";
+}
+
 export function StudentProfileDialog({
   student,
   open,
@@ -52,6 +67,7 @@ export function StudentProfileDialog({
   exams,
   grades,
   opportunityLogs,
+  studentNotes,
   courseName,
   activeChapterForCourse,
   whatsappLink,
@@ -70,6 +86,30 @@ export function StudentProfileDialog({
     () => (student ? opportunityLogs.filter((log) => log.studentId === student.id) : []),
     [opportunityLogs, student],
   );
+
+  const studentActionNotes = useMemo(
+    () => (student ? studentNotes.filter((note) => note.studentId === student.id && note.kind === "إجراء") : []),
+    [studentNotes, student],
+  );
+
+  const studentActions = useMemo<StudentActionRow[]>(() => {
+    if (!student) return [];
+    const noteRows = studentActionNotes.map((note) => ({
+      id: `note-${note.id}`,
+      date: note.date,
+      title: note.kind || "إجراء",
+      details: note.text,
+      tone: note.text.includes("فصل") ? "danger" as const : note.text.includes("إعادة تفعيل") ? "success" as const : "secondary" as const,
+    }));
+    const opportunityRows = studentOpportunities.map((log) => ({
+      id: `opp-${log.id}`,
+      date: log.date,
+      title: `${log.action}${log.amount ? ` ${log.amount}` : ""}`,
+      details: log.reason || "—",
+      tone: opportunityActionTone(log.action),
+    }));
+    return [...noteRows, ...opportunityRows].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  }, [student, studentActionNotes, studentOpportunities]);
 
   if (!student) return null;
 
@@ -92,6 +132,7 @@ export function StudentProfileDialog({
     { id: "grades", label: "الدرجات", value: studentGrades.length, hint: "عرض درجات الطالب" },
     { id: "exams", label: "الامتحانات", value: examCount, hint: "عدد الامتحانات" },
     { id: "opportunities", label: "الفرص", value: opportunityText, hint: "المتبقي / الأساسي" },
+    { id: "actions", label: "الإجراءات", value: studentActions.length, hint: "حذف/فصل/إعادة تفعيل" },
     { id: "details", label: "التفاصيل والغيابات", value: absentCount, hint: "عدد الغيابات" },
   ];
 
@@ -122,7 +163,7 @@ export function StudentProfileDialog({
 
           <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
             <div className="space-y-4 sm:space-y-5">
-              <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
                 {cards.map((item) => (
                   <button
                     key={item.id}
@@ -230,6 +271,21 @@ export function StudentProfileDialog({
                   <div className="max-h-72 space-y-2 overflow-y-auto">
                     {studentOpportunities.length === 0 ? <p className="empty-state py-8">لا توجد حركات فرص</p> : studentOpportunities.map((row) => (
                       <div key={row.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center"><span>{formatAppDate(row.date)}</span><Badge className="w-fit" variant={row.action === "خصم" ? "destructive" : "default"}>{row.action} {row.amount}</Badge><span className="break-words text-muted-foreground">{row.reason}</span></div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {tab === "actions" && (
+                <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
+                  <h4 className="mb-4 text-base font-black sm:text-lg">إجراءات ملف الطالب</h4>
+                  <div className="max-h-96 space-y-2 overflow-y-auto">
+                    {studentActions.length === 0 ? <p className="empty-state py-8">لا توجد إجراءات مسجلة لهذا الطالب</p> : studentActions.map((row) => (
+                      <div key={row.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center">
+                        <span className="font-bold text-muted-foreground">{formatAppDate(row.date)}</span>
+                        <Badge className="w-fit" variant={row.tone === "danger" ? "destructive" : row.tone === "secondary" ? "secondary" : "default"}>{row.title}</Badge>
+                        <span className="break-words text-muted-foreground">{row.details}</span>
+                      </div>
                     ))}
                   </div>
                 </div>
