@@ -1246,10 +1246,12 @@ export const useTeacherStore = create<TeacherState>()(
       },
 
       setSection: (section) => {
-        if (!get().canAccess(section)) {
-          get().logAction('الصلاحيات', 'محاولة دخول مرفوضة', section);
+        const state = get();
+        if (!state.canAccess(section)) {
+          state.logAction('الصلاحيات', 'محاولة دخول مرفوضة', section);
           return;
         }
+        if (state.currentSection === section && !state.sidebarOpen) return;
         set({ currentSection: section, sidebarOpen: false });
       },
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),

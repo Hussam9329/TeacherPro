@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTeacherStore, type Exam } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import { useActionLock } from "@/hooks/use-action-lock";
 import { hasActiveChapterLink } from "@/lib/exam-utils";
 
 type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
+const EXAM_MAIN_SITE_OPTIONS: string[] = [...MAIN_SITE_OPTIONS];
 
 type ExamFormState = {
   name: string;
@@ -111,18 +112,8 @@ export function ExamNewView() {
   const { locked: isAddingExam, runLocked: runAddExamLocked } = useActionLock();
 
   const activeCourses = useMemo(() => courses.filter((course) => course.active), [courses]);
-  const availableMainSites = useMemo<string[]>(() => [...MAIN_SITE_OPTIONS], []);
 
-  const availableMainSitesFor = (_state: ExamFormState): string[] => availableMainSites;
-
-  useEffect(() => {
-    const availableSet = new Set(availableMainSites);
-    setForm((prev) => {
-      const nextMainSites = prev.mainSites.filter((site) => availableSet.has(site));
-      if (nextMainSites.length === prev.mainSites.length) return prev;
-      return { ...prev, mainSites: nextMainSites };
-    });
-  }, [availableMainSites]);
+  const availableMainSitesFor = (_state: ExamFormState): string[] => EXAM_MAIN_SITE_OPTIONS;
 
   const validateForm = (state: ExamFormState) => {
     const fullMark = Number(state.fullMark);

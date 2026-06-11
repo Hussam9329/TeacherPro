@@ -392,10 +392,11 @@ export function TeacherProLayout() {
     () => (isAdmin ? menuItems : menuItems.filter((item) => canAccess(item.id))),
     [canAccess, isAdmin, user?.id, user?.roleId, userPermsKey],
   );
-  const visibleSectionIds = useMemo(
-    () => new Set(visibleMenuItems.map((item) => item.id)),
-    [visibleMenuItems],
+  const currentSectionVisible = useMemo(
+    () => visibleMenuItems.some((item) => item.id === currentSection),
+    [visibleMenuItems, currentSection],
   );
+  const firstVisibleSectionId = visibleMenuItems[0]?.id ?? null;
   const dashboardMenuItem = visibleMenuItems.find(
     (item) => item.id === "dashboard",
   );
@@ -419,15 +420,16 @@ export function TeacherProLayout() {
 
   useEffect(() => {
     if (
-      (!canAccess(currentSection) || !visibleSectionIds.has(currentSection)) &&
-      visibleMenuItems[0]
+      (!canAccess(currentSection) || !currentSectionVisible) &&
+      firstVisibleSectionId &&
+      firstVisibleSectionId !== currentSection
     ) {
-      setSection(visibleMenuItems[0].id);
+      setSection(firstVisibleSectionId);
     }
   }, [
     currentSection,
-    visibleMenuItems,
-    visibleSectionIds,
+    currentSectionVisible,
+    firstVisibleSectionId,
     canAccess,
     setSection,
   ]);
