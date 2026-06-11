@@ -300,13 +300,15 @@ export function FollowUpView() {
     setProfileDialogOpen(true);
   };
 
-  const studentRecordCount = (studentId: string) => (
-    grades.filter((grade) => grade.studentId === studentId).length +
-    studentLeaves.filter((leave) => leave.studentId === studentId).length +
-    studentCalls.filter((call) => call.studentId === studentId).length +
-    studentNotes.filter((note) => note.studentId === studentId).length +
-    opportunityLogs.filter((log) => log.studentId === studentId).length
-  );
+  const studentExamCount = (student: Student) => exams.filter((exam) => {
+    const selectedMainSites = splitSelection(exam.mainSite);
+    return (
+      exam.courseIds.includes(student.courseId) &&
+      isExamOnOrAfterStudentRegistration(student, exam) &&
+      hasActiveChapterLink(courseChapters, student.courseId) &&
+      studentMatchesExamMainSites(student, selectedMainSites)
+    );
+  }).length;
 
   const renderStudentPicker = () => {
     return (
@@ -329,7 +331,7 @@ export function FollowUpView() {
         {selectedLeaveStudent && (
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card/80 p-2">
             <Button type="button" size="sm" variant="outline" onClick={() => openProfile(selectedLeaveStudent.id)}>ملف الطالب</Button>
-            <Badge variant="secondary">عدد السجلات: {studentRecordCount(selectedLeaveStudent.id)}</Badge>
+            <Badge variant="secondary">عدد فروض الطالب: {studentExamCount(selectedLeaveStudent)}</Badge>
           </div>
         )}
       </div>
