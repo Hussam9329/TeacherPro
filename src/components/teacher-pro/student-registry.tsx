@@ -5,6 +5,7 @@ import { useTeacherStore, type Student } from "@/lib/teacher-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import {
+  formatAppDate,
   getPhoneValidationError,
   sanitizePhoneInput,
   toLatinDigits,
@@ -145,10 +147,10 @@ function isValidGraceDays(value: string): boolean {
 function graceEndDate(student: Student): string {
   const start = new Date(`${String(student.createdAt || '').slice(0, 10)}T00:00:00`);
   const days = Number(student.accountingGraceDays || 0);
-  if (!Number.isFinite(start.getTime()) || days <= 0) return String(student.createdAt || '').slice(0, 10) || '-';
+  if (!Number.isFinite(start.getTime()) || days <= 0) return formatAppDate(student.createdAt, String(student.createdAt || '').slice(0, 10) || '-');
   const end = new Date(start);
   end.setDate(end.getDate() + days - 1);
-  return end.toISOString().slice(0, 10);
+  return formatAppDate(end);
 }
 
 function isStudentCurrentlyInGrace(student: Student): boolean {
@@ -1243,13 +1245,12 @@ export function StudentRegistryView() {
             )}
             <div className="space-y-2">
               <Label htmlFor="edit-createdAt">تاريخ إضافة الطالب / بداية السماح</Label>
-              <Input
+              <DateInput
                 id="edit-createdAt"
                 name="createdAt"
-                type="date"
                 autoComplete="off"
                 value={editDialog.form.createdAt}
-                onChange={(e) => updateEditForm("createdAt", e.target.value)}
+                onChange={(value) => updateEditForm("createdAt", value)}
                 required
               />
             </div>

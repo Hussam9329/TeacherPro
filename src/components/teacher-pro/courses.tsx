@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { BookOpen, Settings, MapPin, GraduationCap, Monitor, Building } from "lucide-react";
 import { EmptyState } from "./ui-kit";
+import { formatAppDate } from "@/lib/format";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -681,7 +682,7 @@ export function CoursesView() {
                       <div className="min-w-0 flex-1">
                         <p className="font-bold text-sm leading-6">{course.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {course.createdAt}
+                          {formatAppDate(course.createdAt)}
                         </p>
                       </div>
                       <Badge variant={course.active ? "default" : "secondary"}>

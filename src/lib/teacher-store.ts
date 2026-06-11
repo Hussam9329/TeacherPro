@@ -21,6 +21,7 @@ import {
 } from './course-config';
 import { isExamOnOrAfterStudentRegistration, isGradeEntered } from './exam-utils';
 import { toBaghdadDateTimeLocal } from './baghdad-time';
+import { formatAppDate } from './format';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -542,7 +543,7 @@ function normalizeDateTimeValue(value: unknown): string {
 
 function nowText(): string {
   const d = new Date();
-  const date = d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const date = formatAppDate(d);
   const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
   return `${date} ${time}`;
 }
@@ -2058,10 +2059,10 @@ export const useTeacherStore = create<TeacherState>()(
           `حركات الفرص هذا الشهر: ${oppLogs.length}`,
           '',
           'تفصيل الطلاب الجدد:',
-          ...newStudents.map((s) => `- ${s.code} | ${s.name} | ${get().courseName(s.courseId)} | ${s.createdAt}`),
+          ...newStudents.map((s) => `- ${s.code} | ${s.name} | ${get().courseName(s.courseId)} | ${formatAppDate(s.createdAt, s.createdAt)}`),
           '',
           'تفصيل حركات الفرص:',
-          ...oppLogs.map((l) => `- ${l.date} | ${get().studentName(l.studentId)} | ${l.action} ${l.amount} | ${l.reason}`),
+          ...oppLogs.map((l) => `- ${formatAppDate(l.date, l.date)} | ${get().studentName(l.studentId)} | ${l.action} ${l.amount} | ${l.reason}`),
         ];
         return rows.join('\n');
       },

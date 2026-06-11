@@ -22,7 +22,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { toLatinDigits } from "@/lib/format";
+import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
 
@@ -115,7 +115,7 @@ export function OpportunitiesView() {
     return (
       <div className="grid gap-2 rounded-xl border bg-muted/40 p-3 text-xs leading-6 md:grid-cols-2">
         <div><span className="font-bold text-foreground">الامتحان: </span><span className="text-muted-foreground">{exam.name}</span></div>
-        <div><span className="font-bold text-foreground">التاريخ: </span><span className="text-muted-foreground">{exam.date || "—"}</span></div>
+        <div><span className="font-bold text-foreground">التاريخ: </span><span className="text-muted-foreground">{formatAppDate(exam.date)}</span></div>
         <div><span className="font-bold text-foreground">النوع: </span><span className="text-muted-foreground">{exam.type}</span></div>
         <div><span className="font-bold text-foreground">درجة الطالب: </span><span className="text-muted-foreground">{grade ? (grade.score !== null ? grade.status + " / " + grade.score : grade.status) : "لا توجد درجة مسجلة"}</span></div>
         {grade?.notes ? <div className="md:col-span-2"><span className="font-bold text-foreground">ملاحظات الدرجة: </span><span className="text-muted-foreground">{grade.notes}</span></div> : null}
@@ -434,7 +434,7 @@ export function OpportunitiesView() {
                         {student?.name || "غير محدد"}
                       </span>
                       <span className="text-muted-foreground mx-2">•</span>
-                      <span className="text-muted-foreground">{log.date}</span>
+                      <span className="text-muted-foreground">{formatAppDate(log.date)}</span>
                       {exam ? <span className="mx-2 text-xs font-bold text-primary">{exam.name}</span> : null}
                     </div>
                     <div className="flex items-center gap-2">
@@ -492,7 +492,7 @@ export function OpportunitiesView() {
               <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
                 {selectedDetailsLogs.length === 0 ? <p className="empty-state py-8">لا توجد حركات فرص لهذا الطالب</p> : selectedDetailsLogs.map((log) => (
                   <div key={log.id} className="space-y-3 rounded-2xl border bg-card p-4">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div className="flex flex-wrap items-center gap-2"><Badge variant={log.action === "خصم" ? "destructive" : log.action === "إضافة" ? "default" : "secondary"}>{log.action} {log.amount}</Badge><span className="text-sm font-bold text-foreground">{log.date}</span></div><span className="text-xs text-muted-foreground">الفصل: {log.chapterId || "غير محدد"}</span></div>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div className="flex flex-wrap items-center gap-2"><Badge variant={log.action === "خصم" ? "destructive" : log.action === "إضافة" ? "default" : "secondary"}>{log.action} {log.amount}</Badge><span className="text-sm font-bold text-foreground">{formatAppDate(log.date)}</span></div><span className="text-xs text-muted-foreground">الفصل: {log.chapterId || "غير محدد"}</span></div>
                     <div className="rounded-xl bg-muted/40 p-3 text-sm leading-6"><span className="font-bold text-foreground">السبب: </span><span className="text-muted-foreground">{log.reason || "بدون سبب مكتوب"}</span></div>
                     {renderLogExamDetails(log)}
                   </div>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import {
   Select,
   SelectContent,
@@ -33,7 +34,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { toLatinDigits } from "@/lib/format";
+import { formatAppDate, formatAppDateTime, toLatinDigits } from "@/lib/format";
 import { formatBaghdadDateTime, toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
@@ -192,7 +193,7 @@ export function ExamRecordsView() {
     const mainSites = splitSelection(exam.mainSite);
     return [
       { label: "اسم الامتحان", value: exam.name },
-      { label: "تاريخ الامتحان", value: exam.date || "—" },
+      { label: "تاريخ الامتحان", value: formatAppDate(exam.date) },
       { label: "نوع الامتحان", value: exam.type },
       { label: "حالة الامتحان", value: getExamStatus(exam) },
       { label: "الدورات", value: exam.courseIds.map(courseName).join("، ") || "—" },
@@ -299,7 +300,7 @@ tr:nth-child(even) td { background: #f8fafc; }
 <div class="toolbar"><button onclick="window.print()">طباعة / حفظ PDF</button><button onclick="window.close()">إغلاق</button></div>
 <main class="report">
   <section class="header">
-    <div><div class="brand">TeacherPro</div><h1>سجل الامتحان: ${escapeHtml(exam.name)}</h1><div class="meta">التاريخ: ${escapeHtml(exam.date)} | النوع: ${escapeHtml(exam.type)} | الحالة: ${escapeHtml(getExamStatus(exam))}</div></div>
+    <div><div class="brand">TeacherPro</div><h1>سجل الامتحان: ${escapeHtml(exam.name)}</h1><div class="meta">التاريخ: ${escapeHtml(formatAppDate(exam.date))} | النوع: ${escapeHtml(exam.type)} | الحالة: ${escapeHtml(getExamStatus(exam))}</div></div>
     <div class="meta">الدورات: ${escapeHtml(exam.courseIds.map(courseName).join("، "))}<br/>النجاح: ${exam.passMark} | الخصم: ${exam.discountMark} | الدرجة الكاملة: ${exam.fullMark}</div>
   </section>
   <section class="stats">
@@ -309,7 +310,7 @@ tr:nth-child(even) td { background: #f8fafc; }
     <div class="stat"><strong>${deductedCount}</strong><span>خصم / فصل / غش</span></div>
   </section>
   <table><thead><tr><th>#</th><th>الكود</th><th>الطالب</th><th>الدورة</th><th>الحالة</th><th>الدرجة</th><th>التصنيف</th>${extraHeaders}</tr></thead><tbody>${tableRows}</tbody></table>
-  <div class="footer"><span>تم إنشاء التقرير آلياً</span><span>${new Date().toLocaleString("ar-IQ")}</span></div>
+  <div class="footer"><span>تم إنشاء التقرير آلياً</span><span>${formatAppDateTime(new Date())}</span></div>
 </main>
 </body></html>`;
     const win = window.open("", "_blank");
@@ -467,15 +468,14 @@ tr:nth-child(even) td { background: #f8fafc; }
           </div>
           <div className="space-y-1">
             <Label htmlFor="edit-exam-date">تاريخ الامتحان</Label>
-            <Input
+            <DateInput
               id="edit-exam-date"
-              type="date"
               value={editDialog.date}
-              onChange={(e) => setEditDialog((prev) => ({
+              onChange={(value) => setEditDialog((prev) => ({
                 ...prev,
-                date: e.target.value,
-                scheduledActivateAt: prev.statusMode === "تفعيل مجدول" ? defaultDateTimeForDate(e.target.value) : prev.scheduledActivateAt,
-                scheduledDeactivateAt: prev.statusMode === "تعطيل مجدول" ? defaultDateTimeForDate(e.target.value) : prev.scheduledDeactivateAt,
+                date: value,
+                scheduledActivateAt: prev.statusMode === "تفعيل مجدول" ? defaultDateTimeForDate(value) : prev.scheduledActivateAt,
+                scheduledDeactivateAt: prev.statusMode === "تعطيل مجدول" ? defaultDateTimeForDate(value) : prev.scheduledDeactivateAt,
               }))}
             />
           </div>
@@ -588,7 +588,7 @@ tr:nth-child(even) td { background: #f8fafc; }
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <CardTitle className="text-base">{exam.name}</CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">{exam.date} - {exam.courseIds.map(courseName).join("، ")}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{formatAppDate(exam.date)} - {exam.courseIds.map(courseName).join("، ")}</p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     <Badge>{exam.type}</Badge>
                     <Badge variant="outline">{getExamStatus(exam)}</Badge>
@@ -658,7 +658,7 @@ tr:nth-child(even) td { background: #f8fafc; }
             return (
               <tr key={exam.id} className="border-t align-top">
                 <td className="p-3 font-bold">{exam.name}</td>
-                <td className="p-3">{exam.date}</td>
+                <td className="p-3">{formatAppDate(exam.date)}</td>
                 <td className="p-3"><Badge>{exam.type}</Badge></td>
                 <td className="p-3"><Badge variant="outline">{getExamStatus(exam)}</Badge></td>
                 <td className="p-3 min-w-44">{exam.courseIds.map(courseName).join("، ") || "—"}</td>

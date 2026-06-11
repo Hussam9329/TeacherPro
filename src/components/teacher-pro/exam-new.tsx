@@ -5,6 +5,7 @@ import { useTeacherStore, type Exam } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
@@ -269,15 +270,14 @@ export function ExamNewView() {
         </div>
         <div className="space-y-2">
           <Label htmlFor={`${prefix}-date`}>تاريخ الامتحان</Label>
-          <Input
+          <DateInput
             id={`${prefix}-date`}
-            type="date"
             value={state.date}
-            onChange={(e) => setState((p) => ({
+            onChange={(value) => setState((p) => ({
               ...p,
-              date: e.target.value,
+              date: value,
               scheduledActivateAt: p.statusMode === "تفعيل مجدول" && (!p.scheduledActivateAt || p.scheduledActivateAt.startsWith(p.date))
-                ? defaultDateTimeForDate(e.target.value)
+                ? defaultDateTimeForDate(value)
                 : p.scheduledActivateAt,
             }))}
           />

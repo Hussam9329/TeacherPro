@@ -1,3 +1,5 @@
+import { formatAppDate } from './format';
+
 const BAGHDAD_OFFSET_HOURS = 3;
 const BAGHDAD_OFFSET_MS = BAGHDAD_OFFSET_HOURS * 60 * 60 * 1000;
 
@@ -67,5 +69,5 @@ export function formatBaghdadDateTime(value?: string | Date | null): string {
   const local = toBaghdadDateTimeLocal(value);
   if (!local) return '—';
   const [date, time] = local.split('T');
-  return `${date} ${time}`;
+  return `${formatAppDate(date, date)} ${time}`;
 }

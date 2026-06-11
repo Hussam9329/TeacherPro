@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { toLatinDigits } from "@/lib/format";
+import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import {
   hasActiveChapterLink,
@@ -239,7 +239,7 @@ export function GradeEntryView() {
                 <SelectContent>
                   {activeExams.map((e) => (
                     <SelectItem key={e.id} value={e.id}>
-                      {e.name} ({e.type}) - {e.date}
+                      {e.name} ({e.type}) - {formatAppDate(e.date)}
                     </SelectItem>
                   ))}
                 </SelectContent>

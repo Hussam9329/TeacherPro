@@ -33,6 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { formatAppDate } from "@/lib/format";
 import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import { isGradeEntered } from "@/lib/exam-utils";
@@ -251,7 +252,7 @@ export function GradeRecordsView() {
               <div key={grade.id} className="flex flex-col gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2"><p className="truncate text-sm font-medium">{student.name}</p><Badge variant="outline" className="text-[10px]">{student.code}</Badge></div>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{student.telegram}</span><span>•</span><span>{student.subSite || student.locationScope || "—"}</span><span>•</span><span>{exam.name}</span><span>•</span><span>{grade.createdAt}</span></div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{student.telegram}</span><span>•</span><span>{student.subSite || student.locationScope || "—"}</span><span>•</span><span>{exam.name}</span><span>•</span><span>{formatAppDate(grade.createdAt)}</span></div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {grade.score !== null && <span className="font-bold">{grade.score}/{exam.fullMark}</span>}

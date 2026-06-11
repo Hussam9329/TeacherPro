@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { type Exam, type Grade, type OpportunityLog, type Student } from "@/lib/teacher-store";
 import { Badge } from "@/components/ui/badge";
+import { formatAppDate } from "@/lib/format";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities";
@@ -156,7 +157,7 @@ export function StudentProfileDialog({
                         <InfoBox label="الكورس" value={student.courseTerm || "—"} />
                         <InfoBox label="الموقع الكامل" value={`${student.locationScope || student.mainSite || "-"} - ${student.subSite || "-"}`} />
                         <InfoBox label="الفصل النشط" value={activeChapter?.name || "لم يتم اختيار الفصل لهم بعد"} />
-                        <InfoBox label="تاريخ التسجيل" value={student.createdAt} />
+                        <InfoBox label="تاريخ التسجيل" value={formatAppDate(student.createdAt)} />
                       </div>
                     </div>
 
@@ -194,7 +195,7 @@ export function StudentProfileDialog({
                       const exam = exams.find((item) => item.id === grade.examId);
                       return (
                         <div key={grade.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
-                          <div className="min-w-0"><b className="break-words">{exam?.name || "امتحان محذوف"}</b><p className="text-xs text-muted-foreground">{exam?.date || "—"}</p></div>
+                          <div className="min-w-0"><b className="break-words">{exam?.name || "امتحان محذوف"}</b><p className="text-xs text-muted-foreground">{formatAppDate(exam?.date)}</p></div>
                           <Badge className="w-fit" variant={grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : "secondary"}>{grade.status}</Badge>
                           <span className="font-black">{formatScore(grade, exam)}</span>
                         </div>
@@ -213,7 +214,7 @@ export function StudentProfileDialog({
                       if (!exam) return null;
                       return (
                         <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
-                          <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {exam.date}</p></div><Badge>{grade.status}</Badge></div>
+                          <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><Badge>{grade.status}</Badge></div>
                           <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{grade.score ?? "—"}</b><p>درجة الطالب</p></div></div>
                         </div>
                       );
@@ -228,7 +229,7 @@ export function StudentProfileDialog({
                   <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3"><div className="rounded-2xl bg-primary/10 p-3 text-center"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-xs text-muted-foreground">الفرص الحالية</p></div><div className="rounded-2xl bg-red-500/10 p-3 text-center"><p className="text-xl font-black text-red-600 sm:text-2xl">{deductedCount}</p><p className="text-xs text-muted-foreground">حركات خصم</p></div><div className="rounded-2xl bg-emerald-500/10 p-3 text-center"><p className="text-xl font-black text-emerald-600 sm:text-2xl">{addedCount}</p><p className="text-xs text-muted-foreground">حركات إضافة/تعديل</p></div></div>
                   <div className="max-h-72 space-y-2 overflow-y-auto">
                     {studentOpportunities.length === 0 ? <p className="empty-state py-8">لا توجد حركات فرص</p> : studentOpportunities.map((row) => (
-                      <div key={row.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center"><span>{row.date}</span><Badge className="w-fit" variant={row.action === "خصم" ? "destructive" : "default"}>{row.action} {row.amount}</Badge><span className="break-words text-muted-foreground">{row.reason}</span></div>
+                      <div key={row.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center"><span>{formatAppDate(row.date)}</span><Badge className="w-fit" variant={row.action === "خصم" ? "destructive" : "default"}>{row.action} {row.amount}</Badge><span className="break-words text-muted-foreground">{row.reason}</span></div>
                     ))}
                   </div>
                 </div>

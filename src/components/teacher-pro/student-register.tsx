@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -22,6 +23,7 @@ import {
 
 import { toast } from "sonner";
 import {
+  formatAppDate,
   getPhoneValidationError,
   sanitizePhoneInput,
   toLatinDigits,
@@ -95,28 +97,8 @@ function calculateGracePeriodEnd(dateISO: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-const GRACE_MONTH_NAMES = [
-  "يناير",
-  "فيبراير",
-  "مارس",
-  "ابريل",
-  "مايو",
-  "يونيو",
-  "يوليو",
-  "اغسطس",
-  "سيبتمبر",
-  "اكتوبر",
-  "نوفمبر",
-  "ديسمبر",
-];
-
 function formatGraceDate(dateISO: string): string {
-  if (!dateISO) return "-";
-  const [year, month, day] = dateISO.split("-");
-  const monthIndex = Number(month) - 1;
-  const monthName = GRACE_MONTH_NAMES[monthIndex];
-  if (!year || !monthName || !day) return dateISO;
-  return `${day.padStart(2, "0")} ${monthName} ${year}`;
+  return formatAppDate(dateISO);
 }
 
 function normalizeGraceDays(value: string): string {
@@ -1046,12 +1028,11 @@ export function StudentRegisterView() {
                   <Label htmlFor="reg-createdAt" className="font-bold text-foreground">
                     تاريخ تسجيل الطالب <RequiredMark />
                   </Label>
-                  <Input
+                  <DateInput
                     id="reg-createdAt"
                     name="createdAt"
-                    type="date"
                     value={form.createdAt}
-                    onChange={(e) => updateForm("createdAt", e.target.value)}
+                    onChange={(value) => updateForm("createdAt", value)}
                     required
                     className={fieldBaseClass}
                   />
