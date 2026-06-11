@@ -300,15 +300,10 @@ export function FollowUpView() {
     setProfileDialogOpen(true);
   };
 
-  const studentExamCount = (student: Student) => exams.filter((exam) => {
-    const selectedMainSites = splitSelection(exam.mainSite);
-    return (
-      exam.courseIds.includes(student.courseId) &&
-      isExamOnOrAfterStudentRegistration(student, exam) &&
-      hasActiveChapterLink(courseChapters, student.courseId) &&
-      studentMatchesExamMainSites(student, selectedMainSites)
-    );
-  }).length;
+  const studentOpportunityText = (student: Student) => {
+    if (!activeChapterForCourse(student.courseId)) return "0 / 0";
+    return `${Number(student.opportunities || 0)} / ${Number(student.baseOpportunities || 0)}`;
+  };
 
   const renderStudentPicker = () => {
     return (
@@ -331,7 +326,7 @@ export function FollowUpView() {
         {selectedLeaveStudent && (
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card/80 p-2">
             <Button type="button" size="sm" variant="outline" onClick={() => openProfile(selectedLeaveStudent.id)}>ملف الطالب</Button>
-            <Badge variant="secondary">عدد فروض الطالب: {studentExamCount(selectedLeaveStudent)}</Badge>
+            <Badge variant="secondary">عدد فرص الطالب: {studentOpportunityText(selectedLeaveStudent)}</Badge>
           </div>
         )}
       </div>
