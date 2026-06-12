@@ -407,6 +407,31 @@ export function FollowUpView() {
     );
   };
 
+  if (profileDialogOpen && selectedProfileStudent) {
+    return (
+      <StudentProfileDialog
+        student={selectedProfileStudent}
+        open
+        onOpenChange={(open) => {
+          if (!open) setProfileDialogOpen(false);
+        }}
+        exams={exams}
+        grades={grades}
+        opportunityLogs={opportunityLogs}
+        studentLeaves={studentLeaves}
+        studentCalls={studentCalls}
+        studentNotes={studentNotes}
+        logs={logs}
+        courseName={courseName}
+        activeChapterForCourse={activeChapterForCourse}
+        whatsappLink={whatsappLink}
+        telegramLink={telegramLink}
+        isStudentCurrentlyInGrace={isStudentCurrentlyInGrace}
+        graceEndDate={graceEndDate}
+      />
+    );
+  }
+
   return (
     <div className="space-y-5">
       <Card>
@@ -462,24 +487,6 @@ export function FollowUpView() {
         <div className="space-y-4"><Card><CardContent className="grid gap-3 p-4 md:grid-cols-2"><div className="space-y-2"><Label>الامتحان</Label><Select value={gradeListExamId || exams[0]?.id || ""} onValueChange={setGradeListExamId}><SelectTrigger><SelectValue placeholder="اختر الامتحان" /></SelectTrigger><SelectContent>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name} - {formatAppDate(exam.date)}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>القائمة</Label><Select value={gradeListCategory} onValueChange={(value) => setGradeListCategory(value as CallCategory)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(Object.keys(callCategoryLabels) as CallCategory[]).map((key) => <SelectItem key={key} value={key}>{callCategoryLabels[key]}</SelectItem>)}</SelectContent></Select></div></CardContent></Card><div className="space-y-2">{gradeListRows.length === 0 ? <p className="empty-state py-8">لا توجد أسماء في هذه القائمة</p> : gradeListRows.map(renderCallRow)}</div></div>
       )}
 
-      <StudentProfileDialog
-        student={selectedProfileStudent}
-        open={profileDialogOpen}
-        onOpenChange={setProfileDialogOpen}
-        exams={exams}
-        grades={grades}
-        opportunityLogs={opportunityLogs}
-        studentLeaves={studentLeaves}
-        studentCalls={studentCalls}
-        studentNotes={studentNotes}
-        logs={logs}
-        courseName={courseName}
-        activeChapterForCourse={activeChapterForCourse}
-        whatsappLink={whatsappLink}
-        telegramLink={telegramLink}
-        isStudentCurrentlyInGrace={isStudentCurrentlyInGrace}
-        graceEndDate={graceEndDate}
-      />
     </div>
   );
 }

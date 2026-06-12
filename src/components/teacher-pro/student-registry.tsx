@@ -653,6 +653,35 @@ export function StudentRegistryView() {
     setPage(1);
   };
 
+  const activeFileStudent = fileDialog.student
+    ? students.find((student) => student.id === fileDialog.student?.id) || fileDialog.student
+    : null;
+
+  if (fileDialog.open && activeFileStudent) {
+    return (
+      <StudentProfileDialog
+        student={activeFileStudent}
+        open
+        onOpenChange={(open) => {
+          if (!open) setFileDialog({ student: null, open: false });
+        }}
+        exams={exams}
+        grades={grades}
+        opportunityLogs={opportunityLogs}
+        studentLeaves={studentLeaves}
+        studentCalls={studentCalls}
+        studentNotes={studentNotes}
+        logs={logs}
+        courseName={courseName}
+        activeChapterForCourse={activeChapterForCourse}
+        whatsappLink={whatsappLink}
+        telegramLink={telegramLink}
+        isStudentCurrentlyInGrace={isStudentCurrentlyInGrace}
+        graceEndDate={graceEndDate}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       <Card>
@@ -1382,24 +1411,6 @@ export function StudentRegistryView() {
         </DialogContent>
       </Dialog>
 
-      <StudentProfileDialog
-        student={fileDialog.student}
-        open={fileDialog.open}
-        onOpenChange={(open) => setFileDialog((prev) => ({ ...prev, open }))}
-        exams={exams}
-        grades={grades}
-        opportunityLogs={opportunityLogs}
-        studentLeaves={studentLeaves}
-        studentCalls={studentCalls}
-        studentNotes={studentNotes}
-        logs={logs}
-        courseName={courseName}
-        activeChapterForCourse={activeChapterForCourse}
-        whatsappLink={whatsappLink}
-        telegramLink={telegramLink}
-        isStudentCurrentlyInGrace={isStudentCurrentlyInGrace}
-        graceEndDate={graceEndDate}
-      />
     </div>
   );
 }

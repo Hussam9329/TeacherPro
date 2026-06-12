@@ -268,14 +268,8 @@ export function StudentProfileDialog({
       if (event.key === "Escape") onOpenChange(false);
     };
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, onOpenChange]);
 
   if (!open || !student) return null;
@@ -304,40 +298,33 @@ export function StudentProfileDialog({
   ];
 
   return (
-    <div
+    <section
       dir="rtl"
-      className="fixed inset-0 z-50 overflow-hidden bg-background text-foreground"
-      role="dialog"
-      aria-modal="true"
+      className="fixed inset-0 z-[80] flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground"
       aria-labelledby="student-profile-title"
     >
-      <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
-        <div className="relative shrink-0 border-b bg-background/95 p-4 text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-6">
-          <button
-            type="button"
-            aria-label="إغلاق ملف الطالب"
-            onClick={() => onOpenChange(false)}
-            className="absolute left-4 top-4 rounded-full p-1 opacity-70 transition-opacity hover:bg-accent hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <XIcon className="size-4" />
-          </button>
-          <div className="grid min-w-0 gap-4 pe-8 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
+      <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background">
+        <div className="shrink-0 border-b bg-background/95 p-4 text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-6">
+          <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0 space-y-2">
-              <h2 id="student-profile-title" className="text-xl font-black sm:text-2xl">ملف الطالب</h2>
-              <p className="max-w-3xl break-words text-xs leading-6 text-muted-foreground sm:text-sm">
-                {student.name}
-              </p>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-2xl border bg-background px-4 py-2 text-sm font-black shadow-sm transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <XIcon className="size-4" />
+                  رجوع
+                </button>
                 <Badge variant={student.status === "نشط" ? "default" : "destructive"}>{student.status}</Badge>
                 <Badge variant="outline">{student.code}</Badge>
                 <Badge variant="secondary" className="max-w-full truncate">{courseName(student.courseId)}</Badge>
                 <Badge variant="outline">فرص: {opportunityText}</Badge>
               </div>
-            </div>
-            <div className="min-w-0 rounded-2xl border bg-card/90 p-4 shadow-sm lg:rounded-3xl">
-              <p className="text-xs text-muted-foreground">اسم الطالب</p>
-              <p className="break-words text-lg font-black sm:text-xl">{student.name}</p>
-              <p className="mt-1 break-words text-xs text-muted-foreground">{student.school || "بدون مدرسة"}</p>
+              <h2 id="student-profile-title" className="break-words text-2xl font-black sm:text-3xl">{student.name}</h2>
+              <p className="break-words text-xs leading-6 text-muted-foreground sm:text-sm">
+                {student.school || "بدون مدرسة"} - شاشة ملف الطالب
+              </p>
             </div>
           </div>
         </div>
@@ -494,6 +481,6 @@ export function StudentProfileDialog({
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
