@@ -80,23 +80,37 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { id, ...data } = body;
     delete data.accountingChecked;
-    if (!id) return validationError('تعذر تحديد الدرجة المطلوبة');
+
+    const gradeId = String(id || '').trim();
+    const fallbackStudentId = String(data.studentId || '').trim();
+    const fallbackExamId = String(data.examId || '').trim();
+    if (!gradeId && (!fallbackStudentId || !fallbackExamId)) return validationError('تعذر تحديد الدرجة المطلوبة');
+
     if (data.academicAccountingChecked !== undefined) data.academicAccountingChecked = Boolean(data.academicAccountingChecked);
     if (data.status !== undefined && !['درجة', 'غائب', 'غش'].includes(String(data.status))) return validationError('حالة الدرجة غير صحيحة');
     if (data.score !== undefined) data.score = data.score === null ? null : Number(data.score);
+
+    const current = gradeId
+      ? await db.grade.findUnique({ where: { id: gradeId }, include: { exam: true } })
+      : null;
+    const fallbackCurrent = !current && fallbackStudentId && fallbackExamId
+      ? await db.grade.findUnique({ where: { studentId_examId: { studentId: fallbackStudentId, examId: fallbackExamId } }, include: { exam: true } })
+      : null;
+    const targetGrade = current || fallbackCurrent;
+    if (!targetGrade) return validationError('سجل الدرجة غير موجود أو تم حذفه مسبقاً', 404);
+
     if (data.status === 'درجة' || data.score !== undefined) {
-      const current = await db.grade.findUnique({ where: { id }, include: { exam: true } });
-      if (!current) return validationError('سجل الدرجة غير موجود');
-      const nextStatus = String(data.status ?? current.status);
-      const nextScore = data.score !== undefined ? data.score : current.score;
+      const nextStatus = String(data.status ?? targetGrade.status);
+      const nextScore = data.score !== undefined ? data.score : targetGrade.score;
       if (nextStatus === 'درجة') {
-        const fullMark = Number(current.exam.fullMark || 0);
+        const fullMark = Number(targetGrade.exam.fullMark || 0);
         if (!Number.isFinite(Number(nextScore)) || Number(nextScore) < 0 || Number(nextScore) > fullMark) {
           return validationError(`الدرجة يجب أن تكون رقماً بين 0 و ${fullMark}`);
         }
       }
     }
-    const grade = await db.grade.update({ where: { id }, data });
+
+    const grade = await db.grade.update({ where: { id: targetGrade.id }, data });
     return NextResponse.json({ grade });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث الدرجة حالياً.');
@@ -114,12 +128,14 @@ export async function DELETE(req: NextRequest) {
     const examId = searchParams.get('examId');
 
     if (id) {
-      await db.grade.delete({ where: { id } });
-      return NextResponse.json({ ok: true });
+      const deletedById = await db.grade.deleteMany({ where: { id } });
+      if (deletedById.count > 0 || !studentId || !examId) {
+        return NextResponse.json({ ok: true, deleted: deletedById.count });
+      }
     }
     if (studentId && examId) {
-      await db.grade.delete({ where: { studentId_examId: { studentId, examId } } });
-      return NextResponse.json({ ok: true });
+      const deletedByPair = await db.grade.deleteMany({ where: { studentId, examId } });
+      return NextResponse.json({ ok: true, deleted: deletedByPair.count });
     }
     return validationError('تعذر تحديد الدرجة المطلوبة');
   } catch (error) {

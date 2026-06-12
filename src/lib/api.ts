@@ -90,9 +90,14 @@ async function apiPut(endpoint: string, data: Record<string, unknown>): Promise<
   }
 }
 
-async function apiDelete(endpoint: string, id: string): Promise<ApiResult> {
+async function apiDelete(endpoint: string, id: string, extraParams: Record<string, string | undefined> = {}): Promise<ApiResult> {
   try {
-    const res = await fetch(`/api/${endpoint}?id=${encodeURIComponent(id)}`, {
+    const params = new URLSearchParams();
+    params.set('id', id);
+    Object.entries(extraParams).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+    const res = await fetch(`/api/${endpoint}?${params.toString()}`, {
       method: 'DELETE',
       credentials: 'same-origin',
     });
@@ -316,8 +321,8 @@ export const gradeApi = {
     apiPost('grades', grade),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut('grades', { id, ...updates }),
-  remove: (id: string) =>
-    apiDelete('grades', id),
+  remove: (id: string, studentId?: string, examId?: string) =>
+    apiDelete('grades', id, { studentId, examId }),
 };
 
 // ─── OpportunityLog API ───────────────────────────────────────────────────────

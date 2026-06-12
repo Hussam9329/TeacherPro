@@ -2005,7 +2005,7 @@ export const useTeacherStore = create<TeacherState>()(
           date: todayISO(),
         }));
 
-        relatedGrades.forEach((grade) => syncToServer(get, () => gradeApi.remove(grade.id)));
+        relatedGrades.forEach((grade) => syncToServer(get, () => gradeApi.remove(grade.id, grade.studentId, grade.examId)));
         relatedOpportunityLogs
           .filter(isAcademicallyManagedOpportunityLog)
           .forEach((log) => syncToServer(get, () => opportunityLogApi.remove(log.id), { description: 'حذف إجراء أكاديمي مرتبط بامتحان محذوف' }));
@@ -2073,7 +2073,10 @@ export const useTeacherStore = create<TeacherState>()(
         const affectedStudentIds = [existingGrade?.studentId, updates.studentId].filter(Boolean) as string[];
         set((s) => ({ grades: s.grades.map((g) => g.id === id ? { ...g, ...updates, updatedAt: todayISO() } : g) }));
         get().logAction('الدرجات', 'تعديل مباشر للدرجة', id);
-        syncToServer(get, () => gradeApi.update(id, updates as Record<string, unknown>), {
+        syncToServer(get, () => gradeApi.update(id, {
+          ...updates,
+          ...(existingGrade ? { studentId: existingGrade.studentId, examId: existingGrade.examId } : {}),
+        } as Record<string, unknown>), {
           description: 'تعديل درجة',
           rollback: () => set(previousState),
         });
@@ -2094,7 +2097,7 @@ export const useTeacherStore = create<TeacherState>()(
         };
         set((s) => ({ grades: s.grades.filter((g) => g.id !== id), studentNotes: [actionNote, ...s.studentNotes] }));
         get().logAction('الدرجات', 'حذف درجة', `${get().studentName(grade.studentId)} - ${examName}`);
-        syncToServer(get, () => gradeApi.remove(id), {
+        syncToServer(get, () => gradeApi.remove(id, grade.studentId, grade.examId), {
           description: 'حذف درجة',
           rollback: () => set(previousState),
         });
@@ -2228,6 +2231,7 @@ export const useTeacherStore = create<TeacherState>()(
         existingGrades.forEach((grade) => {
           const examName = stateBefore.exams.find((exam) => exam.id === grade.examId)?.name || '';
           get().logAction('الدرجات', 'إزالة درجة بسبب الإجازة', `${get().studentName(leave.studentId)} - ${examName}`);
+          syncToServer(get, () => gradeApi.remove(grade.id, grade.studentId, grade.examId), { description: 'حذف درجة بسبب إجازة' });
         });
         syncToServer(get, () => studentNoteApi.add(removedGradeNote as unknown as Record<string, unknown>));
         syncToServer(get, () => studentLeaveApi.add(leave as unknown as Record<string, unknown>), {
