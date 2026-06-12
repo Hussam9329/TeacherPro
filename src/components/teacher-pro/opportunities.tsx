@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { formatGradeScore } from "@/lib/exam-utils";
 
 export function OpportunitiesView() {
   const {
@@ -117,7 +118,7 @@ export function OpportunitiesView() {
         <div><span className="font-bold text-foreground">الامتحان: </span><span className="text-muted-foreground">{exam.name}</span></div>
         <div><span className="font-bold text-foreground">التاريخ: </span><span className="text-muted-foreground">{formatAppDate(exam.date)}</span></div>
         <div><span className="font-bold text-foreground">النوع: </span><span className="text-muted-foreground">{exam.type}</span></div>
-        <div><span className="font-bold text-foreground">درجة الطالب: </span><span className="text-muted-foreground">{grade ? (grade.score !== null ? grade.status + " / " + grade.score : grade.status) : "لا توجد درجة مسجلة"}</span></div>
+        <div><span className="font-bold text-foreground">درجة الطالب: </span><span className="text-muted-foreground">{grade ? formatGradeScore(grade, exam, "—") : "لا توجد درجة مسجلة"}</span></div>
         {grade?.notes ? <div className="md:col-span-2"><span className="font-bold text-foreground">ملاحظات الدرجة: </span><span className="text-muted-foreground">{grade.notes}</span></div> : null}
       </div>
     );

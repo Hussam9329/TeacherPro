@@ -99,6 +99,19 @@ export function isScoreInsideExamRange(value: unknown, fullMark: number): boolea
   return numeric !== null && numeric >= 0 && numeric <= Number(fullMark || 0);
 }
 
+
+export function formatGradeScore(grade: GradeLike, exam?: ExamForGradeRange | null, emptyLabel = '—'): string {
+  if (!grade) return emptyLabel;
+  const status = String(grade.status || '');
+  if (status === 'درجة') {
+    const score = normalizeScore(grade.score);
+    if (score === null) return emptyLabel;
+    return exam ? `${score}/${Number(exam.fullMark || 0)}` : String(score);
+  }
+  if (status === 'غائب' || status === 'غش') return status;
+  return status || emptyLabel;
+}
+
 export function isGradeEntered(grade: GradeLike, exam?: ExamForGradeRange | null): boolean {
   if (!grade || !exam) return false;
   if (grade.status === 'درجة') return isScoreInsideExamRange(grade.score, exam.fullMark);

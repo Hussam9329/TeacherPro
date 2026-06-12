@@ -36,7 +36,7 @@ import { toast } from "sonner";
 import { formatAppDate } from "@/lib/format";
 import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
-import { isGradeEntered } from "@/lib/exam-utils";
+import { formatGradeScore, isGradeEntered } from "@/lib/exam-utils";
 import { useActionLock } from "@/hooks/use-action-lock";
 
 type GradeStatus = "درجة" | "غائب" | "غش";
@@ -173,7 +173,7 @@ export function GradeRecordsView() {
       const student = students.find((item) => item.id === grade.studentId);
       const exam = exams.find((item) => item.id === grade.examId);
       const cls = exam ? classification(grade, exam, student) : { text: "" };
-      return [student?.name || "", student?.code || "", student?.telegram || "", exam?.name || "", grade.status, grade.score?.toString() || "", cls.text, grade.academicAccountingChecked ? "تمت المحاسبة" : "", grade.notes || ""]
+      return [student?.name || "", student?.code || "", student?.telegram || "", exam?.name || "", grade.status, formatGradeScore(grade, exam, ""), cls.text, grade.academicAccountingChecked ? "تمت المحاسبة" : "", grade.notes || ""]
         .map((value) => `"${String(value).replaceAll('"', '""')}"`)
         .join(",");
     });
@@ -255,7 +255,7 @@ export function GradeRecordsView() {
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{student.telegram}</span><span>•</span><span>{student.subSite || student.locationScope || "—"}</span><span>•</span><span>{exam.name}</span><span>•</span><span>{formatAppDate(grade.createdAt)}</span></div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {grade.score !== null && <span className="font-bold">{grade.score}/{exam.fullMark}</span>}
+                  <span className="font-bold">{formatGradeScore(grade, exam, "—")}</span>
                   <Badge variant={cls.type === "ok" ? "default" : cls.type === "danger" ? "destructive" : cls.type === "warn" ? "secondary" : "outline"}>{cls.text}</Badge>
                   {cls.kind === "academic-accounting" && (
                     <label className="flex items-center gap-2 rounded-xl border px-2 py-1 text-xs">
@@ -300,7 +300,7 @@ export function GradeRecordsView() {
                     <td className="p-3">{student.subSite || student.locationScope || student.mainSite || "—"}</td>
                     <td className="p-3">{exam.name}</td>
                     <td className="p-3">{grade.status}</td>
-                    <td className="p-3">{grade.score !== null ? `${grade.score}/${exam.fullMark}` : "—"}</td>
+                    <td className="p-3">{formatGradeScore(grade, exam, "—")}</td>
                     <td className="p-3"><Badge variant={cls.type === "ok" ? "default" : cls.type === "danger" ? "destructive" : cls.type === "warn" ? "secondary" : "outline"}>{cls.text}</Badge></td>
                     <td className="p-3">
                       {cls.kind === "academic-accounting" ? (
@@ -334,14 +334,22 @@ export function GradeRecordsView() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label>الحالة</Label>
-              <Select value={editDialog.status} onValueChange={(value) => setEditDialog((prev) => ({ ...prev, status: value as GradeStatus }))}>
+              <Select value={editDialog.status} onValueChange={(value) => {
+                const nextStatus = value as GradeStatus;
+                setEditDialog((prev) => ({ ...prev, status: nextStatus, score: nextStatus === "درجة" ? prev.score : "" }));
+              }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="غش">غش</SelectItem></SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
               <Label>الدرجة</Label>
-              <Input type="number" disabled={editDialog.status !== "درجة"} value={editDialog.score} onChange={(e) => setEditDialog((prev) => ({ ...prev, score: toLatinDigits(e.target.value) }))} />
+              <Input
+                type={editDialog.status === "درجة" ? "number" : "text"}
+                disabled={editDialog.status !== "درجة"}
+                value={editDialog.status === "درجة" ? editDialog.score : editDialog.status}
+                onChange={(e) => setEditDialog((prev) => ({ ...prev, score: toLatinDigits(e.target.value) }))}
+              />
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label>الملاحظات</Label>

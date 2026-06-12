@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { type Exam, type Grade, type OpportunityLog, type Student, type StudentNote } from "@/lib/teacher-store";
 import { Badge } from "@/components/ui/badge";
 import { formatAppDate } from "@/lib/format";
+import { formatGradeScore } from "@/lib/exam-utils";
 import { XIcon } from "lucide-react";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "actions";
@@ -42,8 +43,7 @@ function InfoBox({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function formatScore(grade: Grade, exam?: Exam) {
-  if (grade.status !== "درجة") return grade.status;
-  return grade.score !== null ? `${grade.score}/${exam?.fullMark || 100}` : "—";
+  return formatGradeScore(grade, exam, "—");
 }
 
 type StudentActionRow = {
@@ -281,7 +281,7 @@ export function StudentProfileDialog({
                       return (
                         <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
                           <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><Badge>{grade.status}</Badge></div>
-                          <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{grade.score ?? "—"}</b><p>درجة الطالب</p></div></div>
+                          <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{formatGradeScore(grade, exam, "—")}</b><p>درجة الطالب</p></div></div>
                         </div>
                       );
                     })}

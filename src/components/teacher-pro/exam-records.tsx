@@ -38,7 +38,7 @@ import { formatAppDate, formatAppDateTime, toLatinDigits } from "@/lib/format";
 import { formatBaghdadDateTime, toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { downloadTextFile, escapeHtml, getExamStatus, hasActiveChapterLink, splitSelection } from "@/lib/exam-utils";
+import { downloadTextFile, escapeHtml, formatGradeScore, getExamStatus, hasActiveChapterLink, splitSelection } from "@/lib/exam-utils";
 import { searchAny } from "@/lib/validation";
 
 type ReportOptions = {
@@ -219,7 +219,7 @@ export function ExamRecordsView() {
       row.student?.name || "",
       row.student ? courseName(row.student.courseId) : "",
       row.grade.status,
-      row.grade.score === null ? "" : `${row.grade.score}/${exam.fullMark}`,
+      formatGradeScore(row.grade, exam, ""),
       row.cls.text,
       row.student?.phone || "",
       row.student?.telegram || "",
@@ -237,7 +237,7 @@ export function ExamRecordsView() {
       <tr>
         <td>${index + 1}</td><td>${escapeHtml(row.student?.code)}</td><td>${escapeHtml(row.student?.name)}</td>
         <td>${escapeHtml(row.student ? courseName(row.student.courseId) : "")}</td><td>${escapeHtml(row.grade.status)}</td>
-        <td>${escapeHtml(row.grade.score === null ? "" : `${row.grade.score}/${exam.fullMark}`)}</td><td>${escapeHtml(row.cls.text)}</td>
+        <td>${escapeHtml(formatGradeScore(row.grade, exam, ""))}</td><td>${escapeHtml(row.cls.text)}</td>
         <td>${escapeHtml(row.student?.phone)}</td><td>${escapeHtml(row.student?.telegram)}</td><td>${escapeHtml(row.grade.notes)}</td>
       </tr>`).join("");
     const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8" /></head><body><table border="1"><thead><tr><th>#</th><th>الكود</th><th>الطالب</th><th>الدورة</th><th>الحالة</th><th>الدرجة</th><th>التصنيف</th><th>الهاتف</th><th>التليكرام</th><th>ملاحظات</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
@@ -260,7 +260,7 @@ export function ExamRecordsView() {
         <td>${escapeHtml(row.student?.name)}</td>
         <td>${escapeHtml(row.student ? courseName(row.student.courseId) : "")}</td>
         <td>${escapeHtml(row.grade.status)}</td>
-        <td>${escapeHtml(row.grade.score === null ? "-" : `${row.grade.score}/${exam.fullMark}`)}</td>
+        <td>${escapeHtml(formatGradeScore(row.grade, exam, "-"))}</td>
         <td><span class="pill">${escapeHtml(row.cls.text)}</span></td>
         ${reportOptions.showPhone ? `<td>${escapeHtml(row.student?.phone)}</td>` : ""}
         ${reportOptions.showTelegram ? `<td>${escapeHtml(row.student?.telegram)}</td>` : ""}
@@ -617,7 +617,7 @@ tr:nth-child(even) td { background: #f8fafc; }
                 {rows.map((row) => (
                   <div key={row.grade.id} className="flex items-center justify-between rounded-xl bg-muted/60 p-2 text-sm">
                     <span className="truncate">{row.student?.name}</span>
-                    <div className="flex items-center gap-2">{row.grade.score !== null && <span className="font-bold">{row.grade.score}</span>}<Badge variant={row.cls.type === "ok" ? "default" : row.cls.type === "danger" ? "destructive" : row.cls.type === "warn" ? "secondary" : "outline"} className="text-[10px]">{row.cls.text}</Badge></div>
+                    <div className="flex items-center gap-2"><span className="font-bold">{formatGradeScore(row.grade, exam, "—")}</span><Badge variant={row.cls.type === "ok" ? "default" : row.cls.type === "danger" ? "destructive" : row.cls.type === "warn" ? "secondary" : "outline"} className="text-[10px]">{row.cls.text}</Badge></div>
                   </div>
                 ))}
                 {rows.length === 0 && <div className="empty-state py-6">لا توجد درجات مسجلة لهذا الامتحان بعد.</div>}

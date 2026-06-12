@@ -418,11 +418,11 @@ export function GradeEntryView() {
                       </div>
 
                       <Input
-                        type="number"
+                        type={draft.status === "درجة" ? "number" : "text"}
                         min={0}
                         max={selectedExam.fullMark}
                         disabled={controlsDisabled || draft.status !== "درجة"}
-                        value={!leave && draft.status === "درجة" ? draft.score : ""}
+                        value={!leave ? (draft.status === "درجة" ? draft.score : draft.status) : ""}
                         onChange={(e) => {
                           const nextScore = normalizeGradeScoreInput(e.target.value, selectedExam.fullMark);
                           if (nextScore !== toLatinDigits(e.target.value).trim()) {
@@ -437,7 +437,7 @@ export function GradeEntryView() {
                             void saveGrade(student.id);
                           }
                         }}
-                        placeholder={`0 - ${selectedExam.fullMark}`}
+                        placeholder={draft.status === "درجة" ? `0 - ${selectedExam.fullMark}` : draft.status}
                         className="h-10"
                       />
 
