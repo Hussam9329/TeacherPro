@@ -304,9 +304,15 @@ export function StudentProfileDialog({
   ];
 
   return (
-    <div dir="rtl" className="fixed inset-0 z-50 grid place-items-center overflow-hidden bg-black/60 p-2 backdrop-blur-sm sm:p-4" role="dialog" aria-modal="true" aria-labelledby="student-profile-title">
-      <div className="flex h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-full max-w-[1180px] flex-col overflow-hidden rounded-2xl border bg-popover/95 text-popover-foreground shadow-2xl backdrop-blur-xl sm:h-[92dvh] sm:max-h-[900px] sm:rounded-3xl">
-        <div className="relative shrink-0 border-b bg-gradient-to-l from-primary/15 via-purple-500/10 to-background p-4 text-right sm:p-6">
+    <div
+      dir="rtl"
+      className="fixed inset-0 z-50 overflow-hidden bg-background text-foreground"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="student-profile-title"
+    >
+      <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
+        <div className="relative shrink-0 border-b bg-background/95 p-4 text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-6">
           <button
             type="button"
             aria-label="إغلاق ملف الطالب"
