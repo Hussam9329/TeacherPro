@@ -304,18 +304,20 @@ export function StudentProfileDialog({
       aria-labelledby="student-profile-title"
     >
       <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background">
-        <div className="shrink-0 border-b bg-background/95 p-4 text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-6">
+        <button
+          type="button"
+          onClick={() => onOpenChange(false)}
+          className="fixed right-4 top-4 z-[120] inline-flex min-h-11 items-center gap-2 rounded-2xl border bg-background/95 px-4 py-2 text-sm font-black shadow-lg backdrop-blur transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring sm:right-6 sm:top-6"
+          aria-label="الرجوع من ملف الطالب"
+        >
+          <XIcon className="size-4" />
+          رجوع
+        </button>
+
+        <div className="sticky top-0 z-30 shrink-0 border-b bg-background/95 p-4 pt-20 text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-6 sm:pt-24">
           <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onOpenChange(false)}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-2xl border bg-background px-4 py-2 text-sm font-black shadow-sm transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <XIcon className="size-4" />
-                  رجوع
-                </button>
                 <Badge variant={student.status === "نشط" ? "default" : "destructive"}>{student.status}</Badge>
                 <Badge variant="outline">{student.code}</Badge>
                 <Badge variant="secondary" className="max-w-full truncate">{courseName(student.courseId)}</Badge>
