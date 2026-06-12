@@ -204,7 +204,10 @@ export function StudentRegistryView() {
     exams,
     grades,
     opportunityLogs,
+    studentLeaves,
+    studentCalls,
     studentNotes,
+    logs,
     dismissStudent,
     reactivateStudent,
     updateStudent,
@@ -1386,7 +1389,10 @@ export function StudentRegistryView() {
         exams={exams}
         grades={grades}
         opportunityLogs={opportunityLogs}
+        studentLeaves={studentLeaves}
+        studentCalls={studentCalls}
         studentNotes={studentNotes}
+        logs={logs}
         courseName={courseName}
         activeChapterForCourse={activeChapterForCourse}
         whatsappLink={whatsappLink}

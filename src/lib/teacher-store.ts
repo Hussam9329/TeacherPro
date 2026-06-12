@@ -19,7 +19,7 @@ import {
   parseJsonArray,
   parseJsonRecord,
 } from './course-config';
-import { isExamAvailableForEntry, isExamOnOrAfterStudentRegistration, isGradeEntered } from './exam-utils';
+import { formatGradeScore, isExamAvailableForEntry, isExamOnOrAfterStudentRegistration, isGradeEntered } from './exam-utils';
 import { toBaghdadDateTimeLocal } from './baghdad-time';
 import { formatAppDate } from './format';
 
@@ -2193,12 +2193,16 @@ export const useTeacherStore = create<TeacherState>()(
         const leaveLabel = leave.leaveType === 'period'
           ? `فترة ${formatAppDate(leave.dateFrom)} إلى ${formatAppDate(leave.dateTo)}`
           : `امتحان (${stateBefore.exams.find((exam) => exam.id === leave.examId)?.name || 'امتحان محذوف'})`;
+        const removedGradeDetails = existingGrades.map((grade) => {
+          const exam = stateBefore.exams.find((item) => item.id === grade.examId);
+          return `${exam?.name || 'امتحان محذوف'}: ${formatGradeScore(grade, exam, '—')}`;
+        });
         const removedGradeNote: StudentNote | null = existingGrades.length
           ? {
               id: uid('note'),
               studentId: leave.studentId,
               kind: 'إجراء',
-              text: `إضافة إجازة ${leaveLabel}: حذف ${existingGrades.length} درجة وإلغاء أي إجراء أكاديمي تلقائي مرتبط بها`,
+              text: `إضافة إجازة ${leaveLabel}: تم حذف درجة الطالب (${removedGradeDetails.join('، ')}) لأن الطالب أصبح مجازًا، وإلغاء أي إجراء أكاديمي تلقائي مرتبط بها`,
               date: todayISO(),
             }
           : {
@@ -2229,8 +2233,9 @@ export const useTeacherStore = create<TeacherState>()(
         }));
         get().logAction('المتابعة', 'إضافة إجازة', `${get().studentName(leave.studentId)} - ${leave.reason} - ${leaveLabel}`);
         existingGrades.forEach((grade) => {
-          const examName = stateBefore.exams.find((exam) => exam.id === grade.examId)?.name || '';
-          get().logAction('الدرجات', 'إزالة درجة بسبب الإجازة', `${get().studentName(leave.studentId)} - ${examName}`);
+          const exam = stateBefore.exams.find((item) => item.id === grade.examId);
+          const examName = exam?.name || '';
+          get().logAction('الدرجات', 'إزالة درجة بسبب الإجازة', `${get().studentName(leave.studentId)} - ${examName} - الدرجة المحذوفة: ${formatGradeScore(grade, exam, '—')} لأن الطالب أصبح مجازًا`);
           syncToServer(get, () => gradeApi.remove(grade.id, grade.studentId, grade.examId), { description: 'حذف درجة بسبب إجازة' });
         });
         syncToServer(get, () => studentNoteApi.add(removedGradeNote as unknown as Record<string, unknown>));

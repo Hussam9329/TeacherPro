@@ -28,6 +28,7 @@ import { StudentProfileDialog } from "./student-profile-dialog";
 import {
   hasActiveChapterLink,
   isExamOnOrAfterStudentRegistration,
+  formatGradeScore,
   isGradeEntered,
   splitSelection,
   studentMatchesExamMainSites,
@@ -120,6 +121,7 @@ export function FollowUpView() {
     studentCalls,
     studentNotes,
     opportunityLogs,
+    logs,
     addStudentLeave,
     deleteStudentLeave,
     addStudentCall,
@@ -259,6 +261,16 @@ export function FollowUpView() {
       return;
     }
     const student = students.find((item) => item.id === leaveStudentId);
+    const affectedGrades = grades.filter((grade) => {
+      if (grade.studentId !== leaveStudentId) return false;
+      if (leaveMode === "exam") return grade.examId === leaveExamId;
+      const exam = exams.find((item) => item.id === grade.examId);
+      return Boolean(exam && leaveAppliesToExam({ studentId: leaveStudentId, leaveType: "period", dateFrom: from, dateTo: to }, leaveStudentId, exam));
+    });
+    const removedGradeMessages = affectedGrades.map((grade) => {
+      const exam = exams.find((item) => item.id === grade.examId);
+      return `${exam?.name || "امتحان محذوف"}: ${formatGradeScore(grade, exam, "—")}`;
+    });
     addStudentLeave({
       studentId: leaveStudentId,
       examId: leaveMode === "exam" ? leaveExamId : "",
@@ -273,7 +285,16 @@ export function FollowUpView() {
     setCustomLeaveReason("");
     setLeaveReasonChoice("حالة مرضية");
     setLeaveNotes("");
-    toast.success(leaveMode === "period" ? "تمت إضافة الإجازة للفترة وإلغاء محاسبة امتحاناتها" : "تمت إضافة الإجازة وإعادة احتساب الطالب بدون محاسبة هذا الامتحان");
+    if (removedGradeMessages.length > 0) {
+      toast.success(
+        removedGradeMessages.length === 1
+          ? `تم حذف درجة الطالب ${removedGradeMessages[0]} لأن الطالب أصبح مجازًا`
+          : `تم حذف ${removedGradeMessages.length} درجات لأن الطالب أصبح مجازًا`,
+        removedGradeMessages.length > 1 ? { description: removedGradeMessages.join(" | ") } : undefined,
+      );
+    } else {
+      toast.success(leaveMode === "period" ? "تمت إضافة الإجازة للفترة وإلغاء محاسبة امتحاناتها" : "تمت إضافة الإجازة وإعادة احتساب الطالب بدون محاسبة هذا الامتحان");
+    }
   };
 
   const callLogForRow = (row: CallRow) => studentCalls.find((call) => call.studentId === row.student.id && call.examId === row.exam.id && call.category === row.category);
@@ -448,7 +469,10 @@ export function FollowUpView() {
         exams={exams}
         grades={grades}
         opportunityLogs={opportunityLogs}
+        studentLeaves={studentLeaves}
+        studentCalls={studentCalls}
         studentNotes={studentNotes}
+        logs={logs}
         courseName={courseName}
         activeChapterForCourse={activeChapterForCourse}
         whatsappLink={whatsappLink}
