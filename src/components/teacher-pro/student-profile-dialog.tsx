@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { type Exam, type Grade, type OpportunityLog, type Student, type StudentNote } from "@/lib/teacher-store";
 import { Badge } from "@/components/ui/badge";
 import { formatAppDate } from "@/lib/format";
@@ -76,6 +76,7 @@ export function StudentProfileDialog({
   graceEndDate,
 }: StudentProfileDialogProps) {
   const [tab, setTab] = useState<StudentFileTab>("details");
+  const contentScrollRef = useRef<HTMLDivElement | null>(null);
 
   const studentGrades = useMemo(
     () => (student ? grades.filter((grade) => grade.studentId === student.id) : []),
@@ -110,6 +111,11 @@ export function StudentProfileDialog({
     }));
     return [...noteRows, ...opportunityRows].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   }, [student, studentActionNotes, studentOpportunities]);
+
+  useEffect(() => {
+    if (!open) return;
+    contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [open, student?.id, tab]);
 
   useEffect(() => {
     if (!open) return;
@@ -154,8 +160,8 @@ export function StudentProfileDialog({
   ];
 
   return (
-    <div dir="rtl" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-2 backdrop-blur-sm sm:p-4" role="dialog" aria-modal="true" aria-labelledby="student-profile-title">
-      <div className="flex max-h-[92dvh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border bg-popover/95 text-popover-foreground shadow-2xl backdrop-blur-xl sm:w-[calc(100vw-2rem)] sm:max-w-[1180px] sm:rounded-3xl lg:max-h-[88vh]">
+    <div dir="rtl" className="fixed inset-0 z-50 flex items-stretch justify-center overflow-hidden bg-black/60 p-2 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="student-profile-title">
+      <div className="flex h-full max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border bg-popover/95 text-popover-foreground shadow-2xl backdrop-blur-xl sm:h-auto sm:max-h-[92dvh] sm:w-[calc(100vw-2rem)] sm:max-w-[1180px] sm:rounded-3xl lg:max-h-[88vh]">
         <div className="flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-2xl sm:rounded-3xl">
           <div className="relative shrink-0 border-b bg-gradient-to-l from-primary/15 via-purple-500/10 to-background p-4 text-right sm:p-6 sm:text-right">
             <button
@@ -186,7 +192,7 @@ export function StudentProfileDialog({
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:p-6">
+          <div ref={contentScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 lg:p-6 [scrollbar-gutter:stable]">
             <div className="space-y-4 sm:space-y-5">
               <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
                 {cards.map((item) => (
