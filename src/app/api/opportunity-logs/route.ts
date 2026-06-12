@@ -17,7 +17,12 @@ function hasAnyPermission(principal: AuthPrincipal, permissions: string[]): bool
 function isAutomaticOpportunityPayload(value: { action?: unknown; reason?: unknown } | null | undefined): boolean {
   const action = String(value?.action || '');
   const reason = String(value?.reason || '');
-  return action === 'خصم تلقائي' || action === 'فصل تلقائي' || reason.startsWith('تلقائي:');
+  return (
+    action === 'خصم تلقائي'
+    || action === 'فصل تلقائي'
+    || reason.startsWith('تلقائي:')
+    || reason.includes('[academic-reactivation-link:')
+  );
 }
 
 function canManageAutomaticAcademicEffects(principal: AuthPrincipal): boolean {

@@ -749,6 +749,106 @@ function automaticOpportunityLogId(studentId: string, examId: string, sourceId: 
   return `auto_${studentId}_${examId}_${sourceId || 'exam'}_${slug}`;
 }
 
+const ACADEMIC_REACTIVATION_LINK_PREFIX = '[academic-reactivation-link:';
+const ACADEMIC_REACTIVATION_LINK_SUFFIX = ']';
+
+interface AcademicReactivationLink {
+  sourceGradeId: string;
+  sourceExamId: string;
+  sourceAutomaticLogId: string;
+  reactivationMode: string;
+}
+
+function encodeAcademicReactivationLink(link: Partial<AcademicReactivationLink>): string {
+  const params = new URLSearchParams();
+  if (link.sourceGradeId) params.set('sourceGradeId', link.sourceGradeId);
+  if (link.sourceExamId) params.set('sourceExamId', link.sourceExamId);
+  if (link.sourceAutomaticLogId) params.set('sourceAutomaticLogId', link.sourceAutomaticLogId);
+  params.set('reactivationMode', link.reactivationMode || 'بسبب إجراء تلقائي');
+  return `${ACADEMIC_REACTIVATION_LINK_PREFIX}${params.toString()}${ACADEMIC_REACTIVATION_LINK_SUFFIX}`;
+}
+
+function parseAcademicReactivationLink(reason: string | null | undefined): AcademicReactivationLink | null {
+  const text = String(reason || '');
+  const start = text.indexOf(ACADEMIC_REACTIVATION_LINK_PREFIX);
+  if (start < 0) return null;
+  const valueStart = start + ACADEMIC_REACTIVATION_LINK_PREFIX.length;
+  const end = text.indexOf(ACADEMIC_REACTIVATION_LINK_SUFFIX, valueStart);
+  if (end < 0) return null;
+  const params = new URLSearchParams(text.slice(valueStart, end));
+  return {
+    sourceGradeId: params.get('sourceGradeId') || '',
+    sourceExamId: params.get('sourceExamId') || '',
+    sourceAutomaticLogId: params.get('sourceAutomaticLogId') || '',
+    reactivationMode: params.get('reactivationMode') || 'بسبب إجراء تلقائي',
+  };
+}
+
+function isLinkedAcademicReactivationLog(log: OpportunityLog): boolean {
+  return Boolean(parseAcademicReactivationLink(log.reason));
+}
+
+function academicReactivationSourceKey(link: AcademicReactivationLink | null): string {
+  if (!link) return '';
+  if (link.sourceGradeId) return `grade:${link.sourceGradeId}`;
+  if (link.sourceExamId) return `exam:${link.sourceExamId}`;
+  if (link.sourceAutomaticLogId) return `log:${link.sourceAutomaticLogId}`;
+  return '';
+}
+
+function gradeMatchesAcademicReactivationLink(grade: Grade, link: AcademicReactivationLink | null): boolean {
+  if (!link) return false;
+  if (link.sourceGradeId && grade.id === link.sourceGradeId) return true;
+  if (link.sourceExamId && grade.examId === link.sourceExamId) return true;
+  return false;
+}
+
+function automaticLogMatchesAcademicReactivationLink(log: OpportunityLog, link: AcademicReactivationLink | null, grades: Grade[]): boolean {
+  if (!link) return false;
+  if (link.sourceAutomaticLogId && log.id === link.sourceAutomaticLogId) return true;
+  if (link.sourceExamId && log.examId === link.sourceExamId) {
+    if (!link.sourceGradeId) return true;
+    return grades.some((grade) => grade.id === link.sourceGradeId && grade.studentId === log.studentId && grade.examId === log.examId);
+  }
+  return false;
+}
+
+function findAcademicReactivationSourceForStudent(
+  state: Pick<TeacherState, 'grades' | 'opportunityLogs'>,
+  student: Student,
+): Partial<AcademicReactivationLink> | null {
+  if (!isRuleManagedDismissal(student)) return null;
+  const studentAutomaticLogs = state.opportunityLogs
+    .filter((log) => log.studentId === student.id && isAutomaticOpportunityLog(log))
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const dismissalLog = studentAutomaticLogs.find((log) => log.action === 'فصل تلقائي') || studentAutomaticLogs[0];
+  if (!dismissalLog) return null;
+  const sourceGrade = state.grades.find((grade) => grade.studentId === student.id && grade.examId === dismissalLog.examId);
+  return {
+    sourceGradeId: sourceGrade?.id || '',
+    sourceExamId: dismissalLog.examId || sourceGrade?.examId || '',
+    sourceAutomaticLogId: dismissalLog.id,
+    reactivationMode: 'بسبب إجراء تلقائي',
+  };
+}
+
+function gradeHasAcademicEffect(grade: Grade, exam: Exam): boolean {
+  if (!isExamAvailableForEntry(exam)) return false;
+  if (!isGradeEntered(grade, exam)) return false;
+  if (grade.status === 'غش') return true;
+  if (grade.status === 'غائب') return true;
+  if (grade.status !== 'درجة' || grade.score === null) return false;
+  const score = Number(grade.score);
+  if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
+    return score === 0 || (exam.dismissalGrade !== null && score <= exam.dismissalGrade);
+  }
+  return score <= exam.discountMark;
+}
+
+function isAcademicallyManagedOpportunityLog(log: OpportunityLog): boolean {
+  return isAutomaticOpportunityLog(log) || isLinkedAcademicReactivationLog(log);
+}
+
 function isReactivationOpportunityLog(log: OpportunityLog): boolean {
   return log.action === 'إعادة تفعيل' || String(log.reason || '').includes('تثبيت إعادة التفعيل');
 }
@@ -842,6 +942,7 @@ function recalculateStudentsFromAcademicRules(
   const hasScopedRecalculation = Boolean(targetStudentIds?.size);
   const automaticLogs: OpportunityLog[] = [];
   const normalizedLeaves = (state.studentLeaves || []).map((leave) => normalizeStudentLeave(leave));
+  const activeLinkedSourcesByStudent = new Map<string, AcademicReactivationLink[]>();
 
   const students = state.students.map((student) => {
     const isTargetStudent = !hasScopedRecalculation || targetStudentIds?.has(student.id);
@@ -850,23 +951,54 @@ function recalculateStudentsFromAcademicRules(
     const manualDismissal = student.status === 'مفصول' && !isRuleManagedDismissal(student);
     if (manualDismissal) return student;
 
-    // إذا تمت إعادة تفعيل الطالب يدوياً، لا نعيد فصله بسبب درجات/غيابات قديمة
-    // عند تحميل البيانات أو عند إعادة احتساب جماعي. أما تعديل درجة الطالب نفسه
-    // فيُعاد احتسابه بصورة مستهدفة حتى يتأثر هو فقط بالتغيير الجديد.
-    const hasManualReactivation = student.status === 'نشط' && manualLogs.some((log) => log.studentId === student.id && isReactivationOpportunityLog(log));
-    if (!hasScopedRecalculation && hasManualReactivation) return student;
+    const allStudentManualLogs = manualLogs
+      .filter((log) => log.studentId === student.id)
+      .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+
+    // إعادة التفعيل الإدارية القديمة/المستقلة تبقى قراراً يدوياً لا نعيد كتابته بالحساب الجماعي.
+    // أما إعادة التفعيل المرتبطة بإجراء تلقائي فنعيد تقييم سببها حتى تزول آثارها عند زوال الدرجة.
+    const hasIndependentManualReactivation = student.status === 'نشط' && allStudentManualLogs.some((log) => {
+      return isReactivationOpportunityLog(log) && !isLinkedAcademicReactivationLog(log);
+    });
+    if (!hasScopedRecalculation && hasIndependentManualReactivation) return student;
 
     const activeCourseChapter = activeCourseChapterByCourse.get(student.courseId);
     const activeChapter = activeCourseChapter ? state.chapters.find((chapter) => chapter.id === activeCourseChapter.chapterId) : null;
+    const studentGrades = state.grades
+      .filter((grade) => grade.studentId === student.id)
+      .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
+
+    const linkedSourceLinks = allStudentManualLogs
+      .map((log) => parseAcademicReactivationLink(log.reason))
+      .filter((link): link is AcademicReactivationLink => Boolean(link && academicReactivationSourceKey(link)));
+    const activeLinkedSources = linkedSourceLinks.filter((link, index, links) => {
+      const key = academicReactivationSourceKey(link);
+      if (links.findIndex((item) => academicReactivationSourceKey(item) === key) !== index) return false;
+      return studentGrades.some((grade) => {
+        if (!gradeMatchesAcademicReactivationLink(grade, link)) return false;
+        const exam = examsById.get(grade.examId);
+        if (!exam) return false;
+        if (!isExamOnOrAfterStudentRegistration(student, exam)) return false;
+        if (normalizedLeaves.some((leave) => studentLeaveAppliesToExam(leave, student.id, exam))) return false;
+        if (isExamWithinStudentGracePeriod(student, exam)) return false;
+        return gradeHasAcademicEffect(grade, exam);
+      });
+    });
+    if (activeLinkedSources.length > 0) activeLinkedSourcesByStudent.set(student.id, activeLinkedSources);
+
+    const studentManualLogs = allStudentManualLogs.filter((log) => {
+      const link = parseAcademicReactivationLink(log.reason);
+      if (!link) return true;
+      const key = academicReactivationSourceKey(link);
+      return Boolean(key && activeLinkedSources.some((activeLink) => academicReactivationSourceKey(activeLink) === key));
+    });
+
     let opportunities = Number(student.baseOpportunities || activeChapter?.opportunities || 0);
     let dismissalType = '';
     let dismissalReason = '';
     let dismissalPriority = -1;
     let cheatCount = 0;
 
-    const studentManualLogs = manualLogs
-      .filter((log) => log.studentId === student.id)
-      .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
     const hasFinalChancePledge = studentManualLogs.some(isFinalChanceOpportunityLog);
     const finalChanceStartDate = latestStudentLogDate(studentManualLogs, isFinalChanceOpportunityLog);
     studentManualLogs.forEach((log) => {
@@ -878,10 +1010,6 @@ function recalculateStudentsFromAcademicRules(
       if (log.action === 'خصم') opportunities -= amount;
       if (log.action === 'إعادة تعيين') opportunities = Number(student.baseOpportunities || activeChapter?.opportunities || 0);
     });
-
-    const studentGrades = state.grades
-      .filter((grade) => grade.studentId === student.id)
-      .sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
 
     const addAutomaticLog = (exam: Exam, sourceId: string, action: string, amount: number, reason: string) => {
       if (amount <= 0 && action === 'خصم تلقائي') return;
@@ -921,6 +1049,10 @@ function recalculateStudentsFromAcademicRules(
       }
     };
 
+    const isProtectedLinkedSourceGrade = (grade: Grade): boolean => {
+      return activeLinkedSources.some((link) => gradeMatchesAcademicReactivationLink(grade, link));
+    };
+
     for (const grade of studentGrades) {
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
@@ -930,6 +1062,7 @@ function recalculateStudentsFromAcademicRules(
       if (!isExamOnOrAfterStudentRegistration(student, exam)) continue;
       if (normalizedLeaves.some((leave) => studentLeaveAppliesToExam(leave, student.id, exam))) continue;
       if (isExamWithinStudentGracePeriod(student, exam)) continue;
+      if (isProtectedLinkedSourceGrade(grade) && gradeHasAcademicEffect(grade, exam)) continue;
 
       if (grade.status === 'غش') {
         cheatCount += 1;
@@ -991,11 +1124,22 @@ function recalculateStudentsFromAcademicRules(
     };
   });
 
-  const keptAutomaticLogs = hasScopedRecalculation
-    ? previousAutomaticLogs.filter((log) => !targetStudentIds?.has(log.studentId))
-    : [];
+  const keptAutomaticLogs = previousAutomaticLogs.filter((log) => {
+    if (hasScopedRecalculation && !targetStudentIds?.has(log.studentId)) return true;
+    const activeLinks = activeLinkedSourcesByStudent.get(log.studentId) || [];
+    return activeLinks.some((link) => automaticLogMatchesAcademicReactivationLink(log, link, state.grades));
+  });
 
-  return { students, opportunityLogs: [...automaticLogs, ...keptAutomaticLogs, ...manualLogs] };
+  const keptManualLogs = manualLogs.filter((log) => {
+    const link = parseAcademicReactivationLink(log.reason);
+    if (!link) return true;
+    if (hasScopedRecalculation && !targetStudentIds?.has(log.studentId)) return true;
+    const key = academicReactivationSourceKey(link);
+    const activeLinks = activeLinkedSourcesByStudent.get(log.studentId) || [];
+    return Boolean(key && activeLinks.some((activeLink) => academicReactivationSourceKey(activeLink) === key));
+  });
+
+  return { students, opportunityLogs: [...automaticLogs, ...keptAutomaticLogs, ...keptManualLogs] };
 }
 
 function getSyncErrorMessage(error: unknown): string {
@@ -1670,14 +1814,20 @@ export const useTeacherStore = create<TeacherState>()(
         const stateBefore = get();
         const studentBefore = stateBefore.students.find((st) => st.id === studentId);
         const shouldGrantFinalChance = Boolean(studentBefore?.status === 'مفصول');
+        const academicReactivationSource = studentBefore && shouldGrantFinalChance
+          ? findAcademicReactivationSourceForStudent(stateBefore, studentBefore)
+          : null;
+        const academicReactivationLink = academicReactivationSource
+          ? ` ${encodeAcademicReactivationLink(academicReactivationSource)}`
+          : '';
         const reactivationLog: OpportunityLog | null = studentBefore
           ? {
               id: uid('ol'),
               studentId,
-              examId: '',
+              examId: academicReactivationSource?.sourceExamId || '',
               action: 'إعادة تفعيل',
               amount: 0,
-              reason: 'تثبيت إعادة التفعيل: لا يعاد فصل الطالب بسبب سجلات قديمة، وأي إجراء جديد بعد الفرصة يصبح نهائياً',
+              reason: `تثبيت إعادة التفعيل: لا يعاد فصل الطالب بسبب سجلات قديمة، وأي إجراء جديد بعد الفرصة يصبح نهائياً${academicReactivationLink}`,
               date: todayISO(),
               chapterId: stateBefore.activeChapterForCourse(studentBefore.courseId)?.id || '',
             }
@@ -1686,10 +1836,10 @@ export const useTeacherStore = create<TeacherState>()(
           ? {
               id: uid('ol'),
               studentId,
-              examId: '',
+              examId: academicReactivationSource?.sourceExamId || '',
               action: 'فرصة أخيرة بعد تعهد',
               amount: 1,
-              reason: 'إرجاع الطالب بعد إعادة التفعيل بفرصة واحدة فقط',
+              reason: `إرجاع الطالب بعد إعادة التفعيل بفرصة واحدة فقط${academicReactivationLink}`,
               date: todayISO(),
               chapterId: stateBefore.activeChapterForCourse(studentBefore.courseId)?.id || '',
             }
@@ -1869,6 +2019,7 @@ export const useTeacherStore = create<TeacherState>()(
             : undefined;
         const recalculated = recalculateStudentsFromAcademicRules(before, targetStudentIds);
         const oldAutomaticLogs = before.opportunityLogs.filter(isAutomaticOpportunityLog);
+        const oldAcademicallyManagedLogs = before.opportunityLogs.filter(isAcademicallyManagedOpportunityLog);
         set({ students: recalculated.students, opportunityLogs: recalculated.opportunityLogs });
         recalculated.students.forEach((student) => {
           const oldStudent = before.students.find((item) => item.id === student.id);
@@ -1888,9 +2039,10 @@ export const useTeacherStore = create<TeacherState>()(
           }
         });
         const nextAutomaticLogs = recalculated.opportunityLogs.filter(isAutomaticOpportunityLog);
-        oldAutomaticLogs
-          .filter((oldLog) => !nextAutomaticLogs.some((nextLog) => nextLog.id === oldLog.id))
-          .forEach((oldLog) => syncToServer(get, () => opportunityLogApi.remove(oldLog.id), { description: 'حذف إجراء تلقائي ملغى' }));
+        const nextAcademicallyManagedLogs = recalculated.opportunityLogs.filter(isAcademicallyManagedOpportunityLog);
+        oldAcademicallyManagedLogs
+          .filter((oldLog) => !nextAcademicallyManagedLogs.some((nextLog) => nextLog.id === oldLog.id))
+          .forEach((oldLog) => syncToServer(get, () => opportunityLogApi.remove(oldLog.id), { description: 'حذف إجراء أكاديمي ملغى' }));
         nextAutomaticLogs
           .filter((nextLog) => {
             const oldLog = oldAutomaticLogs.find((item) => item.id === nextLog.id);
