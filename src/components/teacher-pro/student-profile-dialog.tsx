@@ -14,7 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { formatAppDate } from "@/lib/format";
 import { formatGradeScore } from "@/lib/exam-utils";
-import { XIcon } from "lucide-react";
+import { ArrowRightIcon } from "lucide-react";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "actions";
 
@@ -304,19 +304,9 @@ export function StudentProfileDialog({
       aria-labelledby="student-profile-title"
     >
       <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background">
-        <button
-          type="button"
-          onClick={() => onOpenChange(false)}
-          className="fixed right-4 top-4 z-[120] inline-flex min-h-11 items-center gap-2 rounded-2xl border bg-background/95 px-4 py-2 text-sm font-black shadow-lg backdrop-blur transition hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring sm:right-6 sm:top-6"
-          aria-label="الرجوع من ملف الطالب"
-        >
-          <XIcon className="size-4" />
-          رجوع
-        </button>
-
-        <div className="sticky top-0 z-30 shrink-0 border-b bg-background/95 p-4 pt-20 text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-6 sm:pt-24">
+        <div className="sticky top-0 z-30 shrink-0 border-b bg-background/95 p-4 text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-6">
           <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0 space-y-2">
+            <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={student.status === "نشط" ? "default" : "destructive"}>{student.status}</Badge>
                 <Badge variant="outline">{student.code}</Badge>
@@ -327,6 +317,15 @@ export function StudentProfileDialog({
               <p className="break-words text-xs leading-6 text-muted-foreground sm:text-sm">
                 {student.school || "بدون مدرسة"} - شاشة ملف الطالب
               </p>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="inline-flex w-fit min-h-10 items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 shadow-sm transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
+                aria-label="الرجوع من ملف الطالب"
+              >
+                <ArrowRightIcon className="size-4" />
+                رجوع
+              </button>
             </div>
           </div>
         </div>
