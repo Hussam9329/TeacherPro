@@ -405,7 +405,11 @@ export function StudentProfileDialog({
                     const exam = exams.find((item) => item.id === grade.examId);
                     return (
                       <div key={grade.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
-                        <div className="min-w-0"><b className="break-words">{exam?.name || "امتحان محذوف"}</b><p className="text-xs text-muted-foreground">{formatAppDate(exam?.date)}</p></div>
+                        <div className="min-w-0">
+                          <b className="break-words">{exam?.name || "امتحان محذوف"}</b>
+                          <p className="text-xs text-muted-foreground">{formatAppDate(exam?.date)}</p>
+                          {grade.notes ? <p className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
+                        </div>
                         <Badge className="w-fit" variant={grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : "secondary"}>{grade.status}</Badge>
                         <span className="font-black">{formatScore(grade, exam)}</span>
                       </div>
@@ -426,6 +430,7 @@ export function StudentProfileDialog({
                       <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
                         <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><Badge>{grade.status}</Badge></div>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{formatGradeScore(grade, exam, "—")}</b><p>درجة الطالب</p></div></div>
+                        {grade.notes ? <p className="mt-3 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
                       </div>
                     );
                   })}

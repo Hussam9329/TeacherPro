@@ -391,7 +391,11 @@ export function FollowUpView() {
           <p className="text-xs text-muted-foreground">{courseName(row.student.courseId)} - {row.student.studyType || "—"}</p>
         </div>
         <div><b>{row.exam.name}</b><p className="text-xs text-muted-foreground">{formatAppDate(row.exam.date)}</p></div>
-        <div><Badge>{row.label}</Badge><p className="mt-1 text-xs text-muted-foreground">{row.reason}</p></div>
+        <div>
+          <Badge>{row.label}</Badge>
+          <p className="mt-1 text-xs text-muted-foreground">{row.reason}</p>
+          {row.grade?.notes ? <p className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{row.grade.notes}</p> : null}
+        </div>
         <Select value={target} onValueChange={(value) => saveCallState(row, Boolean(call?.completed), value as ContactTarget)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent><SelectItem value="الطالب">الطالب</SelectItem><SelectItem value="ولي الأمر">ولي الأمر</SelectItem></SelectContent>

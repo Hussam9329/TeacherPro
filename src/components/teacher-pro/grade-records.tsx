@@ -281,6 +281,12 @@ export function GradeRecordsView() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2"><p className="truncate text-sm font-medium">{student.name}</p><Badge variant="outline" className="text-[10px]">{student.code}</Badge></div>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span>{student.telegram}</span><span>•</span><span>{student.subSite || student.locationScope || "—"}</span><span>•</span><span>{exam.name}</span><span>•</span><span>{formatAppDate(grade.createdAt)}</span></div>
+                  {grade.notes ? (
+                    <div className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100">
+                      <span className="font-bold">ملاحظة الدرجة: </span>
+                      <span className="break-words">{grade.notes}</span>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-bold">{formatGradeScore(grade, exam, "—")}</span>
