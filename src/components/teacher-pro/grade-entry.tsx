@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,7 @@ export function GradeEntryView() {
   const [editableRows, setEditableRows] = useState<Record<string, boolean>>({});
   const [reactivationWarningsAccepted, setReactivationWarningsAccepted] = useState<Record<string, boolean>>({});
   const [clockTick, setClockTick] = useState(0);
+  const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   useEffect(() => {
     const timer = window.setInterval(() => setClockTick((tick) => tick + 1), 30000);
@@ -232,6 +233,40 @@ export function GradeEntryView() {
       })
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
   }, [selectedExam, students, grades, studentLeaves, courseChapters, search, filterCourseId, filterStatus]);
+
+  const gradeInputStudentIds = useMemo(() => {
+    if (!selectedExam) return [];
+    return examStudents
+      .filter((student) => {
+        const leave = getStudentLeaveForSelectedExam(student.id);
+        if (leave || !canEditGradeForStudent(student.id)) return false;
+        const grade = getGrade(student.id);
+        const draft = getDraft(student.id);
+        const entered = isGradeEntered(grade, selectedExam);
+        const rowLocked = Boolean(entered && !editableRows[student.id]);
+        return !rowLocked && draft.status === "درجة";
+      })
+      .map((student) => student.id);
+  }, [selectedExam, examStudents, grades, studentLeaves, opportunityLogs, editableRows, drafts]);
+
+  const focusGradeInputAt = (index: number) => {
+    if (gradeInputStudentIds.length === 0) return false;
+    const boundedIndex = Math.max(0, Math.min(index, gradeInputStudentIds.length - 1));
+    const targetStudentId = gradeInputStudentIds[boundedIndex];
+    window.requestAnimationFrame(() => {
+      gradeInputRefs.current[targetStudentId]?.focus();
+      gradeInputRefs.current[targetStudentId]?.select();
+    });
+    return true;
+  };
+
+  const focusRelativeGradeInput = (studentId: string, direction: 1 | -1 = 1) => {
+    const currentIndex = gradeInputStudentIds.indexOf(studentId);
+    if (currentIndex === -1) return false;
+    const nextIndex = currentIndex + direction;
+    if (nextIndex < 0 || nextIndex >= gradeInputStudentIds.length) return false;
+    return focusGradeInputAt(nextIndex);
+  };
 
   const missingChapterCourses = useMemo(() => {
     if (!selectedExam) return [];
@@ -397,7 +432,7 @@ export function GradeEntryView() {
           <CardTitle>تسجيل الدرجات</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
             <div className="space-y-2 lg:col-span-2">
               <Label htmlFor="grade-entry-exam">اختر الامتحان</Label>
               <Select name="examId" value={selectedExamId} onValueChange={handleExamChange}>
@@ -414,16 +449,6 @@ export function GradeEntryView() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="grade-entry-search">بحث الطالب</Label>
-              <Input
-                id="grade-entry-search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="اسم / كود / تليكرام / محافظة"
-                autoComplete="off"
-              />
-            </div>
 
             <div className="space-y-2">
               <Label htmlFor="grade-entry-course">الدورة</Label>
@@ -495,8 +520,30 @@ export function GradeEntryView() {
 
       {selectedExam && (
         <Card>
-          <CardHeader>
-            <CardTitle>إدخال الدرجات - {examStudents.length} طالب</CardTitle>
+          <CardHeader className="gap-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <CardTitle>إدخال الدرجات - {examStudents.length} طالب</CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">البحث هنا داخل إطار إدخال الدرجات. اضغط Tab من البحث للانتقال لأول خانة درجة، ثم Tab للتنقل بين درجات الطلاب.</p>
+              </div>
+              <div className="w-full space-y-2 lg:max-w-sm">
+                <Label htmlFor="grade-entry-search">بحث الطالب داخل الإدخال</Label>
+                <Input
+                  id="grade-entry-search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Tab" && !event.shiftKey) {
+                      const focused = focusGradeInputAt(0);
+                      if (focused) event.preventDefault();
+                    }
+                  }}
+                  placeholder="اسم / كود / تليكرام / محافظة"
+                  autoComplete="off"
+                  className="h-10"
+                />
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -543,6 +590,9 @@ export function GradeEntryView() {
                       </div>
 
                       <Input
+                        ref={(element) => {
+                          gradeInputRefs.current[student.id] = element;
+                        }}
                         type={draft.status === "درجة" ? "number" : "text"}
                         min={0}
                         max={selectedExam.fullMark}
@@ -560,6 +610,10 @@ export function GradeEntryView() {
                           if (event.key === "Enter") {
                             event.preventDefault();
                             void saveGrade(student.id);
+                          }
+                          if (event.key === "Tab") {
+                            const focused = focusRelativeGradeInput(student.id, event.shiftKey ? -1 : 1);
+                            if (focused) event.preventDefault();
                           }
                         }}
                         placeholder={draft.status === "درجة" ? `0 - ${selectedExam.fullMark}` : draft.status}
