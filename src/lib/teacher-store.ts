@@ -851,7 +851,7 @@ function gradeHasAcademicEffect(grade: Grade, exam: Exam): boolean {
   if (grade.status === 'غائب') return true;
   if (grade.status !== 'درجة' || grade.score === null) return false;
   const score = Number(grade.score);
-  if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
+  if (exam.type === 'فاينل') {
     return score === 0 || (exam.dismissalGrade !== null && score <= exam.dismissalGrade);
   }
   return score <= exam.discountMark;
@@ -860,10 +860,11 @@ function gradeHasAcademicEffect(grade: Grade, exam: Exam): boolean {
 
 function gradeCausesDismissalGradeEffect(grade: Grade, exam: Exam): boolean {
   if (!gradeHasAcademicEffect(grade, exam)) return false;
-  if (grade.status === 'غش' || grade.status === 'غائب') return true;
+  if (grade.status === 'غش') return true;
+  if (grade.status === 'غائب') return exam.type === 'فاينل';
   if (grade.status !== 'درجة' || grade.score === null) return false;
   const score = Number(grade.score);
-  if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
+  if (exam.type === 'فاينل') {
     return score === 0 || (exam.dismissalGrade !== null && score <= exam.dismissalGrade);
   }
   return false;
@@ -1201,16 +1202,16 @@ function recalculateStudentsFromAcademicRules(
       }
 
       if (grade.status === 'غائب') {
-        if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
+        if (exam.type === 'فاينل') {
           setDismissal('فصل مؤقت', `غياب ضمن درجة الفصل في امتحان ${exam.type}: ${exam.name}`, 75, exam, grade.id);
         } else {
           const penalty = examPenaltyValue(exam);
           opportunities -= penalty;
-          addAutomaticLog(exam, grade.id, 'خصم تلقائي', penalty, `غياب في امتحان يومي: ${exam.name}`);
+          addAutomaticLog(exam, grade.id, 'خصم تلقائي', penalty, `غياب في امتحان ${exam.type}: ${exam.name}`);
           if (hasPriorDismissalEvent) {
-            setDismissal('فصل مؤقت', `غياب في امتحان يومي بعد فصل سابق: ${exam.name}`, 85, exam, grade.id);
+            setDismissal('فصل مؤقت', `غياب في امتحان ${exam.type} بعد فصل سابق: ${exam.name}`, 85, exam, grade.id);
           } else if (opportunities <= 0) {
-            setDismissal('فصل مؤقت', `انتهاء الفرص بعد غياب في امتحان يومي: ${exam.name}`, 60, exam, grade.id);
+            setDismissal('فصل مؤقت', `انتهاء الفرص بعد غياب في امتحان ${exam.type}: ${exam.name}`, 60, exam, grade.id);
           }
         }
         continue;
@@ -1218,7 +1219,7 @@ function recalculateStudentsFromAcademicRules(
 
       if (grade.status === 'درجة' && grade.score !== null) {
         const score = Number(grade.score);
-        if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
+        if (exam.type === 'فاينل') {
           if (score === 0) {
             setDismissal('فصل مؤقت', `درجة صفر في امتحان ${exam.type}: ${exam.name}`, 76, exam, grade.id);
           } else if (exam.dismissalGrade !== null && score <= exam.dismissalGrade) {
@@ -1231,7 +1232,7 @@ function recalculateStudentsFromAcademicRules(
           opportunities -= penalty;
           addAutomaticLog(exam, grade.id, 'خصم تلقائي', penalty, `درجة ${score} ضمن الخصم في امتحان: ${exam.name}`);
           if (hasPriorDismissalEvent) {
-            setDismissal('فصل مؤقت', `درجة خصم (${score}) بعد فصل سابق في امتحان يومي: ${exam.name}`, 85, exam, grade.id);
+            setDismissal('فصل مؤقت', `درجة خصم (${score}) بعد فصل سابق في امتحان ${exam.type}: ${exam.name}`, 85, exam, grade.id);
           } else if (opportunities <= 0) {
             setDismissal('فصل مؤقت', `انتهاء الفرص بعد درجة خصم (${score}) في امتحان: ${exam.name}`, 60, exam, grade.id);
           }
@@ -1607,11 +1608,11 @@ export const useTeacherStore = create<TeacherState>()(
         if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
         if (grade.status === 'غش') return { text: 'غش', type: 'danger', kind: 'cheat' };
         if (grade.status === 'غائب') {
-          if (exam.type === 'تراكمي' || exam.type === 'فاينل') return { text: 'فصل', type: 'danger', kind: 'dismissal' };
+          if (exam.type === 'فاينل') return { text: 'فصل', type: 'danger', kind: 'dismissal' };
           return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
         }
         const score = Number(grade.score) || 0;
-        if (exam.type === 'تراكمي' || exam.type === 'فاينل') {
+        if (exam.type === 'فاينل') {
           if (score === 0 || (exam.dismissalGrade !== null && score <= exam.dismissalGrade)) return { text: 'فصل', type: 'danger', kind: 'dismissal' };
           if (score >= exam.passMark) return { text: 'ناجح', type: 'ok', kind: 'pass' };
           return { text: 'راسب', type: 'danger', kind: 'fail' };

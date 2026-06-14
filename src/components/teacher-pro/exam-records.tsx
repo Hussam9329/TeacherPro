@@ -352,8 +352,8 @@ tr:nth-child(even) td { background: #f8fafc; }
   const validateEditExam = (state: FullExamEditState) => {
     const fullMark = Number(toLatinDigits(state.fullMark));
     const passMark = Number(toLatinDigits(state.passMark));
-    const isCumulativeOrFinal = state.type === "تراكمي" || state.type === "فاينل";
-    const discountMark = isCumulativeOrFinal ? 0 : Number(toLatinDigits(state.discountMark));
+    const isFinalExam = state.type === "فاينل";
+    const discountMark = isFinalExam ? 0 : Number(toLatinDigits(state.discountMark));
     if (!state.name.trim()) return "اسم الامتحان مطلوب";
     if (state.courseIds.length === 0) return "اختر دورة واحدة على الأقل";
     const invalidCourses = state.courseIds.filter((courseId) => !hasActiveChapterLink(courseChapters, courseId));
@@ -363,7 +363,8 @@ tr:nth-child(even) td { background: #f8fafc; }
     if (fullMark <= 0) return "الدرجة الكاملة يجب أن تكون أكبر من صفر";
     if (passMark < 0 || passMark > fullMark) return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
     if (discountMark < 0 || discountMark > fullMark) return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
-    if (!isCumulativeOrFinal && passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
+    if (!isFinalExam && passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
+    if (!isFinalExam && Number(toLatinDigits(state.opportunitiesPenaltyNum) || 0) <= 0) return "خصم الفرص يجب أن يكون أكبر من صفر";
     if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ ووقت التفعيل المجدول";
     if (state.statusMode === "تعطيل مجدول" && !state.scheduledDeactivateAt) return "حدد تاريخ ووقت التعطيل المجدول";
     return null;
@@ -372,7 +373,7 @@ tr:nth-child(even) td { background: #f8fafc; }
   const handleEditExam = () => {
     const error = validateEditExam(editDialog);
     if (error) return toast.error(error);
-    const isCumulativeOrFinal = editDialog.type === "تراكمي" || editDialog.type === "فاينل";
+    const isFinalExam = editDialog.type === "فاينل";
     const statusPatch = editDialog.statusMode === "نشط"
       ? { active: true, scheduledActivateAt: "", scheduledDeactivateAt: "" }
       : editDialog.statusMode === "معطل"
@@ -389,9 +390,9 @@ tr:nth-child(even) td { background: #f8fafc; }
       date: editDialog.date,
       fullMark: Number(toLatinDigits(editDialog.fullMark)),
       passMark: Number(toLatinDigits(editDialog.passMark)),
-      discountMark: isCumulativeOrFinal ? 0 : Number(toLatinDigits(editDialog.discountMark)),
-      opportunitiesPenalty: isCumulativeOrFinal ? "فصل مؤقت" : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum) || 1),
-      dismissalGrade: isCumulativeOrFinal && editDialog.dismissalGrade ? Number(toLatinDigits(editDialog.dismissalGrade)) : null,
+      discountMark: isFinalExam ? 0 : Number(toLatinDigits(editDialog.discountMark)),
+      opportunitiesPenalty: isFinalExam ? "فصل مؤقت" : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum) || 1),
+      dismissalGrade: isFinalExam && editDialog.dismissalGrade ? Number(toLatinDigits(editDialog.dismissalGrade)) : null,
       ...statusPatch,
     });
     setEditDialog(emptyEditState());
@@ -441,7 +442,7 @@ tr:nth-child(even) td { background: #f8fafc; }
   });
 
   const renderEditExamFields = () => {
-    const isCumulativeOrFinal = editDialog.type === "تراكمي" || editDialog.type === "فاينل";
+    const isFinalExam = editDialog.type === "فاينل";
     const mainSitesForEdit = availableMainSitesForEdit(editDialog);
     const eligibleCourses = courses.filter((course) => hasActiveChapterLink(courseChapters, course.id));
     const allCoursesSelected = eligibleCourses.length > 0 && eligibleCourses.every((course) => editDialog.courseIds.includes(course.id));
@@ -459,8 +460,8 @@ tr:nth-child(even) td { background: #f8fafc; }
             <Select value={editDialog.type} onValueChange={(value) => setEditDialog((prev) => ({
               ...prev,
               type: value as Exam["type"],
-              discountMark: value === "تراكمي" || value === "فاينل" ? "0" : (prev.discountMark || "45"),
-              opportunitiesPenaltyNum: value === "تراكمي" || value === "فاينل" ? "0" : (prev.opportunitiesPenaltyNum || "1"),
+              discountMark: value === "فاينل" ? "0" : (prev.discountMark || "45"),
+              opportunitiesPenaltyNum: value === "فاينل" ? "0" : (prev.opportunitiesPenaltyNum || "1"),
             }))}>
               <SelectTrigger id="edit-exam-type"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="يومي">يومي</SelectItem><SelectItem value="تراكمي">تراكمي</SelectItem><SelectItem value="فاينل">فاينل</SelectItem></SelectContent>
@@ -523,14 +524,14 @@ tr:nth-child(even) td { background: #f8fafc; }
           </div>
           <div className="space-y-1">
             <Label>درجة الخصم</Label>
-            <Input type="number" disabled={isCumulativeOrFinal} value={isCumulativeOrFinal ? "0" : editDialog.discountMark} onChange={(e) => setEditDialog((prev) => ({ ...prev, discountMark: toLatinDigits(e.target.value) }))} />
-            {!isCumulativeOrFinal && Number(editDialog.passMark) <= Number(editDialog.discountMark) && <p className="text-xs text-destructive">درجة النجاح يجب أن تكون أكبر من درجة الخصم.</p>}
+            <Input type="number" disabled={isFinalExam} value={isFinalExam ? "0" : editDialog.discountMark} onChange={(e) => setEditDialog((prev) => ({ ...prev, discountMark: toLatinDigits(e.target.value) }))} />
+            {!isFinalExam && Number(editDialog.passMark) <= Number(editDialog.discountMark) && <p className="text-xs text-destructive">درجة النجاح يجب أن تكون أكبر من درجة الخصم.</p>}
           </div>
           <div className="space-y-1">
             <Label>خصم الفرص</Label>
-            <Input type="number" disabled={isCumulativeOrFinal} value={isCumulativeOrFinal ? "0" : editDialog.opportunitiesPenaltyNum} onChange={(e) => setEditDialog((prev) => ({ ...prev, opportunitiesPenaltyNum: toLatinDigits(e.target.value) }))} />
+            <Input type="number" disabled={isFinalExam} value={isFinalExam ? "0" : editDialog.opportunitiesPenaltyNum} onChange={(e) => setEditDialog((prev) => ({ ...prev, opportunitiesPenaltyNum: toLatinDigits(e.target.value) }))} />
           </div>
-          {isCumulativeOrFinal && (
+          {isFinalExam && (
             <div className="space-y-1">
               <Label>درجة الفصل</Label>
               <Input type="number" value={editDialog.dismissalGrade} onChange={(e) => setEditDialog((prev) => ({ ...prev, dismissalGrade: toLatinDigits(e.target.value) }))} />

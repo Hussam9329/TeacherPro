@@ -34,8 +34,8 @@ function validateExamPayload(body: Record<string, unknown>) {
   if (fullMark <= 0) return 'الدرجة الكاملة يجب أن تكون أكبر من صفر';
   if (passMark < 0 || passMark > fullMark) return 'درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة';
   if (discountMark < 0 || discountMark > fullMark) return 'درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة';
-  if (passMark <= discountMark) return 'درجة النجاح يجب أن تكون أكبر من درجة الخصم';
-  if (String(body.type) === 'يومي' && Number(body.opportunitiesPenalty ?? 1) <= 0) return 'خصم الفرص يجب أن يكون أكبر من صفر';
+  if (String(body.type) !== 'فاينل' && passMark <= discountMark) return 'درجة النجاح يجب أن تكون أكبر من درجة الخصم';
+  if (String(body.type) !== 'فاينل' && Number(body.opportunitiesPenalty ?? 1) <= 0) return 'خصم الفرص يجب أن يكون أكبر من صفر';
   return null;
 }
 
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
         passMark: Number(body.passMark || 50),
         discountMark: Number(body.discountMark || 0),
         opportunitiesPenalty: String(body.opportunitiesPenalty ?? 1),
-        dismissalGrade: body.dismissalGrade === null || body.dismissalGrade === undefined ? null : Number(body.dismissalGrade),
+        dismissalGrade: String(body.type) === 'فاينل' && body.dismissalGrade !== null && body.dismissalGrade !== undefined ? Number(body.dismissalGrade) : null,
         active: body.active ?? true,
         scheduledActivateAt: body.scheduledActivateAt ? parseBaghdadDateTime(String(body.scheduledActivateAt)) : null,
         scheduledDeactivateAt: body.scheduledDeactivateAt ? parseBaghdadDateTime(String(body.scheduledDeactivateAt)) : null,
@@ -121,6 +121,7 @@ export async function PUT(req: NextRequest) {
       opportunitiesPenalty: data.opportunitiesPenalty ?? existingExam.opportunitiesPenalty,
     });
     if (candidateValidationMessage) return validationError(candidateValidationMessage);
+    if (String(data.type ?? existingExam.type) !== 'فاينل') data.dismissalGrade = null;
 
     const exam = await db.exam.update({ where: { id }, data });
     return NextResponse.json({ exam });

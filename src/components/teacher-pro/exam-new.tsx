@@ -84,7 +84,7 @@ function applyStatus(form: ExamFormState) {
 }
 
 function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
-  const isCumulativeOrFinal = form.type === "تراكمي" || form.type === "فاينل";
+  const isFinalExam = form.type === "فاينل";
   return {
     name: form.name.trim(),
     type: form.type,
@@ -93,9 +93,9 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
     date: form.date,
     fullMark: form.fullMark,
     passMark: form.passMark,
-    discountMark: isCumulativeOrFinal ? 0 : form.discountMark,
-    opportunitiesPenalty: isCumulativeOrFinal ? "فصل مؤقت" : form.opportunitiesPenaltyNum,
-    dismissalGrade: isCumulativeOrFinal && form.dismissalGrade ? Number(form.dismissalGrade) : null,
+    discountMark: isFinalExam ? 0 : form.discountMark,
+    opportunitiesPenalty: isFinalExam ? "فصل مؤقت" : form.opportunitiesPenaltyNum,
+    dismissalGrade: isFinalExam && form.dismissalGrade ? Number(form.dismissalGrade) : null,
     ...applyStatus(form),
   };
 }
@@ -118,8 +118,8 @@ export function ExamNewView() {
   const validateForm = (state: ExamFormState) => {
     const fullMark = Number(state.fullMark);
     const passMark = Number(state.passMark);
-    const isCumulativeOrFinal = state.type === "تراكمي" || state.type === "فاينل";
-    const discountMark = isCumulativeOrFinal
+    const isFinalExam = state.type === "فاينل";
+    const discountMark = isFinalExam
       ? 0
       : Number(state.discountMark);
 
@@ -132,8 +132,8 @@ export function ExamNewView() {
     if (fullMark <= 0) return "الدرجة الكاملة يجب أن تكون أكبر من صفر";
     if (passMark < 0 || passMark > fullMark) return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
     if (discountMark < 0 || discountMark > fullMark) return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
-    if (passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
-    if (!isCumulativeOrFinal && Number(state.opportunitiesPenaltyNum) <= 0) return "خصم الفرص يجب أن يكون أكبر من صفر";
+    if (!isFinalExam && passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
+    if (!isFinalExam && Number(state.opportunitiesPenaltyNum) <= 0) return "خصم الفرص يجب أن يكون أكبر من صفر";
     if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ ووقت التفعيل المجدول";
     return null;
   };
@@ -227,7 +227,7 @@ export function ExamNewView() {
   );
 
   const renderFormFields = (state: ExamFormState, setState: (updater: (prev: ExamFormState) => ExamFormState) => void, prefix: string) => {
-    const isCumulativeOrFinal = state.type === "تراكمي" || state.type === "فاينل";
+    const isFinalExam = state.type === "فاينل";
     const mainSitesForState = availableMainSitesFor(state);
     const allMainSitesSelected = mainSitesForState.length > 0 && state.mainSites.length === mainSitesForState.length;
 
@@ -241,13 +241,13 @@ export function ExamNewView() {
           <Label htmlFor={`${prefix}-type`}>نوع الامتحان</Label>
           <Select value={state.type} onValueChange={(v) => setState((p) => {
             const nextType = v as ExamFormState["type"];
-            const nextIsCumulativeOrFinal = nextType === "تراكمي" || nextType === "فاينل";
+            const nextIsFinalExam = nextType === "فاينل";
             return {
               ...p,
               type: nextType,
-              discountMark: nextIsCumulativeOrFinal ? 0 : (p.discountMark || 45),
-              opportunitiesPenaltyNum: nextIsCumulativeOrFinal ? 0 : (p.opportunitiesPenaltyNum || 1),
-              dismissalGrade: nextIsCumulativeOrFinal ? p.dismissalGrade : "",
+              discountMark: nextIsFinalExam ? 0 : (p.discountMark || 45),
+              opportunitiesPenaltyNum: nextIsFinalExam ? 0 : (p.opportunitiesPenaltyNum || 1),
+              dismissalGrade: nextIsFinalExam ? p.dismissalGrade : "",
             };
           })}>
             <SelectTrigger id={`${prefix}-type`}><SelectValue /></SelectTrigger>
@@ -297,12 +297,12 @@ export function ExamNewView() {
           <Label>درجة الخصم</Label>
           <Input
             type="number"
-            value={isCumulativeOrFinal ? "" : numberInputValue(state.discountMark)}
-            disabled={isCumulativeOrFinal}
+            value={isFinalExam ? "" : numberInputValue(state.discountMark)}
+            disabled={isFinalExam}
             onChange={(e) => setState((p) => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 0 }))}
           />
-          {isCumulativeOrFinal && <p className="text-xs text-amber-600">معطل في التراكمي/الفاينل؛ الحكم يكون فقط من درجة الفصل.</p>}
-          {!isCumulativeOrFinal && Number(state.passMark) <= Number(state.discountMark) && (
+          {isFinalExam && <p className="text-xs text-amber-600">معطل في الفاينل؛ الحكم يكون فقط من درجة الفصل.</p>}
+          {!isFinalExam && Number(state.passMark) <= Number(state.discountMark) && (
             <p className="text-xs text-destructive">درجة النجاح يجب أن تكون أكبر من درجة الخصم.</p>
           )}
         </div>
@@ -311,13 +311,13 @@ export function ExamNewView() {
           <Input
             type="number"
             min={0}
-            value={isCumulativeOrFinal ? "" : numberInputValue(state.opportunitiesPenaltyNum)}
-            disabled={isCumulativeOrFinal}
+            value={isFinalExam ? "" : numberInputValue(state.opportunitiesPenaltyNum)}
+            disabled={isFinalExam}
             onChange={(e) => setState((p) => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 0 }))}
           />
-          {isCumulativeOrFinal && <p className="text-xs text-amber-600">معطل في التراكمي/الفاينل؛ الغياب أو الغش أو درجة الفصل يعالج كفصل مؤقت فقط.</p>}
+          {isFinalExam && <p className="text-xs text-amber-600">معطل في الفاينل؛ الغياب أو الغش أو درجة الفصل يعالج كفصل مؤقت فقط.</p>}
         </div>
-        {isCumulativeOrFinal && <div className="space-y-2"><Label>درجة الفصل</Label><Input type="number" value={state.dismissalGrade} onChange={(e) => setState((p) => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} /></div>}
+        {isFinalExam && <div className="space-y-2"><Label>درجة الفصل</Label><Input type="number" value={state.dismissalGrade} onChange={(e) => setState((p) => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} /></div>}
         {renderStatusControls(state, setState, prefix)}
       </div>
     );

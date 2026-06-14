@@ -138,7 +138,7 @@ export function GradeEntryView() {
 
   const examPenaltyAmount = (exam: typeof selectedExam, studentOpportunities: number) => {
     if (!exam) return 0;
-    if (exam.opportunitiesPenalty === "فصل مؤقت") return Math.max(1, studentOpportunities);
+    if (exam.type === "فاينل" && exam.opportunitiesPenalty === "فصل مؤقت") return Math.max(1, studentOpportunities);
     return Math.max(0, Number(exam.opportunitiesPenalty || 0));
   };
 
@@ -498,7 +498,7 @@ export function GradeEntryView() {
                 <Badge>{selectedExam.type}</Badge>
                 <span>الدرجة الكاملة: {selectedExam.fullMark}</span>
                 <span>النجاح: {selectedExam.passMark}</span>
-                {selectedExam.type === "يومي" ? (
+                {selectedExam.type !== "فاينل" ? (
                   <>
                     <span>الخصم: {selectedExam.discountMark}</span>
                     <span>فرص الخصم: {selectedExam.opportunitiesPenalty}</span>
