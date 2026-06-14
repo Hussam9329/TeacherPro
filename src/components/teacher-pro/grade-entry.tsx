@@ -135,16 +135,53 @@ export function GradeEntryView() {
   const studentHasManualReactivation = (studentId: string) =>
     opportunityLogs.some((log) => log.studentId === studentId && log.action === "إعادة تفعيل");
 
+  const examPenaltyAmount = (exam: typeof selectedExam, studentOpportunities: number) => {
+    if (!exam) return 0;
+    if (exam.opportunitiesPenalty === "فصل مؤقت") return Math.max(1, studentOpportunities);
+    return Math.max(0, Number(exam.opportunitiesPenalty || 0));
+  };
+
+  const draftMayReturnReactivatedStudentToDismissal = (studentId: string, draft: DraftGrade) => {
+    if (!selectedExam) return false;
+    const student = students.find((item) => item.id === studentId);
+    if (!student || !studentHasManualReactivation(studentId)) return false;
+
+    const normalizedScore = toLatinDigits(draft.score).trim();
+    if (draft.status === "درجة" && !isScoreInsideExamRange(normalizedScore, selectedExam.fullMark)) return false;
+
+    const nextGrade = {
+      id: getGrade(studentId)?.id || "preview",
+      studentId,
+      examId: selectedExam.id,
+      status: draft.status,
+      score: draft.status === "درجة" ? Number(normalizedScore) : null,
+      notes: draft.notes,
+      academicAccountingChecked: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const result = classification(nextGrade, selectedExam, student);
+
+    if (result.kind === "dismissal" || result.kind === "cheat") return true;
+    if (result.kind === "deducted") {
+      const remainingOpportunities = Math.max(0, Number(student.opportunities || 0));
+      return examPenaltyAmount(selectedExam, remainingOpportunities) >= remainingOpportunities;
+    }
+    return false;
+  };
+
   const reactivationWarningKey = (studentId: string) => `${studentId}:${selectedExam?.id || ""}`;
 
-  const needsReactivationWarning = (studentId: string) =>
-    Boolean(selectedExam && studentHasManualReactivation(studentId) && !reactivationWarningsAccepted[reactivationWarningKey(studentId)]);
+  const needsReactivationWarning = (studentId: string, draftOverride?: DraftGrade) => {
+    if (!selectedExam || reactivationWarningsAccepted[reactivationWarningKey(studentId)]) return false;
+    return draftMayReturnReactivatedStudentToDismissal(studentId, draftOverride || getDraft(studentId));
+  };
 
-  const confirmReactivatedStudentGradeEdit = (studentId: string) => {
-    if (!needsReactivationWarning(studentId)) return true;
+  const confirmReactivatedStudentGradeEdit = (studentId: string, draftOverride?: DraftGrade) => {
+    if (!needsReactivationWarning(studentId, draftOverride)) return true;
     const student = students.find((item) => item.id === studentId);
     const confirmed = window.confirm(
-      `تعديل درجة ${student?.name || "هذا الطالب"} سيعيد احتساب حالة الطالب وقد يعيده للمفصولين. هل تريد المتابعة؟`,
+      `درجة ${student?.name || "هذا الطالب"} الجديدة قد تستهلك الفرصة الأخيرة وتعيد الطالب إلى المفصولين. هل تريد المتابعة؟`,
     );
     if (confirmed) {
       const key = reactivationWarningKey(studentId);
@@ -206,7 +243,7 @@ export function GradeEntryView() {
       }
     }
 
-    if (!confirmReactivatedStudentGradeEdit(studentId)) return;
+    if (!confirmReactivatedStudentGradeEdit(studentId, draft)) return;
 
     setSavingRows((prev) => ({ ...prev, [studentId]: true }));
     addGrade({
@@ -223,8 +260,8 @@ export function GradeEntryView() {
   };
 
   const autoSaveGrade = (studentId: string, draftOverride?: DraftGrade) => {
-    if (!selectedExam || getStudentLeaveForSelectedExam(studentId) || !canEditGradeForStudent(studentId) || needsReactivationWarning(studentId)) return;
     const draft = draftOverride || getDraft(studentId);
+    if (!selectedExam || getStudentLeaveForSelectedExam(studentId) || !canEditGradeForStudent(studentId) || needsReactivationWarning(studentId, draft)) return;
     const existing = getGrade(studentId);
     const normalizedScore = toLatinDigits(draft.score).trim();
 

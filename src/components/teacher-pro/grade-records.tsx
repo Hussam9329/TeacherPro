@@ -81,11 +81,39 @@ export function GradeRecordsView() {
   const studentHasManualReactivation = (studentId: string) =>
     opportunityLogs.some((log) => log.studentId === studentId && log.action === "إعادة تفعيل");
 
-  const confirmReactivatedStudentGradeEdit = (studentId: string) => {
-    if (!studentHasManualReactivation(studentId)) return true;
+  const examPenaltyAmount = (exam: NonNullable<typeof exams[number]>, studentOpportunities: number) => {
+    if (exam.opportunitiesPenalty === "فصل مؤقت") return Math.max(1, studentOpportunities);
+    return Math.max(0, Number(exam.opportunitiesPenalty || 0));
+  };
+
+  const editMayReturnReactivatedStudentToDismissal = (studentId: string, gradeId: string, status: GradeStatus, score: number | null, notes: string) => {
+    const grade = grades.find((item) => item.id === gradeId);
+    const exam = grade ? exams.find((item) => item.id === grade.examId) : null;
+    const student = students.find((item) => item.id === studentId);
+    if (!grade || !exam || !student || !studentHasManualReactivation(studentId)) return false;
+
+    const nextGrade = {
+      ...grade,
+      status,
+      score,
+      notes,
+      updatedAt: new Date().toISOString(),
+    };
+    const result = classification(nextGrade, exam, student);
+
+    if (result.kind === "dismissal" || result.kind === "cheat") return true;
+    if (result.kind === "deducted") {
+      const remainingOpportunities = Math.max(0, Number(student.opportunities || 0));
+      return examPenaltyAmount(exam, remainingOpportunities) >= remainingOpportunities;
+    }
+    return false;
+  };
+
+  const confirmReactivatedStudentGradeEdit = (studentId: string, gradeId: string, status: GradeStatus, score: number | null, notes: string) => {
+    if (!editMayReturnReactivatedStudentToDismissal(studentId, gradeId, status, score, notes)) return true;
     const student = students.find((item) => item.id === studentId);
     return window.confirm(
-      `تعديل درجة ${student?.name || "هذا الطالب"} سيعيد احتساب حالة الطالب وقد يعيده للمفصولين. هل تريد المتابعة؟`,
+      `درجة ${student?.name || "هذا الطالب"} الجديدة قد تستهلك الفرصة الأخيرة وتعيد الطالب إلى المفصولين. هل تريد المتابعة؟`,
     );
   };
 
@@ -142,7 +170,7 @@ export function GradeRecordsView() {
       toast.error(`الدرجة يجب أن تكون بين 0 و ${exam.fullMark}`);
       return;
     }
-    if (!confirmReactivatedStudentGradeEdit(grade.studentId)) return;
+    if (!confirmReactivatedStudentGradeEdit(grade.studentId, grade.id, editDialog.status, score, editDialog.notes)) return;
 
     updateGrade(editDialog.id, {
       status: editDialog.status,
