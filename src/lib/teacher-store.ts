@@ -148,6 +148,7 @@ export interface StudentCall {
   category: string;
   target: string;
   phone: string;
+  status: string;
   completed: boolean;
   completedAt: string;
   notes: string;
@@ -1423,6 +1424,7 @@ export const useTeacherStore = create<TeacherState>()(
 
           const studentCalls = (serverData.studentCalls || []).map((call: Record<string, unknown>) => ({
             ...call,
+            status: String(call.status || (call.completed ? 'تم الاتصال' : 'لم يرد')),
             completed: Boolean(call.completed),
             completedAt: call.completedAt ? String(call.completedAt) : '',
             createdAt: call.createdAt ? String(call.createdAt).slice(0, 10) : todayISO(),

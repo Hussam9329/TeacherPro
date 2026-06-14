@@ -107,8 +107,9 @@ function leaveLogDetails(leave: StudentLeave, exam?: Exam) {
 }
 
 function callLogDetails(call: StudentCall, exam?: Exam) {
-  const status = call.completed ? "تم الاتصال" : "لم يتم الاتصال";
-  return `${exam?.name || "كل الامتحانات / امتحان محذوف"} - ${status} - الجهة: ${call.target || "—"}${call.phone ? ` - الهاتف: ${call.phone}` : ""}${call.notes ? ` - ملاحظات: ${call.notes}` : ""}`;
+  const status = call.status || (call.completed ? "تم الاتصال" : "لم يرد");
+  const target = call.target ? ` - الجهة: ${call.target}` : "";
+  return `${exam?.name || "كل الامتحانات / امتحان محذوف"} - ${status}${target}${call.phone ? ` - الهاتف: ${call.phone}` : ""}${call.notes ? ` - ملاحظات: ${call.notes}` : ""}`;
 }
 
 function systemLogMatchesStudent(log: LogEntry, student: Student) {
@@ -229,7 +230,7 @@ export function StudentProfileDialog({
         id: `call-${call.id}`,
         date: call.completedAt || call.createdAt,
         source: "المكالمات",
-        title: call.completed ? "مكالمة مكتملة" : "مكالمة مسجلة",
+        title: call.status || (call.completed ? "تم الاتصال" : "لم يرد"),
         details: callLogDetails(call, examById.get(call.examId)),
         tone: call.completed ? "success" as const : "secondary" as const,
       })),

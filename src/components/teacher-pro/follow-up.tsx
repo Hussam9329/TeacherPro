@@ -34,9 +34,9 @@ import {
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
 
-type FollowTab = "leaves" | "calls" | "grade-lists";
-type CallCategory = "absent" | "failed" | "low-pass" | "full" | "not-entered";
-type ContactTarget = "الطالب" | "ولي الأمر";
+type FollowTab = "leaves" | "calls";
+type CallCategory = "absent" | "failed" | "low-pass" | "full";
+type ContactStatus = "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
 
 type CallRow = {
   id: string;
@@ -51,7 +51,6 @@ type CallRow = {
 const tabLabels: Record<FollowTab, string> = {
   leaves: "الإجازات",
   calls: "المكالمات",
-  "grade-lists": "قوائم الدرجات",
 };
 
 const leaveReasonOptions = ["حالة مرضية", "سفر", "حالة وفاة", "ظروف قاهرة", "أخرى"] as const;
@@ -63,8 +62,9 @@ const callCategoryLabels: Record<CallCategory, string> = {
   failed: "الراسبون",
   "low-pass": "ناجح بدرجة منخفضة",
   full: "درجة كاملة",
-  "not-entered": "غير ممتحنين",
 };
+
+const contactStatusOptions: ContactStatus[] = ["تم الاتصال", "لم يرد", "الرقم خاطئ"];
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -81,6 +81,11 @@ function phoneForWhatsApp(phone?: string) {
 function whatsappLink(phone: string): string {
   const digits = phoneForWhatsApp(sanitizePhoneInput(phone));
   return digits ? `https://wa.me/${digits}` : "#";
+}
+
+function whatsappAppLink(phone: string): string {
+  const digits = phoneForWhatsApp(phone);
+  return digits ? `whatsapp://send?phone=${digits}` : "#";
 }
 
 function telegramLink(telegram: string): string {
@@ -149,8 +154,6 @@ export function FollowUpView() {
   const [profileStudentId, setProfileStudentId] = useState("");
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
 
-  const [gradeListExamId, setGradeListExamId] = useState("");
-  const [gradeListCategory, setGradeListCategory] = useState<CallCategory>("absent");
 
   const filteredStudents = useMemo(() => {
     const query = globalSearch;
@@ -197,9 +200,7 @@ export function FollowUpView() {
       if (studentHasLeaveForExam(student.id, exam.id)) return [];
       const grade = getGrade(student.id, exam.id);
       const entered = isGradeEntered(grade, exam);
-      if (!entered) {
-        return [{ id: `${exam.id}:${student.id}:not-entered`, student, exam, grade, category: "not-entered", label: callCategoryLabels["not-entered"], reason: "لا توجد درجة مسجلة لهذا الطالب" }];
-      }
+      if (!entered) return [];
       if (!grade) return [];
       if (grade.status === "غائب") {
         return [{ id: `${exam.id}:${student.id}:absent`, student, exam, grade, category: "absent", label: callCategoryLabels.absent, reason: "غائب عن الامتحان" }];
@@ -230,11 +231,6 @@ export function FollowUpView() {
       .sort((a, b) => `${b.exam.date}-${a.student.name}`.localeCompare(`${a.exam.date}-${b.student.name}`, "ar"));
   }, [exams, students, grades, courseChapters, callExamId, callCategory, callSearch, studentLeaves]);
 
-  const gradeListRows = useMemo(() => {
-    const exam = exams.find((item) => item.id === gradeListExamId) || exams[0];
-    if (!exam) return [];
-    return buildCallRowsForExam(exam).filter((row) => row.category === gradeListCategory);
-  }, [exams, students, grades, courseChapters, gradeListExamId, gradeListCategory, studentLeaves]);
 
   const saveLeave = () => {
     if (!leaveStudentId || !leaveReason.trim()) {
@@ -299,15 +295,22 @@ export function FollowUpView() {
 
   const callLogForRow = (row: CallRow) => studentCalls.find((call) => call.studentId === row.student.id && call.examId === row.exam.id && call.category === row.category);
 
-  const saveCallState = (row: CallRow, completed: boolean, target: ContactTarget) => {
+  const callStatusForLog = (call: ReturnType<typeof callLogForRow>): ContactStatus => {
+    const value = String(call?.status || "");
+    if ((contactStatusOptions as string[]).includes(value)) return value as ContactStatus;
+    return call?.completed ? "تم الاتصال" : "لم يرد";
+  };
+
+  const saveCallStatus = (row: CallRow, status: ContactStatus) => {
     const existing = callLogForRow(row);
-    const phone = target === "ولي الأمر" ? row.student.parentPhone : row.student.phone;
+    const completed = status === "تم الاتصال";
     const payload = {
       studentId: row.student.id,
       examId: row.exam.id,
       category: row.category,
-      target,
-      phone: phone || "",
+      target: "",
+      phone: [row.student.phone, row.student.parentPhone].filter(Boolean).join(" / "),
+      status,
       completed,
       completedAt: completed ? todayISO() : "",
       notes: row.reason,
@@ -379,13 +382,28 @@ export function FollowUpView() {
     </Card>
   );
 
+  const renderPhoneLink = (label: string, phone?: string) => {
+    const digits = phoneForWhatsApp(phone);
+    if (!digits) {
+      return <span className="rounded-xl border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{label}: لا يوجد رقم</span>;
+    }
+    return (
+      <a
+        className="rounded-xl border bg-card px-3 py-2 text-xs font-bold text-emerald-700 underline dark:text-emerald-300"
+        href={whatsappAppLink(phone || "")}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {label}: {phone}
+      </a>
+    );
+  };
+
   const renderCallRow = (row: CallRow) => {
     const call = callLogForRow(row);
-    const target = (call?.target as ContactTarget) || "ولي الأمر";
-    const phone = target === "ولي الأمر" ? row.student.parentPhone : row.student.phone;
-    const whatsapp = phoneForWhatsApp(phone);
+    const contactStatus = callStatusForLog(call);
     return (
-      <div key={row.id} className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.2fr_1fr_1fr_170px_130px] xl:items-center">
+      <div key={row.id} className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.2fr_1fr_1fr_1.3fr_170px_auto] xl:items-center">
         <div>
           <div className="flex flex-wrap items-center gap-2"><b>{row.student.name}</b><Badge variant="outline">{row.student.code}</Badge></div>
           <p className="text-xs text-muted-foreground">{courseName(row.student.courseId)} - {row.student.studyType || "—"}</p>
@@ -396,20 +414,23 @@ export function FollowUpView() {
           <p className="mt-1 text-xs text-muted-foreground">{row.reason}</p>
           {row.grade?.notes ? <p className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{row.grade.notes}</p> : null}
         </div>
-        <Select value={target} onValueChange={(value) => saveCallState(row, Boolean(call?.completed), value as ContactTarget)}>
+        <div className="flex flex-wrap gap-2">
+          {renderPhoneLink("رقم الطالب", row.student.phone)}
+          {renderPhoneLink("رقم ولي الأمر", row.student.parentPhone)}
+        </div>
+        <Select value={contactStatus} onValueChange={(value) => saveCallStatus(row, value as ContactStatus)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent><SelectItem value="الطالب">الطالب</SelectItem><SelectItem value="ولي الأمر">ولي الأمر</SelectItem></SelectContent>
+          <SelectContent>
+            {contactStatusOptions.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+          </SelectContent>
         </Select>
-        <div className="flex flex-wrap items-center gap-2 justify-end">
-          {whatsapp ? <a className="text-xs font-bold text-emerald-600 underline" href={`https://wa.me/${whatsapp}`} target="_blank" rel="noreferrer">واتساب</a> : <span className="text-xs text-muted-foreground">لا يوجد رقم</span>}
-          <label className="flex items-center gap-1 text-xs">
-            <input type="checkbox" checked={Boolean(call?.completed)} onChange={(event) => saveCallState(row, event.target.checked, target)} /> تمت
-          </label>
+        <div className="flex items-center justify-end">
           <Button variant="ghost" size="sm" onClick={() => openProfile(row.student.id)}>ملف الطالب</Button>
         </div>
       </div>
     );
   };
+
 
   if (profileDialogOpen && selectedProfileStudent) {
     return (
@@ -485,10 +506,6 @@ export function FollowUpView() {
           <Card><CardContent className="grid gap-3 p-4 md:grid-cols-3"><div className="space-y-2"><Label>الامتحان</Label><Select value={callExamId || "all"} onValueChange={(value) => setCallExamId(value === "all" ? "" : value)}><SelectTrigger><SelectValue placeholder="كل الامتحانات" /></SelectTrigger><SelectContent><SelectItem value="all">كل الامتحانات</SelectItem>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>الحالة</Label><Select value={callCategory} onValueChange={(value) => setCallCategory(value as CallCategory | "all")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل الحالات</SelectItem>{(Object.keys(callCategoryLabels) as CallCategory[]).map((key) => <SelectItem key={key} value={key}>{callCategoryLabels[key]}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>بحث</Label><Input value={callSearch} onChange={(event) => setCallSearch(event.target.value)} placeholder="طالب / كود / امتحان" /></div></CardContent></Card>
           <div className="space-y-2">{callRows.length === 0 ? <p className="empty-state py-8">لا توجد نتائج للمكالمات</p> : callRows.map(renderCallRow)}</div>
         </div>
-      )}
-
-      {tab === "grade-lists" && (
-        <div className="space-y-4"><Card><CardContent className="grid gap-3 p-4 md:grid-cols-2"><div className="space-y-2"><Label>الامتحان</Label><Select value={gradeListExamId || exams[0]?.id || ""} onValueChange={setGradeListExamId}><SelectTrigger><SelectValue placeholder="اختر الامتحان" /></SelectTrigger><SelectContent>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name} - {formatAppDate(exam.date)}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>القائمة</Label><Select value={gradeListCategory} onValueChange={(value) => setGradeListCategory(value as CallCategory)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(Object.keys(callCategoryLabels) as CallCategory[]).map((key) => <SelectItem key={key} value={key}>{callCategoryLabels[key]}</SelectItem>)}</SelectContent></Select></div></CardContent></Card><div className="space-y-2">{gradeListRows.length === 0 ? <p className="empty-state py-8">لا توجد أسماء في هذه القائمة</p> : gradeListRows.map(renderCallRow)}</div></div>
       )}
 
     </div>

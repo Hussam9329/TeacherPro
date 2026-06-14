@@ -18,14 +18,22 @@ function dateOrNow(value: unknown): Date {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
+function normalizeCallStatus(body: Record<string, unknown>): string {
+  const status = String(body.status ?? '').trim();
+  if (status) return status;
+  return Boolean(body.completed) ? 'تم الاتصال' : 'لم يرد';
+}
+
 function normalizeCallPayload(body: Record<string, unknown>) {
+  const status = normalizeCallStatus(body);
   return {
     studentId: String(body.studentId ?? ''),
     examId: String(body.examId ?? ''),
     category: String(body.category ?? ''),
     target: String(body.target ?? ''),
     phone: String(body.phone ?? ''),
-    completed: Boolean(body.completed),
+    status,
+    completed: status === 'تم الاتصال',
     completedAt: dateOrNull(body.completedAt),
     notes: String(body.notes ?? ''),
     createdAt: dateOrNow(body.createdAt),
@@ -83,7 +91,8 @@ export async function PUT(req: NextRequest) {
     if (updates.category !== undefined) data.category = String(updates.category ?? '');
     if (updates.target !== undefined) data.target = String(updates.target ?? '');
     if (updates.phone !== undefined) data.phone = String(updates.phone ?? '');
-    if (updates.completed !== undefined) data.completed = Boolean(updates.completed);
+    if (updates.status !== undefined) data.status = String(updates.status ?? '').trim() || (updates.completed ? 'تم الاتصال' : 'لم يرد');
+    if (updates.completed !== undefined) data.completed = data.status ? data.status === 'تم الاتصال' : Boolean(updates.completed);
     if (updates.completedAt !== undefined) data.completedAt = dateOrNull(updates.completedAt);
     if (updates.notes !== undefined) data.notes = String(updates.notes ?? '');
     const studentCall = await withFollowupTables(
