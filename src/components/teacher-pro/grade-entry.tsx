@@ -190,6 +190,26 @@ export function GradeEntryView() {
     return confirmed;
   };
 
+  const restoreDraftFromSavedGrade = (studentId: string) => {
+    const existing = getGrade(studentId);
+    setDrafts((prev) => {
+      const next = { ...prev };
+      if (existing) {
+        next[studentId] = {
+          status: (existing.status as string) === "مجاز" ? "غائب" : (existing.status as DraftGrade["status"]) || "درجة",
+          score: existing.score !== null && existing.score !== undefined ? String(existing.score) : "",
+          notes: existing.notes || "",
+        };
+      } else {
+        delete next[studentId];
+      }
+      return next;
+    });
+    setEditableRows((prev) => ({ ...prev, [studentId]: false }));
+    setSavingRows((prev) => ({ ...prev, [studentId]: false }));
+    setSavedRows((prev) => ({ ...prev, [studentId]: "تم إلغاء التعديل" }));
+  };
+
 
   const examStudents = useMemo(() => {
     if (!selectedExam) return [];
@@ -220,7 +240,7 @@ export function GradeEntryView() {
       .map((courseId) => courseName(courseId));
   }, [selectedExam, courseChapters, courseName]);
 
-  const saveGrade = async (studentId: string, draftOverride?: DraftGrade, options: { silent?: boolean } = {}) => {
+  const saveGrade = async (studentId: string, draftOverride?: DraftGrade, options: { silent?: boolean; skipReactivationWarning?: boolean } = {}) => {
     if (!selectedExam) return;
     const leave = getStudentLeaveForSelectedExam(studentId);
     if (leave) {
@@ -243,7 +263,7 @@ export function GradeEntryView() {
       }
     }
 
-    if (!confirmReactivatedStudentGradeEdit(studentId, draft)) return;
+    if (!options.skipReactivationWarning && !confirmReactivatedStudentGradeEdit(studentId, draft)) return;
 
     setSavingRows((prev) => ({ ...prev, [studentId]: true }));
     addGrade({
@@ -261,7 +281,7 @@ export function GradeEntryView() {
 
   const autoSaveGrade = (studentId: string, draftOverride?: DraftGrade) => {
     const draft = draftOverride || getDraft(studentId);
-    if (!selectedExam || getStudentLeaveForSelectedExam(studentId) || !canEditGradeForStudent(studentId) || needsReactivationWarning(studentId, draft)) return;
+    if (!selectedExam || getStudentLeaveForSelectedExam(studentId) || !canEditGradeForStudent(studentId)) return;
     const existing = getGrade(studentId);
     const normalizedScore = toLatinDigits(draft.score).trim();
 
@@ -295,7 +315,15 @@ export function GradeEntryView() {
       return;
     }
 
-    void saveGrade(studentId, draft, { silent: true });
+    if (needsReactivationWarning(studentId, draft)) {
+      const confirmed = confirmReactivatedStudentGradeEdit(studentId, draft);
+      if (!confirmed) {
+        restoreDraftFromSavedGrade(studentId);
+        return;
+      }
+    }
+
+    void saveGrade(studentId, draft, { silent: true, skipReactivationWarning: true });
   };
 
   const handleQuickScan = () => {
