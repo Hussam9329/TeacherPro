@@ -56,7 +56,16 @@ import {
   TEXT_ONLY_PATTERN,
 } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { SearchX, UserPlus } from "lucide-react";
+import {
+  CalendarDays,
+  GraduationCap,
+  MapPin,
+  Phone,
+  SearchX,
+  ShieldCheck,
+  UserPlus,
+  UserRound,
+} from "lucide-react";
 import { EmptyState } from "./ui-kit";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { CustomFilterPresets, type FilterPresetValues } from "./custom-filter-presets";
@@ -1004,318 +1013,535 @@ export function StudentRegistryView() {
       >
         <DialogContent
           dir="rtl"
-          className="max-w-4xl max-h-[85vh] overflow-y-auto"
+          className="max-h-[92vh] max-w-6xl gap-0 overflow-hidden p-0 sm:rounded-[2rem]"
         >
-          <DialogHeader>
-            <DialogTitle>تعديل بيانات الطالب</DialogTitle>
-            <DialogDescription>
-              يمكن تعديل نفس حقول صفحة تسجيل الطالب كاملة.
-            </DialogDescription>
+          <DialogHeader className="border-b border-border/70 bg-gradient-to-l from-primary/12 via-background to-muted/50 px-6 py-5 pr-14 text-right">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-black tracking-tight text-gradient-brand">
+                  تعديل بيانات الطالب
+                </DialogTitle>
+                <DialogDescription className="mt-2 text-sm leading-6">
+                  واجهة منظمة لتحديث البيانات الأساسية، الاتصال، الدورة، وفترة
+                  السماح بدون تغيير آلية الحفظ.
+                </DialogDescription>
+              </div>
+              <Badge
+                variant="secondary"
+                className="w-fit rounded-full px-4 py-1 text-xs font-bold"
+              >
+                {editDialog.form.gender || "بيانات الطالب"}
+              </Badge>
+            </div>
           </DialogHeader>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">اسم الطالب</Label>
-              <Input
-                id="edit-name"
-                name="name"
-                autoComplete="name"
-                value={editDialog.form.name}
-                onChange={(e) => updateEditForm("name", e.target.value)}
-                required
-                placeholder="اسم الطالب الرباعي"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-school">اسم المدرسة</Label>
-              <Input
-                id="edit-school"
-                name="school"
-                autoComplete="organization"
-                value={editDialog.form.school}
-                onChange={(e) => updateEditForm("school", e.target.value)}
-                required
-                placeholder="اسم المدرسة"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-gender">الجنس</Label>
-              <Select
-                name="gender"
-                value={editDialog.form.gender}
-                onValueChange={(v) => updateEditForm("gender", v)}
-              >
-                <SelectTrigger id="edit-gender">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ذكر">ذكر</SelectItem>
-                  <SelectItem value="أنثى">أنثى</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-telegram">معرف التليكرام</Label>
-              <Input
-                id="edit-telegram"
-                name="telegram"
-                autoComplete="username"
-                value={editDialog.form.telegram}
-                onChange={(e) => updateEditTelegram(e.target.value)}
-                placeholder="اختياري - username بدون @"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-phone">رقم الطالب</Label>
-              <Input
-                id="edit-phone"
-                name="phone"
-                autoComplete="tel"
-                value={editDialog.form.phone}
-                onChange={(e) => updateEditPhone("phone", e.target.value)}
-                inputMode="numeric"
-                maxLength={11}
-                pattern="07[0-9]{9}"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-parentPhone">رقم ولي الأمر</Label>
-              <Input
-                id="edit-parentPhone"
-                name="parentPhone"
-                autoComplete="tel"
-                value={editDialog.form.parentPhone}
-                onChange={(e) => updateEditPhone("parentPhone", e.target.value)}
-                inputMode="numeric"
-                maxLength={11}
-                pattern="07[0-9]{9}"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-courseId">اختر الدورة</Label>
-              <Select
-                name="courseId"
-                value={editDialog.form.courseId}
-                onValueChange={(v) =>
-                  setEditDialog((prev) => ({
-                    ...prev,
-                    form: {
-                      ...prev.form,
-                      courseId: v,
-                                          courseProgram: "",
-                      courseTerm: "",
-                      studyType: "",
-                      locationScope: "",
-                      baghdadMode: "",
-                      subSite: "",
-                    },
-                  }))
-                }
-                disabled={editFilteredCourses.length === 0}
-              >
-                <SelectTrigger id="edit-courseId">
-                  <SelectValue
-                    placeholder={
-                      editFilteredCourses.length === 0
-                        ? "لا توجد دورات مسجلة"
-                        : "اختر الدورة"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {editFilteredCourses.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">
-                      لا توجد دورات مسجلة
+
+          <div className="app-scrollbar max-h-[calc(92vh-11.5rem)] overflow-y-auto p-4 md:p-6">
+            <div className="grid gap-5 lg:grid-cols-[0.9fr_1.6fr]">
+              <aside className="space-y-4">
+                <div className="rounded-[1.75rem] border border-primary/20 bg-primary/5 p-4 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-14 shrink-0 items-center justify-center rounded-3xl bg-primary text-xl font-black text-primary-foreground shadow-lg shadow-primary/20">
+                      {editDialog.form.name.trim().slice(0, 1) || "ط"}
                     </div>
-                  ) : (
-                    editFilteredCourses.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            {editDialog.form.courseId && editAvailablePrograms.length > 1 && (
-              <div className="space-y-2">
-                <Label htmlFor="edit-courseProgram">نوع الدورة</Label>
-                <Select
-                  name="courseProgram"
-                  value={editDialog.form.courseProgram}
-                  onValueChange={(v) =>
-                    setEditDialog((prev) => ({
-                      ...prev,
-                      form: {
-                        ...prev.form,
-                        courseProgram: v,
-                        courseTerm: v === "كورسات" ? prev.form.courseTerm : "",
-                        studyType: "",
-                        locationScope: "",
-                        baghdadMode: "",
-                        subSite: "",
-                                            },
-                    }))
-                  }
-                >
-                  <SelectTrigger id="edit-courseProgram">
-                    <SelectValue placeholder="اختر نوع الدورة..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {editAvailablePrograms.map((p) => (
-                      <SelectItem key={p} value={p}>
-                        {p}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    <div className="min-w-0">
+                      <p className="truncate text-lg font-black">
+                        {editDialog.form.name || "اسم الطالب"}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {editDialog.form.school || "المدرسة غير محددة"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 text-sm">
+                    <div className="rounded-2xl bg-background/80 p-3">
+                      <span className="text-xs text-muted-foreground">
+                        الدورة
+                      </span>
+                      <p className="mt-1 font-bold">
+                        {editDialog.form.courseId
+                          ? courseName(editDialog.form.courseId)
+                          : "لم يتم اختيار دورة"}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="rounded-2xl bg-background/80 p-3 text-center">
+                        <p className="text-xs text-muted-foreground">الهاتف</p>
+                        <p className="mt-1 truncate font-black">
+                          {editDialog.form.phone || "—"}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl bg-background/80 p-3 text-center">
+                        <p className="text-xs text-muted-foreground">السماح</p>
+                        <p className="mt-1 font-black">
+                          {editDialog.form.accountingGraceDays || "0"} يوم
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[1.75rem] border bg-card p-4 shadow-sm">
+                  <div className="mb-3 flex items-center gap-2">
+                    <ShieldCheck className="size-4 text-primary" />
+                    <h4 className="font-black">ملاحظات الإدخال</h4>
+                  </div>
+                  <ul className="space-y-2 text-xs leading-6 text-muted-foreground">
+                    <li>• الأرقام تقبل الصيغة العراقية 07 وتتكون من 11 رقم.</li>
+                    <li>• فترة السماح لا تتجاوز 30 يوم.</li>
+                    <li>
+                      • تغيير الدورة يعيد تهيئة خيارات نوع الدراسة والموقع.
+                    </li>
+                  </ul>
+                </div>
+              </aside>
+
+              <div className="space-y-5">
+                <section className="rounded-[1.75rem] border bg-card p-4 shadow-sm md:p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <UserRound className="size-5 text-primary" />
+                    <div>
+                      <h3 className="font-black">البيانات الأساسية</h3>
+                      <p className="text-xs text-muted-foreground">
+                        الاسم، المدرسة، الجنس، ومعرف التليكرام.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="edit-name">اسم الطالب</Label>
+                      <Input
+                        id="edit-name"
+                        name="name"
+                        autoComplete="name"
+                        value={editDialog.form.name}
+                        onChange={(e) => updateEditForm("name", e.target.value)}
+                        required
+                        placeholder="اسم الطالب الرباعي"
+                        className="h-12 rounded-2xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-school">اسم المدرسة</Label>
+                      <Input
+                        id="edit-school"
+                        name="school"
+                        autoComplete="organization"
+                        value={editDialog.form.school}
+                        onChange={(e) =>
+                          updateEditForm("school", e.target.value)
+                        }
+                        required
+                        placeholder="اسم المدرسة"
+                        className="h-12 rounded-2xl"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-gender">الجنس</Label>
+                      <Select
+                        name="gender"
+                        value={editDialog.form.gender}
+                        onValueChange={(v) => updateEditForm("gender", v)}
+                      >
+                        <SelectTrigger
+                          id="edit-gender"
+                          className="h-12 rounded-2xl"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ذكر">ذكر</SelectItem>
+                          <SelectItem value="أنثى">أنثى</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="edit-telegram">معرف التليكرام</Label>
+                      <Input
+                        id="edit-telegram"
+                        name="telegram"
+                        autoComplete="username"
+                        value={editDialog.form.telegram}
+                        onChange={(e) => updateEditTelegram(e.target.value)}
+                        placeholder="اختياري - username بدون @"
+                        className="h-12 rounded-2xl"
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-[1.75rem] border bg-card p-4 shadow-sm md:p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <Phone className="size-5 text-primary" />
+                    <div>
+                      <h3 className="font-black">بيانات الاتصال</h3>
+                      <p className="text-xs text-muted-foreground">
+                        أرقام الطالب وولي الأمر مع ضبط الصيغة تلقائياً.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-phone">رقم الطالب</Label>
+                      <Input
+                        id="edit-phone"
+                        name="phone"
+                        autoComplete="tel"
+                        value={editDialog.form.phone}
+                        onChange={(e) =>
+                          updateEditPhone("phone", e.target.value)
+                        }
+                        inputMode="numeric"
+                        maxLength={11}
+                        pattern="07[0-9]{9}"
+                        dir="ltr"
+                        required
+                        className="h-12 rounded-2xl text-left"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-parentPhone">رقم ولي الأمر</Label>
+                      <Input
+                        id="edit-parentPhone"
+                        name="parentPhone"
+                        autoComplete="tel"
+                        value={editDialog.form.parentPhone}
+                        onChange={(e) =>
+                          updateEditPhone("parentPhone", e.target.value)
+                        }
+                        inputMode="numeric"
+                        maxLength={11}
+                        pattern="07[0-9]{9}"
+                        dir="ltr"
+                        required
+                        className="h-12 rounded-2xl text-left"
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-[1.75rem] border bg-card p-4 shadow-sm md:p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <GraduationCap className="size-5 text-primary" />
+                    <div>
+                      <h3 className="font-black">الدورة ونوع الدراسة</h3>
+                      <p className="text-xs text-muted-foreground">
+                        اختر الدورة ثم أكمل الخيارات المرتبطة بها.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="space-y-2 xl:col-span-2">
+                      <Label htmlFor="edit-courseId">اختر الدورة</Label>
+                      <Select
+                        name="courseId"
+                        value={editDialog.form.courseId}
+                        onValueChange={(v) =>
+                          setEditDialog((prev) => ({
+                            ...prev,
+                            form: {
+                              ...prev.form,
+                              courseId: v,
+                              courseProgram: "",
+                              courseTerm: "",
+                              studyType: "",
+                              locationScope: "",
+                              baghdadMode: "",
+                              subSite: "",
+                            },
+                          }))
+                        }
+                        disabled={editFilteredCourses.length === 0}
+                      >
+                        <SelectTrigger
+                          id="edit-courseId"
+                          className="h-12 rounded-2xl"
+                        >
+                          <SelectValue
+                            placeholder={
+                              editFilteredCourses.length === 0
+                                ? "لا توجد دورات مسجلة"
+                                : "اختر الدورة"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {editFilteredCourses.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-muted-foreground">
+                              لا توجد دورات مسجلة
+                            </div>
+                          ) : (
+                            editFilteredCourses.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {editDialog.form.courseId &&
+                      editAvailablePrograms.length > 1 && (
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-courseProgram">نوع الدورة</Label>
+                          <Select
+                            name="courseProgram"
+                            value={editDialog.form.courseProgram}
+                            onValueChange={(v) =>
+                              setEditDialog((prev) => ({
+                                ...prev,
+                                form: {
+                                  ...prev.form,
+                                  courseProgram: v,
+                                  courseTerm:
+                                    v === "كورسات" ? prev.form.courseTerm : "",
+                                  studyType: "",
+                                  locationScope: "",
+                                  baghdadMode: "",
+                                  subSite: "",
+                                },
+                              }))
+                            }
+                          >
+                            <SelectTrigger
+                              id="edit-courseProgram"
+                              className="h-12 rounded-2xl"
+                            >
+                              <SelectValue placeholder="اختر نوع الدورة..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {editAvailablePrograms.map((p) => (
+                                <SelectItem key={p} value={p}>
+                                  {p}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                    {editEffectiveCourseProgram === "كورسات" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-courseTerm">الكورس</Label>
+                        <Select
+                          name="courseTerm"
+                          value={editDialog.form.courseTerm}
+                          onValueChange={(v) => updateEditForm("courseTerm", v)}
+                        >
+                          <SelectTrigger
+                            id="edit-courseTerm"
+                            className="h-12 rounded-2xl"
+                          >
+                            <SelectValue placeholder="اختر الكورس..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {COURSE_TERMS.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {t}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {editDialog.form.courseId &&
+                      editAvailableStudyTypes.length > 0 && (
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-studyType">نوع الدراسة</Label>
+                          <Select
+                            name="studyType"
+                            value={editDialog.form.studyType}
+                            onValueChange={(v) =>
+                              setEditDialog((prev) => ({
+                                ...prev,
+                                form: {
+                                  ...prev.form,
+                                  studyType: v,
+                                  locationScope: "",
+                                  baghdadMode: "",
+                                  subSite: "",
+                                },
+                              }))
+                            }
+                          >
+                            <SelectTrigger
+                              id="edit-studyType"
+                              className="h-12 rounded-2xl"
+                            >
+                              <SelectValue placeholder="اختر نوع الدراسة..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {editAvailableStudyTypes.map((t) => (
+                                <SelectItem key={t} value={t}>
+                                  {t}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                  </div>
+                </section>
+
+                <section className="rounded-[1.75rem] border bg-card p-4 shadow-sm md:p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <MapPin className="size-5 text-primary" />
+                    <div>
+                      <h3 className="font-black">الموقع</h3>
+                      <p className="text-xs text-muted-foreground">
+                        تظهر الخيارات حسب نوع الدراسة والدورة المختارة.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {editDialog.form.studyType &&
+                    editLocationScopes.length > 0 ? (
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-locationScope">الموقع</Label>
+                        <Select
+                          name="locationScope"
+                          value={editDialog.form.locationScope}
+                          onValueChange={(v) =>
+                            setEditDialog((prev) => ({
+                              ...prev,
+                              form: {
+                                ...prev.form,
+                                locationScope: v,
+                                subSite: "",
+                              },
+                            }))
+                          }
+                        >
+                          <SelectTrigger
+                            id="edit-locationScope"
+                            className="h-12 rounded-2xl"
+                          >
+                            <SelectValue placeholder="اختر الموقع..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {editLocationScopes.map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {s}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground md:col-span-2">
+                        اختر الدورة ونوع الدراسة لعرض خيارات الموقع.
+                      </div>
+                    )}
+
+                    {editDialog.form.locationScope &&
+                      editSubSiteOptions.length > 0 && (
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-subSite">الموقع الفرعي</Label>
+                          <Select
+                            name="subSite"
+                            value={editDialog.form.subSite}
+                            onValueChange={(v) => updateEditForm("subSite", v)}
+                          >
+                            <SelectTrigger
+                              id="edit-subSite"
+                              className="h-12 rounded-2xl"
+                            >
+                              <SelectValue placeholder="اختر الموقع الفرعي..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {editSubSiteOptions.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {s}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                  </div>
+                </section>
+
+                <section className="rounded-[1.75rem] border bg-card p-4 shadow-sm md:p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <CalendarDays className="size-5 text-primary" />
+                    <div>
+                      <h3 className="font-black">التسجيل وفترة السماح</h3>
+                      <p className="text-xs text-muted-foreground">
+                        يحدد هذا الجزء بداية احتساب الطالب أكاديمياً.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-createdAt">
+                        تاريخ إضافة الطالب / بداية السماح
+                      </Label>
+                      <DateInput
+                        id="edit-createdAt"
+                        name="createdAt"
+                        autoComplete="off"
+                        value={editDialog.form.createdAt}
+                        onChange={(value) => updateEditForm("createdAt", value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-accountingGraceDays">
+                        فترة السماح بالأيام
+                      </Label>
+                      <Input
+                        id="edit-accountingGraceDays"
+                        name="accountingGraceDays"
+                        inputMode="numeric"
+                        min={0}
+                        max={30}
+                        pattern="(?:[0-9]|[12][0-9]|30)"
+                        autoComplete="off"
+                        value={editDialog.form.accountingGraceDays}
+                        onChange={(e) =>
+                          updateEditForm(
+                            "accountingGraceDays",
+                            normalizeGraceDaysInput(e.target.value),
+                          )
+                        }
+                        required
+                        className="h-12 rounded-2xl"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        لا يُحاسَب الطالب على الامتحانات أو الإخفاقات خلال هذه
+                        الأيام.
+                      </p>
+                    </div>
+                  </div>
+                </section>
               </div>
-            )}
-            {editEffectiveCourseProgram === "كورسات" && (
-              <div className="space-y-2">
-                <Label htmlFor="edit-courseTerm">الكورس</Label>
-                <Select
-                  name="courseTerm"
-                  value={editDialog.form.courseTerm}
-                  onValueChange={(v) => updateEditForm("courseTerm", v)}
-                >
-                  <SelectTrigger id="edit-courseTerm">
-                    <SelectValue placeholder="اختر الكورس..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COURSE_TERMS.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {editDialog.form.courseId && editAvailableStudyTypes.length > 0 && (
-              <div className="space-y-2">
-                <Label htmlFor="edit-studyType">نوع الدراسة</Label>
-                <Select
-                  name="studyType"
-                  value={editDialog.form.studyType}
-                  onValueChange={(v) =>
-                    setEditDialog((prev) => ({
-                      ...prev,
-                      form: {
-                        ...prev.form,
-                        studyType: v,
-                        locationScope: "",
-                        baghdadMode: "",
-                        subSite: "",
-                      },
-                    }))
-                  }
-                >
-                  <SelectTrigger id="edit-studyType">
-                    <SelectValue placeholder="اختر نوع الدراسة..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {editAvailableStudyTypes.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {editDialog.form.studyType && editLocationScopes.length > 0 && (
-              <div className="space-y-2">
-                <Label htmlFor="edit-locationScope">الموقع</Label>
-                <Select
-                  name="locationScope"
-                  value={editDialog.form.locationScope}
-                  onValueChange={(v) =>
-                    setEditDialog((prev) => ({
-                      ...prev,
-                      form: {
-                        ...prev.form,
-                        locationScope: v,
-                        subSite: "",
-                      },
-                    }))
-                  }
-                >
-                  <SelectTrigger id="edit-locationScope">
-                    <SelectValue placeholder="اختر الموقع..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {editLocationScopes.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {editDialog.form.locationScope && editSubSiteOptions.length > 0 && (
-              <div className="space-y-2">
-                <Label htmlFor="edit-subSite">الموقع الفرعي</Label>
-                <Select
-                  name="subSite"
-                  value={editDialog.form.subSite}
-                  onValueChange={(v) => updateEditForm("subSite", v)}
-                >
-                  <SelectTrigger id="edit-subSite">
-                    <SelectValue placeholder="اختر الموقع الفرعي..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {editSubSiteOptions.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="edit-createdAt">تاريخ إضافة الطالب / بداية السماح</Label>
-              <DateInput
-                id="edit-createdAt"
-                name="createdAt"
-                autoComplete="off"
-                value={editDialog.form.createdAt}
-                onChange={(value) => updateEditForm("createdAt", value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-accountingGraceDays">فترة السماح بالأيام</Label>
-              <Input
-                id="edit-accountingGraceDays"
-                name="accountingGraceDays"
-                inputMode="numeric"
-                min={0}
-                max={30}
-                pattern="(?:[0-9]|[12][0-9]|30)"
-                autoComplete="off"
-                value={editDialog.form.accountingGraceDays}
-                onChange={(e) => updateEditForm("accountingGraceDays", normalizeGraceDaysInput(e.target.value))}
-                required
-              />
-              <p className="text-xs text-muted-foreground">لا يُحاسَب الطالب على الامتحانات أو الإخفاقات خلال هذه الأيام.</p>
             </div>
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() =>
-                setEditDialog({ open: false, id: "", form: emptyEditForm })
-              }
-            >
-              إلغاء
-            </Button>
-            <Button onClick={handleEditSave} disabled={isSavingEdit}>
-              {isSavingEdit ? "جاري الحفظ..." : "حفظ"}
-            </Button>
+
+          <DialogFooter className="border-t border-border/70 bg-muted/30 px-4 py-4 sm:justify-between md:px-6">
+            <p className="hidden text-xs text-muted-foreground sm:block">
+              راجع الحقول المطلوبة قبل حفظ التعديل.
+            </p>
+            <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+              <Button
+                variant="outline"
+                className="min-w-28 rounded-2xl"
+                onClick={() =>
+                  setEditDialog({ open: false, id: "", form: emptyEditForm })
+                }
+              >
+                إلغاء
+              </Button>
+              <Button
+                className="min-w-32 rounded-2xl"
+                onClick={handleEditSave}
+                disabled={isSavingEdit}
+              >
+                {isSavingEdit ? "جاري الحفظ..." : "حفظ التعديلات"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

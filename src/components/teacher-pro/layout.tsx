@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import {
   LayoutDashboard,
@@ -22,9 +22,6 @@ import {
   Moon,
   Menu,
   X,
-  Download,
-  Upload,
-  FileBarChart,
   LogOut,
   ChevronDown,
   KeyRound,
@@ -32,16 +29,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -165,19 +152,6 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   logs: LogsView,
 };
 
-function downloadTextFile(
-  content: string,
-  filename: string,
-  type = "text/plain;charset=utf-8",
-) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 type LoginScreenProps = {
   theme: string;
@@ -263,9 +237,6 @@ export function TeacherProLayout() {
     setSidebarOpen,
     theme,
     toggleTheme,
-    exportBackup,
-    importBackup,
-    exportMonthlyReport,
     currentUser,
     canAccess,
     isAuthenticated,
@@ -276,7 +247,6 @@ export function TeacherProLayout() {
     loadFromServer,
   } = useTeacherStore();
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>(() => {
     // Open all families by default
     const initial: Record<string, boolean> = {};
@@ -285,9 +255,6 @@ export function TeacherProLayout() {
     });
     return initial;
   });
-  const [pendingBackupContent, setPendingBackupContent] = useState<
-    string | null
-  >(null);
 
   const toggleFamily = (title: string) => {
     setOpenFamilies((prev) => ({ ...prev, [title]: !prev[title] }));
@@ -443,24 +410,6 @@ export function TeacherProLayout() {
       ? sectionComponents[currentSection] || DashboardView
       : DashboardView;
   const currentMenu = menuItems.find((m) => m.id === currentSection);
-
-  const handleImportBackup = (file?: File) => {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPendingBackupContent(String(reader.result || ""));
-    };
-    reader.readAsText(file, "utf-8");
-  };
-
-  const confirmImportBackup = () => {
-    if (!pendingBackupContent) return;
-    const result = importBackup(pendingBackupContent);
-    if (result.ok) toast.success(result.message);
-    else toast.error(result.message);
-    setPendingBackupContent(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
 
   if (!isAuthenticated) {
     return <LoginScreen theme={theme} toggleTheme={toggleTheme} login={login} />;
@@ -750,11 +699,11 @@ export function TeacherProLayout() {
           </nav>
         </div>
 
-        <div className="relative p-3 border-t border-sidebar-border space-y-2 shrink-0 bg-black/[0.08]">
+        <div className="relative border-t border-sidebar-border bg-black/[0.08] p-3 shrink-0">
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="w-full justify-start rounded-2xl text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={toggleTheme}
           >
             {theme === "dark" ? (
@@ -763,60 +712,6 @@ export function TeacherProLayout() {
               <Moon className="w-4 h-4 ml-2" />
             )}
             {theme === "dark" ? "الوضع الصباحي" : "الوضع الليلي"}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            onClick={() => {
-              downloadTextFile(
-                exportBackup(),
-                `backup-${new Date().toISOString().slice(0, 10)}.json`,
-                "application/json;charset=utf-8",
-              );
-              toast.success("تم تصدير النسخة الاحتياطية");
-            }}
-          >
-            <Download className="w-4 h-4 ml-2" />
-            تصدير نسخة احتياطية
-          </Button>
-          <input
-            ref={fileInputRef}
-            id="backup-import"
-            name="backupFile"
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(e) => handleImportBackup(e.target.files?.[0])}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload className="w-4 h-4 ml-2" />
-            استيراد نسخة احتياطية
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            onClick={() => {
-              const month =
-                prompt(
-                  "اكتب الشهر بصيغة YYYY-MM",
-                  new Date().toISOString().slice(0, 7),
-                ) || new Date().toISOString().slice(0, 7);
-              downloadTextFile(
-                exportMonthlyReport(month),
-                `monthly-report-${month}.txt`,
-              );
-              toast.success("تم تصدير التقرير الشهري");
-            }}
-          >
-            <FileBarChart className="w-4 h-4 ml-2" />
-            تقرير شهري
           </Button>
         </div>
       </aside>
@@ -884,33 +779,6 @@ export function TeacherProLayout() {
           </div>
         </div>
 
-        <AlertDialog
-          open={Boolean(pendingBackupContent)}
-          onOpenChange={(open) => {
-            if (!open) {
-              setPendingBackupContent(null);
-              if (fileInputRef.current) fileInputRef.current.value = "";
-            }
-          }}
-        >
-          <AlertDialogContent dir="rtl">
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                تأكيد استيراد النسخة الاحتياطية
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                سيتم استبدال البيانات الحالية بالنسخة الاحتياطية المختارة. هل
-                أنت متأكد من المتابعة؟
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>إلغاء</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmImportBackup}>
-                استيراد
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </main>
     </div>
   );
