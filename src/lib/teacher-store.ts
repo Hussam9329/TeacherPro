@@ -956,6 +956,22 @@ function hasFinalChanceForStudent(logs: OpportunityLog[], studentId: string): bo
   return logs.some((log) => log.studentId === studentId && isFinalChanceOpportunityLog(log));
 }
 
+function latestManualDismissalDateForStudent(
+  state: Pick<TeacherState, 'opportunityLogs' | 'studentNotes'>,
+  studentId: string,
+): string {
+  const logDates = state.opportunityLogs
+    .filter((log) => log.studentId === studentId && log.action === 'خصم' && String(log.reason || '').startsWith('فصل الطالب'))
+    .map((log) => dayKey(log.date))
+    .filter(Boolean);
+  const noteDates = (state.studentNotes || [])
+    .filter((note) => note.studentId === studentId && note.kind === 'إجراء' && String(note.text || '').startsWith('فصل الطالب'))
+    .map((note) => dayKey(note.date))
+    .filter(Boolean);
+  const dates = [...logDates, ...noteDates].sort();
+  return dates.length ? dates[dates.length - 1] : '';
+}
+
 function dayKey(value: string | Date | null | undefined): string {
   if (!value) return '';
   if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : '';
@@ -1014,7 +1030,7 @@ function affectedExamIdsForLeave(leave: StudentLeave, state: Pick<TeacherState, 
 }
 
 function recalculateStudentsFromAcademicRules(
-  state: Pick<TeacherState, 'students' | 'grades' | 'exams' | 'courseChapters' | 'chapters' | 'opportunityLogs' | 'studentLeaves'>,
+  state: Pick<TeacherState, 'students' | 'grades' | 'exams' | 'courseChapters' | 'chapters' | 'opportunityLogs' | 'studentLeaves' | 'studentNotes'>,
   targetStudentIds?: Set<string>,
 ): { students: Student[]; opportunityLogs: OpportunityLog[] } {
   const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
@@ -1036,7 +1052,8 @@ function recalculateStudentsFromAcademicRules(
     if (!isTargetStudent) return student;
 
     const manualDismissal = student.status === 'مفصول' && !isRuleManagedDismissal(student);
-    if (manualDismissal) return student;
+    const manualDismissalDate = manualDismissal ? latestManualDismissalDateForStudent(state, student.id) : '';
+    let hasAcademicEventAfterManualDismissal = false;
 
     const allStudentManualLogs = manualLogs
       .filter((log) => log.studentId === student.id)
@@ -1093,6 +1110,7 @@ function recalculateStudentsFromAcademicRules(
     let cheatCount = 0;
 
     const hasFinalChancePledge = studentManualLogs.some(isFinalChanceOpportunityLog);
+    let hasPriorDismissalEvent = manualDismissal || hasFinalChancePledge;
     const finalChanceStartDate = latestStudentLogDate(studentManualLogs, isFinalChanceOpportunityLog);
     studentManualLogs.forEach((log) => {
       if (finalChanceStartDate && !isFinalChanceOpportunityLog(log) && String(log.date || '').slice(0, 10) < finalChanceStartDate) return;
@@ -1128,9 +1146,15 @@ function recalculateStudentsFromAcademicRules(
 
     const setDismissal = (type: string, reason: string, priority: number, exam?: Exam, sourceId?: string) => {
       const finalChanceViolation = hasFinalChancePledge && type === 'فصل مؤقت';
-      const effectiveType = finalChanceViolation ? 'فصل نهائي' : type;
-      const effectiveReason = finalChanceViolation ? `عدم الالتزام بالتعهد السابق - ${reason}` : reason;
-      const effectivePriority = finalChanceViolation ? Math.max(priority, 90) : priority;
+      const secondDismissalViolation = hasPriorDismissalEvent && type === 'فصل مؤقت';
+      const shouldBeFinal = finalChanceViolation || secondDismissalViolation;
+      const effectiveType = shouldBeFinal ? 'فصل نهائي' : type;
+      const effectiveReason = finalChanceViolation
+        ? `عدم الالتزام بالتعهد السابق - ${reason}`
+        : secondDismissalViolation
+          ? `الفصل الثاني للطالب - ${reason}`
+          : reason;
+      const effectivePriority = shouldBeFinal ? Math.max(priority, 90) : priority;
       if (effectivePriority >= dismissalPriority) {
         dismissalType = effectiveType;
         dismissalReason = effectiveReason;
@@ -1140,6 +1164,7 @@ function recalculateStudentsFromAcademicRules(
         consumeAllRemainingOpportunities(exam, sourceId || exam.id, effectiveReason);
         addAutomaticLog(exam, sourceId || exam.id, 'فصل تلقائي', 0, effectiveReason);
       }
+      hasPriorDismissalEvent = true;
     };
 
     const isProtectedLinkedSourceGrade = (grade: Grade): boolean => {
@@ -1151,11 +1176,15 @@ function recalculateStudentsFromAcademicRules(
       if (!exam) continue;
       if (!isExamAvailableForEntry(exam)) continue;
       if (!isGradeEntered(grade, exam)) continue;
-      if (finalChanceStartDate && String(grade.updatedAt || grade.createdAt || '').slice(0, 10) < finalChanceStartDate) continue;
+      const gradeEventDate = String(grade.updatedAt || grade.createdAt || exam.date || '').slice(0, 10);
+      if (finalChanceStartDate && gradeEventDate < finalChanceStartDate) continue;
+      if (manualDismissal && manualDismissalDate && gradeEventDate && gradeEventDate < manualDismissalDate) continue;
       if (!isExamOnOrAfterStudentRegistration(student, exam)) continue;
       if (normalizedLeaves.some((leave) => studentLeaveAppliesToExam(leave, student.id, exam))) continue;
       if (isExamWithinStudentGracePeriod(student, exam)) continue;
-      if (isProtectedLinkedSourceGrade(grade) && gradeHasAcademicEffect(grade, exam)) continue;
+      const gradeHasEffect = gradeHasAcademicEffect(grade, exam);
+      if (isProtectedLinkedSourceGrade(grade) && gradeHasEffect) continue;
+      if (manualDismissal && gradeHasEffect) hasAcademicEventAfterManualDismissal = true;
 
       if (grade.status === 'غش') {
         cheatCount += 1;
@@ -1177,6 +1206,11 @@ function recalculateStudentsFromAcademicRules(
           const penalty = examPenaltyValue(exam);
           opportunities -= penalty;
           addAutomaticLog(exam, grade.id, 'خصم تلقائي', penalty, `غياب في امتحان يومي: ${exam.name}`);
+          if (hasPriorDismissalEvent) {
+            setDismissal('فصل مؤقت', `غياب في امتحان يومي بعد فصل سابق: ${exam.name}`, 85, exam, grade.id);
+          } else if (opportunities <= 0) {
+            setDismissal('فصل مؤقت', `انتهاء الفرص بعد غياب في امتحان يومي: ${exam.name}`, 60, exam, grade.id);
+          }
         }
         continue;
       }
@@ -1195,9 +1229,16 @@ function recalculateStudentsFromAcademicRules(
           const penalty = examPenaltyValue(exam);
           opportunities -= penalty;
           addAutomaticLog(exam, grade.id, 'خصم تلقائي', penalty, `درجة ${score} ضمن الخصم في امتحان: ${exam.name}`);
+          if (hasPriorDismissalEvent) {
+            setDismissal('فصل مؤقت', `درجة خصم (${score}) بعد فصل سابق في امتحان يومي: ${exam.name}`, 85, exam, grade.id);
+          } else if (opportunities <= 0) {
+            setDismissal('فصل مؤقت', `انتهاء الفرص بعد درجة خصم (${score}) في امتحان: ${exam.name}`, 60, exam, grade.id);
+          }
         }
       }
     }
+
+    if (manualDismissal && !hasAcademicEventAfterManualDismissal) return student;
 
     opportunities = Math.max(0, opportunities);
     if (opportunities === 0 && Number(student.baseOpportunities || activeChapter?.opportunities || 0) > 0 && !dismissalType) {

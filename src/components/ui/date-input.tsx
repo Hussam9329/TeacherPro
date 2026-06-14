@@ -67,7 +67,7 @@ function DateInput({
   }, [disabled]);
 
   return (
-    <div className={cn("relative", className)}>
+    <div className="relative w-full">
       <input
         {...props}
         ref={inputRef}
@@ -102,6 +102,7 @@ function DateInput({
         onClick={openPicker}
         className={cn(
           "border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive flex h-10 w-full min-w-0 items-center justify-between gap-3 rounded-xl border bg-background/70 px-3.5 py-2 text-sm shadow-xs backdrop-blur transition-[color,box-shadow,border-color,background-color] outline-none focus-visible:ring-[3px] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
+          className,
           props["aria-invalid"] && "border-destructive ring-destructive/20",
         )}
       >
