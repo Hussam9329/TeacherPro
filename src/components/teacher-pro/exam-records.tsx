@@ -613,14 +613,8 @@ tr:nth-child(even) td { background: #f8fafc; }
                 ))}
               </div>
 
-              <div className="max-h-60 space-y-1 overflow-y-auto">
-                {rows.map((row) => (
-                  <div key={row.grade.id} className="flex items-center justify-between rounded-xl bg-muted/60 p-2 text-sm">
-                    <span className="truncate">{row.student?.name}</span>
-                    <div className="flex items-center gap-2"><span className="font-bold">{formatGradeScore(row.grade, exam, "—")}</span><Badge variant={row.cls.type === "ok" ? "default" : row.cls.type === "danger" ? "destructive" : row.cls.type === "warn" ? "secondary" : "outline"} className="text-[10px]">{row.cls.text}</Badge></div>
-                  </div>
-                ))}
-                {rows.length === 0 && <div className="empty-state py-6">لا توجد درجات مسجلة لهذا الامتحان بعد.</div>}
+              <div className="rounded-xl border border-dashed bg-muted/30 p-3 text-center text-xs text-muted-foreground">
+                تم إخفاء تفاصيل درجات الطلاب من سجل الامتحانات. يمكن مراجعة الدرجات من قائمة سجل الدرجات.
               </div>
             </CardContent>
           </Card>
