@@ -326,6 +326,57 @@ export function GradeEntryView() {
     void saveGrade(studentId, draft, { silent: true, skipReactivationWarning: true });
   };
 
+  const missingVisibleStudents = selectedExam
+    ? examStudents.filter((student) => {
+        const leave = getStudentLeaveForSelectedExam(student.id);
+        if (leave) return false;
+        if (!canEditGradeForStudent(student.id)) return false;
+        const grade = getGrade(student.id);
+        return !isGradeEntered(grade, selectedExam);
+      })
+    : [];
+
+  const handleMarkVisibleMissingAsAbsent = () => {
+    if (!selectedExam) return;
+    if (missingVisibleStudents.length === 0) {
+      toast.info("لا يوجد طلاب ظاهرون بدون درجة لتسجيلهم غائبين");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `سيتم تسجيل ${missingVisibleStudents.length} طالب ظاهر بدون درجة كغائب في امتحان ${selectedExam.name}. لن يتم تعديل أي درجة موجودة مسبقًا. هل تريد المتابعة؟`,
+    );
+    if (!confirmed) return;
+
+    const timestamp = new Date().toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" });
+    const nextDrafts: Record<string, DraftGrade> = {};
+    const nextSavedRows: Record<string, string> = {};
+    const nextEditableRows: Record<string, boolean> = {};
+
+    missingVisibleStudents.forEach((student) => {
+      const draft: DraftGrade = {
+        status: "غائب",
+        score: "",
+        notes: "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
+      };
+      addGrade({
+        studentId: student.id,
+        examId: selectedExam.id,
+        status: "غائب",
+        score: null,
+        notes: draft.notes,
+      });
+      nextDrafts[student.id] = draft;
+      nextSavedRows[student.id] = `تم تسجيله غائب ${timestamp}`;
+      nextEditableRows[student.id] = false;
+    });
+
+    setDrafts((prev) => ({ ...prev, ...nextDrafts }));
+    setSavedRows((prev) => ({ ...prev, ...nextSavedRows }));
+    setEditableRows((prev) => ({ ...prev, ...nextEditableRows }));
+    toast.success(`تم تسجيل ${missingVisibleStudents.length} طالب ظاهر كغائب`);
+  };
+
   const handleQuickScan = () => {
     const code = window.prompt("امسح QR/باركود أو اكتب كود الطالب للبحث");
     if (code?.trim()) setSearch(code.trim());
@@ -408,6 +459,15 @@ export function GradeEntryView() {
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleQuickScan}>بحث / مسح QR</Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleMarkVisibleMissingAsAbsent}
+              disabled={!selectedExam || missingVisibleStudents.length === 0}
+              title="يسجل الطلاب الظاهرين حاليًا الذين لا يملكون درجة محفوظة كغائبين"
+            >
+              تسجيل الجميع كغائب ({missingVisibleStudents.length})
+            </Button>
             {selectedExam && (
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <Badge>{selectedExam.type}</Badge>
