@@ -500,6 +500,7 @@ interface TeacherState {
   recalculateAcademicEffects: (studentIds?: string | string[]) => void;
 
   adjustOpportunities: (studentId: string, amount: number, reason: string) => void;
+  bulkAdjustOpportunities: (studentIds: string[], amount: number, reason: string) => { affected: number; skipped: number };
   resetOpportunities: (studentId: string) => void;
   undoOpportunityLog: (logId: string) => boolean;
 
@@ -2159,12 +2160,14 @@ export const useTeacherStore = create<TeacherState>()(
           return;
         }
         const action = amount > 0 ? 'إضافة' : 'خصم';
-        const log: OpportunityLog = { id: uid('ol'), studentId, examId: '', action, amount: Math.abs(amount), reason, date: todayISO(), chapterId: stateBefore.activeChapterForCourse(studentBefore?.courseId || '')?.id || '' };
+        const normalizedAmount = Math.max(1, Math.trunc(Math.abs(Number(amount) || 0)));
+        const signedAmount = amount > 0 ? normalizedAmount : -normalizedAmount;
+        const log: OpportunityLog = { id: uid('ol'), studentId, examId: '', action, amount: normalizedAmount, reason, date: todayISO(), chapterId: stateBefore.activeChapterForCourse(studentBefore?.courseId || '')?.id || '' };
         set((s) => {
-          const students = s.students.map((st) => st.id === studentId ? { ...st, opportunities: Math.max(0, st.opportunities + amount) } : st);
+          const students = s.students.map((st) => st.id === studentId ? { ...st, opportunities: Math.max(0, st.opportunities + signedAmount) } : st);
           return { students, opportunityLogs: [log, ...s.opportunityLogs] };
         });
-        get().logAction('إدارة الفرص', amount > 0 ? 'إضافة فرصة' : 'خصم فرصة', `${get().studentName(studentId)} - ${Math.abs(amount)} - ${reason}`);
+        get().logAction('إدارة الفرص', amount > 0 ? 'إضافة فرصة' : 'خصم فرصة', `${get().studentName(studentId)} - ${normalizedAmount} - ${reason}`);
         const student = get().students.find((s) => s.id === studentId);
         if (student) syncToServer(get, () => studentApi.update(studentId, { opportunities: student.opportunities }));
         syncToServer(get, () => opportunityLogApi.add(log as unknown as Record<string, unknown>));
@@ -2176,6 +2179,68 @@ export const useTeacherStore = create<TeacherState>()(
             hasFinalChance ? 'عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة' : 'انتهاء الفرص',
           );
         }
+      },
+      bulkAdjustOpportunities: (studentIds, amount, reason) => {
+        const stateBefore = get();
+        const normalizedAmount = Math.max(1, Math.trunc(Math.abs(Number(amount) || 0)));
+        const signedAmount = amount > 0 ? normalizedAmount : -normalizedAmount;
+        const action = signedAmount > 0 ? 'إضافة' : 'خصم';
+        const uniqueStudentIds = Array.from(new Set(studentIds.filter(Boolean)));
+        const eligibleStudents = uniqueStudentIds
+          .map((id) => stateBefore.students.find((student) => student.id === id) || null)
+          .filter((student): student is Student => Boolean(student && stateBefore.activeChapterForCourse(student.courseId)));
+        const skipped = uniqueStudentIds.length - eligibleStudents.length;
+        if (!eligibleStudents.length) {
+          get().logAction('إدارة الفرص', 'رفض عملية جماعية بدون طلاب مؤهلين', reason);
+          return { affected: 0, skipped };
+        }
+
+        const batchId = uid('batch');
+        const datedReason = `عملية جماعية (${batchId}): ${reason}`;
+        const logs: OpportunityLog[] = eligibleStudents.map((student) => ({
+          id: uid('ol'),
+          studentId: student.id,
+          examId: '',
+          action,
+          amount: normalizedAmount,
+          reason: datedReason,
+          date: todayISO(),
+          chapterId: stateBefore.activeChapterForCourse(student.courseId)?.id || '',
+        }));
+
+        set((s) => ({
+          students: s.students.map((student) => {
+            if (!eligibleStudents.some((eligible) => eligible.id === student.id)) return student;
+            return { ...student, opportunities: Math.max(0, student.opportunities + signedAmount) };
+          }),
+          opportunityLogs: [...logs, ...s.opportunityLogs],
+        }));
+
+        get().logAction(
+          'إدارة الفرص',
+          signedAmount > 0 ? 'إضافة فرص جماعية' : 'خصم فرص جماعي',
+          `${eligibleStudents.length} طالب - ${normalizedAmount} - ${reason}${skipped ? ` - تم تجاوز ${skipped} بدون فصل نشط` : ''}`,
+        );
+
+        const nextState = get();
+        eligibleStudents.forEach((studentBefore) => {
+          const student = nextState.students.find((item) => item.id === studentBefore.id);
+          if (student) syncToServer(get, () => studentApi.update(student.id, { opportunities: student.opportunities }), { description: 'تحديث فرص طالب ضمن عملية جماعية' });
+        });
+        logs.forEach((log) => syncToServer(get, () => opportunityLogApi.add(log as unknown as Record<string, unknown>), { description: 'حفظ حركة فرص جماعية' }));
+
+        nextState.students
+          .filter((student) => eligibleStudents.some((eligible) => eligible.id === student.id) && student.opportunities === 0 && student.status === 'نشط')
+          .forEach((student) => {
+            const hasFinalChance = hasFinalChanceForStudent(get().opportunityLogs, student.id);
+            get().dismissStudent(
+              student.id,
+              hasFinalChance ? 'فصل نهائي' : 'فصل مؤقت',
+              hasFinalChance ? 'عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة' : 'انتهاء الفرص',
+            );
+          });
+
+        return { affected: eligibleStudents.length, skipped };
       },
       addStudentLeave: (leaveData) => {
         const stateBefore = get();

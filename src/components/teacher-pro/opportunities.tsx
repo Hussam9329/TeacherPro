@@ -35,6 +35,7 @@ export function OpportunitiesView() {
     grades,
     opportunityLogs,
     adjustOpportunities,
+    bulkAdjustOpportunities,
     resetOpportunities,
     undoOpportunityLog,
     courseName,
@@ -43,6 +44,7 @@ export function OpportunitiesView() {
 
   const [filterCourseId, setFilterCourseId] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterOpportunityCount, setFilterOpportunityCount] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
@@ -56,6 +58,9 @@ export function OpportunitiesView() {
   }>({ studentId: "", type: "add", open: false });
   const [amount, setAmount] = useState(1);
   const [reason, setReason] = useState("");
+  const [bulkActionDialog, setBulkActionDialog] = useState<{ type: "add" | "deduct"; open: boolean }>({ type: "add", open: false });
+  const [bulkAmount, setBulkAmount] = useState(1);
+  const [bulkReason, setBulkReason] = useState("");
   const { locked: isApplyingAction, runLocked: runActionLocked } =
     useActionLock();
 
@@ -68,19 +73,47 @@ export function OpportunitiesView() {
       if (filterStatus === 'no-opportunities' && !(s.opportunities === 0 && s.status === 'نشط')) return false;
       if (filterStatus === 'temporary-dismissal' && !(s.status === 'مفصول' && s.dismissalType === 'فصل مؤقت')) return false;
       if (filterStatus === 'final-dismissal' && !(s.status === 'مفصول' && s.dismissalType === 'فصل نهائي')) return false;
+      if (filterOpportunityCount && s.opportunities !== Number(filterOpportunityCount)) return false;
       if (search && !searchAny(search, [s.name, s.code, s.phone, s.parentPhone, s.telegram, s.school, s.subSite, s.status, s.dismissalType, s.dismissalReason, s.dismissalNotes])) return false;
       return true;
     });
-  }, [students, filterCourseId, filterStatus, search]);
+  }, [students, filterCourseId, filterStatus, filterOpportunityCount, search]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  const opportunityCountOptions = useMemo(() => {
+    return Array.from(new Set(students.map((student) => Number(student.opportunities || 0))))
+      .filter((count) => Number.isFinite(count) && count >= 0)
+      .sort((a, b) => a - b);
+  }, [students]);
+
+  const bulkEligibleStudents = useMemo(
+    () => filtered.filter((student) => Boolean(activeChapterForCourse(student.courseId))),
+    [filtered, activeChapterForCourse],
+  );
+
+  const bulkSkippedCount = filtered.length - bulkEligibleStudents.length;
+
+  const activeCourseFilterName = filterCourseId ? courseName(filterCourseId) : "كل الدورات";
+  const activeStatusFilterName = filterStatus
+    ? ({
+        active: "طلاب نشطون",
+        dismissed: "طلاب مفصولون",
+        "has-opportunities": "نشط ولديه فرص",
+        "no-opportunities": "نشط بدون فرص",
+        "temporary-dismissal": "فصل مؤقت",
+        "final-dismissal": "فصل نهائي",
+      } as Record<string, string>)[filterStatus] || "حالة مخصصة"
+    : "كل الحالات";
+  const activeOpportunityFilterName = filterOpportunityCount ? `${filterOpportunityCount} فرصة` : "كل أعداد الفرص";
 
 
   const clearFilters = () => {
     setSearch("");
     setFilterCourseId("");
     setFilterStatus("");
+    setFilterOpportunityCount("");
     setPage(1);
   };
 
@@ -149,6 +182,38 @@ export function OpportunitiesView() {
     setAmount(1);
   });
 
+  const handleBulkAction = runActionLocked(async () => {
+    if (!bulkEligibleStudents.length) {
+      toast.error("لا يوجد طلاب مؤهلون ضمن الفلترة الحالية");
+      return;
+    }
+    if (!bulkReason.trim()) {
+      toast.error("يرجى إدخال سبب العملية الجماعية");
+      return;
+    }
+    const normalizedAmount = Math.max(1, Math.trunc(Number(bulkAmount) || 1));
+    const scopeReason = [
+      `النطاق: ${activeCourseFilterName}`,
+      `الحالة: ${activeStatusFilterName}`,
+      `عدد الفرص: ${activeOpportunityFilterName}`,
+      search.trim() ? `البحث: ${search.trim()}` : "",
+      `السبب: ${bulkReason.trim()}`,
+    ].filter(Boolean).join(" - ");
+    const result = bulkAdjustOpportunities(
+      bulkEligibleStudents.map((student) => student.id),
+      bulkActionDialog.type === "deduct" ? -normalizedAmount : normalizedAmount,
+      scopeReason,
+    );
+    if (result.affected === 0) {
+      toast.error("لم يتم تطبيق العملية على أي طالب");
+      return;
+    }
+    toast.success(`${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${result.affected} طالب${result.skipped ? `، وتم تجاوز ${result.skipped} بدون فصل نشط` : ""}`);
+    setBulkActionDialog({ type: "add", open: false });
+    setBulkReason("");
+    setBulkAmount(1);
+  });
+
   const exportCSV = () => {
     const headers = [
       "الطالب",
@@ -185,7 +250,7 @@ export function OpportunitiesView() {
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">فلاتر إدارة الفرص</CardTitle></CardHeader>
         <CardContent className="p-4 pt-2">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
             <div className="space-y-1 xl:col-span-2">
               <Label htmlFor="opp-search" className="text-xs font-bold">بحث عن طالب</Label>
               <Input id="opp-search" name="search" autoComplete="off" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="اسم الطالب / الكود / الهاتف / المدرسة" />
@@ -198,7 +263,7 @@ export function OpportunitiesView() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="opp-status" className="text-xs font-bold">حالة الطالب / الفرص</Label>
+              <Label htmlFor="opp-status" className="text-xs font-bold">حالة الطالب</Label>
               <Select name="status" value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
                 <SelectTrigger id="opp-status"><SelectValue placeholder="كل الحالات" /></SelectTrigger>
                 <SelectContent>
@@ -206,7 +271,45 @@ export function OpportunitiesView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-end gap-2"><Button variant="outline" className="h-10 flex-1" onClick={clearFilters} disabled={!search && !filterCourseId && !filterStatus}>مسح</Button><Button variant="outline" className="h-10 flex-1" onClick={exportCSV}>CSV</Button></div>
+            <div className="space-y-1">
+              <Label htmlFor="opp-count" className="text-xs font-bold">عدد الفرص</Label>
+              <Select name="opportunityCount" value={filterOpportunityCount || "all"} onValueChange={(v) => { setFilterOpportunityCount(v === "all" ? "" : v); setPage(1); }}>
+                <SelectTrigger id="opp-count"><SelectValue placeholder="كل الأعداد" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل أعداد الفرص</SelectItem>
+                  {opportunityCountOptions.map((count) => <SelectItem key={count} value={String(count)}>{count} فرصة</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end gap-2"><Button variant="outline" className="h-10 flex-1" onClick={clearFilters} disabled={!search && !filterCourseId && !filterStatus && !filterOpportunityCount}>مسح</Button><Button variant="outline" className="h-10 flex-1" onClick={exportCSV}>CSV</Button></div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-black">عمليات جماعية حسب الفلترة الحالية</p>
+            <p className="text-xs text-muted-foreground">
+              سيطبق الإجراء على {bulkEligibleStudents.length} طالب من أصل {filtered.length} ظاهر حالياً حسب الفلاتر. {bulkSkippedCount > 0 ? `تم استثناء ${bulkSkippedCount} طالب بدون فصل نشط.` : ""}
+            </p>
+            <p className="text-[11px] text-muted-foreground">النطاق: {activeCourseFilterName} • {activeStatusFilterName} • {activeOpportunityFilterName}{search.trim() ? ` • بحث: ${search.trim()}` : ""}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+              disabled={bulkEligibleStudents.length === 0}
+              onClick={() => setBulkActionDialog({ type: "add", open: true })}
+            >
+              إضافة للجميع الظاهرين
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={bulkEligibleStudents.length === 0}
+              onClick={() => setBulkActionDialog({ type: "deduct", open: true })}
+            >
+              خصم من الجميع الظاهرين
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -501,6 +604,55 @@ export function OpportunitiesView() {
               </div>
             </div>
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={bulkActionDialog.open}
+        onOpenChange={(open) => setBulkActionDialog((current) => ({ ...current, open }))}
+      >
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle>
+              {bulkActionDialog.type === "add" ? "إضافة فرص لجميع الطلاب الظاهرين" : "خصم فرص من جميع الطلاب الظاهرين"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-2xl border bg-muted/50 p-3 text-sm leading-6">
+              <p className="font-bold">سيتم تطبيق العملية على {bulkEligibleStudents.length} طالب مؤهل.</p>
+              <p className="text-xs text-muted-foreground">الفلاتر: {activeCourseFilterName} • {activeStatusFilterName} • {activeOpportunityFilterName}{search.trim() ? ` • بحث: ${search.trim()}` : ""}</p>
+              {bulkSkippedCount > 0 ? <p className="text-xs font-semibold text-amber-600">سيتم تجاوز {bulkSkippedCount} طالب لأنهم بلا فصل نشط مرتبط بالدورة.</p> : null}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bulk-opp-amount">عدد الفرص</Label>
+              <Input
+                id="bulk-opp-amount"
+                name="bulkAmount"
+                type="number"
+                min={1}
+                autoComplete="off"
+                value={bulkAmount}
+                onChange={(e) => setBulkAmount(Math.max(1, Number(toLatinDigits(e.target.value)) || 1))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="bulk-opp-reason">سبب الإضافة / الخصم</Label>
+              <Input
+                id="bulk-opp-reason"
+                name="bulkReason"
+                autoComplete="off"
+                value={bulkReason}
+                onChange={(e) => setBulkReason(e.target.value)}
+                placeholder="مثلاً: سلوك ممتاز، إعفاء، مخالفة واجب، شك..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkActionDialog((current) => ({ ...current, open: false }))}>إلغاء</Button>
+            <Button onClick={handleBulkAction} disabled={isApplyingAction || bulkEligibleStudents.length === 0} variant={bulkActionDialog.type === "deduct" ? "destructive" : "default"}>
+              {bulkActionDialog.type === "add" ? "إضافة للجميع" : "خصم من الجميع"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
