@@ -170,6 +170,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     updateStudentCall,
     addStudentNote,
     deleteStudentNote,
+    reactivateStudent,
     courseName,
     activeChapterForCourse,
   } = useTeacherStore();
@@ -607,7 +608,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         dismissalReason: dismissalInfo.reason,
         dismissalDate: dismissalInfo.date,
       });
-      toast.success("تم تثبيت التعهد وربطه بسجل الفصل");
+      reactivateStudent(student.id);
+      toast.success("تم تثبيت التعهد وإعادة تفعيل الطالب حسب شروط إعادة التفعيل");
       return;
     }
     if (existing) {
