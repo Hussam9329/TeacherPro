@@ -556,7 +556,7 @@ export function StudentRegisterView() {
         </CardHeader>
 
         <CardContent className="p-4 md:p-6 lg:p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} autoComplete="off" className="space-y-6">
             <StepProgress steps={formSteps} />
             <section className="surface-card p-5 md:p-6">
               <SectionTitle
@@ -577,7 +577,7 @@ export function StudentRegisterView() {
                     <Input
                       id="reg-name"
                       name="name"
-                      autoComplete="name"
+                      autoComplete="off"
                       value={form.name}
                       onChange={(e) => updateForm("name", e.target.value)}
                       required
@@ -611,7 +611,7 @@ export function StudentRegisterView() {
                     <Input
                       id="reg-school"
                       name="school"
-                      autoComplete="organization"
+                      autoComplete="off"
                       value={form.school}
                       onChange={(e) => updateForm("school", e.target.value)}
                       required
@@ -675,7 +675,7 @@ export function StudentRegisterView() {
                     <Input
                       id="reg-telegram"
                       name="telegram"
-                      autoComplete="username"
+                      autoComplete="off"
                       value={form.telegram}
                       onChange={(e) =>
                         setForm((prev) => ({
@@ -707,7 +707,7 @@ export function StudentRegisterView() {
                     <Input
                       id="reg-phone"
                       name="phone"
-                      autoComplete="tel"
+                      autoComplete="off"
                       value={form.phone}
                       onChange={(e) => updatePhoneForm("phone", e.target.value)}
                       required
@@ -738,7 +738,7 @@ export function StudentRegisterView() {
                     <Input
                       id="reg-parentPhone"
                       name="parentPhone"
-                      autoComplete="tel"
+                      autoComplete="off"
                       value={form.parentPhone}
                       onChange={(e) =>
                         updatePhoneForm("parentPhone", e.target.value)

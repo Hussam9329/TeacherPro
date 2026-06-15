@@ -74,6 +74,10 @@ function DateInput({
         id={controlId}
         name={name}
         type="date"
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="none"
+        spellCheck={false}
         value={normalizedValue}
         min={min}
         max={max}

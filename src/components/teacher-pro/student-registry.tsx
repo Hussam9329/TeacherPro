@@ -1113,7 +1113,7 @@ export function StudentRegistryView() {
                       <Input
                         id="edit-name"
                         name="name"
-                        autoComplete="name"
+                        autoComplete="off"
                         value={editDialog.form.name}
                         onChange={(e) => updateEditForm("name", e.target.value)}
                         required
@@ -1126,7 +1126,7 @@ export function StudentRegistryView() {
                       <Input
                         id="edit-school"
                         name="school"
-                        autoComplete="organization"
+                        autoComplete="off"
                         value={editDialog.form.school}
                         onChange={(e) =>
                           updateEditForm("school", e.target.value)
@@ -1160,7 +1160,7 @@ export function StudentRegistryView() {
                       <Input
                         id="edit-telegram"
                         name="telegram"
-                        autoComplete="username"
+                        autoComplete="off"
                         value={editDialog.form.telegram}
                         onChange={(e) => updateEditTelegram(e.target.value)}
                         placeholder="اختياري - username بدون @"
@@ -1186,7 +1186,7 @@ export function StudentRegistryView() {
                       <Input
                         id="edit-phone"
                         name="phone"
-                        autoComplete="tel"
+                        autoComplete="off"
                         value={editDialog.form.phone}
                         onChange={(e) =>
                           updateEditPhone("phone", e.target.value)
@@ -1204,7 +1204,7 @@ export function StudentRegistryView() {
                       <Input
                         id="edit-parentPhone"
                         name="parentPhone"
-                        autoComplete="tel"
+                        autoComplete="off"
                         value={editDialog.form.parentPhone}
                         onChange={(e) =>
                           updateEditPhone("parentPhone", e.target.value)
