@@ -136,10 +136,11 @@ export function GradeRecordsView() {
       if (filterExamId && grade.examId !== filterExamId) return false;
       const cls = classification(grade, exam, student);
       if (filterStatus) {
-        if (filterStatus === "محاسبة رسوب" && cls.kind !== "academic-accounting") return false;
+        if (filterStatus === "ضمن السماح" && cls.kind !== "grace") return false;
+        else if (filterStatus === "محاسبة رسوب" && cls.kind !== "academic-accounting") return false;
         else if (filterStatus === "الناجحين" && cls.kind !== "pass") return false;
         else if (filterStatus === "المخصومين" && !["deducted", "dismissal", "cheat"].includes(cls.kind)) return false;
-        else if (!["محاسبة رسوب", "الناجحين", "المخصومين"].includes(filterStatus) && grade.status !== filterStatus) return false;
+        else if (!["ضمن السماح", "محاسبة رسوب", "الناجحين", "المخصومين"].includes(filterStatus) && (cls.kind === "grace" || grade.status !== filterStatus)) return false;
       }
       if (filterCourseId && !exam.courseIds.includes(filterCourseId)) return false;
       return true;
@@ -236,7 +237,7 @@ export function GradeRecordsView() {
               <Label htmlFor="grade-records-status" className="text-xs">الحالة</Label>
               <Select value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
                 <SelectTrigger id="grade-records-status"><SelectValue placeholder="الكل" /></SelectTrigger>
-                <SelectContent><SelectItem value="all">الكل</SelectItem><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="غش">غش</SelectItem><SelectItem value="محاسبة رسوب">محاسبة رسوب</SelectItem><SelectItem value="الناجحين">الناجحين</SelectItem><SelectItem value="المخصومين">المخصومين</SelectItem></SelectContent>
+                <SelectContent><SelectItem value="all">الكل</SelectItem><SelectItem value="درجة">درجة</SelectItem><SelectItem value="غائب">غائب</SelectItem><SelectItem value="غش">غش</SelectItem><SelectItem value="ضمن السماح">ضمن السماح</SelectItem><SelectItem value="محاسبة رسوب">محاسبة رسوب</SelectItem><SelectItem value="الناجحين">الناجحين</SelectItem><SelectItem value="المخصومين">المخصومين</SelectItem></SelectContent>
               </Select>
             </div>
             <div className="space-y-1">

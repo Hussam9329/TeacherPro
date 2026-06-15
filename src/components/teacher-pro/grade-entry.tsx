@@ -22,6 +22,7 @@ import {
   isExamAvailableForEntry,
   isExamOnOrAfterStudentRegistration,
   isGradeEntered,
+  isExamWithinStudentGracePeriod,
   isScoreInsideExamRange,
   splitSelection,
   studentMatchesExamMainSites,
@@ -108,6 +109,12 @@ export function GradeEntryView() {
       }
       return leave.examId === selectedExam.id;
     });
+  };
+
+  const isStudentInGraceForSelectedExam = (studentId: string) => {
+    if (!selectedExam) return false;
+    const student = students.find((item) => item.id === studentId);
+    return Boolean(student && isExamWithinStudentGracePeriod(student, selectedExam));
   };
 
   const gradeHasAutomaticEffect = (studentId: string, examId: string) =>
@@ -224,11 +231,13 @@ export function GradeEntryView() {
         if (!studentMatchesExamMainSites(student, selectedMainSites)) return false;
         if (filterCourseId && student.courseId !== filterCourseId) return false;
         if (search && !searchAny(search, [student.name, student.code, student.telegram, student.phone, student.subSite, student.locationScope])) return false;
-        const hasLeave = studentLeaves.some((leave) => leave.studentId === student.id && leave.examId === selectedExam.id);
+        const hasLeave = Boolean(getStudentLeaveForSelectedExam(student.id));
+        const hasGrace = isExamWithinStudentGracePeriod(student, selectedExam);
         const grade = grades.find((g) => g.studentId === student.id && g.examId === selectedExam.id);
         const entered = !hasLeave && isGradeEntered(grade, selectedExam);
+        if (filterStatus === "ضمن السماح" && !hasGrace) return false;
         if (filterStatus === "غير مسجل" && (entered || hasLeave)) return false;
-        if (filterStatus && filterStatus !== "غير مسجل" && (hasLeave || !entered || grade?.status !== filterStatus)) return false;
+        if (filterStatus && !["غير مسجل", "ضمن السماح"].includes(filterStatus) && (hasLeave || !entered || hasGrace || grade?.status !== filterStatus)) return false;
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
@@ -476,6 +485,7 @@ export function GradeEntryView() {
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   <SelectItem value="غير مسجل">غير مسجل</SelectItem>
+                  <SelectItem value="ضمن السماح">ضمن السماح</SelectItem>
                   {statusOptions.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -569,6 +579,9 @@ export function GradeEntryView() {
                           {leave && (
                             <Badge variant="secondary" className="text-[10px]">الطالب مجاز</Badge>
                           )}
+                          {!leave && isStudentInGraceForSelectedExam(student.id) && (
+                            <Badge variant="outline" className="text-[10px]">ضمن فترة السماح</Badge>
+                          )}
                           {student.status === "مفصول" && (
                             <Badge variant={canEdit ? "secondary" : "destructive"} className="text-[10px]">
                               {canEdit ? "مفصول - يمكن تصحيح سبب الفصل" : "مفصول - إدخال مقفل"}
@@ -582,6 +595,11 @@ export function GradeEntryView() {
                         {leave && (
                           <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-300">
                             الطالب مجاز لهذا الامتحان ولا يمكن إدخال درجة له{leave.reason ? `: ${leave.reason}` : ""}
+                          </p>
+                        )}
+                        {!leave && isStudentInGraceForSelectedExam(student.id) && (
+                          <p className="mt-1 text-[11px] text-sky-700 dark:text-sky-300">
+                            هذا الامتحان داخل فترة السماح؛ تحفظ الدرجة للمتابعة فقط ولا تخصم فرصاً ولا تسبب فصلاً.
                           </p>
                         )}
                         {student.status === "مفصول" && student.dismissalReason && (

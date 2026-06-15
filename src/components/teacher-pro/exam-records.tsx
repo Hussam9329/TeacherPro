@@ -182,10 +182,13 @@ export function ExamRecordsView() {
 
   const examStats = (examId: string) => {
     const rows = examRows(examId);
+    const protectedKinds = ["grace", "excused", "before-registration", "missing"];
+    const accountableRows = rows.filter((row) => !protectedKinds.includes(row.cls.kind));
     return {
       rows,
       passCount: rows.filter((row) => row.cls.kind === "pass").length,
-      notPassedCount: rows.filter((row) => row.cls.kind !== "pass").length,
+      notPassedCount: accountableRows.filter((row) => row.cls.kind !== "pass").length,
+      protectedCount: rows.filter((row) => protectedKinds.includes(row.cls.kind)).length,
     };
   };
 
@@ -252,6 +255,7 @@ export function ExamRecordsView() {
     const passCount = rows.filter((row) => row.cls.kind === "pass").length;
     const belowPassCount = rows.filter((row) => row.cls.kind === "academic-accounting" || row.cls.kind === "fail").length;
     const deductedCount = rows.filter((row) => row.cls.kind === "deducted" || row.cls.kind === "dismissal" || row.cls.kind === "cheat").length;
+    const protectedCount = rows.filter((row) => ["grace", "excused", "before-registration"].includes(row.cls.kind)).length;
 
     const tableRows = rows.map((row, index) => `
       <tr>
@@ -308,6 +312,7 @@ tr:nth-child(even) td { background: #f8fafc; }
     <div class="stat"><strong>${passCount}</strong><span>ناجح</span></div>
     <div class="stat"><strong>${belowPassCount}</strong><span>محاسبة رسوب / رسوب</span></div>
     <div class="stat"><strong>${deductedCount}</strong><span>خصم / فصل / غش</span></div>
+    <div class="stat"><strong>${protectedCount}</strong><span>سماح / إجازة</span></div>
   </section>
   <table><thead><tr><th>#</th><th>الكود</th><th>الطالب</th><th>الدورة</th><th>الحالة</th><th>الدرجة</th><th>التصنيف</th>${extraHeaders}</tr></thead><tbody>${tableRows}</tbody></table>
   <div class="footer"><span>تم إنشاء التقرير آلياً</span><span>${formatAppDateTime(new Date())}</span></div>
@@ -581,7 +586,7 @@ tr:nth-child(even) td { background: #f8fafc; }
   const renderCards = () => (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       {filteredExams.map((exam) => {
-        const { rows, passCount, notPassedCount } = examStats(exam.id);
+        const { rows, passCount, notPassedCount, protectedCount } = examStats(exam.id);
         const details = examDetails(exam, rows.length);
         return (
           <Card key={exam.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10">
@@ -599,9 +604,10 @@ tr:nth-child(even) td { background: #f8fafc; }
               </div>
             </CardHeader>
             <CardContent>
-              <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+              <div className="mb-3 grid grid-cols-2 gap-2 text-center md:grid-cols-4">
                 <div className="rounded bg-emerald-50 p-2 dark:bg-emerald-950/40"><p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{passCount}</p><p className="text-[10px] text-muted-foreground">ناجح</p></div>
-                <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40"><p className="text-lg font-bold text-rose-600 dark:text-rose-400">{notPassedCount}</p><p className="text-[10px] text-muted-foreground">غير ناجح/غائب</p></div>
+                <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40"><p className="text-lg font-bold text-rose-600 dark:text-rose-400">{notPassedCount}</p><p className="text-[10px] text-muted-foreground">محاسب/غائب</p></div>
+                <div className="rounded bg-cyan-50 p-2 dark:bg-cyan-950/40"><p className="text-lg font-bold text-cyan-600 dark:text-cyan-400">{protectedCount}</p><p className="text-[10px] text-muted-foreground">سماح/إجازة</p></div>
                 <div className="rounded bg-sky-50 p-2 dark:bg-sky-950/40"><p className="text-lg font-bold text-sky-600 dark:text-sky-400">{rows.length}</p><p className="text-[10px] text-muted-foreground">إجمالي</p></div>
               </div>
 

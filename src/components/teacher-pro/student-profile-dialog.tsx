@@ -13,7 +13,7 @@ import {
 } from "@/lib/teacher-store";
 import { Badge } from "@/components/ui/badge";
 import { formatAppDate } from "@/lib/format";
-import { formatGradeScore } from "@/lib/exam-utils";
+import { formatGradeScore, isExamWithinStudentGracePeriod } from "@/lib/exam-utils";
 import { ArrowRightIcon } from "lucide-react";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "actions";
@@ -276,14 +276,21 @@ export function StudentProfileDialog({
   if (!open || !student) return null;
 
   const activeChapter = activeChapterForCourse(student.courseId);
+  const gradeExam = (grade: Grade) => exams.find((item) => item.id === grade.examId);
+  const gradeInsideGrace = (grade: Grade) => {
+    const exam = gradeExam(grade);
+    return Boolean(exam && isExamWithinStudentGracePeriod(student, exam));
+  };
+  const accountableStudentGrades = studentGrades.filter((grade) => !gradeInsideGrace(grade));
+  const graceGradeCount = studentGrades.length - accountableStudentGrades.length;
   const examCount = new Set(studentGrades.map((grade) => grade.examId)).size;
-  const absentCount = studentGrades.filter((grade) => grade.status === "غائب").length;
-  const successCount = studentGrades.filter((grade) => {
-    const exam = exams.find((item) => item.id === grade.examId);
+  const absentCount = accountableStudentGrades.filter((grade) => grade.status === "غائب").length;
+  const successCount = accountableStudentGrades.filter((grade) => {
+    const exam = gradeExam(grade);
     return grade.status === "درجة" && grade.score !== null && exam && Number(grade.score) >= Number(exam.passMark);
   }).length;
-  const failedCount = studentGrades.filter((grade) => {
-    const exam = exams.find((item) => item.id === grade.examId);
+  const failedCount = accountableStudentGrades.filter((grade) => {
+    const exam = gradeExam(grade);
     return grade.status === "درجة" && grade.score !== null && exam && Number(grade.score) < Number(exam.passMark);
   }).length;
   const opportunityText = activeChapter ? `${student.opportunities}/${student.baseOpportunities}` : "0/0";
@@ -295,7 +302,8 @@ export function StudentProfileDialog({
     { id: "exams", label: "الامتحانات", value: examCount, hint: "عدد الامتحانات" },
     { id: "opportunities", label: "الفرص", value: opportunityText, hint: "المتبقي / الأساسي" },
     { id: "actions", label: "الإجراءات", value: studentActions.length, hint: "حذف/فصل/إعادة تفعيل" },
-    { id: "details", label: "التفاصيل والغيابات", value: absentCount, hint: "عدد الغيابات" },
+    { id: "details", label: "التفاصيل والغيابات", value: absentCount, hint: "عدد الغيابات المحتسبة" },
+    { id: "grades", label: "ضمن السماح", value: graceGradeCount, hint: "درجات محفوظة بدون خصم" },
   ];
 
   return (
@@ -312,7 +320,7 @@ export function StudentProfileDialog({
                 <Badge variant={student.status === "نشط" ? "default" : "destructive"}>{student.status}</Badge>
                 <Badge variant="outline">{student.code}</Badge>
                 <Badge variant="secondary" className="max-w-full truncate">{courseName(student.courseId)}</Badge>
-                <Badge variant="outline">فرص: {opportunityText}</Badge>
+                <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary font-bold">فرص: {opportunityText}</Badge>
               </div>
               <h2 id="student-profile-title" className="break-words text-2xl font-black sm:text-3xl">{student.name}</h2>
               <p className="break-words text-xs leading-6 text-muted-foreground sm:text-sm">
@@ -336,7 +344,7 @@ export function StudentProfileDialog({
             <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
               {cards.map((item) => (
                 <button
-                  key={item.id}
+                  key={`${item.id}-${item.label}`}
                   type="button"
                   onClick={() => setTab(item.id)}
                   className={`min-w-0 rounded-2xl border p-3 text-right shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md sm:rounded-3xl sm:p-4 ${
@@ -404,6 +412,7 @@ export function StudentProfileDialog({
                 <div className="space-y-2">
                   {studentGrades.length === 0 ? <p className="empty-state py-8">لا توجد درجات لهذا الطالب</p> : studentGrades.map((grade) => {
                     const exam = exams.find((item) => item.id === grade.examId);
+                    const withinGrace = Boolean(exam && isExamWithinStudentGracePeriod(student, exam));
                     return (
                       <div key={grade.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
                         <div className="min-w-0">
@@ -411,7 +420,11 @@ export function StudentProfileDialog({
                           <p className="text-xs text-muted-foreground">{formatAppDate(exam?.date)}</p>
                           {grade.notes ? <p className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
                         </div>
-                        <Badge className="w-fit" variant={grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : "secondary"}>{grade.status}</Badge>
+                        <div className="flex flex-wrap gap-1">
+                          {withinGrace && <Badge className="w-fit" variant="outline">ضمن السماح</Badge>}
+                          <Badge className="w-fit" variant={withinGrace ? "outline" : grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : "secondary"}>{grade.status}</Badge>
+                          {opportunityText !== "0/0" && <Badge variant="outline" className="text-[10px]">فرص: {opportunityText}</Badge>}
+                        </div>
                         <span className="font-black">{formatScore(grade, exam)}</span>
                       </div>
                     );
@@ -427,9 +440,10 @@ export function StudentProfileDialog({
                   {studentGrades.length === 0 ? <p className="empty-state py-8 lg:col-span-2">لا توجد امتحانات مسجلة لهذا الطالب</p> : studentGrades.map((grade) => {
                     const exam = exams.find((item) => item.id === grade.examId);
                     if (!exam) return null;
+                    const withinGrace = isExamWithinStudentGracePeriod(student, exam);
                     return (
                       <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
-                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><Badge>{grade.status}</Badge></div>
+                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{withinGrace && <Badge variant="outline">ضمن السماح</Badge>}<Badge>{grade.status}</Badge></div></div>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{formatGradeScore(grade, exam, "—")}</b><p>درجة الطالب</p></div></div>
                         {grade.notes ? <p className="mt-3 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
                       </div>

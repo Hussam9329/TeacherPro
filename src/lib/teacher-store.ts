@@ -1902,6 +1902,9 @@ export const useTeacherStore = create<TeacherState>()(
           description: 'تعديل بيانات طالب',
           rollback: () => set({ students: previousStudents }),
         });
+        if (updates.accountingGraceDays !== undefined || updates.createdAt !== undefined) {
+          get().recalculateAcademicEffects(id);
+        }
         return { ok: true, message: 'تم تعديل بيانات الطالب' };
       },
       deleteStudent: (id) => {

@@ -31,6 +31,7 @@ import {
   isExamOnOrAfterStudentRegistration,
   formatGradeScore,
   isGradeEntered,
+  isExamWithinStudentGracePeriod,
   splitSelection,
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
@@ -221,6 +222,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const buildCallRowsForExam = (exam: Exam): CallRow[] => {
     return eligibleStudentsForExam(exam).flatMap<CallRow>((student) => {
       if (studentHasLeaveForExam(student.id, exam.id)) return [];
+      if (isExamWithinStudentGracePeriod(student, exam)) return [];
       const grade = getGrade(student.id, exam.id);
       const entered = isGradeEntered(grade, exam);
       if (!entered) return [];

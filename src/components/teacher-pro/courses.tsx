@@ -747,23 +747,36 @@ export function CoursesView() {
         open={editDialog.open}
         onOpenChange={(o) => setEditDialog(prev => ({ ...prev, open: o }))}
       >
-        <DialogContent dir="rtl" className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>تعديل الدورة</DialogTitle>
-            <DialogDescription>عدّل إعدادات الدورة. لا يمكنك إزالة خيارات يستخدمها طلاب مسجلون.</DialogDescription>
-          </DialogHeader>
-          <CourseBuilderForm
-            form={editDialog.form}
-            setForm={(action) =>
-              setEditDialog(prev => ({
-                ...prev,
-                form: typeof action === "function" ? action(prev.form) : action,
-              }))
-            }
-            onSubmit={handleEditSave}
-            submitLabel="حفظ التعديلات"
-            submitDisabled={isSavingCourse}
-          />
+        <DialogContent
+          dir="rtl"
+          className="!left-0 !top-0 z-[70] h-dvh w-screen !max-w-none !translate-x-0 !translate-y-0 overflow-hidden rounded-none border-0 bg-background p-0 shadow-none sm:!max-w-none sm:p-0"
+        >
+          <div className="flex h-full min-h-0 flex-col">
+            <DialogHeader className="shrink-0 border-b bg-background/95 px-5 py-5 text-right shadow-sm backdrop-blur md:px-8">
+              <div className="mx-auto w-full max-w-6xl space-y-2 pl-10">
+                <DialogTitle className="text-2xl font-black">تعديل الدورة</DialogTitle>
+                <DialogDescription>
+                  شاشة كاملة لتعديل إعدادات الدورة والمواقع وأنواع الدراسة بدون ازدحام. لا يمكنك إزالة خيارات يستخدمها طلاب مسجلون.
+                </DialogDescription>
+              </div>
+            </DialogHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-8 md:py-6">
+              <div className="mx-auto w-full max-w-6xl rounded-3xl border bg-card/80 p-4 shadow-sm md:p-6">
+                <CourseBuilderForm
+                  form={editDialog.form}
+                  setForm={(action) =>
+                    setEditDialog(prev => ({
+                      ...prev,
+                      form: typeof action === "function" ? action(prev.form) : action,
+                    }))
+                  }
+                  onSubmit={handleEditSave}
+                  submitLabel="حفظ التعديلات"
+                  submitDisabled={isSavingCourse}
+                />
+              </div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
