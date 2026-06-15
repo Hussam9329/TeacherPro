@@ -19,7 +19,7 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS "StudentCall" (
     "id" TEXT NOT NULL,
     "studentId" TEXT NOT NULL,
-    "examId" TEXT NOT NULL,
+    "examId" TEXT,
     "category" TEXT NOT NULL DEFAULT '',
     "target" TEXT NOT NULL DEFAULT '',
     "phone" TEXT NOT NULL DEFAULT '',
@@ -50,6 +50,7 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "StudentLeave_dateFrom_idx" ON "StudentLeave"("dateFrom")`,
   `CREATE INDEX IF NOT EXISTS "StudentLeave_dateTo_idx" ON "StudentLeave"("dateTo")`,
   `ALTER TABLE "StudentCall" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE "StudentCall" ALTER COLUMN "examId" DROP NOT NULL`,
   `UPDATE "StudentCall" SET "status" = CASE WHEN "completed" THEN 'تم الاتصال' ELSE 'لم يرد' END WHERE COALESCE("status", '') = ''`,
   `CREATE INDEX IF NOT EXISTS "StudentCall_studentId_idx" ON "StudentCall"("studentId")`,
   `CREATE INDEX IF NOT EXISTS "StudentCall_examId_idx" ON "StudentCall"("examId")`,

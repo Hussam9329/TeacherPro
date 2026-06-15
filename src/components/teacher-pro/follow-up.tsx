@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -34,23 +35,26 @@ import {
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
 
-type FollowTab = "leaves" | "calls";
-type CallCategory = "absent" | "failed" | "low-pass" | "full";
+type FollowView = "leaves" | "calls" | "pledges";
+type CallCategory = "absent" | "failed" | "low-pass" | "full" | "dismissal-temporary" | "dismissal-final";
+type PledgeTypeFilter = "all" | "temporary" | "final";
+type PledgeStatusFilter = "all" | "pledged" | "pending";
 type ContactStatus = "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
 
 type CallRow = {
   id: string;
   student: Student;
-  exam: Exam;
+  exam?: Exam;
   grade?: Grade;
   category: CallCategory;
   label: string;
   reason: string;
 };
 
-const tabLabels: Record<FollowTab, string> = {
-  leaves: "الإجازات",
-  calls: "المكالمات",
+const viewTitles: Record<FollowView, { title: string; description: string }> = {
+  calls: { title: "المكالمات", description: "متابعة الغياب والرسوب والدرجات والفصل المؤقت والنهائي عبر الاتصال." },
+  leaves: { title: "الإجازات", description: "تسجيل إجازات الطلاب حسب الامتحان أو حسب فترة زمنية." },
+  pledges: { title: "تعهدات", description: "فرز طلبة الفصل المؤقت والنهائي وتثبيت تعهد ولي الأمر." },
 };
 
 const leaveReasonOptions = ["حالة مرضية", "سفر", "حالة وفاة", "ظروف قاهرة", "أخرى"] as const;
@@ -62,9 +66,12 @@ const callCategoryLabels: Record<CallCategory, string> = {
   failed: "الراسبون",
   "low-pass": "ناجح بدرجة منخفضة",
   full: "درجة كاملة",
+  "dismissal-temporary": "فصل مؤقت",
+  "dismissal-final": "فصل نهائي",
 };
 
 const contactStatusOptions: ContactStatus[] = ["تم الاتصال", "لم يرد", "الرقم خاطئ"];
+const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -116,7 +123,7 @@ function dayKey(value: string | null | undefined): string {
   return String(value || "").slice(0, 10);
 }
 
-export function FollowUpView() {
+function FollowUpViewBase({ view }: { view: FollowView }) {
   const {
     students,
     exams,
@@ -131,11 +138,12 @@ export function FollowUpView() {
     deleteStudentLeave,
     addStudentCall,
     updateStudentCall,
+    addStudentNote,
+    deleteStudentNote,
     courseName,
     activeChapterForCourse,
   } = useTeacherStore();
 
-  const [tab, setTab] = useState<FollowTab>("leaves");
   const [globalSearch, setGlobalSearch] = useState("");
   const [leaveStudentId, setLeaveStudentId] = useState("");
   const [leaveMode, setLeaveMode] = useState<LeaveMode>("exam");
@@ -148,8 +156,11 @@ export function FollowUpView() {
   const [leaveNotes, setLeaveNotes] = useState("");
 
   const [callExamId, setCallExamId] = useState("");
-  const [callCategory, setCallCategory] = useState<CallCategory | "all">("absent");
+  const [callCategory, setCallCategory] = useState<CallCategory | "all">("all");
   const [callSearch, setCallSearch] = useState("");
+  const [pledgeSearch, setPledgeSearch] = useState("");
+  const [pledgeTypeFilter, setPledgeTypeFilter] = useState<PledgeTypeFilter>("all");
+  const [pledgeStatusFilter, setPledgeStatusFilter] = useState<PledgeStatusFilter>("all");
 
   const [profileStudentId, setProfileStudentId] = useState("");
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
@@ -195,6 +206,18 @@ export function FollowUpView() {
 
   const getGrade = (studentId: string, examId: string) => grades.find((grade) => grade.studentId === studentId && grade.examId === examId);
 
+  const dismissalGroup = (student: Student): "temporary" | "final" | null => {
+    if (student.status !== "مفصول") return null;
+    const type = String(student.dismissalType || "");
+    if (type.includes("نهائي") || type.includes("دائم")) return "final";
+    if (type.includes("مؤقت")) return "temporary";
+    return "temporary";
+  };
+
+  const dismissalCategory = (student: Student): Extract<CallCategory, "dismissal-temporary" | "dismissal-final"> => (
+    dismissalGroup(student) === "final" ? "dismissal-final" : "dismissal-temporary"
+  );
+
   const buildCallRowsForExam = (exam: Exam): CallRow[] => {
     return eligibleStudentsForExam(exam).flatMap<CallRow>((student) => {
       if (studentHasLeaveForExam(student.id, exam.id)) return [];
@@ -222,14 +245,57 @@ export function FollowUpView() {
     });
   };
 
+  const dismissalCallRows = useMemo<CallRow[]>(() => students
+    .filter((student) => student.status === "مفصول")
+    .map((student) => {
+      const category = dismissalCategory(student);
+      return {
+        id: `dismissal:${student.id}:${category}`,
+        student,
+        category,
+        label: callCategoryLabels[category],
+        reason: student.dismissalReason || student.dismissalType || "طالب مفصول",
+      };
+    }), [students]);
+
   const callRows = useMemo(() => {
     const sourceExams = callExamId ? exams.filter((exam) => exam.id === callExamId) : exams;
-    return sourceExams
-      .flatMap(buildCallRowsForExam)
+    const examRows = sourceExams.flatMap(buildCallRowsForExam);
+    const sourceRows = callExamId ? examRows : [...examRows, ...dismissalCallRows];
+    return sourceRows
       .filter((row) => callCategory === "all" || row.category === callCategory)
-      .filter((row) => !callSearch || searchAny(callSearch, [row.student.name, row.student.code, row.student.phone, row.student.parentPhone, row.exam.name, row.reason]))
-      .sort((a, b) => `${b.exam.date}-${a.student.name}`.localeCompare(`${a.exam.date}-${b.student.name}`, "ar"));
-  }, [exams, students, grades, courseChapters, callExamId, callCategory, callSearch, studentLeaves]);
+      .filter((row) => !callSearch || searchAny(callSearch, [row.student.name, row.student.code, row.student.phone, row.student.parentPhone, row.exam?.name, row.reason, row.student.dismissalType]))
+      .sort((a, b) => `${b.exam?.date || "9999-12-31"}-${a.student.name}`.localeCompare(`${a.exam?.date || "9999-12-31"}-${b.student.name}`, "ar"));
+  }, [exams, students, grades, courseChapters, callExamId, callCategory, callSearch, studentLeaves, dismissalCallRows]);
+
+  const pledgeNoteForStudent = (student: Student) => studentNotes.find((note) =>
+    note.studentId === student.id &&
+    note.kind === PLEDGE_NOTE_KIND &&
+    note.text.includes(student.dismissalType || "فصل")
+  );
+
+  const dismissedStudentsForPledges = useMemo(() => students
+    .filter((student) => student.status === "مفصول")
+    .filter((student) => {
+      const group = dismissalGroup(student);
+      if (pledgeTypeFilter === "temporary" && group !== "temporary") return false;
+      if (pledgeTypeFilter === "final" && group !== "final") return false;
+      const pledged = Boolean(pledgeNoteForStudent(student));
+      if (pledgeStatusFilter === "pledged" && !pledged) return false;
+      if (pledgeStatusFilter === "pending" && pledged) return false;
+      return !pledgeSearch || searchAny(pledgeSearch, [student.name, student.code, student.phone, student.parentPhone, student.dismissalType, student.dismissalReason]);
+    })
+    .sort((a, b) => `${dismissalGroup(a) === "temporary" ? 0 : 1}-${a.name}`.localeCompare(`${dismissalGroup(b) === "temporary" ? 0 : 1}-${b.name}`, "ar")),
+    [students, studentNotes, pledgeSearch, pledgeTypeFilter, pledgeStatusFilter],
+  );
+
+  const pledgeStats = useMemo(() => {
+    const dismissed = students.filter((student) => student.status === "مفصول");
+    const temporary = dismissed.filter((student) => dismissalGroup(student) === "temporary").length;
+    const final = dismissed.filter((student) => dismissalGroup(student) === "final").length;
+    const pledged = dismissed.filter((student) => Boolean(pledgeNoteForStudent(student))).length;
+    return { dismissed: dismissed.length, temporary, final, pledged, pending: dismissed.length - pledged };
+  }, [students, studentNotes]);
 
 
   const saveLeave = () => {
@@ -293,7 +359,10 @@ export function FollowUpView() {
     }
   };
 
-  const callLogForRow = (row: CallRow) => studentCalls.find((call) => call.studentId === row.student.id && call.examId === row.exam.id && call.category === row.category);
+  const callLogForRow = (row: CallRow) => {
+    const examId = row.exam?.id || "";
+    return studentCalls.find((call) => call.studentId === row.student.id && String(call.examId || "") === examId && call.category === row.category);
+  };
 
   const callStatusForLog = (call: ReturnType<typeof callLogForRow>): ContactStatus => {
     const value = String(call?.status || "");
@@ -306,7 +375,7 @@ export function FollowUpView() {
     const completed = status === "تم الاتصال";
     const payload = {
       studentId: row.student.id,
-      examId: row.exam.id,
+      examId: row.exam?.id || "",
       category: row.category,
       target: "",
       phone: [row.student.phone, row.student.parentPhone].filter(Boolean).join(" / "),
@@ -408,7 +477,7 @@ export function FollowUpView() {
           <div className="flex flex-wrap items-center gap-2"><b>{row.student.name}</b><Badge variant="outline">{row.student.code}</Badge></div>
           <p className="text-xs text-muted-foreground">{courseName(row.student.courseId)} - {row.student.studyType || "—"}</p>
         </div>
-        <div><b>{row.exam.name}</b><p className="text-xs text-muted-foreground">{formatAppDate(row.exam.date)}</p></div>
+        <div><b>{row.exam?.name || "ملف الفصل"}</b><p className="text-xs text-muted-foreground">{row.exam ? formatAppDate(row.exam.date) : (row.student.dismissalType || "طالب مفصول")}</p></div>
         <div>
           <Badge>{row.label}</Badge>
           <p className="mt-1 text-xs text-muted-foreground">{row.reason}</p>
@@ -426,6 +495,57 @@ export function FollowUpView() {
         </Select>
         <div className="flex items-center justify-end">
           <Button variant="ghost" size="sm" onClick={() => openProfile(row.student.id)}>ملف الطالب</Button>
+        </div>
+      </div>
+    );
+  };
+
+
+  const togglePledge = (student: Student, checked: boolean) => {
+    const existing = pledgeNoteForStudent(student);
+    if (checked) {
+      if (existing) return;
+      addStudentNote({
+        studentId: student.id,
+        kind: PLEDGE_NOTE_KIND,
+        text: `تم تعهد ولي الأمر على ${student.dismissalType || "الفصل"}`,
+        date: todayISO(),
+      });
+      toast.success("تم تثبيت التعهد");
+      return;
+    }
+    if (existing) {
+      studentNotes
+        .filter((note) => note.studentId === student.id && note.kind === PLEDGE_NOTE_KIND && note.text.includes(student.dismissalType || "فصل"))
+        .forEach((note) => deleteStudentNote(note.id));
+      toast.success("تم إلغاء التعهد");
+    }
+  };
+
+  const renderPledgeRow = (student: Student) => {
+    const group = dismissalGroup(student);
+    const pledged = Boolean(pledgeNoteForStudent(student));
+    return (
+      <div key={student.id} className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.2fr_1fr_1.5fr_1.2fr_160px_auto] xl:items-center">
+        <div>
+          <div className="flex flex-wrap items-center gap-2"><b>{student.name}</b><Badge variant="outline">{student.code}</Badge></div>
+          <p className="text-xs text-muted-foreground">{courseName(student.courseId)} - {student.studyType || "—"}</p>
+        </div>
+        <div className="space-y-1">
+          <Badge variant={group === "final" ? "destructive" : "secondary"}>{student.dismissalType || "فصل مؤقت"}</Badge>
+          <p className="text-xs text-muted-foreground">الحالة: {student.status}</p>
+        </div>
+        <p className="text-xs leading-6 text-muted-foreground">{student.dismissalReason || "لا يوجد سبب فصل مسجل"}</p>
+        <div className="flex flex-wrap gap-2">
+          {renderPhoneLink("رقم الطالب", student.phone)}
+          {renderPhoneLink("رقم ولي الأمر", student.parentPhone)}
+        </div>
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-muted/30 px-3 py-2">
+          <span className="text-sm font-bold">التعهد</span>
+          <Checkbox checked={pledged} onCheckedChange={(value) => togglePledge(student, Boolean(value))} />
+        </label>
+        <div className="flex items-center justify-end">
+          <Button variant="ghost" size="sm" onClick={() => openProfile(student.id)}>ملف الطالب</Button>
         </div>
       </div>
     );
@@ -459,20 +579,15 @@ export function FollowUpView() {
 
   return (
     <div className="space-y-5">
-      <Card>
+      <Card className="overflow-hidden">
+        <div className="h-1 bg-gradient-to-l from-primary via-fuchsia-500 to-indigo-500" />
         <CardHeader>
-          <CardTitle>المتابعة</CardTitle>
+          <CardTitle>{viewTitles[view].title}</CardTitle>
+          <p className="text-sm text-muted-foreground">{viewTitles[view].description}</p>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-2">
-            {(Object.keys(tabLabels) as FollowTab[]).map((item) => (
-              <Button key={item} variant={tab === item ? "default" : "outline"} onClick={() => setTab(item)}>{tabLabels[item]}</Button>
-            ))}
-          </div>
-        </CardContent>
       </Card>
 
-      {tab === "leaves" && (
+      {view === "leaves" && (
         <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
           <Card>
             <CardHeader><CardTitle>إضافة إجازة</CardTitle></CardHeader>
@@ -501,13 +616,67 @@ export function FollowUpView() {
         </div>
       )}
 
-      {tab === "calls" && (
+      {view === "calls" && (
         <div className="space-y-4">
-          <Card><CardContent className="grid gap-3 p-4 md:grid-cols-3"><div className="space-y-2"><Label>الامتحان</Label><Select value={callExamId || "all"} onValueChange={(value) => setCallExamId(value === "all" ? "" : value)}><SelectTrigger><SelectValue placeholder="كل الامتحانات" /></SelectTrigger><SelectContent><SelectItem value="all">كل الامتحانات</SelectItem>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>الحالة</Label><Select value={callCategory} onValueChange={(value) => setCallCategory(value as CallCategory | "all")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل الحالات</SelectItem>{(Object.keys(callCategoryLabels) as CallCategory[]).map((key) => <SelectItem key={key} value={key}>{callCategoryLabels[key]}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>بحث</Label><Input value={callSearch} onChange={(event) => setCallSearch(event.target.value)} placeholder="طالب / كود / امتحان" /></div></CardContent></Card>
+          <Card>
+            <CardContent className="grid gap-3 p-4 md:grid-cols-3">
+              <div className="space-y-2"><Label>الامتحان</Label><Select value={callExamId || "all"} onValueChange={(value) => setCallExamId(value === "all" ? "" : value)}><SelectTrigger><SelectValue placeholder="كل الامتحانات" /></SelectTrigger><SelectContent><SelectItem value="all">كل الامتحانات + المفصولون</SelectItem>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>الحالة</Label><Select value={callCategory} onValueChange={(value) => setCallCategory(value as CallCategory | "all")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل الحالات</SelectItem>{(Object.keys(callCategoryLabels) as CallCategory[]).map((key) => <SelectItem key={key} value={key}>{callCategoryLabels[key]}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>بحث</Label><Input value={callSearch} onChange={(event) => setCallSearch(event.target.value)} placeholder="طالب / كود / امتحان / سبب الفصل" /></div>
+            </CardContent>
+          </Card>
+          <div className="grid gap-3 md:grid-cols-4">
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">إجمالي النتائج</p><b className="text-2xl">{callRows.length}</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">فصل مؤقت</p><b className="text-2xl">{dismissalCallRows.filter((row) => row.category === "dismissal-temporary").length}</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">فصل نهائي</p><b className="text-2xl">{dismissalCallRows.filter((row) => row.category === "dismissal-final").length}</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">حالات الاتصال</p><b className="text-sm">تم / لم يرد / خطأ</b></CardContent></Card>
+          </div>
           <div className="space-y-2">{callRows.length === 0 ? <p className="empty-state py-8">لا توجد نتائج للمكالمات</p> : callRows.map(renderCallRow)}</div>
         </div>
       )}
 
+      {view === "pledges" && (
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-5">
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">المفصولون</p><b className="text-2xl">{pledgeStats.dismissed}</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">فصل مؤقت</p><b className="text-2xl">{pledgeStats.temporary}</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">فصل نهائي</p><b className="text-2xl">{pledgeStats.final}</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">تم التعهد</p><b className="text-2xl">{pledgeStats.pledged}</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">بانتظار التعهد</p><b className="text-2xl">{pledgeStats.pending}</b></CardContent></Card>
+          </div>
+
+          <Card>
+            <CardContent className="grid gap-3 p-4 md:grid-cols-3">
+              <div className="space-y-2"><Label>فرز الفصل</Label><Select value={pledgeTypeFilter} onValueChange={(value) => setPledgeTypeFilter(value as PledgeTypeFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل المفصولين</SelectItem><SelectItem value="temporary">طلبة الفصل المؤقت</SelectItem><SelectItem value="final">طلبة الفصل النهائي</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><Label>حالة التعهد</Label><Select value={pledgeStatusFilter} onValueChange={(value) => setPledgeStatusFilter(value as PledgeStatusFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل الحالات</SelectItem><SelectItem value="pledged">تم التعهد</SelectItem><SelectItem value="pending">لم يتم التعهد</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><Label>بحث</Label><Input value={pledgeSearch} onChange={(event) => setPledgeSearch(event.target.value)} placeholder="طالب / كود / سبب الفصل" /></div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>قائمة التعهدات</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {dismissedStudentsForPledges.length === 0 ? <p className="empty-state py-8">لا توجد نتائج للتعهدات</p> : dismissedStudentsForPledges.map(renderPledgeRow)}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
+}
+
+export function FollowUpCallsView() {
+  return <FollowUpViewBase view="calls" />;
+}
+
+export function FollowUpLeavesView() {
+  return <FollowUpViewBase view="leaves" />;
+}
+
+export function FollowUpPledgesView() {
+  return <FollowUpViewBase view="pledges" />;
+}
+
+export function FollowUpView() {
+  return <FollowUpLeavesView />;
 }

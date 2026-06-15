@@ -28,7 +28,7 @@ function normalizeCallPayload(body: Record<string, unknown>) {
   const status = normalizeCallStatus(body);
   return {
     studentId: String(body.studentId ?? ''),
-    examId: String(body.examId ?? ''),
+    examId: String(body.examId ?? '').trim() || null,
     category: String(body.category ?? ''),
     target: String(body.target ?? ''),
     phone: String(body.phone ?? ''),
@@ -64,8 +64,6 @@ export async function POST(req: NextRequest) {
     const data = normalizeCallPayload(body);
     const studentError = requireText(data.studentId, 'الطالب');
     if (studentError) return validationError(studentError);
-    const examError = requireText(data.examId, 'الامتحان');
-    if (examError) return validationError(examError);
     const id = String(body.id || '').trim();
     const studentCall = await withFollowupTables(
       () => id
@@ -90,6 +88,7 @@ export async function PUT(req: NextRequest) {
     const data: Record<string, unknown> = {};
     if (updates.category !== undefined) data.category = String(updates.category ?? '');
     if (updates.target !== undefined) data.target = String(updates.target ?? '');
+    if (updates.examId !== undefined) data.examId = String(updates.examId ?? '').trim() || null;
     if (updates.phone !== undefined) data.phone = String(updates.phone ?? '');
     if (updates.status !== undefined) data.status = String(updates.status ?? '').trim() || (updates.completed ? 'تم الاتصال' : 'لم يرد');
     if (updates.completed !== undefined) data.completed = data.status ? data.status === 'تم الاتصال' : Boolean(updates.completed);

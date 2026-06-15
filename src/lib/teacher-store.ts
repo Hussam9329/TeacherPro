@@ -235,6 +235,9 @@ export type SectionId =
   | 'grade-records'
   | 'opportunities'
   | 'follow-up'
+  | 'follow-up-calls'
+  | 'follow-up-leaves'
+  | 'follow-up-pledges'
   | 'e-correction'
   | 'accounts'
   | 'logs';
@@ -309,6 +312,9 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'grade-records': 'grades.view',
   'opportunities': 'opportunities.view',
   'follow-up': 'follow-up.view',
+  'follow-up-calls': 'follow-up.view',
+  'follow-up-leaves': 'follow-up.view',
+  'follow-up-pledges': 'follow-up.view',
   'e-correction': 'correction.view',
   'accounts': 'accounts.view',
   'logs': 'logs.view',
@@ -1425,6 +1431,7 @@ export const useTeacherStore = create<TeacherState>()(
 
           const studentCalls = (serverData.studentCalls || []).map((call: Record<string, unknown>) => ({
             ...call,
+            examId: String(call.examId || ''),
             status: String(call.status || (call.completed ? 'تم الاتصال' : 'لم يرد')),
             completed: Boolean(call.completed),
             completedAt: call.completedAt ? String(call.completedAt) : '',

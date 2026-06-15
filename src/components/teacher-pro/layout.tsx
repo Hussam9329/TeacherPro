@@ -16,6 +16,8 @@ import {
   Target,
   CheckSquare,
   PhoneCall,
+  CalendarCheck,
+  Handshake,
   Shield,
   ScrollText,
   Sun,
@@ -76,7 +78,9 @@ const menuItems: {
     sub: "المتصدرين",
     icon: CheckSquare,
   },
-  { id: "follow-up", title: "المتابعة", sub: "إجازات ومكالمات", icon: PhoneCall },
+  { id: "follow-up-calls", title: "المكالمات", sub: "اتصالات المتابعة", icon: PhoneCall },
+  { id: "follow-up-leaves", title: "الإجازات", sub: "إجازات الطلاب", icon: CalendarCheck },
+  { id: "follow-up-pledges", title: "تعهدات", sub: "تعهدات الفصل", icon: Handshake },
   { id: "accounts", title: "إدارة الحسابات", sub: "صلاحيات", icon: Shield },
   { id: "logs", title: "السجلات", sub: "تدقيق", icon: ScrollText },
 ];
@@ -89,7 +93,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
   },
-  { title: "المتابعة", itemIds: ["follow-up"] },
+  { title: "المتابعة", itemIds: ["follow-up-calls", "follow-up-leaves", "follow-up-pledges"] },
   { title: "الإدارة", itemIds: ["accounts", "logs"] },
 ];
 
@@ -110,7 +114,8 @@ function readSectionFromLocation(): SectionId | null {
   const hashSection = window.location.hash.replace(/^#/, "");
   const value = querySection || hashSection;
   // Backward compatibility: redirect old section IDs
-  if (value === 'whatsapp') return 'follow-up' as SectionId;
+  if (value === 'whatsapp') return 'follow-up-calls' as SectionId;
+  if (value === 'follow-up') return 'follow-up-leaves' as SectionId;
   if (value === 'course-new' || value === 'site-management') {
     return 'courses' as SectionId;
   }
@@ -129,7 +134,7 @@ import { ExamRecordsView } from "./exam-records";
 import { GradeRecordsView } from "./grade-records";
 import { OpportunitiesView } from "./opportunities";
 import { ECorrectionView } from "./e-correction";
-import { FollowUpView } from "./follow-up";
+import { FollowUpCallsView, FollowUpLeavesView, FollowUpPledgesView, FollowUpView } from "./follow-up";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
 import { LoadingState } from "./ui-kit";
@@ -147,6 +152,9 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "grade-records": GradeRecordsView,
   opportunities: OpportunitiesView,
   "follow-up": FollowUpView,
+  "follow-up-calls": FollowUpCallsView,
+  "follow-up-leaves": FollowUpLeavesView,
+  "follow-up-pledges": FollowUpPledgesView,
   "e-correction": ECorrectionView,
   accounts: AccountsView,
   logs: LogsView,
@@ -367,6 +375,11 @@ export function TeacherProLayout() {
     () => visibleMenuItems.some((item) => item.id === currentSection),
     [visibleMenuItems, currentSection],
   );
+  useEffect(() => {
+    if (currentSection === "follow-up") {
+      setSection("follow-up-leaves");
+    }
+  }, [currentSection, setSection]);
   const firstVisibleSectionId = visibleMenuItems[0]?.id ?? null;
   const dashboardMenuItem = visibleMenuItems.find(
     (item) => item.id === "dashboard",

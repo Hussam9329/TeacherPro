@@ -170,7 +170,7 @@ model StudentLeave {
 model StudentCall {
   id          String    @id @default(cuid())
   studentId   String
-  examId      String
+  examId      String?
   category    String    @default("")
   target      String    @default("")
   phone       String    @default("")
@@ -180,7 +180,7 @@ model StudentCall {
   notes       String    @default("")
   createdAt   DateTime  @default(now())
   student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  exam        Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  exam        Exam?     @relation(fields: [examId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
   @@index([examId])
