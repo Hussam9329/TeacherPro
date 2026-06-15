@@ -234,14 +234,19 @@ export function StudentProfileDialog({
         details: callLogDetails(call, examById.get(call.examId)),
         tone: call.completed ? "success" as const : "secondary" as const,
       })),
-      ...allStudentNotes.map((note) => ({
-        id: `note-${note.id}`,
-        date: note.date,
-        source: "الملاحظات",
-        title: note.kind || "ملاحظة",
-        details: note.text,
-        tone: note.kind === "إجراء" ? "secondary" as const : "info" as const,
-      })),
+      ...allStudentNotes.map((note) => {
+        const linkedDismissal = note.kind === "تعهد ولي الأمر" && (note.dismissalKey || note.sourceId);
+        return {
+          id: `note-${note.id}`,
+          date: note.date,
+          source: "الملاحظات",
+          title: note.kind || "ملاحظة",
+          details: linkedDismissal
+            ? `${note.text} | مرتبط بالفصل: ${note.dismissalType || "فصل"} - ${note.dismissalReason || "بدون سبب"}${note.dismissalDate ? ` - ${note.dismissalDate}` : ""}`
+            : note.text,
+          tone: note.kind === "تعهد ولي الأمر" ? "success" as const : note.kind === "إجراء" ? "secondary" as const : "info" as const,
+        };
+      }),
       ...logs.filter((log) => systemLogMatchesStudent(log, student)).map((log) => ({
         id: `sys-${log.id}`,
         date: log.time,

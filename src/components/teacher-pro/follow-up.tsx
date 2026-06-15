@@ -52,6 +52,16 @@ type CallRow = {
   reason: string;
 };
 
+type DismissalLinkInfo = {
+  key: string;
+  sourceType: string;
+  sourceId: string;
+  type: string;
+  reason: string;
+  date: string;
+  examName: string;
+};
+
 const viewTitles: Record<FollowView, { title: string; description: string }> = {
   calls: { title: "المكالمات", description: "متابعة الغياب والرسوب والدرجات والفصل المؤقت والنهائي عبر الاتصال." },
   leaves: { title: "الإجازات", description: "تسجيل إجازات الطلاب حسب الامتحان أو حسب فترة زمنية." },
@@ -122,6 +132,25 @@ function isStudentCurrentlyInGrace(student: Student): boolean {
 
 function dayKey(value: string | null | undefined): string {
   return String(value || "").slice(0, 10);
+}
+
+function normalizeDismissalText(value: string | null | undefined): string {
+  return String(value || "")
+    .replace(/^تلقائي:\s*/, "")
+    .replace(/^فصل الطالب:\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildDismissalKey(parts: { studentId: string; sourceType: string; sourceId: string; type: string; reason: string; date: string }) {
+  return [
+    parts.studentId,
+    parts.sourceType,
+    parts.sourceId,
+    normalizeDismissalText(parts.type),
+    normalizeDismissalText(parts.reason),
+    dayKey(parts.date),
+  ].join("::");
 }
 
 function FollowUpViewBase({ view }: { view: FollowView }) {
@@ -219,6 +248,64 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     dismissalGroup(student) === "final" ? "dismissal-final" : "dismissal-temporary"
   );
 
+  const dismissalInfoForStudent = (student: Student): DismissalLinkInfo | null => {
+    if (student.status !== "مفصول") return null;
+    const type = student.dismissalType || "فصل مؤقت";
+    const reason = student.dismissalReason || type || "طالب مفصول";
+    const normalizedReason = normalizeDismissalText(reason);
+    const dismissalLogs = opportunityLogs
+      .filter((log) => log.studentId === student.id)
+      .filter((log) => {
+        const rawReason = String(log.reason || "");
+        const logReason = normalizeDismissalText(rawReason);
+        return log.action === "فصل تلقائي"
+          || (log.action === "خصم" && rawReason.startsWith("فصل الطالب"))
+          || (normalizedReason && logReason.includes(normalizedReason));
+      })
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    const sourceLog = dismissalLogs.find((log) => log.action === "فصل تلقائي") || dismissalLogs[0];
+    const sourceNote = sourceLog ? undefined : studentNotes
+      .filter((note) => note.studentId === student.id && note.kind === "إجراء")
+      .filter((note) => {
+        const noteText = normalizeDismissalText(note.text);
+        return note.text.includes("فصل الطالب") || (normalizedReason && noteText.includes(normalizedReason));
+      })
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0];
+    const sourceExam = sourceLog?.examId ? exams.find((exam) => exam.id === sourceLog.examId) : undefined;
+    const sourceType = sourceLog ? "opportunity-log" : sourceNote ? "student-note" : "student-dismissal";
+    const sourceId = sourceLog?.id || sourceNote?.id || student.id;
+    const date = dayKey(sourceLog?.date || sourceNote?.date || student.createdAt);
+    const key = buildDismissalKey({
+      studentId: student.id,
+      sourceType,
+      sourceId,
+      type,
+      reason,
+      date,
+    });
+    return {
+      key,
+      sourceType,
+      sourceId,
+      type,
+      reason,
+      date,
+      examName: sourceExam?.name || "",
+    };
+  };
+
+  const pledgeNoteForDismissal = (student: Student, dismissalInfo = dismissalInfoForStudent(student)) => {
+    if (!dismissalInfo) return undefined;
+    return studentNotes.find((note) => {
+      if (note.studentId !== student.id || note.kind !== PLEDGE_NOTE_KIND) return false;
+      if (note.dismissalKey) return note.dismissalKey === dismissalInfo.key;
+      if (note.sourceType && note.sourceId) return note.sourceType === dismissalInfo.sourceType && note.sourceId === dismissalInfo.sourceId;
+      const noteReason = normalizeDismissalText(note.dismissalReason || note.text);
+      return note.text.includes(student.dismissalType || "فصل")
+        && (!noteReason || noteReason.includes(normalizeDismissalText(dismissalInfo.reason)) || normalizeDismissalText(dismissalInfo.reason).includes(noteReason));
+    });
+  };
+
   const buildCallRowsForExam = (exam: Exam): CallRow[] => {
     return eligibleStudentsForExam(exam).flatMap<CallRow>((student) => {
       if (studentHasLeaveForExam(student.id, exam.id)) return [];
@@ -270,11 +357,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       .sort((a, b) => `${b.exam?.date || "9999-12-31"}-${a.student.name}`.localeCompare(`${a.exam?.date || "9999-12-31"}-${b.student.name}`, "ar"));
   }, [exams, students, grades, courseChapters, callExamId, callCategory, callSearch, studentLeaves, dismissalCallRows]);
 
-  const pledgeNoteForStudent = (student: Student) => studentNotes.find((note) =>
-    note.studentId === student.id &&
-    note.kind === PLEDGE_NOTE_KIND &&
-    note.text.includes(student.dismissalType || "فصل")
-  );
+  const pledgeNoteForStudent = (student: Student) => pledgeNoteForDismissal(student);
 
   const dismissedStudentsForPledges = useMemo(() => students
     .filter((student) => student.status === "مفصول")
@@ -288,7 +371,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       return !pledgeSearch || searchAny(pledgeSearch, [student.name, student.code, student.phone, student.parentPhone, student.dismissalType, student.dismissalReason]);
     })
     .sort((a, b) => `${dismissalGroup(a) === "temporary" ? 0 : 1}-${a.name}`.localeCompare(`${dismissalGroup(b) === "temporary" ? 0 : 1}-${b.name}`, "ar")),
-    [students, studentNotes, pledgeSearch, pledgeTypeFilter, pledgeStatusFilter],
+    [students, studentNotes, opportunityLogs, exams, pledgeSearch, pledgeTypeFilter, pledgeStatusFilter],
   );
 
   const pledgeStats = useMemo(() => {
@@ -297,7 +380,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const final = dismissed.filter((student) => dismissalGroup(student) === "final").length;
     const pledged = dismissed.filter((student) => Boolean(pledgeNoteForStudent(student))).length;
     return { dismissed: dismissed.length, temporary, final, pledged, pending: dismissed.length - pledged };
-  }, [students, studentNotes]);
+  }, [students, studentNotes, opportunityLogs, exams]);
 
 
   const saveLeave = () => {
@@ -504,40 +587,64 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
 
   const togglePledge = (student: Student, checked: boolean) => {
-    const existing = pledgeNoteForStudent(student);
+    const dismissalInfo = dismissalInfoForStudent(student);
+    if (!dismissalInfo) {
+      toast.error("لا يوجد فصل حالي يمكن ربط التعهد به");
+      return;
+    }
+    const existing = pledgeNoteForDismissal(student, dismissalInfo);
     if (checked) {
       if (existing) return;
       addStudentNote({
         studentId: student.id,
         kind: PLEDGE_NOTE_KIND,
-        text: `تم تعهد ولي الأمر على ${student.dismissalType || "الفصل"}`,
+        text: `تم تعهد ولي الأمر على ${dismissalInfo.type}: ${dismissalInfo.reason}`,
         date: todayISO(),
+        sourceType: dismissalInfo.sourceType,
+        sourceId: dismissalInfo.sourceId,
+        dismissalKey: dismissalInfo.key,
+        dismissalType: dismissalInfo.type,
+        dismissalReason: dismissalInfo.reason,
+        dismissalDate: dismissalInfo.date,
       });
-      toast.success("تم تثبيت التعهد");
+      toast.success("تم تثبيت التعهد وربطه بسجل الفصل");
       return;
     }
     if (existing) {
       studentNotes
-        .filter((note) => note.studentId === student.id && note.kind === PLEDGE_NOTE_KIND && note.text.includes(student.dismissalType || "فصل"))
+        .filter((note) => note.studentId === student.id && note.kind === PLEDGE_NOTE_KIND)
+        .filter((note) => {
+          if (note.dismissalKey) return note.dismissalKey === dismissalInfo.key;
+          if (note.sourceType && note.sourceId) return note.sourceType === dismissalInfo.sourceType && note.sourceId === dismissalInfo.sourceId;
+          return note.id === existing.id;
+        })
         .forEach((note) => deleteStudentNote(note.id));
-      toast.success("تم إلغاء التعهد");
+      toast.success("تم إلغاء التعهد المرتبط بهذا الفصل فقط");
     }
   };
 
   const renderPledgeRow = (student: Student) => {
     const group = dismissalGroup(student);
-    const pledged = Boolean(pledgeNoteForStudent(student));
+    const dismissalInfo = dismissalInfoForStudent(student);
+    const pledged = Boolean(pledgeNoteForDismissal(student, dismissalInfo));
     return (
-      <div key={student.id} className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.2fr_1fr_1.5fr_1.2fr_160px_auto] xl:items-center">
+      <div key={student.id} className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.2fr_1fr_1.7fr_1.2fr_170px_auto] xl:items-center">
         <div>
           <div className="flex flex-wrap items-center gap-2"><b>{student.name}</b><Badge variant="outline">{student.code}</Badge></div>
           <p className="text-xs text-muted-foreground">{courseName(student.courseId)} - {student.studyType || "—"}</p>
         </div>
         <div className="space-y-1">
-          <Badge variant={group === "final" ? "destructive" : "secondary"}>{student.dismissalType || "فصل مؤقت"}</Badge>
+          <Badge variant={group === "final" ? "destructive" : "secondary"}>{dismissalInfo?.type || student.dismissalType || "فصل مؤقت"}</Badge>
           <p className="text-xs text-muted-foreground">الحالة: {student.status}</p>
+          {dismissalInfo?.date ? <p className="text-xs text-muted-foreground">تاريخ الفصل: {formatAppDate(dismissalInfo.date)}</p> : null}
         </div>
-        <p className="text-xs leading-6 text-muted-foreground">{student.dismissalReason || "لا يوجد سبب فصل مسجل"}</p>
+        <div className="space-y-1">
+          <p className="text-xs leading-6 text-muted-foreground">{dismissalInfo?.reason || student.dismissalReason || "لا يوجد سبب فصل مسجل"}</p>
+          <p className="rounded-xl bg-muted/50 px-2 py-1 text-[11px] text-muted-foreground">
+            الربط: {dismissalInfo?.sourceType === "opportunity-log" ? "سجل فرص/فصل" : dismissalInfo?.sourceType === "student-note" ? "ملاحظة إجراء الفصل" : "ملف الفصل الحالي"}
+            {dismissalInfo?.examName ? ` - ${dismissalInfo.examName}` : ""}
+          </p>
+        </div>
         <div className="flex flex-wrap gap-2">
           {renderPhoneLink("رقم الطالب", student.phone)}
           {renderPhoneLink("رقم ولي الأمر", student.parentPhone)}

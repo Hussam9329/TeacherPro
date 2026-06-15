@@ -36,6 +36,12 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
     "kind" TEXT NOT NULL DEFAULT '',
     "text" TEXT NOT NULL,
     "date" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "sourceType" TEXT NOT NULL DEFAULT '',
+    "sourceId" TEXT NOT NULL DEFAULT '',
+    "dismissalKey" TEXT NOT NULL DEFAULT '',
+    "dismissalType" TEXT NOT NULL DEFAULT '',
+    "dismissalReason" TEXT NOT NULL DEFAULT '',
+    "dismissalDate" TIMESTAMP(3),
     CONSTRAINT "StudentNote_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "StudentLeave_studentId_examId_key" ON "StudentLeave"("studentId", "examId")`,
@@ -55,8 +61,17 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "StudentCall_studentId_idx" ON "StudentCall"("studentId")`,
   `CREATE INDEX IF NOT EXISTS "StudentCall_examId_idx" ON "StudentCall"("examId")`,
   `CREATE INDEX IF NOT EXISTS "StudentCall_createdAt_idx" ON "StudentCall"("createdAt")`,
+  `ALTER TABLE "StudentNote" ADD COLUMN IF NOT EXISTS "sourceType" TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE "StudentNote" ADD COLUMN IF NOT EXISTS "sourceId" TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE "StudentNote" ADD COLUMN IF NOT EXISTS "dismissalKey" TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE "StudentNote" ADD COLUMN IF NOT EXISTS "dismissalType" TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE "StudentNote" ADD COLUMN IF NOT EXISTS "dismissalReason" TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE "StudentNote" ADD COLUMN IF NOT EXISTS "dismissalDate" TIMESTAMP(3)`,
   `CREATE INDEX IF NOT EXISTS "StudentNote_studentId_idx" ON "StudentNote"("studentId")`,
   `CREATE INDEX IF NOT EXISTS "StudentNote_date_idx" ON "StudentNote"("date")`,
+  `CREATE INDEX IF NOT EXISTS "StudentNote_sourceType_idx" ON "StudentNote"("sourceType")`,
+  `CREATE INDEX IF NOT EXISTS "StudentNote_sourceId_idx" ON "StudentNote"("sourceId")`,
+  `CREATE INDEX IF NOT EXISTS "StudentNote_dismissalKey_idx" ON "StudentNote"("dismissalKey")`,
   `DO $$
   BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentLeave_studentId_fkey') THEN

@@ -161,6 +161,12 @@ export interface StudentNote {
   kind: string;
   text: string;
   date: string;
+  sourceType?: string;
+  sourceId?: string;
+  dismissalKey?: string;
+  dismissalType?: string;
+  dismissalReason?: string;
+  dismissalDate?: string;
 }
 
 export interface CorrectionSheet {
@@ -1442,6 +1448,14 @@ export const useTeacherStore = create<TeacherState>()(
 
           const studentNotes = (serverData.studentNotes || []).map((note: Record<string, unknown>) => ({
             ...note,
+            kind: String(note.kind || ''),
+            text: String(note.text || ''),
+            sourceType: String(note.sourceType || ''),
+            sourceId: String(note.sourceId || ''),
+            dismissalKey: String(note.dismissalKey || ''),
+            dismissalType: String(note.dismissalType || ''),
+            dismissalReason: String(note.dismissalReason || ''),
+            dismissalDate: note.dismissalDate ? String(note.dismissalDate).slice(0, 10) : '',
             date: note.date ? String(note.date).slice(0, 10) : todayISO(),
           })) as StudentNote[];
 

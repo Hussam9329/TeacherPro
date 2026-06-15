@@ -12,12 +12,24 @@ function dateOrNow(value: unknown): Date {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
+function optionalDate(value: unknown): Date | null {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function normalizeNotePayload(body: Record<string, unknown>) {
   return {
     studentId: String(body.studentId ?? ''),
     kind: String(body.kind ?? ''),
     text: String(body.text ?? '').trim(),
     date: dateOrNow(body.date),
+    sourceType: String(body.sourceType ?? ''),
+    sourceId: String(body.sourceId ?? ''),
+    dismissalKey: String(body.dismissalKey ?? ''),
+    dismissalType: String(body.dismissalType ?? ''),
+    dismissalReason: String(body.dismissalReason ?? ''),
+    dismissalDate: optionalDate(body.dismissalDate),
   };
 }
 
@@ -72,6 +84,12 @@ export async function PUT(req: NextRequest) {
     if (updates.kind !== undefined) data.kind = String(updates.kind ?? '');
     if (updates.text !== undefined) data.text = String(updates.text ?? '').trim();
     if (updates.date !== undefined) data.date = dateOrNow(updates.date);
+    if (updates.sourceType !== undefined) data.sourceType = String(updates.sourceType ?? '');
+    if (updates.sourceId !== undefined) data.sourceId = String(updates.sourceId ?? '');
+    if (updates.dismissalKey !== undefined) data.dismissalKey = String(updates.dismissalKey ?? '');
+    if (updates.dismissalType !== undefined) data.dismissalType = String(updates.dismissalType ?? '');
+    if (updates.dismissalReason !== undefined) data.dismissalReason = String(updates.dismissalReason ?? '');
+    if (updates.dismissalDate !== undefined) data.dismissalDate = optionalDate(updates.dismissalDate);
     const studentNote = await withFollowupTables(
       () => db.studentNote.update({ where: { id: String(id) }, data }),
       'StudentNote',

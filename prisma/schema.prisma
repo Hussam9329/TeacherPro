@@ -188,15 +188,24 @@ model StudentCall {
 }
 
 model StudentNote {
-  id        String   @id @default(cuid())
-  studentId String
-  kind      String   @default("")
-  text      String
-  date      DateTime @default(now())
-  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  id              String   @id @default(cuid())
+  studentId       String
+  kind            String   @default("")
+  text            String
+  date            DateTime @default(now())
+  sourceType      String   @default("")
+  sourceId        String   @default("")
+  dismissalKey    String   @default("")
+  dismissalType   String   @default("")
+  dismissalReason String   @default("")
+  dismissalDate   DateTime?
+  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@index([studentId])
   @@index([date])
+  @@index([sourceType])
+  @@index([sourceId])
+  @@index([dismissalKey])
 }
 
 model CorrectionSheet {
