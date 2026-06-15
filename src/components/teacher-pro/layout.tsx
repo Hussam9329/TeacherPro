@@ -253,6 +253,7 @@ export function TeacherProLayout() {
     dbConnected,
     dbLoading,
     loadFromServer,
+    restoreSession,
   } = useTeacherStore();
 
   const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>(() => {
@@ -315,6 +316,17 @@ export function TeacherProLayout() {
     window.addEventListener("teacherpro:server-sync-error", handler);
     return () => window.removeEventListener("teacherpro:server-sync-error", handler);
   }, []);
+
+  const [authChecked, setAuthChecked] = useState(false);
+  useEffect(() => {
+    let active = true;
+    restoreSession().finally(() => {
+      if (active) setAuthChecked(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [restoreSession]);
 
   // تحميل البيانات من الخادم عند بدء التطبيق
   const [initDone, setInitDone] = useState(false);
@@ -423,6 +435,19 @@ export function TeacherProLayout() {
       ? sectionComponents[currentSection] || DashboardView
       : DashboardView;
   const currentMenu = menuItems.find((m) => m.id === currentSection);
+
+  if (!authChecked) {
+    return (
+      <div className="app-bg flex min-h-screen items-center justify-center bg-background p-6" dir="rtl">
+        <div className="w-full max-w-md">
+          <LoadingState
+            title="جاري التحقق من الجلسة..."
+            description="نراجع تسجيل الدخول المحفوظ قبل فتح النظام."
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <LoginScreen theme={theme} toggleTheme={toggleTheme} login={login} />;

@@ -459,6 +459,7 @@ interface TeacherState {
   isAuthenticated: boolean;
 
   loadFromServer: () => Promise<boolean>;
+  restoreSession: () => Promise<boolean>;
 
   setSection: (section: SectionId) => void;
   toggleSidebar: () => void;
@@ -1559,6 +1560,24 @@ export const useTeacherStore = create<TeacherState>()(
           || (state.isAuthenticated ? state.users.find((u) => isPrimaryAdminUser(u) && u.active) : undefined)
           || null;
         return user ? normalizeAdminAccessUser(user) : null;
+      },
+      restoreSession: async () => {
+        const authResult = await authApi.session();
+        if (!authResult.ok || !authResult.user) {
+          set({ isAuthenticated: false });
+          return false;
+        }
+
+        const sessionUser = normalizeAdminAccessUser(userFromAuthApi(authResult.user));
+        set((s) => ({
+          users: s.users.some((u) => u.id === sessionUser.id)
+            ? s.users.map((u) => u.id === sessionUser.id ? { ...u, ...sessionUser } : normalizeAdminAccessUser(u))
+            : [...s.users.map((u) => normalizeAdminAccessUser(u)), sessionUser],
+          roles: mergeDefaultRoles(s.roles),
+          currentUserId: sessionUser.id,
+          isAuthenticated: true,
+        }));
+        return true;
       },
       login: async (username, password) => {
         const authResult = await authApi.login(username, password);
