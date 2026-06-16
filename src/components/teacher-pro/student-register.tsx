@@ -32,6 +32,7 @@ import {
   COURSE_TERMS,
   getAvailablePrograms, getAvailableStudyTypesForProgram,
   getBaghdadSites, getProvinceOptions, getLocationScopes, getBaghdadMode,
+  OUT_OF_COUNTRY_LOCATION_SCOPE,
 } from "@/lib/course-config";
 import {
   getStudentDuplicateMessage,
@@ -253,15 +254,17 @@ export function StudentRegisterView() {
     [selectedCourse, form.studyType],
   );
 
+  const isOutOfCountry = form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE;
+
   const subSiteOptions = useMemo<string[]>(() => {
-    if (!selectedCourse || !form.studyType) return [];
+    if (!selectedCourse || !form.studyType || isOutOfCountry) return [];
     if (form.locationScope === "بغداد") {
       if (courseBaghdadMode === "عموم بغداد") return [];
       if (courseBaghdadMode === "بغداد - مخصص") return courseBaghdadSites;
     }
     if (form.locationScope === "محافظات") return courseProvinces;
     return [];
-  }, [selectedCourse, form.studyType, form.locationScope, courseBaghdadMode, courseBaghdadSites, courseProvinces]);
+  }, [selectedCourse, form.studyType, form.locationScope, isOutOfCountry, courseBaghdadMode, courseBaghdadSites, courseProvinces]);
 
   // Effective baghdadMode: auto-set from course config
   const effectiveBaghdadMode = useMemo(
@@ -344,6 +347,7 @@ export function StudentRegisterView() {
           (effectiveCourseProgram !== "كورسات" || form.courseTerm) &&
           (courseAvailableStudyTypes.length === 0 || form.studyType) &&
           (courseLocationScopes.length === 0 || form.locationScope) &&
+          (!isOutOfCountry || Boolean(form.subSite.trim())) &&
           (subSiteOptions.length === 0 || effectiveSubSite)
         ),
       },
@@ -353,7 +357,7 @@ export function StudentRegisterView() {
       },
 
     ],
-    [form, courseAvailableStudyTypes, courseLocationScopes, subSiteOptions.length, effectiveCourseProgram, effectiveSubSite],
+    [form, courseAvailableStudyTypes, courseLocationScopes, subSiteOptions.length, effectiveCourseProgram, effectiveSubSite, isOutOfCountry],
   );
   const hasDraftData = useMemo(
     () =>
@@ -442,8 +446,11 @@ export function StudentRegisterView() {
     if (courseLocationScopes.length > 0 && !form.locationScope) {
       return "يرجى اختيار الموقع";
     }
+    if (isOutOfCountry && !form.subSite.trim()) {
+      return "يرجى إدخال الدولة عند اختيار خارج القطر";
+    }
     // Sub-site validation
-    if (subSiteOptions.length > 0 && !form.subSite) {
+    if (!isOutOfCountry && subSiteOptions.length > 0 && !form.subSite) {
       return "يرجى اختيار الموقع الفرعي";
     }
 
@@ -948,7 +955,7 @@ export function StudentRegisterView() {
                     </Label>
                     <Select
                       name="locationScope"
-                      value={form.locationScope}
+                      value={isOutOfCountry ? "" : form.locationScope}
                       onValueChange={(v) =>
                         setForm((prev) => ({
                           ...prev,
@@ -972,10 +979,48 @@ export function StudentRegisterView() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-2xl border border-dashed bg-muted/30 p-3 text-sm font-bold text-foreground transition hover:bg-muted/50">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-primary"
+                        checked={isOutOfCountry}
+                        onChange={(event) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            locationScope: event.target.checked ? OUT_OF_COUNTRY_LOCATION_SCOPE : "",
+                            baghdadMode: "",
+                            subSite: "",
+                          }))
+                        }
+                      />
+                      الطالب خارج القطر
+                    </label>
                   </div>
 
+                  {/* ── Out of Country ── */}
+                  {isOutOfCountry && (
+                    <div className="space-y-2">
+                      <Label htmlFor="reg-outOfCountrySite" className="font-bold text-foreground">
+                        الدولة <RequiredMark />
+                      </Label>
+                      <Input
+                        id="reg-outOfCountrySite"
+                        name="subSite"
+                        autoComplete="off"
+                        value={form.subSite}
+                        onChange={(e) => updateForm("subSite", e.target.value)}
+                        placeholder="مثلاً: تركيا"
+                        required
+                        className={fieldBaseClass}
+                      />
+                      <p className="text-xs leading-5 text-muted-foreground">
+                        خيار خارج القطر عام لكل الدورات ولا يحتاج تفعيله من إعدادات الدورة.
+                      </p>
+                    </div>
+                  )}
+
                   {/* ── Sub-Site ── */}
-                  {subSiteOptions.length > 0 && (
+                  {!isOutOfCountry && subSiteOptions.length > 0 && (
                     <div className="space-y-2">
                       <Label
                         htmlFor="reg-subSite"

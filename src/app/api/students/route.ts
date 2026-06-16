@@ -285,7 +285,7 @@ export async function PUT(req: NextRequest) {
   // If course-related fields are being updated, validate against course settings
   if (data.courseProgram !== undefined || data.studyType !== undefined || 
       data.locationScope !== undefined || data.baghdadMode !== undefined || 
-      data.courseId !== undefined) {
+      data.subSite !== undefined || data.courseId !== undefined) {
     const targetCourseId = data.courseId !== undefined ? data.courseId : 
       (await db.student.findUnique({ where: { id }, select: { courseId: true } }))?.courseId;
     

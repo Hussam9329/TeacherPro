@@ -1,3 +1,5 @@
+import { normalizeIraqiProvinceName, uniqueNormalizedIraqiProvinces } from './iraq';
+
 /**
  * course-config.ts — ثوابت ودوال مشتركة لإعدادات الدورات
  * يستخدم في: courses.tsx, student-register.tsx, student-registry.tsx,
@@ -10,12 +12,14 @@ export const COURSE_PROGRAMS = ["منهج كامل", "كورسات"] as const;
 export const COURSE_TERMS = ["الكورس الأول", "الكورس الثاني"] as const;
 export const STUDY_TYPES = ["إلكتروني", "حضوري", "مدمج"] as const;
 export const LOCATION_SCOPES = ["بغداد", "محافظات"] as const;
+export const OUT_OF_COUNTRY_LOCATION_SCOPE = "خارج القطر" as const;
 export const BAGHDAD_MODES = ["عموم بغداد", "بغداد - مخصص"] as const;
 
 export type CourseProgram = (typeof COURSE_PROGRAMS)[number];
 export type CourseTerm = (typeof COURSE_TERMS)[number];
 export type StudyType = (typeof STUDY_TYPES)[number];
 export type LocationScope = (typeof LOCATION_SCOPES)[number];
+export type StudentLocationScope = LocationScope | typeof OUT_OF_COUNTRY_LOCATION_SCOPE;
 export type BaghdadMode = (typeof BAGHDAD_MODES)[number];
 
 export type StudyLocationConfig = {
@@ -124,7 +128,17 @@ export function getAvailableStudyTypesForProgram(
 }
 
 export function getCourseLocationConfig(course: CourseSettingsSource): CourseLocationConfig {
-  return parseJsonRecord<CourseLocationConfig>(course.locationConfig, {});
+  const config = parseJsonRecord<CourseLocationConfig>(course.locationConfig, {});
+  const normalized: CourseLocationConfig = {};
+  for (const [studyType, studyConfig] of Object.entries(config)) {
+    normalized[studyType as StudyType] = {
+      ...studyConfig,
+      provinces: studyConfig?.provinces
+        ? uniqueNormalizedIraqiProvinces(studyConfig.provinces)
+        : studyConfig?.provinces,
+    };
+  }
+  return normalized;
 }
 
 
@@ -163,7 +177,7 @@ export function getProvinceOptions(
 ): string[] {
   const config = getCourseLocationConfig(course);
   const studyConfig = config[studyType as StudyType];
-  return studyConfig?.provinces ?? [];
+  return uniqueNormalizedIraqiProvinces(studyConfig?.provinces ?? []);
 }
 
 // ─── Student Choice Validation (server-side) ────────────────────────────────
@@ -218,6 +232,15 @@ export function validateStudentCourseChoices(
   if (!choices.locationScope) {
     return { ok: false, error: "الموقع مطلوب" };
   }
+
+  // خارج القطر خيار عام لكل الدورات، ولا يحتاج تخصيصاً في إعدادات الدورة.
+  if (choices.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE) {
+    if (!String(choices.subSite || '').trim()) {
+      return { ok: false, error: "يجب إدخال اسم الدولة عند اختيار خارج القطر" };
+    }
+    return { ok: true };
+  }
+
   if (!locationScopes.includes(choices.locationScope as LocationScope)) {
     return { ok: false, error: `الموقع "${choices.locationScope}" غير متاح لنوع الدراسة المختار` };
   }
@@ -267,7 +290,10 @@ export function resolveSubSite(
     if (mode === "بغداد - مخصص") return subSite || "";
   }
   if (locationScope === "محافظات") {
-    return subSite || "";
+    return normalizeIraqiProvinceName(subSite || "");
+  }
+  if (locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE) {
+    return String(subSite || "").trim();
   }
   return subSite || "";
 }

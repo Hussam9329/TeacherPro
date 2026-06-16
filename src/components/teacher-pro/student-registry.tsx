@@ -44,6 +44,7 @@ import {
   COURSE_TERMS,
   getAvailablePrograms, getAvailableStudyTypesForProgram,
   getBaghdadSites, getProvinceOptions, getLocationScopes, getBaghdadMode,
+  OUT_OF_COUNTRY_LOCATION_SCOPE,
 } from "@/lib/course-config";
 import {
   getStudentDuplicateMessage,
@@ -309,15 +310,17 @@ export function StudentRegistryView() {
     [editSelectedCourse, editDialog.form.studyType],
   );
 
+  const isEditOutOfCountry = editDialog.form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE;
+
   const editSubSiteOptions = useMemo<string[]>(() => {
-    if (!editSelectedCourse || !editDialog.form.studyType) return [];
+    if (!editSelectedCourse || !editDialog.form.studyType || isEditOutOfCountry) return [];
     if (editDialog.form.locationScope === "بغداد") {
       if (editBaghdadMode === "عموم بغداد") return [];
       if (editBaghdadMode === "بغداد - مخصص") return editBaghdadSites;
     }
     if (editDialog.form.locationScope === "محافظات") return editProvinces;
     return [];
-  }, [editSelectedCourse, editDialog.form.studyType, editDialog.form.locationScope, editBaghdadMode, editBaghdadSites, editProvinces]);
+  }, [editSelectedCourse, editDialog.form.studyType, editDialog.form.locationScope, isEditOutOfCountry, editBaghdadMode, editBaghdadSites, editProvinces]);
 
 
   // Reset dependent fields when course or studyType changes
@@ -353,13 +356,13 @@ export function StudentRegistryView() {
     }
 
     // Reset subSite if not in options
-    if (editSubSiteOptions.length > 0 && editDialog.form.subSite && !editSubSiteOptions.includes(editDialog.form.subSite) && !(editDialog.form.locationScope === "بغداد" && editBaghdadMode === "عموم بغداد")) {
+    if (!isEditOutOfCountry && editSubSiteOptions.length > 0 && editDialog.form.subSite && !editSubSiteOptions.includes(editDialog.form.subSite) && !(editDialog.form.locationScope === "بغداد" && editBaghdadMode === "عموم بغداد")) {
       patch.subSite = "";
       needsPatch = true;
     }
 
     // Clear subSite if no options available
-    if (editSubSiteOptions.length === 0 && editDialog.form.subSite && editDialog.form.subSite !== "عموم بغداد") {
+    if (!isEditOutOfCountry && editSubSiteOptions.length === 0 && editDialog.form.subSite && editDialog.form.subSite !== "عموم بغداد") {
       patch.subSite = "";
       needsPatch = true;
     }
@@ -374,6 +377,7 @@ export function StudentRegistryView() {
     editDialog.form.studyType,
     editDialog.form.locationScope,
     editDialog.form.subSite,
+    isEditOutOfCountry,
     editAvailablePrograms,
     editAvailableStudyTypes,
     editBaghdadMode,
@@ -444,7 +448,10 @@ export function StudentRegistryView() {
     if (editLocationScopes.length > 0 && !form.locationScope) {
       return "يرجى اختيار الموقع";
     }
-    if (editSubSiteOptions.length > 0 && !form.subSite) {
+    if (form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE && !form.subSite.trim()) {
+      return "يرجى إدخال الدولة عند اختيار خارج القطر";
+    }
+    if (form.locationScope !== OUT_OF_COUNTRY_LOCATION_SCOPE && editSubSiteOptions.length > 0 && !form.subSite) {
       return "يرجى اختيار الموقع الفرعي";
     }
 
@@ -499,10 +506,10 @@ export function StudentRegistryView() {
       courseTerm: (editEffectiveCourseProgram === "كورسات" ? form.courseTerm : "") as any,
       studyType: form.studyType as any,
       locationScope: form.locationScope as any,
-      baghdadMode: (form.baghdadMode || (editBaghdadMode || "")) as any,
+      baghdadMode: (form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE ? "" : (form.baghdadMode || (editBaghdadMode || ""))) as any,
       courseId: form.courseId,
       mainSite: form.locationScope,
-      subSite: form.subSite || (editBaghdadMode === "عموم بغداد" ? "عموم بغداد" : ""),
+      subSite: form.subSite || (form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE ? "" : (editBaghdadMode === "عموم بغداد" ? "عموم بغداد" : "")),
       createdAt: form.createdAt,
       accountingGraceDays: Number(form.accountingGraceDays || 0),
     });
@@ -1013,9 +1020,9 @@ export function StudentRegistryView() {
       >
         <DialogContent
           dir="rtl"
-          className="max-h-[92vh] max-w-6xl gap-0 overflow-hidden p-0 sm:rounded-[2rem]"
+          className="left-0 top-0 h-screen max-h-screen w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:max-w-none sm:rounded-none sm:p-0"
         >
-          <DialogHeader className="border-b border-border/70 bg-gradient-to-l from-primary/12 via-background to-muted/50 px-6 py-5 pr-14 text-right">
+          <DialogHeader className="border-b border-border/70 bg-gradient-to-l from-primary/12 via-background to-muted/50 px-6 py-5 pr-16 text-right">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <DialogTitle className="text-2xl font-black tracking-tight text-gradient-brand">
@@ -1035,7 +1042,7 @@ export function StudentRegistryView() {
             </div>
           </DialogHeader>
 
-          <div className="app-scrollbar max-h-[calc(92vh-11.5rem)] overflow-y-auto p-4 md:p-6">
+          <div className="app-scrollbar h-[calc(100vh-10.5rem)] overflow-y-auto p-4 md:p-6">
             <div className="grid gap-5 lg:grid-cols-[0.9fr_1.6fr]">
               <aside className="space-y-4">
                 <div className="rounded-[1.75rem] border border-primary/20 bg-primary/5 p-4 shadow-sm">
@@ -1402,7 +1409,7 @@ export function StudentRegistryView() {
                         <Label htmlFor="edit-locationScope">الموقع</Label>
                         <Select
                           name="locationScope"
-                          value={editDialog.form.locationScope}
+                          value={isEditOutOfCountry ? "" : editDialog.form.locationScope}
                           onValueChange={(v) =>
                             setEditDialog((prev) => ({
                               ...prev,
@@ -1428,6 +1435,25 @@ export function StudentRegistryView() {
                             ))}
                           </SelectContent>
                         </Select>
+                        <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-2xl border border-dashed bg-muted/30 p-3 text-sm font-bold text-foreground transition hover:bg-muted/50">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-primary"
+                            checked={isEditOutOfCountry}
+                            onChange={(event) =>
+                              setEditDialog((prev) => ({
+                                ...prev,
+                                form: {
+                                  ...prev.form,
+                                  locationScope: event.target.checked ? OUT_OF_COUNTRY_LOCATION_SCOPE : "",
+                                  baghdadMode: "",
+                                  subSite: "",
+                                },
+                              }))
+                            }
+                          />
+                          الطالب خارج القطر
+                        </label>
                       </div>
                     ) : (
                       <div className="rounded-2xl border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground md:col-span-2">
@@ -1435,7 +1461,27 @@ export function StudentRegistryView() {
                       </div>
                     )}
 
+                    {isEditOutOfCountry && (
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-outOfCountrySite">الدولة</Label>
+                        <Input
+                          id="edit-outOfCountrySite"
+                          name="subSite"
+                          autoComplete="off"
+                          value={editDialog.form.subSite}
+                          onChange={(e) => updateEditForm("subSite", e.target.value)}
+                          placeholder="مثلاً: تركيا"
+                          required
+                          className="h-12 rounded-2xl"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          خيار خارج القطر عام لكل الدورات ولا يحتاج تفعيله من إعدادات الدورة.
+                        </p>
+                      </div>
+                    )}
+
                     {editDialog.form.locationScope &&
+                      !isEditOutOfCountry &&
                       editSubSiteOptions.length > 0 && (
                         <div className="space-y-2">
                           <Label htmlFor="edit-subSite">الموقع الفرعي</Label>

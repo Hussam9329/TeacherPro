@@ -70,7 +70,7 @@ export interface Student {
   courseProgram: 'منهج كامل' | 'كورسات' | '';
   courseTerm: 'الكورس الأول' | 'الكورس الثاني' | '';
   studyType: 'إلكتروني' | 'حضوري' | 'مدمج' | '';
-  locationScope: 'بغداد' | 'محافظات' | '';
+  locationScope: 'بغداد' | 'محافظات' | 'خارج القطر' | '';
   baghdadMode: 'عموم بغداد' | 'بغداد - مخصص' | '';
   courseId: string;
   mainSite: string;

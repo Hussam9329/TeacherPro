@@ -20,8 +20,9 @@ import {
   STUDY_TYPES,
   LOCATION_SCOPES,
   BAGHDAD_MODES,
+  OUT_OF_COUNTRY_LOCATION_SCOPE,
 } from '@/lib/course-config';
-import { IRAQI_PROVINCES } from '@/lib/iraq';
+import { IRAQI_PROVINCES, normalizeIraqiProvinceName } from '@/lib/iraq';
 
 function parseCourseIds(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String);
@@ -90,7 +91,8 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
         return `يجب اختيار محافظة واحدة على الأقل لنوع الدراسة "${studyType}"`;
       }
       for (const prov of config.provinces) {
-        if (!IRAQI_PROVINCES.includes(prov as any))
+        const normalizedProvince = normalizeIraqiProvinceName(prov);
+        if (!IRAQI_PROVINCES.includes(normalizedProvince as any))
           return `المحافظة "${prov}" غير صالحة`;
       }
     }
@@ -185,6 +187,7 @@ export async function PUT(req: NextRequest) {
           }
         }
         if (student.studyType && student.locationScope) {
+          if (student.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE) continue;
           const studyConfig = newLocationConfig[student.studyType as StudyType];
           if (studyConfig && !studyConfig.scopes?.includes(student.locationScope as any)) {
             return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
@@ -195,7 +198,7 @@ export async function PUT(req: NextRequest) {
             }
           }
           if (student.locationScope === 'محافظات' && student.subSite && studyConfig?.provinces && studyConfig.provinces.length > 0) {
-            if (!studyConfig.provinces.includes(student.subSite)) {
+            if (!studyConfig.provinces.map(normalizeIraqiProvinceName).includes(normalizeIraqiProvinceName(student.subSite))) {
               return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
             }
           }
