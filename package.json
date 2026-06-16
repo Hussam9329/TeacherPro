@@ -11,7 +11,7 @@
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "vercel-build": "DATABASE_URL=${DATABASE_URL:-postgresql://user:password@localhost:5432/db} prisma generate && next build",
+    "vercel-build": "DATABASE_URL=${DATABASE_URL:-postgresql://user:password@localhost:5432/db} prisma generate && prisma migrate deploy && next build",
     "db:deploy": "prisma migrate deploy",
     "db:baseline:existing": "prisma migrate resolve --applied 20260605000000_course_builder_availability && prisma migrate resolve --applied 20260608000000_study_types_by_program && prisma migrate resolve --applied 20260608010000_remove_financial_attendance && prisma migrate resolve --applied 20260608050000_academic_opportunity_accounting && prisma migrate resolve --applied 20260608193000_dismissal_notes_followup_filters"
   },
