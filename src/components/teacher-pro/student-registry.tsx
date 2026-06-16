@@ -40,6 +40,7 @@ import {
   sanitizePhoneInput,
   toLatinDigits,
 } from "@/lib/format";
+import { exportStudentsXlsx } from "@/lib/export-students-xlsx";
 import {
   COURSE_TERMS,
   getAvailablePrograms, getAvailableStudyTypesForProgram,
@@ -639,6 +640,30 @@ export function StudentRegistryView() {
     toast.success("تم تصدير CSV");
   };
 
+  const exportXLSX = () => {
+    try {
+      exportStudentsXlsx({
+        students: filtered,
+        courses,
+        exams,
+        grades,
+        opportunityLogs,
+        studentLeaves,
+        studentNotes,
+        studentCalls,
+        courseName,
+        examName: (id: string) => {
+          const exam = exams.find((e) => e.id === id);
+          return exam?.name || id;
+        },
+      });
+      toast.success(`تم تصدير ${filtered.length} طالب إلى Excel`);
+    } catch (err) {
+      console.error(err);
+      toast.error("تعذر تصدير Excel");
+    }
+  };
+
   const studentOppLogs = (studentId: string) =>
     opportunityLogs.filter((l) => l.studentId === studentId);
   const studentGrades = (studentId: string) =>
@@ -790,14 +815,24 @@ export function StudentRegistryView() {
             </div>
             <div className="space-y-1">
               <span className="text-xs font-medium">تصدير</span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full h-9"
-                onClick={exportCSV}
-              >
-                تصدير CSV
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-9"
+                  onClick={exportCSV}
+                >
+                  CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-9 border-emerald-500/40 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                  onClick={exportXLSX}
+                >
+                  Excel
+                </Button>
+              </div>
             </div>
           </div>
           <div className="mt-3">
