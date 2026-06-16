@@ -338,7 +338,8 @@ async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   if (!SupportedDecompressionStream) {
     throw new Error("المتصفح الحالي لا يدعم قراءة ملفات Excel. احفظ الملف بصيغة CSV ثم أعد رفعه.");
   }
-  const stream = new Blob([data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)]).stream().pipeThrough(new SupportedDecompressionStream("deflate-raw"));
+  const sliced = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+  const stream = new Blob([sliced]).stream().pipeThrough(new SupportedDecompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
