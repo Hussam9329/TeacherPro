@@ -344,10 +344,44 @@ async function runImport() {
   };
 }
 
+async function normalizePhonesForCourse() {
+  // Find exemption course
+  const courses = await db.course.findMany();
+  const course = courses.find((c) => normalizeArabic(c.name) === normalizeArabic(TARGET_COURSE_NAME));
+  if (!course) throw new Error(`لم يتم العثور على دورة "${TARGET_COURSE_NAME}"`);
+
+  // Find all students with malformed phones (10 digits starting with 7, missing leading 0)
+  const students = await db.student.findMany({
+    where: { courseId: course.id },
+    select: { id: true, name: true, code: true, phone: true, phoneKey: true, parentPhone: true },
+  });
+
+  let fixed = 0;
+  const fixedDetails: string[] = [];
+  for (const s of students) {
+    const updates: { phone?: string; phoneKey?: string | null; parentPhone?: string } = {};
+    if (s.phone && s.phone.length === 10 && s.phone.startsWith('7')) {
+      updates.phone = '0' + s.phone;
+      updates.phoneKey = updates.phone;
+    }
+    if (s.parentPhone && s.parentPhone.length === 10 && s.parentPhone.startsWith('7')) {
+      updates.parentPhone = '0' + s.parentPhone;
+    }
+    if (Object.keys(updates).length > 0) {
+      await db.student.update({ where: { id: s.id }, data: updates });
+      fixed += 1;
+      fixedDetails.push(`${s.code} ${s.name}: phone ${s.phone}→${updates.phone ?? s.phone} parent ${s.parentPhone}→${updates.parentPhone ?? s.parentPhone}`);
+    }
+  }
+
+  return { courseId: course.id, courseName: course.name, totalStudents: students.length, fixed, fixedDetails };
+}
+
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('x-admin-token');
   const url = new URL(request.url);
   const queryToken = url.searchParams.get('token');
+  const mode = url.searchParams.get('mode');
   const expectedToken = process.env.ADMIN_IMPORT_TOKEN;
 
   if (!expectedToken) {
@@ -358,6 +392,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    if (mode === 'normalize-phones') {
+      const result = await normalizePhonesForCourse();
+      return NextResponse.json({ ok: true, ...result });
+    }
     const result = await runImport();
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
