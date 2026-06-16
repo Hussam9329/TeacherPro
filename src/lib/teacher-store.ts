@@ -233,6 +233,7 @@ export type SectionId =
   | 'courses'
   | 'chapters'
   | 'student-register'
+  | 'student-bulk-import'
   | 'student-registry'
   | 'dismissed-students'
   | 'exam-new'
@@ -310,6 +311,7 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'courses': 'courses.add',
   'chapters': 'chapters.view',
   'student-register': 'students.add',
+  'student-bulk-import': 'students.add',
   'student-registry': 'students.view',
   'dismissed-students': 'students.view',
   'exam-new': 'exams.add',

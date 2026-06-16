@@ -7,6 +7,7 @@ import {
   BookOpen,
   BookMarked,
   UserPlus,
+  UsersRound,
   ClipboardList,
   UserX,
   FileText,
@@ -61,6 +62,12 @@ const menuItems: {
     icon: UserPlus,
   },
   {
+    id: "student-bulk-import",
+    title: "الإضافة الجماعية",
+    sub: "Excel / CSV",
+    icon: UsersRound,
+  },
+  {
     id: "student-registry",
     title: "سجل الطلاب",
     sub: "بطاقات",
@@ -88,7 +95,7 @@ const menuItems: {
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
   { title: "الدورات", itemIds: ["courses"] },
   { title: "الفرص", itemIds: ["chapters", "opportunities"] },
-  { title: "الطلاب", itemIds: ["student-register", "student-registry", "dismissed-students"] },
+  { title: "الطلاب", itemIds: ["student-register", "student-bulk-import", "student-registry", "dismissed-students"] },
   {
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
@@ -127,6 +134,7 @@ import { CoursesView } from "./courses";
 import { ChaptersView } from "./chapters";
 import { StudentRegisterView } from "./student-register";
 import { StudentRegistryView } from "./student-registry";
+import { StudentBulkImportView } from "./student-bulk-import";
 import { DismissedStudentsView } from "./dismissed-students";
 import { ExamNewView } from "./exam-new";
 import { GradeEntryView } from "./grade-entry";
@@ -144,6 +152,7 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   courses: CoursesView,
   chapters: ChaptersView,
   "student-register": StudentRegisterView,
+  "student-bulk-import": StudentBulkImportView,
   "student-registry": StudentRegistryView,
   "dismissed-students": DismissedStudentsView,
   "exam-new": ExamNewView,
