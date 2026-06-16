@@ -334,12 +334,7 @@ export function TeacherProLayout() {
     if (initDone || !isAuthenticated) return;
     setInitDone(true);
     loadFromServer().then((ok) => {
-      if (ok) {
-        console.log("[TeacherPro] Loaded data from database");
-      } else {
-        console.log(
-          "[TeacherPro] Using localStorage data (database not available)",
-        );
+      if (!ok) {
         toast.warning("أنت تعمل محلياً؛ البيانات قد لا تُحفظ في السيرفر إلى أن يعود اتصال قاعدة البيانات.");
       }
     });

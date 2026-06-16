@@ -141,6 +141,61 @@ export function OpportunitiesView() {
     );
   }, [selectedDetailsLogs]);
 
+
+  const cleanOpportunityReason = (reason: string | null | undefined) => {
+    const text = String(reason || "").replace(/\s*\[academic-reactivation-link:[^\]]+\]/g, "").trim();
+    return text || "بدون سبب مكتوب";
+  };
+
+  const reasonLabel = (part: string) => {
+    const separatorIndex = part.indexOf(":");
+    if (separatorIndex < 0) return { label: "السبب", value: part.trim() };
+    return {
+      label: part.slice(0, separatorIndex).trim(),
+      value: part.slice(separatorIndex + 1).trim() || "—",
+    };
+  };
+
+  const renderOpportunityReason = (log: typeof opportunityLogs[number]) => {
+    const cleaned = cleanOpportunityReason(log.reason);
+    const hasHiddenLink = String(log.reason || "").includes("[academic-reactivation-link:");
+    const parts = cleaned
+      .split(/\s+-\s+(?=النطاق:|الحالة:|عدد الفرص:|البحث:|السبب:)/g)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const shouldSplit = parts.length > 1 || /^النطاق:|^الحالة:|^عدد الفرص:|^البحث:|^السبب:/.test(cleaned);
+
+    if (!shouldSplit) {
+      return (
+        <div className="rounded-xl bg-muted/40 p-3 text-sm leading-6">
+          <span className="font-bold text-foreground">السبب: </span>
+          <span className="break-words text-muted-foreground">{cleaned}</span>
+          {hasHiddenLink ? <Badge variant="outline" className="ms-2 align-middle">مرتبط بإعادة التفعيل</Badge> : null}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-2 rounded-xl bg-muted/40 p-3 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-bold text-foreground">تفاصيل السبب</span>
+          {hasHiddenLink ? <Badge variant="outline">مرتبط بإعادة التفعيل</Badge> : null}
+        </div>
+        <div className="grid gap-2 md:grid-cols-2">
+          {parts.map((part, index) => {
+            const item = reasonLabel(part);
+            return (
+              <div key={`${log.id}-reason-${index}`} className="rounded-lg border bg-card/80 px-3 py-2">
+                <p className="text-[11px] font-bold text-muted-foreground">{item.label}</p>
+                <p className="break-words text-xs leading-5 text-foreground">{item.value}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   const renderLogExamDetails = (log: typeof opportunityLogs[number]) => {
     const exam = exams.find((item) => item.id === log.examId);
     const grade = grades.find((item) => item.studentId === log.studentId && item.examId === log.examId);
@@ -597,7 +652,7 @@ export function OpportunitiesView() {
                 {selectedDetailsLogs.length === 0 ? <p className="empty-state py-8">لا توجد حركات فرص لهذا الطالب</p> : selectedDetailsLogs.map((log) => (
                   <div key={log.id} className="space-y-3 rounded-2xl border bg-card p-4">
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between"><div className="flex flex-wrap items-center gap-2"><Badge variant={log.action === "خصم" ? "destructive" : log.action === "إضافة" ? "default" : "secondary"}>{log.action} {log.amount}</Badge><span className="text-sm font-bold text-foreground">{formatAppDate(log.date)}</span></div><span className="text-xs text-muted-foreground">الفصل: {log.chapterId || "غير محدد"}</span></div>
-                    <div className="rounded-xl bg-muted/40 p-3 text-sm leading-6"><span className="font-bold text-foreground">السبب: </span><span className="text-muted-foreground">{log.reason || "بدون سبب مكتوب"}</span></div>
+                    {renderOpportunityReason(log)}
                     {renderLogExamDetails(log)}
                   </div>
                 ))}

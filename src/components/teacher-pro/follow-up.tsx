@@ -6,6 +6,7 @@ import {
   type Exam,
   type Grade,
   type Student,
+  type StudentNote,
 } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,7 @@ import {
 type FollowView = "leaves" | "calls" | "pledges";
 type CallCategory = "absent" | "failed" | "low-pass" | "full" | "dismissal-temporary" | "dismissal-final";
 type PledgeTypeFilter = "all" | "temporary" | "final";
-type PledgeStatusFilter = "all" | "pledged" | "pending";
+type PledgeStatusFilter = "all" | "pledged" | "pending" | "reactivated";
 type ContactStatus = "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
 
 type CallRow = {
@@ -60,6 +61,16 @@ type DismissalLinkInfo = {
   reason: string;
   date: string;
   examName: string;
+};
+
+type PledgeRow = {
+  key: string;
+  student: Student;
+  dismissalInfo: DismissalLinkInfo;
+  group: "temporary" | "final";
+  pledged: boolean;
+  note?: StudentNote;
+  reactivated: boolean;
 };
 
 const viewTitles: Record<FollowView, { title: string; description: string }> = {
@@ -237,12 +248,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   const getGrade = (studentId: string, examId: string) => grades.find((grade) => grade.studentId === studentId && grade.examId === examId);
 
+  const dismissalGroupFromType = (type: string | null | undefined): "temporary" | "final" => {
+    const text = String(type || "");
+    if (text.includes("نهائي") || text.includes("دائم")) return "final";
+    return "temporary";
+  };
+
   const dismissalGroup = (student: Student): "temporary" | "final" | null => {
     if (student.status !== "مفصول") return null;
-    const type = String(student.dismissalType || "");
-    if (type.includes("نهائي") || type.includes("دائم")) return "final";
-    if (type.includes("مؤقت")) return "temporary";
-    return "temporary";
+    return dismissalGroupFromType(student.dismissalType || "فصل مؤقت");
   };
 
   const dismissalCategory = (student: Student): Extract<CallCategory, "dismissal-temporary" | "dismissal-final"> => (
@@ -295,10 +309,44 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     };
   };
 
+  const dismissalInfoFromPledgeNote = (student: Student, note: StudentNote): DismissalLinkInfo => {
+    const sourceLog = note.sourceType === "opportunity-log" && note.sourceId
+      ? opportunityLogs.find((log) => log.id === note.sourceId)
+      : undefined;
+    const sourceExam = sourceLog?.examId ? exams.find((exam) => exam.id === sourceLog.examId) : undefined;
+    const type = note.dismissalType || "فصل مؤقت";
+    const reason = note.dismissalReason || note.text || type;
+    const sourceType = note.sourceType || "pledge-note";
+    const sourceId = note.sourceId || note.id;
+    const date = dayKey(note.dismissalDate || sourceLog?.date || note.date);
+    const key = note.dismissalKey || buildDismissalKey({
+      studentId: student.id,
+      sourceType,
+      sourceId,
+      type,
+      reason,
+      date,
+    });
+    return {
+      key,
+      sourceType,
+      sourceId,
+      type,
+      reason,
+      date,
+      examName: sourceExam?.name || "",
+    };
+  };
+
+  const pledgeNotes = useMemo(
+    () => studentNotes.filter((note) => note.kind === PLEDGE_NOTE_KIND),
+    [studentNotes],
+  );
+
   const pledgeNoteForDismissal = (student: Student, dismissalInfo = dismissalInfoForStudent(student)) => {
     if (!dismissalInfo) return undefined;
-    return studentNotes.find((note) => {
-      if (note.studentId !== student.id || note.kind !== PLEDGE_NOTE_KIND) return false;
+    return pledgeNotes.find((note) => {
+      if (note.studentId !== student.id) return false;
       if (note.dismissalKey) return note.dismissalKey === dismissalInfo.key;
       if (note.sourceType && note.sourceId) return note.sourceType === dismissalInfo.sourceType && note.sourceId === dismissalInfo.sourceId;
       const noteReason = normalizeDismissalText(note.dismissalReason || note.text);
@@ -358,30 +406,77 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       .sort((a, b) => `${b.exam?.date || "9999-12-31"}-${a.student.name}`.localeCompare(`${a.exam?.date || "9999-12-31"}-${b.student.name}`, "ar"));
   }, [exams, students, grades, courseChapters, callExamId, callCategory, callSearch, studentLeaves, dismissalCallRows]);
 
-  const pledgeNoteForStudent = (student: Student) => pledgeNoteForDismissal(student);
+  const pledgeRows = useMemo<PledgeRow[]>(() => {
+    const rows: PledgeRow[] = [];
+    const seen = new Set<string>();
 
-  const dismissedStudentsForPledges = useMemo(() => students
-    .filter((student) => student.status === "مفصول")
-    .filter((student) => {
-      const group = dismissalGroup(student);
-      if (pledgeTypeFilter === "temporary" && group !== "temporary") return false;
-      if (pledgeTypeFilter === "final" && group !== "final") return false;
-      const pledged = Boolean(pledgeNoteForStudent(student));
-      if (pledgeStatusFilter === "pledged" && !pledged) return false;
-      if (pledgeStatusFilter === "pending" && pledged) return false;
-      return !pledgeSearch || searchAny(pledgeSearch, [student.name, student.code, student.phone, student.parentPhone, student.dismissalType, student.dismissalReason]);
-    })
-    .sort((a, b) => `${dismissalGroup(a) === "temporary" ? 0 : 1}-${a.name}`.localeCompare(`${dismissalGroup(b) === "temporary" ? 0 : 1}-${b.name}`, "ar")),
-    [students, studentNotes, opportunityLogs, exams, pledgeSearch, pledgeTypeFilter, pledgeStatusFilter],
-  );
+    students
+      .filter((student) => student.status === "مفصول")
+      .forEach((student) => {
+        const dismissalInfo = dismissalInfoForStudent(student);
+        if (!dismissalInfo) return;
+        const note = pledgeNoteForDismissal(student, dismissalInfo);
+        const key = note?.dismissalKey || dismissalInfo.key;
+        seen.add(key);
+        rows.push({
+          key,
+          student,
+          dismissalInfo,
+          group: dismissalGroupFromType(dismissalInfo.type),
+          pledged: Boolean(note),
+          note,
+          reactivated: false,
+        });
+      });
+
+    pledgeNotes.forEach((note) => {
+      const student = students.find((item) => item.id === note.studentId);
+      if (!student) return;
+      const dismissalInfo = dismissalInfoFromPledgeNote(student, note);
+      const key = note.dismissalKey || dismissalInfo.key || note.id;
+      if (seen.has(key)) return;
+      seen.add(key);
+      rows.push({
+        key,
+        student,
+        dismissalInfo,
+        group: dismissalGroupFromType(note.dismissalType || dismissalInfo.type),
+        pledged: true,
+        note,
+        reactivated: student.status !== "مفصول",
+      });
+    });
+
+    return rows
+      .filter((row) => {
+        if (pledgeTypeFilter === "temporary" && row.group !== "temporary") return false;
+        if (pledgeTypeFilter === "final" && row.group !== "final") return false;
+        if (pledgeStatusFilter === "pledged" && !row.pledged) return false;
+        if (pledgeStatusFilter === "pending" && row.pledged) return false;
+        if (pledgeStatusFilter === "reactivated" && !row.reactivated) return false;
+        return !pledgeSearch || searchAny(pledgeSearch, [
+          row.student.name,
+          row.student.code,
+          row.student.phone,
+          row.student.parentPhone,
+          row.dismissalInfo.type,
+          row.dismissalInfo.reason,
+          row.note?.text,
+          row.student.status,
+        ]);
+      })
+      .sort((a, b) => `${a.pledged ? 1 : 0}-${a.group === "temporary" ? 0 : 1}-${a.student.name}`.localeCompare(`${b.pledged ? 1 : 0}-${b.group === "temporary" ? 0 : 1}-${b.student.name}`, "ar"));
+  }, [students, pledgeNotes, opportunityLogs, exams, pledgeSearch, pledgeTypeFilter, pledgeStatusFilter]);
 
   const pledgeStats = useMemo(() => {
     const dismissed = students.filter((student) => student.status === "مفصول");
     const temporary = dismissed.filter((student) => dismissalGroup(student) === "temporary").length;
     const final = dismissed.filter((student) => dismissalGroup(student) === "final").length;
-    const pledged = dismissed.filter((student) => Boolean(pledgeNoteForStudent(student))).length;
-    return { dismissed: dismissed.length, temporary, final, pledged, pending: dismissed.length - pledged };
-  }, [students, studentNotes, opportunityLogs, exams]);
+    const pending = dismissed.filter((student) => !pledgeNoteForDismissal(student)).length;
+    const pledged = pledgeNotes.filter((note) => students.some((student) => student.id === note.studentId)).length;
+    const reactivated = pledgeNotes.filter((note) => students.some((student) => student.id === note.studentId && student.status !== "مفصول")).length;
+    return { dismissed: dismissed.length, temporary, final, pledged, pending, reactivated };
+  }, [students, pledgeNotes, opportunityLogs, exams]);
 
 
   const saveLeave = () => {
@@ -587,13 +682,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
 
-  const togglePledge = (student: Student, checked: boolean) => {
-    const dismissalInfo = dismissalInfoForStudent(student);
-    if (!dismissalInfo) {
-      toast.error("لا يوجد فصل حالي يمكن ربط التعهد به");
-      return;
-    }
-    const existing = pledgeNoteForDismissal(student, dismissalInfo);
+  const togglePledge = (row: PledgeRow, checked: boolean) => {
+    const { student, dismissalInfo } = row;
+    const existing = row.note || pledgeNoteForDismissal(student, dismissalInfo);
     if (checked) {
       if (existing) return;
       addStudentNote({
@@ -609,42 +700,45 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         dismissalDate: dismissalInfo.date,
       });
       reactivateStudent(student.id);
-      toast.success("تم تثبيت التعهد وإعادة تفعيل الطالب حسب شروط إعادة التفعيل");
+      toast.success("تم تثبيت التعهد وإعادة تفعيل الطالب حسب شروط إعادة التفعيل. ستجده بعد ذلك من فلتر: تم التعهد / تم التعهد وإعادة التفعيل.");
       return;
     }
     if (existing) {
       studentNotes
         .filter((note) => note.studentId === student.id && note.kind === PLEDGE_NOTE_KIND)
         .filter((note) => {
+          if (existing.id && note.id === existing.id) return true;
           if (note.dismissalKey) return note.dismissalKey === dismissalInfo.key;
           if (note.sourceType && note.sourceId) return note.sourceType === dismissalInfo.sourceType && note.sourceId === dismissalInfo.sourceId;
-          return note.id === existing.id;
+          return false;
         })
         .forEach((note) => deleteStudentNote(note.id));
       toast.success("تم إلغاء التعهد المرتبط بهذا الفصل فقط");
     }
   };
 
-  const renderPledgeRow = (student: Student) => {
-    const group = dismissalGroup(student);
-    const dismissalInfo = dismissalInfoForStudent(student);
-    const pledged = Boolean(pledgeNoteForDismissal(student, dismissalInfo));
+  const renderPledgeRow = (row: PledgeRow) => {
+    const { student, dismissalInfo, group, pledged, reactivated } = row;
     return (
-      <div key={student.id} className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.2fr_1fr_1.7fr_1.2fr_170px_auto] xl:items-center">
+      <div key={row.key} className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.2fr_1fr_1.7fr_1.2fr_190px_auto] xl:items-center">
         <div>
-          <div className="flex flex-wrap items-center gap-2"><b>{student.name}</b><Badge variant="outline">{student.code}</Badge></div>
+          <div className="flex flex-wrap items-center gap-2">
+            <b>{student.name}</b>
+            <Badge variant="outline">{student.code}</Badge>
+            {reactivated ? <Badge variant="default">تم التعهد وإعادة التفعيل</Badge> : null}
+          </div>
           <p className="text-xs text-muted-foreground">{courseName(student.courseId)} - {student.studyType || "—"}</p>
         </div>
         <div className="space-y-1">
-          <Badge variant={group === "final" ? "destructive" : "secondary"}>{dismissalInfo?.type || student.dismissalType || "فصل مؤقت"}</Badge>
-          <p className="text-xs text-muted-foreground">الحالة: {student.status}</p>
-          {dismissalInfo?.date ? <p className="text-xs text-muted-foreground">تاريخ الفصل: {formatAppDate(dismissalInfo.date)}</p> : null}
+          <Badge variant={group === "final" ? "destructive" : "secondary"}>{dismissalInfo.type || "فصل مؤقت"}</Badge>
+          <p className="text-xs text-muted-foreground">حالة الطالب الآن: {student.status}</p>
+          {dismissalInfo.date ? <p className="text-xs text-muted-foreground">تاريخ الفصل: {formatAppDate(dismissalInfo.date)}</p> : null}
         </div>
         <div className="space-y-1">
-          <p className="text-xs leading-6 text-muted-foreground">{dismissalInfo?.reason || student.dismissalReason || "لا يوجد سبب فصل مسجل"}</p>
+          <p className="text-xs leading-6 text-muted-foreground">{dismissalInfo.reason || "لا يوجد سبب فصل مسجل"}</p>
           <p className="rounded-xl bg-muted/50 px-2 py-1 text-[11px] text-muted-foreground">
-            الربط: {dismissalInfo?.sourceType === "opportunity-log" ? "سجل فرص/فصل" : dismissalInfo?.sourceType === "student-note" ? "ملاحظة إجراء الفصل" : "ملف الفصل الحالي"}
-            {dismissalInfo?.examName ? ` - ${dismissalInfo.examName}` : ""}
+            الربط: {dismissalInfo.sourceType === "opportunity-log" ? "سجل فرص/فصل" : dismissalInfo.sourceType === "student-note" ? "ملاحظة إجراء الفصل" : dismissalInfo.sourceType === "pledge-note" ? "تعهد محفوظ" : "ملف الفصل الحالي"}
+            {dismissalInfo.examName ? ` - ${dismissalInfo.examName}` : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -653,7 +747,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         </div>
         <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-muted/30 px-3 py-2">
           <span className="text-sm font-bold">التعهد</span>
-          <Checkbox checked={pledged} onCheckedChange={(value) => togglePledge(student, Boolean(value))} />
+          <Checkbox checked={pledged} onCheckedChange={(value) => togglePledge(row, Boolean(value))} />
         </label>
         <div className="flex items-center justify-end">
           <Button variant="ghost" size="sm" onClick={() => openProfile(student.id)}>ملف الطالب</Button>
@@ -748,18 +842,19 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
       {view === "pledges" && (
         <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-5">
-            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">المفصولون</p><b className="text-2xl">{pledgeStats.dismissed}</b></CardContent></Card>
+          <div className="grid gap-3 md:grid-cols-6">
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">المفصولون الآن</p><b className="text-2xl">{pledgeStats.dismissed}</b></CardContent></Card>
             <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">فصل مؤقت</p><b className="text-2xl">{pledgeStats.temporary}</b></CardContent></Card>
             <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">فصل نهائي</p><b className="text-2xl">{pledgeStats.final}</b></CardContent></Card>
             <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">تم التعهد</p><b className="text-2xl">{pledgeStats.pledged}</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">تم التعهد وإعادة التفعيل</p><b className="text-2xl">{pledgeStats.reactivated}</b></CardContent></Card>
             <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">بانتظار التعهد</p><b className="text-2xl">{pledgeStats.pending}</b></CardContent></Card>
           </div>
 
           <Card>
             <CardContent className="grid gap-3 p-4 md:grid-cols-3">
-              <div className="space-y-2"><Label>فرز الفصل</Label><Select value={pledgeTypeFilter} onValueChange={(value) => setPledgeTypeFilter(value as PledgeTypeFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل المفصولين</SelectItem><SelectItem value="temporary">طلبة الفصل المؤقت</SelectItem><SelectItem value="final">طلبة الفصل النهائي</SelectItem></SelectContent></Select></div>
-              <div className="space-y-2"><Label>حالة التعهد</Label><Select value={pledgeStatusFilter} onValueChange={(value) => setPledgeStatusFilter(value as PledgeStatusFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل الحالات</SelectItem><SelectItem value="pledged">تم التعهد</SelectItem><SelectItem value="pending">لم يتم التعهد</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><Label>فرز الفصل</Label><Select value={pledgeTypeFilter} onValueChange={(value) => setPledgeTypeFilter(value as PledgeTypeFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل ملفات الفصل</SelectItem><SelectItem value="temporary">طلبة الفصل المؤقت</SelectItem><SelectItem value="final">طلبة الفصل النهائي</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><Label>حالة التعهد</Label><Select value={pledgeStatusFilter} onValueChange={(value) => setPledgeStatusFilter(value as PledgeStatusFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل الحالات</SelectItem><SelectItem value="pledged">تم التعهد</SelectItem><SelectItem value="reactivated">تم التعهد وإعادة التفعيل</SelectItem><SelectItem value="pending">لم يتم التعهد</SelectItem></SelectContent></Select></div>
               <div className="space-y-2"><Label>بحث</Label><Input value={pledgeSearch} onChange={(event) => setPledgeSearch(event.target.value)} placeholder="طالب / كود / سبب الفصل" /></div>
             </CardContent>
           </Card>
@@ -767,7 +862,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           <Card>
             <CardHeader><CardTitle>قائمة التعهدات</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {dismissedStudentsForPledges.length === 0 ? <p className="empty-state py-8">لا توجد نتائج للتعهدات</p> : dismissedStudentsForPledges.map(renderPledgeRow)}
+              {pledgeRows.length === 0 ? <p className="empty-state py-8">لا توجد نتائج للتعهدات</p> : pledgeRows.map(renderPledgeRow)}
             </CardContent>
           </Card>
         </div>
