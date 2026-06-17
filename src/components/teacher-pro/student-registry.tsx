@@ -69,7 +69,6 @@ import {
 } from "lucide-react";
 import { EmptyState } from "./ui-kit";
 import { StudentProfileDialog } from "./student-profile-dialog";
-import { CustomFilterPresets, type FilterPresetValues } from "./custom-filter-presets";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import {
   STUDENT_FILTER_COURSE_PROGRAMS,
@@ -675,16 +674,6 @@ export function StudentRegistryView() {
   const studentGrades = (studentId: string) =>
     grades.filter((g) => g.studentId === studentId);
 
-  const applyFilterPreset = (values: FilterPresetValues) => {
-    setSearch(String(values.search || ""));
-    setFilterStatus(String(values.status || ""));
-    setFilterCourseProgram(String(values.courseProgram || ""));
-    setFilterCourseTerm(String(values.courseTerm || ""));
-    setFilterStudyType(String(values.studyType || ""));
-    setFilterLocation(String(values.location || ""));
-    setViewMode((values.viewMode as RegistryViewMode) || "cards");
-    setPage(1);
-  };
 
   const resetFilters = () => {
     setSearch("");
@@ -859,14 +848,6 @@ export function StudentRegistryView() {
                 تصدير CSV
               </Button>
             </div>
-          </div>
-          <div className="mt-3">
-            <CustomFilterPresets
-              storageKey="teacherpro.registry.customFilters"
-              currentFilters={{ search, status: filterStatus, courseProgram: filterCourseProgram, courseTerm: filterCourseTerm, studyType: filterStudyType, location: filterLocation, viewMode }}
-              onApply={applyFilterPreset}
-              onClear={resetFilters}
-            />
           </div>
         </CardContent>
       </Card>
