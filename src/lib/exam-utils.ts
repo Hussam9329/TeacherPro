@@ -1,4 +1,5 @@
 import { parseBaghdadDateTime } from './baghdad-time';
+import { MAIN_SITE_OPTIONS, normalizeIraqiProvinceName } from './iraq';
 
 export type ExamLike = {
   active: boolean;
@@ -107,14 +108,36 @@ export function hasActiveChapterLink(
   return courseChapters.some((link) => link.courseId === courseId && link.active && !link.archived);
 }
 
+export function normalizeExamSiteValue(value?: string | null): string {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const compact = raw.replace(/\s+/g, ' ');
+  if (compact === 'الكل') return 'الكل';
+  if (compact === 'اونلاين' || compact === 'إونلاين' || compact === 'الكتروني' || compact === 'إلكتروني') return 'أونلاين';
+  if (compact.startsWith('خارج القطر')) return 'خارج القطر';
+  if (compact === 'اربيل') return 'أربيل';
+  if (compact === 'الانبار') return 'الأنبار';
+  if (compact === 'البصره') return 'البصرة';
+  if (compact === 'الديوانيه') return 'الديوانية';
+  return normalizeIraqiProvinceName(compact);
+}
+
+export function isAllMainSitesSelection(selectedMainSites: string[]): boolean {
+  const normalizedSelection = new Set(selectedMainSites.map(normalizeExamSiteValue).filter(Boolean));
+  if (normalizedSelection.size === 0 || normalizedSelection.has('الكل')) return true;
+
+  const normalizedAllSites = MAIN_SITE_OPTIONS.map(normalizeExamSiteValue).filter(Boolean);
+  return normalizedAllSites.every((site) => normalizedSelection.has(site));
+}
+
 export function studentMatchesExamMainSites(student: StudentSiteLike, selectedMainSites: string[]): boolean {
-  if (selectedMainSites.length === 0) return true;
+  if (isAllMainSitesSelection(selectedMainSites)) return true;
   const values = new Set([
     student.mainSite,
     student.subSite,
     student.locationScope,
-  ].map((value) => String(value || '').trim()).filter(Boolean));
-  return selectedMainSites.some((site) => values.has(site));
+  ].map((value) => normalizeExamSiteValue(value)).filter(Boolean));
+  return selectedMainSites.some((site) => values.has(normalizeExamSiteValue(site)));
 }
 
 export function normalizeScore(value: unknown): number | null {

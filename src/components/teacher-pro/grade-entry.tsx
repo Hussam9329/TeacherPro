@@ -24,6 +24,7 @@ import {
   isGradeEntered,
   isExamWithinStudentGracePeriod,
   isScoreInsideExamRange,
+  isAllMainSitesSelection,
   splitSelection,
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
@@ -222,11 +223,12 @@ export function GradeEntryView() {
   const examStudents = useMemo(() => {
     if (!selectedExam) return [];
     const selectedMainSites = splitSelection(selectedExam.mainSite);
+    const courseWideExam = isAllMainSitesSelection(selectedMainSites);
 
     return students
       .filter((student) => {
         if (!selectedExam.courseIds.includes(student.courseId)) return false;
-        if (!isExamOnOrAfterStudentRegistration(student, selectedExam)) return false;
+        if (!courseWideExam && !isExamOnOrAfterStudentRegistration(student, selectedExam)) return false;
         if (!hasActiveChapterLink(courseChapters, student.courseId)) return false;
         if (!studentMatchesExamMainSites(student, selectedMainSites)) return false;
         if (filterCourseId && student.courseId !== filterCourseId) return false;
