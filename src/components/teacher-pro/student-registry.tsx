@@ -70,6 +70,14 @@ import {
 import { EmptyState } from "./ui-kit";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { CustomFilterPresets, type FilterPresetValues } from "./custom-filter-presets";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import {
+  STUDENT_FILTER_COURSE_PROGRAMS,
+  STUDENT_FILTER_COURSE_TERMS,
+  STUDENT_FILTER_STUDY_TYPES,
+  getStudentLocationFilterOptions,
+  studentMatchesListFilters,
+} from "@/lib/student-list-filters";
 
 type RegistryViewMode = "cards" | "table";
 
@@ -228,9 +236,11 @@ export function StudentRegistryView() {
   } = useTeacherStore();
 
   const [search, setSearch] = useState("");
-  const [filterCourseId, setFilterCourseId] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [filterGender, setFilterGender] = useState("");
+  const [filterCourseProgram, setFilterCourseProgram] = useState("");
+  const [filterCourseTerm, setFilterCourseTerm] = useState("");
+  const [filterStudyType, setFilterStudyType] = useState("");
+  const [filterLocation, setFilterLocation] = useState("");
   const [viewMode, setViewMode] = useState<RegistryViewMode>("cards");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -261,6 +271,14 @@ export function StudentRegistryView() {
     useActionLock();
   const { locked: isDeletingStudent, runLocked: runDeleteStudentLocked } =
     useActionLock();
+  const debouncedSearch = useDebouncedValue(search, 180);
+  const locationFilterOptions = useMemo(() => getStudentLocationFilterOptions(students), [students]);
+
+  useEffect(() => {
+    if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
+      setFilterCourseTerm("");
+    }
+  }, [filterCourseProgram, filterCourseTerm]);
 
   const editFilteredCourses = useMemo(
     () => courses.filter((c) => c.active),
@@ -537,8 +555,8 @@ export function StudentRegistryView() {
   const filtered = useMemo(() => {
     return students.filter((s) => {
       if (
-        search &&
-        !searchAny(search, [
+        debouncedSearch &&
+        !searchAny(debouncedSearch, [
           s.name,
           s.school,
           s.code,
@@ -551,17 +569,23 @@ export function StudentRegistryView() {
         ])
       )
         return false;
-      if (filterCourseId && s.courseId !== filterCourseId) return false;
       if (filterStatus && s.status !== filterStatus) return false;
-      if (filterGender && s.gender !== filterGender) return false;
+      if (!studentMatchesListFilters(s, {
+        courseProgram: filterCourseProgram,
+        courseTerm: filterCourseTerm,
+        studyType: filterStudyType,
+        location: filterLocation,
+      })) return false;
       return true;
     });
   }, [
     students,
-    search,
-    filterCourseId,
+    debouncedSearch,
     filterStatus,
-    filterGender,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
+    filterLocation,
   ]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
@@ -653,18 +677,22 @@ export function StudentRegistryView() {
 
   const applyFilterPreset = (values: FilterPresetValues) => {
     setSearch(String(values.search || ""));
-    setFilterCourseId(String(values.courseId || ""));
     setFilterStatus(String(values.status || ""));
-    setFilterGender(String(values.gender || ""));
+    setFilterCourseProgram(String(values.courseProgram || ""));
+    setFilterCourseTerm(String(values.courseTerm || ""));
+    setFilterStudyType(String(values.studyType || ""));
+    setFilterLocation(String(values.location || ""));
     setViewMode((values.viewMode as RegistryViewMode) || "cards");
     setPage(1);
   };
 
   const resetFilters = () => {
     setSearch("");
-    setFilterCourseId("");
     setFilterStatus("");
-    setFilterGender("");
+    setFilterCourseProgram("");
+    setFilterCourseTerm("");
+    setFilterStudyType("");
+    setFilterLocation("");
     setViewMode("cards");
     setPage(1);
   };
@@ -720,71 +748,96 @@ export function StudentRegistryView() {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="registry-course" className="text-xs">
-                الدورة
+              <Label htmlFor="registry-program" className="text-xs">
+                نوع الدورة
               </Label>
               <Select
-                name="courseId"
-                value={filterCourseId}
+                name="courseProgram"
+                value={filterCourseProgram || "all"}
                 onValueChange={(v) => {
-                  setFilterCourseId(v === "all" ? "" : v);
+                  setFilterCourseProgram(v === "all" ? "" : v);
                   setPage(1);
                 }}
               >
-                <SelectTrigger id="registry-course">
+                <SelectTrigger id="registry-program">
                   <SelectValue placeholder="الكل" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {courses.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
+                  {STUDENT_FILTER_COURSE_PROGRAMS.map((program) => (
+                    <SelectItem key={program} value={program}>{program}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {filterCourseProgram === "كورسات" && (
+              <div className="space-y-1">
+                <Label htmlFor="registry-term" className="text-xs">
+                  الكورس
+                </Label>
+                <Select
+                  name="courseTerm"
+                  value={filterCourseTerm || "all"}
+                  onValueChange={(v) => {
+                    setFilterCourseTerm(v === "all" ? "" : v);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger id="registry-term">
+                    <SelectValue placeholder="الكل" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">الكل</SelectItem>
+                    {STUDENT_FILTER_COURSE_TERMS.map((term) => (
+                      <SelectItem key={term} value={term}>{term}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-1">
+              <Label htmlFor="registry-study-type" className="text-xs">
+                نوع الدراسة
+              </Label>
+              <Select
+                name="studyType"
+                value={filterStudyType || "all"}
+                onValueChange={(v) => {
+                  setFilterStudyType(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-study-type">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {STUDENT_FILTER_STUDY_TYPES.map((studyType) => (
+                    <SelectItem key={studyType} value={studyType}>{studyType}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="registry-status" className="text-xs">
-                الحالة
+              <Label htmlFor="registry-location" className="text-xs">
+                المحافظة / الموقع
               </Label>
               <Select
-                name="status"
-                value={filterStatus}
+                name="location"
+                value={filterLocation || "all"}
                 onValueChange={(v) => {
-                  setFilterStatus(v === "all" ? "" : v);
+                  setFilterLocation(v === "all" ? "" : v);
                   setPage(1);
                 }}
               >
-                <SelectTrigger id="registry-status">
+                <SelectTrigger id="registry-location">
                   <SelectValue placeholder="الكل" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="نشط">نشط</SelectItem>
-                  <SelectItem value="مفصول">مفصول</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="registry-gender" className="text-xs">
-                الجنس
-              </Label>
-              <Select
-                name="gender"
-                value={filterGender}
-                onValueChange={(v) => {
-                  setFilterGender(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="registry-gender">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="ذكر">ذكر</SelectItem>
-                  <SelectItem value="أنثى">أنثى</SelectItem>
+                  {locationFilterOptions.map((location) => (
+                    <SelectItem key={location} value={location}>{location}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -810,7 +863,7 @@ export function StudentRegistryView() {
           <div className="mt-3">
             <CustomFilterPresets
               storageKey="teacherpro.registry.customFilters"
-              currentFilters={{ search, courseId: filterCourseId, status: filterStatus, gender: filterGender, viewMode }}
+              currentFilters={{ search, status: filterStatus, courseProgram: filterCourseProgram, courseTerm: filterCourseTerm, studyType: filterStudyType, location: filterLocation, viewMode }}
               onApply={applyFilterPreset}
               onClear={resetFilters}
             />
@@ -843,7 +896,7 @@ export function StudentRegistryView() {
               <p className="text-xs text-muted-foreground">بدون فصل نشط</p>
               <p className="text-2xl font-black text-amber-600">{noActiveChapterStudents.length}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => { setFilterStatus(""); setFilterCourseId(""); setSearch(""); setPage(1); }}>عرض الكل</Button>
+            <Button variant="outline" size="sm" onClick={() => { resetFilters(); }}>عرض الكل</Button>
           </CardContent>
         </Card>
       </div>

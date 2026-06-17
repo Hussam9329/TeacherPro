@@ -15,11 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { searchAny } from "@/lib/validation";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 export function LogsView() {
   const { logs } = useTeacherStore();
 
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 180);
   const [filterModule, setFilterModule] = useState("");
   const [filterUser, setFilterUser] = useState("");
   const [page, setPage] = useState(1);
@@ -34,13 +36,13 @@ export function LogsView() {
 
   const filtered = useMemo(() => {
     return logs.filter((l) => {
-      if (search && !searchAny(search, [l.action, l.details, l.module, l.user]))
+      if (debouncedSearch && !searchAny(debouncedSearch, [l.action, l.details, l.module, l.user]))
         return false;
       if (filterModule && l.module !== filterModule) return false;
       if (filterUser && l.user !== filterUser) return false;
       return true;
     });
-  }, [logs, search, filterModule, filterUser]);
+  }, [logs, debouncedSearch, filterModule, filterUser]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);

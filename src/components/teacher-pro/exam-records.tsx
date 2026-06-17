@@ -40,6 +40,7 @@ import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { downloadTextFile, escapeHtml, formatGradeScore, getExamStatus, hasActiveChapterLink, splitSelection } from "@/lib/exam-utils";
 import { searchAny } from "@/lib/validation";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 type ReportOptions = {
   orientation: "portrait" | "landscape";
@@ -141,6 +142,7 @@ export function ExamRecordsView() {
   } = useTeacherStore();
 
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 180);
   const [filterType, setFilterType] = useState("");
   const [filterCourseId, setFilterCourseId] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
@@ -159,12 +161,12 @@ export function ExamRecordsView() {
 
   const filteredExams = useMemo(() => {
     return exams.filter((exam) => {
-      if (search && !searchAny(search, [exam.name, exam.date, getExamStatus(exam), exam.mainSite, ...exam.courseIds.map(courseName)])) return false;
+      if (debouncedSearch && !searchAny(debouncedSearch, [exam.name, exam.date, getExamStatus(exam), exam.mainSite, ...exam.courseIds.map(courseName)])) return false;
       if (filterType && exam.type !== filterType) return false;
       if (filterCourseId && !exam.courseIds.includes(filterCourseId)) return false;
       return true;
     });
-  }, [exams, search, filterType, filterCourseId, courseName, clockTick]);
+  }, [exams, debouncedSearch, filterType, filterCourseId, courseName, clockTick]);
 
   const examRows = (examId: string) => {
     const exam = exams.find((item) => item.id === examId);

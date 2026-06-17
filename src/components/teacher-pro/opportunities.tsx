@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { formatGradeScore } from "@/lib/exam-utils";
 
@@ -46,6 +47,7 @@ export function OpportunitiesView() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterOpportunityCount, setFilterOpportunityCount] = useState("");
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 180);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [detailsStudentId, setDetailsStudentId] = useState("");
@@ -74,10 +76,10 @@ export function OpportunitiesView() {
       if (filterStatus === 'temporary-dismissal' && !(s.status === 'مفصول' && s.dismissalType === 'فصل مؤقت')) return false;
       if (filterStatus === 'final-dismissal' && !(s.status === 'مفصول' && s.dismissalType === 'فصل نهائي')) return false;
       if (filterOpportunityCount && s.opportunities !== Number(filterOpportunityCount)) return false;
-      if (search && !searchAny(search, [s.name, s.code, s.phone, s.parentPhone, s.telegram, s.school, s.subSite, s.status, s.dismissalType, s.dismissalReason, s.dismissalNotes])) return false;
+      if (debouncedSearch && !searchAny(debouncedSearch, [s.name, s.code, s.phone, s.parentPhone, s.telegram, s.school, s.subSite, s.status, s.dismissalType, s.dismissalReason, s.dismissalNotes])) return false;
       return true;
     });
-  }, [students, filterCourseId, filterStatus, filterOpportunityCount, search]);
+  }, [students, filterCourseId, filterStatus, filterOpportunityCount, debouncedSearch]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);

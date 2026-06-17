@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import { formatAppDate } from "@/lib/format";
 import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { formatGradeScore, isGradeEntered } from "@/lib/exam-utils";
 import { useActionLock } from "@/hooks/use-action-lock";
 
@@ -55,6 +56,7 @@ export function GradeRecordsView() {
   } = useTeacherStore();
 
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 180);
   const [filterExamId, setFilterExamId] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterCourseId, setFilterCourseId] = useState("");
@@ -133,7 +135,7 @@ export function GradeRecordsView() {
       const student = students.find((item) => item.id === grade.studentId);
       const exam = exams.find((item) => item.id === grade.examId);
       if (!student || !exam || !isGradeEntered(grade, exam)) return false;
-      if (search && !searchAny(search, [student.name, student.code, student.telegram, student.phone, student.subSite, student.locationScope, exam.name, grade.notes])) return false;
+      if (debouncedSearch && !searchAny(debouncedSearch, [student.name, student.code, student.telegram, student.phone, student.subSite, student.locationScope, exam.name, grade.notes])) return false;
       if (filterExamId && grade.examId !== filterExamId) return false;
       const cls = classification(grade, exam, student);
       if (filterStatus) {
@@ -146,7 +148,7 @@ export function GradeRecordsView() {
       if (filterCourseId && !exam.courseIds.includes(filterCourseId)) return false;
       return true;
     });
-  }, [grades, students, exams, search, filterExamId, filterStatus, filterCourseId, classification]);
+  }, [grades, students, exams, debouncedSearch, filterExamId, filterStatus, filterCourseId, classification]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);

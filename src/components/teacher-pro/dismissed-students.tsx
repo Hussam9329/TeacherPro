@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { searchAny } from "@/lib/validation";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "sonner";
 import { CustomFilterPresets, type FilterPresetValues } from "./custom-filter-presets";
 
@@ -24,6 +25,7 @@ type NotesFilter = "all" | "with-notes" | "without-notes";
 export function DismissedStudentsView() {
   const { students, courses, courseName, reactivateStudent, updateStudent } = useTeacherStore();
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 180);
   const [filterCourseId, setFilterCourseId] = useState("");
   const [filterDismissalType, setFilterDismissalType] = useState("");
   const [filterNotes, setFilterNotes] = useState<NotesFilter>("all");
@@ -44,7 +46,7 @@ export function DismissedStudentsView() {
         if (filterDismissalType && (student.dismissalType || "مفصول") !== filterDismissalType) return false;
         if (filterNotes === "with-notes" && !hasNotes) return false;
         if (filterNotes === "without-notes" && hasNotes) return false;
-        if (search && !searchAny(search, [
+        if (debouncedSearch && !searchAny(debouncedSearch, [
           student.name,
           student.code,
           student.phone,
@@ -60,7 +62,7 @@ export function DismissedStudentsView() {
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
-  }, [students, filterCourseId, filterDismissalType, filterNotes, search]);
+  }, [students, filterCourseId, filterDismissalType, filterNotes, debouncedSearch]);
 
   const handleReactivate = (studentId: string) => {
     reactivateStudent(studentId);
