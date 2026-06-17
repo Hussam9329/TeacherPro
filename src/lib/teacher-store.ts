@@ -1847,15 +1847,17 @@ export const useTeacherStore = create<TeacherState>()(
         const previousCourseChapters = state.courseChapters;
         const previousStudents = state.students;
         const updatedCc = get().courseChapters.find(x => x.id === courseChapterId);
-        if (updatedCc) syncToServer(get, () => courseChapterApi.update(courseChapterId, { active: updatedCc.active, archived: updatedCc.archived, archive: JSON.stringify(updatedCc.archive) }), {
-          description: 'تفعيل/تعطيل فصل',
+        if (updatedCc) syncToServer(get, () => courseChapterApi.update(courseChapterId, {
+          active: updatedCc.active,
+          archived: updatedCc.archived,
+          archive: JSON.stringify(updatedCc.archive || []),
+          syncStudentOpportunities: true,
+          courseId: cc.courseId,
+          chapterOpportunities: chapter.opportunities,
+        }), {
+          description: 'تفعيل/تعطيل فصل وتحديث فرص الطلاب دفعة واحدة',
           rollback: () => set({ courseChapters: previousCourseChapters, students: previousStudents }),
         });
-        // Sync updated students to DB
-        get().students.filter(st => st.courseId === cc.courseId).forEach(st => syncToServer(get, () => studentApi.update(st.id, { opportunities: st.opportunities, baseOpportunities: st.baseOpportunities }), {
-          description: 'تحديث فرص الطلاب بعد تفعيل الفصل',
-          rollback: () => set({ courseChapters: previousCourseChapters, students: previousStudents }),
-        }));
       },
       deleteCourseChapter: (courseChapterId) => {
         const cc = get().courseChapters.find((x) => x.id === courseChapterId);

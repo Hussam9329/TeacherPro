@@ -6,6 +6,49 @@ import { requireAnyPermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 
+type ArchiveEntry = { studentId: string; opportunities: number; date?: string };
+
+function normalizeBoolean(value: unknown): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value === 'true';
+  return Boolean(value);
+}
+
+function normalizeOpportunityValue(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.trunc(numeric));
+}
+
+function parseArchiveEntries(value: unknown): ArchiveEntry[] {
+  const source = typeof value === 'string' ? value : JSON.stringify(value ?? []);
+  try {
+    const parsed = JSON.parse(source);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => ({
+        studentId: String((entry as { studentId?: unknown }).studentId || '').trim(),
+        opportunities: normalizeOpportunityValue((entry as { opportunities?: unknown }).opportunities),
+        date: (entry as { date?: unknown }).date ? String((entry as { date?: unknown }).date) : undefined,
+      }))
+      .filter((entry) => entry.studentId);
+  } catch {
+    return [];
+  }
+}
+
+function normalizeArchiveText(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.trim() ? value : '[]';
+  }
+  try {
+    return JSON.stringify(Array.isArray(value) ? value : []);
+  } catch {
+    return '[]';
+  }
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requireAnyPermission(req, ['chapters.view', 'courses.view']);
   if (authError) return authError;
@@ -57,10 +100,67 @@ export async function PUT(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { id, ...data } = body;
+    const { id } = body;
     if (!id) return validationError('تعذر تحديد رابط الفصل بالدورة');
-    const courseChapter = await db.courseChapter.update({ where: { id }, data });
-    return NextResponse.json({ courseChapter });
+
+    const syncStudentOpportunities = body.syncStudentOpportunities === true;
+    const updateData: {
+      active?: boolean;
+      archived?: boolean;
+      archive?: string;
+      courseId?: string;
+      chapterId?: string;
+    } = {};
+
+    const activeValue = normalizeBoolean(body.active);
+    const archivedValue = normalizeBoolean(body.archived);
+    if (activeValue !== undefined) updateData.active = activeValue;
+    if (archivedValue !== undefined) updateData.archived = archivedValue;
+    if (body.archive !== undefined) updateData.archive = normalizeArchiveText(body.archive);
+    if (body.courseId !== undefined && !syncStudentOpportunities) updateData.courseId = String(body.courseId);
+    if (body.chapterId !== undefined && !syncStudentOpportunities) updateData.chapterId = String(body.chapterId);
+
+    const result = await db.$transaction(async (tx) => {
+      const courseChapter = await tx.courseChapter.update({ where: { id: String(id) }, data: updateData });
+      let affectedStudents = 0;
+
+      if (syncStudentOpportunities) {
+        const courseId = String(body.courseId || courseChapter.courseId || '').trim();
+        if (!courseId) {
+          throw new Error('تعذر تحديد دورة الفصل لتحديث فرص الطلاب');
+        }
+
+        if (courseChapter.active) {
+          const baseOpportunities = normalizeOpportunityValue(body.chapterOpportunities);
+          const baseUpdate = await tx.student.updateMany({
+            where: { courseId },
+            data: { opportunities: baseOpportunities, baseOpportunities },
+          });
+          affectedStudents = baseUpdate.count;
+
+          const archiveEntries = parseArchiveEntries(courseChapter.archive);
+          for (const entry of archiveEntries) {
+            await tx.student.updateMany({
+              where: { id: entry.studentId, courseId },
+              data: {
+                opportunities: entry.opportunities,
+                baseOpportunities,
+              },
+            });
+          }
+        } else {
+          const resetUpdate = await tx.student.updateMany({
+            where: { courseId },
+            data: { opportunities: 0, baseOpportunities: 0 },
+          });
+          affectedStudents = resetUpdate.count;
+        }
+      }
+
+      return { courseChapter, affectedStudents };
+    });
+
+    return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث رابط الفصل بالدورة حالياً.');
   }

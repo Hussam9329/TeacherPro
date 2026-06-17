@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { ensureExamSchema } from '@/lib/exam-schema';
 
 function validateCorrectionSheetPayload(body: Record<string, unknown>) {
   const studentError = requireText(body.studentId, 'الطالب');
@@ -21,6 +22,8 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    await ensureExamSchema();
+
     const correctionSheets = await db.correctionSheet.findMany({
       orderBy: { startedAt: 'desc' },
       include: { student: true, exam: true, corrector: true },

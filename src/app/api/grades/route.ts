@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { ensureExamSchema } from '@/lib/exam-schema';
 
 async function validateGradePayload(body: Record<string, unknown>) {
   const studentError = requireText(body.studentId, 'الطالب');
@@ -28,6 +29,8 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    await ensureExamSchema();
+
     // ترحيل آمن للبيانات القديمة: حالة الإجازة صارت تدار من StudentLeave وليس من grades.
     await db.grade.updateMany({ where: { status: 'مجاز' }, data: { status: 'غائب' } }).catch(() => null);
     const grades = await db.grade.findMany({ orderBy: { updatedAt: 'desc' }, include: { student: true, exam: true } });
@@ -42,6 +45,8 @@ export async function POST(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    await ensureExamSchema();
+
     const body = await req.json();
     const validationMessage = await validateGradePayload(body);
     if (validationMessage) return validationError(validationMessage);
@@ -77,6 +82,8 @@ export async function PUT(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    await ensureExamSchema();
+
     const body = await req.json();
     const { id, ...data } = body;
     delete data.accountingChecked;

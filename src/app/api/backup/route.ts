@@ -6,12 +6,15 @@ import { requireAnyPermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { findManyOrEmpty, routeErrorResponse } from '@/lib/route-helpers';
 import { withFollowupTables } from '@/lib/followup-schema';
+import { ensureExamSchema } from '@/lib/exam-schema';
 
 export async function GET(req: NextRequest) {
   const authError = await requireAnyPermission(req, ['backup.view', 'accounts.manage', 'system.settings']);
   if (authError) return authError;
 
   try {
+    await ensureExamSchema();
+
     const [
       courses,
       chapters,

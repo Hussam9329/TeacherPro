@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { parseBaghdadDateTime } from '@/lib/baghdad-time';
+import { ensureExamSchema } from '@/lib/exam-schema';
 
 function parseCourseIds(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -49,6 +50,8 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    await ensureExamSchema();
+
     const exams = await db.exam.findMany({ orderBy: { date: 'desc' }, include: { grades: true } });
     return NextResponse.json({ exams });
   } catch (error) {
@@ -61,6 +64,8 @@ export async function POST(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    await ensureExamSchema();
+
     const body = await req.json();
     const validationMessage = validateExamPayload(body);
     if (validationMessage) return validationError(validationMessage);
@@ -95,6 +100,8 @@ export async function PUT(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    await ensureExamSchema();
+
     const body = await req.json();
     const { id, ...data } = body;
     for (const obsoleteKey of ["attendance", "attendanceClosed", "groupId"]) {
@@ -151,6 +158,8 @@ export async function DELETE(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    await ensureExamSchema();
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد الامتحان المطلوب');
