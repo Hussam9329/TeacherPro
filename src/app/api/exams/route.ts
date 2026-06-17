@@ -22,20 +22,25 @@ function parseCourseIds(value: unknown): string[] {
   return [];
 }
 
+function parseBoolean(value: unknown): boolean {
+  return value === true || value === 'true' || value === '1' || value === 1;
+}
+
 function validateExamPayload(body: Record<string, unknown>) {
   const nameError = requireText(body.name, 'اسم الامتحان');
   if (nameError) return nameError;
   if (!['يومي', 'تراكمي', 'فاينل'].includes(String(body.type ?? ''))) return 'نوع الامتحان غير صحيح';
   if (parseCourseIds(body.courseIds).length === 0) return 'يجب اختيار دورة واحدة على الأقل';
+  const noDiscount = parseBoolean(body.noDiscount);
   const fullMark = Number(body.fullMark ?? 100);
   const passMark = Number(body.passMark ?? 50);
-  const discountMark = Number(body.discountMark ?? 0);
+  const discountMark = noDiscount ? 0 : Number(body.discountMark ?? 0);
   if (![fullMark, passMark, discountMark].every(Number.isFinite)) return 'درجات الامتحان يجب أن تكون أرقاماً صحيحة';
   if (fullMark <= 0) return 'الدرجة الكاملة يجب أن تكون أكبر من صفر';
   if (passMark < 0 || passMark > fullMark) return 'درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة';
-  if (discountMark < 0 || discountMark > fullMark) return 'درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة';
-  if (String(body.type) !== 'فاينل' && passMark <= discountMark) return 'درجة النجاح يجب أن تكون أكبر من درجة الخصم';
-  if (String(body.type) !== 'فاينل' && Number(body.opportunitiesPenalty ?? 1) <= 0) return 'خصم الفرص يجب أن يكون أكبر من صفر';
+  if (!noDiscount && (discountMark < 0 || discountMark > fullMark)) return 'درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة';
+  if (!noDiscount && String(body.type) !== 'فاينل' && passMark <= discountMark) return 'درجة النجاح يجب أن تكون أكبر من درجة الخصم';
+  if (!noDiscount && String(body.type) !== 'فاينل' && Number(body.opportunitiesPenalty ?? 1) <= 0) return 'خصم الفرص يجب أن يكون أكبر من صفر';
   return null;
 }
 
@@ -59,6 +64,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const validationMessage = validateExamPayload(body);
     if (validationMessage) return validationError(validationMessage);
+    const noDiscount = parseBoolean(body.noDiscount);
     const exam = await db.exam.create({
       data: {
         id: body.id,
@@ -69,9 +75,10 @@ export async function POST(req: NextRequest) {
         date: body.date ? new Date(body.date) : new Date(),
         fullMark: Number(body.fullMark || 100),
         passMark: Number(body.passMark || 50),
-        discountMark: Number(body.discountMark || 0),
-        opportunitiesPenalty: String(body.opportunitiesPenalty ?? 1),
-        dismissalGrade: String(body.type) === 'فاينل' && body.dismissalGrade !== null && body.dismissalGrade !== undefined ? Number(body.dismissalGrade) : null,
+        discountMark: noDiscount ? 0 : Number(body.discountMark || 0),
+        opportunitiesPenalty: noDiscount ? '0' : String(body.opportunitiesPenalty ?? 1),
+        dismissalGrade: !noDiscount && String(body.type) === 'فاينل' && body.dismissalGrade !== null && body.dismissalGrade !== undefined ? Number(body.dismissalGrade) : null,
+        noDiscount,
         active: body.active ?? true,
         scheduledActivateAt: body.scheduledActivateAt ? parseBaghdadDateTime(String(body.scheduledActivateAt)) : null,
         scheduledDeactivateAt: body.scheduledDeactivateAt ? parseBaghdadDateTime(String(body.scheduledDeactivateAt)) : null,
@@ -108,6 +115,7 @@ export async function PUT(req: NextRequest) {
     if (data.discountMark !== undefined) data.discountMark = Number(data.discountMark);
     if (data.opportunitiesPenalty !== undefined) data.opportunitiesPenalty = String(data.opportunitiesPenalty);
     if (data.dismissalGrade !== undefined) data.dismissalGrade = data.dismissalGrade === null || data.dismissalGrade === "" ? null : Number(data.dismissalGrade);
+    if (data.noDiscount !== undefined) data.noDiscount = parseBoolean(data.noDiscount);
     if (data.scheduledActivateAt !== undefined) data.scheduledActivateAt = data.scheduledActivateAt ? parseBaghdadDateTime(String(data.scheduledActivateAt)) : null;
     if (data.scheduledDeactivateAt !== undefined) data.scheduledDeactivateAt = data.scheduledDeactivateAt ? parseBaghdadDateTime(String(data.scheduledDeactivateAt)) : null;
 
@@ -119,9 +127,17 @@ export async function PUT(req: NextRequest) {
       passMark: data.passMark ?? existingExam.passMark,
       discountMark: data.discountMark ?? existingExam.discountMark,
       opportunitiesPenalty: data.opportunitiesPenalty ?? existingExam.opportunitiesPenalty,
+      noDiscount: data.noDiscount ?? existingExam.noDiscount,
     });
     if (candidateValidationMessage) return validationError(candidateValidationMessage);
-    if (String(data.type ?? existingExam.type) !== 'فاينل') data.dismissalGrade = null;
+    const effectiveNoDiscount = Boolean(data.noDiscount ?? existingExam.noDiscount);
+    if (effectiveNoDiscount) {
+      data.discountMark = 0;
+      data.opportunitiesPenalty = '0';
+      data.dismissalGrade = null;
+    } else if (String(data.type ?? existingExam.type) !== 'فاينل') {
+      data.dismissalGrade = null;
+    }
 
     const exam = await db.exam.update({ where: { id }, data });
     return NextResponse.json({ exam });

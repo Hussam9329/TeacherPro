@@ -82,6 +82,7 @@ export function GradeRecordsView() {
     opportunityLogs.some((log) => log.studentId === studentId && log.action === "إعادة تفعيل");
 
   const examPenaltyAmount = (exam: NonNullable<typeof exams[number]>, studentOpportunities: number) => {
+    if (exam.noDiscount) return 0;
     if (exam.type === "فاينل" && exam.opportunitiesPenalty === "فصل مؤقت") return Math.max(1, studentOpportunities);
     return Math.max(0, Number(exam.opportunitiesPenalty || 0));
   };

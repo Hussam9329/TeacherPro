@@ -359,6 +359,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return eligibleStudentsForExam(exam).flatMap<CallRow>((student) => {
       if (studentHasLeaveForExam(student.id, exam.id)) return [];
       if (isExamWithinStudentGracePeriod(student, exam)) return [];
+      if (exam.noDiscount) return [];
       const grade = getGrade(student.id, exam.id);
       const entered = isGradeEntered(grade, exam);
       if (!entered) return [];

@@ -98,6 +98,7 @@ export interface Exam {
   discountMark: number;
   opportunitiesPenalty: number | 'فصل مؤقت';
   dismissalGrade: number | null;
+  noDiscount: boolean;
   active: boolean;
   scheduledActivateAt?: string;
   scheduledDeactivateAt?: string;
@@ -718,6 +719,7 @@ function isRuleManagedDismissal(student: Student): boolean {
 }
 
 function examPenaltyValue(exam: Exam): number {
+  if (exam.noDiscount) return 0;
   return typeof exam.opportunitiesPenalty === 'number'
     ? exam.opportunitiesPenalty
     : Number(exam.opportunitiesPenalty) || 1;
@@ -861,6 +863,7 @@ function gradeHasAcademicEffect(grade: Grade, exam: Exam): boolean {
   if (!isExamAvailableForEntry(exam)) return false;
   if (!isGradeEntered(grade, exam)) return false;
   if (grade.status === 'غش') return true;
+  if (exam.noDiscount) return false;
   if (grade.status === 'غائب') return true;
   if (grade.status !== 'درجة' || grade.score === null) return false;
   const score = Number(grade.score);
@@ -1214,6 +1217,10 @@ function recalculateStudentsFromAcademicRules(
         continue;
       }
 
+      if (exam.noDiscount) {
+        continue;
+      }
+
       if (grade.status === 'غائب') {
         if (exam.type === 'فاينل') {
           setDismissal('فصل مؤقت', `غياب ضمن درجة الفصل في امتحان ${exam.type}: ${exam.name}`, 75, exam, grade.id);
@@ -1407,6 +1414,7 @@ export const useTeacherStore = create<TeacherState>()(
             discountMark: Number(ex.discountMark || 0),
             opportunitiesPenalty: ex.opportunitiesPenalty === 'فصل مؤقت' ? 'فصل مؤقت' as const : Number(ex.opportunitiesPenalty || 1),
             dismissalGrade: ex.dismissalGrade === null || ex.dismissalGrade === undefined ? null : Number(ex.dismissalGrade),
+            noDiscount: Boolean(ex.noDiscount),
             active: Boolean(ex.active),
             scheduledActivateAt: normalizeDateTimeValue(ex.scheduledActivateAt),
             scheduledDeactivateAt: normalizeDateTimeValue(ex.scheduledDeactivateAt),
@@ -1647,6 +1655,10 @@ export const useTeacherStore = create<TeacherState>()(
         if (student && !isExamOnOrAfterStudentRegistration(student, exam)) return { text: 'قبل التسجيل', type: 'neutral', kind: 'before-registration' };
         if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
         if (grade.status === 'غش') return { text: 'غش', type: 'danger', kind: 'cheat' };
+        if (exam.noDiscount) {
+          if (grade.status === 'درجة' && Number(grade.score || 0) >= exam.passMark) return { text: 'ناجح', type: 'ok', kind: 'pass' };
+          return { text: 'بدون خصم', type: 'info', kind: 'no-discount' };
+        }
         if (grade.status === 'غائب') {
           if (exam.type === 'فاينل') return { text: 'فصل', type: 'danger', kind: 'dismissal' };
           return { text: 'مخصوم', type: 'danger', kind: 'deducted' };
@@ -2614,6 +2626,7 @@ export const useTeacherStore = create<TeacherState>()(
             parsed.exams = parsed.exams.map((exam) => {
               const copy = { ...(exam as unknown as Record<string, unknown>) };
               delete copy.groupId;
+              copy.noDiscount = Boolean(copy.noDiscount);
               return copy as unknown as Exam;
             });
           }

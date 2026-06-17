@@ -144,7 +144,7 @@ export function GradeEntryView() {
     opportunityLogs.some((log) => log.studentId === studentId && log.action === "إعادة تفعيل");
 
   const examPenaltyAmount = (exam: typeof selectedExam, studentOpportunities: number) => {
-    if (!exam) return 0;
+    if (!exam || exam.noDiscount) return 0;
     if (exam.type === "فاينل" && exam.opportunitiesPenalty === "فصل مؤقت") return Math.max(1, studentOpportunities);
     return Math.max(0, Number(exam.opportunitiesPenalty || 0));
   };
@@ -508,7 +508,9 @@ export function GradeEntryView() {
                 <Badge>{selectedExam.type}</Badge>
                 <span>الدرجة الكاملة: {selectedExam.fullMark}</span>
                 <span>النجاح: {selectedExam.passMark}</span>
-                {selectedExam.type !== "فاينل" ? (
+                {selectedExam.noDiscount ? (
+                  <span>بدون خصم: لا محاسبة على الدرجة أو الغياب</span>
+                ) : selectedExam.type !== "فاينل" ? (
                   <>
                     <span>الخصم: {selectedExam.discountMark}</span>
                     <span>فرص الخصم: {selectedExam.opportunitiesPenalty}</span>

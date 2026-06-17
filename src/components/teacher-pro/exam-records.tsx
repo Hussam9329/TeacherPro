@@ -182,7 +182,7 @@ export function ExamRecordsView() {
 
   const examStats = (examId: string) => {
     const rows = examRows(examId);
-    const protectedKinds = ["grace", "excused", "before-registration", "missing"];
+    const protectedKinds = ["grace", "excused", "before-registration", "missing", "no-discount"];
     const accountableRows = rows.filter((row) => !protectedKinds.includes(row.cls.kind));
     return {
       rows,
@@ -203,9 +203,10 @@ export function ExamRecordsView() {
       { label: "الموقع", value: mainSites.join("، ") || "الكل" },
       { label: "الدرجة الكاملة", value: exam.fullMark },
       { label: "درجة النجاح", value: exam.passMark },
-      { label: "درجة الخصم", value: exam.discountMark },
-      { label: "خصم الفرص", value: exam.opportunitiesPenalty },
-      { label: "درجة الفصل", value: exam.dismissalGrade ?? "—" },
+      { label: "بدون خصم", value: exam.noDiscount ? "نعم" : "لا" },
+      { label: "درجة الخصم", value: exam.noDiscount ? "معطل" : exam.discountMark },
+      { label: "خصم الفرص", value: exam.noDiscount ? "معطل" : exam.opportunitiesPenalty },
+      { label: "درجة الفصل", value: exam.noDiscount ? "معطل" : (exam.dismissalGrade ?? "—") },
       { label: "تفعيل مجدول", value: formatDateTime(exam.scheduledActivateAt) },
       { label: "تعطيل مجدول", value: formatDateTime(exam.scheduledDeactivateAt) },
       { label: "عدد سجلات الدرجات", value: rowsCount },
@@ -660,15 +661,15 @@ tr:nth-child(even) td { background: #f8fafc; }
               <tr key={exam.id} className="border-t align-top">
                 <td className="p-3 font-bold">{exam.name}</td>
                 <td className="p-3">{formatAppDate(exam.date)}</td>
-                <td className="p-3"><Badge>{exam.type}</Badge></td>
+                <td className="p-3"><div className="flex flex-wrap gap-1"><Badge>{exam.type}</Badge>{exam.noDiscount && <Badge variant="secondary">بدون خصم</Badge>}</div></td>
                 <td className="p-3"><Badge variant="outline">{getExamStatus(exam)}</Badge></td>
                 <td className="p-3 min-w-44">{exam.courseIds.map(courseName).join("، ") || "—"}</td>
                 <td className="p-3 min-w-36">{splitSelection(exam.mainSite).join("، ") || "الكل"}</td>
                 <td className="p-3">{exam.fullMark}</td>
                 <td className="p-3">{exam.passMark}</td>
-                <td className="p-3">{exam.discountMark}</td>
-                <td className="p-3">{exam.opportunitiesPenalty}</td>
-                <td className="p-3">{exam.dismissalGrade ?? "—"}</td>
+                <td className="p-3">{exam.noDiscount ? "معطل" : exam.discountMark}</td>
+                <td className="p-3">{exam.noDiscount ? "معطل" : exam.opportunitiesPenalty}</td>
+                <td className="p-3">{exam.noDiscount ? "معطل" : (exam.dismissalGrade ?? "—")}</td>
                 <td className="p-3 min-w-36">{formatDateTime(exam.scheduledActivateAt)}</td>
                 <td className="p-3 min-w-36">{formatDateTime(exam.scheduledDeactivateAt)}</td>
                 <td className="p-3">{rows.length}</td>
