@@ -297,6 +297,8 @@ export const courseChapterApi = {
 export const studentApi = {
   add: (student: Record<string, unknown>) =>
     apiPost('students', student),
+  bulkAdd: (students: Array<Record<string, unknown>>) =>
+    apiPost('students/bulk', { students }),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut('students', { id, ...updates }),
   remove: (id: string) =>
