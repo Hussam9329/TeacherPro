@@ -487,3 +487,10 @@ button[data-slot="button"][class*="text-destructive"] svg {
     min-width: 0;
   }
 }
+
+
+/* عزل الصفوف الثقيلة حتى لا يعيد المتصفح قياس كل القائمة عند كل نقرة أو بحث */
+.teacherpro-heavy-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 92px;
+}

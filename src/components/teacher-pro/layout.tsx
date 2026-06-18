@@ -283,7 +283,9 @@ export function TeacherProLayout() {
   });
 
   const toggleFamily = (title: string) => {
-    setOpenFamilies((prev) => ({ ...prev, [title]: !prev[title] }));
+    React.startTransition(() => {
+      setOpenFamilies((prev) => ({ ...prev, [title]: !prev[title] }));
+    });
   };
 
   const handleSectionLinkClick = (
@@ -302,11 +304,13 @@ export function TeacherProLayout() {
     if (!isAdmin && !canAccess(section)) return;
     React.startTransition(() => setSection(section));
     if (typeof window !== "undefined") {
-      const nextUrl = new URL(window.location.href);
-      nextUrl.searchParams.set("section", section);
-      nextUrl.hash = "";
-      window.history.pushState({}, "", nextUrl.toString());
-      if (window.innerWidth < 1024) setSidebarOpen(false);
+      window.requestAnimationFrame(() => {
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set("section", section);
+        nextUrl.hash = "";
+        window.history.pushState({}, "", nextUrl.toString());
+        if (window.innerWidth < 1024) setSidebarOpen(false);
+      });
     }
   };
 
@@ -336,8 +340,9 @@ export function TeacherProLayout() {
     ].join(",");
 
     const isVisibleSearchControl = (control: HTMLInputElement | HTMLTextAreaElement) => {
+      // Avoid layout reads such as offsetParent/getComputedStyle here; Ctrl+F must stay instant.
       if (control.disabled || control.readOnly) return false;
-      return Boolean(control.offsetParent) && (!(control instanceof HTMLInputElement) || control.type !== "hidden");
+      return !(control instanceof HTMLInputElement) || control.type !== "hidden";
     };
 
     const findVisibleSearchInput = () => {
@@ -358,11 +363,9 @@ export function TeacherProLayout() {
       const searchInput = findVisibleSearchInput();
       if (!searchInput) return false;
       searchInput.focus({ preventScroll: true });
-      searchInput.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
-      requestAnimationFrame(() => {
-        searchInput.focus({ preventScroll: true });
-        searchInput.select();
-      });
+      if (typeof searchInput.select === "function") {
+        window.requestAnimationFrame(() => searchInput.select());
+      }
       return true;
     };
 

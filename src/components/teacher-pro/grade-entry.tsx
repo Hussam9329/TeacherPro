@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
-import { searchAny } from "@/lib/validation";
-import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { normalizeForSearch } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
 import {
   STUDENT_FILTER_COURSE_PROGRAMS,
@@ -45,6 +44,47 @@ type DraftGrade = {
 };
 
 const statusOptions: DraftGrade["status"][] = ["درجة", "غائب", "غش"];
+
+const GradeEntrySearchInput = React.memo(function GradeEntrySearchInput({
+  value,
+  onCommit,
+  onForwardTab,
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+  onForwardTab: () => boolean;
+}) {
+  const [localValue, setLocalValue] = useState(value);
+
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => onCommit(localValue), 90);
+    return () => window.clearTimeout(timer);
+  }, [localValue, onCommit]);
+
+  return (
+    <Input
+      id="grade-entry-search"
+      name="search"
+      data-teacherpro-search="true"
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Tab" && !event.shiftKey) {
+          const focused = onForwardTab();
+          if (focused) event.preventDefault();
+        }
+      }}
+      placeholder="اسم / كود / تليكرام / محافظة"
+      autoComplete="off"
+      className="h-10"
+    />
+  );
+});
+
 
 function normalizeGradeScoreInput(value: string, fullMark: number) {
   const normalized = toLatinDigits(value).trim();
@@ -79,7 +119,7 @@ export function GradeEntryView() {
   const [filterLocation, setFilterLocation] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [entryPage, setEntryPage] = useState(1);
-  const [entryPageSize, setEntryPageSize] = useState(100);
+  const [entryPageSize, setEntryPageSize] = useState(50);
   const [drafts, setDrafts] = useState<Record<string, DraftGrade>>({});
   const [savingRows, setSavingRows] = useState<Record<string, boolean>>({});
   const [savedRows, setSavedRows] = useState<Record<string, string>>({});
@@ -88,7 +128,6 @@ export function GradeEntryView() {
     useState<Record<string, boolean>>({});
   const [clockTick, setClockTick] = useState(0);
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-  const debouncedSearch = useDebouncedValue(search, 180);
   const { locked: clearingAbsentGrades, runLocked: runClearAbsentGradesLocked } = useActionLock();
 
   const locationFilterOptions = useMemo(
@@ -106,7 +145,7 @@ export function GradeEntryView() {
     setEntryPage(1);
   }, [
     selectedExamId,
-    debouncedSearch,
+    search,
     filterCourseProgram,
     filterCourseTerm,
     filterStudyType,
@@ -127,11 +166,89 @@ export function GradeEntryView() {
     () => exams.filter((e) => isExamAvailableForEntry(e)),
     [exams, clockTick],
   );
+  const normalizedSearch = useMemo(() => normalizeForSearch(search), [search]);
+  const studentById = useMemo(
+    () => new Map(students.map((student) => [student.id, student])),
+    [students],
+  );
+  const activeChapterCourseIds = useMemo(
+    () =>
+      new Set(
+        courseChapters
+          .filter((link) => link.active && !link.archived)
+          .map((link) => link.courseId),
+      ),
+    [courseChapters],
+  );
+  const gradeByStudentId = useMemo(() => {
+    const map = new Map<string, (typeof grades)[number]>();
+    if (!selectedExamId) return map;
+    for (const grade of grades) {
+      if (grade.examId === selectedExamId) map.set(grade.studentId, grade);
+    }
+    return map;
+  }, [grades, selectedExamId]);
+  const leaveByStudentId = useMemo(() => {
+    const map = new Map<string, (typeof studentLeaves)[number]>();
+    if (!selectedExam) return map;
+    const examDate = String(selectedExam.date || "").slice(0, 10);
+    for (const leave of studentLeaves) {
+      if ((leave.leaveType || "exam") === "period") {
+        const from = String(leave.dateFrom || leave.date || "").slice(0, 10);
+        const to = String(leave.dateTo || leave.dateFrom || leave.date || "").slice(0, 10);
+        if (examDate && from && to && examDate >= from && examDate <= to) {
+          map.set(leave.studentId, leave);
+        }
+      } else if (leave.examId === selectedExam.id) {
+        map.set(leave.studentId, leave);
+      }
+    }
+    return map;
+  }, [selectedExam, studentLeaves]);
+  const automaticEffectStudentIds = useMemo(() => {
+    const set = new Set<string>();
+    if (!selectedExamId) return set;
+    for (const log of opportunityLogs) {
+      if (
+        log.examId === selectedExamId &&
+        (log.action === "خصم تلقائي" ||
+          log.action === "فصل تلقائي" ||
+          String(log.reason || "").startsWith("تلقائي:"))
+      ) {
+        set.add(log.studentId);
+      }
+    }
+    return set;
+  }, [opportunityLogs, selectedExamId]);
+  const manuallyReactivatedStudentIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const log of opportunityLogs) {
+      if (log.action === "إعادة تفعيل") set.add(log.studentId);
+    }
+    return set;
+  }, [opportunityLogs]);
+  const studentSearchTextById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const student of students) {
+      map.set(
+        student.id,
+        normalizeForSearch([
+          student.name,
+          student.code,
+          student.telegram,
+          student.phone,
+          student.parentPhone,
+          student.school,
+          student.subSite,
+          student.locationScope,
+          student.mainSite,
+        ].join(" ")),
+      );
+    }
+    return map;
+  }, [students]);
 
-  const getGrade = (studentId: string) =>
-    grades.find(
-      (g) => g.studentId === studentId && g.examId === selectedExamId,
-    );
+  const getGrade = (studentId: string) => gradeByStudentId.get(studentId);
 
   const getDraft = (studentId: string): DraftGrade => {
     const existing = getGrade(studentId);
@@ -157,44 +274,20 @@ export function GradeEntryView() {
     }));
   };
 
-  const getStudentLeaveForSelectedExam = (studentId: string) => {
-    if (!selectedExam) return undefined;
-    const examDate = String(selectedExam.date || "").slice(0, 10);
-    return studentLeaves.find((leave) => {
-      if (leave.studentId !== studentId) return false;
-      if ((leave.leaveType || "exam") === "period") {
-        const from = String(leave.dateFrom || leave.date || "").slice(0, 10);
-        const to = String(
-          leave.dateTo || leave.dateFrom || leave.date || "",
-        ).slice(0, 10);
-        return Boolean(
-          examDate && from && to && examDate >= from && examDate <= to,
-        );
-      }
-      return leave.examId === selectedExam.id;
-    });
-  };
+  const getStudentLeaveForSelectedExam = (studentId: string) =>
+    leaveByStudentId.get(studentId);
 
   const isStudentInGraceForSelectedExam = (studentId: string) => {
     if (!selectedExam) return false;
-    const student = students.find((item) => item.id === studentId);
-    return Boolean(
-      student && isExamWithinStudentGracePeriod(student, selectedExam),
-    );
+    const student = studentById.get(studentId);
+    return Boolean(student && isExamWithinStudentGracePeriod(student, selectedExam));
   };
 
   const gradeHasAutomaticEffect = (studentId: string, examId: string) =>
-    opportunityLogs.some(
-      (log) =>
-        log.studentId === studentId &&
-        log.examId === examId &&
-        (log.action === "خصم تلقائي" ||
-          log.action === "فصل تلقائي" ||
-          String(log.reason || "").startsWith("تلقائي:")),
-    );
+    examId === selectedExamId && automaticEffectStudentIds.has(studentId);
 
   const canEditGradeForStudent = (studentId: string) => {
-    const student = students.find((item) => item.id === studentId);
+    const student = studentById.get(studentId);
     const grade = getGrade(studentId);
     if (!student) return false;
     if (student.status !== "مفصول") return true;
@@ -208,9 +301,7 @@ export function GradeEntryView() {
   };
 
   const studentHasManualReactivation = (studentId: string) =>
-    opportunityLogs.some(
-      (log) => log.studentId === studentId && log.action === "إعادة تفعيل",
-    );
+    manuallyReactivatedStudentIds.has(studentId);
 
   const examPenaltyAmount = (
     exam: typeof selectedExam,
@@ -227,7 +318,7 @@ export function GradeEntryView() {
     draft: DraftGrade,
   ) => {
     if (!selectedExam) return false;
-    const student = students.find((item) => item.id === studentId);
+    const student = studentById.get(studentId);
     if (!student || !studentHasManualReactivation(studentId)) return false;
 
     const normalizedScore = toLatinDigits(draft.score).trim();
@@ -287,7 +378,7 @@ export function GradeEntryView() {
     draftOverride?: DraftGrade,
   ) => {
     if (!needsReactivationWarning(studentId, draftOverride)) return true;
-    const student = students.find((item) => item.id === studentId);
+    const student = studentById.get(studentId);
     const confirmed = window.confirm(
       `درجة ${student?.name || "هذا الطالب"} الجديدة قد تستهلك الفرصة الأخيرة وتعيد الطالب إلى المفصولين. هل تريد المتابعة؟`,
     );
@@ -337,8 +428,7 @@ export function GradeEntryView() {
           !isExamOnOrAfterStudentRegistration(student, selectedExam)
         )
           return false;
-        if (!hasActiveChapterLink(courseChapters, student.courseId))
-          return false;
+        if (!activeChapterCourseIds.has(student.courseId)) return false;
         if (!studentMatchesExamMainSites(student, selectedMainSites))
           return false;
         if (
@@ -351,22 +441,13 @@ export function GradeEntryView() {
         )
           return false;
         if (
-          debouncedSearch &&
-          !searchAny(debouncedSearch, [
-            student.name,
-            student.code,
-            student.telegram,
-            student.phone,
-            student.subSite,
-            student.locationScope,
-          ])
+          normalizedSearch &&
+          !(studentSearchTextById.get(student.id) || "").includes(normalizedSearch)
         )
           return false;
-        const hasLeave = Boolean(getStudentLeaveForSelectedExam(student.id));
+        const hasLeave = leaveByStudentId.has(student.id);
         const hasGrace = isExamWithinStudentGracePeriod(student, selectedExam);
-        const grade = grades.find(
-          (g) => g.studentId === student.id && g.examId === selectedExam.id,
-        );
+        const grade = gradeByStudentId.get(student.id);
         const entered = !hasLeave && isGradeEntered(grade, selectedExam);
         if (filterStatus === "ضمن السماح" && !hasGrace) return false;
         if (filterStatus === "غير مسجل" && (entered || hasLeave)) return false;
@@ -382,10 +463,11 @@ export function GradeEntryView() {
   }, [
     selectedExam,
     students,
-    grades,
-    studentLeaves,
-    courseChapters,
-    debouncedSearch,
+    gradeByStudentId,
+    leaveByStudentId,
+    activeChapterCourseIds,
+    normalizedSearch,
+    studentSearchTextById,
     filterCourseProgram,
     filterCourseTerm,
     filterStudyType,
@@ -454,6 +536,12 @@ export function GradeEntryView() {
     if (nextIndex < 0 || nextIndex >= gradeInputStudentIds.length) return false;
     return focusGradeInputAt(nextIndex);
   };
+
+  const commitSearch = useCallback((value: string) => {
+    setSearch((current) => (current === value ? current : value));
+  }, []);
+
+  const focusFirstGradeInput = useCallback(() => focusGradeInputAt(0), [gradeInputStudentIds]);
 
   const missingChapterCourses = useMemo(() => {
     if (!selectedExam) return [];
@@ -918,21 +1006,10 @@ export function GradeEntryView() {
                 <Label htmlFor="grade-entry-search">
                   بحث الطالب داخل الإدخال
                 </Label>
-                <Input
-                  id="grade-entry-search"
-                  name="search"
-                  data-teacherpro-search="true"
+                <GradeEntrySearchInput
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Tab" && !event.shiftKey) {
-                      const focused = focusGradeInputAt(0);
-                      if (focused) event.preventDefault();
-                    }
-                  }}
-                  placeholder="اسم / كود / تليكرام / محافظة"
-                  autoComplete="off"
-                  className="h-10"
+                  onCommit={commitSearch}
+                  onForwardTab={focusFirstGradeInput}
                 />
               </div>
             </div>
@@ -961,9 +1038,9 @@ export function GradeEntryView() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="25">25</SelectItem>
                       <SelectItem value="50">50</SelectItem>
                       <SelectItem value="100">100</SelectItem>
-                      <SelectItem value="200">200</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button
@@ -1020,7 +1097,7 @@ export function GradeEntryView() {
                   return (
                     <div
                       key={student.id}
-                      className="grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]"
+                      className="teacherpro-heavy-row grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]"
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
