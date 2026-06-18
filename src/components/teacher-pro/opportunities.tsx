@@ -65,6 +65,7 @@ export function OpportunitiesView() {
   const [bulkAmount, setBulkAmount] = useState(1);
   const [bulkReason, setBulkReason] = useState("");
   const [bulkExcludeDismissed, setBulkExcludeDismissed] = useState(true);
+  const [bulkExcludeFullOpportunities, setBulkExcludeFullOpportunities] = useState(true);
   const { locked: isApplyingAction, runLocked: runActionLocked } =
     useActionLock();
 
@@ -108,15 +109,18 @@ export function OpportunitiesView() {
         if (bulkExcludeDismissed && student.status === "مفصول") return false;
         return true;
       }
-      return Number(student.opportunities || 0) < fullOpportunityLimitFor(student);
+      if (bulkExcludeFullOpportunities) {
+        return Number(student.opportunities || 0) < fullOpportunityLimitFor(student);
+      }
+      return true;
     });
-  }, [bulkEligibleStudents, bulkActionDialog.type, bulkExcludeDismissed]);
+  }, [bulkEligibleStudents, bulkActionDialog.type, bulkExcludeDismissed, bulkExcludeFullOpportunities]);
 
   const bulkSkippedNoActiveChapterCount = filtered.length - bulkEligibleStudents.length;
   const bulkExcludedDismissedCount = bulkActionDialog.type === "add" && bulkExcludeDismissed
     ? bulkEligibleStudents.filter((student) => student.status === "مفصول").length
     : 0;
-  const bulkExcludedFullOpportunitiesCount = bulkActionDialog.type === "deduct"
+  const bulkExcludedFullOpportunitiesCount = bulkActionDialog.type === "deduct" && bulkExcludeFullOpportunities
     ? bulkEligibleStudents.filter((student) => Number(student.opportunities || 0) >= fullOpportunityLimitFor(student)).length
     : 0;
   const bulkSkippedCount = filtered.length - currentBulkTargets.length;
@@ -278,6 +282,9 @@ export function OpportunitiesView() {
       `الحالة: ${activeStatusFilterName}`,
       `عدد الفرص: ${activeOpportunityFilterName}`,
       search.trim() ? `البحث: ${search.trim()}` : "",
+      bulkActionDialog.type === "add"
+        ? `عدا المفصولين: ${bulkExcludeDismissed ? "نعم" : "لا"}`
+        : `عدا أصحاب الفرص الكاملة: ${bulkExcludeFullOpportunities ? "نعم" : "لا"}`,
       `السبب: ${bulkReason.trim()}`,
     ].filter(Boolean).join(" - ");
     const result = bulkAdjustOpportunities(
@@ -294,6 +301,8 @@ export function OpportunitiesView() {
     setBulkActionDialog({ type: "add", open: false });
     setBulkReason("");
     setBulkAmount(1);
+    setBulkExcludeDismissed(true);
+    setBulkExcludeFullOpportunities(true);
   });
 
   const exportCSV = () => {
@@ -388,7 +397,7 @@ export function OpportunitiesView() {
             <Button
               variant="destructive"
               disabled={bulkEligibleStudents.length === 0}
-              onClick={() => setBulkActionDialog({ type: "deduct", open: true })}
+              onClick={() => { setBulkExcludeFullOpportunities(true); setBulkActionDialog({ type: "deduct", open: true }); }}
             >
               خصم من الجميع الظاهرين
             </Button>
@@ -717,9 +726,17 @@ export function OpportunitiesView() {
                   </label>
                 </div>
               ) : (
-                <div className="mt-3 rounded-xl border bg-background/70 p-3 text-xs leading-5 text-muted-foreground">
-                  <p className="font-black text-foreground">العدا / Except</p>
-                  <p>سيتم استثناء الطلاب أصحاب الفرص الكاملة تلقائياً مثل 3/3 حتى لا تُخصم منهم فرصة عند عملية الخصم الجماعي.</p>
+                <div className="mt-3 rounded-xl border bg-background/70 p-3">
+                  <p className="mb-2 text-xs font-black text-foreground">العدا / Except</p>
+                  <label htmlFor="bulk-exclude-full-opportunities" className="flex cursor-pointer items-start gap-2 text-xs leading-5 text-muted-foreground">
+                    <Checkbox
+                      id="bulk-exclude-full-opportunities"
+                      checked={bulkExcludeFullOpportunities}
+                      onCheckedChange={(checked) => setBulkExcludeFullOpportunities(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <span>عدا أصحاب الفرص الكاملة مثل 3/3: إذا بقيت محددة لا يتم الخصم منهم. إذا ألغيتها يدخلون ضمن الخصم الجماعي.</span>
+                  </label>
                 </div>
               )}
               {bulkSkippedNoActiveChapterCount > 0 ? <p className="mt-2 text-xs font-semibold text-amber-600">سيتم تجاوز {bulkSkippedNoActiveChapterCount} طالب لأنهم بلا فصل نشط مرتبط بالدورة.</p> : null}
