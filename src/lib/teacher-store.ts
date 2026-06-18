@@ -2340,12 +2340,47 @@ export const useTeacherStore = create<TeacherState>()(
           chapterId: stateBefore.activeChapterForCourse(student.courseId)?.id || '',
         }));
 
+        const eligibleStudentIds = new Set(eligibleStudents.map((student) => student.id));
+        const opportunityLogsAfterAdjustment = [...logs, ...stateBefore.opportunityLogs];
+        const adjustedStudents = stateBefore.students.map((student) => {
+          if (!eligibleStudentIds.has(student.id)) return student;
+          return { ...student, opportunities: Math.max(0, student.opportunities + signedAmount) };
+        });
+
+        const dismissalEffects = adjustedStudents
+          .filter((student) => eligibleStudentIds.has(student.id) && student.opportunities === 0 && student.status === 'نشط')
+          .map((student) => {
+            const hasFinalChance = hasFinalChanceForStudent(opportunityLogsAfterAdjustment, student.id);
+            const dismissalType = hasFinalChance ? 'فصل نهائي' : 'فصل مؤقت';
+            const dismissalReason = hasFinalChance ? 'عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة' : 'انتهاء الفرص';
+            const note: StudentNote = {
+              id: uid('note'),
+              studentId: student.id,
+              kind: 'إجراء',
+              text: `فصل الطالب (${dismissalType}): ${dismissalReason}`,
+              date: todayISO(),
+            };
+            return { studentId: student.id, dismissalType, dismissalReason, note };
+          });
+        const dismissalByStudentId = new Map(dismissalEffects.map((effect) => [effect.studentId, effect]));
+        const dismissalNotes = dismissalEffects.map((effect) => effect.note);
+        const nextStudents = adjustedStudents.map((student) => {
+          const dismissal = dismissalByStudentId.get(student.id);
+          if (!dismissal) return student;
+          return {
+            ...student,
+            status: 'مفصول' as const,
+            dismissalType: dismissal.dismissalType,
+            dismissalReason: dismissal.dismissalReason,
+            dismissalNotes: '',
+            opportunities: 0,
+          };
+        });
+
         set((s) => ({
-          students: s.students.map((student) => {
-            if (!eligibleStudents.some((eligible) => eligible.id === student.id)) return student;
-            return { ...student, opportunities: Math.max(0, student.opportunities + signedAmount) };
-          }),
+          students: nextStudents,
           opportunityLogs: [...logs, ...s.opportunityLogs],
+          studentNotes: [...dismissalNotes, ...s.studentNotes],
         }));
 
         get().logAction(
@@ -2353,24 +2388,39 @@ export const useTeacherStore = create<TeacherState>()(
           signedAmount > 0 ? 'إضافة فرص جماعية' : 'خصم فرص جماعي',
           `${eligibleStudents.length} طالب - ${normalizedAmount} - ${reason}${skipped ? ` - تم تجاوز ${skipped} بدون فصل نشط` : ''}`,
         );
+        dismissalEffects.forEach((effect) => {
+          get().logAction('الطلاب', `فصل الطالب (${effect.dismissalType})`, `${get().studentName(effect.studentId)} - ${effect.dismissalReason}`);
+        });
 
         const nextState = get();
-        eligibleStudents.forEach((studentBefore) => {
-          const student = nextState.students.find((item) => item.id === studentBefore.id);
-          if (student) syncToServer(get, () => studentApi.update(student.id, { opportunities: student.opportunities }), { description: 'تحديث فرص طالب ضمن عملية جماعية' });
-        });
-        logs.forEach((log) => syncToServer(get, () => opportunityLogApi.add(log as unknown as Record<string, unknown>), { description: 'حفظ حركة فرص جماعية' }));
+        const studentPayload = eligibleStudents
+          .map((studentBefore) => {
+            const student = nextState.students.find((item) => item.id === studentBefore.id);
+            if (!student) return null;
+            const payload: Record<string, unknown> = {
+              id: student.id,
+              opportunities: student.opportunities,
+            };
+            const dismissal = dismissalByStudentId.get(student.id);
+            if (dismissal) {
+              payload.status = 'مفصول';
+              payload.dismissalType = dismissal.dismissalType;
+              payload.dismissalReason = dismissal.dismissalReason;
+              payload.dismissalNotes = '';
+            }
+            return payload;
+          })
+          .filter((item): item is Record<string, unknown> => Boolean(item));
 
-        nextState.students
-          .filter((student) => eligibleStudents.some((eligible) => eligible.id === student.id) && student.opportunities === 0 && student.status === 'نشط')
-          .forEach((student) => {
-            const hasFinalChance = hasFinalChanceForStudent(get().opportunityLogs, student.id);
-            get().dismissStudent(
-              student.id,
-              hasFinalChance ? 'فصل نهائي' : 'فصل مؤقت',
-              hasFinalChance ? 'عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة' : 'انتهاء الفرص',
-            );
-          });
+        syncToServer(
+          get,
+          () => opportunityLogApi.bulkAdjust({
+            students: studentPayload,
+            opportunityLogs: logs as unknown as Array<Record<string, unknown>>,
+            studentNotes: dismissalNotes as unknown as Array<Record<string, unknown>>,
+          }),
+          { description: 'حفظ تحديث فرص جماعي بطلب واحد' },
+        );
 
         return { affected: eligibleStudents.length, skipped };
       },

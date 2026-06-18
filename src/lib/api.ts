@@ -351,6 +351,8 @@ export const gradeApi = {
 export const opportunityLogApi = {
   add: (log: Record<string, unknown>) =>
     apiPost('opportunity-logs', log),
+  bulkAdjust: (payload: { students?: Array<Record<string, unknown>>; opportunityLogs?: Array<Record<string, unknown>>; studentNotes?: Array<Record<string, unknown>> }) =>
+    apiPost('opportunities/bulk-adjust', payload),
   remove: (id: string) =>
     apiDelete('opportunity-logs', id),
 };
