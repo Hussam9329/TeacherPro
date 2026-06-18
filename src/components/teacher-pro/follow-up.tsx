@@ -27,18 +27,10 @@ import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { searchAny } from "@/lib/validation";
 import { StudentProfileDialog } from "./student-profile-dialog";
-import {
-  hasActiveChapterLink,
-  isExamOnOrAfterStudentRegistration,
-  formatGradeScore,
-  isGradeEntered,
-  isExamWithinStudentGracePeriod,
-  splitSelection,
-  studentMatchesExamMainSites,
-} from "@/lib/exam-utils";
+import { formatGradeScore } from "@/lib/exam-utils";
 
 type FollowView = "leaves" | "calls" | "pledges";
-type CallCategory = "absent" | "failed" | "low-pass" | "full" | "dismissal-temporary" | "dismissal-final";
+type CallCategory = "absent" | "failed" | "low-pass" | "full" | "passed" | "cheating";
 type PledgeTypeFilter = "all" | "temporary" | "final";
 type PledgeStatusFilter = "all" | "pledged" | "pending" | "reactivated";
 type ContactStatus = "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
@@ -46,9 +38,10 @@ type CallGradeSort = "exam" | "score-desc" | "score-asc" | "name";
 
 type CallRow = {
   id: string;
+  callKey: string;
   student: Student;
-  exam?: Exam;
-  grade?: Grade;
+  exam: Exam;
+  grade: Grade;
   category: CallCategory;
   label: string;
   reason: string;
@@ -85,22 +78,23 @@ type LeaveReasonOption = typeof leaveReasonOptions[number];
 type LeaveMode = "exam" | "period";
 
 const callCategoryLabels: Record<CallCategory, string> = {
-  absent: "الغائبون",
-  failed: "الراسبون",
+  absent: "غائب",
+  failed: "راسب",
   "low-pass": "ناجح بدرجة منخفضة",
   full: "درجة كاملة",
-  "dismissal-temporary": "فصل مؤقت",
-  "dismissal-final": "فصل نهائي",
+  passed: "ناجح",
+  cheating: "غش",
 };
 
 const contactStatusOptions: ContactStatus[] = ["تم الاتصال", "لم يرد", "الرقم خاطئ"];
-const CALL_GRADE_PAGE_SIZE = 120;
+const CALL_PAGE_SIZE = 120;
 const callGradeSortLabels: Record<CallGradeSort, string> = {
   exam: "حسب الامتحان",
   "score-desc": "حسب الدرجة: الأعلى أولاً",
   "score-asc": "حسب الدرجة: الأقل أولاً",
   name: "حسب الأحرف الأبجدية",
 };
+const callCategoryFilterOptions: Array<CallCategory | "all"> = ["all", "absent", "failed", "low-pass", "full", "passed", "cheating"];
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 
 function todayISO() {
@@ -184,7 +178,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     students,
     exams,
     grades,
-    courseChapters,
     studentLeaves,
     studentCalls,
     studentNotes,
@@ -247,23 +240,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return leave.examId === exam.id;
   };
 
-  const studentHasLeaveForExam = (studentId: string, examId: string) => {
-    const exam = exams.find((item) => item.id === examId);
-    return Boolean(exam && studentLeaves.some((leave) => leaveAppliesToExam(leave, studentId, exam)));
-  };
 
-  const eligibleStudentsForExam = (exam: Exam) => {
-    const selectedMainSites = splitSelection(exam.mainSite);
-    return students.filter((student) => {
-      if (!exam.courseIds.includes(student.courseId)) return false;
-      if (!isExamOnOrAfterStudentRegistration(student, exam)) return false;
-      if (!hasActiveChapterLink(courseChapters, student.courseId)) return false;
-      if (!studentMatchesExamMainSites(student, selectedMainSites)) return false;
-      return true;
-    });
-  };
-
-  const getGrade = (studentId: string, examId: string) => grades.find((grade) => grade.studentId === studentId && grade.examId === examId);
 
   const dismissalGroupFromType = (type: string | null | undefined): "temporary" | "final" => {
     const text = String(type || "");
@@ -276,9 +253,124 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return dismissalGroupFromType(student.dismissalType || "فصل مؤقت");
   };
 
-  const dismissalCategory = (student: Student): Extract<CallCategory, "dismissal-temporary" | "dismissal-final"> => (
-    dismissalGroup(student) === "final" ? "dismissal-final" : "dismissal-temporary"
-  );
+  const callLogLookup = useMemo(() => {
+    const map = new Map<string, typeof studentCalls[number]>();
+    studentCalls.forEach((call) => {
+      const key = `${call.studentId}::${String(call.examId || "")}::${call.category}`;
+      if (!map.has(key)) map.set(key, call);
+    });
+    return map;
+  }, [studentCalls]);
+
+  const callLogForRow = (row: CallRow) => {
+    const exactKey = `${row.student.id}::${row.exam.id}::${row.callKey}`;
+    const legacyKey = `${row.student.id}::${row.exam.id}::${row.category}`;
+    return callLogLookup.get(exactKey) || callLogLookup.get(legacyKey);
+  };
+
+  const callStatusForLog = (call: ReturnType<typeof callLogForRow>): ContactStatus => {
+    const value = String(call?.status || "");
+    if ((contactStatusOptions as string[]).includes(value)) return value as ContactStatus;
+    return call?.completed ? "تم الاتصال" : "لم يرد";
+  };
+
+  const gradeCallInfo = (grade: Grade, exam: Exam): Pick<CallRow, "category" | "label" | "reason"> => {
+    if (grade.status === "غائب") {
+      return { category: "absent", label: callCategoryLabels.absent, reason: "غائب عن الامتحان" };
+    }
+    if (grade.status === "غش") {
+      return { category: "cheating", label: callCategoryLabels.cheating, reason: "مسجل بحالة غش" };
+    }
+    if (grade.status === "درجة" && grade.score !== null) {
+      const score = Number(grade.score);
+      if (Number.isFinite(score)) {
+        if (score < exam.passMark) {
+          return { category: "failed", label: callCategoryLabels.failed, reason: `راسب: ${score}/${exam.fullMark}` };
+        }
+        if (score === exam.fullMark) {
+          return { category: "full", label: callCategoryLabels.full, reason: `درجة كاملة: ${score}/${exam.fullMark}` };
+        }
+        if (score >= exam.passMark && score <= Math.round(exam.fullMark * 0.7)) {
+          return { category: "low-pass", label: callCategoryLabels["low-pass"], reason: `ناجح بدرجة منخفضة: ${score}/${exam.fullMark}` };
+        }
+        return { category: "passed", label: callCategoryLabels.passed, reason: `ناجح: ${score}/${exam.fullMark}` };
+      }
+    }
+    return { category: "passed", label: "درجة مسجلة", reason: formatGradeScore(grade, exam, "—") };
+  };
+
+  const callRows = useMemo<CallRow[]>(() => {
+    const studentById = new Map(students.map((student) => [student.id, student]));
+    const examById = new Map(exams.map((exam) => [exam.id, exam]));
+    const rows = grades.flatMap<CallRow>((grade) => {
+      const student = studentById.get(grade.studentId);
+      const exam = examById.get(grade.examId);
+      if (!student || !exam) return [];
+      const info = gradeCallInfo(grade, exam);
+      return [{
+        id: `grade:${grade.id}`,
+        callKey: `grade:${grade.id}`,
+        student,
+        exam,
+        grade,
+        ...info,
+      }];
+    })
+      .filter((row) => !callExamId || row.exam.id === callExamId)
+      .filter((row) => callCategory === "all" || row.category === callCategory)
+      .filter((row) => !callSearch || searchAny(callSearch, [
+        row.student.name,
+        row.student.code,
+        row.student.phone,
+        row.student.parentPhone,
+        row.student.telegram,
+        row.student.school,
+        row.student.status,
+        row.student.studyType,
+        row.exam.name,
+        row.grade.status,
+        formatGradeScore(row.grade, row.exam, "—"),
+        row.reason,
+        row.grade.notes,
+        callStatusForLog(callLogForRow(row)),
+      ]));
+
+    return rows.sort((a, b) => {
+      const studentA = a.student.name || "";
+      const studentB = b.student.name || "";
+      const examA = `${a.exam.name || ""} ${a.exam.date || ""}`;
+      const examB = `${b.exam.name || ""} ${b.exam.date || ""}`;
+      if (callGradeSort === "name") {
+        return studentA.localeCompare(studentB, "ar") || examA.localeCompare(examB, "ar");
+      }
+      if (callGradeSort === "score-desc") {
+        return gradeScoreForSort(b.grade, "desc") - gradeScoreForSort(a.grade, "desc")
+          || studentA.localeCompare(studentB, "ar")
+          || examA.localeCompare(examB, "ar");
+      }
+      if (callGradeSort === "score-asc") {
+        return gradeScoreForSort(a.grade, "asc") - gradeScoreForSort(b.grade, "asc")
+          || studentA.localeCompare(studentB, "ar")
+          || examA.localeCompare(examB, "ar");
+      }
+      return examA.localeCompare(examB, "ar") || studentA.localeCompare(studentB, "ar");
+    });
+  }, [grades, students, exams, callExamId, callCategory, callSearch, callGradeSort, callLogLookup]);
+
+  const callTotalPages = Math.max(1, Math.ceil(callRows.length / CALL_PAGE_SIZE));
+  const callSafePage = Math.min(callGradePage, callTotalPages);
+  const visibleCallRows = callRows.slice((callSafePage - 1) * CALL_PAGE_SIZE, callSafePage * CALL_PAGE_SIZE);
+
+  const callStats = useMemo(() => {
+    const rowsWithCalls = callRows.map((row) => ({ row, call: callLogForRow(row) }));
+    return {
+      total: callRows.length,
+      contacted: rowsWithCalls.filter(({ call }) => callStatusForLog(call) === "تم الاتصال").length,
+      unanswered: rowsWithCalls.filter(({ call }) => callStatusForLog(call) === "لم يرد").length,
+      wrong: rowsWithCalls.filter(({ call }) => callStatusForLog(call) === "الرقم خاطئ").length,
+    };
+  }, [callRows, callLogLookup]);
+
 
   const dismissalInfoForStudent = (student: Student): DismissalLinkInfo | null => {
     if (student.status !== "مفصول") return null;
@@ -371,107 +463,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         && (!noteReason || noteReason.includes(normalizeDismissalText(dismissalInfo.reason)) || normalizeDismissalText(dismissalInfo.reason).includes(noteReason));
     });
   };
-
-  const buildCallRowsForExam = (exam: Exam): CallRow[] => {
-    return eligibleStudentsForExam(exam).flatMap<CallRow>((student) => {
-      if (studentHasLeaveForExam(student.id, exam.id)) return [];
-      if (isExamWithinStudentGracePeriod(student, exam)) return [];
-      if (exam.noDiscount) return [];
-      const grade = getGrade(student.id, exam.id);
-      const entered = isGradeEntered(grade, exam);
-      if (!entered) return [];
-      if (!grade) return [];
-      if (grade.status === "غائب") {
-        return [{ id: `${exam.id}:${student.id}:absent`, student, exam, grade, category: "absent", label: callCategoryLabels.absent, reason: "غائب عن الامتحان" }];
-      }
-      if (grade.status === "غش") return [];
-      if (grade.status === "درجة" && grade.score !== null) {
-        const score = Number(grade.score);
-        if (score < exam.passMark) {
-          return [{ id: `${exam.id}:${student.id}:failed`, student, exam, grade, category: "failed", label: callCategoryLabels.failed, reason: `راسب: ${score}/${exam.fullMark}` }];
-        }
-        if (score === exam.fullMark) {
-          return [{ id: `${exam.id}:${student.id}:full`, student, exam, grade, category: "full", label: callCategoryLabels.full, reason: "حاصل على الدرجة الكاملة" }];
-        }
-        if (score >= exam.passMark && score <= Math.round(exam.fullMark * 0.7)) {
-          return [{ id: `${exam.id}:${student.id}:low-pass`, student, exam, grade, category: "low-pass", label: callCategoryLabels["low-pass"], reason: `ناجح بدرجة منخفضة: ${score}/${exam.fullMark}` }];
-        }
-      }
-      return [];
-    });
-  };
-
-  const dismissalCallRows = useMemo<CallRow[]>(() => students
-    .filter((student) => student.status === "مفصول")
-    .map((student) => {
-      const category = dismissalCategory(student);
-      return {
-        id: `dismissal:${student.id}:${category}`,
-        student,
-        category,
-        label: callCategoryLabels[category],
-        reason: student.dismissalReason || student.dismissalType || "طالب مفصول",
-      };
-    }), [students]);
-
-  const callRows = useMemo(() => {
-    const sourceExams = callExamId ? exams.filter((exam) => exam.id === callExamId) : exams;
-    const examRows = sourceExams.flatMap(buildCallRowsForExam);
-    const sourceRows = callExamId ? examRows : [...examRows, ...dismissalCallRows];
-    return sourceRows
-      .filter((row) => callCategory === "all" || row.category === callCategory)
-      .filter((row) => !callSearch || searchAny(callSearch, [row.student.name, row.student.code, row.student.phone, row.student.parentPhone, row.exam?.name, row.reason, row.student.dismissalType]))
-      .sort((a, b) => `${b.exam?.date || "9999-12-31"}-${a.student.name}`.localeCompare(`${a.exam?.date || "9999-12-31"}-${b.student.name}`, "ar"));
-  }, [exams, students, grades, courseChapters, callExamId, callCategory, callSearch, studentLeaves, dismissalCallRows]);
-
-  const callGradeRows = useMemo(() => {
-    const studentById = new Map(students.map((student) => [student.id, student]));
-    const examById = new Map(exams.map((exam) => [exam.id, exam]));
-    const rows = grades
-      .map((grade) => {
-        const student = studentById.get(grade.studentId);
-        const exam = examById.get(grade.examId);
-        return { grade, student, exam };
-      })
-      .filter((row) => !callExamId || row.grade.examId === callExamId)
-      .filter((row) => !callSearch || searchAny(callSearch, [
-        row.student?.name,
-        row.student?.code,
-        row.student?.phone,
-        row.student?.parentPhone,
-        row.student?.telegram,
-        row.student?.school,
-        row.exam?.name,
-        row.grade.status,
-        formatGradeScore(row.grade, row.exam, "—"),
-        row.grade.notes,
-      ]));
-
-    return rows.sort((a, b) => {
-      const studentA = a.student?.name || "طالب محذوف";
-      const studentB = b.student?.name || "طالب محذوف";
-      const examA = `${a.exam?.name || "امتحان محذوف"} ${a.exam?.date || ""}`;
-      const examB = `${b.exam?.name || "امتحان محذوف"} ${b.exam?.date || ""}`;
-      if (callGradeSort === "name") {
-        return studentA.localeCompare(studentB, "ar") || examA.localeCompare(examB, "ar");
-      }
-      if (callGradeSort === "score-desc") {
-        return gradeScoreForSort(b.grade, "desc") - gradeScoreForSort(a.grade, "desc")
-          || studentA.localeCompare(studentB, "ar")
-          || examA.localeCompare(examB, "ar");
-      }
-      if (callGradeSort === "score-asc") {
-        return gradeScoreForSort(a.grade, "asc") - gradeScoreForSort(b.grade, "asc")
-          || studentA.localeCompare(studentB, "ar")
-          || examA.localeCompare(examB, "ar");
-      }
-      return examA.localeCompare(examB, "ar") || studentA.localeCompare(studentB, "ar");
-    });
-  }, [grades, students, exams, callExamId, callSearch, callGradeSort]);
-
-  const callGradeTotalPages = Math.max(1, Math.ceil(callGradeRows.length / CALL_GRADE_PAGE_SIZE));
-  const callGradeSafePage = Math.min(callGradePage, callGradeTotalPages);
-  const visibleCallGradeRows = callGradeRows.slice((callGradeSafePage - 1) * CALL_GRADE_PAGE_SIZE, callGradeSafePage * CALL_GRADE_PAGE_SIZE);
 
   const pledgeRows = useMemo<PledgeRow[]>(() => {
     const rows: PledgeRow[] = [];
@@ -607,30 +598,19 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     }
   };
 
-  const callLogForRow = (row: CallRow) => {
-    const examId = row.exam?.id || "";
-    return studentCalls.find((call) => call.studentId === row.student.id && String(call.examId || "") === examId && call.category === row.category);
-  };
-
-  const callStatusForLog = (call: ReturnType<typeof callLogForRow>): ContactStatus => {
-    const value = String(call?.status || "");
-    if ((contactStatusOptions as string[]).includes(value)) return value as ContactStatus;
-    return call?.completed ? "تم الاتصال" : "لم يرد";
-  };
-
   const saveCallStatus = (row: CallRow, status: ContactStatus) => {
     const existing = callLogForRow(row);
     const completed = status === "تم الاتصال";
     const payload = {
       studentId: row.student.id,
       examId: row.exam?.id || "",
-      category: row.category,
-      target: "",
+      category: row.callKey,
+      target: row.label,
       phone: [row.student.phone, row.student.parentPhone].filter(Boolean).join(" / "),
       status,
       completed,
       completedAt: completed ? todayISO() : "",
-      notes: row.reason,
+      notes: `${row.reason} | ${row.exam.name} | ${formatGradeScore(row.grade, row.exam, "—")}`,
     };
     if (existing) updateStudentCall(existing.id, payload);
     else addStudentCall(payload);
@@ -716,63 +696,50 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     );
   };
 
-  const renderCallGradeRecordRow = (row: typeof visibleCallGradeRows[number]) => {
-    const { grade, student, exam } = row;
-    return (
-      <div key={grade.id} className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.2fr_1fr_.8fr_1.2fr_auto] xl:items-center">
-        <div>
-          <div className="flex flex-wrap items-center gap-2"><b>{student?.name || "طالب محذوف"}</b>{student?.code ? <Badge variant="outline">{student.code}</Badge> : null}</div>
-          <p className="text-xs text-muted-foreground">{student ? `${courseName(student.courseId)} - ${student.studyType || "—"}` : "لا يوجد ملف طالب"}</p>
-        </div>
-        <div><b>{exam?.name || "امتحان محذوف"}</b><p className="text-xs text-muted-foreground">{exam ? formatAppDate(exam.date) : "—"}</p></div>
-        <div>
-          <Badge variant={grade.status === "درجة" ? "secondary" : grade.status === "غائب" ? "destructive" : "outline"}>{grade.status}</Badge>
-          <p className="mt-1 text-sm font-bold">{formatGradeScore(grade, exam, "—")}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {renderPhoneLink("رقم الطالب", student?.phone)}
-          {renderPhoneLink("رقم ولي الأمر", student?.parentPhone)}
-        </div>
-        <div className="flex items-center justify-end">
-          {student ? <Button variant="ghost" size="sm" onClick={() => openProfile(student.id)}>ملف الطالب</Button> : <span className="text-xs text-muted-foreground">—</span>}
-        </div>
-        {grade.notes ? <p className="xl:col-span-5 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
-      </div>
-    );
-  };
-
   const renderCallRow = (row: CallRow) => {
     const call = callLogForRow(row);
     const contactStatus = callStatusForLog(call);
     return (
-      <div key={row.id} className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.2fr_1fr_1fr_1.3fr_170px_auto] xl:items-center">
+      <div key={row.id} className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.15fr_1fr_.85fr_1.25fr_180px_auto] xl:items-center">
         <div>
-          <div className="flex flex-wrap items-center gap-2"><b>{row.student.name}</b><Badge variant="outline">{row.student.code}</Badge></div>
+          <div className="flex flex-wrap items-center gap-2">
+            <b>{row.student.name}</b>
+            <Badge variant="outline">{row.student.code}</Badge>
+            <Badge variant={row.student.status === "نشط" ? "secondary" : "destructive"}>حالة الطالب: {row.student.status}</Badge>
+          </div>
           <p className="text-xs text-muted-foreground">{courseName(row.student.courseId)} - {row.student.studyType || "—"}</p>
         </div>
-        <div><b>{row.exam?.name || "ملف الفصل"}</b><p className="text-xs text-muted-foreground">{row.exam ? formatAppDate(row.exam.date) : (row.student.dismissalType || "طالب مفصول")}</p></div>
         <div>
-          <Badge>{row.label}</Badge>
+          <b>{row.exam.name}</b>
+          <p className="text-xs text-muted-foreground">{formatAppDate(row.exam.date)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">درجة النجاح: {row.exam.passMark} / {row.exam.fullMark}</p>
+        </div>
+        <div>
+          <Badge variant={row.category === "absent" || row.category === "failed" || row.category === "cheating" ? "destructive" : "secondary"}>{row.label}</Badge>
+          <p className="mt-1 text-sm font-bold">{formatGradeScore(row.grade, row.exam, "—")}</p>
           <p className="mt-1 text-xs text-muted-foreground">{row.reason}</p>
-          {row.grade?.notes ? <p className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{row.grade.notes}</p> : null}
+          {row.grade.notes ? <p className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{row.grade.notes}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           {renderPhoneLink("رقم الطالب", row.student.phone)}
           {renderPhoneLink("رقم ولي الأمر", row.student.parentPhone)}
         </div>
-        <Select value={contactStatus} onValueChange={(value) => saveCallStatus(row, value as ContactStatus)}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {contactStatusOptions.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">إجراء التواصل المرتبط بهذه الدرجة</Label>
+          <Select value={contactStatus} onValueChange={(value) => saveCallStatus(row, value as ContactStatus)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {contactStatusOptions.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {call?.completedAt ? <p className="text-xs text-muted-foreground">آخر تواصل: {formatAppDate(call.completedAt)}</p> : null}
+        </div>
         <div className="flex items-center justify-end">
           <Button variant="ghost" size="sm" onClick={() => openProfile(row.student.id)}>ملف الطالب</Button>
         </div>
       </div>
     );
   };
-
 
   const togglePledge = (row: PledgeRow, checked: boolean) => {
     const { student, dismissalInfo } = row;
@@ -916,39 +883,42 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       {view === "calls" && (
         <div className="space-y-4">
           <Card>
+            <CardHeader>
+              <CardTitle>المكالمات المرتبطة بسجل الدرجات</CardTitle>
+              <p className="text-sm text-muted-foreground">كل صف هنا مرتبط بدرجة حقيقية: الطالب، الامتحان، حالة الطالب، الدرجة، وإجراء التواصل محفوظ على نفس سجل الدرجة.</p>
+            </CardHeader>
             <CardContent className="grid gap-3 p-4 md:grid-cols-4">
-              <div className="space-y-2"><Label>الامتحان</Label><Select value={callExamId || "all"} onValueChange={(value) => { setCallExamId(value === "all" ? "" : value); setCallGradePage(1); }}><SelectTrigger><SelectValue placeholder="كل الامتحانات" /></SelectTrigger><SelectContent><SelectItem value="all">كل الامتحانات + المفصولون</SelectItem>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>الحالة</Label><Select value={callCategory} onValueChange={(value) => setCallCategory(value as CallCategory | "all")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل الحالات</SelectItem>{(Object.keys(callCategoryLabels) as CallCategory[]).map((key) => <SelectItem key={key} value={key}>{callCategoryLabels[key]}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>فرز سجل الدرجات</Label><Select value={callGradeSort} onValueChange={(value) => { setCallGradeSort(value as CallGradeSort); setCallGradePage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(Object.keys(callGradeSortLabels) as CallGradeSort[]).map((key) => <SelectItem key={key} value={key}>{callGradeSortLabels[key]}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>بحث</Label><Input id="follow-up-calls-search" name="search" data-teacherpro-search="true" value={callSearch} onChange={(event) => { setCallSearch(event.target.value); setCallGradePage(1); }} placeholder="طالب / كود / امتحان / درجة / سبب الفصل" /></div>
+              <div className="space-y-2"><Label>الامتحان</Label><Select value={callExamId || "all"} onValueChange={(value) => { setCallExamId(value === "all" ? "" : value); setCallGradePage(1); }}><SelectTrigger><SelectValue placeholder="كل الامتحانات" /></SelectTrigger><SelectContent><SelectItem value="all">كل الامتحانات</SelectItem>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>حالة الدرجة</Label><Select value={callCategory} onValueChange={(value) => { setCallCategory(value as CallCategory | "all"); setCallGradePage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{callCategoryFilterOptions.map((key) => <SelectItem key={key} value={key}>{key === "all" ? "كل حالات الدرجات" : callCategoryLabels[key]}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>الفرز</Label><Select value={callGradeSort} onValueChange={(value) => { setCallGradeSort(value as CallGradeSort); setCallGradePage(1); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(Object.keys(callGradeSortLabels) as CallGradeSort[]).map((key) => <SelectItem key={key} value={key}>{callGradeSortLabels[key]}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>بحث</Label><Input id="follow-up-calls-search" name="search" data-teacherpro-search="true" value={callSearch} onChange={(event) => { setCallSearch(event.target.value); setCallGradePage(1); }} placeholder="طالب / كود / امتحان / درجة / حالة طالب / إجراء تواصل" /></div>
             </CardContent>
           </Card>
           <div className="grid gap-3 md:grid-cols-4">
-            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">إجمالي النتائج</p><b className="text-2xl">{callRows.length}</b></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">فصل مؤقت</p><b className="text-2xl">{dismissalCallRows.filter((row) => row.category === "dismissal-temporary").length}</b></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">فصل نهائي</p><b className="text-2xl">{dismissalCallRows.filter((row) => row.category === "dismissal-final").length}</b></CardContent></Card>
-            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">حالات الاتصال</p><b className="text-sm">تم / لم يرد / خطأ</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">سجلات الدرجات المعروضة</p><b className="text-2xl">{callStats.total}</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">تم الاتصال</p><b className="text-2xl">{callStats.contacted}</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">لم يرد</p><b className="text-2xl">{callStats.unanswered}</b></CardContent></Card>
+            <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">الرقم خاطئ</p><b className="text-2xl">{callStats.wrong}</b></CardContent></Card>
           </div>
           <Card>
             <CardHeader>
-              <CardTitle>سجل الدرجات الكامل</CardTitle>
-              <p className="text-sm text-muted-foreground">يعرض كل سجلات الدرجات المسجلة، مع فرز حسب الامتحان أو الدرجة أو الاسم الأبجدي. البحث وفلتر الامتحان أعلاه يؤثران على هذه القائمة أيضاً.</p>
+              <CardTitle>قائمة المكالمات والدرجات</CardTitle>
+              <p className="text-sm text-muted-foreground">الفلاتر والفرز والبحث كلها تعمل على نفس القائمة بالضبط؛ لا توجد قائمة منفصلة أو بيانات غير مرتبطة.</p>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-muted/40 px-3 py-2 text-sm">
-                <span>عدد سجلات الدرجات: <b>{callGradeRows.length}</b></span>
-                <span>الصفحة <b>{callGradeSafePage}</b> من <b>{callGradeTotalPages}</b></span>
+                <span>عدد النتائج: <b>{callRows.length}</b></span>
+                <span>الصفحة <b>{callSafePage}</b> من <b>{callTotalPages}</b></span>
               </div>
-              {visibleCallGradeRows.length === 0 ? <p className="empty-state py-8">لا توجد سجلات درجات مطابقة</p> : visibleCallGradeRows.map(renderCallGradeRecordRow)}
-              {callGradeTotalPages > 1 && (
+              {visibleCallRows.length === 0 ? <p className="empty-state py-8">لا توجد درجات مطابقة للمكالمات</p> : visibleCallRows.map(renderCallRow)}
+              {callTotalPages > 1 && (
                 <div className="flex items-center justify-center gap-2 pt-2">
-                  <Button variant="outline" size="sm" disabled={callGradeSafePage <= 1} onClick={() => setCallGradePage((page) => Math.max(1, page - 1))}>السابق</Button>
-                  <Button variant="outline" size="sm" disabled={callGradeSafePage >= callGradeTotalPages} onClick={() => setCallGradePage((page) => Math.min(callGradeTotalPages, page + 1))}>التالي</Button>
+                  <Button variant="outline" size="sm" disabled={callSafePage <= 1} onClick={() => setCallGradePage((page) => Math.max(1, page - 1))}>السابق</Button>
+                  <Button variant="outline" size="sm" disabled={callSafePage >= callTotalPages} onClick={() => setCallGradePage((page) => Math.min(callTotalPages, page + 1))}>التالي</Button>
                 </div>
               )}
             </CardContent>
           </Card>
-          <div className="space-y-2">{callRows.length === 0 ? <p className="empty-state py-8">لا توجد نتائج للمكالمات</p> : callRows.map(renderCallRow)}</div>
         </div>
       )}
 
