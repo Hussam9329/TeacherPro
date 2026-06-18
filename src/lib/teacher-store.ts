@@ -1348,6 +1348,33 @@ function syncToServer(
     });
 }
 
+type PersistedUiSnapshot = Pick<
+  TeacherState,
+  'theme' | 'studentPageSize' | 'gradePageSize' | 'currentUserId' | 'currentSection'
+>;
+
+function toPersistedUiSnapshot(state: Partial<TeacherState> | Record<string, unknown>): PersistedUiSnapshot {
+  const theme = state.theme === 'dark' ? 'dark' : 'light';
+  const studentPageSize = Number(state.studentPageSize || 10);
+  const gradePageSize = Number(state.gradePageSize || 10);
+  const currentUserId = typeof state.currentUserId === 'string' && state.currentUserId.trim()
+    ? state.currentUserId
+    : 'u_admin';
+  const currentSection =
+    typeof state.currentSection === 'string' &&
+    Object.prototype.hasOwnProperty.call(SECTION_PERMISSIONS, state.currentSection)
+      ? (state.currentSection as SectionId)
+      : 'dashboard';
+
+  return {
+    theme,
+    studentPageSize: Number.isFinite(studentPageSize) && studentPageSize > 0 ? studentPageSize : 10,
+    gradePageSize: Number.isFinite(gradePageSize) && gradePageSize > 0 ? gradePageSize : 10,
+    currentUserId,
+    currentSection,
+  };
+}
+
 // ─── Store ───────────────────────────────────────────────────────────────────
 
 export const useTeacherStore = create<TeacherState>()(
@@ -2840,9 +2867,15 @@ export const useTeacherStore = create<TeacherState>()(
     }),
     {
       name: 'teacher-pro-store-v4',
-      version: 13,
+      version: 14,
       migrate: (persistedState: unknown, version: number) => {
         const state = (persistedState ?? {}) as Record<string, unknown>;
+
+        // Migration v14: stop storing the full school database in localStorage.
+        // Persisting thousands of students/grades/logs on every click or state change
+        // blocks the main thread and causes Chrome [Violation] pointer/message warnings.
+        if (version < 14) return toPersistedUiSnapshot(state);
+
         const nextState: Record<string, unknown> = { ...state };
 
         // Migration v3 → v4: Replace all courses with the new default courses
@@ -2956,27 +2989,7 @@ export const useTeacherStore = create<TeacherState>()(
 
         return nextState;
       },
-      partialize: (state) => ({
-        courses: state.courses,
-        chapters: state.chapters,
-        courseChapters: state.courseChapters,
-        students: state.students,
-        exams: state.exams,
-        grades: state.grades,
-        opportunityLogs: state.opportunityLogs,
-        studentLeaves: state.studentLeaves,
-        studentCalls: state.studentCalls,
-        studentNotes: state.studentNotes,
-        correctionSheets: state.correctionSheets,
-        users: state.users,
-        roles: state.roles,
-        logs: state.logs,
-        leaderboardSettings: state.leaderboardSettings,
-        theme: state.theme,
-        studentPageSize: state.studentPageSize,
-        gradePageSize: state.gradePageSize,
-        currentUserId: state.currentUserId,
-      }),
+      partialize: (state) => toPersistedUiSnapshot(state),
     }
   )
 );
