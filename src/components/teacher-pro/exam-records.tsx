@@ -404,7 +404,7 @@ tr:nth-child(even) td { background: #f8fafc; }
       fullMark: Number(toLatinDigits(editDialog.fullMark)),
       passMark: Number(toLatinDigits(editDialog.passMark)),
       discountMark: isFinalExam || noDiscount ? 0 : Number(toLatinDigits(editDialog.discountMark)),
-      opportunitiesPenalty: noDiscount ? "0" : (isFinalExam ? "فصل مؤقت" : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum) || 1)),
+      opportunitiesPenalty: noDiscount ? 0 : (isFinalExam ? "فصل مؤقت" : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum) || 1)),
       dismissalGrade: !noDiscount && isFinalExam && editDialog.dismissalGrade ? Number(toLatinDigits(editDialog.dismissalGrade)) : null,
       noDiscount,
       ...statusPatch,
