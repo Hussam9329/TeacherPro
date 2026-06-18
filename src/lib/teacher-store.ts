@@ -514,6 +514,7 @@ interface TeacherState {
   addGrade: (grade: Omit<Grade, 'id' | 'createdAt' | 'updatedAt' | 'academicAccountingChecked'> & { academicAccountingChecked?: boolean }) => void;
   updateGrade: (id: string, updates: Partial<Grade>) => void;
   deleteGrade: (id: string) => boolean;
+  clearAbsentGradesForExam: (examId: string) => number;
   recalculateAcademicEffects: (studentIds?: string | string[]) => void;
 
   adjustOpportunities: (studentId: string, amount: number, reason: string) => void;
@@ -2208,6 +2209,34 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => studentNoteApi.add(actionNote as unknown as Record<string, unknown>));
         get().recalculateAcademicEffects(grade.studentId);
         return true;
+      },
+      clearAbsentGradesForExam: (examId) => {
+        const stateBefore = get();
+        const exam = stateBefore.exams.find((item) => item.id === examId);
+        const absentGrades = stateBefore.grades.filter((grade) => grade.examId === examId && grade.status === 'غائب');
+        if (!exam || absentGrades.length === 0) return 0;
+
+        const affectedStudentIds = Array.from(new Set(absentGrades.map((grade) => grade.studentId)));
+        const previousState = {
+          students: stateBefore.students,
+          grades: stateBefore.grades,
+          opportunityLogs: stateBefore.opportunityLogs,
+        };
+
+        set((s) => ({
+          grades: s.grades.filter((grade) => !(grade.examId === examId && grade.status === 'غائب')),
+        }));
+        get().logAction(
+          'الدرجات',
+          'إلغاء حالة غائب جماعي',
+          `${exam.name} - ${absentGrades.length} طالب`,
+        );
+        syncToServer(get, () => gradeApi.removeAbsentByExam(examId), {
+          description: 'إلغاء حالة غائب جماعي',
+          rollback: () => set(previousState),
+        });
+        get().recalculateAcademicEffects(affectedStudentIds);
+        return absentGrades.length;
       },
       recalculateAcademicEffects: (studentIds) => {
         const before = get();

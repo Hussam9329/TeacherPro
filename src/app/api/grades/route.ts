@@ -134,6 +134,26 @@ export async function DELETE(req: NextRequest) {
     const studentId = searchParams.get('studentId');
     const examId = searchParams.get('examId');
 
+    const status = searchParams.get('status');
+
+    if (examId && status === 'غائب' && !studentId && !id) {
+      const targetGrades = await db.grade.findMany({
+        where: { examId, status: 'غائب' },
+        select: { id: true, studentId: true },
+      });
+      if (targetGrades.length === 0) {
+        return NextResponse.json({ ok: true, deleted: 0, studentIds: [] });
+      }
+      const deletedAbsences = await db.grade.deleteMany({
+        where: { examId, status: 'غائب' },
+      });
+      return NextResponse.json({
+        ok: true,
+        deleted: deletedAbsences.count,
+        studentIds: Array.from(new Set(targetGrades.map((grade) => grade.studentId))),
+      });
+    }
+
     if (id) {
       const deletedById = await db.grade.deleteMany({ where: { id } });
       if (deletedById.count > 0 || !studentId || !examId) {

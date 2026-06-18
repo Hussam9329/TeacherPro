@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useActionLock } from "@/hooks/use-action-lock";
 import {
   STUDENT_FILTER_COURSE_PROGRAMS,
   STUDENT_FILTER_COURSE_TERMS,
@@ -65,6 +66,7 @@ export function GradeEntryView() {
     opportunityLogs,
     addGrade,
     deleteGrade,
+    clearAbsentGradesForExam,
     courseName,
     classification,
   } = useTeacherStore();
@@ -87,6 +89,7 @@ export function GradeEntryView() {
   const [clockTick, setClockTick] = useState(0);
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const debouncedSearch = useDebouncedValue(search, 180);
+  const { locked: clearingAbsentGrades, runLocked: runClearAbsentGradesLocked } = useActionLock();
 
   const locationFilterOptions = useMemo(
     () => getStudentLocationFilterOptions(students),
@@ -584,6 +587,67 @@ export function GradeEntryView() {
       })
     : [];
 
+  const absentGradesForSelectedExam = useMemo(
+    () =>
+      selectedExam
+        ? grades.filter(
+            (grade) =>
+              grade.examId === selectedExam.id && grade.status === "غائب",
+          )
+        : [],
+    [selectedExam, grades],
+  );
+
+  const handleClearAbsentGrades = runClearAbsentGradesLocked(async () => {
+    if (!selectedExam) return;
+    if (absentGradesForSelectedExam.length === 0) {
+      toast.info("لا توجد حالات غياب محفوظة لهذا الامتحان");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `سيتم إلغاء حالة غائب من ${absentGradesForSelectedExam.length} طالب في امتحان ${selectedExam.name} وإرجاعهم كأن الدرجة لم تُسجل لهم. هل تريد المتابعة؟`,
+    );
+    if (!confirmed) return;
+
+    const affectedStudentIds = new Set(
+      absentGradesForSelectedExam.map((grade) => grade.studentId),
+    );
+    const removedCount = clearAbsentGradesForExam(selectedExam.id);
+
+    if (removedCount > 0) {
+      setDrafts((prev) => {
+        const next = { ...prev };
+        affectedStudentIds.forEach((studentId) => {
+          delete next[studentId];
+        });
+        return next;
+      });
+      setEditableRows((prev) => {
+        const next = { ...prev };
+        affectedStudentIds.forEach((studentId) => {
+          delete next[studentId];
+        });
+        return next;
+      });
+      setSavingRows((prev) => {
+        const next = { ...prev };
+        affectedStudentIds.forEach((studentId) => {
+          delete next[studentId];
+        });
+        return next;
+      });
+      setSavedRows((prev) => {
+        const next = { ...prev };
+        affectedStudentIds.forEach((studentId) => {
+          next[studentId] = "تم إلغاء الغياب";
+        });
+        return next;
+      });
+      toast.success(`تم إلغاء حالة غائب من ${removedCount} طالب`);
+    }
+  });
+
   const handleMarkVisibleMissingAsAbsent = () => {
     if (!selectedExam) return;
     if (missingVisibleStudents.length === 0) {
@@ -790,6 +854,22 @@ export function GradeEntryView() {
               title="يسجل طلاب الصفحة الحالية الذين لا يملكون درجة محفوظة كغائبين"
             >
               تسجيل الصفحة كغائب ({missingVisibleStudents.length})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearAbsentGrades}
+              disabled={
+                !selectedExam ||
+                absentGradesForSelectedExam.length === 0 ||
+                clearingAbsentGrades
+              }
+              title="يحذف كل سجلات الغياب لهذا الامتحان ويرجع الطلاب كأنهم غير مسجلين"
+              className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/30"
+            >
+              {clearingAbsentGrades
+                ? "جاري الإلغاء..."
+                : `إلغاء حالة غائب (${absentGradesForSelectedExam.length})`}
             </Button>
             {selectedExam && (
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">

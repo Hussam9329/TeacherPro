@@ -325,6 +325,25 @@ export const gradeApi = {
     apiPut('grades', { id, ...updates }),
   remove: (id: string, studentId?: string, examId?: string) =>
     apiDelete('grades', id, { studentId, examId }),
+  removeAbsentByExam: async (examId: string): Promise<ApiResult> => {
+    try {
+      const params = new URLSearchParams({ examId, status: 'غائب' });
+      const res = await fetch(`/api/grades?${params.toString()}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      if (!res.ok) {
+        const error = await readApiError(res, `تعذر إلغاء حالات الغياب (رمز ${res.status})`);
+        console.warn('[API] DELETE /api/grades absent-by-exam failed:', error);
+        return { ok: false, error };
+      }
+      return { ok: true };
+    } catch (e) {
+      const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
+      console.warn('[API] DELETE /api/grades absent-by-exam network error:', e);
+      return { ok: false, error: msg };
+    }
+  },
 };
 
 // ─── OpportunityLog API ───────────────────────────────────────────────────────
