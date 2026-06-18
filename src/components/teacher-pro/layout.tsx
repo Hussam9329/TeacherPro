@@ -8,6 +8,7 @@ import {
   BookMarked,
   UserPlus,
   ClipboardList,
+  ClipboardCheck,
   UsersRound,
   UserX,
   FileText,
@@ -77,6 +78,7 @@ const menuItems: {
   { id: "dismissed-students", title: "المفصولون", sub: "قائمة", icon: UserX },
   { id: "exam-new", title: "إضافة الامتحان", sub: "القواعد", icon: FileText },
   { id: "grade-entry", title: "تسجيل الدرجات", sub: "إدخال", icon: PenTool },
+  { id: "grade-bulk-import", title: "إضافة درجات جماعية", sub: "لصق ومعاينة", icon: ClipboardCheck },
   { id: "exam-records", title: "سجل الامتحانات", sub: "PDF", icon: FileCheck },
   { id: "grade-records", title: "سجل الدرجات", sub: "سجل", icon: BarChart3 },
   { id: "opportunities", title: "إدارة الفرص", sub: "خصم/إضافة", icon: Target },
@@ -100,7 +102,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
   { title: "الطلاب", itemIds: ["student-register", "student-bulk-import", "student-registry", "dismissed-students"] },
   {
     title: "الامتحانات والدرجات",
-    itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
+    itemIds: ["exam-new", "grade-entry", "grade-bulk-import", "exam-records", "grade-records"],
   },
   { title: "المتابعة", itemIds: ["follow-up-calls", "follow-up-leaves", "follow-up-pledges"] },
   { title: "الإدارة", itemIds: ["accounts", "logs", "admin-log-reset"] },
@@ -140,6 +142,7 @@ import { StudentRegistryView } from "./student-registry";
 import { DismissedStudentsView } from "./dismissed-students";
 import { ExamNewView } from "./exam-new";
 import { GradeEntryView } from "./grade-entry";
+import { GradeBulkImportView } from "./grade-bulk-import";
 import { ExamRecordsView } from "./exam-records";
 import { GradeRecordsView } from "./grade-records";
 import { OpportunitiesView } from "./opportunities";
@@ -160,6 +163,7 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "dismissed-students": DismissedStudentsView,
   "exam-new": ExamNewView,
   "grade-entry": GradeEntryView,
+  "grade-bulk-import": GradeBulkImportView,
   "exam-records": ExamRecordsView,
   "grade-records": GradeRecordsView,
   opportunities: OpportunitiesView,

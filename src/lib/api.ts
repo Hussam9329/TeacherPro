@@ -321,6 +321,8 @@ export const examApi = {
 export const gradeApi = {
   add: (grade: Record<string, unknown>) =>
     apiPost('grades', grade),
+  bulkAdd: (grades: Array<Record<string, unknown>>) =>
+    apiPost('grades/bulk', { grades }),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut('grades', { id, ...updates }),
   remove: (id: string, studentId?: string, examId?: string) =>

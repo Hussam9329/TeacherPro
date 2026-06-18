@@ -239,6 +239,7 @@ export type SectionId =
   | 'dismissed-students'
   | 'exam-new'
   | 'grade-entry'
+  | 'grade-bulk-import'
   | 'exam-records'
   | 'grade-records'
   | 'opportunities'
@@ -318,6 +319,7 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'dismissed-students': 'students.view',
   'exam-new': 'exams.add',
   'grade-entry': 'grades.add',
+  'grade-bulk-import': 'grades.add',
   'exam-records': 'exams.view',
   'grade-records': 'grades.view',
   'opportunities': 'opportunities.view',
@@ -515,6 +517,7 @@ interface TeacherState {
   deleteExam: (id: string) => boolean;
 
   addGrade: (grade: Omit<Grade, 'id' | 'createdAt' | 'updatedAt' | 'academicAccountingChecked'> & { academicAccountingChecked?: boolean }) => void;
+  bulkAddGrades: (grades: Array<Omit<Grade, 'id' | 'createdAt' | 'updatedAt' | 'academicAccountingChecked'> & { academicAccountingChecked?: boolean }>) => { added: number; updated: number };
   updateGrade: (id: string, updates: Partial<Grade>) => void;
   deleteGrade: (id: string) => boolean;
   clearAbsentGradesForExam: (examId: string) => number;
@@ -2213,6 +2216,72 @@ export const useTeacherStore = create<TeacherState>()(
           rollback: () => set(previousState),
         });
         get().recalculateAcademicEffects(grade.studentId);
+      },
+      bulkAddGrades: (gradeItems) => {
+        const stateBefore = get();
+        const now = todayISO();
+        const validItems = gradeItems.filter((item) => {
+          if (isStudentExcusedForExam(stateBefore, item.studentId, item.examId)) {
+            const examName = stateBefore.exams.find((exam) => exam.id === item.examId)?.name || '';
+            get().logAction('الدرجات', 'رفض إدخال جماعي لطالب مجاز', `${get().studentName(item.studentId)} - ${examName}`);
+            return false;
+          }
+          return true;
+        });
+
+        if (validItems.length === 0) return { added: 0, updated: 0 };
+
+        const previousState = {
+          students: stateBefore.students,
+          grades: stateBefore.grades,
+          opportunityLogs: stateBefore.opportunityLogs,
+        };
+        const affectedStudentIds = new Set<string>();
+        const nextGrades = [...stateBefore.grades];
+        const gradesToSync: Grade[] = [];
+        let added = 0;
+        let updated = 0;
+
+        validItems.forEach((item) => {
+          const existingIndex = nextGrades.findIndex((grade) => grade.studentId === item.studentId && grade.examId === item.examId);
+          const normalized: Grade = existingIndex >= 0
+            ? {
+                ...nextGrades[existingIndex],
+                ...item,
+                status: item.status,
+                score: item.score,
+                notes: item.notes,
+                academicAccountingChecked: Boolean(item.academicAccountingChecked),
+                updatedAt: now,
+              }
+            : {
+                ...item,
+                id: uid('gr'),
+                academicAccountingChecked: Boolean(item.academicAccountingChecked),
+                createdAt: now,
+                updatedAt: now,
+              };
+
+          if (existingIndex >= 0) {
+            nextGrades[existingIndex] = normalized;
+            updated += 1;
+          } else {
+            nextGrades.push(normalized);
+            added += 1;
+          }
+          gradesToSync.push(normalized);
+          affectedStudentIds.add(normalized.studentId);
+        });
+
+        set({ grades: nextGrades });
+        const examNames = Array.from(new Set(gradesToSync.map((grade) => stateBefore.exams.find((exam) => exam.id === grade.examId)?.name || 'امتحان'))).join('، ');
+        get().logAction('الدرجات', 'إضافة درجات جماعية', `${gradesToSync.length} درجة - ${examNames}`);
+        syncToServer(get, () => gradeApi.bulkAdd(gradesToSync as unknown as Array<Record<string, unknown>>), {
+          description: 'إضافة درجات جماعية',
+          rollback: () => set(previousState),
+        });
+        get().recalculateAcademicEffects(Array.from(affectedStudentIds));
+        return { added, updated };
       },
       updateGrade: (id, updates) => {
         const stateBefore = get();
