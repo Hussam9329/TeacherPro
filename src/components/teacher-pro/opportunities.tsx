@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -63,6 +64,7 @@ export function OpportunitiesView() {
   const [bulkActionDialog, setBulkActionDialog] = useState<{ type: "add" | "deduct"; open: boolean }>({ type: "add", open: false });
   const [bulkAmount, setBulkAmount] = useState(1);
   const [bulkReason, setBulkReason] = useState("");
+  const [bulkExcludeDismissed, setBulkExcludeDismissed] = useState(true);
   const { locked: isApplyingAction, runLocked: runActionLocked } =
     useActionLock();
 
@@ -95,7 +97,29 @@ export function OpportunitiesView() {
     [filtered, activeChapterForCourse],
   );
 
-  const bulkSkippedCount = filtered.length - bulkEligibleStudents.length;
+  const fullOpportunityLimitFor = (student: typeof students[number]) => {
+    const base = Number(student.baseOpportunities || 0);
+    return base > 0 ? base : 3;
+  };
+
+  const currentBulkTargets = useMemo(() => {
+    return bulkEligibleStudents.filter((student) => {
+      if (bulkActionDialog.type === "add") {
+        if (bulkExcludeDismissed && student.status === "مفصول") return false;
+        return true;
+      }
+      return Number(student.opportunities || 0) < fullOpportunityLimitFor(student);
+    });
+  }, [bulkEligibleStudents, bulkActionDialog.type, bulkExcludeDismissed]);
+
+  const bulkSkippedNoActiveChapterCount = filtered.length - bulkEligibleStudents.length;
+  const bulkExcludedDismissedCount = bulkActionDialog.type === "add" && bulkExcludeDismissed
+    ? bulkEligibleStudents.filter((student) => student.status === "مفصول").length
+    : 0;
+  const bulkExcludedFullOpportunitiesCount = bulkActionDialog.type === "deduct"
+    ? bulkEligibleStudents.filter((student) => Number(student.opportunities || 0) >= fullOpportunityLimitFor(student)).length
+    : 0;
+  const bulkSkippedCount = filtered.length - currentBulkTargets.length;
 
   const activeCourseFilterName = filterCourseId ? courseName(filterCourseId) : "كل الدورات";
   const activeStatusFilterName = filterStatus
@@ -240,8 +264,8 @@ export function OpportunitiesView() {
   });
 
   const handleBulkAction = runActionLocked(async () => {
-    if (!bulkEligibleStudents.length) {
-      toast.error("لا يوجد طلاب مؤهلون ضمن الفلترة الحالية");
+    if (!currentBulkTargets.length) {
+      toast.error("لا يوجد طلاب مؤهلون بعد تطبيق الاستثناءات الحالية");
       return;
     }
     if (!bulkReason.trim()) {
@@ -257,15 +281,16 @@ export function OpportunitiesView() {
       `السبب: ${bulkReason.trim()}`,
     ].filter(Boolean).join(" - ");
     const result = bulkAdjustOpportunities(
-      bulkEligibleStudents.map((student) => student.id),
+      currentBulkTargets.map((student) => student.id),
       bulkActionDialog.type === "deduct" ? -normalizedAmount : normalizedAmount,
       scopeReason,
+      { reactivateDismissedOnAdd: bulkActionDialog.type === "add" && !bulkExcludeDismissed },
     );
     if (result.affected === 0) {
       toast.error("لم يتم تطبيق العملية على أي طالب");
       return;
     }
-    toast.success(`${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${result.affected} طالب${result.skipped ? `، وتم تجاوز ${result.skipped} بدون فصل نشط` : ""}`);
+    toast.success(`${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${result.affected} طالب${bulkSkippedCount ? `، وتم استثناء ${bulkSkippedCount}` : ""}`);
     setBulkActionDialog({ type: "add", open: false });
     setBulkReason("");
     setBulkAmount(1);
@@ -348,7 +373,7 @@ export function OpportunitiesView() {
           <div className="space-y-1">
             <p className="text-sm font-black">عمليات جماعية حسب الفلترة الحالية</p>
             <p className="text-xs text-muted-foreground">
-              سيطبق الإجراء على {bulkEligibleStudents.length} طالب من أصل {filtered.length} ظاهر حالياً حسب الفلاتر. {bulkSkippedCount > 0 ? `تم استثناء ${bulkSkippedCount} طالب بدون فصل نشط.` : ""}
+              سيطبق الإجراء على الطلاب المؤهلين حسب الفلاتر، وتُعرض الاستثناءات التفصيلية قبل التنفيذ داخل نافذة التأكيد. {bulkSkippedNoActiveChapterCount > 0 ? `يوجد ${bulkSkippedNoActiveChapterCount} طالب بلا فصل نشط.` : ""}
             </p>
             <p className="text-[11px] text-muted-foreground">النطاق: {activeCourseFilterName} • {activeStatusFilterName} • {activeOpportunityFilterName}{search.trim() ? ` • بحث: ${search.trim()}` : ""}</p>
           </div>
@@ -356,7 +381,7 @@ export function OpportunitiesView() {
             <Button
               className="bg-emerald-600 text-white hover:bg-emerald-700"
               disabled={bulkEligibleStudents.length === 0}
-              onClick={() => setBulkActionDialog({ type: "add", open: true })}
+              onClick={() => { setBulkExcludeDismissed(true); setBulkActionDialog({ type: "add", open: true }); }}
             >
               إضافة للجميع الظاهرين
             </Button>
@@ -676,9 +701,30 @@ export function OpportunitiesView() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-2xl border bg-muted/50 p-3 text-sm leading-6">
-              <p className="font-bold">سيتم تطبيق العملية على {bulkEligibleStudents.length} طالب مؤهل.</p>
+              <p className="font-bold">سيتم تطبيق العملية على {currentBulkTargets.length} طالب بعد الاستثناءات.</p>
               <p className="text-xs text-muted-foreground">الفلاتر: {activeCourseFilterName} • {activeStatusFilterName} • {activeOpportunityFilterName}{search.trim() ? ` • بحث: ${search.trim()}` : ""}</p>
-              {bulkSkippedCount > 0 ? <p className="text-xs font-semibold text-amber-600">سيتم تجاوز {bulkSkippedCount} طالب لأنهم بلا فصل نشط مرتبط بالدورة.</p> : null}
+              {bulkActionDialog.type === "add" ? (
+                <div className="mt-3 rounded-xl border bg-background/70 p-3">
+                  <p className="mb-2 text-xs font-black text-foreground">العدا / Except</p>
+                  <label htmlFor="bulk-exclude-dismissed" className="flex cursor-pointer items-start gap-2 text-xs leading-5 text-muted-foreground">
+                    <Checkbox
+                      id="bulk-exclude-dismissed"
+                      checked={bulkExcludeDismissed}
+                      onCheckedChange={(checked) => setBulkExcludeDismissed(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <span>عدا المفصولين: إذا بقيت محددة لا تُضاف لهم فرصة. إذا ألغيتها تُضاف لهم فرصة ويتم إعادة تفعيلهم تلقائياً إذا صار لديهم فرص.</span>
+                  </label>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-xl border bg-background/70 p-3 text-xs leading-5 text-muted-foreground">
+                  <p className="font-black text-foreground">العدا / Except</p>
+                  <p>سيتم استثناء الطلاب أصحاب الفرص الكاملة تلقائياً مثل 3/3 حتى لا تُخصم منهم فرصة عند عملية الخصم الجماعي.</p>
+                </div>
+              )}
+              {bulkSkippedNoActiveChapterCount > 0 ? <p className="mt-2 text-xs font-semibold text-amber-600">سيتم تجاوز {bulkSkippedNoActiveChapterCount} طالب لأنهم بلا فصل نشط مرتبط بالدورة.</p> : null}
+              {bulkExcludedDismissedCount > 0 ? <p className="text-xs font-semibold text-amber-600">سيتم استثناء {bulkExcludedDismissedCount} طالب مفصول حسب خيار العدا.</p> : null}
+              {bulkExcludedFullOpportunitiesCount > 0 ? <p className="text-xs font-semibold text-amber-600">سيتم استثناء {bulkExcludedFullOpportunitiesCount} طالب لديهم فرص كاملة.</p> : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="bulk-opp-amount">عدد الفرص</Label>
@@ -706,7 +752,7 @@ export function OpportunitiesView() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setBulkActionDialog((current) => ({ ...current, open: false }))}>إلغاء</Button>
-            <Button onClick={handleBulkAction} disabled={isApplyingAction || bulkEligibleStudents.length === 0} variant={bulkActionDialog.type === "deduct" ? "destructive" : "default"}>
+            <Button onClick={handleBulkAction} disabled={isApplyingAction || currentBulkTargets.length === 0} variant={bulkActionDialog.type === "deduct" ? "destructive" : "default"}>
               {bulkActionDialog.type === "add" ? "إضافة للجميع" : "خصم من الجميع"}
             </Button>
           </DialogFooter>

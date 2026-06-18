@@ -318,6 +318,50 @@ export function TeacherProLayout() {
   }, [theme]);
 
   useEffect(() => {
+    const findVisibleSearchInput = () => {
+      const selectors = [
+        '[data-teacherpro-search="true"]',
+        'input[type="search"]',
+        'input[name="search"]',
+        'input[id*="search"]',
+        'textarea[name="search"]',
+        'textarea[id*="search"]',
+      ];
+      const controls = Array.from(
+        document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(selectors.join(",")),
+      );
+      return controls.find((control) => {
+        if (control.disabled || control.readOnly) return false;
+        const rect = control.getBoundingClientRect();
+        const style = window.getComputedStyle(control);
+        return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+      }) || null;
+    };
+
+    const focusSearchInput = () => {
+      const searchInput = findVisibleSearchInput();
+      if (!searchInput) return false;
+      searchInput.focus({ preventScroll: true });
+      searchInput.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+      requestAnimationFrame(() => {
+        searchInput.focus({ preventScroll: true });
+        searchInput.select();
+      });
+      return true;
+    };
+
+    const handleGlobalSearchShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "f") return;
+      if (!focusSearchInput()) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    window.addEventListener("keydown", handleGlobalSearchShortcut, true);
+    return () => window.removeEventListener("keydown", handleGlobalSearchShortcut, true);
+  }, []);
+
+  useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ message?: string }>).detail;
       toast.error(detail?.message || "تعذر حفظ التغيير في الخادم وتم التراجع محلياً");

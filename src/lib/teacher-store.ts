@@ -518,7 +518,12 @@ interface TeacherState {
   recalculateAcademicEffects: (studentIds?: string | string[]) => void;
 
   adjustOpportunities: (studentId: string, amount: number, reason: string) => void;
-  bulkAdjustOpportunities: (studentIds: string[], amount: number, reason: string) => { affected: number; skipped: number };
+  bulkAdjustOpportunities: (
+    studentIds: string[],
+    amount: number,
+    reason: string,
+    options?: { reactivateDismissedOnAdd?: boolean },
+  ) => { affected: number; skipped: number };
   resetOpportunities: (studentId: string) => void;
   undoOpportunityLog: (logId: string) => boolean;
 
@@ -2312,7 +2317,7 @@ export const useTeacherStore = create<TeacherState>()(
           );
         }
       },
-      bulkAdjustOpportunities: (studentIds, amount, reason) => {
+      bulkAdjustOpportunities: (studentIds, amount, reason, options = {}) => {
         const stateBefore = get();
         const normalizedAmount = Math.max(1, Math.trunc(Math.abs(Number(amount) || 0)));
         const signedAmount = amount > 0 ? normalizedAmount : -normalizedAmount;
@@ -2362,25 +2367,52 @@ export const useTeacherStore = create<TeacherState>()(
             };
             return { studentId: student.id, dismissalType, dismissalReason, note };
           });
+        const reactivationEffects = signedAmount > 0 && options.reactivateDismissedOnAdd
+          ? adjustedStudents
+              .filter((student) => eligibleStudentIds.has(student.id) && student.status === 'مفصول' && student.opportunities > 0)
+              .map((student) => {
+                const note: StudentNote = {
+                  id: uid('note'),
+                  studentId: student.id,
+                  kind: 'إجراء',
+                  text: 'إعادة تفعيل تلقائية بعد إضافة فرصة جماعية',
+                  date: todayISO(),
+                };
+                return { studentId: student.id, note };
+              })
+          : [];
         const dismissalByStudentId = new Map(dismissalEffects.map((effect) => [effect.studentId, effect]));
-        const dismissalNotes = dismissalEffects.map((effect) => effect.note);
+        const reactivationByStudentId = new Map(reactivationEffects.map((effect) => [effect.studentId, effect]));
+        const effectNotes = [...dismissalEffects.map((effect) => effect.note), ...reactivationEffects.map((effect) => effect.note)];
         const nextStudents = adjustedStudents.map((student) => {
           const dismissal = dismissalByStudentId.get(student.id);
-          if (!dismissal) return student;
-          return {
-            ...student,
-            status: 'مفصول' as const,
-            dismissalType: dismissal.dismissalType,
-            dismissalReason: dismissal.dismissalReason,
-            dismissalNotes: '',
-            opportunities: 0,
-          };
+          if (dismissal) {
+            return {
+              ...student,
+              status: 'مفصول' as const,
+              dismissalType: dismissal.dismissalType,
+              dismissalReason: dismissal.dismissalReason,
+              dismissalNotes: '',
+              opportunities: 0,
+            };
+          }
+          const reactivation = reactivationByStudentId.get(student.id);
+          if (reactivation) {
+            return {
+              ...student,
+              status: 'نشط' as const,
+              dismissalType: '',
+              dismissalReason: '',
+              dismissalNotes: '',
+            };
+          }
+          return student;
         });
 
         set((s) => ({
           students: nextStudents,
           opportunityLogs: [...logs, ...s.opportunityLogs],
-          studentNotes: [...dismissalNotes, ...s.studentNotes],
+          studentNotes: [...effectNotes, ...s.studentNotes],
         }));
 
         get().logAction(
@@ -2390,6 +2422,9 @@ export const useTeacherStore = create<TeacherState>()(
         );
         dismissalEffects.forEach((effect) => {
           get().logAction('الطلاب', `فصل الطالب (${effect.dismissalType})`, `${get().studentName(effect.studentId)} - ${effect.dismissalReason}`);
+        });
+        reactivationEffects.forEach((effect) => {
+          get().logAction('الطلاب', 'إعادة تفعيل تلقائية', `${get().studentName(effect.studentId)} - إضافة فرصة جماعية`);
         });
 
         const nextState = get();
@@ -2407,6 +2442,11 @@ export const useTeacherStore = create<TeacherState>()(
               payload.dismissalType = dismissal.dismissalType;
               payload.dismissalReason = dismissal.dismissalReason;
               payload.dismissalNotes = '';
+            } else if (reactivationByStudentId.has(student.id)) {
+              payload.status = 'نشط';
+              payload.dismissalType = '';
+              payload.dismissalReason = '';
+              payload.dismissalNotes = '';
             }
             return payload;
           })
@@ -2417,7 +2457,7 @@ export const useTeacherStore = create<TeacherState>()(
           () => opportunityLogApi.bulkAdjust({
             students: studentPayload,
             opportunityLogs: logs as unknown as Array<Record<string, unknown>>,
-            studentNotes: dismissalNotes as unknown as Array<Record<string, unknown>>,
+            studentNotes: effectNotes as unknown as Array<Record<string, unknown>>,
           }),
           { description: 'حفظ تحديث فرص جماعي بطلب واحد' },
         );
