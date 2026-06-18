@@ -300,7 +300,7 @@ export function TeacherProLayout() {
       return;
     event.preventDefault();
     if (!isAdmin && !canAccess(section)) return;
-    setSection(section);
+    React.startTransition(() => setSection(section));
     if (typeof window !== "undefined") {
       const nextUrl = new URL(window.location.href);
       nextUrl.searchParams.set("section", section);
@@ -337,9 +337,7 @@ export function TeacherProLayout() {
 
     const isVisibleSearchControl = (control: HTMLInputElement | HTMLTextAreaElement) => {
       if (control.disabled || control.readOnly) return false;
-      const rect = control.getBoundingClientRect();
-      const style = window.getComputedStyle(control);
-      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+      return Boolean(control.offsetParent) && (!(control instanceof HTMLInputElement) || control.type !== "hidden");
     };
 
     const findVisibleSearchInput = () => {
@@ -360,7 +358,7 @@ export function TeacherProLayout() {
       const searchInput = findVisibleSearchInput();
       if (!searchInput) return false;
       searchInput.focus({ preventScroll: true });
-      searchInput.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+      searchInput.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
       requestAnimationFrame(() => {
         searchInput.focus({ preventScroll: true });
         searchInput.select();

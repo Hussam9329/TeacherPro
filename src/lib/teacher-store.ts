@@ -2126,17 +2126,32 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => examApi.add({ ...exam, courseIds: exam.courseIds, opportunitiesPenalty: String(exam.opportunitiesPenalty) }));
       },
       updateExam: (id, updates) => {
+        const stateBefore = get();
+        const exam = stateBefore.exams.find((e) => e.id === id);
+        const affectedStudentIds = Array.from(new Set(
+          stateBefore.grades
+            .filter((grade) => grade.examId === id)
+            .map((grade) => grade.studentId)
+            .filter(Boolean),
+        ));
         set((s) => ({ exams: s.exams.map((e) => e.id === id ? { ...e, ...updates } : e) }));
-        get().logAction('الامتحانات', 'تعديل امتحان', get().exams.find((e) => e.id === id)?.name || id);
+        get().logAction('الامتحانات', 'تعديل امتحان', exam?.name || id);
         syncToServer(get, () => examApi.update(id, updates as Record<string, unknown>));
-        get().recalculateAcademicEffects();
+        if (affectedStudentIds.length > 0) get().recalculateAcademicEffects(affectedStudentIds);
       },
       toggleExam: (id) => {
-        const exam = get().exams.find((e) => e.id === id);
+        const stateBefore = get();
+        const exam = stateBefore.exams.find((e) => e.id === id);
+        const affectedStudentIds = Array.from(new Set(
+          stateBefore.grades
+            .filter((grade) => grade.examId === id)
+            .map((grade) => grade.studentId)
+            .filter(Boolean),
+        ));
         set((s) => ({ exams: s.exams.map((e) => e.id === id ? { ...e, active: !e.active } : e) }));
         get().logAction('الامتحانات', exam?.active ? 'تعطيل امتحان' : 'تفعيل امتحان', exam?.name || id);
         syncToServer(get, () => examApi.update(id, { active: !exam?.active }));
-        get().recalculateAcademicEffects();
+        if (affectedStudentIds.length > 0) get().recalculateAcademicEffects(affectedStudentIds);
       },
       deleteExam: (id) => {
         const state = get();
@@ -2367,9 +2382,11 @@ export const useTeacherStore = create<TeacherState>()(
         const recalculated = recalculateStudentsFromAcademicRules(before, targetStudentIds);
         const oldAutomaticLogs = before.opportunityLogs.filter(isAutomaticOpportunityLog);
         const oldAcademicallyManagedLogs = before.opportunityLogs.filter(isAcademicallyManagedOpportunityLog);
+        const studentsById = new Map(before.students.map((student) => [student.id, student]));
         set({ students: recalculated.students, opportunityLogs: recalculated.opportunityLogs });
         recalculated.students.forEach((student) => {
-          const oldStudent = before.students.find((item) => item.id === student.id);
+          if (targetStudentIds && !targetStudentIds.has(student.id)) return;
+          const oldStudent = studentsById.get(student.id);
           if (!oldStudent) return;
           if (
             oldStudent.opportunities !== student.opportunities ||

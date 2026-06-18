@@ -65,6 +65,7 @@ type FullExamEditState = {
   discountMark: string;
   opportunitiesPenaltyNum: string;
   dismissalGrade: string;
+  noDiscount: boolean;
   statusMode: ExamStatusMode;
   scheduledActivateAt: string;
   scheduledDeactivateAt: string;
@@ -121,6 +122,7 @@ function emptyEditState(): FullExamEditState {
     discountMark: "45",
     opportunitiesPenaltyNum: "1",
     dismissalGrade: "",
+    noDiscount: false,
     statusMode: "نشط",
     scheduledActivateAt: "",
     scheduledDeactivateAt: "",
@@ -308,7 +310,7 @@ tr:nth-child(even) td { background: #f8fafc; }
 <main class="report">
   <section class="header">
     <div><div class="brand">TeacherPro</div><h1>سجل الامتحان: ${escapeHtml(exam.name)}</h1><div class="meta">التاريخ: ${escapeHtml(formatAppDate(exam.date))} | النوع: ${escapeHtml(exam.type)} | الحالة: ${escapeHtml(getExamStatus(exam))}</div></div>
-    <div class="meta">الدورات: ${escapeHtml(exam.courseIds.map(courseName).join("، "))}<br/>النجاح: ${exam.passMark} | الخصم: ${exam.discountMark} | الدرجة الكاملة: ${exam.fullMark}</div>
+    <div class="meta">الدورات: ${escapeHtml(exam.courseIds.map(courseName).join("، "))}<br/>النجاح: ${exam.passMark} | الخصم: ${exam.noDiscount ? "معطل - بدون خصم" : exam.discountMark} | الدرجة الكاملة: ${exam.fullMark}</div>
   </section>
   <section class="stats">
     <div class="stat"><strong>${rows.length}</strong><span>إجمالي السجلات</span></div>
@@ -351,6 +353,7 @@ tr:nth-child(even) td { background: #f8fafc; }
       discountMark: String(exam.discountMark),
       opportunitiesPenaltyNum: typeof exam.opportunitiesPenalty === "number" ? String(exam.opportunitiesPenalty) : "1",
       dismissalGrade: exam.dismissalGrade === null || exam.dismissalGrade === undefined ? "" : String(exam.dismissalGrade),
+      noDiscount: Boolean(exam.noDiscount),
       statusMode: statusModeFromExam(exam),
       scheduledActivateAt: toDateTimeLocalValue(exam.scheduledActivateAt) || defaultDateTimeForDate(exam.date),
       scheduledDeactivateAt: toDateTimeLocalValue(exam.scheduledDeactivateAt) || defaultDeactivateDateTime(exam),
@@ -361,7 +364,8 @@ tr:nth-child(even) td { background: #f8fafc; }
     const fullMark = Number(toLatinDigits(state.fullMark));
     const passMark = Number(toLatinDigits(state.passMark));
     const isFinalExam = state.type === "فاينل";
-    const discountMark = isFinalExam ? 0 : Number(toLatinDigits(state.discountMark));
+    const noDiscount = Boolean(state.noDiscount);
+    const discountMark = isFinalExam || noDiscount ? 0 : Number(toLatinDigits(state.discountMark));
     if (!state.name.trim()) return "اسم الامتحان مطلوب";
     if (state.courseIds.length === 0) return "اختر دورة واحدة على الأقل";
     const invalidCourses = state.courseIds.filter((courseId) => !hasActiveChapterLink(courseChapters, courseId));
@@ -370,9 +374,9 @@ tr:nth-child(even) td { background: #f8fafc; }
     if (![fullMark, passMark, discountMark].every(Number.isFinite)) return "درجات الامتحان يجب أن تكون أرقاماً";
     if (fullMark <= 0) return "الدرجة الكاملة يجب أن تكون أكبر من صفر";
     if (passMark < 0 || passMark > fullMark) return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
-    if (discountMark < 0 || discountMark > fullMark) return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
-    if (!isFinalExam && passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
-    if (!isFinalExam && Number(toLatinDigits(state.opportunitiesPenaltyNum) || 0) <= 0) return "خصم الفرص يجب أن يكون أكبر من صفر";
+    if (!noDiscount && (discountMark < 0 || discountMark > fullMark)) return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
+    if (!noDiscount && !isFinalExam && passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
+    if (!noDiscount && !isFinalExam && Number(toLatinDigits(state.opportunitiesPenaltyNum) || 0) <= 0) return "خصم الفرص يجب أن يكون أكبر من صفر";
     if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ ووقت التفعيل المجدول";
     if (state.statusMode === "تعطيل مجدول" && !state.scheduledDeactivateAt) return "حدد تاريخ ووقت التعطيل المجدول";
     return null;
@@ -382,6 +386,7 @@ tr:nth-child(even) td { background: #f8fafc; }
     const error = validateEditExam(editDialog);
     if (error) return toast.error(error);
     const isFinalExam = editDialog.type === "فاينل";
+    const noDiscount = Boolean(editDialog.noDiscount);
     const statusPatch = editDialog.statusMode === "نشط"
       ? { active: true, scheduledActivateAt: "", scheduledDeactivateAt: "" }
       : editDialog.statusMode === "معطل"
@@ -398,9 +403,10 @@ tr:nth-child(even) td { background: #f8fafc; }
       date: editDialog.date,
       fullMark: Number(toLatinDigits(editDialog.fullMark)),
       passMark: Number(toLatinDigits(editDialog.passMark)),
-      discountMark: isFinalExam ? 0 : Number(toLatinDigits(editDialog.discountMark)),
-      opportunitiesPenalty: isFinalExam ? "فصل مؤقت" : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum) || 1),
-      dismissalGrade: isFinalExam && editDialog.dismissalGrade ? Number(toLatinDigits(editDialog.dismissalGrade)) : null,
+      discountMark: isFinalExam || noDiscount ? 0 : Number(toLatinDigits(editDialog.discountMark)),
+      opportunitiesPenalty: noDiscount ? "0" : (isFinalExam ? "فصل مؤقت" : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum) || 1)),
+      dismissalGrade: !noDiscount && isFinalExam && editDialog.dismissalGrade ? Number(toLatinDigits(editDialog.dismissalGrade)) : null,
+      noDiscount,
       ...statusPatch,
     });
     setEditDialog(emptyEditState());
@@ -451,6 +457,7 @@ tr:nth-child(even) td { background: #f8fafc; }
 
   const renderEditExamFields = () => {
     const isFinalExam = editDialog.type === "فاينل";
+    const noDiscount = Boolean(editDialog.noDiscount);
     const mainSitesForEdit = availableMainSitesForEdit(editDialog);
     const eligibleCourses = courses.filter((course) => hasActiveChapterLink(courseChapters, course.id));
     const allCoursesSelected = eligibleCourses.length > 0 && eligibleCourses.every((course) => editDialog.courseIds.includes(course.id));
@@ -468,8 +475,9 @@ tr:nth-child(even) td { background: #f8fafc; }
             <Select value={editDialog.type} onValueChange={(value) => setEditDialog((prev) => ({
               ...prev,
               type: value as Exam["type"],
-              discountMark: value === "فاينل" ? "0" : (prev.discountMark || "45"),
-              opportunitiesPenaltyNum: value === "فاينل" ? "0" : (prev.opportunitiesPenaltyNum || "1"),
+              discountMark: value === "فاينل" || prev.noDiscount ? "0" : (prev.discountMark || "45"),
+              opportunitiesPenaltyNum: value === "فاينل" || prev.noDiscount ? "0" : (prev.opportunitiesPenaltyNum || "1"),
+              dismissalGrade: value === "فاينل" && !prev.noDiscount ? prev.dismissalGrade : "",
             }))}>
               <SelectTrigger id="edit-exam-type"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="يومي">يومي</SelectItem><SelectItem value="تراكمي">تراكمي</SelectItem><SelectItem value="فاينل">فاينل</SelectItem></SelectContent>
@@ -530,19 +538,45 @@ tr:nth-child(even) td { background: #f8fafc; }
             <Label>درجة النجاح</Label>
             <Input type="number" value={editDialog.passMark} onChange={(e) => setEditDialog((prev) => ({ ...prev, passMark: toLatinDigits(e.target.value) }))} />
           </div>
+          <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 md:col-span-2 dark:border-sky-900/50 dark:bg-sky-950/20">
+            <label className="flex cursor-pointer items-start gap-3 text-sm">
+              <Checkbox
+                checked={noDiscount}
+                onCheckedChange={(value) => {
+                  const enabled = Boolean(value);
+                  setEditDialog((prev) => ({
+                    ...prev,
+                    noDiscount: enabled,
+                    discountMark: enabled || prev.type === "فاينل" ? "0" : (prev.discountMark && prev.discountMark !== "0" ? prev.discountMark : "45"),
+                    opportunitiesPenaltyNum: enabled || prev.type === "فاينل" ? "0" : (prev.opportunitiesPenaltyNum && prev.opportunitiesPenaltyNum !== "0" ? prev.opportunitiesPenaltyNum : "1"),
+                    dismissalGrade: enabled ? "" : prev.dismissalGrade,
+                  }));
+                }}
+              />
+              <span>
+                <span className="block font-semibold">امتحان بدون خصم</span>
+                <span className="block text-xs text-muted-foreground">عند التفعيل لا يحاسب الطالب على الدرجة أو الغياب، وتعطل درجة الخصم وخصم الفرص ودرجة الفصل.</span>
+              </span>
+            </label>
+          </div>
           <div className="space-y-1">
             <Label>درجة الخصم</Label>
-            <Input type="number" disabled={isFinalExam} value={isFinalExam ? "0" : editDialog.discountMark} onChange={(e) => setEditDialog((prev) => ({ ...prev, discountMark: toLatinDigits(e.target.value) }))} />
-            {!isFinalExam && Number(editDialog.passMark) <= Number(editDialog.discountMark) && <p className="text-xs text-destructive">درجة النجاح يجب أن تكون أكبر من درجة الخصم.</p>}
+            <Input type="number" disabled={isFinalExam || noDiscount} value={isFinalExam || noDiscount ? "0" : editDialog.discountMark} onChange={(e) => setEditDialog((prev) => ({ ...prev, discountMark: toLatinDigits(e.target.value) }))} />
+            {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
+            {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ الحكم يكون من درجة الفصل.</p>}
+            {!noDiscount && !isFinalExam && Number(editDialog.passMark) <= Number(editDialog.discountMark) && <p className="text-xs text-destructive">درجة النجاح يجب أن تكون أكبر من درجة الخصم.</p>}
           </div>
           <div className="space-y-1">
             <Label>خصم الفرص</Label>
-            <Input type="number" disabled={isFinalExam} value={isFinalExam ? "0" : editDialog.opportunitiesPenaltyNum} onChange={(e) => setEditDialog((prev) => ({ ...prev, opportunitiesPenaltyNum: toLatinDigits(e.target.value) }))} />
+            <Input type="number" disabled={isFinalExam || noDiscount} value={isFinalExam || noDiscount ? "0" : editDialog.opportunitiesPenaltyNum} onChange={(e) => setEditDialog((prev) => ({ ...prev, opportunitiesPenaltyNum: toLatinDigits(e.target.value) }))} />
+            {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
+            {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ يعالج الفصل من درجة الفصل أو الغياب/الغش.</p>}
           </div>
           {isFinalExam && (
             <div className="space-y-1">
               <Label>درجة الفصل</Label>
-              <Input type="number" value={editDialog.dismissalGrade} onChange={(e) => setEditDialog((prev) => ({ ...prev, dismissalGrade: toLatinDigits(e.target.value) }))} />
+              <Input type="number" disabled={noDiscount} value={noDiscount ? "" : editDialog.dismissalGrade} onChange={(e) => setEditDialog((prev) => ({ ...prev, dismissalGrade: toLatinDigits(e.target.value) }))} />
+              {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
             </div>
           )}
           <div className="space-y-1">
