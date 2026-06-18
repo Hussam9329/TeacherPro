@@ -21,6 +21,7 @@ import {
   Handshake,
   Shield,
   ScrollText,
+  ShieldAlert,
   Sun,
   Moon,
   Menu,
@@ -90,6 +91,7 @@ const menuItems: {
   { id: "follow-up-pledges", title: "تعهدات", sub: "تعهدات الفصل", icon: Handshake },
   { id: "accounts", title: "إدارة الحسابات", sub: "صلاحيات", icon: Shield },
   { id: "logs", title: "السجلات", sub: "تدقيق", icon: ScrollText },
+  { id: "admin-log-reset", title: "تصفير الlog", sub: "مدير النظام فقط", icon: ShieldAlert },
 ];
 
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
@@ -101,7 +103,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
   },
   { title: "المتابعة", itemIds: ["follow-up-calls", "follow-up-leaves", "follow-up-pledges"] },
-  { title: "الإدارة", itemIds: ["accounts", "logs"] },
+  { title: "الإدارة", itemIds: ["accounts", "logs", "admin-log-reset"] },
 ];
 
 const familyItemIds = new Set<SectionId>(
@@ -145,6 +147,7 @@ import { ECorrectionView } from "./e-correction";
 import { FollowUpCallsView, FollowUpLeavesView, FollowUpPledgesView, FollowUpView } from "./follow-up";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
+import { AdminLogResetView } from "./admin-log-reset";
 import { LoadingState } from "./ui-kit";
 
 const sectionComponents: Record<SectionId, React.ComponentType> = {
@@ -167,6 +170,7 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "e-correction": ECorrectionView,
   accounts: AccountsView,
   logs: LogsView,
+  "admin-log-reset": AdminLogResetView,
 };
 
 

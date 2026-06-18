@@ -425,4 +425,6 @@ export const roleApi = {
 export const logApi = {
   add: (log: Record<string, unknown>) =>
     apiPost('logs', log),
+  clear: (password: string) =>
+    apiPost('logs/clear', { password }),
 };

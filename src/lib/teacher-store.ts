@@ -248,7 +248,8 @@ export type SectionId =
   | 'follow-up-pledges'
   | 'e-correction'
   | 'accounts'
-  | 'logs';
+  | 'logs'
+  | 'admin-log-reset';
 
 // ─── Permissions Catalog ────────────────────────────────────────────────────
 
@@ -327,6 +328,7 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'e-correction': 'correction.view',
   'accounts': 'accounts.view',
   'logs': 'logs.view',
+  'admin-log-reset': '__admin_only__',
 };
 
 // ─── Default Roles ──────────────────────────────────────────────────────────
@@ -339,6 +341,7 @@ const ADMIN_PASSWORD = '1993';
 const ADMIN_ROLE_ID = 'role_admin';
 const ADMIN_ROLE_NAME = 'مدير عام';
 const ADMIN_FULL_PERMISSIONS = [...ALL_PERMISSION_IDS];
+const ADMIN_ONLY_SECTIONS = new Set<SectionId>(['admin-log-reset']);
 const DEPRECATED_PERMISSION_IDS = new Set(['groups.view', 'groups.add', 'groups.edit', 'groups.delete', 'sites.view', 'sites.add', 'sites.edit', 'sites.delete', 'demos.view', 'demos.manage']);
 
 function sanitizePermissionIds(permissions: string[] = []): string[] {
@@ -550,6 +553,7 @@ interface TeacherState {
 
 
   logAction: (module: string, action: string, details?: string) => void;
+  clearLogs: (password: string) => Promise<{ ok: boolean; message: string }>;
   exportBackup: () => string;
   importBackup: (jsonText: string) => { ok: boolean; message: string };
   exportMonthlyReport: (month?: string) => string;
@@ -1635,6 +1639,7 @@ export const useTeacherStore = create<TeacherState>()(
         if (!get().isAuthenticated) return false;
         const user = get().currentUser();
         if (!user) return false;
+        if (ADMIN_ONLY_SECTIONS.has(section as SectionId)) return hasFullAdminAccess(user);
         // Admin user always has full access to every section and tab.
         if (hasFullAdminAccess(user)) return true;
         // Check if user has the required permission for this section
@@ -1693,6 +1698,19 @@ export const useTeacherStore = create<TeacherState>()(
         if (get().isAuthenticated && currentUser?.id) {
           syncToServer(get, () => logApi.add({ ...log, userName: user, userId: currentUser.id }));
         }
+      },
+
+      clearLogs: async (password) => {
+        const currentUser = get().currentUser();
+        if (!currentUser || !hasFullAdminAccess(currentUser)) {
+          return { ok: false, message: 'هذه العملية متاحة لمدير النظام فقط' };
+        }
+        const result = await logApi.clear(password);
+        if (!result.ok) {
+          return { ok: false, message: result.error || 'تعذر تصفير السجلات' };
+        }
+        set({ logs: [] });
+        return { ok: true, message: 'تم تصفير السجلات بنجاح' };
       },
 
       addCourse: (courseInput) => {
