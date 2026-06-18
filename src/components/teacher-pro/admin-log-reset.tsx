@@ -70,7 +70,7 @@ export function AdminLogResetView() {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="rounded-2xl border border-destructive/20 bg-background/70 p-4 text-sm leading-7 text-muted-foreground">
-            هذا الإجراء يحذف جميع سجلات الـ log من قاعدة البيانات ولا يمكن التراجع عنه.
+            هذا الإجراء يحذف جميع سجلات الـ log وسجل حركات الفرص من قاعدة البيانات ولا يمكن التراجع عنه.
             لا يتم التنفيذ إلا بعد إدخال الباسوورد الخاص ثم تأكيد العملية.
           </div>
 
@@ -109,7 +109,7 @@ export function AdminLogResetView() {
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد تصفير الlog</AlertDialogTitle>
             <AlertDialogDescription>
-              سيتم حذف جميع سجلات العمليات والتدقيق نهائياً. هل تريد المتابعة؟
+              سيتم حذف جميع سجلات العمليات والتدقيق وسجل حركات الفرص نهائياً. هل تريد المتابعة؟
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

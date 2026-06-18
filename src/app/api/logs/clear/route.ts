@@ -24,8 +24,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'الباسوورد الخاص غير صحيح.' }, { status: 403 });
     }
 
-    const result = await db.auditLog.deleteMany({});
-    return NextResponse.json({ ok: true, deleted: result.count });
+    const [auditLogsResult, opportunityLogsResult] = await db.$transaction([
+      db.auditLog.deleteMany({}),
+      db.opportunityLog.deleteMany({}),
+    ]);
+
+    return NextResponse.json({
+      ok: true,
+      deleted: auditLogsResult.count + opportunityLogsResult.count,
+      deletedAuditLogs: auditLogsResult.count,
+      deletedOpportunityLogs: opportunityLogsResult.count,
+    });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تصفير السجلات حالياً.');
   }

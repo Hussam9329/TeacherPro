@@ -1709,8 +1709,8 @@ export const useTeacherStore = create<TeacherState>()(
         if (!result.ok) {
           return { ok: false, message: result.error || 'تعذر تصفير السجلات' };
         }
-        set({ logs: [] });
-        return { ok: true, message: 'تم تصفير السجلات بنجاح' };
+        set({ logs: [], opportunityLogs: [] });
+        return { ok: true, message: 'تم تصفير سجلات النظام وسجل حركات الفرص بنجاح' };
       },
 
       addCourse: (courseInput) => {
