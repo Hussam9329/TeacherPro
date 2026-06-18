@@ -727,6 +727,7 @@ export function StudentRegistryView() {
               <Input
                 id="registry-search"
                 name="search"
+                data-teacherpro-search="true"
                 autoComplete="off"
                 value={search}
                 onChange={(e) => {

@@ -344,7 +344,7 @@ export function OpportunitiesView() {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
             <div className="space-y-1 xl:col-span-2">
               <Label htmlFor="opp-search" className="text-xs font-bold">بحث عن طالب</Label>
-              <Input id="opp-search" name="search" autoComplete="off" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="اسم الطالب / الكود / الهاتف / المدرسة" />
+              <Input id="opp-search" name="search" data-teacherpro-search="true" autoComplete="off" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="اسم الطالب / الكود / الهاتف / المدرسة" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="opp-course" className="text-xs font-bold">الدورة</Label>

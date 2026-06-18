@@ -77,6 +77,7 @@ export function LogsView() {
               <Input
                 id="logs-search"
                 name="search"
+                data-teacherpro-search="true"
                 autoComplete="off"
                 value={search}
                 onChange={(e) => {

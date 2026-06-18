@@ -584,7 +584,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return (
       <div className="space-y-2">
         <Label>البحث العام عن الطالب</Label>
-        <Input value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="اسم / كود / هاتف / مدرسة" />
+        <Input id="follow-up-global-search" name="search" data-teacherpro-search="true" value={globalSearch} onChange={(event) => setGlobalSearch(event.target.value)} placeholder="اسم / كود / هاتف / مدرسة" />
         <div className="max-h-44 space-y-1 overflow-y-auto rounded-2xl border bg-muted/30 p-2">
           {filteredStudents.map((student) => (
             <button
@@ -828,7 +828,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <CardContent className="grid gap-3 p-4 md:grid-cols-3">
               <div className="space-y-2"><Label>الامتحان</Label><Select value={callExamId || "all"} onValueChange={(value) => setCallExamId(value === "all" ? "" : value)}><SelectTrigger><SelectValue placeholder="كل الامتحانات" /></SelectTrigger><SelectContent><SelectItem value="all">كل الامتحانات + المفصولون</SelectItem>{exams.map((exam) => <SelectItem key={exam.id} value={exam.id}>{exam.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label>الحالة</Label><Select value={callCategory} onValueChange={(value) => setCallCategory(value as CallCategory | "all")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل الحالات</SelectItem>{(Object.keys(callCategoryLabels) as CallCategory[]).map((key) => <SelectItem key={key} value={key}>{callCategoryLabels[key]}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>بحث</Label><Input value={callSearch} onChange={(event) => setCallSearch(event.target.value)} placeholder="طالب / كود / امتحان / سبب الفصل" /></div>
+              <div className="space-y-2"><Label>بحث</Label><Input id="follow-up-calls-search" name="search" data-teacherpro-search="true" value={callSearch} onChange={(event) => setCallSearch(event.target.value)} placeholder="طالب / كود / امتحان / سبب الفصل" /></div>
             </CardContent>
           </Card>
           <div className="grid gap-3 md:grid-cols-4">
@@ -856,7 +856,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <CardContent className="grid gap-3 p-4 md:grid-cols-3">
               <div className="space-y-2"><Label>فرز الفصل</Label><Select value={pledgeTypeFilter} onValueChange={(value) => setPledgeTypeFilter(value as PledgeTypeFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل ملفات الفصل</SelectItem><SelectItem value="temporary">طلبة الفصل المؤقت</SelectItem><SelectItem value="final">طلبة الفصل النهائي</SelectItem></SelectContent></Select></div>
               <div className="space-y-2"><Label>حالة التعهد</Label><Select value={pledgeStatusFilter} onValueChange={(value) => setPledgeStatusFilter(value as PledgeStatusFilter)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">كل الحالات</SelectItem><SelectItem value="pledged">تم التعهد</SelectItem><SelectItem value="reactivated">تم التعهد وإعادة التفعيل</SelectItem><SelectItem value="pending">لم يتم التعهد</SelectItem></SelectContent></Select></div>
-              <div className="space-y-2"><Label>بحث</Label><Input value={pledgeSearch} onChange={(event) => setPledgeSearch(event.target.value)} placeholder="طالب / كود / سبب الفصل" /></div>
+              <div className="space-y-2"><Label>بحث</Label><Input id="follow-up-pledges-search" name="search" data-teacherpro-search="true" value={pledgeSearch} onChange={(event) => setPledgeSearch(event.target.value)} placeholder="طالب / كود / سبب الفصل" /></div>
             </CardContent>
           </Card>
 

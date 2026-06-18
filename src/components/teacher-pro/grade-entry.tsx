@@ -920,6 +920,8 @@ export function GradeEntryView() {
                 </Label>
                 <Input
                   id="grade-entry-search"
+                  name="search"
+                  data-teacherpro-search="true"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(event) => {

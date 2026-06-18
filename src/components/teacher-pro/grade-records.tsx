@@ -227,7 +227,7 @@ export function GradeRecordsView() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             <div className="space-y-1">
               <Label htmlFor="grade-records-search" className="text-xs">بحث</Label>
-              <Input id="grade-records-search" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تليكرام / امتحان" />
+              <Input id="grade-records-search" name="search" data-teacherpro-search="true" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="اسم / كود / تليكرام / امتحان" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="grade-records-exam" className="text-xs">الامتحان</Label>

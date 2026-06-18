@@ -322,24 +322,34 @@ export function TeacherProLayout() {
   }, [theme]);
 
   useEffect(() => {
+    const searchSelectors = [
+      '[data-teacherpro-search="true"]',
+      'input[type="search"]',
+      'input[name="search"]',
+      'input[id*="search"]',
+      'textarea[name="search"]',
+      'textarea[id*="search"]',
+    ].join(",");
+
+    const isVisibleSearchControl = (control: HTMLInputElement | HTMLTextAreaElement) => {
+      if (control.disabled || control.readOnly) return false;
+      const rect = control.getBoundingClientRect();
+      const style = window.getComputedStyle(control);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    };
+
     const findVisibleSearchInput = () => {
-      const selectors = [
-        '[data-teacherpro-search="true"]',
-        'input[type="search"]',
-        'input[name="search"]',
-        'input[id*="search"]',
-        'textarea[name="search"]',
-        'textarea[id*="search"]',
-      ];
-      const controls = Array.from(
-        document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(selectors.join(",")),
+      const activeContent = document.querySelector<HTMLElement>('[data-teacherpro-active-content="true"]');
+      const scopedControls = activeContent
+        ? Array.from(activeContent.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(searchSelectors))
+        : [];
+      const scopedMatch = scopedControls.find(isVisibleSearchControl);
+      if (scopedMatch) return scopedMatch;
+
+      const pageControls = Array.from(
+        document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(searchSelectors),
       );
-      return controls.find((control) => {
-        if (control.disabled || control.readOnly) return false;
-        const rect = control.getBoundingClientRect();
-        const style = window.getComputedStyle(control);
-        return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
-      }) || null;
+      return pageControls.find(isVisibleSearchControl) || null;
     };
 
     const focusSearchInput = () => {
@@ -355,7 +365,13 @@ export function TeacherProLayout() {
     };
 
     const handleGlobalSearchShortcut = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "f") return;
+      const key = event.key.toLowerCase();
+      const isSearchShortcut =
+        (event.ctrlKey || event.metaKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        (key === "f" || event.code === "KeyF");
+      if (!isSearchShortcut) return;
       if (!focusSearchInput()) return;
       event.preventDefault();
       event.stopPropagation();
@@ -859,7 +875,7 @@ export function TeacherProLayout() {
         )}
 
         <div className="app-scrollbar page-enter flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 xl:p-8">
-          <div className="content-container space-y-6">
+          <div className="content-container space-y-6" data-teacherpro-active-content="true" data-teacherpro-section={currentSection}>
             {dbLoading && <LoadingState />}
             {isAdmin || canAccess(currentSection) ? (
               <CurrentComponent />

@@ -122,7 +122,7 @@ export function DismissedStudentsView() {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
             <div className="space-y-1 md:col-span-2">
               <Label htmlFor="dismissed-search" className="text-xs">بحث ذكي</Label>
-              <Input id="dismissed-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم / كود / سبب / ملاحظات / تليكرام" />
+              <Input id="dismissed-search" name="search" data-teacherpro-search="true" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم / كود / سبب / ملاحظات / تليكرام" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="dismissed-course" className="text-xs">الدورة</Label>

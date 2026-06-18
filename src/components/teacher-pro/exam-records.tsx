@@ -696,7 +696,7 @@ tr:nth-child(even) td { background: #f8fafc; }
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
             <div className="space-y-1 lg:col-span-2">
               <Label htmlFor="exam-records-search" className="text-xs">بحث</Label>
-              <Input id="exam-records-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم الامتحان / التاريخ / الدورة / الحالة" />
+              <Input id="exam-records-search" name="search" data-teacherpro-search="true" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم الامتحان / التاريخ / الدورة / الحالة" />
             </div>
             <div className="space-y-1">
               <Label htmlFor="exam-records-type" className="text-xs">نوع الامتحان</Label>
