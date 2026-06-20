@@ -28,6 +28,14 @@ import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { searchAny } from "@/lib/validation";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { formatGradeScore } from "@/lib/exam-utils";
+import {
+  buildArabicLetterOptions,
+  gradeMatchesStatusFilter,
+  gradeStatusFilterLabels,
+  gradeStatusFilterOptions,
+  matchesArabicLetterFilter,
+  type GradeStatusFilter,
+} from "@/lib/grade-status-filters";
 
 type FollowView = "leaves" | "calls" | "pledges";
 type CallCategory =
@@ -39,7 +47,7 @@ type CallCategory =
   | "cheating";
 type PledgeTypeFilter = "all" | "temporary" | "final";
 type PledgeStatusFilter = "all" | "pledged" | "pending" | "reactivated";
-type ContactStatus = "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
+type ContactStatus = "" | "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
 type CallGradeSort = "latest" | "exam" | "score-desc" | "score-asc" | "name";
 
 type CallGradeItem = {
@@ -58,6 +66,17 @@ type CallStudentRow = {
   student: Student;
   items: CallGradeItem[];
   focusItem: CallGradeItem;
+};
+
+type CallExportColumn = {
+  key: string;
+  label: string;
+  value: (ctx: {
+    row: CallStudentRow;
+    status: ContactStatus;
+    note: string;
+    courseName: (id: string) => string;
+  }) => string;
 };
 
 type DismissalLinkInfo = {
@@ -115,10 +134,16 @@ const callCategoryLabels: Record<CallCategory, string> = {
   cheating: "غش",
 };
 
-const contactStatusOptions: ContactStatus[] = [
-  "تم الاتصال",
-  "لم يرد",
-  "الرقم خاطئ",
+const CONTACT_STATUS_EMPTY_VALUE = "__empty__";
+const CALL_STUDENT_NOTE_CATEGORY = "call-student-note";
+const contactStatusOptions: Array<{
+  value: typeof CONTACT_STATUS_EMPTY_VALUE | Exclude<ContactStatus, "">;
+  label: string;
+}> = [
+  { value: CONTACT_STATUS_EMPTY_VALUE, label: "بدون إجراء" },
+  { value: "تم الاتصال", label: "تم الاتصال" },
+  { value: "لم يرد", label: "لم يرد" },
+  { value: "الرقم خاطئ", label: "الرقم خاطئ" },
 ];
 const CALL_PAGE_SIZE = 120;
 const callGradeSortLabels: Record<CallGradeSort, string> = {
@@ -128,15 +153,61 @@ const callGradeSortLabels: Record<CallGradeSort, string> = {
   "score-asc": "حسب الدرجة: الأقل أولاً",
   name: "حسب الأحرف الأبجدية",
 };
-const callCategoryFilterOptions: Array<CallCategory | "all"> = [
-  "all",
-  "absent",
-  "failed",
-  "low-pass",
-  "full",
-  "passed",
-  "cheating",
+
+const callExportColumns: CallExportColumn[] = [
+  {
+    key: "student",
+    label: "الطالب",
+    value: ({ row }) => row.student.name || "",
+  },
+  { key: "code", label: "الكود", value: ({ row }) => row.student.code || "" },
+  {
+    key: "course",
+    label: "الدورة",
+    value: ({ row, courseName }) => courseName(row.student.courseId),
+  },
+  {
+    key: "studentStatus",
+    label: "حالة الطالب",
+    value: ({ row }) => row.student.status || "",
+  },
+  {
+    key: "exam",
+    label: "الامتحان المحور",
+    value: ({ row }) => row.focusItem.exam.name || "",
+  },
+  {
+    key: "gradeStatus",
+    label: "حالة الدرجة",
+    value: ({ row }) => row.focusItem.label || "",
+  },
+  {
+    key: "grade",
+    label: "الدرجة",
+    value: ({ row }) =>
+      formatGradeScore(row.focusItem.grade, row.focusItem.exam, "—"),
+  },
+  {
+    key: "contact",
+    label: "حالة الاتصال",
+    value: ({ status }) => status || "بدون إجراء",
+  },
+  {
+    key: "phone",
+    label: "رقم الطالب",
+    value: ({ row }) => row.student.phone || "",
+  },
+  {
+    key: "parentPhone",
+    label: "رقم ولي الأمر",
+    value: ({ row }) => row.student.parentPhone || "",
+  },
+  { key: "note", label: "ملاحظات المكالمات", value: ({ note }) => note },
 ];
+
+const defaultCallExportColumnKeys = callExportColumns.map(
+  (column) => column.key,
+);
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 
 function todayISO() {
@@ -193,6 +264,26 @@ function sortGradeItemsByLatest(items: CallGradeItem[]) {
       b.sortTime - a.sortTime ||
       String(b.exam.date || "").localeCompare(String(a.exam.date || ""), "ar"),
   );
+}
+
+function contactStatusSelectValue(
+  status: ContactStatus,
+): typeof CONTACT_STATUS_EMPTY_VALUE | Exclude<ContactStatus, ""> {
+  return status || CONTACT_STATUS_EMPTY_VALUE;
+}
+
+function contactStatusFromSelectValue(value: string): ContactStatus {
+  return value === CONTACT_STATUS_EMPTY_VALUE ? "" : (value as ContactStatus);
+}
+
+function contactStatusClasses(status: ContactStatus): string {
+  if (status === "تم الاتصال")
+    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200";
+  if (status === "لم يرد")
+    return "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200";
+  if (status === "الرقم خاطئ")
+    return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200";
+  return "border-muted bg-muted/40 text-muted-foreground";
 }
 
 function graceEndDate(student: Student): string {
@@ -273,6 +364,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     reactivateStudent,
     courseName,
     activeChapterForCourse,
+    classification,
   } = useTeacherStore();
 
   const [globalSearch, setGlobalSearch] = useState("");
@@ -288,10 +380,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [leaveNotes, setLeaveNotes] = useState("");
 
   const [callExamId, setCallExamId] = useState("");
-  const [callCategory, setCallCategory] = useState<CallCategory | "all">("all");
+  const [callGradeStatusFilter, setCallGradeStatusFilter] =
+    useState<GradeStatusFilter>("all");
+  const [callNameLetter, setCallNameLetter] = useState("all");
   const [callSearch, setCallSearch] = useState("");
   const [callGradeSort, setCallGradeSort] = useState<CallGradeSort>("latest");
   const [callGradePage, setCallGradePage] = useState(1);
+  const [callExportColumnKeys, setCallExportColumnKeys] = useState<string[]>(
+    defaultCallExportColumnKeys,
+  );
   const [pledgeSearch, setPledgeSearch] = useState("");
   const [pledgeTypeFilter, setPledgeTypeFilter] =
     useState<PledgeTypeFilter>("all");
@@ -387,11 +484,24 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const callStatusForLog = (
     call: ReturnType<typeof callLogForRow>,
   ): ContactStatus => {
-    const value = String(call?.status || "");
-    if ((contactStatusOptions as string[]).includes(value))
-      return value as ContactStatus;
-    return call?.completed ? "تم الاتصال" : "لم يرد";
+    if (!call) return "";
+    const value = String(call.status || "") as ContactStatus;
+    if (value === "تم الاتصال" || value === "لم يرد" || value === "الرقم خاطئ")
+      return value;
+    return call.completed ? "تم الاتصال" : "";
   };
+
+  const callStudentNoteLookup = useMemo(() => {
+    const map = new Map<string, (typeof studentCalls)[number]>();
+    studentCalls.forEach((call) => {
+      if (call.category === CALL_STUDENT_NOTE_CATEGORY)
+        map.set(call.studentId, call);
+    });
+    return map;
+  }, [studentCalls]);
+
+  const callNoteForStudent = (studentId: string) =>
+    callStudentNoteLookup.get(studentId);
 
   const gradeCallInfo = (
     grade: Grade,
@@ -453,10 +563,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const callRows = useMemo<CallStudentRow[]>(() => {
-    const studentById = new Map(
-      students.map((student) => [student.id, student]),
+    const studentById = new Map<string, Student>(
+      students.map((student) => [student.id, student] as [string, Student]),
     );
-    const examById = new Map(exams.map((exam) => [exam.id, exam]));
+    const examById = new Map<string, Exam>(
+      exams.map((exam) => [exam.id, exam] as [string, Exam]),
+    );
     const grouped = new Map<
       string,
       { student: Student; items: CallGradeItem[] }
@@ -475,7 +587,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         ...info,
         sortTime: gradeTimeValue(grade, exam),
       };
-      const current = grouped.get(student.id) || { student, items: [] };
+      const current = grouped.get(student.id) ?? {
+        student,
+        items: [] as CallGradeItem[],
+      };
       current.items.push(item);
       grouped.set(student.id, current);
     });
@@ -485,11 +600,20 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         const sortedItems = sortGradeItemsByLatest(items);
         const relevantItems = sortedItems.filter((item) => {
           if (callExamId && item.exam.id !== callExamId) return false;
-          if (callCategory !== "all" && item.category !== callCategory)
+          const cls = classification(item.grade, item.exam, student);
+          if (
+            !gradeMatchesStatusFilter(
+              callGradeStatusFilter,
+              item.grade,
+              item.exam,
+              cls,
+            )
+          )
             return false;
           return true;
         });
         if (relevantItems.length === 0) return [];
+        if (!matchesArabicLetterFilter(student.name, callNameLetter)) return [];
         const focusItem = relevantItems[0] || sortedItems[0];
         return [
           {
@@ -520,6 +644,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               item.grade.notes,
               callStatusForLog(callLogForGrade(row.student, item)),
             ]),
+            callNoteForStudent(row.student.id)?.notes,
           ]),
       );
 
@@ -567,10 +692,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     students,
     exams,
     callExamId,
-    callCategory,
+    callGradeStatusFilter,
+    callNameLetter,
     callSearch,
     callGradeSort,
     callLogLookup,
+    callStudentNoteLookup,
+    classification,
   ]);
 
   const callTotalPages = Math.max(
@@ -598,6 +726,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       ).length,
       wrong: rowsWithCalls.filter(
         ({ call }) => callStatusForLog(call) === "الرقم خاطئ",
+      ).length,
+      noAction: rowsWithCalls.filter(
+        ({ call }) => callStatusForLog(call) === "",
       ).length,
     };
   }, [callRows, callLogLookup]);
@@ -937,6 +1068,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const saveCallStatus = (row: CallStudentRow, status: ContactStatus) => {
     const item = row.focusItem;
     const existing = callLogForGrade(row.student, item);
+    if (!status && !existing) return;
     const completed = status === "تم الاتصال";
     const payload = {
       studentId: row.student.id,
@@ -949,10 +1081,63 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       status,
       completed,
       completedAt: completed ? todayISO() : "",
-      notes: `${item.reason} | ${item.exam.name} | ${formatGradeScore(item.grade, item.exam, "—")}`,
+      notes:
+        existing?.notes ||
+        `${item.reason} | ${item.exam.name} | ${formatGradeScore(item.grade, item.exam, "—")}`,
     };
     if (existing) updateStudentCall(existing.id, payload);
     else addStudentCall(payload);
+  };
+
+  const saveCallStudentNote = (row: CallStudentRow, notes: string) => {
+    const existing = callNoteForStudent(row.student.id);
+    const payload = {
+      studentId: row.student.id,
+      examId: "",
+      category: CALL_STUDENT_NOTE_CATEGORY,
+      target: "ملاحظات المكالمات",
+      phone: [row.student.phone, row.student.parentPhone]
+        .filter(Boolean)
+        .join(" / "),
+      status: "" as ContactStatus,
+      completed: false,
+      completedAt: "",
+      notes,
+    };
+    if (existing) updateStudentCall(existing.id, payload);
+    else if (notes.trim()) addStudentCall(payload);
+  };
+
+  const toggleCallExportColumn = (key: string, checked: boolean) => {
+    setCallExportColumnKeys((current) => {
+      if (checked) return current.includes(key) ? current : [...current, key];
+      const next = current.filter((item) => item !== key);
+      return next.length ? next : current;
+    });
+  };
+
+  const exportCallsCSV = () => {
+    const activeColumns = callExportColumns.filter((column) =>
+      callExportColumnKeys.includes(column.key),
+    );
+    const headers = activeColumns.map((column) => column.label);
+    const rows = callRows.map((row) => {
+      const status = callStatusForLog(callLogForRow(row));
+      const note = callNoteForStudent(row.student.id)?.notes || "";
+      return activeColumns
+        .map((column) => column.value({ row, status, note, courseName }))
+        .map((value) => `"${String(value).replaceAll('"', '""')}"`)
+        .join(",");
+    });
+    const csv = "\ufeff" + [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `calls-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("تم تصدير المكالمات حسب الأعمدة المحددة");
   };
 
   const openProfile = (studentId: string) => {
@@ -1114,7 +1299,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         ) : null}
         {call ? (
           <p className="mt-1 text-muted-foreground">
-            التواصل: {callStatusForLog(call)}
+            التواصل: {callStatusForLog(call) || "بدون إجراء"}
           </p>
         ) : null}
         {item.grade.notes ? (
@@ -1130,6 +1315,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const item = row.focusItem;
     const call = callLogForRow(row);
     const contactStatus = callStatusForLog(call);
+    const callStudentNote = callNoteForStudent(row.student.id);
     const focusValue =
       item.category === "absent"
         ? "غائب"
@@ -1207,22 +1393,38 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             إجراء التواصل للامتحان المحور
           </Label>
           <Select
-            value={contactStatus}
+            value={contactStatusSelectValue(contactStatus)}
             onValueChange={(value) =>
-              saveCallStatus(row, value as ContactStatus)
+              saveCallStatus(row, contactStatusFromSelectValue(value))
             }
           >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {contactStatusOptions.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status}
+              {contactStatusOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          <div
+            className={`rounded-xl border px-3 py-2 text-xs font-bold ${contactStatusClasses(contactStatus)}`}
+          >
+            {contactStatus || "بدون إجراء"}
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">
+              ملاحظات الطالب في المكالمات
+            </Label>
+            <textarea
+              className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              defaultValue={callStudentNote?.notes || ""}
+              onBlur={(event) => saveCallStudentNote(row, event.target.value)}
+              placeholder="ملاحظة ثابتة تظهر لهذا الطالب داخل المكالمات"
+            />
+          </div>
           {call?.completedAt ? (
             <p className="text-xs text-muted-foreground">
               آخر تواصل: {formatAppDate(call.completedAt)}
@@ -1519,7 +1721,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 نزلت له درجة أو الامتحان المختار من الفلتر.
               </p>
             </CardHeader>
-            <CardContent className="grid gap-3 p-4 md:grid-cols-4">
+            <CardContent className="grid gap-3 p-4 md:grid-cols-5">
               <div className="space-y-2">
                 <Label>الامتحان</Label>
                 <Select
@@ -1545,9 +1747,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <div className="space-y-2">
                 <Label>حالة الدرجة</Label>
                 <Select
-                  value={callCategory}
+                  value={callGradeStatusFilter}
                   onValueChange={(value) => {
-                    setCallCategory(value as CallCategory | "all");
+                    setCallGradeStatusFilter(value as GradeStatusFilter);
                     setCallGradePage(1);
                   }}
                 >
@@ -1555,11 +1757,33 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {callCategoryFilterOptions.map((key) => (
-                      <SelectItem key={key} value={key}>
-                        {key === "all"
-                          ? "كل حالات الدرجات"
-                          : callCategoryLabels[key]}
+                    {gradeStatusFilterOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {gradeStatusFilterLabels[option]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>فلترة الاسم أبجدياً</Label>
+                <Select
+                  value={callNameLetter}
+                  onValueChange={(value) => {
+                    setCallNameLetter(value);
+                    setCallGradePage(1);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="كل الأحرف" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الأحرف</SelectItem>
+                    {buildArabicLetterOptions(
+                      students.map((student) => student.name),
+                    ).map((letter) => (
+                      <SelectItem key={letter} value={letter}>
+                        {letter}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1602,9 +1826,40 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   placeholder="طالب / كود / امتحان / درجة / حالة طالب / إجراء تواصل"
                 />
               </div>
+              <div className="space-y-2">
+                <Label>تصدير</Label>
+                <Button
+                  variant="outline"
+                  className="h-10 w-full"
+                  onClick={exportCallsCSV}
+                >
+                  تصدير CSV
+                </Button>
+              </div>
+            </CardContent>
+            <CardContent className="border-t p-4">
+              <p className="mb-2 text-xs font-bold text-muted-foreground">
+                أعمدة تصدير المكالمات
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                {callExportColumns.map((column) => (
+                  <label
+                    key={column.key}
+                    className="flex items-center gap-2 rounded-xl border bg-background/70 px-3 py-2 text-xs"
+                  >
+                    <Checkbox
+                      checked={callExportColumnKeys.includes(column.key)}
+                      onCheckedChange={(checked) =>
+                        toggleCallExportColumn(column.key, checked === true)
+                      }
+                    />
+                    <span>{column.label}</span>
+                  </label>
+                ))}
+              </div>
             </CardContent>
           </Card>
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-5">
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">
@@ -1629,6 +1884,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">الرقم خاطئ</p>
                 <b className="text-2xl">{callStats.wrong}</b>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">بدون إجراء</p>
+                <b className="text-2xl">{callStats.noAction}</b>
               </CardContent>
             </Card>
           </div>

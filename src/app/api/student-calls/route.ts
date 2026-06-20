@@ -1,11 +1,15 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/server-auth';
-import { db } from '@/lib/db';
-import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
-import { withFollowupTables } from '@/lib/followup-schema';
+import { NextRequest, NextResponse } from "next/server";
+import { requirePermission } from "@/lib/server-auth";
+import { db } from "@/lib/db";
+import {
+  requireText,
+  routeErrorResponse,
+  validationError,
+} from "@/lib/route-helpers";
+import { withFollowupTables } from "@/lib/followup-schema";
 
 function dateOrNull(value: unknown): Date | null {
   if (!value) return null;
@@ -19,102 +23,117 @@ function dateOrNow(value: unknown): Date {
 }
 
 function normalizeCallStatus(body: Record<string, unknown>): string {
-  const status = String(body.status ?? '').trim();
-  if (status) return status;
-  return Boolean(body.completed) ? 'تم الاتصال' : 'لم يرد';
+  if (Object.prototype.hasOwnProperty.call(body, "status")) {
+    return String(body.status ?? "").trim();
+  }
+  return Boolean(body.completed) ? "تم الاتصال" : "";
 }
 
 function normalizeCallPayload(body: Record<string, unknown>) {
   const status = normalizeCallStatus(body);
   return {
-    studentId: String(body.studentId ?? ''),
-    examId: String(body.examId ?? '').trim() || null,
-    category: String(body.category ?? ''),
-    target: String(body.target ?? ''),
-    phone: String(body.phone ?? ''),
+    studentId: String(body.studentId ?? ""),
+    examId: String(body.examId ?? "").trim() || null,
+    category: String(body.category ?? ""),
+    target: String(body.target ?? ""),
+    phone: String(body.phone ?? ""),
     status,
-    completed: status === 'تم الاتصال',
+    completed: status === "تم الاتصال",
     completedAt: dateOrNull(body.completedAt),
-    notes: String(body.notes ?? ''),
+    notes: String(body.notes ?? ""),
     createdAt: dateOrNow(body.createdAt),
   };
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, 'follow-up.view');
+  const authError = await requirePermission(req, "follow-up.view");
   if (authError) return authError;
 
   try {
     const studentCalls = await withFollowupTables(
-      () => db.studentCall.findMany({ orderBy: { createdAt: 'desc' } }),
-      'StudentCall',
+      () => db.studentCall.findMany({ orderBy: { createdAt: "desc" } }),
+      "StudentCall",
     );
     return NextResponse.json({ studentCalls });
   } catch (error) {
-    return routeErrorResponse(error, 'تعذر تحميل المكالمات حالياً.');
+    return routeErrorResponse(error, "تعذر تحميل المكالمات حالياً.");
   }
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, 'follow-up.manage');
+  const authError = await requirePermission(req, "follow-up.manage");
   if (authError) return authError;
 
   try {
     const body = await req.json();
     const data = normalizeCallPayload(body);
-    const studentError = requireText(data.studentId, 'الطالب');
+    const studentError = requireText(data.studentId, "الطالب");
     if (studentError) return validationError(studentError);
-    const id = String(body.id || '').trim();
+    const id = String(body.id || "").trim();
     const studentCall = await withFollowupTables(
-      () => id
-        ? db.studentCall.upsert({ where: { id }, update: data, create: { id, ...data } })
-        : db.studentCall.create({ data }),
-      'StudentCall',
+      () =>
+        id
+          ? db.studentCall.upsert({
+              where: { id },
+              update: data,
+              create: { id, ...data },
+            })
+          : db.studentCall.create({ data }),
+      "StudentCall",
     );
     return NextResponse.json({ studentCall }, { status: 201 });
   } catch (error) {
-    return routeErrorResponse(error, 'تعذر حفظ المكالمة حالياً.');
+    return routeErrorResponse(error, "تعذر حفظ المكالمة حالياً.");
   }
 }
 
 export async function PUT(req: NextRequest) {
-  const authError = await requirePermission(req, 'follow-up.manage');
+  const authError = await requirePermission(req, "follow-up.manage");
   if (authError) return authError;
 
   try {
     const body = await req.json();
     const { id, ...updates } = body;
-    if (!id) return validationError('تعذر تحديد المكالمة المطلوبة');
+    if (!id) return validationError("تعذر تحديد المكالمة المطلوبة");
     const data: Record<string, unknown> = {};
-    if (updates.category !== undefined) data.category = String(updates.category ?? '');
-    if (updates.target !== undefined) data.target = String(updates.target ?? '');
-    if (updates.examId !== undefined) data.examId = String(updates.examId ?? '').trim() || null;
-    if (updates.phone !== undefined) data.phone = String(updates.phone ?? '');
-    if (updates.status !== undefined) data.status = String(updates.status ?? '').trim() || (updates.completed ? 'تم الاتصال' : 'لم يرد');
-    if (updates.completed !== undefined) data.completed = data.status ? data.status === 'تم الاتصال' : Boolean(updates.completed);
-    if (updates.completedAt !== undefined) data.completedAt = dateOrNull(updates.completedAt);
-    if (updates.notes !== undefined) data.notes = String(updates.notes ?? '');
+    if (updates.category !== undefined)
+      data.category = String(updates.category ?? "");
+    if (updates.target !== undefined)
+      data.target = String(updates.target ?? "");
+    if (updates.examId !== undefined)
+      data.examId = String(updates.examId ?? "").trim() || null;
+    if (updates.phone !== undefined) data.phone = String(updates.phone ?? "");
+    if (updates.status !== undefined)
+      data.status = String(updates.status ?? "").trim();
+    if (updates.completed !== undefined || updates.status !== undefined)
+      data.completed = data.status ? data.status === "تم الاتصال" : false;
+    if (updates.completedAt !== undefined)
+      data.completedAt = dateOrNull(updates.completedAt);
+    if (updates.notes !== undefined) data.notes = String(updates.notes ?? "");
     const studentCall = await withFollowupTables(
       () => db.studentCall.update({ where: { id: String(id) }, data }),
-      'StudentCall',
+      "StudentCall",
     );
     return NextResponse.json({ studentCall });
   } catch (error) {
-    return routeErrorResponse(error, 'تعذر تحديث المكالمة حالياً.');
+    return routeErrorResponse(error, "تعذر تحديث المكالمة حالياً.");
   }
 }
 
 export async function DELETE(req: NextRequest) {
-  const authError = await requirePermission(req, 'follow-up.manage');
+  const authError = await requirePermission(req, "follow-up.manage");
   if (authError) return authError;
 
   try {
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
-    if (!id) return validationError('تعذر تحديد المكالمة المطلوبة');
-    await withFollowupTables(() => db.studentCall.delete({ where: { id } }), 'StudentCall');
+    const id = searchParams.get("id");
+    if (!id) return validationError("تعذر تحديد المكالمة المطلوبة");
+    await withFollowupTables(
+      () => db.studentCall.delete({ where: { id } }),
+      "StudentCall",
+    );
     return NextResponse.json({ ok: true });
   } catch (error) {
-    return routeErrorResponse(error, 'تعذر حذف المكالمة حالياً.');
+    return routeErrorResponse(error, "تعذر حذف المكالمة حالياً.");
   }
 }
