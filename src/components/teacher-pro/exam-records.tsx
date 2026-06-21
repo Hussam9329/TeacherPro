@@ -41,6 +41,21 @@ import { useActionLock } from "@/hooks/use-action-lock";
 import { downloadTextFile, escapeHtml, formatGradeScore, getExamStatus, hasActiveChapterLink, splitSelection } from "@/lib/exam-utils";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { ExportDialog, type ExportColumn } from "./export-dialog";
+
+
+const examGradeExportColumns: ExportColumn<any>[] = [
+  { key: "index", label: "#", value: (row) => row.index + 1 },
+  { key: "code", label: "الكود", value: (row) => row.student?.code || "" },
+  { key: "student", label: "الطالب", value: (row) => row.student?.name || "" },
+  { key: "course", label: "الدورة", value: (row) => row.courseName || "" },
+  { key: "status", label: "الحالة", value: (row) => row.grade.status || "" },
+  { key: "score", label: "الدرجة", value: (row) => formatGradeScore(row.grade, row.exam, "") },
+  { key: "classification", label: "التصنيف", value: (row) => row.cls.text || "" },
+  { key: "phone", label: "الهاتف", value: (row) => row.student?.phone || "" },
+  { key: "telegram", label: "التليكرام", value: (row) => row.student?.telegram || "" },
+  { key: "notes", label: "ملاحظات", value: (row) => row.grade.notes || "" },
+];
 
 type ReportOptions = {
   orientation: "portrait" | "landscape";
@@ -217,26 +232,7 @@ export function ExamRecordsView() {
     ];
   };
 
-  const exportCSV = (examId: string) => {
-    const exam = exams.find((item) => item.id === examId);
-    if (!exam) return;
-    const headers = ["#", "الكود", "الطالب", "الدورة", "الحالة", "الدرجة", "التصنيف", "الهاتف", "التليكرام", "ملاحظات"];
-    const rows = examRows(examId).map((row, index) => [
-      String(index + 1),
-      row.student?.code || "",
-      row.student?.name || "",
-      row.student ? courseName(row.student.courseId) : "",
-      row.grade.status,
-      formatGradeScore(row.grade, exam, ""),
-      row.cls.text,
-      row.student?.phone || "",
-      row.student?.telegram || "",
-      row.grade.notes || "",
-    ]);
-    const csv = "\ufeff" + [headers, ...rows].map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\n");
-    downloadTextFile(csv, `exam-${exam.name}-${new Date().toISOString().slice(0, 10)}.csv`, "text/csv;charset=utf-8");
-    toast.success("تم تصدير CSV");
-  };
+
 
   const exportExcel = (examId: string) => {
     const exam = exams.find((item) => item.id === examId);
@@ -612,7 +608,21 @@ tr:nth-child(even) td { background: #f8fafc; }
     <div className="flex flex-wrap gap-1">
       <Button variant="ghost" size="sm" onClick={() => exportPDF(exam.id)}>PDF</Button>
       <Button variant="ghost" size="sm" onClick={() => exportExcel(exam.id)}>Excel</Button>
-      <Button variant="ghost" size="sm" onClick={() => exportCSV(exam.id)}>CSV</Button>
+      <div className="min-w-32">
+        <ExportDialog
+          title={`تصدير درجات ${exam.name}`}
+          fileName={`exam-${exam.name}`}
+          rows={examRows(exam.id).map((row, index) => ({
+            ...row,
+            index,
+            exam,
+            courseName: row.student ? courseName(row.student.courseId) : "",
+          }))}
+          columns={examGradeExportColumns}
+          triggerLabel="CSV / HTML"
+          description={`تقرير درجات امتحان ${exam.name}`}
+        />
+      </div>
       <Button variant="outline" size="sm" onClick={() => toggleExam(exam.id)}>{exam.active ? "تعطيل الآن" : "تفعيل الآن"}</Button>
       <Button variant="outline" size="sm" onClick={() => openScheduleDeactivateDialog(exam.id)}>تعطيل مجدول</Button>
       <Button variant="secondary" size="sm" onClick={() => openEditExamDialog(exam.id)}>تعديل</Button>

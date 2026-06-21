@@ -70,6 +70,7 @@ import {
 import { EmptyState } from "./ui-kit";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { ExportDialog, type ExportColumn } from "./export-dialog";
 import {
   STUDENT_FILTER_COURSE_PROGRAMS,
   STUDENT_FILTER_COURSE_TERMS,
@@ -77,6 +78,26 @@ import {
   getStudentLocationFilterOptions,
   studentMatchesListFilters,
 } from "@/lib/student-list-filters";
+
+
+const studentExportColumns: ExportColumn<any>[] = [
+  { key: "code", label: "الكود", value: (s) => s.code || "" },
+  { key: "name", label: "الاسم", value: (s) => s.name || "" },
+  { key: "school", label: "المدرسة", value: (s) => s.school || "" },
+  { key: "gender", label: "الجنس", value: (s) => s.gender || "" },
+  { key: "course", label: "الدورة", value: (s) => s.courseName || "" },
+  { key: "courseProgram", label: "نوع الدورة", value: (s) => s.courseProgram || "" },
+  { key: "courseTerm", label: "الكورس", value: (s) => s.courseTerm || "" },
+  { key: "studyType", label: "نوع الدراسة", value: (s) => s.studyType || "" },
+  { key: "locationScope", label: "نطاق الموقع", value: (s) => s.locationScope || "" },
+  { key: "location", label: "الموقع", value: (s) => s.locationText || "" },
+  { key: "status", label: "الحالة", value: (s) => s.status || "" },
+  { key: "opportunities", label: "الفرص", value: (s) => s.opportunities ?? "" },
+  { key: "grace", label: "فترة السماح", value: (s) => `${s.accountingGraceDays ?? 0} يوم` },
+  { key: "phone", label: "الهاتف", value: (s) => s.phone || "" },
+  { key: "parentPhone", label: "ولي الأمر", value: (s) => s.parentPhone || "" },
+  { key: "telegram", label: "التليكرام", value: (s) => s.telegram || "" },
+];
 
 type RegistryViewMode = "cards" | "table";
 
@@ -610,64 +631,14 @@ export function StudentRegistryView() {
     toast.success("تم إعادة تفعيل الطالب");
   };
 
-  const exportCSV = () => {
-    const headers = [
-      "الكود",
-      "الاسم",
-      "المدرسة",
-      "الجنس",
-      "الدورة",
-      "نوع الدورة",
-      "الكورس",
-      "نوع الدراسة",
-      "نطاق الموقع",
-      "الموقع",
-      "الحالة",
-      "الفرص",
-      "فترة السماح",
-      "الهاتف",
-      "ولي الأمر",
-      "التليكرام",
-    ];
-    const rows = filtered.map((s) => ({
-      الكود: s.code,
-      الاسم: s.name,
-      المدرسة: s.school || "",
-      الجنس: s.gender,
-      الدورة: courseName(s.courseId),
-      "نوع الدورة": s.courseProgram || "",
-      "الكورس": s.courseTerm || "",
-      "نوع الدراسة": s.studyType || "",
-      "نطاق الموقع": s.locationScope || "",
-      الموقع: `${s.locationScope || s.mainSite} - ${s.subSite}`,
-      الحالة: s.status,
-      الفرص: String(s.opportunities),
-      "فترة السماح": `${s.accountingGraceDays ?? 0} يوم`,
-      الهاتف: s.phone,
-      "ولي الأمر": s.parentPhone,
-      التليكرام: s.telegram || "",
-    }));
-    const csv =
-      "\ufeff" +
-      [
-        headers.join(","),
-        ...rows.map((r) =>
-          headers
-            .map(
-              (h) => `"${(r as unknown as Record<string, string>)[h] || ""}"`,
-            )
-            .join(","),
-        ),
-      ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `students-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("تم تصدير CSV");
-  };
+
+
+  const studentExportRows = filtered.map((student) => ({
+    ...student,
+    courseName: courseName(student.courseId),
+    locationText: `${student.locationScope || student.mainSite || ""} - ${student.subSite || ""}`,
+  }));
+
 
   const studentOppLogs = (studentId: string) =>
     opportunityLogs.filter((l) => l.studentId === studentId);
@@ -840,14 +811,14 @@ export function StudentRegistryView() {
             </div>
             <div className="space-y-1">
               <span className="text-xs font-medium">تصدير</span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full h-9"
-                onClick={exportCSV}
-              >
-                تصدير CSV
-              </Button>
+              <ExportDialog
+                title="تصدير سجل الطلاب"
+                fileName="students"
+                rows={studentExportRows}
+                columns={studentExportColumns}
+                triggerLabel="تصدير CSV / HTML"
+                description="تقرير سجل الطلاب حسب الفلاتر الحالية"
+              />
             </div>
           </div>
         </CardContent>

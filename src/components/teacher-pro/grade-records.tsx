@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ExportDialog, type ExportColumn } from "./export-dialog";
 import {
   Select,
   SelectContent,
@@ -51,18 +52,14 @@ import {
 type GradeStatus = "درجة" | "غائب" | "غش";
 type ViewMode = "cards" | "table";
 
-type GradeExportColumn = {
-  key: string;
-  label: string;
-  value: (ctx: {
-    grade: any;
-    student: any;
-    exam: any;
-    classificationText: string;
-  }) => string;
+type GradeExportRow = {
+  grade: any;
+  student: any;
+  exam: any;
+  classificationText: string;
 };
 
-const gradeExportColumns: GradeExportColumn[] = [
+const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
   {
     key: "student",
     label: "الطالب",
@@ -95,10 +92,6 @@ const gradeExportColumns: GradeExportColumn[] = [
   { key: "notes", label: "ملاحظات", value: ({ grade }) => grade.notes || "" },
 ];
 
-const defaultGradeExportColumnKeys = gradeExportColumns.map(
-  (column) => column.key,
-);
-
 export function GradeRecordsView() {
   const {
     grades,
@@ -120,9 +113,6 @@ export function GradeRecordsView() {
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [exportColumnKeys, setExportColumnKeys] = useState<string[]>(
-    defaultGradeExportColumnKeys,
-  );
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     id: "",
@@ -376,40 +366,15 @@ export function GradeRecordsView() {
     setDeleteDialog({ open: false, id: "", label: "" });
   });
 
-  const toggleExportColumn = (key: string, checked: boolean) => {
-    setExportColumnKeys((current) => {
-      if (checked) return current.includes(key) ? current : [...current, key];
-      const next = current.filter((item) => item !== key);
-      return next.length ? next : current;
-    });
-  };
 
-  const exportCSV = () => {
-    const activeColumns = gradeExportColumns.filter((column) =>
-      exportColumnKeys.includes(column.key),
-    );
-    const headers = activeColumns.map((column) => column.label);
-    const rows = filtered.map((grade) => {
-      const student = studentById.get(grade.studentId);
-      const exam = examById.get(grade.examId);
-      const cls = exam ? classification(grade, exam, student) : { text: "" };
-      return activeColumns
-        .map((column) =>
-          column.value({ grade, student, exam, classificationText: cls.text }),
-        )
-        .map((value) => `"${String(value).replaceAll('"', '""')}"`)
-        .join(",");
-    });
-    const csv = "\ufeff" + [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `grades-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("تم تصدير السجل حسب الأعمدة المحددة");
-  };
+
+  const exportRows = filtered.map((grade) => {
+    const student = studentById.get(grade.studentId);
+    const exam = examById.get(grade.examId);
+    const cls = exam ? classification(grade, exam, student) : { text: "" };
+    return { grade, student, exam, classificationText: cls.text };
+  });
+
 
   return (
     <div className="space-y-4">
@@ -546,35 +511,14 @@ export function GradeRecordsView() {
             </div>
             <div className="space-y-1">
               <span className="text-xs font-medium">تصدير</span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 w-full"
-                onClick={exportCSV}
-              >
-                تصدير CSV
-              </Button>
-            </div>
-          </div>
-          <div className="mt-4 rounded-2xl border bg-muted/30 p-3">
-            <p className="mb-2 text-xs font-bold text-muted-foreground">
-              أعمدة التصدير
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-              {gradeExportColumns.map((column) => (
-                <label
-                  key={column.key}
-                  className="flex items-center gap-2 rounded-xl border bg-background/70 px-3 py-2 text-xs"
-                >
-                  <Checkbox
-                    checked={exportColumnKeys.includes(column.key)}
-                    onCheckedChange={(checked) =>
-                      toggleExportColumn(column.key, checked === true)
-                    }
-                  />
-                  <span>{column.label}</span>
-                </label>
-              ))}
+              <ExportDialog
+                title="تصدير سجل الدرجات"
+                fileName="grades"
+                rows={exportRows}
+                columns={gradeExportColumns}
+                triggerLabel="تصدير CSV / HTML"
+                description="تقرير سجل الدرجات حسب الفلاتر الحالية"
+              />
             </div>
           </div>
         </CardContent>

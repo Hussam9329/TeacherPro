@@ -28,6 +28,19 @@ import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { formatGradeScore } from "@/lib/exam-utils";
+import { ExportDialog, type ExportColumn } from "./export-dialog";
+
+
+const opportunityExportColumns: ExportColumn<any>[] = [
+  { key: "student", label: "الطالب", value: (s) => s.name || "" },
+  { key: "code", label: "الكود", value: (s) => s.code || "" },
+  { key: "course", label: "الدورة", value: (s) => s.courseName || "" },
+  { key: "status", label: "الحالة", value: (s) => s.status || "" },
+  { key: "opportunities", label: "الفرص الحالية", value: (s) => s.opportunities ?? "" },
+  { key: "baseOpportunities", label: "الفرص الأساسية", value: (s) => s.baseOpportunities ?? "" },
+  { key: "phone", label: "الهاتف", value: (s) => s.phone || "" },
+  { key: "telegram", label: "التليكرام", value: (s) => s.telegram || "" },
+];
 
 export function OpportunitiesView() {
   const {
@@ -305,35 +318,13 @@ export function OpportunitiesView() {
     setBulkExcludeFullOpportunities(true);
   });
 
-  const exportCSV = () => {
-    const headers = [
-      "الطالب",
-      "الكود",
-      "الدورة",
-      "الفرص الحالية",
-      "الفرص الأساسية",
-    ];
-    const rows = filtered.map((s) =>
-      [
-        s.name,
-        s.code,
-        courseName(s.courseId),
-        s.opportunities.toString(),
-        s.baseOpportunities.toString(),
-      ]
-        .map((v) => `"${v}"`)
-        .join(","),
-    );
-    const csv = "\ufeff" + [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `opportunities-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("تم التصدير");
-  };
+
+
+  const opportunityExportRows = filtered.map((student) => ({
+    ...student,
+    courseName: courseName(student.courseId),
+  }));
+
 
   return (
     <div className="space-y-4">
@@ -372,7 +363,14 @@ export function OpportunitiesView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-end gap-2"><Button variant="outline" className="h-10 flex-1" onClick={clearFilters} disabled={!search && !filterCourseId && !filterStatus && !filterOpportunityCount}>مسح</Button><Button variant="outline" className="h-10 flex-1" onClick={exportCSV}>CSV</Button></div>
+            <div className="flex items-end gap-2"><Button variant="outline" className="h-10 flex-1" onClick={clearFilters} disabled={!search && !filterCourseId && !filterStatus && !filterOpportunityCount}>مسح</Button><ExportDialog
+                title="تصدير إدارة الفرص"
+                fileName="opportunities"
+                rows={opportunityExportRows}
+                columns={opportunityExportColumns}
+                triggerLabel="CSV / HTML"
+                description="تقرير إدارة الفرص حسب الفلاتر الحالية"
+              /></div>
           </div>
         </CardContent>
       </Card>

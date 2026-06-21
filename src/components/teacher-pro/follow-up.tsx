@@ -27,6 +27,7 @@ import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { searchAny } from "@/lib/validation";
 import { StudentProfileDialog } from "./student-profile-dialog";
+import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { formatGradeScore } from "@/lib/exam-utils";
 import {
   buildArabicLetterOptions,
@@ -68,15 +69,11 @@ type CallStudentRow = {
   focusItem: CallGradeItem;
 };
 
-type CallExportColumn = {
-  key: string;
-  label: string;
-  value: (ctx: {
-    row: CallStudentRow;
-    status: ContactStatus;
-    note: string;
-    courseName: (id: string) => string;
-  }) => string;
+type CallExportRow = {
+  row: CallStudentRow;
+  status: ContactStatus;
+  note: string;
+  courseName: (id: string) => string;
 };
 
 type DismissalLinkInfo = {
@@ -154,7 +151,7 @@ const callGradeSortLabels: Record<CallGradeSort, string> = {
   name: "حسب الأحرف الأبجدية",
 };
 
-const callExportColumns: CallExportColumn[] = [
+const callExportColumns: ExportColumn<CallExportRow>[] = [
   {
     key: "student",
     label: "الطالب",
@@ -204,10 +201,6 @@ const callExportColumns: CallExportColumn[] = [
   },
   { key: "note", label: "ملاحظات المكالمات", value: ({ note }) => note },
 ];
-
-const defaultCallExportColumnKeys = callExportColumns.map(
-  (column) => column.key,
-);
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 
 function todayISO() {
@@ -386,9 +379,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [callSearch, setCallSearch] = useState("");
   const [callGradeSort, setCallGradeSort] = useState<CallGradeSort>("latest");
   const [callGradePage, setCallGradePage] = useState(1);
-  const [callExportColumnKeys, setCallExportColumnKeys] = useState<string[]>(
-    defaultCallExportColumnKeys,
-  );
   const [pledgeSearch, setPledgeSearch] = useState("");
   const [pledgeTypeFilter, setPledgeTypeFilter] =
     useState<PledgeTypeFilter>("all");
@@ -1065,6 +1055,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     }
   };
 
+  const callExportRows = callRows.map((row) => ({
+    row,
+    status: callStatusForLog(callLogForRow(row)),
+    note: callNoteForStudent(row.student.id)?.notes || "",
+    courseName,
+  }));
+
   const saveCallStatus = (row: CallStudentRow, status: ContactStatus) => {
     const item = row.focusItem;
     const existing = callLogForGrade(row.student, item);
@@ -1108,37 +1105,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     else if (notes.trim()) addStudentCall(payload);
   };
 
-  const toggleCallExportColumn = (key: string, checked: boolean) => {
-    setCallExportColumnKeys((current) => {
-      if (checked) return current.includes(key) ? current : [...current, key];
-      const next = current.filter((item) => item !== key);
-      return next.length ? next : current;
-    });
-  };
 
-  const exportCallsCSV = () => {
-    const activeColumns = callExportColumns.filter((column) =>
-      callExportColumnKeys.includes(column.key),
-    );
-    const headers = activeColumns.map((column) => column.label);
-    const rows = callRows.map((row) => {
-      const status = callStatusForLog(callLogForRow(row));
-      const note = callNoteForStudent(row.student.id)?.notes || "";
-      return activeColumns
-        .map((column) => column.value({ row, status, note, courseName }))
-        .map((value) => `"${String(value).replaceAll('"', '""')}"`)
-        .join(",");
-    });
-    const csv = "\ufeff" + [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `calls-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("تم تصدير المكالمات حسب الأعمدة المحددة");
-  };
 
   const openProfile = (studentId: string) => {
     setProfileStudentId(studentId);
@@ -1828,34 +1795,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               </div>
               <div className="space-y-2">
                 <Label>تصدير</Label>
-                <Button
-                  variant="outline"
-                  className="h-10 w-full"
-                  onClick={exportCallsCSV}
-                >
-                  تصدير CSV
-                </Button>
-              </div>
-            </CardContent>
-            <CardContent className="border-t p-4">
-              <p className="mb-2 text-xs font-bold text-muted-foreground">
-                أعمدة تصدير المكالمات
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                {callExportColumns.map((column) => (
-                  <label
-                    key={column.key}
-                    className="flex items-center gap-2 rounded-xl border bg-background/70 px-3 py-2 text-xs"
-                  >
-                    <Checkbox
-                      checked={callExportColumnKeys.includes(column.key)}
-                      onCheckedChange={(checked) =>
-                        toggleCallExportColumn(column.key, checked === true)
-                      }
-                    />
-                    <span>{column.label}</span>
-                  </label>
-                ))}
+                <ExportDialog
+                  title="تصدير المكالمات"
+                  fileName="calls"
+                  rows={callExportRows}
+                  columns={callExportColumns}
+                  triggerLabel="تصدير CSV / HTML"
+                  description="تقرير المكالمات حسب الفلاتر الحالية"
+                />
               </div>
             </CardContent>
           </Card>

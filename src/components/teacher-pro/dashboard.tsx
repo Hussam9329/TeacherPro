@@ -200,6 +200,12 @@ export function DashboardView() {
     gradeStatusFilter,
   ]);
 
+  const selectedGradeExamName =
+    gradeExamFilter === "all"
+      ? "كل الامتحانات"
+      : exams.find((exam) => exam.id === gradeExamFilter)?.name || "امتحان محدد";
+  const selectedGradeStatusName = gradeDashboardStatusLabels[gradeStatusFilter];
+
   const recentLogs = logs.slice(0, 6);
   return (
     <div className="section-stack">
@@ -289,6 +295,31 @@ export function DashboardView() {
           </div>
         </CardHeader>
         <CardContent className="space-y-5 p-4">
+          <div className="rounded-3xl border border-primary/25 bg-gradient-to-br from-primary/15 via-background to-muted/40 p-5 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-sm font-bold text-primary">عداد الدرجات حسب الفلترة</p>
+                <h3 className="mt-2 text-3xl font-black md:text-5xl">
+                  {gradeDashboard.filteredRows.length.toLocaleString("ar-IQ")}
+                  <span className="ms-2 text-base font-bold text-muted-foreground">درجة منزّلة</span>
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  عدد الدرجات التي تم وضعها لطلاب <b>{selectedGradeExamName}</b> حسب فلترة <b>{selectedGradeStatusName}</b>.
+                </p>
+              </div>
+              <div className="grid min-w-0 grid-cols-2 gap-2 text-xs sm:min-w-80">
+                <div className="rounded-2xl border bg-background/80 p-3">
+                  <p className="text-muted-foreground">الامتحان</p>
+                  <p className="mt-1 truncate font-bold">{selectedGradeExamName}</p>
+                </div>
+                <div className="rounded-2xl border bg-background/80 p-3">
+                  <p className="text-muted-foreground">حالة الدرجة</p>
+                  <p className="mt-1 truncate font-bold">{selectedGradeStatusName}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <StatCard
               label="الدرجات المنزّلة"

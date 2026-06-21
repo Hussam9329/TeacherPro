@@ -16,6 +16,16 @@ import {
 } from "@/components/ui/select";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { ExportDialog, type ExportColumn } from "./export-dialog";
+
+
+const logExportColumns: ExportColumn<any>[] = [
+  { key: "time", label: "الوقت", value: (log) => log.time || "" },
+  { key: "user", label: "المستخدم", value: (log) => log.user || "" },
+  { key: "module", label: "الوحدة", value: (log) => log.module || "" },
+  { key: "action", label: "الإجراء", value: (log) => log.action || "" },
+  { key: "details", label: "التفاصيل", value: (log) => log.details || "" },
+];
 
 export function LogsView() {
   const { logs } = useTeacherStore();
@@ -47,22 +57,7 @@ export function LogsView() {
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const exportLogs = () => {
-    const headers = ["الوقت", "المستخدم", "الوحدة", "الإجراء", "التفاصيل"];
-    const rows = filtered.map((l) =>
-      [l.time, l.user, l.module, l.action, l.details]
-        .map((v) => `"${v}"`)
-        .join(","),
-    );
-    const csv = "\ufeff" + [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `logs-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+
 
   return (
     <div className="space-y-4">
@@ -162,14 +157,14 @@ export function LogsView() {
             </div>
             <div className="space-y-1">
               <span className="text-xs font-medium">تصدير</span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full h-9"
-                onClick={exportLogs}
-              >
-                تصدير CSV
-              </Button>
+              <ExportDialog
+                title="تصدير السجلات"
+                fileName="logs"
+                rows={filtered}
+                columns={logExportColumns}
+                triggerLabel="تصدير CSV / HTML"
+                description="تقرير سجلات النظام حسب الفلاتر الحالية"
+              />
             </div>
           </div>
         </CardContent>
