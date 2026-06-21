@@ -38,8 +38,17 @@ import { formatAppDate } from "@/lib/format";
 import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { formatGradeScore, isGradeEntered } from "@/lib/exam-utils";
+import {
+  formatGradeScore,
+  isAllMainSitesSelection,
+  isExamOnOrAfterStudentRegistration,
+  isGradeEntered,
+  splitSelection,
+  studentMatchesExamMainSites,
+} from "@/lib/exam-utils";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { CheckCircle2, UserX } from "lucide-react";
+import { StatCard } from "./ui-kit";
 import {
   buildArabicLetterOptions,
   gradeMatchesStatusFilter,
@@ -240,6 +249,88 @@ export function GradeRecordsView() {
     [students],
   );
 
+  const gradeCoverageDashboard = useMemo(() => {
+    const selectedExam = filterExamId ? examById.get(filterExamId) : null;
+
+    const studentMatchesDashboardFilters = (
+      student: (typeof students)[number],
+      exam?: (typeof exams)[number] | null,
+    ) => {
+      if (!matchesArabicLetterFilter(student.name, filterNameLetter))
+        return false;
+      if (filterCourseId && student.courseId !== filterCourseId) return false;
+      if (
+        debouncedSearch &&
+        !searchAny(debouncedSearch, [
+          student.name,
+          student.code,
+          student.telegram,
+          student.phone,
+          student.parentPhone,
+          student.school,
+          student.subSite,
+          student.locationScope,
+          student.mainSite,
+          exam?.name,
+        ])
+      )
+        return false;
+      return true;
+    };
+
+    const enteredStudentIds = new Set<string>();
+    for (const grade of grades) {
+      if (selectedExam && grade.examId !== selectedExam.id) continue;
+      const exam = examById.get(grade.examId);
+      if (exam && isGradeEntered(grade, exam)) {
+        enteredStudentIds.add(grade.studentId);
+      }
+    }
+
+    const selectedMainSites = selectedExam
+      ? splitSelection(selectedExam.mainSite)
+      : [];
+    const courseWideExam = isAllMainSitesSelection(selectedMainSites);
+
+    const scopedStudents = selectedExam
+      ? students.filter((student) => {
+          if (!selectedExam.courseIds.includes(student.courseId)) return false;
+          if (
+            !courseWideExam &&
+            !isExamOnOrAfterStudentRegistration(student, selectedExam)
+          )
+            return false;
+          if (!studentMatchesExamMainSites(student, selectedMainSites))
+            return false;
+          return studentMatchesDashboardFilters(student, selectedExam);
+        })
+      : students.filter((student) => studentMatchesDashboardFilters(student));
+
+    const withGrade = scopedStudents.filter((student) =>
+      enteredStudentIds.has(student.id),
+    ).length;
+    const withoutGrade = Math.max(0, scopedStudents.length - withGrade);
+
+    return {
+      withGrade,
+      withoutGrade,
+      total: scopedStudents.length,
+      scopeLabel: selectedExam ? `ضمن ${selectedExam.name}` : "ضمن كل الامتحانات",
+      missingHint: selectedExam
+        ? "لم تُدخل لهم درجة لهذا الامتحان"
+        : "لا يملكون أي سجل درجة لحد الآن",
+    };
+  }, [
+    grades,
+    students,
+    exams,
+    examById,
+    filterExamId,
+    filterNameLetter,
+    filterCourseId,
+    debouncedSearch,
+  ]);
+
   const filtered = useMemo(() => {
     return grades.filter((grade) => {
       const student = studentById.get(grade.studentId);
@@ -378,6 +469,23 @@ export function GradeRecordsView() {
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <StatCard
+          label="طلاب لديهم درجة"
+          value={gradeCoverageDashboard.withGrade.toLocaleString("ar-IQ")}
+          icon={CheckCircle2}
+          tone="success"
+          hint={`${gradeCoverageDashboard.scopeLabel} من أصل ${gradeCoverageDashboard.total.toLocaleString("ar-IQ")} طالب`}
+        />
+        <StatCard
+          label="طلاب بلا درجة"
+          value={gradeCoverageDashboard.withoutGrade.toLocaleString("ar-IQ")}
+          icon={UserX}
+          tone="warning"
+          hint={gradeCoverageDashboard.missingHint}
+        />
+      </div>
+
       <Card>
         <CardContent className="p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
