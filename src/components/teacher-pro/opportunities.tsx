@@ -368,7 +368,7 @@ export function OpportunitiesView() {
                 fileName="opportunities"
                 rows={opportunityExportRows}
                 columns={opportunityExportColumns}
-                triggerLabel="CSV / HTML"
+                triggerLabel="تصدير"
                 description="تقرير إدارة الفرص حسب الفلاتر الحالية"
               /></div>
           </div>

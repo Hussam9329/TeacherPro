@@ -162,7 +162,7 @@ export function LogsView() {
                 fileName="logs"
                 rows={filtered}
                 columns={logExportColumns}
-                triggerLabel="تصدير CSV / HTML"
+                triggerLabel="تصدير"
                 description="تقرير سجلات النظام حسب الفلاتر الحالية"
               />
             </div>

@@ -628,7 +628,7 @@ export function GradeRecordsView() {
                 fileName="grades"
                 rows={exportRows}
                 columns={gradeExportColumns}
-                triggerLabel="تصدير CSV / HTML"
+                triggerLabel="تصدير"
                 description="تقرير سجل الدرجات حسب الفلاتر الحالية"
               />
             </div>

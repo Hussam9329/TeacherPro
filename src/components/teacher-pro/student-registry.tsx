@@ -816,7 +816,7 @@ export function StudentRegistryView() {
                 fileName="students"
                 rows={studentExportRows}
                 columns={studentExportColumns}
-                triggerLabel="تصدير CSV / HTML"
+                triggerLabel="تصدير"
                 description="تقرير سجل الطلاب حسب الفلاتر الحالية"
               />
             </div>

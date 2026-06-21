@@ -34,11 +34,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { formatAppDate, formatAppDateTime, toLatinDigits } from "@/lib/format";
+import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { formatBaghdadDateTime, toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { downloadTextFile, escapeHtml, formatGradeScore, getExamStatus, hasActiveChapterLink, splitSelection } from "@/lib/exam-utils";
+import { formatGradeScore, getExamStatus, hasActiveChapterLink, splitSelection } from "@/lib/exam-utils";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
@@ -56,13 +56,6 @@ const examGradeExportColumns: ExportColumn<any>[] = [
   { key: "telegram", label: "التليكرام", value: (row) => row.student?.telegram || "" },
   { key: "notes", label: "ملاحظات", value: (row) => row.grade.notes || "" },
 ];
-
-type ReportOptions = {
-  orientation: "portrait" | "landscape";
-  showPhone: boolean;
-  showTelegram: boolean;
-  showNotes: boolean;
-};
 
 type ViewMode = "cards" | "table";
 type ExamStatusMode = "نشط" | "تفعيل مجدول" | "تعطيل مجدول" | "معطل";
@@ -89,13 +82,6 @@ type FullExamEditState = {
 type ExamDetailItem = {
   label: string;
   value: React.ReactNode;
-};
-
-const defaultReportOptions: ReportOptions = {
-  orientation: "portrait",
-  showPhone: false,
-  showTelegram: true,
-  showNotes: true,
 };
 
 function toDateTimeLocalValue(value?: string | null) {
@@ -163,8 +149,6 @@ export function ExamRecordsView() {
   const [filterType, setFilterType] = useState("");
   const [filterCourseId, setFilterCourseId] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
-  const [reportOptions, setReportOptions] = useState<ReportOptions>(defaultReportOptions);
-  const [customizeOpen, setCustomizeOpen] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, id: "", name: "" });
   const [editDialog, setEditDialog] = useState<FullExamEditState>(() => emptyEditState());
   const [deactivateDialog, setDeactivateDialog] = useState({ open: false, id: "", name: "", scheduledDeactivateAt: "" });
@@ -233,101 +217,6 @@ export function ExamRecordsView() {
   };
 
 
-
-  const exportExcel = (examId: string) => {
-    const exam = exams.find((item) => item.id === examId);
-    if (!exam) return;
-    const rows = examRows(examId).map((row, index) => `
-      <tr>
-        <td>${index + 1}</td><td>${escapeHtml(row.student?.code)}</td><td>${escapeHtml(row.student?.name)}</td>
-        <td>${escapeHtml(row.student ? courseName(row.student.courseId) : "")}</td><td>${escapeHtml(row.grade.status)}</td>
-        <td>${escapeHtml(formatGradeScore(row.grade, exam, ""))}</td><td>${escapeHtml(row.cls.text)}</td>
-        <td>${escapeHtml(row.student?.phone)}</td><td>${escapeHtml(row.student?.telegram)}</td><td>${escapeHtml(row.grade.notes)}</td>
-      </tr>`).join("");
-    const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8" /></head><body><table border="1"><thead><tr><th>#</th><th>الكود</th><th>الطالب</th><th>الدورة</th><th>الحالة</th><th>الدرجة</th><th>التصنيف</th><th>الهاتف</th><th>التليكرام</th><th>ملاحظات</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
-    downloadTextFile(html, `exam-${exam.name}.xls`, "application/vnd.ms-excel;charset=utf-8");
-    toast.success("تم تصدير Excel");
-  };
-
-  const exportPDF = (examId: string) => {
-    const exam = exams.find((item) => item.id === examId);
-    if (!exam) return;
-    const rows = examRows(examId);
-    const passCount = rows.filter((row) => row.cls.kind === "pass").length;
-    const belowPassCount = rows.filter((row) => row.cls.kind === "academic-accounting" || row.cls.kind === "fail").length;
-    const deductedCount = rows.filter((row) => row.cls.kind === "deducted" || row.cls.kind === "dismissal" || row.cls.kind === "cheat").length;
-    const protectedCount = rows.filter((row) => ["grace", "excused", "before-registration"].includes(row.cls.kind)).length;
-
-    const tableRows = rows.map((row, index) => `
-      <tr>
-        <td>${index + 1}</td>
-        <td>${escapeHtml(row.student?.code)}</td>
-        <td>${escapeHtml(row.student?.name)}</td>
-        <td>${escapeHtml(row.student ? courseName(row.student.courseId) : "")}</td>
-        <td>${escapeHtml(row.grade.status)}</td>
-        <td>${escapeHtml(formatGradeScore(row.grade, exam, "-"))}</td>
-        <td><span class="pill">${escapeHtml(row.cls.text)}</span></td>
-        ${reportOptions.showPhone ? `<td>${escapeHtml(row.student?.phone)}</td>` : ""}
-        ${reportOptions.showTelegram ? `<td>${escapeHtml(row.student?.telegram)}</td>` : ""}
-        ${reportOptions.showNotes ? `<td>${escapeHtml(row.grade.notes || "-")}</td>` : ""}
-      </tr>`).join("");
-
-    const extraHeaders = `${reportOptions.showPhone ? "<th>الهاتف</th>" : ""}${reportOptions.showTelegram ? "<th>التليكرام</th>" : ""}${reportOptions.showNotes ? "<th>ملاحظات</th>" : ""}`;
-    const html = `<!doctype html>
-<html dir="rtl" lang="ar">
-<head>
-<meta charset="utf-8" />
-<title>${escapeHtml(exam.name)}</title>
-<style>
-@page { size: A4 ${reportOptions.orientation}; margin: 12mm; }
-* { box-sizing: border-box; }
-body { margin: 0; font-family: "Cairo", "Tahoma", Arial, sans-serif; color: #111827; background: #f8fafc; direction: rtl; }
-.toolbar { position: sticky; top: 0; display: flex; gap: 8px; padding: 12px; background: #111827; color: white; z-index: 3; }
-.toolbar button { border: 0; border-radius: 12px; padding: 10px 16px; cursor: pointer; font-weight: 700; }
-.report { max-width: 1200px; margin: 24px auto; background: white; border-radius: 24px; padding: 28px; box-shadow: 0 24px 80px rgba(15,23,42,.12); }
-.header { display: flex; justify-content: space-between; gap: 16px; border-bottom: 3px solid #7c3aed; padding-bottom: 18px; }
-.brand { font-size: 28px; font-weight: 900; color: #6d28d9; }
-h1 { margin: 8px 0 0; font-size: 22px; }
-.meta { color: #64748b; line-height: 1.9; font-size: 13px; }
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0; }
-.stat { border: 1px solid #e5e7eb; border-radius: 18px; padding: 14px; background: #faf5ff; }
-.stat strong { display:block; font-size: 22px; color: #581c87; }
-table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 18px; font-size: 12px; }
-th { background: #ede9fe; color: #2e1065; }
-th,td { border: 1px solid #e5e7eb; padding: 9px; text-align: right; }
-tr:nth-child(even) td { background: #f8fafc; }
-.pill { display:inline-block; border-radius:999px; padding:4px 10px; background:#f3e8ff; color:#6b21a8; font-weight:700; }
-.footer { margin-top: 18px; color: #64748b; font-size: 11px; display:flex; justify-content:space-between; }
-@media print { body { background: white; } .toolbar { display: none; } .report { box-shadow: none; margin: 0; border-radius: 0; padding: 0; max-width: none; } }
-</style>
-</head>
-<body>
-<div class="toolbar"><button onclick="window.print()">طباعة / حفظ PDF</button><button onclick="window.close()">إغلاق</button></div>
-<main class="report">
-  <section class="header">
-    <div><div class="brand">TeacherPro</div><h1>سجل الامتحان: ${escapeHtml(exam.name)}</h1><div class="meta">التاريخ: ${escapeHtml(formatAppDate(exam.date))} | النوع: ${escapeHtml(exam.type)} | الحالة: ${escapeHtml(getExamStatus(exam))}</div></div>
-    <div class="meta">الدورات: ${escapeHtml(exam.courseIds.map(courseName).join("، "))}<br/>النجاح: ${exam.passMark} | الخصم: ${exam.noDiscount ? "معطل - بدون خصم" : exam.discountMark} | الدرجة الكاملة: ${exam.fullMark}</div>
-  </section>
-  <section class="stats">
-    <div class="stat"><strong>${rows.length}</strong><span>إجمالي السجلات</span></div>
-    <div class="stat"><strong>${passCount}</strong><span>ناجح</span></div>
-    <div class="stat"><strong>${belowPassCount}</strong><span>محاسبة رسوب / رسوب</span></div>
-    <div class="stat"><strong>${deductedCount}</strong><span>خصم / فصل / غش</span></div>
-    <div class="stat"><strong>${protectedCount}</strong><span>سماح / إجازة</span></div>
-  </section>
-  <table><thead><tr><th>#</th><th>الكود</th><th>الطالب</th><th>الدورة</th><th>الحالة</th><th>الدرجة</th><th>التصنيف</th>${extraHeaders}</tr></thead><tbody>${tableRows}</tbody></table>
-  <div class="footer"><span>تم إنشاء التقرير آلياً</span><span>${formatAppDateTime(new Date())}</span></div>
-</main>
-</body></html>`;
-    const win = window.open("", "_blank");
-    if (!win) {
-      toast.error("المتصفح منع نافذة الطباعة");
-      return;
-    }
-    win.document.write(html);
-    win.document.close();
-    toast.success("تم فتح تقرير PDF الاحترافي");
-  };
 
   const availableMainSitesForEdit = (state: FullExamEditState) => {
     return [...MAIN_SITE_OPTIONS];
@@ -606,8 +495,6 @@ tr:nth-child(even) td { background: #f8fafc; }
 
   const renderExamActions = (exam: Exam) => (
     <div className="flex flex-wrap gap-1">
-      <Button variant="ghost" size="sm" onClick={() => exportPDF(exam.id)}>PDF</Button>
-      <Button variant="ghost" size="sm" onClick={() => exportExcel(exam.id)}>Excel</Button>
       <div className="min-w-32">
         <ExportDialog
           title={`تصدير درجات ${exam.name}`}
@@ -619,7 +506,7 @@ tr:nth-child(even) td { background: #f8fafc; }
             courseName: row.student ? courseName(row.student.courseId) : "",
           }))}
           columns={examGradeExportColumns}
-          triggerLabel="CSV / HTML"
+          triggerLabel="تصدير"
           description={`تقرير درجات امتحان ${exam.name}`}
         />
       </div>
@@ -737,7 +624,7 @@ tr:nth-child(even) td { background: #f8fafc; }
     <div className="space-y-4">
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="space-y-1 lg:col-span-2">
               <Label htmlFor="exam-records-search" className="text-xs">بحث</Label>
               <Input id="exam-records-search" name="search" data-teacherpro-search="true" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم الامتحان / التاريخ / الدورة / الحالة" />
@@ -763,34 +650,11 @@ tr:nth-child(even) td { background: #f8fafc; }
                 <SelectContent><SelectItem value="cards">الكارتات</SelectItem><SelectItem value="table">الجدول</SelectItem></SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <span className="text-xs font-medium">تخصيص التقرير</span>
-              <Button variant="outline" size="sm" className="h-9 w-full" onClick={() => setCustomizeOpen(true)}>تخصيص PDF</Button>
-            </div>
           </div>
         </CardContent>
       </Card>
 
       {viewMode === "cards" ? renderCards() : renderTable()}
-
-      <Dialog open={customizeOpen} onOpenChange={setCustomizeOpen}>
-        <DialogContent dir="rtl">
-          <DialogHeader><DialogTitle>تخصيص تقرير PDF</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>اتجاه الصفحة</Label>
-              <Select value={reportOptions.orientation} onValueChange={(value) => setReportOptions((prev) => ({ ...prev, orientation: value as ReportOptions["orientation"] }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="portrait">A4 بالطول</SelectItem><SelectItem value="landscape">A4 بالعرض</SelectItem></SelectContent>
-              </Select>
-            </div>
-            {[["showTelegram", "إظهار التليكرام"], ["showPhone", "إظهار الهاتف"], ["showNotes", "إظهار الملاحظات"]].map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2 text-sm"><Checkbox checked={Boolean(reportOptions[key as keyof ReportOptions])} onCheckedChange={(value) => setReportOptions((prev) => ({ ...prev, [key]: Boolean(value) }))} />{label}</label>
-            ))}
-          </div>
-          <DialogFooter><Button onClick={() => setCustomizeOpen(false)}>حفظ التخصيص</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={editDialog.open} onOpenChange={(open) => setEditDialog((prev) => ({ ...prev, open }))}>
         <DialogContent dir="rtl" className="max-w-5xl">

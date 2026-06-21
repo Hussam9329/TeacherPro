@@ -1800,7 +1800,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   fileName="calls"
                   rows={callExportRows}
                   columns={callExportColumns}
-                  triggerLabel="تصدير CSV / HTML"
+                  triggerLabel="تصدير"
                   description="تقرير المكالمات حسب الفلاتر الحالية"
                 />
               </div>
