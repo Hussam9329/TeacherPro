@@ -68,6 +68,10 @@ type GradeExportRow = {
   classificationText: string;
 };
 
+const englishNumberFormatter = new Intl.NumberFormat("en-US");
+const formatEnglishNumber = (value: number) =>
+  englishNumberFormatter.format(value);
+
 const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
   {
     key: "student",
@@ -472,14 +476,14 @@ export function GradeRecordsView() {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <StatCard
           label="طلاب لديهم درجة"
-          value={gradeCoverageDashboard.withGrade.toLocaleString("ar-IQ")}
+          value={formatEnglishNumber(gradeCoverageDashboard.withGrade)}
           icon={CheckCircle2}
           tone="success"
-          hint={`${gradeCoverageDashboard.scopeLabel} من أصل ${gradeCoverageDashboard.total.toLocaleString("ar-IQ")} طالب`}
+          hint={`${gradeCoverageDashboard.scopeLabel} من أصل ${formatEnglishNumber(gradeCoverageDashboard.total)} طالب`}
         />
         <StatCard
           label="طلاب بلا درجة"
-          value={gradeCoverageDashboard.withoutGrade.toLocaleString("ar-IQ")}
+          value={formatEnglishNumber(gradeCoverageDashboard.withoutGrade)}
           icon={UserX}
           tone="warning"
           hint={gradeCoverageDashboard.missingHint}
