@@ -55,6 +55,7 @@ function buildHtml<T>(rows: T[], columns: ExportColumn<T>[], title: string): str
           .join("")}</tr>`,
     )
     .join("")}</tbody></table></body></html>`;
+  return head;
 }
 
 function escapeHtml(value: string): string {
