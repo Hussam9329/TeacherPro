@@ -158,6 +158,7 @@ export interface AuthApiUser {
 
 export interface AuthApiResult extends ApiResult {
   user?: AuthApiUser;
+  status?: number;
 }
 
 export const authApi = {
@@ -194,11 +195,11 @@ export const authApi = {
   session: async (): Promise<AuthApiResult> => {
     try {
       const res = await fetch('/api/auth/session', { credentials: 'same-origin' });
-      if (!res.ok) return { ok: false, error: await readApiError(res, 'الجلسة منتهية') };
+      if (!res.ok) return { ok: false, status: res.status, error: await readApiError(res, 'تعذر التحقق من الجلسة حالياً') };
       const json = await res.json() as { user?: AuthApiUser };
       return { ok: true, user: json.user };
     } catch (e) {
-      return { ok: false, error: toUserFriendlyError(e instanceof Error ? e.message : 'Network error') };
+      return { ok: false, status: 0, error: toUserFriendlyError(e instanceof Error ? e.message : 'Network error') };
     }
   },
 };

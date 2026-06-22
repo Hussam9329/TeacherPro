@@ -422,6 +422,14 @@ export function TeacherProLayout() {
     if (!isAuthenticated && initDone) setInitDone(false);
   }, [initDone, isAuthenticated]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const timer = window.setInterval(() => {
+      void restoreSession();
+    }, 10 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [isAuthenticated, restoreSession]);
+
   // منع تمرير الخلفية عند فتح القائمة على الموبايل
   useEffect(() => {
     if (sidebarOpen) {

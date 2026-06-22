@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
 export const AUTH_COOKIE_NAME = 'teacherpro_session';
-const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 type DbUserWithRole = Awaited<ReturnType<typeof findUserById>>;
 

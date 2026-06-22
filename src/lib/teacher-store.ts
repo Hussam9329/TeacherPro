@@ -1626,8 +1626,20 @@ export const useTeacherStore = create<TeacherState>()(
         return user ? normalizeAdminAccessUser(user) : null;
       },
       restoreSession: async () => {
+        const wasAuthenticated = get().isAuthenticated;
         const authResult = await authApi.session();
-        if (!authResult.ok || !authResult.user) {
+
+        // Do not force logout an already-open session because of a temporary
+        // network/server/database error. Only an explicit empty session means
+        // the cookie is missing/expired and the user should return to login.
+        if (!authResult.ok) {
+          console.warn('[Store] Session check failed:', authResult.error || authResult.status || 'unknown error');
+          if (wasAuthenticated) return true;
+          set({ isAuthenticated: false });
+          return false;
+        }
+
+        if (!authResult.user) {
           set({ isAuthenticated: false });
           return false;
         }
