@@ -604,9 +604,9 @@ export function GradeEntryView() {
     setEditableRows((prev) => ({ ...prev, [studentId]: false }));
     setSavedRows((prev) => ({
       ...prev,
-      [studentId]: `تم ${new Date().toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" })}`,
+      [studentId]: `تم حفظها ${new Date().toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" })}`,
     }));
-    if (!options.silent) toast.success("تم حفظ الدرجة");
+    if (!options.silent) toast.success("تم حفظ الدرجة وستتم مزامنتها تلقائياً");
   };
 
   const autoSaveGrade = (studentId: string, draftOverride?: DraftGrade) => {
@@ -777,7 +777,7 @@ export function GradeEntryView() {
     setDrafts((prev) => ({ ...prev, ...nextDrafts }));
     setSavedRows((prev) => ({ ...prev, ...nextSavedRows }));
     setEditableRows((prev) => ({ ...prev, ...nextEditableRows }));
-    toast.success(`تم تسجيل ${missingVisibleStudents.length} طالب من الصفحة الحالية كغائب`);
+    toast.success(`تم تسجيل ${missingVisibleStudents.length} طالب من الصفحة الحالية كغائب وستتم المزامنة تلقائياً`);
   };
 
   const handleQuickScan = () => {

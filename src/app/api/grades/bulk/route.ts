@@ -35,31 +35,34 @@ export async function POST(req: NextRequest) {
 
     const examIds = Array.from(new Set(rawGrades.map((grade) => asText(grade.examId)).filter(Boolean)));
     const studentIds = Array.from(new Set(rawGrades.map((grade) => asText(grade.studentId)).filter(Boolean)));
-    if (examIds.length !== 1) return validationError('يجب أن تكون كل الدرجات لنفس الامتحان');
+    if (examIds.length === 0) return validationError('تعذر تحديد الامتحان');
     if (studentIds.length === 0) return validationError('تعذر تحديد الطلاب');
 
-    const exam = await db.exam.findUnique({ where: { id: examIds[0] }, select: { id: true, fullMark: true, courseIds: true } });
-    if (!exam) return validationError('الامتحان غير موجود', 404);
+    const exams = await db.exam.findMany({ where: { id: { in: examIds } }, select: { id: true, fullMark: true, courseIds: true } });
+    const examsById = new Map(exams.map((exam) => [exam.id, exam]));
+    if (examsById.size !== examIds.length) return validationError('أحد الامتحانات غير موجود', 404);
 
     const students = await db.student.findMany({ where: { id: { in: studentIds } }, select: { id: true, courseId: true } });
     const studentsById = new Map(students.map((student) => [student.id, student]));
-    const seenStudents = new Set<string>();
+    const seenGradeKeys = new Set<string>();
 
     const normalizedGrades = rawGrades.map((raw, index) => {
       const studentId = asText(raw.studentId);
       const examId = asText(raw.examId);
+      const exam = examsById.get(examId);
       if (!studentId) throw new Error(`السطر ${index + 1}: الطالب غير محدد`);
       if (!studentsById.has(studentId)) throw new Error(`السطر ${index + 1}: الطالب غير موجود`);
-      if (seenStudents.has(studentId)) throw new Error(`السطر ${index + 1}: الطالب مكرر في الدفعة`);
-      seenStudents.add(studentId);
-      if (examId !== exam.id) throw new Error(`السطر ${index + 1}: الامتحان غير صحيح`);
+      if (!exam) throw new Error(`السطر ${index + 1}: الامتحان غير صحيح`);
+      const gradeKey = `${studentId}:${examId}`;
+      if (seenGradeKeys.has(gradeKey)) throw new Error(`السطر ${index + 1}: الطالب مكرر لنفس الامتحان في الدفعة`);
+      seenGradeKeys.add(gradeKey);
       const student = studentsById.get(studentId);
       if (student && !exam.courseIds.includes(student.courseId)) throw new Error(`السطر ${index + 1}: الطالب ليس ضمن دورات هذا الامتحان`);
       const status = asText(raw.status || 'درجة');
-      if (status !== 'درجة') throw new Error(`السطر ${index + 1}: الإضافة الجماعية الحالية مخصصة للدرجات الرقمية فقط`);
-      const score = Number(raw.score);
-      if (!Number.isFinite(score) || !Number.isInteger(score) || score < 0 || score > Number(exam.fullMark || 0)) {
-        throw new Error(`السطر ${index + 1}: الدرجة يجب أن تكون عدداً صحيحاً بين 0 و ${exam.fullMark}`);
+      if (!['درجة', 'غائب', 'غش'].includes(status)) throw new Error(`السطر ${index + 1}: حالة الدرجة غير صحيحة`);
+      const score = status === 'درجة' ? Number(raw.score) : null;
+      if (status === 'درجة' && (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > Number(exam.fullMark || 0))) {
+        throw new Error(`السطر ${index + 1}: الدرجة يجب أن تكون رقماً بين 0 و ${exam.fullMark}`);
       }
       return {
         id: asText(raw.id) || undefined,

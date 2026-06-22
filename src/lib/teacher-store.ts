@@ -6,7 +6,7 @@ import {
   courseApi, chapterApi, courseChapterApi,
   studentApi, examApi, gradeApi, opportunityLogApi, studentLeaveApi, studentCallApi, studentNoteApi, correctionSheetApi,
   userApi, roleApi, logApi, authApi,
-  loadAllFromServer, type AuthApiUser, type ServerData,
+  loadAllFromServer, type ApiResult, type AuthApiUser, type ServerData,
 } from './api';
 import { getStudentDuplicateMessage, sanitizeTelegramInput } from './student-utils';
 import {
@@ -1313,24 +1313,42 @@ function recalculateStudentsFromAcademicRules(
   return { students, opportunityLogs: [...automaticLogs, ...keptAutomaticLogs, ...keptManualLogs] };
 }
 
+const syncFailureNoticeTimestamps = new Map<string, number>();
+
 function getSyncErrorMessage(error: unknown): string {
+  if (isFailedApiResult(error) && error.error?.trim()) return error.error;
   if (error instanceof Error && error.message.trim()) return error.message;
   if (typeof error === 'string' && error.trim()) return error;
-  return 'تعذر حفظ التغيير في الخادم. تم التراجع عن التغيير المحلي.';
+  return 'تعذر حفظ التغيير في الخادم. سيتم الاحتفاظ بالتغيير محلياً ومحاولة مزامنته لاحقاً.';
 }
 
 function notifySyncFailure(_getState: () => TeacherState, description: string, error: unknown): void {
   const message = getSyncErrorMessage(error);
   console.warn('[Store] Server sync failed:', description, error);
   if (typeof window !== 'undefined') {
+    const now = Date.now();
+    const transient = isTransientSyncFailure(error);
+    const noticeKey = transient ? '__transient_sync__' : `${description}:${message}`;
+    const minGapMs = transient ? 15000 : 4000;
+    if (now - (syncFailureNoticeTimestamps.get(noticeKey) || 0) < minGapMs) return;
+    syncFailureNoticeTimestamps.set(noticeKey, now);
     window.dispatchEvent(new CustomEvent('teacherpro:server-sync-error', {
       detail: { message: description ? `${description}: ${message}` : message },
     }));
   }
 }
 
-function isFailedApiResult(result: unknown): result is { ok: false; error?: string } {
+function isFailedApiResult(result: unknown): result is ApiResult & { ok: false } {
   return Boolean(result && typeof result === 'object' && 'ok' in result && (result as { ok?: unknown }).ok === false);
+}
+
+function isTransientSyncFailure(error: unknown): boolean {
+  if (isFailedApiResult(error)) return Boolean(error.transient);
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    return message.includes('network') || message.includes('failed to fetch') || message.includes('تعذر الاتصال');
+  }
+  return false;
 }
 
 function syncToServer(
@@ -1342,13 +1360,210 @@ function syncToServer(
     .then(action)
     .then((result) => {
       if (isFailedApiResult(result)) {
-        throw new Error(result.error || 'رفض الخادم حفظ التغيير');
+        throw result;
       }
     })
     .catch((error) => {
-      options.rollback?.();
+      // لا نرجع الحالة القديمة بسبب انقطاع شبكة/ضغط خادم مؤقت؛
+      // الرجوع العشوائي كان يمسح درجات أُدخلت بعد الطلب الفاشل.
+      if (!isTransientSyncFailure(error)) options.rollback?.();
       notifySyncFailure(getState, options.description || '', error);
     });
+}
+
+const PENDING_GRADE_SAVES_KEY = 'teacherpro-pending-grade-saves-v1';
+const MAX_PENDING_GRADE_SAVES = 5000;
+
+type PendingGradeSave = Pick<
+  Grade,
+  'id' | 'studentId' | 'examId' | 'status' | 'score' | 'notes' | 'academicAccountingChecked' | 'createdAt' | 'updatedAt'
+> & { queuedAt: number };
+
+let pendingGradeFlushTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingGradeFlushInFlight = false;
+let pendingGradeLastWarningAt = 0;
+let pendingGradeBrowserEventsAttached = false;
+
+function pendingGradeKey(grade: Pick<Grade, 'studentId' | 'examId'>): string {
+  return `${grade.studentId}:${grade.examId}`;
+}
+
+function canUseGradeOutbox(): boolean {
+  return typeof window !== 'undefined' && Boolean(window.localStorage);
+}
+
+function normalizePendingGradeSave(item: unknown): PendingGradeSave | null {
+  if (!item || typeof item !== 'object') return null;
+  const record = item as Record<string, unknown>;
+  const id = String(record.id || '').trim();
+  const studentId = String(record.studentId || '').trim();
+  const examId = String(record.examId || '').trim();
+  const status = String(record.status || 'درجة') as Grade['status'];
+  if (!id || !studentId || !examId || !['درجة', 'غائب', 'غش'].includes(status)) return null;
+
+  const score = record.score === null || record.score === undefined || record.score === ''
+    ? null
+    : Number(record.score);
+
+  return {
+    id,
+    studentId,
+    examId,
+    status,
+    score: status === 'درجة' && typeof score === 'number' && Number.isFinite(score) ? score : null,
+    notes: String(record.notes || ''),
+    academicAccountingChecked: Boolean(record.academicAccountingChecked),
+    createdAt: String(record.createdAt || todayISO()),
+    updatedAt: String(record.updatedAt || todayISO()),
+    queuedAt: Number(record.queuedAt || Date.now()),
+  };
+}
+
+function readPendingGradeSaves(): PendingGradeSave[] {
+  if (!canUseGradeOutbox()) return [];
+  try {
+    const raw = window.localStorage.getItem(PENDING_GRADE_SAVES_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(normalizePendingGradeSave)
+      .filter((item): item is PendingGradeSave => Boolean(item));
+  } catch (error) {
+    console.warn('[Store] Failed to read pending grade saves:', error);
+    return [];
+  }
+}
+
+function writePendingGradeSaves(items: PendingGradeSave[]): void {
+  if (!canUseGradeOutbox()) return;
+  try {
+    if (items.length === 0) {
+      window.localStorage.removeItem(PENDING_GRADE_SAVES_KEY);
+      return;
+    }
+    window.localStorage.setItem(PENDING_GRADE_SAVES_KEY, JSON.stringify(items.slice(-MAX_PENDING_GRADE_SAVES)));
+  } catch (error) {
+    console.warn('[Store] Failed to write pending grade saves:', error);
+  }
+}
+
+function gradeSaveForApi(item: PendingGradeSave): Record<string, unknown> {
+  return {
+    id: item.id,
+    studentId: item.studentId,
+    examId: item.examId,
+    status: item.status,
+    score: item.score,
+    notes: item.notes,
+    academicAccountingChecked: item.academicAccountingChecked,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+  };
+}
+
+function mergePendingGradeSavesIntoGrades(grades: Grade[]): Grade[] {
+  const pending = readPendingGradeSaves();
+  if (pending.length === 0) return grades;
+  const byKey = new Map<string, Grade>();
+  grades.forEach((grade) => byKey.set(pendingGradeKey(grade), grade));
+  pending.forEach((item) => {
+    const { queuedAt: _queuedAt, ...grade } = item;
+    void _queuedAt;
+    byKey.set(pendingGradeKey(item), grade as Grade);
+  });
+  return Array.from(byKey.values());
+}
+
+function mergePendingGradeSaves(items: Grade[]): PendingGradeSave[] {
+  const byKey = new Map<string, PendingGradeSave>();
+  readPendingGradeSaves().forEach((item) => byKey.set(pendingGradeKey(item), item));
+  const queuedAt = Date.now();
+  items.forEach((grade) => {
+    byKey.set(pendingGradeKey(grade), {
+      id: grade.id,
+      studentId: grade.studentId,
+      examId: grade.examId,
+      status: grade.status,
+      score: grade.status === 'درجة' ? grade.score : null,
+      notes: grade.notes || '',
+      academicAccountingChecked: Boolean(grade.academicAccountingChecked),
+      createdAt: grade.createdAt || todayISO(),
+      updatedAt: grade.updatedAt || todayISO(),
+      queuedAt,
+    });
+  });
+  const next = Array.from(byKey.values()).sort((a, b) => a.queuedAt - b.queuedAt);
+  writePendingGradeSaves(next);
+  return next;
+}
+
+function removeFlushedPendingGradeSaves(sent: PendingGradeSave[]): void {
+  const sentByKey = new Map(sent.map((item) => [pendingGradeKey(item), item.queuedAt]));
+  const remaining = readPendingGradeSaves().filter((item) => sentByKey.get(pendingGradeKey(item)) !== item.queuedAt);
+  writePendingGradeSaves(remaining);
+}
+
+function notifyPendingGradeSyncIssue(getState: () => TeacherState, result: ApiResult): void {
+  const now = Date.now();
+  if (now - pendingGradeLastWarningAt < 15000) return;
+  pendingGradeLastWarningAt = now;
+  notifySyncFailure(
+    getState,
+    'مزامنة الدرجات المؤجلة',
+    result.error || 'تعذر الاتصال بالشبكة. الدرجات محفوظة مؤقتاً وستُعاد المحاولة تلقائياً.',
+  );
+}
+
+async function flushPendingGradeSaves(getState: () => TeacherState): Promise<void> {
+  if (!canUseGradeOutbox()) return;
+  if (pendingGradeFlushInFlight) return;
+
+  const pending = readPendingGradeSaves();
+  if (pending.length === 0) return;
+
+  pendingGradeFlushInFlight = true;
+  try {
+    const chunk = pending.slice(0, 100);
+    const result = await gradeApi.bulkAdd(chunk.map(gradeSaveForApi));
+
+    if (result.ok) {
+      removeFlushedPendingGradeSaves(chunk);
+      const remaining = readPendingGradeSaves();
+      if (remaining.length > 0) schedulePendingGradeFlush(getState, 300);
+      return;
+    }
+
+    notifyPendingGradeSyncIssue(getState, result);
+    schedulePendingGradeFlush(getState, result.transient ? 5000 : 15000);
+  } finally {
+    pendingGradeFlushInFlight = false;
+  }
+}
+
+function schedulePendingGradeFlush(getState: () => TeacherState, delayMs = 700): void {
+  if (!canUseGradeOutbox()) return;
+  if (pendingGradeFlushTimer) clearTimeout(pendingGradeFlushTimer);
+  pendingGradeFlushTimer = setTimeout(() => {
+    pendingGradeFlushTimer = null;
+    void flushPendingGradeSaves(getState);
+  }, delayMs);
+}
+
+function attachPendingGradeBrowserEvents(getState: () => TeacherState): void {
+  if (!canUseGradeOutbox() || pendingGradeBrowserEventsAttached) return;
+  pendingGradeBrowserEventsAttached = true;
+  window.addEventListener('online', () => schedulePendingGradeFlush(getState, 250));
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') schedulePendingGradeFlush(getState, 250);
+  });
+}
+
+function queueGradeSaves(getState: () => TeacherState, grades: Grade[]): void {
+  if (grades.length === 0) return;
+  attachPendingGradeBrowserEvents(getState);
+  mergePendingGradeSaves(grades);
+  schedulePendingGradeFlush(getState);
 }
 
 type PersistedUiSnapshot = Pick<
@@ -1464,14 +1679,14 @@ export const useTeacherStore = create<TeacherState>()(
           };
           }) as Exam[];
 
-          const grades = (serverData.grades || []).map((g: Record<string, unknown>) => ({
+          const grades = mergePendingGradeSavesIntoGrades((serverData.grades || []).map((g: Record<string, unknown>) => ({
             ...g,
             status: sanitizeGradeStatus(g.status),
             score: g.score === null || g.score === undefined ? null : Number(g.score),
             academicAccountingChecked: Boolean(g.academicAccountingChecked),
             createdAt: g.createdAt ? String(g.createdAt).slice(0, 10) : todayISO(),
             updatedAt: g.updatedAt ? String(g.updatedAt).slice(0, 10) : todayISO(),
-          })) as Grade[];
+          })) as Grade[]);
 
           const opportunityLogs = (serverData.opportunityLogs || []).map((ol: Record<string, unknown>) => ({
             ...ol,
@@ -1565,6 +1780,8 @@ export const useTeacherStore = create<TeacherState>()(
             exams, grades, opportunityLogs, studentLeaves, studentCalls, studentNotes, correctionSheets, users,
             roles, logs, currentUserId: nextCurrentUserId, dbConnected: true, dbLoading: false,
           });
+          attachPendingGradeBrowserEvents(get);
+          schedulePendingGradeFlush(get, 900);
 
           // لا نعيد احتساب الفصل والفرص عند فتح النظام فقط.
           // إعادة الاحتساب تبقى مرتبطة بأحداث صريحة مثل إدخال/تعديل درجة أو تعديل امتحان.
@@ -2235,13 +2452,9 @@ export const useTeacherStore = create<TeacherState>()(
             }
           : { ...normalizedGradeData, id: uid('gr'), createdAt: todayISO(), updatedAt: todayISO() };
 
-        const previousState = { students: stateBefore.students, grades: stateBefore.grades, opportunityLogs: stateBefore.opportunityLogs };
         set((s) => ({ grades: existing ? s.grades.map((g) => g.id === existing.id ? grade : g) : [...s.grades, grade] }));
         get().logAction('الدرجات', existing ? 'تعديل درجة' : 'إدخال درجة', `${get().studentName(grade.studentId)} - ${stateBefore.exams.find((e) => e.id === grade.examId)?.name || ''}`);
-        syncToServer(get, () => gradeApi.add(grade as unknown as Record<string, unknown>), {
-          description: existing ? 'تعديل درجة' : 'إدخال درجة',
-          rollback: () => set(previousState),
-        });
+        queueGradeSaves(get, [grade]);
         get().recalculateAcademicEffects(grade.studentId);
       },
       bulkAddGrades: (gradeItems) => {
@@ -2258,11 +2471,6 @@ export const useTeacherStore = create<TeacherState>()(
 
         if (validItems.length === 0) return { added: 0, updated: 0 };
 
-        const previousState = {
-          students: stateBefore.students,
-          grades: stateBefore.grades,
-          opportunityLogs: stateBefore.opportunityLogs,
-        };
         const affectedStudentIds = new Set<string>();
         const nextGrades = [...stateBefore.grades];
         const gradesToSync: Grade[] = [];
@@ -2303,10 +2511,7 @@ export const useTeacherStore = create<TeacherState>()(
         set({ grades: nextGrades });
         const examNames = Array.from(new Set(gradesToSync.map((grade) => stateBefore.exams.find((exam) => exam.id === grade.examId)?.name || 'امتحان'))).join('، ');
         get().logAction('الدرجات', 'إضافة درجات جماعية', `${gradesToSync.length} درجة - ${examNames}`);
-        syncToServer(get, () => gradeApi.bulkAdd(gradesToSync as unknown as Array<Record<string, unknown>>), {
-          description: 'إضافة درجات جماعية',
-          rollback: () => set(previousState),
-        });
+        queueGradeSaves(get, gradesToSync);
         get().recalculateAcademicEffects(Array.from(affectedStudentIds));
         return { added, updated };
       },

@@ -46,72 +46,98 @@ async function readApiError(res: Response, fallback: string): Promise<string> {
 export interface ApiResult {
   ok: boolean;
   error?: string;
+  status?: number;
+  transient?: boolean;
+}
+
+function isTransientHttpStatus(status: number): boolean {
+  return status === 0 || status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function retryTransientMutation(run: () => Promise<ApiResult>, attempts = 3): Promise<ApiResult> {
+  let lastResult: ApiResult = { ok: false, error: 'تعذر تنفيذ العملية حالياً.', transient: true, status: 0 };
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    lastResult = await run();
+    if (lastResult.ok || !lastResult.transient || attempt === attempts) return lastResult;
+    await delay(250 * attempt);
+  }
+  return lastResult;
 }
 
 async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
-  try {
-    const res = await fetch(`/api/${endpoint}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const error = await readApiError(res, `تعذر حفظ البيانات (رمز ${res.status})`);
-      console.warn(`[API] POST /api/${endpoint} failed:`, error);
-      return { ok: false, error };
+  return retryTransientMutation(async () => {
+    try {
+      const res = await fetch(`/api/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await readApiError(res, `تعذر حفظ البيانات (رمز ${res.status})`);
+        console.warn(`[API] POST /api/${endpoint} failed:`, error);
+        return { ok: false, error, status: res.status, transient: isTransientHttpStatus(res.status) };
+      }
+      return { ok: true };
+    } catch (e) {
+      const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
+      console.warn(`[API] POST /api/${endpoint} network error:`, e);
+      return { ok: false, error: msg, status: 0, transient: true };
     }
-    return { ok: true };
-  } catch (e) {
-    const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
-    console.warn(`[API] POST /api/${endpoint} network error:`, e);
-    return { ok: false, error: msg };
-  }
+  });
 }
 
 async function apiPut(endpoint: string, data: Record<string, unknown>): Promise<ApiResult> {
-  try {
-    const res = await fetch(`/api/${endpoint}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const error = await readApiError(res, `تعذر تحديث البيانات (رمز ${res.status})`);
-      console.warn(`[API] PUT /api/${endpoint} failed:`, error);
-      return { ok: false, error };
+  return retryTransientMutation(async () => {
+    try {
+      const res = await fetch(`/api/${endpoint}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await readApiError(res, `تعذر تحديث البيانات (رمز ${res.status})`);
+        console.warn(`[API] PUT /api/${endpoint} failed:`, error);
+        return { ok: false, error, status: res.status, transient: isTransientHttpStatus(res.status) };
+      }
+      return { ok: true };
+    } catch (e) {
+      const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
+      console.warn(`[API] PUT /api/${endpoint} network error:`, e);
+      return { ok: false, error: msg, status: 0, transient: true };
     }
-    return { ok: true };
-  } catch (e) {
-    const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
-    console.warn(`[API] PUT /api/${endpoint} network error:`, e);
-    return { ok: false, error: msg };
-  }
+  });
 }
 
 async function apiDelete(endpoint: string, id: string, extraParams: Record<string, string | undefined> = {}): Promise<ApiResult> {
-  try {
-    const params = new URLSearchParams();
-    params.set('id', id);
-    Object.entries(extraParams).forEach(([key, value]) => {
-      if (value) params.set(key, value);
-    });
-    const res = await fetch(`/api/${endpoint}?${params.toString()}`, {
-      method: 'DELETE',
-      credentials: 'same-origin',
-    });
-    if (!res.ok) {
-      const error = await readApiError(res, `تعذر حذف السجل (رمز ${res.status})`);
-      console.warn(`[API] DELETE /api/${endpoint} failed:`, error);
-      return { ok: false, error };
+  return retryTransientMutation(async () => {
+    try {
+      const params = new URLSearchParams();
+      params.set('id', id);
+      Object.entries(extraParams).forEach(([key, value]) => {
+        if (value) params.set(key, value);
+      });
+      const res = await fetch(`/api/${endpoint}?${params.toString()}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      if (!res.ok) {
+        const error = await readApiError(res, `تعذر حذف السجل (رمز ${res.status})`);
+        console.warn(`[API] DELETE /api/${endpoint} failed:`, error);
+        return { ok: false, error, status: res.status, transient: isTransientHttpStatus(res.status) };
+      }
+      return { ok: true };
+    } catch (e) {
+      const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
+      console.warn(`[API] DELETE /api/${endpoint} network error:`, e);
+      return { ok: false, error: msg, status: 0, transient: true };
     }
-    return { ok: true };
-  } catch (e) {
-    const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
-    console.warn(`[API] DELETE /api/${endpoint} network error:`, e);
-    return { ok: false, error: msg };
-  }
+  });
 }
 
 interface ApiGetResponse<T> {
@@ -338,13 +364,13 @@ export const gradeApi = {
       if (!res.ok) {
         const error = await readApiError(res, `تعذر إلغاء حالات الغياب (رمز ${res.status})`);
         console.warn('[API] DELETE /api/grades absent-by-exam failed:', error);
-        return { ok: false, error };
+        return { ok: false, error, status: res.status, transient: isTransientHttpStatus(res.status) };
       }
       return { ok: true };
     } catch (e) {
       const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
       console.warn('[API] DELETE /api/grades absent-by-exam network error:', e);
-      return { ok: false, error: msg };
+      return { ok: false, error: msg, status: 0, transient: true };
     }
   },
 };
