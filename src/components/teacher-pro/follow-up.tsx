@@ -203,6 +203,11 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
     label: "رقم ولي الأمر",
     value: ({ row }) => row.student.parentPhone || "",
   },
+  {
+    key: "telegram",
+    label: "معرف التلكرام",
+    value: ({ row }) => row.student.telegram || "",
+  },
   { key: "note", label: "ملاحظات المكالمات", value: ({ note }) => note },
 ];
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
@@ -417,6 +422,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   );
   const selectedProfileStudent =
     students.find((student) => student.id === profileStudentId) || null;
+  const selectedCallExam = exams.find((exam) => exam.id === callExamId) || null;
+  const callExportDocumentTitle = selectedCallExam?.name || "كل الامتحانات";
+  const callExportFileName = selectedCallExam?.name || "المكالمات-كل-الامتحانات";
   const leaveReason =
     leaveReasonChoice === "أخرى" ? customLeaveReason.trim() : leaveReasonChoice;
 
@@ -1240,6 +1248,27 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     );
   };
 
+  const renderTelegramLink = (telegram?: string) => {
+    const normalizedTelegram = normalizeTelegramIdentifier(telegram || "");
+    if (!normalizedTelegram) {
+      return (
+        <span className="rounded-xl border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          التلكرام: لا يوجد معرف
+        </span>
+      );
+    }
+    return (
+      <a
+        className="rounded-xl border bg-card px-3 py-2 text-xs font-bold text-sky-700 underline dark:text-sky-300"
+        href={telegramLink(normalizedTelegram)}
+        target="_blank"
+        rel="noreferrer"
+      >
+        التلكرام: {normalizedTelegram}
+      </a>
+    );
+  };
+
   const renderCallGradeChip = (row: CallStudentRow, item: CallGradeItem) => {
     const isFocus = item.id === row.focusItem.id;
     const call = callLogForGrade(row.student, item);
@@ -1364,6 +1393,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         <div className="flex flex-wrap gap-2">
           {renderPhoneLink("رقم الطالب", row.student.phone)}
           {renderPhoneLink("رقم ولي الأمر", row.student.parentPhone)}
+          {renderTelegramLink(row.student.telegram)}
         </div>
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">
@@ -1807,11 +1837,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 <Label>تصدير</Label>
                 <ExportDialog
                   title="تصدير المكالمات"
-                  fileName="calls"
+                  fileName={callExportFileName}
                   rows={callExportRows}
                   columns={callExportColumns}
                   triggerLabel="تصدير"
                   description="تقرير المكالمات حسب الفلاتر الحالية"
+                  pdfTitle={callExportDocumentTitle}
+                  pdfFileName={callExportFileName}
                 />
               </div>
             </CardContent>

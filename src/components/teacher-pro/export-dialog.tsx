@@ -44,6 +44,22 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;");
 }
 
+function escapeJsString(value: string): string {
+  return JSON.stringify(String(value ?? ""));
+}
+
+function sanitizeExportFileName(value: string): string {
+  return (
+    String(value || "export")
+      .trim()
+      .replace(/[\/:*?"<>|]+/g, "-")
+      .replace(/[^\w؀-ۿ .-]+/g, "-")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "") || "export"
+  );
+}
+
 function buildCsv<T>(rows: T[], columns: ExportColumn<T>[]): string {
   const header = columns.map((col) => escapeCsvCell(col.label)).join(",");
   const body = rows
@@ -84,32 +100,53 @@ function buildHtml<T>(
   rows: T[],
   columns: ExportColumn<T>[],
   title: string,
-  options: { printable?: boolean; orientation?: PageOrientation } = {},
+  options: {
+    printable?: boolean;
+    orientation?: PageOrientation;
+    documentTitle?: string;
+    safeUrlName?: string;
+  } = {},
 ): string {
+  const documentTitle = options.documentTitle || title;
+  const safeUrlName = options.safeUrlName || sanitizeExportFileName(documentTitle);
   const printableToolbar = options.printable
     ? `<div class="toolbar"><button onclick="window.print()">طباعة / حفظ PDF</button><button onclick="window.close()">إغلاق</button></div>`
     : "";
-  return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>
-  @page { size: A4 ${options.orientation || "portrait"}; margin: 12mm; }
+  const printableScript = options.printable
+    ? `<script>document.title=${escapeJsString(documentTitle)};try{window.history.replaceState(null,document.title,'/${encodeURIComponent(safeUrlName)}.pdf');}catch(e){}</script>`
+    : "";
+  return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${escapeHtml(documentTitle)}</title><style>
+  @page { size: A4 ${options.orientation || "portrait"}; margin: 10mm; }
   * { box-sizing: border-box; }
-  body { font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif; padding: 24px; color: #111827; background: #f8fafc; }
-  .toolbar { position: sticky; top: 0; display: flex; gap: 8px; margin: -24px -24px 18px; padding: 12px; background: #111827; color: white; z-index: 3; }
+  html, body { margin: 0; min-height: 100%; }
+  body { font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif; padding: 16px; color: #111827; background: #eef2f7; }
+  .toolbar { position: sticky; top: 0; display: flex; gap: 8px; margin: -16px -16px 14px; padding: 10px 12px; background: #111827; color: white; z-index: 3; }
   .toolbar button { border: 0; border-radius: 10px; padding: 9px 14px; cursor: pointer; font-weight: 700; }
-  .report { background: white; border-radius: 18px; padding: 18px; box-shadow: 0 16px 50px rgba(15,23,42,.10); }
-  h1 { font-size: 18px; margin: 0 0 12px; }
-  .meta { margin-bottom: 12px; color: #64748b; font-size: 12px; }
-  table { border-collapse: collapse; width: 100%; font-size: 12px; }
-  th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: right; vertical-align: top; }
-  th { background: #f4f4f5; font-weight: 700; }
+  .report { background: white; border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; box-shadow: 0 10px 30px rgba(15,23,42,.08); }
+  .report-header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px; margin-bottom: 12px; border-bottom: 2px solid #111827; padding-bottom: 10px; }
+  h1 { font-size: 20px; line-height: 1.5; margin: 0; }
+  .meta { color: #475569; font-size: 12px; white-space: nowrap; }
+  .table-wrap { width: 100%; overflow: visible; }
+  table { border-collapse: collapse; width: 100%; table-layout: auto; font-size: 11px; }
+  th, td { border: 1px solid #d1d5db; padding: 6px 7px; text-align: right; vertical-align: top; line-height: 1.45; word-break: break-word; }
+  th { background: #f3f4f6; font-weight: 800; color: #111827; }
   tr:nth-child(even) { background: #fafafa; }
+  a[href]::after { content: "" !important; }
   @media print {
-    body { background: white; padding: 0; }
-    .toolbar { display: none; }
-    .report { box-shadow: none; border-radius: 0; padding: 0; }
+    html, body { width: 100%; margin: 0 !important; padding: 0 !important; background: white !important; }
+    .toolbar { display: none !important; }
+    .report { box-shadow: none !important; border: 0 !important; border-radius: 0 !important; padding: 0 !important; }
+    .report-header { margin-bottom: 8px; padding-bottom: 8px; }
+    h1 { font-size: 18px; }
+    .meta { font-size: 11px; }
+    table { font-size: 10px; page-break-inside: auto; }
+    tr { page-break-inside: avoid; page-break-after: auto; }
+    thead { display: table-header-group; }
+    th, td { padding: 4px 5px; }
   }
-  </style></head><body>${printableToolbar}<main class="report"><h1>${escapeHtml(title)}</h1><div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}</div><table><thead><tr>${columns
+  </style>${printableScript}</head><body>${printableToolbar}<main class="report"><header class="report-header"><h1>${escapeHtml(title)}</h1><div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}</div></header><div class="table-wrap"><table><thead><tr>${columns
     .map((col) => `<th>${escapeHtml(col.label)}</th>`)
-    .join("")}</tr></thead><tbody>${buildTableRows(rows, columns)}</tbody></table></main></body></html>`;
+    .join("")}</tr></thead><tbody>${buildTableRows(rows, columns)}</tbody></table></div></main></body></html>`;
 }
 
 function downloadBlob(content: string, fileName: string, mime: string) {
@@ -160,6 +197,8 @@ export function ExportDialog<T = Record<string, unknown>>({
   formats = ["csv", "excel", "html", "pdf"],
   defaultSelectedColumnKeys,
   pageOrientation = "portrait",
+  pdfTitle,
+  pdfFileName,
 }: {
   title: string;
   fileName: string;
@@ -170,6 +209,8 @@ export function ExportDialog<T = Record<string, unknown>>({
   formats?: ExportFormat[];
   defaultSelectedColumnKeys?: string[];
   pageOrientation?: PageOrientation;
+  pdfTitle?: string;
+  pdfFileName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedColumnKeys, setSelectedColumnKeys] = useState<string[]>(() =>
@@ -240,14 +281,25 @@ export function ExportDialog<T = Record<string, unknown>>({
 
   const exportPdf = () => {
     if (!ensureExportable()) return;
-    const html = buildHtml(rows, selectedColumns, title, { printable: true, orientation: pageOrientation });
-    const win = window.open("", "_blank");
+    const printableTitle = String(pdfTitle || title || "تقرير").trim() || "تقرير";
+    const printableFileName = sanitizeExportFileName(pdfFileName || printableTitle || safeFileName);
+    const html = buildHtml(rows, selectedColumns, printableTitle, {
+      printable: true,
+      orientation: pageOrientation,
+      documentTitle: printableTitle,
+      safeUrlName: printableFileName,
+    });
+    const win = window.open("", `${printableFileName}-pdf`);
     if (!win) {
       toast.error("المتصفح منع نافذة الطباعة");
       return;
     }
     win.document.write(html);
     win.document.close();
+    win.document.title = printableTitle;
+    try {
+      win.history.replaceState(null, printableTitle, `/${encodeURIComponent(printableFileName)}.pdf`);
+    } catch {}
     win.focus();
     toast.success(`تم فتح تقرير PDF بـ ${selectedColumns.length} عمود`);
     setOpen(false);
