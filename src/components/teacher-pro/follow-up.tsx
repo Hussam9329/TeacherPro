@@ -143,6 +143,10 @@ const contactStatusOptions: Array<{
   { value: "الرقم خاطئ", label: "الرقم خاطئ" },
 ];
 const CALL_PAGE_SIZE = 120;
+const excludedCallGradeStatusFilters = new Set<GradeStatusFilter>(["grace-period"]);
+const callGradeStatusFilterOptions = gradeStatusFilterOptions.filter(
+  (option) => !excludedCallGradeStatusFilters.has(option),
+);
 const callGradeSortLabels: Record<CallGradeSort, string> = {
   latest: "آخر درجة أولاً",
   exam: "حسب الامتحان",
@@ -568,6 +572,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       const student = studentById.get(grade.studentId);
       const exam = examById.get(grade.examId);
       if (!student || !exam) return;
+      const cls = classification(grade, exam, student);
+
+      // طلاب فترة السماح يبقون محفوظين بسجل الدرجات كغائبين/درجات،
+      // لكن لا يدخلون قائمة المكالمات لأنهم غير مطالبين بالمتابعة الهاتفية خلال السماح.
+      if (cls.kind === "grace") return;
+
       const info = gradeCallInfo(grade, exam);
       const item: CallGradeItem = {
         id: `grade:${grade.id}`,
@@ -1724,7 +1734,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {gradeStatusFilterOptions.map((option) => (
+                    {callGradeStatusFilterOptions.map((option) => (
                       <SelectItem key={option} value={option}>
                         {gradeStatusFilterLabels[option]}
                       </SelectItem>
