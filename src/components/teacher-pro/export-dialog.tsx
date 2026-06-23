@@ -53,6 +53,22 @@ function buildCsv<T>(rows: T[], columns: ExportColumn<T>[]): string {
   return "\uFEFF" + header + "\r\n" + body;
 }
 
+function plainExcelCell(value: string | number | null | undefined): string {
+  return String(value ?? "")
+    .replace(/\t/g, " ")
+    .replace(/\r?\n/g, " ")
+    .trim();
+}
+
+function buildPlainExcel<T>(rows: T[], columns: ExportColumn<T>[]): string {
+  const header = columns.map((col) => plainExcelCell(col.label)).join("\t");
+  const body = rows
+    .map((row) => columns.map((col) => plainExcelCell(col.value(row))).join("\t"))
+    .join("\r\n");
+  // Plain tab-separated text only: no HTML, CSS, widths, colors, borders, RTL, or merged cells.
+  return "\uFEFF" + header + "\r\n" + body;
+}
+
 function buildTableRows<T>(rows: T[], columns: ExportColumn<T>[]): string {
   return rows
     .map(
@@ -208,9 +224,9 @@ export function ExportDialog<T = Record<string, unknown>>({
 
   const exportExcel = () => {
     if (!ensureExportable()) return;
-    const html = buildHtml(rows, selectedColumns, title);
-    downloadBlob(html, `${safeFileName}.xls`, "application/vnd.ms-excel;charset=utf-8");
-    toast.success(`تم تصدير ${rows.length} صف و ${selectedColumns.length} عمود بصيغة Excel`);
+    const excelText = buildPlainExcel(rows, selectedColumns);
+    downloadBlob(excelText, `${safeFileName}.xls`, "application/vnd.ms-excel;charset=utf-8");
+    toast.success(`تم تصدير ${rows.length} صف و ${selectedColumns.length} عمود بصيغة Excel بدون تنسيق`);
     setOpen(false);
   };
 
