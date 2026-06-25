@@ -138,6 +138,7 @@ export function ECorrectionView() {
   const [botSearch, setBotSearch] = useState("");
   const [botFilterExamId, setBotFilterExamId] = useState("");
   const [botFilterStatus, setBotFilterStatus] = useState("");
+  const [botSchemaWarning, setBotSchemaWarning] = useState("");
   const { locked: isAddingSheet, runLocked: runAddSheetLocked } =
     useActionLock();
   const { locked: isCompletingSheet, runLocked: runCompleteSheetLocked } =
@@ -151,6 +152,7 @@ export function ECorrectionView() {
       const response = await fetch("/api/telegram-exam-submissions", { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || "تعذر تحميل مستلمات البوت");
+      setBotSchemaWarning(payload?.migrationRequired ? String(payload?.message || "جدول مستلمات البوت غير جاهز بعد.") : "");
       setBotSubmissions(Array.isArray(payload.submissions) ? payload.submissions : []);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "تعذر تحميل مستلمات البوت");
@@ -492,6 +494,16 @@ export function ECorrectionView() {
               <p>البيانات المتوقعة: <code className="rounded bg-background px-1">studentId</code>، <code className="rounded bg-background px-1">examId</code>، بيانات التلكرام، وقائمة <code className="rounded bg-background px-1">pages</code> التي تحتوي روابط أو dataUrl أو fileId أو localPath.</p>
             </CardContent>
           </Card>
+
+          {botSchemaWarning && (
+            <Card className="border-amber-300 bg-amber-50 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+              <CardContent className="p-4 space-y-2 text-sm">
+                <p className="font-semibold">تنبيه ربط البوت</p>
+                <p>{botSchemaWarning}</p>
+                <p className="text-xs opacity-80">الصفحة ستبقى شغالة، لكن استقبال مستلمات البوت يحتاج تجهيز جدول قاعدة البيانات.</p>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="space-y-1">

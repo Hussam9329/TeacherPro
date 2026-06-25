@@ -4,7 +4,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requirePermission } from '@/lib/server-auth';
-import { routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { isMissingDatabaseObjectError, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { ensureTelegramSubmissionSchema, resetTelegramSubmissionSchemaEnsureCache, telegramSubmissionSchemaMessage } from '@/lib/telegram-submission-schema';
 
 type IncomingPage = {
   pageNumber?: unknown;
@@ -137,6 +138,16 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const schemaReady = await ensureTelegramSubmissionSchema();
+    if (!schemaReady.ok) {
+      resetTelegramSubmissionSchemaEnsureCache();
+      return NextResponse.json({
+        submissions: [],
+        migrationRequired: true,
+        message: telegramSubmissionSchemaMessage,
+      });
+    }
+
     const { searchParams } = new URL(req.url);
     const examId = textValue(searchParams.get('examId'), 120);
     const studentId = textValue(searchParams.get('studentId'), 120);
@@ -159,6 +170,14 @@ export async function GET(req: NextRequest) {
       submissions: submissions.map((item) => normalizeSubmission(item as unknown as Record<string, unknown>)),
     });
   } catch (error) {
+    if (isMissingDatabaseObjectError(error)) {
+      resetTelegramSubmissionSchemaEnsureCache();
+      return NextResponse.json({
+        submissions: [],
+        migrationRequired: true,
+        message: telegramSubmissionSchemaMessage,
+      });
+    }
     return routeErrorResponse(error, 'تعذر تحميل مستلمات البوت حالياً. تأكد من تشغيل migration الخاصة بها.');
   }
 }
@@ -168,6 +187,12 @@ export async function POST(req: NextRequest) {
   if (tokenError) return tokenError;
 
   try {
+    const schemaReady = await ensureTelegramSubmissionSchema();
+    if (!schemaReady.ok) {
+      resetTelegramSubmissionSchemaEnsureCache();
+      return NextResponse.json({ error: telegramSubmissionSchemaMessage }, { status: 503 });
+    }
+
     const body = await req.json();
     const studentId = textValue(body.studentId, 120);
     const examId = textValue(body.examId, 120);
@@ -246,6 +271,12 @@ export async function PUT(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const schemaReady = await ensureTelegramSubmissionSchema();
+    if (!schemaReady.ok) {
+      resetTelegramSubmissionSchemaEnsureCache();
+      return NextResponse.json({ error: telegramSubmissionSchemaMessage }, { status: 503 });
+    }
+
     const body = await req.json();
     const id = textValue(body.id, 120);
     if (!id) return validationError('تعذر تحديد مستلم البوت المطلوب.');
@@ -270,6 +301,12 @@ export async function DELETE(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const schemaReady = await ensureTelegramSubmissionSchema();
+    if (!schemaReady.ok) {
+      resetTelegramSubmissionSchemaEnsureCache();
+      return NextResponse.json({ error: telegramSubmissionSchemaMessage }, { status: 503 });
+    }
+
     const { searchParams } = new URL(req.url);
     const id = textValue(searchParams.get('id'), 120);
     if (!id) return validationError('تعذر تحديد مستلم البوت المطلوب.');
