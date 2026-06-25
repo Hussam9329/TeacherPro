@@ -81,6 +81,7 @@ model Student {
   studentCalls    StudentCall[]
   studentNotes    StudentNote[]
   correctionSheets CorrectionSheet[]
+  telegramExamSubmissions TelegramExamSubmission[]
 
   @@index([courseId])
   @@index([status])
@@ -107,6 +108,7 @@ model Exam {
   opportunityLogs    OpportunityLog[]
   studentLeaves      StudentLeave[]
   studentCalls       StudentCall[]
+  telegramExamSubmissions TelegramExamSubmission[]
 
   @@index([type])
   @@index([date])
@@ -226,6 +228,32 @@ model CorrectionSheet {
   @@unique([studentId, examId])
   @@index([examId])
   @@index([correctorId])
+}
+
+model TelegramExamSubmission {
+  id               String   @id @default(cuid())
+  studentId        String
+  examId           String
+  gradeId          String?
+  telegramUserId   String   @default("")
+  telegramUsername String   @default("")
+  telegramChatId   String   @default("")
+  sourceMessageIds String   @default("[]")
+  pages            String   @default("[]")
+  pageCount        Int      @default(0)
+  status           String   @default("بانتظار التصحيح")
+  notes            String   @default("")
+  submittedAt      DateTime?
+  receivedAt       DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  student          Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam             Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, examId])
+  @@index([examId])
+  @@index([studentId])
+  @@index([status])
+  @@index([receivedAt])
 }
 
 model Role {
