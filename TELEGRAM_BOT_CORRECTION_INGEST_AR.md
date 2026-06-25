@@ -19,17 +19,19 @@ x-teacherpro-bot-token: <TEACHERPRO_BOT_INGEST_TOKEN>
 في بيئة TeacherPro أضف توكن الاستقبال:
 
 ```env
-TEACHERPRO_BOT_INGEST_TOKEN="ضع_توكن_طويل_وعشوائي"
+TEACHERPRO_BOT_INGEST_TOKEN="e535b28843c00d13b937bcc9c496f9f636b7a7dbc8999811104081b22f9bae6e"
 ```
 
 وفي بيئة بوت التليغرام ضع رابط TeacherPro ونفس التوكن بالضبط:
 
 ```env
-TEACHERPRO_API_URL="https://رابط-teacherpro-الخاص-بك"
-TEACHERPRO_BOT_INGEST_TOKEN="نفس_التوكن_الموجود_في_teacherpro"
+TEACHERPRO_API_URL="https://teacherpro-eight.vercel.app"
+TEACHERPRO_BOT_INGEST_TOKEN="e535b28843c00d13b937bcc9c496f9f636b7a7dbc8999811104081b22f9bae6e"
 ```
 
-داخل صفحة **التصحيح الإلكتروني → مستلمات البوت** سيظهر لك رابط `TEACHERPRO_API_URL` المقترح وحالة تفعيل التوكن، لكن قيمة التوكن نفسها لا تظهر داخل الواجهة لأسباب أمنية.
+داخل صفحة **التصحيح الإلكتروني → مستلمات البوت** سيظهر لك رابط `TEACHERPRO_API_URL` المقترح، وحالة تفعيل التوكن، ومربع جاهز لنسخ إعدادات ملف `.env` الخاص بالبوت.
+
+> مهم: ضع نفس قيمة `TEACHERPRO_BOT_INGEST_TOKEN` في Vercel داخل مشروع TeacherPro، وفي ملف `.env` داخل مشروع البوت. إذا اختلف حرف واحد لن يقبل TeacherPro التسليمات.
 
 ## شكل البيانات التي يرسلها البوت
 

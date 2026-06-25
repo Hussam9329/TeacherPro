@@ -7,6 +7,8 @@ import { requirePermission } from '@/lib/server-auth';
 import { isMissingDatabaseObjectError, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { ensureTelegramSubmissionSchema, resetTelegramSubmissionSchemaEnsureCache, telegramSubmissionSchemaMessage } from '@/lib/telegram-submission-schema';
 
+const READY_BOT_INGEST_TOKEN = 'e535b28843c00d13b937bcc9c496f9f636b7a7dbc8999811104081b22f9bae6e';
+
 type IncomingPage = {
   pageNumber?: unknown;
   fileId?: unknown;
@@ -28,6 +30,14 @@ function readEnv(name: string): string | undefined {
   return (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[name];
 }
 
+function readBotIngestToken(): string {
+  return (readEnv('TEACHERPRO_BOT_INGEST_TOKEN') || '').trim() || READY_BOT_INGEST_TOKEN;
+}
+
+function isUsingEmbeddedBotIngestToken(): boolean {
+  return !(readEnv('TEACHERPRO_BOT_INGEST_TOKEN') || '').trim();
+}
+
 function constantTimeEqual(left: string, right: string): boolean {
   if (!left || !right || left.length !== right.length) return false;
   let diff = 0;
@@ -36,7 +46,7 @@ function constantTimeEqual(left: string, right: string): boolean {
 }
 
 function requireBotToken(req: NextRequest): NextResponse | null {
-  const configuredToken = readEnv('TEACHERPRO_BOT_INGEST_TOKEN');
+  const configuredToken = readBotIngestToken();
   if (!configuredToken) {
     return NextResponse.json(
       { error: 'TEACHERPRO_BOT_INGEST_TOKEN غير مفعّل في إعدادات السيرفر.' },
@@ -69,7 +79,8 @@ function getBotIntegrationConfig(req: NextRequest) {
   return {
     apiUrl,
     ingestUrl: apiUrl ? `${apiUrl}/api/telegram-exam-submissions` : '/api/telegram-exam-submissions',
-    tokenConfigured: Boolean(readEnv('TEACHERPRO_BOT_INGEST_TOKEN')?.trim()),
+    tokenConfigured: Boolean(readBotIngestToken()),
+    usingEmbeddedToken: isUsingEmbeddedBotIngestToken(),
   };
 }
 

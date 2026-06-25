@@ -60,6 +60,7 @@ type BotIntegrationConfig = {
   apiUrl?: string;
   ingestUrl?: string;
   tokenConfigured?: boolean;
+  usingEmbeddedToken?: boolean;
 };
 
 type TelegramExamSubmission = {
@@ -93,6 +94,9 @@ type TelegramExamSubmission = {
     date?: string;
   };
 };
+
+const DEFAULT_TEACHERPRO_API_URL = "https://teacherpro-eight.vercel.app";
+const READY_BOT_INGEST_TOKEN = "e535b28843c00d13b937bcc9c496f9f636b7a7dbc8999811104081b22f9bae6e";
 
 function formatDateTime(value?: string | null) {
   if (!value) return "—";
@@ -238,9 +242,21 @@ export function ECorrectionView() {
   }, [botSubmissions]);
 
 
-  const displayedTeacherProApiUrl = botIntegrationConfig.apiUrl || (typeof window !== "undefined" ? window.location.origin : "");
+  const displayedTeacherProApiUrl = botIntegrationConfig.apiUrl || (typeof window !== "undefined" ? window.location.origin : DEFAULT_TEACHERPRO_API_URL);
   const displayedBotIngestUrl = botIntegrationConfig.ingestUrl || (displayedTeacherProApiUrl ? `${displayedTeacherProApiUrl}/api/telegram-exam-submissions` : "/api/telegram-exam-submissions");
   const botTokenConfigured = Boolean(botIntegrationConfig.tokenConfigured);
+  const botUsingEmbeddedToken = Boolean(botIntegrationConfig.usingEmbeddedToken);
+  const botEnvSnippet = `TEACHERPRO_API_URL=${displayedTeacherProApiUrl || DEFAULT_TEACHERPRO_API_URL}
+TEACHERPRO_BOT_INGEST_TOKEN=${READY_BOT_INGEST_TOKEN}`;
+
+  const copyBotEnvSnippet = async () => {
+    try {
+      await navigator.clipboard.writeText(botEnvSnippet);
+      toast.success("تم نسخ إعدادات البوت");
+    } catch {
+      toast.error("تعذر النسخ تلقائياً، انسخ القيم يدوياً");
+    }
+  };
 
   const completed = correctionSheets.filter((s) => s.status === "مكتمل").length;
   const pending = correctionSheets.filter((s) => s.status !== "مكتمل").length;
@@ -508,7 +524,7 @@ export function ECorrectionView() {
                   <p>هذه القيم هي التي يضعها بوت التليغرام في ملف البيئة حتى يرسل التسليمات إلى TeacherPro مباشرة.</p>
                 </div>
                 <Badge variant={botTokenConfigured ? "default" : "destructive"}>
-                  {botTokenConfigured ? "توكن الاستقبال مفعّل" : "توكن الاستقبال غير مفعّل"}
+                  {botTokenConfigured ? (botUsingEmbeddedToken ? "توكن جاهز مفعّل" : "توكن الاستقبال مفعّل") : "توكن الاستقبال غير مفعّل"}
                 </Badge>
               </div>
 
@@ -525,7 +541,7 @@ export function ECorrectionView() {
                   <code className="block break-all rounded-xl bg-muted px-3 py-2 text-xs text-foreground" dir="ltr">
                     {botTokenConfigured ? "ضع نفس التوكن الموجود في سيرفر TeacherPro داخل ملف البوت" : "غير مضبوط في سيرفر TeacherPro"}
                   </code>
-                  <p className="mt-2 text-xs">لا يتم عرض التوكن هنا حفاظاً على الأمان. لازم تكون نفس القيمة موجودة في السيرفر والبوت.</p>
+                  <p className="mt-2 text-xs">استخدم نفس القيمة الجاهزة أدناه في Vercel وملف البوت حتى يتطابق الاستقبال.</p>
                 </div>
               </div>
 
@@ -536,6 +552,25 @@ export function ECorrectionView() {
                 </code>
                 <p className="mt-2 text-xs">يرسل البوت طلب <span dir="ltr">POST</span> إلى هذا المسار مع <span dir="ltr">Authorization: Bearer TOKEN</span> أو <span dir="ltr">x-teacherpro-bot-token</span>.</p>
               </div>
+
+              <div className="rounded-2xl border border-primary/20 bg-background/80 p-3">
+                <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs font-semibold text-foreground">القيم الجاهزة لملف <span dir="ltr">.env</span> داخل البوت</p>
+                  <Button type="button" size="sm" variant="outline" onClick={copyBotEnvSnippet}>
+                    نسخ القيم
+                  </Button>
+                </div>
+                <pre className="overflow-x-auto rounded-xl bg-muted px-3 py-2 text-xs text-foreground" dir="ltr">
+{botEnvSnippet}
+                </pre>
+                <p className="mt-2 text-xs">ضع نفس التوكن أيضاً في Vercel داخل متغير <span dir="ltr">TEACHERPRO_BOT_INGEST_TOKEN</span> لمشروع TeacherPro، ثم أعد تشغيل البوت.</p>
+              </div>
+
+              {botUsingEmbeddedToken && (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                  التوكن الجاهز يعمل الآن كقيمة افتراضية داخل الكود، لكن الأفضل تثبيته أيضاً في Vercel حتى يبقى الربط واضحاً وقابل للتغيير مستقبلاً.
+                </div>
+              )}
 
               {!botTokenConfigured && (
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-destructive">
