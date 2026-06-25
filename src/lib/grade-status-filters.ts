@@ -52,28 +52,30 @@ export function gradeMatchesStatusFilter(
   const passMark = Number(exam.passMark || 0);
   const discountMark = Number(exam.discountMark || 0);
   const kind = String(classificationResult?.kind || "");
+  const isNoAccountingKind = ["grace", "before-registration", "excused"].includes(kind);
 
   switch (filter) {
     case "full-mark":
-      return score !== null && score === fullMark;
+      return !isNoAccountingKind && score !== null && score === fullMark;
     case "grace-period":
-      return kind === "grace";
+      return kind === "grace" || kind === "before-registration";
     case "absent":
-      return grade.status === "غائب";
+      return !isNoAccountingKind && grade.status === "غائب";
     case "discounted":
-      return score !== null && !exam.noDiscount && score <= discountMark;
+      return !isNoAccountingKind && score !== null && !exam.noDiscount && score <= discountMark;
     case "failed":
-      return score !== null && score < passMark;
+      return !isNoAccountingKind && score !== null && score < passMark;
     case "academic-accounting":
       return (
-        kind === "academic-accounting" ||
-        (score !== null &&
-          !exam.noDiscount &&
-          score > discountMark &&
-          score < passMark)
+        !isNoAccountingKind &&
+        (kind === "academic-accounting" ||
+          (score !== null &&
+            !exam.noDiscount &&
+            score > discountMark &&
+            score < passMark))
       );
     case "cheating":
-      return grade.status === "غش";
+      return !isNoAccountingKind && grade.status === "غش";
     case "has-grade":
       return score !== null;
     default:

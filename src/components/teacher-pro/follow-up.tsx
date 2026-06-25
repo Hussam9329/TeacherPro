@@ -147,6 +147,12 @@ const excludedCallGradeStatusFilters = new Set<GradeStatusFilter>(["grace-period
 const callGradeStatusFilterOptions = gradeStatusFilterOptions.filter(
   (option) => !excludedCallGradeStatusFilters.has(option),
 );
+const nonCallableGradeKinds = new Set([
+  "grace",
+  "before-registration",
+  "excused",
+  "missing",
+]);
 const callGradeSortLabels: Record<CallGradeSort, string> = {
   latest: "آخر درجة أولاً",
   exam: "حسب الامتحان",
@@ -582,9 +588,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       if (!student || !exam) return;
       const cls = classification(grade, exam, student);
 
-      // طلاب فترة السماح يبقون محفوظين بسجل الدرجات كغائبين/درجات،
-      // لكن لا يدخلون قائمة المكالمات لأنهم غير مطالبين بالمتابعة الهاتفية خلال السماح.
-      if (cls.kind === "grace") return;
+      // الحالات غير المحتسبة أكاديمياً تبقى محفوظة في سجل الدرجات،
+      // لكنها لا تدخل قائمة المكالمات حتى لا يتم الاتصال بطالب داخل السماح أو خارج نطاق الامتحان.
+      if (nonCallableGradeKinds.has(cls.kind)) return;
 
       const info = gradeCallInfo(grade, exam);
       const item: CallGradeItem = {
@@ -609,6 +615,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         const relevantItems = sortedItems.filter((item) => {
           if (callExamId && item.exam.id !== callExamId) return false;
           const cls = classification(item.grade, item.exam, student);
+          if (nonCallableGradeKinds.has(cls.kind)) return false;
           if (
             !gradeMatchesStatusFilter(
               callGradeStatusFilter,

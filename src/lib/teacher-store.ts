@@ -1924,8 +1924,8 @@ export const useTeacherStore = create<TeacherState>()(
       classification: (grade, exam, student) => {
         if (student && get().studentLeaves.some((leave) => studentLeaveAppliesToExam(leave, student.id, exam))) return { text: 'مجاز', type: 'info', kind: 'excused' };
         if (!grade || !isGradeEntered(grade, exam)) return { text: 'غير مسجل', type: 'neutral', kind: 'missing' };
-        if (student && !isExamOnOrAfterStudentRegistration(student, exam)) return { text: 'قبل التسجيل', type: 'neutral', kind: 'before-registration' };
         if (student && isExamWithinStudentGracePeriod(student, exam)) return { text: 'ضمن السماح', type: 'info', kind: 'grace' };
+        if (student && !isExamOnOrAfterStudentRegistration(student, exam)) return { text: 'غير محتسب', type: 'info', kind: 'grace' };
         if (grade.status === 'غش') return { text: 'غش', type: 'danger', kind: 'cheat' };
         if (exam.noDiscount) {
           if (grade.status === 'درجة' && Number(grade.score || 0) >= exam.passMark) return { text: 'ناجح', type: 'ok', kind: 'pass' };

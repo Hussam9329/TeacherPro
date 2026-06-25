@@ -40,7 +40,6 @@ import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import {
   formatGradeScore,
-  isAllMainSitesSelection,
   isExamOnOrAfterStudentRegistration,
   isGradeEntered,
   splitSelection,
@@ -294,15 +293,11 @@ export function GradeRecordsView() {
     const selectedMainSites = selectedExam
       ? splitSelection(selectedExam.mainSite)
       : [];
-    const courseWideExam = isAllMainSitesSelection(selectedMainSites);
 
     const scopedStudents = selectedExam
       ? students.filter((student) => {
           if (!selectedExam.courseIds.includes(student.courseId)) return false;
-          if (
-            !courseWideExam &&
-            !isExamOnOrAfterStudentRegistration(student, selectedExam)
-          )
+          if (!isExamOnOrAfterStudentRegistration(student, selectedExam))
             return false;
           if (!studentMatchesExamMainSites(student, selectedMainSites))
             return false;
