@@ -56,6 +56,12 @@ type TelegramSubmissionPage = {
   downloadedAt?: string;
 };
 
+type BotIntegrationConfig = {
+  apiUrl?: string;
+  ingestUrl?: string;
+  tokenConfigured?: boolean;
+};
+
 type TelegramExamSubmission = {
   id: string;
   studentId: string;
@@ -139,6 +145,7 @@ export function ECorrectionView() {
   const [botFilterExamId, setBotFilterExamId] = useState("");
   const [botFilterStatus, setBotFilterStatus] = useState("");
   const [botSchemaWarning, setBotSchemaWarning] = useState("");
+  const [botIntegrationConfig, setBotIntegrationConfig] = useState<BotIntegrationConfig>({});
   const { locked: isAddingSheet, runLocked: runAddSheetLocked } =
     useActionLock();
   const { locked: isCompletingSheet, runLocked: runCompleteSheetLocked } =
@@ -153,6 +160,7 @@ export function ECorrectionView() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || "تعذر تحميل مستلمات البوت");
       setBotSchemaWarning(payload?.migrationRequired ? String(payload?.message || "جدول مستلمات البوت غير جاهز بعد.") : "");
+      setBotIntegrationConfig(payload?.config && typeof payload.config === "object" ? payload.config : {});
       setBotSubmissions(Array.isArray(payload.submissions) ? payload.submissions : []);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "تعذر تحميل مستلمات البوت");
@@ -228,6 +236,11 @@ export function ECorrectionView() {
       totalPages,
     };
   }, [botSubmissions]);
+
+
+  const displayedTeacherProApiUrl = botIntegrationConfig.apiUrl || (typeof window !== "undefined" ? window.location.origin : "");
+  const displayedBotIngestUrl = botIntegrationConfig.ingestUrl || (displayedTeacherProApiUrl ? `${displayedTeacherProApiUrl}/api/telegram-exam-submissions` : "/api/telegram-exam-submissions");
+  const botTokenConfigured = Boolean(botIntegrationConfig.tokenConfigured);
 
   const completed = correctionSheets.filter((s) => s.status === "مكتمل").length;
   const pending = correctionSheets.filter((s) => s.status !== "مكتمل").length;
@@ -488,10 +501,47 @@ export function ECorrectionView() {
           </div>
 
           <Card className="border-dashed bg-muted/30">
-            <CardContent className="p-4 space-y-2 text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">ربط البوت المباشر</p>
-              <p>يستقبل TeacherPro تسليمات البوت عبر <code className="rounded bg-background px-1">POST /api/telegram-exam-submissions</code> مع توكن <code className="rounded bg-background px-1">TEACHERPRO_BOT_INGEST_TOKEN</code>.</p>
-              <p>البيانات المتوقعة: <code className="rounded bg-background px-1">studentId</code>، <code className="rounded bg-background px-1">examId</code>، بيانات التلكرام، وقائمة <code className="rounded bg-background px-1">pages</code> التي تحتوي روابط أو dataUrl أو fileId أو localPath.</p>
+            <CardContent className="p-4 space-y-4 text-sm text-muted-foreground">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1">
+                  <p className="font-medium text-foreground">إعدادات ربط البوت المباشر</p>
+                  <p>هذه القيم هي التي يضعها بوت التليغرام في ملف البيئة حتى يرسل التسليمات إلى TeacherPro مباشرة.</p>
+                </div>
+                <Badge variant={botTokenConfigured ? "default" : "destructive"}>
+                  {botTokenConfigured ? "توكن الاستقبال مفعّل" : "توكن الاستقبال غير مفعّل"}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div className="rounded-2xl border bg-background/80 p-3">
+                  <p className="mb-1 text-xs font-semibold text-foreground">TEACHERPRO_API_URL</p>
+                  <code className="block break-all rounded-xl bg-muted px-3 py-2 text-xs text-foreground" dir="ltr">
+                    {displayedTeacherProApiUrl || "ضع رابط سيرفر TeacherPro هنا"}
+                  </code>
+                  <p className="mt-2 text-xs">هذا هو رابط TeacherPro الأساسي. محلياً يكون غالباً <span dir="ltr">http://localhost:3000</span>.</p>
+                </div>
+                <div className="rounded-2xl border bg-background/80 p-3">
+                  <p className="mb-1 text-xs font-semibold text-foreground">TEACHERPRO_BOT_INGEST_TOKEN</p>
+                  <code className="block break-all rounded-xl bg-muted px-3 py-2 text-xs text-foreground" dir="ltr">
+                    {botTokenConfigured ? "ضع نفس التوكن الموجود في سيرفر TeacherPro داخل ملف البوت" : "غير مضبوط في سيرفر TeacherPro"}
+                  </code>
+                  <p className="mt-2 text-xs">لا يتم عرض التوكن هنا حفاظاً على الأمان. لازم تكون نفس القيمة موجودة في السيرفر والبوت.</p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border bg-background/80 p-3">
+                <p className="mb-1 text-xs font-semibold text-foreground">Endpoint الاستقبال النهائي</p>
+                <code className="block break-all rounded-xl bg-muted px-3 py-2 text-xs text-foreground" dir="ltr">
+                  {displayedBotIngestUrl}
+                </code>
+                <p className="mt-2 text-xs">يرسل البوت طلب <span dir="ltr">POST</span> إلى هذا المسار مع <span dir="ltr">Authorization: Bearer TOKEN</span> أو <span dir="ltr">x-teacherpro-bot-token</span>.</p>
+              </div>
+
+              {!botTokenConfigured && (
+                <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-destructive">
+                  البوت لن يستطيع إرسال أوراق التصحيح قبل إضافة <span dir="ltr">TEACHERPRO_BOT_INGEST_TOKEN</span> إلى إعدادات بيئة TeacherPro وإعادة تشغيل السيرفر.
+                </div>
+              )}
             </CardContent>
           </Card>
 

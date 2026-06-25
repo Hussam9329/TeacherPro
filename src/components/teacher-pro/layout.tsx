@@ -389,11 +389,16 @@ export function TeacherProLayout() {
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ message?: string }>).detail;
-      toast.error(detail?.message || "تعذر حفظ التغيير في الخادم وتم التراجع محلياً");
+      const message = detail?.message || "تعذر حفظ التغيير في الخادم وتم الاحتفاظ به محلياً";
+      if (currentSection === "grade-entry") {
+        window.dispatchEvent(new CustomEvent("teacherpro:grade-entry-sync-error", { detail: { message } }));
+        return;
+      }
+      toast.error(message);
     };
     window.addEventListener("teacherpro:server-sync-error", handler);
     return () => window.removeEventListener("teacherpro:server-sync-error", handler);
-  }, []);
+  }, [currentSection]);
 
   const [authChecked, setAuthChecked] = useState(false);
   useEffect(() => {

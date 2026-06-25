@@ -44,6 +44,12 @@ type DraftGrade = {
 
 const statusOptions: DraftGrade["status"][] = ["درجة", "غائب", "غش"];
 
+type GradeEntryNotice = {
+  type: "success" | "error" | "info";
+  message: string;
+  at: number;
+};
+
 const GradeEntrySearchInput = React.memo(function GradeEntrySearchInput({
   value,
   onCommit,
@@ -122,12 +128,17 @@ export function GradeEntryView() {
   const [drafts, setDrafts] = useState<Record<string, DraftGrade>>({});
   const [savingRows, setSavingRows] = useState<Record<string, boolean>>({});
   const [savedRows, setSavedRows] = useState<Record<string, string>>({});
+  const [gradeEntryNotice, setGradeEntryNotice] = useState<GradeEntryNotice | null>(null);
   const [editableRows, setEditableRows] = useState<Record<string, boolean>>({});
   const [reactivationWarningsAccepted, setReactivationWarningsAccepted] =
     useState<Record<string, boolean>>({});
   const [clockTick, setClockTick] = useState(0);
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const { locked: clearingAbsentGrades, runLocked: runClearAbsentGradesLocked } = useActionLock();
+
+  const showGradeEntryNotice = useCallback((type: GradeEntryNotice["type"], message: string) => {
+    setGradeEntryNotice({ type, message, at: Date.now() });
+  }, []);
 
   const locationFilterOptions = useMemo(
     () => getStudentLocationFilterOptions(students),
@@ -159,6 +170,19 @@ export function GradeEntryView() {
     );
     return () => window.clearInterval(timer);
   }, []);
+
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      showGradeEntryNotice(
+        "error",
+        detail?.message || "تعذر مزامنة التغيير الآن، وتم الاحتفاظ به محلياً للمحاولة لاحقاً.",
+      );
+    };
+    window.addEventListener("teacherpro:grade-entry-sync-error", handler);
+    return () => window.removeEventListener("teacherpro:grade-entry-sync-error", handler);
+  }, [showGradeEntryNotice]);
 
   const selectedExam = exams.find((e) => e.id === selectedExamId);
   const activeExams = useMemo(
@@ -553,13 +577,15 @@ export function GradeEntryView() {
     if (!selectedExam) return;
     const leave = getStudentLeaveForSelectedExam(studentId);
     if (leave) {
-      toast.error(
+      showGradeEntryNotice(
+        "error",
         `الطالب مجاز لهذا الامتحان ولا يمكن إدخال درجة له${leave.reason ? `: ${leave.reason}` : ""}`,
       );
       return;
     }
     if (!canEditGradeForStudent(studentId)) {
-      toast.error(
+      showGradeEntryNotice(
+        "error",
         "هذا الطالب مفصول ولا يمكن تعديل درجته إلا داخل الامتحان الذي سبب الفصل",
       );
       return;
@@ -574,7 +600,8 @@ export function GradeEntryView() {
         !normalizedScore ||
         !isScoreInsideExamRange(normalizedScore, selectedExam.fullMark)
       ) {
-        toast.error(
+        showGradeEntryNotice(
+          "error",
           `لا تُعد الدرجة مدخلة إلا إذا كانت رقماً بين 0 و ${selectedExam.fullMark}`,
         );
         return;
@@ -599,9 +626,9 @@ export function GradeEntryView() {
     setEditableRows((prev) => ({ ...prev, [studentId]: false }));
     setSavedRows((prev) => ({
       ...prev,
-      [studentId]: `تم حفظها ${new Date().toLocaleTimeString("ar-IQ", { hour: "2-digit", minute: "2-digit" })}`,
+      [studentId]: `تم حفظها ${new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`,
     }));
-    if (!options.silent) toast.success("تم حفظ الدرجة وستتم مزامنتها تلقائياً");
+    if (!options.silent) showGradeEntryNotice("success", "تم حفظ الدرجة محلياً وستتم مزامنتها تلقائياً");
   };
 
   const autoSaveGrade = (studentId: string, draftOverride?: DraftGrade) => {
@@ -975,6 +1002,31 @@ export function GradeEntryView() {
             )}
           </div>
 
+          {gradeEntryNotice && (
+            <div
+              className={`mt-4 rounded-2xl border p-3 text-sm ${
+                gradeEntryNotice.type === "success"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100"
+                  : gradeEntryNotice.type === "error"
+                    ? "border-destructive/30 bg-destructive/10 text-destructive"
+                    : "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100"
+              }`}
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <span>{gradeEntryNotice.message}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 self-start px-2 sm:self-auto"
+                  onClick={() => setGradeEntryNotice(null)}
+                >
+                  إخفاء
+                </Button>
+              </div>
+            </div>
+          )}
+
           {missingChapterCourses.length > 0 && (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
               الدورات التالية غير مربوطة بفصل نشط ولن تظهر ضمن إدخال الدرجات:{" "}
@@ -1179,7 +1231,8 @@ export function GradeEntryView() {
                           if (
                             nextScore !== toLatinDigits(e.target.value).trim()
                           ) {
-                            toast.error(
+                            showGradeEntryNotice(
+                              "error",
                               `درجة الطالب يجب أن تكون بين 0 و ${selectedExam.fullMark}`,
                             );
                           }

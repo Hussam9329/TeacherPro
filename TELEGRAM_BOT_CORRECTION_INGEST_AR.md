@@ -14,13 +14,22 @@ Content-Type: application/json
 x-teacherpro-bot-token: <TEACHERPRO_BOT_INGEST_TOKEN>
 ```
 
-## المتغير المطلوب
+## المتغيرات المطلوبة
 
-أضف في بيئة TeacherPro:
+في بيئة TeacherPro أضف توكن الاستقبال:
 
 ```env
 TEACHERPRO_BOT_INGEST_TOKEN="ضع_توكن_طويل_وعشوائي"
 ```
+
+وفي بيئة بوت التليغرام ضع رابط TeacherPro ونفس التوكن بالضبط:
+
+```env
+TEACHERPRO_API_URL="https://رابط-teacherpro-الخاص-بك"
+TEACHERPRO_BOT_INGEST_TOKEN="نفس_التوكن_الموجود_في_teacherpro"
+```
+
+داخل صفحة **التصحيح الإلكتروني → مستلمات البوت** سيظهر لك رابط `TEACHERPRO_API_URL` المقترح وحالة تفعيل التوكن، لكن قيمة التوكن نفسها لا تظهر داخل الواجهة لأسباب أمنية.
 
 ## شكل البيانات التي يرسلها البوت
 

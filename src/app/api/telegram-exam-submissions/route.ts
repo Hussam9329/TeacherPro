@@ -55,6 +55,24 @@ function requireBotToken(req: NextRequest): NextResponse | null {
   return null;
 }
 
+function resolveTeacherProApiUrl(req: NextRequest): string {
+  const explicitUrl = readEnv('TEACHERPRO_API_URL') || readEnv('NEXT_PUBLIC_TEACHERPRO_API_URL');
+  if (explicitUrl?.trim()) return explicitUrl.trim().replace(/\/$/, '');
+
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || '';
+  const protocol = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+  return host ? `${protocol}://${host}`.replace(/\/$/, '') : '';
+}
+
+function getBotIntegrationConfig(req: NextRequest) {
+  const apiUrl = resolveTeacherProApiUrl(req);
+  return {
+    apiUrl,
+    ingestUrl: apiUrl ? `${apiUrl}/api/telegram-exam-submissions` : '/api/telegram-exam-submissions',
+    tokenConfigured: Boolean(readEnv('TEACHERPRO_BOT_INGEST_TOKEN')?.trim()),
+  };
+}
+
 function textValue(value: unknown, max = 2000): string {
   return String(value ?? '').trim().slice(0, max);
 }
@@ -145,6 +163,7 @@ export async function GET(req: NextRequest) {
         submissions: [],
         migrationRequired: true,
         message: telegramSubmissionSchemaMessage,
+        config: getBotIntegrationConfig(req),
       });
     }
 
@@ -168,6 +187,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       submissions: submissions.map((item) => normalizeSubmission(item as unknown as Record<string, unknown>)),
+      config: getBotIntegrationConfig(req),
     });
   } catch (error) {
     if (isMissingDatabaseObjectError(error)) {
@@ -176,6 +196,7 @@ export async function GET(req: NextRequest) {
         submissions: [],
         migrationRequired: true,
         message: telegramSubmissionSchemaMessage,
+        config: getBotIntegrationConfig(req),
       });
     }
     return routeErrorResponse(error, 'تعذر تحميل مستلمات البوت حالياً. تأكد من تشغيل migration الخاصة بها.');
