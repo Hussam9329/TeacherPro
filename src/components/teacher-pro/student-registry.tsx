@@ -924,6 +924,7 @@ export function StudentRegistryView() {
                   <div><span className="text-xs text-muted-foreground">الموقع</span><p className="text-xs font-medium">{`${student.locationScope || student.mainSite || "-"} - ${student.subSite || "-"}`}</p></div>
                   <div><span className="text-xs text-muted-foreground">الفرص</span><p className="text-xs font-medium">{activeChapterForCourse(student.courseId) ? `${student.opportunities} / ${student.baseOpportunities}` : "0 / 0 - لم يتم اختيار الفصل"}</p></div>
                   <div><span className="text-xs text-muted-foreground">السماح</span><p className="text-xs font-medium">{student.accountingGraceDays ?? 0} يوم</p></div>
+                  <div><span className="text-xs text-muted-foreground">تاريخ الإضافة</span><p className="text-xs font-medium">{formatAppDate(student.createdAt, student.createdAt || "-")}</p></div>
                   <div><span className="text-xs text-muted-foreground">تليكرام</span><p className="text-xs">{student.telegram ? <ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink> : "-"}</p></div>
                   <div><span className="text-xs text-muted-foreground">رقم الطالب</span><p className="text-xs"><ContactLink href={whatsappLink(student.phone)}>{student.phone}</ContactLink></p></div>
                   <div><span className="text-xs text-muted-foreground">ولي الأمر</span><p className="text-xs"><ContactLink href={whatsappLink(student.parentPhone)}>{student.parentPhone}</ContactLink></p></div>

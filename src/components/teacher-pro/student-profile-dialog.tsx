@@ -329,6 +329,7 @@ export function StudentProfileDialog({
                 <Badge variant="outline">{student.code}</Badge>
                 <Badge variant="secondary" className="max-w-full truncate">{courseName(student.courseId)}</Badge>
                 <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary font-bold">فرص: {opportunityText}</Badge>
+                <Badge variant="outline" className="border-sky-300/60 bg-sky-500/10 font-bold text-sky-700 dark:text-sky-300">تاريخ الإضافة: {formatAppDate(student.createdAt, student.createdAt || "-")}</Badge>
               </div>
               <h2 id="student-profile-title" className="break-words text-2xl font-black sm:text-3xl">{student.name}</h2>
               <p className="break-words text-xs leading-6 text-muted-foreground sm:text-sm">
@@ -384,7 +385,7 @@ export function StudentProfileDialog({
                       <InfoBox label="الكورس" value={student.courseTerm || "—"} />
                       <InfoBox label="الموقع الكامل" value={`${student.locationScope || student.mainSite || "-"} - ${student.subSite || "-"}`} />
                       <InfoBox label="الفصل النشط" value={activeChapter?.name || "لم يتم اختيار الفصل لهم بعد"} />
-                      <InfoBox label="تاريخ التسجيل" value={formatAppDate(student.createdAt)} />
+                      <InfoBox label="تاريخ إضافة الطالب" value={formatAppDate(student.createdAt, student.createdAt || "—")} />
                     </div>
                   </div>
 
