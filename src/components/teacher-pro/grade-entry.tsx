@@ -140,6 +140,17 @@ export function GradeEntryView() {
     setGradeEntryNotice({ type, message, at: Date.now() });
   }, []);
 
+  useEffect(() => {
+    if (!gradeEntryNotice) return;
+    const timeout = window.setTimeout(
+      () => setGradeEntryNotice((current) =>
+        current?.at === gradeEntryNotice.at ? null : current,
+      ),
+      gradeEntryNotice.type === "success" ? 2200 : 5000,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [gradeEntryNotice]);
+
   const locationFilterOptions = useMemo(
     () => getStudentLocationFilterOptions(students),
     [students],
@@ -817,6 +828,34 @@ export function GradeEntryView() {
 
   return (
     <div className="space-y-6">
+      {gradeEntryNotice && (
+        <div className="pointer-events-none fixed right-4 top-4 z-[100] w-[calc(100vw-2rem)] max-w-sm print:hidden sm:right-6 sm:top-6">
+          <div
+            role={gradeEntryNotice.type === "error" ? "alert" : "status"}
+            className={`pointer-events-auto rounded-2xl border p-3 text-sm shadow-2xl backdrop-blur-md ${
+              gradeEntryNotice.type === "success"
+                ? "border-emerald-200 bg-emerald-50/95 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/90 dark:text-emerald-50"
+                : gradeEntryNotice.type === "error"
+                  ? "border-destructive/40 bg-destructive/10 text-destructive shadow-destructive/10 dark:bg-destructive/20"
+                  : "border-sky-200 bg-sky-50/95 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/90 dark:text-sky-50"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <span className="leading-6">{gradeEntryNotice.message}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 shrink-0 px-2"
+                onClick={() => setGradeEntryNotice(null)}
+              >
+                إخفاء
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>تسجيل الدرجات</CardTitle>
@@ -1001,31 +1040,6 @@ export function GradeEntryView() {
               </div>
             )}
           </div>
-
-          {gradeEntryNotice && (
-            <div
-              className={`mt-4 rounded-2xl border p-3 text-sm ${
-                gradeEntryNotice.type === "success"
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100"
-                  : gradeEntryNotice.type === "error"
-                    ? "border-destructive/30 bg-destructive/10 text-destructive"
-                    : "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100"
-              }`}
-            >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <span>{gradeEntryNotice.message}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 self-start px-2 sm:self-auto"
-                  onClick={() => setGradeEntryNotice(null)}
-                >
-                  إخفاء
-                </Button>
-              </div>
-            </div>
-          )}
 
           {missingChapterCourses.length > 0 && (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
