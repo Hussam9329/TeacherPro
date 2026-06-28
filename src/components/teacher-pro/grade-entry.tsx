@@ -50,6 +50,38 @@ type GradeEntryNotice = {
   at: number;
 };
 
+const GRADE_ENTRY_NOTES_STORAGE_KEY = "teacherpro-grade-entry-notes-v1";
+
+function readStoredGradeEntryNotes(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(GRADE_ENTRY_NOTES_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter(([key, value]) => typeof key === "string" && typeof value === "string")
+        .map(([key, value]) => [key, value as string]),
+    );
+  } catch (error) {
+    console.warn("[GradeEntry] Failed to read local entry notes:", error);
+    return {};
+  }
+}
+
+function writeStoredGradeEntryNotes(notes: Record<string, string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    const compactNotes = Object.fromEntries(
+      Object.entries(notes).filter(([, value]) => value.trim().length > 0),
+    );
+    window.localStorage.setItem(GRADE_ENTRY_NOTES_STORAGE_KEY, JSON.stringify(compactNotes));
+  } catch (error) {
+    console.warn("[GradeEntry] Failed to write local entry notes:", error);
+  }
+}
+
 const GradeEntrySearchInput = React.memo(function GradeEntrySearchInput({
   value,
   onCommit,
@@ -129,12 +161,21 @@ export function GradeEntryView() {
   const [savingRows, setSavingRows] = useState<Record<string, boolean>>({});
   const [savedRows, setSavedRows] = useState<Record<string, string>>({});
   const [gradeEntryNotice, setGradeEntryNotice] = useState<GradeEntryNotice | null>(null);
+  const [entryNotesByExam, setEntryNotesByExam] = useState<Record<string, string>>({});
   const [editableRows, setEditableRows] = useState<Record<string, boolean>>({});
   const [reactivationWarningsAccepted, setReactivationWarningsAccepted] =
     useState<Record<string, boolean>>({});
   const [clockTick, setClockTick] = useState(0);
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const { locked: clearingAbsentGrades, runLocked: runClearAbsentGradesLocked } = useActionLock();
+
+  useEffect(() => {
+    setEntryNotesByExam(readStoredGradeEntryNotes());
+  }, []);
+
+  useEffect(() => {
+    writeStoredGradeEntryNotes(entryNotesByExam);
+  }, [entryNotesByExam]);
 
   const showGradeEntryNotice = useCallback((type: GradeEntryNotice["type"], message: string) => {
     setGradeEntryNotice({ type, message, at: Date.now() });
@@ -196,6 +237,7 @@ export function GradeEntryView() {
   }, [showGradeEntryNotice]);
 
   const selectedExam = exams.find((e) => e.id === selectedExamId);
+  const selectedExamEntryNotes = selectedExamId ? entryNotesByExam[selectedExamId] || "" : "";
   const activeExams = useMemo(
     () => exams.filter((e) => isExamAvailableForEntry(e)),
     [exams, clockTick],
@@ -826,6 +868,20 @@ export function GradeEntryView() {
     setReactivationWarningsAccepted({});
   };
 
+  const updateSelectedExamEntryNotes = (value: string) => {
+    if (!selectedExamId) return;
+    setEntryNotesByExam((current) => ({ ...current, [selectedExamId]: value }));
+  };
+
+  const clearSelectedExamEntryNotes = () => {
+    if (!selectedExamId) return;
+    setEntryNotesByExam((current) => {
+      const next = { ...current };
+      delete next[selectedExamId];
+      return next;
+    });
+  };
+
   return (
     <div className="space-y-6">
       {gradeEntryNotice && (
@@ -1045,6 +1101,43 @@ export function GradeEntryView() {
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
               الدورات التالية غير مربوطة بفصل نشط ولن تظهر ضمن إدخال الدرجات:{" "}
               {missingChapterCourses.join("، ")}
+            </div>
+          )}
+
+          {selectedExam && (
+            <div className="mt-4 rounded-2xl border bg-muted/25 p-4">
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <Label htmlFor="grade-entry-general-notes" className="text-sm font-black">
+                    ملاحظات مدخل الدرجات
+                  </Label>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    اكتب أي ملاحظات سريعة تخص هذا الامتحان، مثل اسم طالب ودرجته أو حالة طالب غير موجود. هذه الملاحظات لا تدخل ضمن الدرجات ولا تغيّر بيانات الطلاب.
+                  </p>
+                </div>
+                {selectedExamEntryNotes.trim() && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 shrink-0 text-xs"
+                    onClick={clearSelectedExamEntryNotes}
+                  >
+                    مسح الملاحظات
+                  </Button>
+                )}
+              </div>
+              <textarea
+                id="grade-entry-general-notes"
+                value={selectedExamEntryNotes}
+                onChange={(event) => updateSelectedExamEntryNotes(event.target.value)}
+                placeholder={`مثال: طالب اسمه أحمد علي درجته 42 وغير موجود ضمن القائمة / صورة ورقة غير واضحة / ملاحظة خاصة بامتحان ${selectedExam.name}`}
+                className="min-h-[140px] w-full resize-y rounded-2xl border bg-background px-4 py-3 text-sm leading-6 outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/25"
+              />
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>محفوظة محلياً لهذا الامتحان فقط حتى لو تم تحديث الصفحة.</span>
+                <span>{selectedExamEntryNotes.length} حرف</span>
+              </div>
             </div>
           )}
         </CardContent>
