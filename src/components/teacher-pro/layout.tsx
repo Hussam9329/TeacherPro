@@ -51,6 +51,12 @@ const menuItems: {
     icon: LayoutDashboard,
   },
   {
+    id: "missing-students-notes",
+    title: "الطلاب الغير موجودين",
+    sub: "ملاحظات الإدخال",
+    icon: UserX,
+  },
+  {
     id: "courses",
     title: "الدورات",
     sub: "صنع وإدارة",
@@ -102,7 +108,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
   { title: "الطلاب", itemIds: ["student-register", "student-bulk-import", "student-registry", "dismissed-students"] },
   {
     title: "الامتحانات والدرجات",
-    itemIds: ["exam-new", "grade-entry", "grade-bulk-import", "exam-records", "grade-records"],
+    itemIds: ["exam-new", "grade-entry", "grade-bulk-import", "exam-records", "grade-records", "missing-students-notes"],
   },
   { title: "المتابعة", itemIds: ["follow-up-calls", "follow-up-leaves", "follow-up-pledges"] },
   { title: "الإدارة", itemIds: ["accounts", "logs", "admin-log-reset"] },
@@ -143,6 +149,7 @@ import { DismissedStudentsView } from "./dismissed-students";
 import { ExamNewView } from "./exam-new";
 import { GradeEntryView } from "./grade-entry";
 import { GradeBulkImportView } from "./grade-bulk-import";
+import { MissingStudentsNotesView } from "./missing-students-notes";
 import { ExamRecordsView } from "./exam-records";
 import { GradeRecordsView } from "./grade-records";
 import { OpportunitiesView } from "./opportunities";
@@ -164,6 +171,7 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "exam-new": ExamNewView,
   "grade-entry": GradeEntryView,
   "grade-bulk-import": GradeBulkImportView,
+  "missing-students-notes": MissingStudentsNotesView,
   "exam-records": ExamRecordsView,
   "grade-records": GradeRecordsView,
   opportunities: OpportunitiesView,

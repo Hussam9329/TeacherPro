@@ -17,6 +17,11 @@ import {
 import { toast } from "sonner";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
+import {
+  deleteGradeEntryMissingNote,
+  findGradeEntryMissingNote,
+  upsertGradeEntryMissingNote,
+} from "@/lib/grade-entry-notes";
 import { useActionLock } from "@/hooks/use-action-lock";
 import {
   STUDENT_FILTER_COURSE_PROGRAMS,
@@ -162,11 +167,13 @@ export function GradeEntryView() {
   const [savedRows, setSavedRows] = useState<Record<string, string>>({});
   const [gradeEntryNotice, setGradeEntryNotice] = useState<GradeEntryNotice | null>(null);
   const [entryNotesByExam, setEntryNotesByExam] = useState<Record<string, string>>({});
+  const [missingStudentsNote, setMissingStudentsNote] = useState("");
   const [editableRows, setEditableRows] = useState<Record<string, boolean>>({});
   const [reactivationWarningsAccepted, setReactivationWarningsAccepted] =
     useState<Record<string, boolean>>({});
   const [clockTick, setClockTick] = useState(0);
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const missingStudentsNoteLoadedRef = useRef("");
   const { locked: clearingAbsentGrades, runLocked: runClearAbsentGradesLocked } = useActionLock();
 
   useEffect(() => {
@@ -238,6 +245,30 @@ export function GradeEntryView() {
 
   const selectedExam = exams.find((e) => e.id === selectedExamId);
   const selectedExamEntryNotes = selectedExamId ? entryNotesByExam[selectedExamId] || "" : "";
+
+  useEffect(() => {
+    const savedNote = selectedExam ? findGradeEntryMissingNote(selectedExam.id)?.text || "" : "";
+    missingStudentsNoteLoadedRef.current = savedNote;
+    setMissingStudentsNote(savedNote);
+  }, [selectedExam?.id]);
+
+  useEffect(() => {
+    if (!selectedExam) return;
+    const timer = window.setTimeout(() => {
+      const normalizedCurrent = missingStudentsNote.trim();
+      const normalizedLoaded = missingStudentsNoteLoadedRef.current.trim();
+      if (normalizedCurrent === normalizedLoaded) return;
+
+      upsertGradeEntryMissingNote({
+        examId: selectedExam.id,
+        examName: selectedExam.name,
+        examDate: selectedExam.date,
+        text: missingStudentsNote,
+      });
+      missingStudentsNoteLoadedRef.current = normalizedCurrent;
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [missingStudentsNote, selectedExam]);
   const activeExams = useMemo(
     () => exams.filter((e) => isExamAvailableForEntry(e)),
     [exams, clockTick],
@@ -1142,6 +1173,49 @@ export function GradeEntryView() {
           )}
         </CardContent>
       </Card>
+
+      {selectedExam && (
+        <Card className="border-amber-200/70 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20">
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-base">ملاحظات مدخل الدرجات</CardTitle>
+                <p className="mt-1 text-xs leading-6 text-muted-foreground">
+                  اكتب هنا أسماء أو درجات طلاب غير موجودين أثناء إدخال درجات هذا الامتحان.
+                  ستظهر كل الملاحظات لاحقاً من زر الطلاب الغير موجودين في لوحة النظام.
+                </p>
+              </div>
+              {missingStudentsNote.trim() && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    deleteGradeEntryMissingNote(selectedExam.id);
+                    missingStudentsNoteLoadedRef.current = "";
+                    setMissingStudentsNote("");
+                  }}
+                >
+                  مسح الملاحظات
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <textarea
+              id="grade-entry-missing-students-note"
+              value={missingStudentsNote}
+              onChange={(event) => setMissingStudentsNote(event.target.value)}
+              placeholder="مثال: الطالب أحمد علي غير موجود بالقائمة، درجته 84. أو: طالبة باسم زينب غير مضافة لهذا الامتحان..."
+              className="min-h-[120px] w-full resize-y rounded-2xl border border-input bg-background px-4 py-3 text-sm leading-7 shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>يتم الحفظ تلقائياً لكل امتحان على حدة.</span>
+              {missingStudentsNote.trim() && <span>{missingStudentsNote.trim().length} حرف</span>}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {selectedExam && (
         <Card>

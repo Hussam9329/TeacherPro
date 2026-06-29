@@ -231,6 +231,7 @@ export interface LeaderboardSettings {
 
 export type SectionId =
   | 'dashboard'
+  | 'missing-students-notes'
   | 'courses'
   | 'chapters'
   | 'student-register'
@@ -311,6 +312,7 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
 
 export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'dashboard': 'system.dashboard',
+  'missing-students-notes': 'grades.view',
   'courses': 'courses.add',
   'chapters': 'chapters.view',
   'student-register': 'students.add',
