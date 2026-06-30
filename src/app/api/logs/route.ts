@@ -2,7 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth, requirePermission } from '@/lib/server-auth';
+import { getAuthPrincipal, requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
@@ -13,19 +13,37 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ logs });
 }
 
+/**
+ * Audit logs are SERVER-ONLY. The client may send only module/action/details;
+ * userId/userName are always taken from the authenticated principal so a
+ * logged-in user cannot forge entries attributed to someone else.
+ *
+ * The id field is also ignored — the server generates it.
+ */
 export async function POST(req: NextRequest) {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const principal = await getAuthPrincipal(req);
+  if (!principal) {
+    return NextResponse.json({ error: 'يجب تسجيل الدخول أولاً.' }, { status: 401 });
+  }
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
+  const module = String(body?.module ?? '').trim().slice(0, 120);
+  const action = String(body?.action ?? '').trim().slice(0, 120);
+  const details = body?.details === undefined || body?.details === null
+    ? null
+    : String(body.details).slice(0, 2000);
+
+  if (!module || !action) {
+    return NextResponse.json({ error: 'الوحدة والإجراء مطلوبان.' }, { status: 400 });
+  }
+
   const log = await db.auditLog.create({
     data: {
-      id: body.id,
-      module: body.module,
-      action: body.action,
-      details: body.details,
-      userName: body.userName,
-      userId: body.userId,
+      module,
+      action,
+      details,
+      userId: principal.id,
+      userName: principal.name || principal.username,
     },
   });
   return NextResponse.json({ log }, { status: 201 });

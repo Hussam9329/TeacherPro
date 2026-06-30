@@ -193,8 +193,8 @@ type LoginScreenProps = {
 };
 
 function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("204871");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -230,7 +230,7 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
                 autoComplete="username"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                placeholder="admin"
+                placeholder="اسم المستخدم"
                 className="h-12 rounded-2xl"
               />
             </div>
@@ -242,7 +242,7 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
                 autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="204871"
+                placeholder="الرمز"
                 className="h-12 rounded-2xl"
               />
             </div>
@@ -253,7 +253,7 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
           </form>
 
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-xs leading-6 text-muted-foreground">
-            الحساب الافتراضي: <b>admin</b> — الرمز: <b>204871</b>. يمكن لاحقاً إدارة الحسابات والصلاحيات من داخل النظام.
+            للحصول على حساب تواصل مع مدير النظام.
           </div>
         </div>
       </div>
