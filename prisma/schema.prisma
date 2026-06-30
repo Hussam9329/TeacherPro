@@ -211,6 +211,21 @@ model StudentNote {
   @@index([dismissalKey])
 }
 
+model GradeEntryMissingNote {
+  id        String   @id @default(cuid())
+  examId    String
+  examName  String   @default("")
+  examDate  String   @default("")
+  text      String
+  userId    String?
+  userName  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([examId])
+  @@index([updatedAt])
+}
+
 model CorrectionSheet {
   id               String   @id @default(cuid())
   status           String

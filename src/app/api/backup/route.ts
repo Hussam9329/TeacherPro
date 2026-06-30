@@ -55,7 +55,11 @@ export async function GET(req: NextRequest) {
         },
       }),
       db.role.findMany(),
-      db.auditLog.findMany(),
+      // Audit logs grow unbounded over time — limit the payload sent to
+      // the client on initial load to the most recent 500 entries.
+      // The dedicated /api/logs endpoint supports search + pagination
+      // for users who need older entries.
+      db.auditLog.findMany({ orderBy: { time: 'desc' }, take: 500 }),
     ]);
 
     return NextResponse.json({

@@ -11,6 +11,7 @@ import { formatAppDate } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
 import {
   deleteGradeEntryMissingNote,
+  fetchGradeEntryMissingNotesFromServer,
   GRADE_ENTRY_MISSING_NOTES_EVENT,
   readGradeEntryMissingNotes,
   type GradeEntryMissingNote,
@@ -40,6 +41,7 @@ export function MissingStudentsNotesView() {
 
   useEffect(() => {
     refreshNotes();
+    void fetchGradeEntryMissingNotesFromServer().then(() => setNotes(readGradeEntryMissingNotes()));
     window.addEventListener(GRADE_ENTRY_MISSING_NOTES_EVENT, refreshNotes);
     window.addEventListener("storage", refreshNotes);
     return () => {

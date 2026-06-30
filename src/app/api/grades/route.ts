@@ -13,10 +13,29 @@ async function validateGradePayload(body: Record<string, unknown>) {
   const examError = requireText(body.examId, 'الامتحان');
   if (examError) return examError;
   if (!['درجة', 'غائب', 'غش'].includes(String(body.status ?? ''))) return 'حالة الدرجة غير صحيحة';
+
+  // تحقق أن الطالب موجود فعلاً ضمن قائمة courseIds للامتحان
+  const [exam, student] = await Promise.all([
+    db.exam.findUnique({ where: { id: String(body.examId) }, select: { fullMark: true, courseIds: true } }),
+    db.student.findUnique({ where: { id: String(body.studentId) }, select: { id: true, courseId: true } }),
+  ]);
+  if (!exam) return 'الامتحان غير موجود';
+  if (!student) return 'الطالب غير موجود';
+
+  let courseIds: string[] = [];
+  try {
+    const parsed = JSON.parse(exam.courseIds || '[]');
+    if (Array.isArray(parsed)) courseIds = parsed.map(String).filter(Boolean);
+  } catch {
+    courseIds = [];
+  }
+  if (courseIds.length > 0 && !courseIds.includes(student.courseId)) {
+    return 'الطالب ليس ضمن دورات هذا الامتحان';
+  }
+
   if (body.status === 'درجة') {
     const score = Number(body.score);
-    const exam = await db.exam.findUnique({ where: { id: String(body.examId) }, select: { fullMark: true } });
-    const fullMark = Number(exam?.fullMark ?? 0);
+    const fullMark = Number(exam.fullMark || 0);
     if (!Number.isFinite(score) || score < 0 || score > fullMark) {
       return `الدرجة يجب أن تكون رقماً بين 0 و ${fullMark}`;
     }
