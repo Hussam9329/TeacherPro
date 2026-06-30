@@ -2,7 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthPrincipal, requirePermission } from '@/lib/server-auth';
+import { getAuthPrincipal, requireAnyPermission, requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { routeErrorResponse, validationError } from '@/lib/route-helpers';
 import {
@@ -51,7 +51,15 @@ export async function GET(req: NextRequest) {
   }
 }
 
+/**
+ * POST requires grades.add OR grades.edit (the user must be able to
+ * enter or edit grades to also leave a note about missing students).
+ * Admins always pass.
+ */
 export async function POST(req: NextRequest) {
+  const authError = await requireAnyPermission(req, ['grades.add', 'grades.edit']);
+  if (authError) return authError;
+
   const principal = await getAuthPrincipal(req);
   if (!principal) {
     return NextResponse.json({ error: 'يجب تسجيل الدخول أولاً.' }, { status: 401 });
@@ -92,9 +100,24 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/**
+ * DELETE requires grades.delete OR admin. The previous check
+ * (grades.view) let any user with read access delete notes, which
+ * could erase a colleague's record of missing students.
+ */
 export async function DELETE(req: NextRequest) {
-  const authError = await requirePermission(req, 'grades.view');
-  if (authError) return authError;
+  const principal = await getAuthPrincipal(req);
+  if (!principal) {
+    return NextResponse.json({ error: 'يجب تسجيل الدخول أولاً.' }, { status: 401 });
+  }
+
+  const hasDeletePermission = principal.isAdmin || principal.permissions.includes('grades.delete');
+  if (!hasDeletePermission) {
+    return NextResponse.json(
+      { error: 'حذف الملاحظات يتطلب صلاحية حذف الدرجات أو حساب مدير النظام.' },
+      { status: 403 },
+    );
+  }
 
   try {
     await ensureGradeEntryMissingNoteSchema();
@@ -102,7 +125,7 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id');
     const examId = searchParams.get('examId');
     if (id) {
-      await db.gradeEntryMissingNote.delete({ where: { id } });
+      await db.gradeEntryMissingNote.delete({ where: { id } }).catch(() => null);
     } else if (examId) {
       await db.gradeEntryMissingNote.deleteMany({ where: { examId } });
     } else {
