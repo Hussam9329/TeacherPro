@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     // Rate limit BEFORE doing any DB work to keep cheap brute-force
     // attempts from hitting the database.
     const identifier = getRequestIdentifier(req, username);
-    const rate = checkLoginRateLimit(identifier);
+    const rate = await checkLoginRateLimit(identifier);
     if (!rate.allowed) {
       return NextResponse.json(
         { error: `محاولات كثيرة فاشلة. حاول مرة أخرى بعد ${rate.retryAfterSeconds} ثانية.` },
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
 
     const user = await findUserByUsername(username);
     if (!user || !user.active || !(await verifyPassword(password, user.passwordHash))) {
-      recordLoginFailure(identifier);
+      await recordLoginFailure(identifier);
       await db.auditLog.create({
         data: {
           module: 'أمان الحسابات',
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Successful login clears the failure counter for this identifier.
-    clearLoginFailures(identifier);
+    clearLoginFailures(identifier).catch(() => {});
 
     await db.auditLog.create({
       data: {
