@@ -13,5 +13,5 @@ CREATE TABLE IF NOT EXISTS "GradeEntryMissingNote" (
   CONSTRAINT "GradeEntryMissingNote_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX IF NOT EXISTS "GradeEntryMissingNote_examId_idx" ON "GradeEntryMissingNote"("examId");
+CREATE UNIQUE INDEX IF NOT EXISTS "GradeEntryMissingNote_examId_key" ON "GradeEntryMissingNote"("examId");
 CREATE INDEX IF NOT EXISTS "GradeEntryMissingNote_updatedAt_idx" ON "GradeEntryMissingNote"("updatedAt");

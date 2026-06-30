@@ -213,7 +213,7 @@ model StudentNote {
 
 model GradeEntryMissingNote {
   id        String   @id @default(cuid())
-  examId    String
+  examId    String   @unique
   examName  String   @default("")
   examDate  String   @default("")
   text      String
@@ -222,7 +222,6 @@ model GradeEntryMissingNote {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([examId])
   @@index([updatedAt])
 }
 
