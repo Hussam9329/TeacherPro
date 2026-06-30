@@ -61,19 +61,19 @@ export async function GET(req: NextRequest) {
     if (altError) return authError;
   }
 
-  if (!TELEGRAM_BOT_TOKEN) {
-    return NextResponse.json(
-      { error: 'TEACHERPRO_BOT_TOKEN غير مضبوط. مطلوب لجلب صور التليغرام.' },
-      { status: 503 },
-    );
-  }
-
   const { searchParams } = new URL(req.url);
   const fileId = searchParams.get('fileId')?.trim();
   const submissionId = searchParams.get('submissionId')?.trim();
 
   if (!fileId) {
     return validationError('fileId مطلوب');
+  }
+
+  if (!TELEGRAM_BOT_TOKEN) {
+    return NextResponse.json(
+      { error: 'TEACHERPRO_BOT_TOKEN غير مضبوط. مطلوب لجلب صور التليغرام.' },
+      { status: 503 },
+    );
   }
 
   // Optional: verify the fileId belongs to the given submission.
