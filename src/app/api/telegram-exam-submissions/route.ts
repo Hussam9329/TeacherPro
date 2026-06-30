@@ -112,13 +112,16 @@ function sanitizePages(value: unknown): Array<Record<string, string | number>> {
     const pageNumber = Math.max(1, Math.trunc(numberValue(page?.pageNumber, index + 1)));
     const cleaned: Record<string, string | number> = { pageNumber };
 
+    // dataUrl is intentionally EXCLUDED — bots must send fileId/url/localPath
+    // for the actual image content. dataUrl (base64 inline image) is rejected
+    // to prevent payload bloat and abuse. The teacher-pro side fetches the
+    // image from Telegram using fileId when needed for correction.
     const stringFields: Array<keyof IncomingPage> = [
-      'fileId', 'fileUniqueId', 'fileName', 'mimeType', 'url', 'dataUrl',
+      'fileId', 'fileUniqueId', 'fileName', 'mimeType', 'url',
       'localPath', 'messageId', 'caption', 'downloadedAt',
     ];
     for (const field of stringFields) {
-      const max = field === 'dataUrl' ? 200_000 : 2000;
-      const cleanedValue = textValue(page?.[field], max);
+      const cleanedValue = textValue(page?.[field], 2000);
       if (cleanedValue) cleaned[field] = cleanedValue;
     }
 
@@ -208,7 +211,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-const MAX_REQUEST_BYTES = 5 * 1024 * 1024; // 5 MB hard cap (20 pages × ~200 KB dataUrl + metadata)
+const MAX_REQUEST_BYTES = 1 * 1024 * 1024; // 1 MB hard cap (metadata only, no dataUrl allowed)
 
 export async function POST(req: NextRequest) {
   const tokenError = requireBotToken(req);
