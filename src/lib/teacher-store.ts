@@ -341,7 +341,7 @@ const ALL_PERMISSION_IDS = Array.from(new Set(PERMISSION_CATALOG.map(p => p.id))
 const ALL_VIEW_PERMISSION_IDS = PERMISSION_CATALOG.filter(p => p.level === 'read').map(p => p.id);
 
 const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = '1993';
+const ADMIN_PASSWORD = '204871';
 const ADMIN_ROLE_ID = 'role_admin';
 const ADMIN_ROLE_NAME = 'مدير عام';
 const ADMIN_FULL_PERMISSIONS = [...ALL_PERMISSION_IDS];
@@ -1845,19 +1845,6 @@ export const useTeacherStore = create<TeacherState>()(
               role: ADMIN_ROLE_NAME,
               permissions: ADMIN_FULL_PERMISSIONS,
             }));
-          }
-          const adminRoleAfterLoad = roles.find((role) => role.id === ADMIN_ROLE_ID);
-          if (adminRoleAfterLoad) {
-            syncToServer(get, async () => {
-              const result = await roleApi.update(ADMIN_ROLE_ID, {
-                name: ADMIN_ROLE_NAME,
-                isDefault: true,
-                permissions: ADMIN_FULL_PERMISSIONS,
-              });
-              if (!result.ok) {
-                await roleApi.add({ id: ADMIN_ROLE_ID, name: ADMIN_ROLE_NAME, isDefault: true, permissions: ADMIN_FULL_PERMISSIONS });
-              }
-            });
           }
           return true;
         } catch (e) {

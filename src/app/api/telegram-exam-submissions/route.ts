@@ -7,8 +7,6 @@ import { requirePermission } from '@/lib/server-auth';
 import { isMissingDatabaseObjectError, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { ensureTelegramSubmissionSchema, resetTelegramSubmissionSchemaEnsureCache, telegramSubmissionSchemaMessage } from '@/lib/telegram-submission-schema';
 
-const READY_BOT_INGEST_TOKEN = 'e535b28843c00d13b937bcc9c496f9f636b7a7dbc8999811104081b22f9bae6e';
-
 type IncomingPage = {
   pageNumber?: unknown;
   fileId?: unknown;
@@ -31,11 +29,7 @@ function readEnv(name: string): string | undefined {
 }
 
 function readBotIngestToken(): string {
-  return (readEnv('TEACHERPRO_BOT_INGEST_TOKEN') || '').trim() || READY_BOT_INGEST_TOKEN;
-}
-
-function isUsingEmbeddedBotIngestToken(): boolean {
-  return !(readEnv('TEACHERPRO_BOT_INGEST_TOKEN') || '').trim();
+  return (readEnv('TEACHERPRO_BOT_INGEST_TOKEN') || '').trim();
 }
 
 function constantTimeEqual(left: string, right: string): boolean {
@@ -80,7 +74,7 @@ function getBotIntegrationConfig(req: NextRequest) {
     apiUrl,
     ingestUrl: apiUrl ? `${apiUrl}/api/telegram-exam-submissions` : '/api/telegram-exam-submissions',
     tokenConfigured: Boolean(readBotIngestToken()),
-    usingEmbeddedToken: isUsingEmbeddedBotIngestToken(),
+    usingEmbeddedToken: false,
   };
 }
 

@@ -28,7 +28,14 @@ function readEnv(name: string): string | undefined {
 }
 
 function getAuthSecret(): string {
-  return readEnv('TEACHERPRO_AUTH_SECRET') || readEnv('AUTH_SECRET') || readEnv('NEXTAUTH_SECRET') || 'teacherpro-dev-secret-change-me';
+  const secret = readEnv('TEACHERPRO_AUTH_SECRET') || readEnv('AUTH_SECRET') || readEnv('NEXTAUTH_SECRET');
+  if (secret?.trim()) return secret.trim();
+
+  if (readEnv('NODE_ENV') === 'production') {
+    throw new Error('TEACHERPRO_AUTH_SECRET مطلوب في بيئة الإنتاج لتوقيع جلسات الدخول.');
+  }
+
+  return 'teacherpro-local-dev-secret';
 }
 
 function base64UrlEncode(value: string | Uint8Array): string {
@@ -194,6 +201,12 @@ export async function requirePermission(req: NextRequest, permission: string): P
   const principal = await getAuthPrincipal(req);
   if (!principal) return unauthorizedResponse();
   return hasPermission(principal, permission) ? null : forbiddenResponse();
+}
+
+export async function requirePermissionPrincipal(req: NextRequest, permission: string): Promise<AuthPrincipal | NextResponse> {
+  const principal = await getAuthPrincipal(req);
+  if (!principal) return unauthorizedResponse();
+  return hasPermission(principal, permission) ? principal : forbiddenResponse();
 }
 
 export async function requireAnyPermission(req: NextRequest, permissions: string[]): Promise<NextResponse | null> {

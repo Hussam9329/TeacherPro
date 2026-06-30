@@ -24,7 +24,7 @@ npm run dev
 
 ```text
 اسم المستخدم: admin
-الرمز: 1993
+الرمز: 204871
 ```
 
 ---
@@ -175,7 +175,7 @@ npm run dev
 
 - `src/components/teacher-pro/layout.tsx` — السطر 203: `LoginScreen`.
 - `src/lib/teacher-store.ts` — السطر 1042: دالة `login`.
-- `src/lib/teacher-store.ts` — المستخدم الافتراضي أصبح `admin / 1993`.
+- `src/lib/teacher-store.ts` — المستخدم الافتراضي أصبح `admin / 204871`.
 - `src/app/api/backup/route.ts` و `src/app/api/users/route.ts`: إرجاع كلمة المرور المخزنة للحسابات حتى تعمل عند تحميل البيانات من قاعدة البيانات.
 
 ### الطلب 12 — تبويبة الأقساط الخاصة بالدورة الخاصة ضمن عائلة الطلاب
@@ -3239,7 +3239,7 @@ diff -ruN '--exclude=*.tsbuildinfo' /mnt/data/original/TeacherPro-main/src/compo
 +                autoComplete="current-password"
 +                value={password}
 +                onChange={(event) => setPassword(event.target.value)}
-+                placeholder="1993"
++                placeholder="204871"
 +                className="h-12 rounded-2xl"
 +              />
 +            </div>
@@ -3250,7 +3250,7 @@ diff -ruN '--exclude=*.tsbuildinfo' /mnt/data/original/TeacherPro-main/src/compo
 +          </form>
 +
 +          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-xs leading-6 text-muted-foreground">
-+            الحساب الافتراضي: <b>admin</b> — الرمز: <b>1993</b>. يمكن لاحقاً إدارة الحسابات والصلاحيات من داخل النظام.
++            الحساب الافتراضي: <b>admin</b> — الرمز: <b>204871</b>. يمكن لاحقاً إدارة الحسابات والصلاحيات من داخل النظام.
 +          </div>
 +        </div>
 +      </div>
@@ -3455,7 +3455,7 @@ diff -ruN '--exclude=*.tsbuildinfo' /mnt/data/original/TeacherPro-main/src/lib/t
  
    const users: User[] = [
 -    { id: 'u_admin', username: 'admin', name: 'مدير النظام', roleId: 'role_admin', role: 'مدير عام', permissions: [...ALL_PERMISSION_IDS], active: true, password: 'admin123' },
-+    { id: 'u_admin', username: 'admin', name: 'مدير النظام', roleId: 'role_admin', role: 'مدير عام', permissions: [...ALL_PERMISSION_IDS], active: true, password: '1993' },
++    { id: 'u_admin', username: 'admin', name: 'مدير النظام', roleId: 'role_admin', role: 'مدير عام', permissions: [...ALL_PERMISSION_IDS], active: true, password: '204871' },
    ];
  
    return {
@@ -3584,7 +3584,7 @@ diff -ruN '--exclude=*.tsbuildinfo' /mnt/data/original/TeacherPro-main/src/lib/t
  
            const parsedUsers = (serverData.users || []).map((u: Record<string, unknown>) => ({
              ...u,
-+            password: String(u.password || u.passwordHash || (u.username === 'admin' ? '1993' : '')),
++            password: String(u.password || u.passwordHash || (u.username === 'admin' ? '204871' : '')),
              permissions: parseArrayField<string>(u.permissions),
              active: u.active !== undefined ? Boolean(u.active) : true,
            })) as User[];
@@ -3595,7 +3595,7 @@ diff -ruN '--exclude=*.tsbuildinfo' /mnt/data/original/TeacherPro-main/src/lib/t
 +      login: (username, password) => {
 +        const normalizedUsername = username.trim();
 +        const user = get().users.find((u) => u.username === normalizedUsername && u.active);
-+        const expectedPassword = user?.password || (normalizedUsername === 'admin' ? '1993' : '');
++        const expectedPassword = user?.password || (normalizedUsername === 'admin' ? '204871' : '');
 +        if (!user || expectedPassword !== password) {
 +          return { ok: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة' };
 +        }

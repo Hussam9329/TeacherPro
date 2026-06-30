@@ -2,15 +2,88 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/server-auth';
+import { requirePermission, requirePermissionPrincipal, type AuthPrincipal } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { normalizePasswordForStorage } from '@/lib/passwords';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+
+const ADMIN_USERNAME = 'admin';
+const ADMIN_ROLE_ID = 'role_admin';
+const ADMIN_ROLE_NAME = 'مدير عام';
+const SENSITIVE_PERMISSION_IDS = new Set([
+  'accounts.manage',
+  'backup.view',
+  'system.settings',
+]);
 
 function normalizePermissions(value: unknown): string {
   if (Array.isArray(value)) return JSON.stringify(value);
   if (typeof value === 'string') return value;
   return '[]';
+}
+
+function parsePermissionIds(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+}
+
+function includesSensitivePermission(value: unknown): boolean {
+  return parsePermissionIds(value).some((permission) => SENSITIVE_PERMISSION_IDS.has(permission));
+}
+
+function isOwner(principal: AuthPrincipal): boolean {
+  return principal.username.trim().toLowerCase() === ADMIN_USERNAME;
+}
+
+function isPrimaryAdminUser(user: { username?: string | null }): boolean {
+  return String(user.username || '').trim().toLowerCase() === ADMIN_USERNAME;
+}
+
+function isAdminRoleUser(user: { roleId?: string | null }): boolean {
+  return String(user.roleId || '') === ADMIN_ROLE_ID;
+}
+
+function forbiddenSecurity(message: string) {
+  return NextResponse.json({ error: message }, { status: 403 });
+}
+
+function validateSensitiveUserChanges(principal: AuthPrincipal, payload: Record<string, unknown>, existingUser?: { username?: string | null; roleId?: string | null }) {
+  const actorIsOwner = isOwner(principal);
+  const requestedUsername = String(payload.username ?? '').trim().toLowerCase();
+  const requestedRoleId = String(payload.roleId ?? '');
+  const targetIsAdmin = Boolean(existingUser && (isPrimaryAdminUser(existingUser) || isAdminRoleUser(existingUser)));
+
+  if (!actorIsOwner && (targetIsAdmin || requestedUsername === ADMIN_USERNAME || requestedRoleId === ADMIN_ROLE_ID)) {
+    return forbiddenSecurity('لا يمكن لمدير حسابات عادي إنشاء أو تعديل حساب مدير النظام.');
+  }
+
+  if (!actorIsOwner && payload.permissions !== undefined && includesSensitivePermission(payload.permissions)) {
+    return forbiddenSecurity('لا يمكن منح صلاحيات حساسة إلا من حساب admin الرئيسي.');
+  }
+
+  if (principal.id === String(payload.id || '') && (payload.roleId !== undefined || payload.permissions !== undefined || payload.active !== undefined)) {
+    return forbiddenSecurity('لا يمكن تعديل دورك أو صلاحياتك أو حالة حسابك من نفس الجلسة.');
+  }
+
+  return null;
+}
+
+async function validateRoleAssignment(principal: AuthPrincipal, roleId: unknown) {
+  if (isOwner(principal) || !roleId) return null;
+  const role = await db.role.findUnique({
+    where: { id: String(roleId) },
+    select: { permissions: true },
+  });
+  if (role && includesSensitivePermission(role.permissions)) {
+    return forbiddenSecurity('لا يمكن تعيين دور يحتوي صلاحيات حساسة إلا من حساب admin الرئيسي.');
+  }
+  return null;
 }
 
 function readPasswordInput(body: Record<string, unknown>): string {
@@ -61,13 +134,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, 'accounts.manage');
-  if (authError) return authError;
+  const principalOrError = await requirePermissionPrincipal(req, 'accounts.manage');
+  if (principalOrError instanceof NextResponse) return principalOrError;
+  const principal = principalOrError;
 
   try {
     const body = await req.json();
     const validationMessage = validateUserPayload(body);
     if (validationMessage) return validationError(validationMessage);
+    const securityError = validateSensitiveUserChanges(principal, body);
+    if (securityError) return securityError;
+    const roleAssignmentError = await validateRoleAssignment(principal, body.roleId);
+    if (roleAssignmentError) return roleAssignmentError;
 
     const password = readPasswordInput(body);
     if (!password) return validationError('يرجى إدخال رمز المرور');
@@ -92,15 +170,36 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const authError = await requirePermission(req, 'accounts.manage');
-  if (authError) return authError;
+  const principalOrError = await requirePermissionPrincipal(req, 'accounts.manage');
+  if (principalOrError instanceof NextResponse) return principalOrError;
+  const principal = principalOrError;
 
   try {
     const body = await req.json();
     const { id, password, passwordHash, ...data } = body;
     if (!id) return validationError('تعذر تحديد المستخدم المطلوب');
 
+    const existingUser = await db.appUser.findUnique({
+      where: { id },
+      select: { id: true, username: true, roleId: true },
+    });
+    if (!existingUser) return validationError('المستخدم غير موجود', 404);
+    const securityError = validateSensitiveUserChanges(principal, { id, ...data }, existingUser);
+    if (securityError) return securityError;
+    const roleAssignmentError = data.roleId !== undefined ? await validateRoleAssignment(principal, data.roleId) : null;
+    if (roleAssignmentError) return roleAssignmentError;
+
     const updateData: Record<string, unknown> = { ...data };
+    if (isPrimaryAdminUser(existingUser)) {
+      delete updateData.username;
+      delete updateData.roleId;
+      delete updateData.role;
+      delete updateData.permissions;
+      delete updateData.active;
+      updateData.active = true;
+      updateData.roleId = ADMIN_ROLE_ID;
+      updateData.role = ADMIN_ROLE_NAME;
+    }
     if (updateData.name !== undefined) {
       const nameError = requireText(updateData.name, 'الاسم الكامل');
       if (nameError) return validationError(nameError);
@@ -124,13 +223,20 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const authError = await requirePermission(req, 'accounts.manage');
-  if (authError) return authError;
+  const principalOrError = await requirePermissionPrincipal(req, 'accounts.manage');
+  if (principalOrError instanceof NextResponse) return principalOrError;
+  const principal = principalOrError;
 
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد المستخدم المطلوب');
+    if (id === principal.id) return validationError('لا يمكن حذف حسابك الحالي من نفس الجلسة.', 403);
+    const user = await db.appUser.findUnique({ where: { id }, select: { username: true, roleId: true } });
+    if (!user) return validationError('المستخدم غير موجود', 404);
+    if (isPrimaryAdminUser(user) || isAdminRoleUser(user)) {
+      return validationError('لا يمكن حذف حساب مدير النظام. عطّل أو عدّل حسابات المستخدمين العادية فقط.', 403);
+    }
     const linkedSheets = await db.correctionSheet.count({ where: { correctorId: id } });
     if (linkedSheets > 0) {
       return validationError('لا يمكن حذف المستخدم لأنه مرتبط بأوراق تصحيح. عطّل الحساب بدلاً من حذفه.', 409);

@@ -194,7 +194,7 @@ type LoginScreenProps = {
 
 function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
   const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("1993");
+  const [password, setPassword] = useState("204871");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -242,7 +242,7 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
                 autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="1993"
+                placeholder="204871"
                 className="h-12 rounded-2xl"
               />
             </div>
@@ -253,7 +253,7 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
           </form>
 
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-xs leading-6 text-muted-foreground">
-            الحساب الافتراضي: <b>admin</b> — الرمز: <b>1993</b>. يمكن لاحقاً إدارة الحسابات والصلاحيات من داخل النظام.
+            الحساب الافتراضي: <b>admin</b> — الرمز: <b>204871</b>. يمكن لاحقاً إدارة الحسابات والصلاحيات من داخل النظام.
           </div>
         </div>
       </div>

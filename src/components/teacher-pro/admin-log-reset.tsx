@@ -30,7 +30,7 @@ export function AdminLogResetView() {
 
   const requestReset = () => {
     if (!password.trim()) {
-      toast.error("أدخل الباسوورد الخاص أولاً");
+      toast.error("أدخل رمز حساب الأدمن أولاً");
       return;
     }
     setConfirmOpen(true);
@@ -71,11 +71,11 @@ export function AdminLogResetView() {
         <CardContent className="space-y-5">
           <div className="rounded-2xl border border-destructive/20 bg-background/70 p-4 text-sm leading-7 text-muted-foreground">
             هذا الإجراء يحذف جميع سجلات الـ log وسجل حركات الفرص من قاعدة البيانات ولا يمكن التراجع عنه.
-            لا يتم التنفيذ إلا بعد إدخال الباسوورد الخاص ثم تأكيد العملية.
+            لا يتم التنفيذ إلا بعد إدخال رمز حساب الأدمن الحالي ثم تأكيد العملية.
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="log-reset-password">الباسوورد الخاص</Label>
+            <Label htmlFor="log-reset-password">رمز حساب الأدمن</Label>
             <Input
               id="log-reset-password"
               type="password"
@@ -83,7 +83,7 @@ export function AdminLogResetView() {
               autoComplete="off"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="أدخل الباسوورد الخاص"
+              placeholder="أدخل رمز حساب الأدمن الحالي"
               className="h-12 rounded-2xl text-center text-lg tracking-[0.35em]"
               onKeyDown={(event) => {
                 if (event.key === "Enter") requestReset();

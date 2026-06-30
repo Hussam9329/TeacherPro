@@ -1,9 +1,10 @@
 import { db } from '@/lib/db';
-import { hashPassword } from '@/lib/passwords';
+import { hashPassword, verifyPassword } from '@/lib/passwords';
 
 const DEFAULT_ADMIN_ID = 'u_admin';
 const DEFAULT_ADMIN_USERNAME = 'admin';
-const DEFAULT_ADMIN_PASSWORD = '1993';
+const DEFAULT_ADMIN_PASSWORD = '204871';
+const PREVIOUS_DEFAULT_ADMIN_PASSWORD = '1993';
 const DEFAULT_ADMIN_ROLE_ID = 'role_admin';
 const DEFAULT_ADMIN_ROLE_NAME = 'مدير عام';
 
@@ -45,7 +46,24 @@ export async function ensureInitialAdminSeed(): Promise<void> {
 
   // Seed the public default admin only on a fresh database. After that, the
   // password lives in the DB and is never hard-coded as a login fallback.
-  if (userCount > 0) return;
+  if (userCount > 0) {
+    const admin = await db.appUser.findFirst({
+      where: { username: { equals: DEFAULT_ADMIN_USERNAME, mode: 'insensitive' } },
+      select: { id: true, passwordHash: true },
+    });
+
+    // One-time safety migration: if the built-in admin still uses the old
+    // public default password, move it to the new admin code. Custom admin
+    // passwords are not touched.
+    if (admin && await verifyPassword(PREVIOUS_DEFAULT_ADMIN_PASSWORD, admin.passwordHash)) {
+      await db.appUser.update({
+        where: { id: admin.id },
+        data: { passwordHash: await hashPassword(DEFAULT_ADMIN_PASSWORD) },
+      });
+    }
+
+    return;
+  }
 
   await db.appUser.create({
     data: {
