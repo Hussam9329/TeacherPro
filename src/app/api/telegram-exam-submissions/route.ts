@@ -220,7 +220,7 @@ export async function POST(req: NextRequest) {
   try {
     const contentLength = Number(req.headers.get('content-length') || 0);
     if (contentLength && contentLength > MAX_REQUEST_BYTES) {
-      return validationError(`حجم الطلب كبير جداً (${Math.round(contentLength / 1024 / 1024)} MB). الحد الأقصى 5 MB.`);
+      return validationError(`حجم الطلب كبير جداً (${Math.round(contentLength / 1024 / 1024)} MB). الحد الأقصى 1 MB.`);
     }
 
     const schemaReady = await ensureTelegramSubmissionSchema();
