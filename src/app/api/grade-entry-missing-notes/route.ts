@@ -19,8 +19,8 @@ type NoteRow = {
   text: string;
   userId: string | null;
   userName: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 function normalize(row: NoteRow) {
@@ -32,8 +32,8 @@ function normalize(row: NoteRow) {
     text: row.text,
     userId: row.userId || null,
     userName: row.userName || null,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
+    updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
   };
 }
 
