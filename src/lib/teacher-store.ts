@@ -1421,6 +1421,54 @@ function isQueuedResult(error: unknown): boolean {
   return isFailedApiResult(error) && Boolean((error as ApiResult).queued);
 }
 
+/**
+ * Modules that are entirely server-only — the client may log them
+ * locally for UI feedback but must NOT send them to POST /api/logs
+ * (the server rejects them with 403).
+ */
+const SERVER_ONLY_LOG_MODULES = new Set([
+  'أمان الحسابات',
+  'النظام',
+  'تصفير الlog',
+  'الحسابات',
+  'الصلاحيات',
+  'الطلاب',
+  'إدارة الفرص',
+  'النسخ الاحتياطي',
+]);
+
+/**
+ * Specific (module, action) pairs that are server-only even if the
+ * module has some client-allowed actions.
+ */
+const SERVER_ONLY_LOG_ACTIONS = new Set([
+  // Deletes
+  'حذف دورة', 'رفض حذف دورة',
+  'حذف فصل', 'رفض حذف فصل', 'حذف ربط فصل بدورة',
+  'تفعيل فصل ومنح فرص جديدة', 'تفعيل فصل واسترجاع أرشيف الفرص',
+  'إلغاء تفعيل فصل',
+  'حذف طالب مع سجلاته التابعة', 'رفض تعديل طالب مكرر',
+  'رفض تسجيل طالب مكرر', 'تراجع تسجيل طالب',
+  'حذف امتحان مع سجلاته وإعادة احتساب التأثيرات',
+  'حذف درجة', 'رفض إدخال درجة لطالب مجاز',
+  'حذف إجازة',
+  // Bulk
+  'إضافة درجات جماعية', 'إلغاء حالة غائب جماعي', 'تسجيل الصفحة كغائب',
+  'إضافة فرص جماعية', 'خصم فرص جماعي', 'تعديل فرص طالب', 'إعادة تعيين فرص طالب',
+  // Security
+  'محاولة دخول مرفوضة',
+  // Backup
+  'تصدير نسخة احتياطية', 'استيراد نسخة احتياطية',
+]);
+
+function isServerOnlyLogEntry(module: string, action: string): boolean {
+  const m = module.trim();
+  const a = action.trim();
+  if (SERVER_ONLY_LOG_MODULES.has(m)) return true;
+  if (SERVER_ONLY_LOG_ACTIONS.has(a)) return true;
+  return false;
+}
+
 function syncToServer(
   getState: () => TeacherState,
   action: () => unknown,
@@ -2009,9 +2057,14 @@ export const useTeacherStore = create<TeacherState>()(
 
         // لا نحاول إرسال السجل قبل تسجيل الدخول؛ هذا يمنع أخطاء 401 المتكررة
         // عند فتح الصفحة أو بعد تسجيل الخروج، مع إبقاء السجل محفوظاً محلياً.
-        if (get().isAuthenticated && currentUser?.id) {
-          syncToServer(get, () => logApi.add({ ...log, userName: user, userId: currentUser.id }));
-        }
+        if (!get().isAuthenticated || !currentUser?.id) return;
+
+        // تخطّي إرسال السجلات server-only للخادم؛ الخادم يرفضها بـ 403
+        // (لأنها حساسة ويجب أن تُكتب من الـ server handler فقط).
+        // نبقيها محلية للـ UI feedback فقط.
+        if (isServerOnlyLogEntry(module, action)) return;
+
+        syncToServer(get, () => logApi.add({ ...log, userName: user, userId: currentUser.id }));
       },
 
       clearLogs: async (password) => {
