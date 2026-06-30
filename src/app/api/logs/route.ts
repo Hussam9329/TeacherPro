@@ -208,6 +208,12 @@ export async function DELETE(req: NextRequest) {
     },
   }).catch((error) => console.warn('[logs] failed to record deletion audit:', error));
 
-  await db.auditLog.delete({ where: { id } });
+  try {
+    await db.auditLog.delete({ where: { id } });
+  } catch {
+    // P2025: record not found. Return ok so the client UI is idempotent
+    // (a missing record is already 'deleted' from the user's POV).
+    return NextResponse.json({ ok: true, notFound: true });
+  }
   return NextResponse.json({ ok: true });
 }
