@@ -515,20 +515,29 @@ export const roleApi = {
 
 export const logApi = {
   add: async (log: Record<string, unknown>): Promise<ApiResult> => {
-    const result = await apiPost('logs', log);
-
-    // Some audit entries are intentionally server-only after the security
-    // hardening phase. The UI may still create a local log for immediate
-    // history, but the backend correctly rejects saving that specific
-    // (module/action) from the client with 403. Treat that as a successful
-    // local-only audit entry so it does not trigger repeated "Server sync"
-    // errors or outbox retries. Real audit records for sensitive actions are
+    // Use direct fetch instead of apiPost so that 403 responses (server-only
+    // audit entries) don't trigger console.warn noise. The UI creates local
+    // log entries for immediate feedback, but the server correctly rejects
+    // sensitive (module/action) pairs with 403. We treat 403 as a successful
+    // local-only audit entry so it doesn't trigger sync-error notifications
+    // or outbox retries. Real audit records for sensitive actions are
     // written by the corresponding server route after the DB mutation.
-    if (!result.ok && result.status === 403) {
-      return { ok: true };
+    try {
+      const res = await fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(log),
+      });
+      if (res.ok) return { ok: true };
+      if (res.status === 403) return { ok: true }; // server-only entry — expected
+      // Other errors (4xx except 403, 5xx) are real failures.
+      const error = await readApiError(res, `تعذر حفظ السجل (رمز ${res.status})`);
+      return { ok: false, error, status: res.status, transient: isTransientHttpStatus(res.status) };
+    } catch (e) {
+      const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
+      return { ok: false, error: msg, status: 0, transient: true };
     }
-
-    return result;
   },
   clear: (password: string) =>
     apiPost('logs/clear', { password }),
