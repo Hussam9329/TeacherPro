@@ -1858,15 +1858,11 @@ export const useTeacherStore = create<TeacherState>()(
           schedulePendingGradeFlush(get, 900);
           repairAbsentDiscountAccountingIfNeeded(get);
 
-          const adminAfterLoad = users.find((u) => isPrimaryAdminUser(u));
-          if (adminAfterLoad) {
-            syncToServer(get, () => userApi.update(adminAfterLoad.id, {
-              active: true,
-              roleId: ADMIN_ROLE_ID,
-              role: ADMIN_ROLE_NAME,
-              permissions: ADMIN_FULL_PERMISSIONS,
-            }));
-          }
+          // Note: we no longer auto-sync the admin user's role/permissions
+          // on every load. That update required accounts.manage permission
+          // which non-admin users (like supervisors) don't have, causing
+          // 403 errors on every page load for them. The admin role is
+          // managed via env vars + the accounts UI, not auto-overwritten.
           return true;
         } catch (e) {
           console.warn('[Store] Failed to load from server:', e);
