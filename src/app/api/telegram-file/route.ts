@@ -88,7 +88,15 @@ export async function GET(req: NextRequest) {
       if (!submission || submission.length === 0) {
         return validationError('السجل غير موجود', 404);
       }
-      const pages = submission[0].pages;
+      // pages is stored as a JSON string in Postgres; parse it before use.
+      let pages = submission[0].pages;
+      if (typeof pages === 'string') {
+        try {
+          pages = JSON.parse(pages);
+        } catch {
+          return validationError('بيانات الصفحات تالفة', 404);
+        }
+      }
       if (!Array.isArray(pages)) {
         return validationError('لا توجد صفحات لهذا السجل', 404);
       }
