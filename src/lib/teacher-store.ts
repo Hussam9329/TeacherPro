@@ -2268,9 +2268,31 @@ export const useTeacherStore = create<TeacherState>()(
         const previousStudents = get().students;
         set((s) => ({ students: s.students.map((st) => st.id === id ? { ...st, ...merged } : st) }));
         get().logAction('سجل الطلاب', 'تعديل بيانات طالب', get().studentName(id));
-        const { id: _id, code: _code, ...apiUpdates } = merged;
-        void _id; void _code;
-        syncToServer(get, () => studentApi.update(id, apiUpdates as Record<string, unknown>), {
+        const apiUpdates: Record<string, unknown> = {
+          name: merged.name,
+          school: merged.school,
+          gender: merged.gender,
+          phone: merged.phone,
+          parentPhone: merged.parentPhone,
+          telegram: merged.telegram,
+          courseProgram: merged.courseProgram,
+          courseTerm: merged.courseTerm,
+          studyType: merged.studyType,
+          locationScope: merged.locationScope,
+          baghdadMode: merged.baghdadMode,
+          mainSite: merged.mainSite,
+          subSite: merged.subSite,
+          courseId: merged.courseId,
+          status: merged.status,
+          dismissalType: merged.dismissalType,
+          dismissalReason: merged.dismissalReason,
+          dismissalNotes: merged.dismissalNotes,
+          createdAt: merged.createdAt,
+          opportunities: merged.opportunities,
+          baseOpportunities: merged.baseOpportunities,
+          accountingGraceDays: merged.accountingGraceDays,
+        };
+        syncToServer(get, () => studentApi.update(id, apiUpdates), {
           description: 'تعديل بيانات طالب',
           rollback: () => set({ students: previousStudents }),
         });

@@ -514,8 +514,22 @@ export const roleApi = {
 // ─── Log API ──────────────────────────────────────────────────────────────────
 
 export const logApi = {
-  add: (log: Record<string, unknown>) =>
-    apiPost('logs', log),
+  add: async (log: Record<string, unknown>): Promise<ApiResult> => {
+    const result = await apiPost('logs', log);
+
+    // Some audit entries are intentionally server-only after the security
+    // hardening phase. The UI may still create a local log for immediate
+    // history, but the backend correctly rejects saving that specific
+    // (module/action) from the client with 403. Treat that as a successful
+    // local-only audit entry so it does not trigger repeated "Server sync"
+    // errors or outbox retries. Real audit records for sensitive actions are
+    // written by the corresponding server route after the DB mutation.
+    if (!result.ok && result.status === 403) {
+      return { ok: true };
+    }
+
+    return result;
+  },
   clear: (password: string) =>
     apiPost('logs/clear', { password }),
 };

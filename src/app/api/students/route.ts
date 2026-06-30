@@ -33,6 +33,39 @@ function validateGraceDays(value: unknown): string | null {
 }
 
 
+const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
+  // Primary/derived fields
+  'code',
+  'nameKey',
+  'phoneKey',
+  'telegramKey',
+  // Prisma relation objects that may be present after GET /api/students include: { course: true }
+  'course',
+  'grades',
+  'opportunityLogs',
+  'studentLeaves',
+  'studentCalls',
+  'studentNotes',
+  'correctionSheets',
+  'telegramExamSubmissions',
+  // Client-only / stale accounting fields from older builds
+  'receiptNo',
+  'codeSequence',
+  'totalAmount',
+  'paidAmount',
+  'installments',
+  'accountingStart',
+  'groupId',
+  // Any Prisma timestamps/unknown values that should never be updated from this route
+  'updatedAt',
+]);
+
+function stripNonWritableStudentUpdateFields(data: Record<string, unknown>) {
+  for (const key of NON_WRITABLE_STUDENT_UPDATE_KEYS) {
+    delete data[key];
+  }
+}
+
 function getPrismaStudentErrorResponse(error: unknown) {
   const prismaError = error as { code?: string; meta?: { target?: unknown } };
   if (prismaError.code === "P2002") {
@@ -50,6 +83,14 @@ function getPrismaStudentErrorResponse(error: unknown) {
     return NextResponse.json({ error: "توجد بيانات فريدة مسجلة مسبقاً" }, { status: 409 });
   }
 
+  if (prismaError.code === "P2003") {
+    return NextResponse.json({ error: "لا يمكن حفظ الطالب لأن الدورة المحددة غير موجودة أو مرتبطة ببيانات غير صالحة" }, { status: 400 });
+  }
+
+  if (prismaError.code === "P2025") {
+    return NextResponse.json({ error: "تعذر العثور على الطالب المطلوب. حدّث الصفحة ثم حاول مرة أخرى." }, { status: 404 });
+  }
+
   console.error("[API] /api/students error:", error);
   return NextResponse.json({ error: "تعذر حفظ بيانات الطالب حالياً. تحقق من الاتصال ثم حاول مرة أخرى." }, { status: 500 });
 }
@@ -61,7 +102,6 @@ export async function GET(req: NextRequest) {
   const query = new URL(req.url).searchParams.get("q") || "";
   const students = await db.student.findMany({
     orderBy: { createdAt: "desc" },
-    include: { course: true },
   });
   const normalizedQuery = normalizeArabicText(query);
   const filteredStudents = normalizedQuery
@@ -199,9 +239,7 @@ export async function PUT(req: NextRequest) {
 
   const body = await req.json();
   const { id, ...data } = body;
-  for (const obsoleteKey of ["receiptNo", "codeSequence", "totalAmount", "paidAmount", "installments", "accountingStart", "groupId"]) {
-    delete data[obsoleteKey];
-  }
+  stripNonWritableStudentUpdateFields(data);
   if (!id)
     return NextResponse.json({ error: "تعذر تحديد الطالب المطلوب" }, { status: 400 });
   if (data.name !== undefined) {
@@ -283,20 +321,23 @@ export async function PUT(req: NextRequest) {
     data.baseOpportunities = Number(data.baseOpportunities);
 
   // If course-related fields are being updated, validate against course settings
-  if (data.courseProgram !== undefined || data.studyType !== undefined || 
-      data.locationScope !== undefined || data.baghdadMode !== undefined || 
+  if (data.courseProgram !== undefined || data.courseTerm !== undefined || data.studyType !== undefined ||
+      data.locationScope !== undefined || data.baghdadMode !== undefined ||
       data.subSite !== undefined || data.courseId !== undefined) {
-    const targetCourseId = data.courseId !== undefined ? data.courseId : 
+    const targetCourseId = data.courseId !== undefined ? data.courseId :
       (await db.student.findUnique({ where: { id }, select: { courseId: true } }))?.courseId;
-    
+
     if (targetCourseId) {
-      const course = await db.course.findUnique({ where: { id: targetCourseId } });
-      if (course) {
-        const current = await db.student.findUnique({ where: { id }, select: { 
-          courseProgram: true, courseTerm: true, studyType: true, 
-          locationScope: true, baghdadMode: true, subSite: true 
+      const course = await db.course.findUnique({ where: { id: String(targetCourseId) } });
+      if (!course) {
+        return NextResponse.json({ error: 'الدورة المحددة غير موجودة' }, { status: 400 });
+      }
+      {
+        const current = await db.student.findUnique({ where: { id }, select: {
+          courseProgram: true, courseTerm: true, studyType: true,
+          locationScope: true, baghdadMode: true, subSite: true
         }});
-        
+
         const courseChoices = {
           courseProgram: data.courseProgram ?? current?.courseProgram,
           courseTerm: data.courseProgram === 'كورسات' ? (data.courseTerm ?? current?.courseTerm) : null,
@@ -305,18 +346,18 @@ export async function PUT(req: NextRequest) {
           baghdadMode: data.baghdadMode ?? current?.baghdadMode,
           subSite: data.subSite ?? current?.subSite,
         };
-        
+
         const choiceValidation = validateStudentCourseChoices(course, courseChoices);
         if (!choiceValidation.ok) {
           return NextResponse.json({ error: choiceValidation.error }, { status: 400 });
         }
-        
+
         // Auto-resolve subSite
         const resolvedSubSite = resolveSubSite(
-          course, 
-          String(courseChoices.studyType ?? ''), 
-          String(courseChoices.locationScope ?? ''), 
-          String(courseChoices.baghdadMode ?? ''), 
+          course,
+          String(courseChoices.studyType ?? ''),
+          String(courseChoices.locationScope ?? ''),
+          String(courseChoices.baghdadMode ?? ''),
           String(courseChoices.subSite ?? '')
         );
         if (resolvedSubSite) data.subSite = resolvedSubSite;
