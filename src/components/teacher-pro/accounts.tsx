@@ -301,7 +301,7 @@ function UsersTab() {
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newUser, setNewUser] = useState({
-    username: '', name: '', password: '123456', roleId: 'role_checker', permissions: [] as string[],
+    username: '', name: '', password: '', roleId: 'role_checker', permissions: [] as string[],
   });
 
   const [editPermsId, setEditPermsId] = useState('');
@@ -339,7 +339,7 @@ function UsersTab() {
       active: true,
     });
     setShowAddDialog(false);
-    setNewUser({ username: '', name: '', password: '123456', roleId: 'role_checker', permissions: [] });
+    setNewUser({ username: '', name: '', password: '', roleId: 'role_checker', permissions: [] });
     toast.success('تمت إضافة المستخدم');
   });
 
@@ -405,7 +405,10 @@ function UsersTab() {
           <h3 className="text-lg font-bold">المستخدمين</h3>
           <p className="text-sm text-muted-foreground">إدارة حسابات المستخدمين وأدوارهم</p>
         </div>
-        <Button onClick={() => setShowAddDialog(true)}>إضافة مستخدم</Button>
+        <Button onClick={() => {
+          setNewUser({ username: '', name: '', password: generatePasscode(), roleId: 'role_checker', permissions: [] });
+          setShowAddDialog(true);
+        }}>إضافة مستخدم</Button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -551,7 +554,7 @@ function UsersTab() {
                 <Label htmlFor="new-password">رمز المرور</Label>
                 <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setNewUser(p => ({ ...p, password: generatePasscode() }))}>توليد رمز</Button>
               </div>
-              <Input id="new-password" name="password" autoComplete="new-password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="مثال: 123456" />
+              <Input id="new-password" name="password" autoComplete="new-password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="أدخل رمزاً أو اضغط توليد رمز" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-role">الدور</Label>
