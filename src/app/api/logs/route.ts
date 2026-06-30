@@ -166,13 +166,48 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ log }, { status: 201 });
 }
 
+/**
+ * DELETE /api/logs?id=...
+ *
+ * Deleting audit log entries is admin-only. The previous check
+ * (logs.view) let any user with read access also delete entries, which
+ * means a non-admin account manager could erase the audit trail of
+ * their own suspicious actions.
+ *
+ * Now: requires an authenticated admin principal (username='admin' OR
+ * roleId='role_admin'). Non-admins get 403.
+ *
+ * Bulk wipe is handled by the dedicated /api/logs/clear endpoint which
+ * has its own admin + password gate.
+ */
 export async function DELETE(req: NextRequest) {
-  const authError = await requirePermission(req, 'logs.view');
-  if (authError) return authError;
+  const principal = await getAuthPrincipal(req);
+  if (!principal) {
+    return NextResponse.json({ error: 'يجب تسجيل الدخول أولاً.' }, { status: 401 });
+  }
+  if (!principal.isAdmin) {
+    return NextResponse.json(
+      { error: 'حذف السجلات متاح لمدير النظام فقط.' },
+      { status: 403 },
+    );
+  }
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+
+  // Record who deleted what before we wipe it, so the audit trail
+  // records the deletion itself.
+  await db.auditLog.create({
+    data: {
+      module: 'أمان الحسابات',
+      action: 'حذف سجل تدقيق',
+      details: `معرف السجل: ${id}`,
+      userId: principal.id,
+      userName: principal.name || principal.username,
+    },
+  }).catch((error) => console.warn('[logs] failed to record deletion audit:', error));
+
   await db.auditLog.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
