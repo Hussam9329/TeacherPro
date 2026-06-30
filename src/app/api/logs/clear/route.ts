@@ -7,6 +7,7 @@ import { getAuthPrincipal } from '@/lib/server-auth';
 import { verifyPassword } from '@/lib/passwords';
 import { routeErrorResponse } from '@/lib/route-helpers';
 import { ensureInitialAdminSeed } from '@/lib/admin-seed';
+import { writeSecurityAudit } from '@/lib/security-audit';
 
 export async function POST(req: NextRequest) {
   try {
@@ -38,6 +39,12 @@ export async function POST(req: NextRequest) {
       db.auditLog.deleteMany({}),
       db.opportunityLog.deleteMany({}),
     ]);
+
+
+    await writeSecurityAudit(principal, 'تصفير السجلات', {
+      deletedAuditLogs: auditLogsResult.count,
+      deletedOpportunityLogs: opportunityLogsResult.count,
+    });
 
     return NextResponse.json({
       ok: true,

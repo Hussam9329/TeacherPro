@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTeacherStore, PERMISSION_CATALOG, type PermissionEntry } from '@/lib/teacher-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -599,6 +599,245 @@ function UsersTab() {
   );
 }
 
+
+// ─── Security Tab Component ──────────────────────────────────────────────────
+
+type SecurityCheck = {
+  id: string;
+  title: string;
+  ok: boolean;
+  severity: 'ok' | 'warn' | 'danger' | string;
+  message: string;
+};
+
+type SecurityRiskUser = {
+  id: string;
+  username: string;
+  name: string;
+  role: string;
+  roleId: string | null;
+  active: boolean;
+  isAdmin: boolean;
+  sensitivePermissions: string[];
+};
+
+type SecurityRiskRole = {
+  id: string;
+  name: string;
+  userCount: number;
+  sensitivePermissions: string[];
+};
+
+type SecurityLogItem = {
+  id: string;
+  module: string;
+  action: string;
+  details: string;
+  userName: string;
+  time: string;
+};
+
+type SecurityOverview = {
+  generatedAt: string;
+  checks: SecurityCheck[];
+  summary: {
+    users: number;
+    activeUsers: number;
+    disabledUsers: number;
+    roles: number;
+    riskyUsers: number;
+    riskyRoles: number;
+  };
+  riskyUsers: SecurityRiskUser[];
+  riskyRoles: SecurityRiskRole[];
+  recentLogs: SecurityLogItem[];
+};
+
+function securityBadgeVariant(severity: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+  if (severity === 'danger') return 'destructive';
+  if (severity === 'warn') return 'secondary';
+  if (severity === 'ok') return 'default';
+  return 'outline';
+}
+
+function formatSecurityTime(value: string) {
+  if (!value) return 'غير محدد';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-US', { hour12: false });
+}
+
+function SecurityTab() {
+  const [overview, setOverview] = useState<SecurityOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const loadOverview = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/accounts/security', { credentials: 'same-origin' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error || 'تعذر تحميل لوحة الأمان');
+      }
+      const data = await res.json() as SecurityOverview;
+      setOverview(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'تعذر تحميل لوحة الأمان');
+      setOverview(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadOverview();
+  }, []);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-sm text-muted-foreground">جاري تحميل لوحة أمان الحسابات...</CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="border-destructive/40">
+        <CardContent className="space-y-3 p-6">
+          <p className="font-semibold text-destructive">{error}</p>
+          <p className="text-sm text-muted-foreground">تحتاج صلاحية إدارة الحسابات لفتح هذه اللوحة.</p>
+          <Button variant="outline" onClick={() => void loadOverview()}>إعادة المحاولة</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!overview) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h3 className="text-lg font-bold">أمان الحسابات</h3>
+          <p className="text-sm text-muted-foreground">فحص سريع للأسرار، الصلاحيات الحساسة، وآخر تغييرات الحسابات.</p>
+        </div>
+        <Button variant="outline" onClick={() => void loadOverview()}>تحديث الفحص</Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">المستخدمين</p><p className="text-2xl font-black">{overview.summary.users}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">فعالين</p><p className="text-2xl font-black">{overview.summary.activeUsers}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">معطلين</p><p className="text-2xl font-black">{overview.summary.disabledUsers}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">الأدوار</p><p className="text-2xl font-black">{overview.summary.roles}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">مستخدمين حساسين</p><p className="text-2xl font-black">{overview.summary.riskyUsers}</p></CardContent></Card>
+        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">أدوار حساسة</p><p className="text-2xl font-black">{overview.summary.riskyRoles}</p></CardContent></Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {overview.checks.map((check) => (
+          <Card key={check.id} className={check.severity === 'danger' ? 'border-destructive/40' : ''}>
+            <CardContent className="space-y-2 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-bold">{check.title}</p>
+                <Badge variant={securityBadgeVariant(check.severity)}>{check.ok ? 'سليم' : check.severity === 'danger' ? 'خطر' : 'تنبيه'}</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">{check.message}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle className="text-base">المستخدمين أصحاب الصلاحيات الحساسة</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {overview.riskyUsers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">لا توجد صلاحيات حساسة خارج النطاق المتوقع.</p>
+            ) : overview.riskyUsers.map((user) => (
+              <div key={user.id} className="rounded-xl border bg-muted/20 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">{user.name}</p>
+                    <p className="text-xs text-muted-foreground">@{user.username} — {user.role}</p>
+                  </div>
+                  <Badge variant={user.active ? 'default' : 'secondary'}>{user.active ? 'فعال' : 'معطل'}</Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {user.sensitivePermissions.map((permission) => (
+                    <Badge key={permission} variant={user.isAdmin ? 'default' : 'outline'} className="text-[10px]">{permission}</Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">الأدوار الحساسة</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {overview.riskyRoles.length === 0 ? (
+              <p className="text-sm text-muted-foreground">لا توجد أدوار تحتوي صلاحيات حساسة.</p>
+            ) : overview.riskyRoles.map((role) => (
+              <div key={role.id} className="rounded-xl border bg-muted/20 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold">{role.name}</p>
+                    <p className="text-xs text-muted-foreground">{role.userCount} مستخدم مرتبط</p>
+                  </div>
+                  <Badge variant={role.id === 'role_admin' ? 'default' : 'secondary'}>{role.id}</Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {role.sensitivePermissions.map((permission) => (
+                    <Badge key={permission} variant="outline" className="text-[10px]">{permission}</Badge>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">آخر تدقيق للحسابات والصلاحيات</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b text-xs text-muted-foreground">
+                  <th className="p-2 text-right">الوقت</th>
+                  <th className="p-2 text-right">المستخدم</th>
+                  <th className="p-2 text-right">القسم</th>
+                  <th className="p-2 text-right">الإجراء</th>
+                  <th className="p-2 text-right">التفاصيل</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overview.recentLogs.length === 0 ? (
+                  <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">لا توجد عمليات حديثة.</td></tr>
+                ) : overview.recentLogs.slice(0, 30).map((log) => (
+                  <tr key={log.id} className="border-b last:border-0">
+                    <td className="p-2 text-xs text-muted-foreground">{formatSecurityTime(log.time)}</td>
+                    <td className="p-2">{log.userName}</td>
+                    <td className="p-2">{log.module}</td>
+                    <td className="p-2 font-medium">{log.action}</td>
+                    <td className="max-w-md truncate p-2 text-xs text-muted-foreground" title={log.details}>{log.details || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">آخر فحص: {formatSecurityTime(overview.generatedAt)}</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Main Accounts View ──────────────────────────────────────────────────────
 
 export function AccountsView() {
@@ -610,15 +849,19 @@ export function AccountsView() {
       </div>
 
       <Tabs defaultValue="users" dir="rtl">
-        <TabsList className="w-full max-w-lg">
+        <TabsList className="w-full max-w-3xl">
           <TabsTrigger value="users" className="flex-1">المستخدمين</TabsTrigger>
           <TabsTrigger value="roles" className="flex-1">الأدوار والصلاحيات</TabsTrigger>
+          <TabsTrigger value="security" className="flex-1">الأمان</TabsTrigger>
         </TabsList>
         <TabsContent value="users" className="mt-4">
           <UsersTab />
         </TabsContent>
         <TabsContent value="roles" className="mt-4">
           <RolesTab />
+        </TabsContent>
+        <TabsContent value="security" className="mt-4">
+          <SecurityTab />
         </TabsContent>
       </Tabs>
     </div>

@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission, requirePermissionPrincipal, type AuthPrincipal } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { writeSecurityAudit } from '@/lib/security-audit';
 
 const ADMIN_USERNAME = 'admin';
 const ADMIN_ROLE_ID = 'role_admin';
@@ -88,6 +89,12 @@ export async function POST(req: NextRequest) {
         permissions: normalizePermissions(body.permissions),
       },
     });
+    await writeSecurityAudit(principal, 'إنشاء دور', {
+      roleId: role.id,
+      name: role.name,
+      isDefault: role.isDefault,
+      permissions: role.permissions,
+    });
     return NextResponse.json({ role }, { status: 201 });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر إنشاء الدور حالياً.');
@@ -103,7 +110,7 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { id, ...data } = body;
     if (!id) return validationError('تعذر تحديد الدور المطلوب');
-    const roleBeforeUpdate = await db.role.findUnique({ where: { id }, select: { id: true } });
+    const roleBeforeUpdate = await db.role.findUnique({ where: { id } });
     if (!roleBeforeUpdate) return validationError('الدور غير موجود', 404);
     const securityError = validateRoleSecurity(principal, { id, ...data }, roleBeforeUpdate);
     if (securityError) return securityError;
@@ -114,6 +121,11 @@ export async function PUT(req: NextRequest) {
     }
     if (data.permissions !== undefined) data.permissions = normalizePermissions(data.permissions);
     const role = await db.role.update({ where: { id }, data });
+    await writeSecurityAudit(principal, 'تعديل دور', {
+      roleId: role.id,
+      before: roleBeforeUpdate,
+      after: role,
+    });
     return NextResponse.json({ role });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث الدور حالياً.');
@@ -134,6 +146,11 @@ export async function DELETE(req: NextRequest) {
     const securityError = validateRoleSecurity(principal, { id }, role || undefined);
     if (securityError) return securityError;
     await db.role.delete({ where: { id } });
+    await writeSecurityAudit(principal, 'حذف دور', {
+      roleId: id,
+      name: role?.name || id,
+      permissions: role?.permissions || '[]',
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حذف الدور حالياً.');

@@ -20,6 +20,14 @@ export async function POST(req: NextRequest) {
 
     const user = await findUserByUsername(username);
     if (!user || !user.active || !(await verifyPassword(password, user.passwordHash))) {
+      await db.auditLog.create({
+        data: {
+          module: 'أمان الحسابات',
+          action: 'فشل تسجيل دخول',
+          details: JSON.stringify({ username }),
+          userName: username || 'غير محدد',
+        },
+      }).catch((error) => console.warn('[security-audit] failed login audit failed:', error));
       return NextResponse.json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة.' }, { status: 401 });
     }
 
@@ -30,6 +38,16 @@ export async function POST(req: NextRequest) {
       await db.appUser.update({ where: { id: user.id }, data: { passwordHash } });
       user.passwordHash = passwordHash;
     }
+
+    await db.auditLog.create({
+      data: {
+        module: 'أمان الحسابات',
+        action: 'نجاح تسجيل دخول',
+        details: JSON.stringify({ username: user.username }),
+        userId: user.id,
+        userName: user.name || user.username,
+      },
+    }).catch((error) => console.warn('[security-audit] login audit failed:', error));
 
     const res = NextResponse.json({ user: toAuthPrincipal(user) });
     await setAuthCookie(res, user.id);

@@ -6,6 +6,7 @@ import { requirePermission, requirePermissionPrincipal, type AuthPrincipal } fro
 import { db } from '@/lib/db';
 import { normalizePasswordForStorage } from '@/lib/passwords';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { writeSecurityAudit } from '@/lib/security-audit';
 
 const ADMIN_USERNAME = 'admin';
 const ADMIN_ROLE_ID = 'role_admin';
@@ -163,6 +164,13 @@ export async function POST(req: NextRequest) {
       },
       select: safeUserSelect(),
     });
+    await writeSecurityAudit(principal, 'إنشاء مستخدم', {
+      targetUserId: user.id,
+      username: user.username,
+      name: user.name,
+      roleId: user.roleId,
+      active: user.active,
+    });
     return NextResponse.json({ user }, { status: 201 });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر إنشاء المستخدم حالياً.');
@@ -181,7 +189,7 @@ export async function PUT(req: NextRequest) {
 
     const existingUser = await db.appUser.findUnique({
       where: { id },
-      select: { id: true, username: true, roleId: true },
+      select: { id: true, username: true, name: true, role: true, roleId: true, permissions: true, active: true },
     });
     if (!existingUser) return validationError('المستخدم غير موجود', 404);
     const securityError = validateSensitiveUserChanges(principal, { id, ...data }, existingUser);
@@ -216,6 +224,25 @@ export async function PUT(req: NextRequest) {
     if (passwordInput) updateData.passwordHash = await normalizePasswordForStorage(passwordInput);
 
     const user = await db.appUser.update({ where: { id }, data: updateData, select: safeUserSelect() });
+    await writeSecurityAudit(principal, 'تعديل مستخدم', {
+      targetUserId: user.id,
+      username: user.username,
+      before: {
+        name: existingUser.name,
+        role: existingUser.role,
+        roleId: existingUser.roleId,
+        permissions: existingUser.permissions,
+        active: existingUser.active,
+      },
+      after: {
+        name: user.name,
+        role: user.role,
+        roleId: user.roleId,
+        permissions: user.permissions,
+        active: user.active,
+      },
+      passwordChanged: Boolean(passwordInput),
+    });
     return NextResponse.json({ user });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث المستخدم حالياً.');
@@ -232,7 +259,7 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد المستخدم المطلوب');
     if (id === principal.id) return validationError('لا يمكن حذف حسابك الحالي من نفس الجلسة.', 403);
-    const user = await db.appUser.findUnique({ where: { id }, select: { username: true, roleId: true } });
+    const user = await db.appUser.findUnique({ where: { id }, select: { id: true, username: true, name: true, role: true, roleId: true, permissions: true, active: true } });
     if (!user) return validationError('المستخدم غير موجود', 404);
     if (isPrimaryAdminUser(user) || isAdminRoleUser(user)) {
       return validationError('لا يمكن حذف حساب مدير النظام. عطّل أو عدّل حسابات المستخدمين العادية فقط.', 403);
@@ -242,6 +269,12 @@ export async function DELETE(req: NextRequest) {
       return validationError('لا يمكن حذف المستخدم لأنه مرتبط بأوراق تصحيح. عطّل الحساب بدلاً من حذفه.', 409);
     }
     await db.appUser.delete({ where: { id } });
+    await writeSecurityAudit(principal, 'حذف مستخدم', {
+      targetUserId: id,
+      username: user.username,
+      name: user.name,
+      roleId: user.roleId,
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حذف المستخدم حالياً.');
