@@ -38,6 +38,19 @@ function includesSensitivePermission(value: unknown): boolean {
   return parsePermissionIds(value).some((permission) => SENSITIVE_PERMISSION_IDS.has(permission));
 }
 
+function samePermissionIds(a: unknown, b: unknown): boolean {
+  const normalize = (value: unknown) => Array.from(new Set(parsePermissionIds(value))).sort().join('\u0000');
+  return normalize(a) === normalize(b);
+}
+
+function sameOptionalString(a: unknown, b: unknown): boolean {
+  return String(a ?? '') === String(b ?? '');
+}
+
+function sameOptionalBoolean(a: unknown, b: unknown): boolean {
+  return Boolean(a) === Boolean(b);
+}
+
 function isOwner(principal: AuthPrincipal): boolean {
   return principal.username.trim().toLowerCase() === ADMIN_USERNAME;
 }
@@ -54,7 +67,7 @@ function forbiddenSecurity(message: string) {
   return NextResponse.json({ error: message }, { status: 403 });
 }
 
-function validateSensitiveUserChanges(principal: AuthPrincipal, payload: Record<string, unknown>, existingUser?: { username?: string | null; roleId?: string | null }) {
+function validateSensitiveUserChanges(principal: AuthPrincipal, payload: Record<string, unknown>, existingUser?: { username?: string | null; role?: string | null; roleId?: string | null; permissions?: unknown; active?: boolean | null }) {
   const actorIsOwner = isOwner(principal);
   const requestedUsername = String(payload.username ?? '').trim().toLowerCase();
   const requestedRoleId = String(payload.roleId ?? '');
@@ -68,8 +81,15 @@ function validateSensitiveUserChanges(principal: AuthPrincipal, payload: Record<
     return forbiddenSecurity('لا يمكن منح صلاحيات حساسة إلا من حساب admin الرئيسي.');
   }
 
-  if (principal.id === String(payload.id || '') && (payload.roleId !== undefined || payload.permissions !== undefined || payload.active !== undefined)) {
-    return forbiddenSecurity('لا يمكن تعديل دورك أو صلاحياتك أو حالة حسابك من نفس الجلسة.');
+  if (principal.id === String(payload.id || '') && existingUser) {
+    const roleIdChanged = payload.roleId !== undefined && !sameOptionalString(payload.roleId, existingUser.roleId);
+    const roleNameChanged = payload.role !== undefined && !sameOptionalString(payload.role, existingUser.role);
+    const permissionsChanged = payload.permissions !== undefined && !samePermissionIds(payload.permissions, existingUser.permissions);
+    const activeChanged = payload.active !== undefined && !sameOptionalBoolean(payload.active, existingUser.active);
+
+    if (roleIdChanged || roleNameChanged || permissionsChanged || activeChanged) {
+      return forbiddenSecurity('لا يمكن تعديل دورك أو صلاحياتك أو حالة حسابك من نفس الجلسة.');
+    }
   }
 
   return null;
@@ -194,7 +214,8 @@ export async function PUT(req: NextRequest) {
     if (!existingUser) return validationError('المستخدم غير موجود', 404);
     const securityError = validateSensitiveUserChanges(principal, { id, ...data }, existingUser);
     if (securityError) return securityError;
-    const roleAssignmentError = data.roleId !== undefined ? await validateRoleAssignment(principal, data.roleId) : null;
+    const roleIdChanged = data.roleId !== undefined && !sameOptionalString(data.roleId, existingUser.roleId);
+    const roleAssignmentError = roleIdChanged ? await validateRoleAssignment(principal, data.roleId) : null;
     if (roleAssignmentError) return roleAssignmentError;
 
     const updateData: Record<string, unknown> = { ...data };
