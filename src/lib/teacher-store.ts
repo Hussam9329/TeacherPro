@@ -341,9 +341,22 @@ const ALL_PERMISSION_IDS = Array.from(new Set(PERMISSION_CATALOG.map(p => p.id))
 const ALL_VIEW_PERMISSION_IDS = PERMISSION_CATALOG.filter(p => p.level === 'read').map(p => p.id);
 
 const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = '204871';
 const ADMIN_ROLE_ID = 'role_admin';
 const ADMIN_ROLE_NAME = 'مدير عام';
+
+/**
+ * Default admin password is read from TEACHERPRO_ADMIN_PASSWORD env var.
+ * The constant here is only a development fallback; production requires
+ * the env var to be set (see admin-seed.ts for the authoritative path).
+ */
+function readAdminPasswordEnv(): string {
+  if (typeof process !== 'undefined' && process.env?.TEACHERPRO_ADMIN_PASSWORD) {
+    return process.env.TEACHERPRO_ADMIN_PASSWORD.trim();
+  }
+  // Development-only fallback. Never used in production.
+  return 'change-me-in-env';
+}
+const ADMIN_PASSWORD = readAdminPasswordEnv();
 const ADMIN_FULL_PERMISSIONS = [...ALL_PERMISSION_IDS];
 const ADMIN_ONLY_SECTIONS = new Set<SectionId>(['admin-log-reset']);
 const DEPRECATED_PERMISSION_IDS = new Set(['groups.view', 'groups.add', 'groups.edit', 'groups.delete', 'sites.view', 'sites.add', 'sites.edit', 'sites.delete', 'demos.view', 'demos.manage']);
