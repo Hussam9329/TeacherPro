@@ -89,12 +89,25 @@ export async function enqueueMutation(input: {
     // network error → queue.
   }
 
+  return queueOnly(input);
+}
+
+/**
+ * Queue a mutation without attempting an immediate send. Used by apiPost/
+ * apiPut/apiDelete after they've already exhausted their own retries.
+ */
+export function queueOnly(input: {
+  endpoint: string;
+  method: 'POST' | 'PUT' | 'DELETE';
+  payload?: unknown;
+  description?: string;
+}): { ok: boolean; outboxId: string } {
   const item: QueuedMutation = {
     id: generateId(),
-    endpoint,
-    method,
-    payload,
-    description,
+    endpoint: input.endpoint,
+    method: input.method,
+    payload: input.payload,
+    description: input.description,
     queuedAt: Date.now(),
     attempts: 0,
   };

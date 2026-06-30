@@ -48,6 +48,7 @@ export interface ApiResult {
   error?: string;
   status?: number;
   transient?: boolean;
+  queued?: boolean;
 }
 
 function isTransientHttpStatus(status: number): boolean {
@@ -69,7 +70,7 @@ async function retryTransientMutation(run: () => Promise<ApiResult>, attempts = 
 }
 
 async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
-  return retryTransientMutation(async () => {
+  const result = await retryTransientMutation(async () => {
     try {
       const res = await fetch(`/api/${endpoint}`, {
         method: 'POST',
@@ -89,10 +90,26 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
       return { ok: false, error: msg, status: 0, transient: true };
     }
   });
+  // If all retries exhausted on a transient failure, queue to outbox
+  // so the mutation survives page reloads and is retried when network returns.
+  if (!result.ok && result.transient) {
+    try {
+      const { queueOnly } = require('./mutation-outbox');
+      queueOnly({
+        endpoint: `/api/${endpoint}`,
+        method: 'POST',
+        payload: data,
+      });
+      return { ...result, queued: true };
+    } catch {
+      // mutation-outbox not available (SSR); return as-is.
+    }
+  }
+  return result;
 }
 
 async function apiPut(endpoint: string, data: Record<string, unknown>): Promise<ApiResult> {
-  return retryTransientMutation(async () => {
+  const result = await retryTransientMutation(async () => {
     try {
       const res = await fetch(`/api/${endpoint}`, {
         method: 'PUT',
@@ -112,17 +129,34 @@ async function apiPut(endpoint: string, data: Record<string, unknown>): Promise<
       return { ok: false, error: msg, status: 0, transient: true };
     }
   });
+  if (!result.ok && result.transient) {
+    try {
+      const { queueOnly } = require('./mutation-outbox');
+      queueOnly({
+        endpoint: `/api/${endpoint}`,
+        method: 'PUT',
+        payload: data,
+      });
+      return { ...result, queued: true };
+    } catch {
+      // SSR; return as-is.
+    }
+  }
+  return result;
 }
 
 async function apiDelete(endpoint: string, id: string, extraParams: Record<string, string | undefined> = {}): Promise<ApiResult> {
-  return retryTransientMutation(async () => {
+  const params = new URLSearchParams();
+  params.set('id', id);
+  Object.entries(extraParams).forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  const queryString = params.toString();
+  const fullEndpoint = `/api/${endpoint}?${queryString}`;
+
+  const result = await retryTransientMutation(async () => {
     try {
-      const params = new URLSearchParams();
-      params.set('id', id);
-      Object.entries(extraParams).forEach(([key, value]) => {
-        if (value) params.set(key, value);
-      });
-      const res = await fetch(`/api/${endpoint}?${params.toString()}`, {
+      const res = await fetch(fullEndpoint, {
         method: 'DELETE',
         credentials: 'same-origin',
       });
@@ -138,6 +172,19 @@ async function apiDelete(endpoint: string, id: string, extraParams: Record<strin
       return { ok: false, error: msg, status: 0, transient: true };
     }
   });
+  if (!result.ok && result.transient) {
+    try {
+      const { queueOnly } = require('./mutation-outbox');
+      queueOnly({
+        endpoint: fullEndpoint,
+        method: 'DELETE',
+      });
+      return { ...result, queued: true };
+    } catch {
+      // SSR; return as-is.
+    }
+  }
+  return result;
 }
 
 interface ApiGetResponse<T> {
@@ -250,16 +297,23 @@ export interface ServerData {
 }
 
 /**
- * Load all data from the server via the backup endpoint.
- * Returns null if the API is unavailable or returns empty data.
+ * Load all data from the server via parallel per-resource endpoints.
+ *
+ * Previously this tried /api/backup first (one huge JSON response with
+ * all tables). Now it always uses the per-resource endpoints in parallel
+ * because:
+ *   - Parallel small requests are faster than one huge request on Vercel
+ *   - Each endpoint respects per-resource permissions (non-admin users
+ *     get 403 on resources they can't see, which is silently skipped)
+ *   - /api/backup remains available for the dedicated backup/export feature
+ *
+ * Returns null if the session is invalid (401) or no data could be loaded.
  */
 export async function loadAllFromServer(): Promise<ServerData | null> {
-  const backup = await apiGetResponse<ServerData>('backup', [401, 403]);
-  if (backup.ok) return backup.data;
-  if (backup.status === 401) return null;
+  // First check if the session is valid at all.
+  const sessionCheck = await apiGetResponse<{ user: unknown }>('auth/session', [401]);
+  if (sessionCheck.status === 401) return null;
 
-  // Non-admin users may not have permission to the full backup endpoint.
-  // In that case, load only the endpoint groups their session is allowed to read.
   const endpointLoaders = [
     apiGetResponse<Pick<ServerData, 'courses'>>('courses', [403]),
     apiGetResponse<Pick<ServerData, 'chapters'>>('chapters', [403]),
@@ -281,6 +335,14 @@ export async function loadAllFromServer(): Promise<ServerData | null> {
     if (result.ok && result.data) Object.assign(acc, result.data);
     return acc;
   }, {});
+
+  // Opportunistically flush any pending mutations from a previous session.
+  try {
+    const { flushOutbox } = require('./mutation-outbox');
+    void flushOutbox();
+  } catch {
+    // SSR; skip.
+  }
 
   return Object.keys(merged).length > 0 ? merged : null;
 }

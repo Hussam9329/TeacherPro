@@ -5,6 +5,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthPrincipal, requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 
+// Modules the client is allowed to log via POST /api/logs.
+// Security-sensitive modules (أمان الحسابات, النظام, تصفير الlog, etc.)
+// are server-only and cannot be written from the client.
+const ALLOWED_CLIENT_MODULES = new Set([
+  'الطلاب',
+  'تسجيل الطلاب',
+  'سجل الطلاب',
+  'الدرجات',
+  'الامتحانات',
+  'الدورات',
+  'الفصول',
+  'الفرص',
+  'المتابعة',
+  'المكالمات',
+  'الإجازات',
+  'التعهدات',
+  'التصحيح الإلكتروني',
+  'تصدير',
+  'تسجيل الدخول',
+]);
+
+function isAllowedClientModule(module: string): boolean {
+  return ALLOWED_CLIENT_MODULES.has(module.trim());
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, 'logs.view');
   if (authError) return authError;
@@ -14,11 +39,13 @@ export async function GET(req: NextRequest) {
 }
 
 /**
- * Audit logs are SERVER-ONLY. The client may send only module/action/details;
- * userId/userName are always taken from the authenticated principal so a
- * logged-in user cannot forge entries attributed to someone else.
+ * Audit logs are SERVER-ONLY in principle. The client may write logs for
+ * a restricted set of UI modules (الطلاب, الدرجات, etc.) so the activity
+ * feed reflects user actions. Security-sensitive modules (أمان الحسابات,
+ * النظام, etc.) are written exclusively by server-side code.
  *
- * The id field is also ignored — the server generates it.
+ * userId/userName are always taken from the authenticated principal.
+ * The id field is ignored — the server generates it.
  */
 export async function POST(req: NextRequest) {
   const principal = await getAuthPrincipal(req);
@@ -35,6 +62,13 @@ export async function POST(req: NextRequest) {
 
   if (!module || !action) {
     return NextResponse.json({ error: 'الوحدة والإجراء مطلوبان.' }, { status: 400 });
+  }
+
+  if (!isAllowedClientModule(module)) {
+    return NextResponse.json(
+      { error: 'لا يمكن كتابة سجلات لهذه الوحدة من العميل.' },
+      { status: 403 },
+    );
   }
 
   const log = await db.auditLog.create({

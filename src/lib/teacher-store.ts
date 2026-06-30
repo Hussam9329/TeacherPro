@@ -1404,6 +1404,10 @@ function isTransientSyncFailure(error: unknown): boolean {
   return false;
 }
 
+function isQueuedResult(error: unknown): boolean {
+  return isFailedApiResult(error) && Boolean((error as ApiResult).queued);
+}
+
 function syncToServer(
   getState: () => TeacherState,
   action: () => unknown,
@@ -1417,6 +1421,10 @@ function syncToServer(
       }
     })
     .catch((error) => {
+      // إذا كان الطلب مؤجلاً في outbox (queued)، لا نعرض خطأ ولا نرجع الحالة.
+      // سيتم إعادة المحاولة تلقائياً عند عودة الشبكة.
+      if (isQueuedResult(error)) return;
+
       // لا نرجع الحالة القديمة بسبب انقطاع شبكة/ضغط خادم مؤقت؛
       // الرجوع العشوائي كان يمسح درجات أُدخلت بعد الطلب الفاشل.
       if (!isTransientSyncFailure(error)) options.rollback?.();

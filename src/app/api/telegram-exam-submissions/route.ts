@@ -108,7 +108,7 @@ function readStringArray(value: unknown): string[] {
 
 function sanitizePages(value: unknown): Array<Record<string, string | number>> {
   if (!Array.isArray(value)) return [];
-  return value.slice(0, 80).map((page: IncomingPage, index) => {
+  return value.slice(0, 20).map((page: IncomingPage, index) => {
     const pageNumber = Math.max(1, Math.trunc(numberValue(page?.pageNumber, index + 1)));
     const cleaned: Record<string, string | number> = { pageNumber };
 
@@ -117,7 +117,7 @@ function sanitizePages(value: unknown): Array<Record<string, string | number>> {
       'localPath', 'messageId', 'caption', 'downloadedAt',
     ];
     for (const field of stringFields) {
-      const max = field === 'dataUrl' ? 2_000_000 : 2000;
+      const max = field === 'dataUrl' ? 200_000 : 2000;
       const cleanedValue = textValue(page?.[field], max);
       if (cleanedValue) cleaned[field] = cleanedValue;
     }
@@ -208,11 +208,18 @@ export async function GET(req: NextRequest) {
   }
 }
 
+const MAX_REQUEST_BYTES = 5 * 1024 * 1024; // 5 MB hard cap (20 pages × ~200 KB dataUrl + metadata)
+
 export async function POST(req: NextRequest) {
   const tokenError = requireBotToken(req);
   if (tokenError) return tokenError;
 
   try {
+    const contentLength = Number(req.headers.get('content-length') || 0);
+    if (contentLength && contentLength > MAX_REQUEST_BYTES) {
+      return validationError(`حجم الطلب كبير جداً (${Math.round(contentLength / 1024 / 1024)} MB). الحد الأقصى 5 MB.`);
+    }
+
     const schemaReady = await ensureTelegramSubmissionSchema();
     if (!schemaReady.ok) {
       resetTelegramSubmissionSchemaEnsureCache();

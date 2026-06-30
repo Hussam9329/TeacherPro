@@ -11,7 +11,7 @@ type AttemptRecord = {
   failures: number[]; // unix-ms timestamps of failures within the window
 };
 
-const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const MAX_FAILURES = 5; // 5 failed attempts within the window → block
 
 const buckets = new Map<string, AttemptRecord>();

@@ -68,13 +68,16 @@ export function checkOrigin(req: NextRequest): NextResponse | null {
     );
   }
 
-  // No Origin and no Referer on a state-changing request.
-  // Browsers send Origin on cross-site fetch POSTs and Referer on
-  // same-site form submissions. A request with neither is likely:
-  //   - a same-site fetch where the browser omitted Origin (some older
-  //     browsers do this for same-site requests)
-  //   - a direct API call (curl, Postman, bot)
-  // SameSite=Lax cookies already block cross-site form POSTs, so we
-  // allow this case rather than risk blocking legitimate users.
-  return null;
+  // No Origin and no Referer on a state-changing request — block.
+  // Modern browsers ALWAYS send Origin on fetch() POST/PUT/DELETE, and
+  // always send Referer on form submissions. A request with neither is
+  // from a non-browser client (curl, bot, script) which can use the
+  // API directly with a bearer token if needed.
+  //
+  // SameSite=Lax cookies provide backup protection for form POSTs, but
+  // we enforce Origin/Referer as the primary CSRF defense.
+  return NextResponse.json(
+    { error: 'طلب غير مصرح به (لا يوجد Origin/Referer).' },
+    { status: 403 },
+  );
 }
