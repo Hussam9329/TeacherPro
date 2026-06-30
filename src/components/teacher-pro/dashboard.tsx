@@ -16,6 +16,23 @@ import {
   GRADE_ENTRY_MISSING_NOTES_EVENT,
   readGradeEntryMissingNotes,
 } from "@/lib/grade-entry-notes";
+
+type DashboardStats = {
+  activeStudents: number;
+  dismissedStudents: number;
+  totalStudents: number;
+  pendingCorrectionSheets: number;
+  recentLogs: Array<{
+    id: string;
+    module: string;
+    action: string;
+    details?: string | null;
+    user?: string | null;
+    userName?: string | null;
+    time: string;
+  }>;
+};
+
 export function DashboardView() {
   const {
     students,
@@ -24,13 +41,28 @@ export function DashboardView() {
     setSection,
   } = useTeacherStore();
 
-  const activeCount = students.filter((s) => s.status === "نشط").length;
-  const dismissedCount = students.filter((s) => s.status === "مفصول").length;
-  const totalStudents = students.length;
-  const pendingSheets = correctionSheets.filter(
-    (s) => s.status !== "مكتمل",
-  ).length;
+  // Stats from the lightweight /api/stats endpoint (5 COUNT queries,
+  // much faster than waiting for loadAllFromServer to fetch all rows).
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [missingNotesCount, setMissingNotesCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setStatsLoading(true);
+    fetch("/api/stats", { credentials: "same-origin" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setStats(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setStatsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const updateCount = () => setMissingNotesCount(readGradeEntryMissingNotes().length);
@@ -42,6 +74,16 @@ export function DashboardView() {
       window.removeEventListener("storage", updateCount);
     };
   }, []);
+
+  // Use stats from /api/stats if available (fast), otherwise fall back
+  // to computing from the store (which may still be loading).
+  const activeCount = stats?.activeStudents ?? students.filter((s) => s.status === "نشط").length;
+  const dismissedCount = stats?.dismissedStudents ?? students.filter((s) => s.status === "مفصول").length;
+  const totalStudents = stats?.totalStudents ?? students.length;
+  const pendingSheets = stats?.pendingCorrectionSheets ?? correctionSheets.filter(
+    (s) => s.status !== "مكتمل",
+  ).length;
+  const recentLogs = stats?.recentLogs ?? logs.slice(0, 6);
 
   const kpiCards = [
     {
@@ -74,7 +116,6 @@ export function DashboardView() {
     },
   ];
 
-  const recentLogs = logs.slice(0, 6);
   return (
     <div className="section-stack">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -82,7 +123,7 @@ export function DashboardView() {
           <StatCard
             key={card.label}
             label={card.label}
-            value={card.value}
+            value={statsLoading ? "…" : card.value}
             icon={card.icon}
             tone={card.tone}
             hint={card.hint}
@@ -143,7 +184,7 @@ export function DashboardView() {
                     <div>
                       <p className="font-bold text-sm">{log.action}</p>
                       <p className="text-xs text-muted-foreground">
-                        {log.user} - {log.module} - {log.time}
+                        {log.userName || log.user || "—"} - {log.module} - {log.time}
                       </p>
                     </div>
                     <span className="chip">نشاط</span>
