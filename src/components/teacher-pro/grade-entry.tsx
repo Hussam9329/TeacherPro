@@ -771,15 +771,33 @@ export function GradeEntryView() {
     });
   };
 
-  const missingVisibleStudents = selectedExam
-    ? visibleExamStudents.filter((student) => {
+  const missingExamStudents = useMemo(() => {
+    if (!selectedExam) return [];
+    const selectedMainSites = splitSelection(selectedExam.mainSite);
+
+    return students
+      .filter((student) => {
+        if (!selectedExam.courseIds.includes(student.courseId)) return false;
+        if (!isExamOnOrAfterStudentRegistration(student, selectedExam))
+          return false;
+        if (!activeChapterCourseIds.has(student.courseId)) return false;
+        if (!studentMatchesExamMainSites(student, selectedMainSites))
+          return false;
         const leave = getStudentLeaveForSelectedExam(student.id);
         if (leave) return false;
         if (!canEditGradeForStudent(student.id)) return false;
         const grade = getGrade(student.id);
         return !isGradeEntered(grade, selectedExam);
       })
-    : [];
+      .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+  }, [
+    selectedExam,
+    students,
+    activeChapterCourseIds,
+    leaveByStudentId,
+    gradeByStudentId,
+    automaticEffectStudentIds,
+  ]);
 
   const absentGradesForSelectedExam = useMemo(
     () =>
@@ -842,15 +860,15 @@ export function GradeEntryView() {
     }
   });
 
-  const handleMarkVisibleMissingAsAbsent = () => {
+  const handleMarkAllMissingAsAbsent = () => {
     if (!selectedExam) return;
-    if (missingVisibleStudents.length === 0) {
-      toast.info("لا يوجد طلاب ظاهرون بدون درجة لتسجيلهم غائبين");
+    if (missingExamStudents.length === 0) {
+      toast.info("لا يوجد طلاب بدون درجة لتسجيلهم غائبين في هذا الامتحان");
       return;
     }
 
     const confirmed = window.confirm(
-      `سيتم تسجيل ${missingVisibleStudents.length} طالب من الصفحة الحالية بدون درجة كغائب في امتحان ${selectedExam.name}. لن يتم تعديل أي درجة موجودة مسبقًا. هل تريد المتابعة؟`,
+      `سيتم تسجيل ${missingExamStudents.length} طالب من كل طلاب الدورة المرتبطين بامتحان ${selectedExam.name} كغائبين. لن يتم تعديل أي درجة موجودة مسبقًا. هل تريد المتابعة؟`,
     );
     if (!confirmed) return;
 
@@ -862,7 +880,7 @@ export function GradeEntryView() {
     const nextSavedRows: Record<string, string> = {};
     const nextEditableRows: Record<string, boolean> = {};
 
-    missingVisibleStudents.forEach((student) => {
+    missingExamStudents.forEach((student) => {
       const draft: DraftGrade = {
         status: "غائب",
         score: "",
@@ -883,7 +901,7 @@ export function GradeEntryView() {
     setDrafts((prev) => ({ ...prev, ...nextDrafts }));
     setSavedRows((prev) => ({ ...prev, ...nextSavedRows }));
     setEditableRows((prev) => ({ ...prev, ...nextEditableRows }));
-    toast.success(`تم تسجيل ${missingVisibleStudents.length} طالب من الصفحة الحالية كغائب وستتم المزامنة تلقائياً`);
+    toast.success(`تم تسجيل ${missingExamStudents.length} طالب من كل طلاب الامتحان كغائب وستتم المزامنة تلقائياً`);
   };
 
   const handleQuickScan = () => {
@@ -1085,11 +1103,11 @@ export function GradeEntryView() {
             <Button
               variant="secondary"
               size="sm"
-              onClick={handleMarkVisibleMissingAsAbsent}
-              disabled={!selectedExam || missingVisibleStudents.length === 0}
-              title="يسجل طلاب الصفحة الحالية الذين لا يملكون درجة محفوظة كغائبين"
+              onClick={handleMarkAllMissingAsAbsent}
+              disabled={!selectedExam || missingExamStudents.length === 0}
+              title="يسجل كل طلاب الدورة المرتبطين بهذا الامتحان الذين لا يملكون درجة محفوظة كغائبين، وليس الصفحة الحالية فقط"
             >
-              تسجيل الصفحة كغائب ({missingVisibleStudents.length})
+              تسجيل الكل كغائب ({missingExamStudents.length})
             </Button>
             <Button
               variant="outline"
