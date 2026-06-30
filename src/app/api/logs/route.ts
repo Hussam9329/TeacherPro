@@ -6,95 +6,97 @@ import { getAuthPrincipal, requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 
 /**
- * Whitelist of (module, action) pairs the client is allowed to write.
+ * Whitelist of (module, action) pairs the CLIENT is allowed to write.
  *
- * The client calls logAction() in teacher-store for user-facing actions
- * like adding/editing/deleting records. Each allowed pair must appear
- * here; anything else is rejected with 403.
+ * Only NON-SENSITIVE user actions are here — adding/editing records,
+ * viewing exports, etc. Sensitive actions (delete, dismiss, reactivate,
+ * bulk operations, backup import/export) are SERVER-ONLY: the client
+ * logs them locally for immediate feedback, but the server-side handler
+ * writes the authoritative audit entry after the DB mutation succeeds.
  *
  * Security-sensitive modules (أمان الحسابات, النظام, تصفير الlog, etc.)
- * are NEVER in this list — they are written exclusively by server-side
- * code (login route, security-audit lib, etc.).
+ * are NEVER in this list.
+ *
+ * Rationale: even with a whitelist, allowing the client to write
+ * 'حذف طالب' or 'فصل الطالب' entries means a compromised session could
+ * plant fake audit entries that look like legitimate admin actions.
+ * Server-only logging for sensitive actions ensures the audit trail
+ * reflects what actually happened in the DB, not what the client
+ * claims happened.
  */
 const ALLOWED_CLIENT_LOG_ENTRIES: Record<string, Set<string>> = {
   'تسجيل الدخول': new Set([
     'دخول للنظام',
     'تسجيل خروج',
-    'محاولة دخول مرفوضة',
   ]),
   'الدورات': new Set([
     'إضافة دورة',
     'تعديل دورة',
     'تفعيل دورة',
     'تعطيل دورة',
-    'حذف دورة',
-    'رفض حذف دورة',
+    // 'حذف دورة' → server-only (delete is sensitive)
+    // 'رفض حذف دورة' → server-only
   ]),
   'الفصول والفرص': new Set([
     'إضافة فصل',
     'تعديل فصل',
-    'حذف فصل',
-    'رفض حذف فصل',
     'ربط فصل بدورة',
-    'حذف ربط فصل بدورة',
-    'تفعيل فصل ومنح فرص جديدة',
-    'تفعيل فصل واسترجاع أرشيف الفرص',
-    'إلغاء تفعيل فصل',
+    // 'حذف فصل' → server-only
+    // 'رفض حذف فصل' → server-only
+    // 'حذف ربط فصل بدورة' → server-only
+    // 'تفعيل فصل ومنح فرص جديدة' → server-only (affects opportunities)
+    // 'تفعيل فصل واسترجاع أرشيف الفرص' → server-only
+    // 'إلغاء تفعيل فصل' → server-only (affects opportunities)
   ]),
   'تسجيل الطلاب': new Set([
     'تسجيل طالب',
-    'تراجع تسجيل طالب',
-    'رفض تسجيل طالب مكرر',
+    // 'تراجع تسجيل طالب' → server-only (triggered by sync failure)
+    // 'رفض تسجيل طالب مكرر' → server-only (validation result)
   ]),
   'سجل الطلاب': new Set([
     'تعديل بيانات طالب',
-    'رفض تعديل طالب مكرر',
-    'حذف طالب مع سجلاته التابعة',
+    // 'رفض تعديل طالب مكرر' → server-only
+    // 'حذف طالب مع سجلاته التابعة' → server-only (delete is sensitive)
   ]),
-  'الطلاب': new Set([
-    'فصل الطالب (فصل مؤقت)',
-    'فصل الطالب (فصل نهائي)',
-    'إعادة تفعيل طالب',
-    'إعادة تفعيل بفرصة واحدة',
-  ]),
+  // 'الطلاب' module (فصل/إعادة تفعيل) → ENTIRELY server-only
+  // These are dismissal/reactivation events that affect academic status.
   'الامتحانات': new Set([
     'إضافة امتحان',
     'تعديل امتحان',
     'تفعيل امتحان',
     'تعطيل امتحان',
-    'حذف امتحان مع سجلاته وإعادة احتساب التأثيرات',
+    // 'حذف امتحان...' → server-only (delete is sensitive)
   ]),
   'الدرجات': new Set([
     'إدخال درجة',
     'تعديل درجة',
-    'حذف درجة',
-    'رفض إدخال درجة لطالب مجاز',
-    'إضافة درجات جماعية',
-    'إلغاء حالة غائب جماعي',
-    'تسجيل الصفحة كغائب',
+    // 'حذف درجة' → server-only
+    // 'رفض إدخال درجة لطالب مجاز' → server-only
+    // 'إضافة درجات جماعية' → server-only (bulk is sensitive)
+    // 'إلغاء حالة غائب جماعي' → server-only (bulk is sensitive)
+    // 'تسجيل الصفحة كغائب' → server-only (bulk is sensitive)
   ]),
   'إدارة الفرص': new Set([
-    'إضافة فرص جماعية',
-    'خصم فرص جماعي',
-    'تعديل فرص طالب',
-    'إعادة تعيين فرص طالب',
+    // All opportunity operations affect academic status → server-only
+    // 'إضافة فرص جماعية' → server-only
+    // 'خصم فرص جماعي' → server-only
+    // 'تعديل فرص طالب' → server-only
+    // 'إعادة تعيين فرص طالب' → server-only
   ]),
   'المتابعة': new Set([
     'تسجيل مكالمة',
     'تحديث حالة مكالمة',
     'تسجيل إجازة',
-    'حذف إجازة',
     'تثبيت تعهد',
+    // 'حذف إجازة' → server-only (delete is sensitive)
   ]),
   'التصحيح الإلكتروني': new Set([
     'إضافة ورقة تصحيح',
     'بدء تصحيح',
     'إنهاء تصحيح',
   ]),
-  'النسخ الاحتياطي': new Set([
-    'تصدير نسخة احتياطية',
-    'استيراد نسخة احتياطية',
-  ]),
+  // 'النسخ الاحتياطي' → ENTIRELY server-only (export may contain PII,
+  //   import overwrites data — both are sensitive)
   'تصدير': new Set([
     'تصدير CSV',
     'تصدير Excel',
@@ -103,7 +105,13 @@ const ALLOWED_CLIENT_LOG_ENTRIES: Record<string, Set<string>> = {
   ]),
 };
 
-const ALLOWED_CLIENT_MODULES = new Set(Object.keys(ALLOWED_CLIENT_LOG_ENTRIES));
+// Remove empty sets (modules where all actions are server-only) so
+// isAllowedClientLogEntry correctly rejects them.
+for (const key of Object.keys(ALLOWED_CLIENT_LOG_ENTRIES)) {
+  if (ALLOWED_CLIENT_LOG_ENTRIES[key].size === 0) {
+    delete ALLOWED_CLIENT_LOG_ENTRIES[key];
+  }
+}
 
 function isAllowedClientLogEntry(module: string, action: string): boolean {
   const actions = ALLOWED_CLIENT_LOG_ENTRIES[module.trim()];
