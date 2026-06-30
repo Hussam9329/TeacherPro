@@ -3,8 +3,8 @@ import { hashPassword, verifyPassword } from '@/lib/passwords';
 
 const DEFAULT_ADMIN_ID = 'u_admin';
 const DEFAULT_ADMIN_USERNAME = 'admin';
-const PREVIOUS_DEFAULT_ADMIN_PASSWORD = '1993';
-const LEGACY_HARDCODED_ADMIN_PASSWORD = '204871';
+const PREVIOUS_DEFAULT_ADMIN_PASSWORD = '';
+const LEGACY_HARDCODED_ADMIN_PASSWORD = '';
 const DEFAULT_ADMIN_ROLE_ID = 'role_admin';
 const DEFAULT_ADMIN_ROLE_NAME = 'مدير عام';
 
