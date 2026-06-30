@@ -881,7 +881,12 @@ function gradeHasAcademicEffect(grade: Grade, exam: Exam): boolean {
   if (!isGradeEntered(grade, exam)) return false;
   if (grade.status === 'غش') return true;
   if (exam.noDiscount) return false;
+
+  // الغياب ليس حالة معلوماتية فقط؛ هو دائماً حالة محاسبة أكاديمية
+  // ويعامل كأقل درجة ضمن الخصم في أي امتحان فعّال فيه خصم،
+  // مع استثناءات الحماية العامة فقط مثل الإجازة أو فترة السماح.
   if (grade.status === 'غائب') return true;
+
   if (grade.status !== 'درجة' || grade.score === null) return false;
   const score = Number(grade.score);
   if (exam.type === 'فاينل') {
@@ -890,6 +895,52 @@ function gradeHasAcademicEffect(grade: Grade, exam: Exam): boolean {
   return score <= exam.discountMark;
 }
 
+
+function shouldAbsentGradeConsumeDiscount(
+  state: Pick<TeacherState, 'studentLeaves'>,
+  grade: Grade,
+  exam: Exam,
+  student: Student | undefined,
+): boolean {
+  if (!student) return false;
+  if (grade.status !== 'غائب') return false;
+  if (!gradeHasAcademicEffect(grade, exam)) return false;
+  if (!isExamOnOrAfterStudentRegistration(student, exam)) return false;
+  if (isExamWithinStudentGracePeriod(student, exam)) return false;
+  return !(state.studentLeaves || [])
+    .map((leave) => normalizeStudentLeave(leave))
+    .some((leave) => studentLeaveAppliesToExam(leave, student.id, exam));
+}
+
+function findAbsentDiscountRepairStudentIds(
+  state: Pick<TeacherState, 'students' | 'grades' | 'exams' | 'studentLeaves'>,
+): string[] {
+  const studentsById = new Map(state.students.map((student) => [student.id, student]));
+  const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
+  const affected = new Set<string>();
+
+  for (const grade of state.grades) {
+    if (grade.status !== 'غائب') continue;
+    const exam = examsById.get(grade.examId);
+    if (!exam) continue;
+    const student = studentsById.get(grade.studentId);
+    if (shouldAbsentGradeConsumeDiscount(state, grade, exam, student)) {
+      affected.add(grade.studentId);
+    }
+  }
+
+  return Array.from(affected);
+}
+
+function repairAbsentDiscountAccountingIfNeeded(getState: () => TeacherState): void {
+  const state = getState();
+  const affectedStudentIds = findAbsentDiscountRepairStudentIds(state);
+  if (!affectedStudentIds.length) return;
+
+  // هذا يعالج البيانات القديمة التي تم حفظ الغياب فيها بدون خصم فرص.
+  // إعادة الاحتساب scoped على الطلاب المتأثرين فقط وتستثني فترة السماح والإجازات.
+  state.recalculateAcademicEffects(affectedStudentIds);
+}
 
 function gradeCausesDismissalGradeEffect(grade: Grade, exam: Exam): boolean {
   if (!gradeHasAcademicEffect(grade, exam)) return false;
@@ -1784,9 +1835,7 @@ export const useTeacherStore = create<TeacherState>()(
           });
           attachPendingGradeBrowserEvents(get);
           schedulePendingGradeFlush(get, 900);
-
-          // لا نعيد احتساب الفصل والفرص عند فتح النظام فقط.
-          // إعادة الاحتساب تبقى مرتبطة بأحداث صريحة مثل إدخال/تعديل درجة أو تعديل امتحان.
+          repairAbsentDiscountAccountingIfNeeded(get);
 
           const adminAfterLoad = users.find((u) => isPrimaryAdminUser(u));
           if (adminAfterLoad) {
