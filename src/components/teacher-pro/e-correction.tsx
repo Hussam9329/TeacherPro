@@ -111,8 +111,18 @@ function formatDateTime(value?: string | null) {
   });
 }
 
-function getSubmissionPagePreview(page: TelegramSubmissionPage) {
-  return page.dataUrl || page.url || "";
+function getSubmissionPagePreview(page: TelegramSubmissionPage, submissionId?: string) {
+  // Prefer direct URL if the bot provided one (public CDN link).
+  if (page.url) return page.url;
+  // Fallback to dataUrl (legacy, may be empty after the dataUrl ban).
+  if (page.dataUrl) return page.dataUrl;
+  // Use the secure Telegram file proxy for fileId.
+  if (page.fileId) {
+    const params = new URLSearchParams({ fileId: page.fileId });
+    if (submissionId) params.set('submissionId', submissionId);
+    return `/api/telegram-file?${params.toString()}`;
+  }
+  return "";
 }
 
 export function ECorrectionView() {
@@ -799,7 +809,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                     لا توجد صفحات مرفوعة داخل هذا التسليم.
                   </div>
                 ) : (botSubmissionDialog?.pages || []).map((page, index) => {
-                  const preview = getSubmissionPagePreview(page);
+                  const preview = getSubmissionPagePreview(page, botSubmissionDialog?.id);
                   return (
                     <div key={`${page.pageNumber || index}-${page.fileId || page.localPath || index}`} className="rounded-2xl border bg-background p-3 space-y-3">
                       <div className="flex items-center justify-between gap-2">
