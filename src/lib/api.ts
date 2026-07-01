@@ -539,6 +539,6 @@ export const logApi = {
       return { ok: false, error: msg, status: 0, transient: true };
     }
   },
-  clear: (password: string, options: Record<string, unknown> = {}) =>
-    apiPost('logs/clear', { password, ...options }),
+  clear: (password: string, options?: Record<string, unknown>) =>
+    apiPost('logs/clear', { password, ...(options || {}) }),
 };

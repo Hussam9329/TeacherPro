@@ -2129,7 +2129,7 @@ export const useTeacherStore = create<TeacherState>()(
         if (!options?.scopeIds?.length) {
           return { ok: false, message: 'اختر نوعاً واحداً على الأقل من السجلات المراد تصفيرها' };
         }
-        const result = await logApi.clear(password, options);
+        const result = await logApi.clear(password, options as unknown as Record<string, unknown>);
         if (!result.ok) {
           return { ok: false, message: result.error || 'تعذر تصفير السجلات' };
         }

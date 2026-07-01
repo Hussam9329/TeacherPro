@@ -32,26 +32,31 @@ const LOG_RESET_SCOPES = [
     id: "audit-grades",
     title: "تصفير إجراءات الدرجات",
     description: "إدخال/تعديل/حذف الدرجات والعمليات المرتبطة بها.",
+    danger: false,
   },
   {
     id: "audit-students",
     title: "تصفير إجراءات الطلاب",
     description: "تسجيل الطلاب، تعديل سجل الطلاب، الفصل وإعادة التفعيل.",
+    danger: false,
   },
   {
     id: "audit-exams",
     title: "تصفير إجراءات صناعة الامتحان",
     description: "الدورات، الفصول، الفرص المرتبطة بالفصول، وإنشاء/تعديل الامتحانات.",
+    danger: false,
   },
   {
     id: "audit-followup",
     title: "تصفير إجراءات المتابعة",
     description: "المكالمات، الإجازات، التعهدات والملاحظات التابعة للمتابعة.",
+    danger: false,
   },
   {
     id: "audit-correction",
     title: "تصفير إجراءات التصحيح الإلكتروني",
     description: "إضافة وتعديل وحذف أوراق التصحيح وحالات التصحيح.",
+    danger: false,
   },
   {
     id: "audit-accounts",
@@ -63,6 +68,7 @@ const LOG_RESET_SCOPES = [
     id: "audit-exports",
     title: "تصفير إجراءات التصدير والنسخ الاحتياطي",
     description: "سجلات التصدير والاستيراد والنسخ الاحتياطي.",
+    danger: false,
   },
   {
     id: "opportunity-logs",
