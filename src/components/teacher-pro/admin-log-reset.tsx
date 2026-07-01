@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { CalendarDays, CheckSquare, ShieldAlert, Trash2 } from "lucide-react";
+import { CalendarDays, CheckSquare, RotateCcw, ShieldAlert, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,10 +81,12 @@ const LOG_RESET_SCOPES = [
 const DEFAULT_SCOPE_IDS = ["audit-grades", "audit-students", "audit-exams"];
 
 export function AdminLogResetView() {
-  const { clearLogs, currentUser } = useTeacherStore();
+  const { clearLogs, restoreLastLogClear, currentUser } = useTeacherStore();
   const [password, setPassword] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
   const [selectedScopeIds, setSelectedScopeIds] = useState<string[]>(DEFAULT_SCOPE_IDS);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -139,8 +141,28 @@ export function AdminLogResetView() {
     });
     setLoading(false);
     if (result.ok) {
-      setPassword("");
       setConfirmOpen(false);
+      toast.success(result.message);
+    } else {
+      toast.error(result.message);
+    }
+  };
+
+  const requestRestore = () => {
+    if (!password.trim()) {
+      toast.error("أدخل رمز حساب الأدمن أولاً");
+      return;
+    }
+    setRestoreConfirmOpen(true);
+  };
+
+  const handleRestore = async () => {
+    setRestoreLoading(true);
+    const result = await restoreLastLogClear(password);
+    setRestoreLoading(false);
+    if (result.ok) {
+      setPassword("");
+      setRestoreConfirmOpen(false);
       toast.success(result.message);
     } else {
       toast.error(result.message);
@@ -169,7 +191,7 @@ export function AdminLogResetView() {
         <CardContent className="space-y-5">
           <div className="rounded-2xl border border-destructive/20 bg-background/70 p-4 text-sm leading-7 text-muted-foreground">
             هذا الإجراء يحذف السجلات المختارة فقط ضمن الفترة الزمنية المحددة. إذا تركت الفترة فارغة سيتم التصفير لكل المدة.
-            لا يتم التنفيذ إلا بعد إدخال رمز حساب الأدمن الحالي ثم تأكيد العملية.
+            لا يتم التنفيذ إلا بعد إدخال رمز حساب الأدمن الحالي ثم تأكيد العملية. قبل أي تصفير يتم حفظ نسخة احتياطية يمكن استعادة آخر عملية تصفير منها.
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[1.25fr_0.75fr]">
@@ -307,16 +329,28 @@ export function AdminLogResetView() {
                   المختار: <span className="font-bold text-foreground">{selectedScopes.length}</span> نوع/أنواع<br />
                   الفترة: <span className="font-bold text-foreground">{dateRangeLabel}</span>
                 </div>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  className="h-12 w-full rounded-2xl text-base font-black"
-                  onClick={requestReset}
-                  disabled={loading}
-                >
-                  <Trash2 className="ml-2 h-4 w-4" />
-                  تصفير السجلات المحددة
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="h-12 w-full rounded-2xl text-base font-black"
+                    onClick={requestReset}
+                    disabled={loading || restoreLoading}
+                  >
+                    <Trash2 className="ml-2 h-4 w-4" />
+                    تصفير السجلات المحددة
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 w-full rounded-2xl border-emerald-500/40 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                    onClick={requestRestore}
+                    disabled={loading || restoreLoading}
+                  >
+                    <RotateCcw className="ml-2 h-4 w-4" />
+                    استعادة آخر تصفير
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -335,7 +369,7 @@ export function AdminLogResetView() {
                 {selectedScopes.map((scope) => scope.title).join("، ")}
               </span>
               <span className="block text-destructive">
-                لا يمكن التراجع عن هذه العملية بعد التنفيذ.
+                سيتم حفظ نسخة احتياطية قبل الحذف، ويمكن استعادة آخر عملية تصفير من زر الاستعادة.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -350,6 +384,35 @@ export function AdminLogResetView() {
               disabled={loading}
             >
               {loading ? "جاري التصفير..." : "نعم، صفّر المحدد"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={restoreConfirmOpen} onOpenChange={setRestoreConfirmOpen}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>استعادة آخر عملية تصفير</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 leading-7">
+              <span className="block">
+                سيتم إرجاع آخر سجلات تم حذفها من صفحة تصفير الـ LOG إذا كانت لها نسخة احتياطية غير مستعادة.
+              </span>
+              <span className="block rounded-xl border bg-muted/30 p-3 text-xs">
+                الاستعادة تعمل على آخر عملية تصفير فقط، ولا تستبدل السجلات الموجودة حالياً. السجلات المكررة يتم تجاهلها تلقائياً.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={restoreLoading}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={(event) => {
+                event.preventDefault();
+                void handleRestore();
+              }}
+              disabled={restoreLoading}
+            >
+              {restoreLoading ? "جاري الاستعادة..." : "نعم، استعد آخر تصفير"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

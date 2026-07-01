@@ -626,6 +626,7 @@ interface TeacherState {
 
   logAction: (module: string, action: string, details?: string) => void;
   clearLogs: (password: string, options: LogClearOptions) => Promise<{ ok: boolean; message: string }>;
+  restoreLastLogClear: (password: string) => Promise<{ ok: boolean; message: string }>;
   exportBackup: () => string;
   importBackup: (jsonText: string) => { ok: boolean; message: string };
   exportMonthlyReport: (month?: string) => string;
@@ -2137,7 +2138,20 @@ export const useTeacherStore = create<TeacherState>()(
           logs: s.logs.filter((log) => !shouldClearAuditLogLocally(log, options)),
           opportunityLogs: s.opportunityLogs.filter((log) => !shouldClearOpportunityLogLocally(log, options)),
         }));
-        return { ok: true, message: 'تم تصفير السجلات المحددة حسب الاختيارات والفترة الزمنية' };
+        return { ok: true, message: 'تم تصفير السجلات المحددة حسب الاختيارات والفترة الزمنية، وتم حفظ نسخة استعادة احتياطية' };
+      },
+
+      restoreLastLogClear: async (password) => {
+        const currentUser = get().currentUser();
+        if (!currentUser || !hasFullAdminAccess(currentUser)) {
+          return { ok: false, message: 'هذه العملية متاحة لمدير النظام فقط' };
+        }
+        const result = await logApi.restoreLastClear(password);
+        if (!result.ok) {
+          return { ok: false, message: result.error || 'تعذر استعادة آخر تصفير' };
+        }
+        await get().loadFromServer();
+        return { ok: true, message: 'تمت استعادة آخر عملية تصفير للسجلات بنجاح' };
       },
 
       addCourse: (courseInput) => {

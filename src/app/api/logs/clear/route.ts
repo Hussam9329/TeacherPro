@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
@@ -9,6 +10,7 @@ import { verifyPassword } from '@/lib/passwords';
 import { routeErrorResponse } from '@/lib/route-helpers';
 import { ensureInitialAdminSeed } from '@/lib/admin-seed';
 import { writeSecurityAudit } from '@/lib/security-audit';
+import { ensureLogClearBackupTable, insertLogClearBackup } from '@/lib/log-clear-backups';
 
 const CLEAR_SCOPE_DEFINITIONS = {
   'audit-all': {
@@ -192,26 +194,58 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'لم يتم تحديد سجلات قابلة للتصفير.' }, { status: 400 });
     }
 
-    const { auditLogsResult, opportunityLogsResult } = await db.$transaction(async (tx) => {
+    const selectedLabels = scopeIds.map((scope) => CLEAR_SCOPE_DEFINITIONS[scope].label);
+    const rangeLabel = dateFrom || dateTo
+      ? `${body.dateFrom ? String(body.dateFrom) : 'أول سجل'} إلى ${body.dateTo ? String(body.dateTo) : 'آخر سجل'}`
+      : 'كل المدة';
+
+    await ensureLogClearBackupTable();
+
+    const backupId = `lcb_${Date.now().toString(36)}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+
+    const { auditLogsResult, opportunityLogsResult, savedBackupId } = await db.$transaction(async (tx) => {
+      const auditLogsToDelete = auditWhere
+        ? await tx.auditLog.findMany({ where: auditWhere })
+        : [];
+      const opportunityLogsToDelete = opportunityWhere
+        ? await tx.opportunityLog.findMany({ where: opportunityWhere })
+        : [];
+
+      const hasBackupRows = auditLogsToDelete.length > 0 || opportunityLogsToDelete.length > 0;
+      if (hasBackupRows) {
+        await insertLogClearBackup(tx, {
+          id: backupId,
+          createdById: principal.id,
+          createdByName: principal.name || principal.username || 'admin',
+          scopeIds,
+          scopeLabels: selectedLabels,
+          dateFrom: body.dateFrom ? String(body.dateFrom) : '',
+          dateTo: body.dateTo ? String(body.dateTo) : '',
+          rangeLabel,
+          auditLogs: auditLogsToDelete,
+          opportunityLogs: opportunityLogsToDelete,
+        });
+      }
+
       const auditLogsResult = auditWhere
         ? await tx.auditLog.deleteMany({ where: auditWhere })
         : { count: 0 };
       const opportunityLogsResult = opportunityWhere
         ? await tx.opportunityLog.deleteMany({ where: opportunityWhere })
         : { count: 0 };
-      return { auditLogsResult, opportunityLogsResult };
+      return {
+        auditLogsResult,
+        opportunityLogsResult,
+        savedBackupId: hasBackupRows ? backupId : null,
+      };
     });
-
-    const selectedLabels = scopeIds.map((scope) => CLEAR_SCOPE_DEFINITIONS[scope].label);
-    const rangeLabel = dateFrom || dateTo
-      ? `${body.dateFrom ? String(body.dateFrom) : 'أول سجل'} إلى ${body.dateTo ? String(body.dateTo) : 'آخر سجل'}`
-      : 'كل المدة';
 
     await writeSecurityAudit(principal, 'تصفير سجلات محددة', {
       scopes: selectedLabels,
       range: rangeLabel,
       deletedAuditLogs: auditLogsResult.count,
       deletedOpportunityLogs: opportunityLogsResult.count,
+      backupId: savedBackupId,
     });
 
     return NextResponse.json({
@@ -222,6 +256,8 @@ export async function POST(req: NextRequest) {
       scopeIds,
       dateFrom: body.dateFrom ? String(body.dateFrom) : '',
       dateTo: body.dateTo ? String(body.dateTo) : '',
+      backupId: savedBackupId,
+      canRestore: Boolean(savedBackupId),
     });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تصفير السجلات حالياً.');

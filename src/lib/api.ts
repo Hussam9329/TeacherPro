@@ -541,4 +541,22 @@ export const logApi = {
   },
   clear: (password: string, options?: Record<string, unknown>) =>
     apiPost('logs/clear', { password, ...(options || {}) }),
+  restoreLastClear: async (password: string): Promise<ApiResult> => {
+    try {
+      const res = await fetch('/api/logs/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        const error = await readApiError(res, `تعذر استعادة السجلات (رمز ${res.status})`);
+        return { ok: false, error, status: res.status, transient: isTransientHttpStatus(res.status) };
+      }
+      return { ok: true };
+    } catch (e) {
+      const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
+      return { ok: false, error: msg, status: 0, transient: true };
+    }
+  },
 };
