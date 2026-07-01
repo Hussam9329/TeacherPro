@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
     });
 
     const opportunityData: Prisma.OpportunityLogCreateManyInput[] = opportunityLogs
-      .map((log) => {
+      .map((log): Prisma.OpportunityLogCreateManyInput | null => {
         const studentId = textOrNull(log.studentId);
         if (!studentId || !existingStudents.has(studentId)) return null;
         const examId = textOrNull(log.examId);
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
           chapterId: textOrNull(log.chapterId),
           studentId,
           examId: examId && existingExams.has(examId) ? examId : null,
-        } satisfies Prisma.OpportunityLogCreateManyInput;
+        };
       })
       .filter((row): row is Prisma.OpportunityLogCreateManyInput => Boolean(row));
 

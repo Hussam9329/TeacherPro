@@ -37,9 +37,8 @@ type RawExecutor = {
   $executeRawUnsafe: (query: string, ...values: unknown[]) => Promise<unknown>;
 };
 
-type TransactionExecutor = {
-  $executeRaw: <T = unknown>(query: TemplateStringsArray | Prisma.Sql, ...values: unknown[]) => Promise<T>;
-};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TransactionExecutor = any;
 
 export async function ensureLogClearBackupTable(client: RawExecutor = db): Promise<void> {
   await client.$executeRawUnsafe(`
