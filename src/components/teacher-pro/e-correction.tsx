@@ -40,26 +40,44 @@ import { useActionLock } from "@/hooks/use-action-lock";
 
 
 type TelegramSubmissionPage = {
+  [key: string]: unknown;
   pageNumber?: number;
+  page_number?: number;
   fileId?: string;
+  file_id?: string;
+  telegramFileId?: string;
+  telegram_file_id?: string;
   fileUniqueId?: string;
+  file_unique_id?: string;
   fileName?: string;
+  file_name?: string;
+  filename?: string;
   mimeType?: string;
+  mime_type?: string;
   url?: string;
+  fileUrl?: string;
+  file_url?: string;
   dataUrl?: string;
+  data_url?: string;
   localPath?: string;
+  local_path?: string;
   size?: number;
+  fileSize?: number;
+  file_size?: number;
   width?: number;
   height?: number;
   messageId?: string;
+  message_id?: string;
   caption?: string;
   downloadedAt?: string;
+  downloaded_at?: string;
 };
 
 type BotIntegrationConfig = {
   apiUrl?: string;
   ingestUrl?: string;
   tokenConfigured?: boolean;
+  telegramBotTokenConfigured?: boolean;
   usingEmbeddedToken?: boolean;
 };
 
@@ -111,18 +129,66 @@ function formatDateTime(value?: string | null) {
   });
 }
 
+function firstPageString(page: TelegramSubmissionPage, keys: string[]) {
+  for (const key of keys) {
+    const value = page[key];
+    if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+  }
+  return "";
+}
+
+function getSubmissionPageNumber(page: TelegramSubmissionPage, index: number) {
+  const value = firstPageString(page, ['pageNumber', 'page_number', 'page']);
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : index + 1;
+}
+
+function getSubmissionPageFileId(page: TelegramSubmissionPage) {
+  return firstPageString(page, ['fileId', 'file_id', 'telegramFileId', 'telegram_file_id', 'telegram_fileid']);
+}
+
 function getSubmissionPagePreview(page: TelegramSubmissionPage, submissionId?: string) {
   // Prefer direct URL if the bot provided one (public CDN link).
-  if (page.url) return page.url;
-  // Fallback to dataUrl (legacy, may be empty after the dataUrl ban).
-  if (page.dataUrl) return page.dataUrl;
+  const directUrl = firstPageString(page, ['url', 'fileUrl', 'file_url', 'publicUrl', 'public_url']);
+  if (directUrl) return directUrl;
+  // Fallback to dataUrl for older records that existed before the dataUrl ban.
+  const legacyDataUrl = firstPageString(page, ['dataUrl', 'data_url']);
+  if (legacyDataUrl) return legacyDataUrl;
   // Use the secure Telegram file proxy for fileId.
-  if (page.fileId) {
-    const params = new URLSearchParams({ fileId: page.fileId });
+  const fileId = getSubmissionPageFileId(page);
+  if (fileId) {
+    const params = new URLSearchParams({ fileId });
     if (submissionId) params.set('submissionId', submissionId);
     return `/api/telegram-file?${params.toString()}`;
   }
   return "";
+}
+
+
+function TelegramPageImage({ src, pageNumber }: { src: string; pageNumber: number }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div className="rounded-xl border border-dashed bg-muted/30 p-4 text-xs text-muted-foreground space-y-2">
+        <p>تعذرت معاينة هذه الصفحة داخل TeacherPro.</p>
+        <p>تأكد من ضبط <span dir="ltr">TEACHERPRO_BOT_TOKEN</span> أو <span dir="ltr">TELEGRAM_BOT_TOKEN</span> في السيرفر إذا كان المصدر Telegram fileId.</p>
+        <Button type="button" variant="outline" size="sm" onClick={() => window.open(src, '_blank', 'noopener,noreferrer')}>
+          فتح الرابط في نافذة جديدة
+        </Button>
+      </div>
+    );
+  }
+
+  // eslint-disable-next-line @next/next/no-img-element
+  return (
+    <img
+      src={src}
+      alt={`صفحة ${pageNumber}`}
+      className="w-full max-h-[520px] rounded-xl border object-contain bg-muted/30"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 export function ECorrectionView() {
@@ -255,6 +321,7 @@ export function ECorrectionView() {
   const displayedTeacherProApiUrl = botIntegrationConfig.apiUrl || (typeof window !== "undefined" ? window.location.origin : DEFAULT_TEACHERPRO_API_URL);
   const displayedBotIngestUrl = botIntegrationConfig.ingestUrl || (displayedTeacherProApiUrl ? `${displayedTeacherProApiUrl}/api/telegram-exam-submissions` : "/api/telegram-exam-submissions");
   const botTokenConfigured = Boolean(botIntegrationConfig.tokenConfigured);
+  const telegramBotTokenConfigured = Boolean(botIntegrationConfig.telegramBotTokenConfigured);
   const botEnvSnippet = `TEACHERPRO_API_URL=${displayedTeacherProApiUrl || DEFAULT_TEACHERPRO_API_URL}
 TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
 
@@ -550,7 +617,14 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                   <code className="block break-all rounded-xl bg-muted px-3 py-2 text-xs text-foreground" dir="ltr">
                     {botTokenConfigured ? "ضع نفس التوكن الموجود في سيرفر TeacherPro داخل ملف البوت" : "غير مضبوط في سيرفر TeacherPro"}
                   </code>
-                  <p className="mt-2 text-xs">التوكن لا يظهر هنا لأسباب أمنية. أنشئه في Vercel ثم ضع نفس القيمة في ملف البوت.</p>
+                  <p className="mt-2 text-xs">هذا التوكن يستقبل التسليمات من البوت. لا يظهر هنا لأسباب أمنية.</p>
+                </div>
+                <div className="rounded-2xl border bg-background/80 p-3 lg:col-span-2">
+                  <p className="mb-1 text-xs font-semibold text-foreground">TEACHERPRO_BOT_TOKEN / TELEGRAM_BOT_TOKEN</p>
+                  <code className="block break-all rounded-xl bg-muted px-3 py-2 text-xs text-foreground" dir="ltr">
+                    {telegramBotTokenConfigured ? "مضبوط في السيرفر — صور التصحيح من fileId يمكن عرضها" : "غير مضبوط — صور fileId لن تظهر"}
+                  </code>
+                  <p className="mt-2 text-xs">هذا توكن بوت Telegram نفسه، ويُستخدم من السيرفر فقط لجلب الصور عند فتح مستلمات التصحيح. لا تضعه داخل الواجهة أو الكود.</p>
                 </div>
               </div>
 
@@ -813,25 +887,24 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                   return (
                     <div key={`${page.pageNumber || index}-${page.fileId || page.localPath || index}`} className="rounded-2xl border bg-background p-3 space-y-3">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="font-semibold text-sm">صفحة {page.pageNumber || index + 1}</p>
+                        <p className="font-semibold text-sm">صفحة {getSubmissionPageNumber(page, index)}</p>
                         <Badge variant="outline">{page.mimeType || "image"}</Badge>
                       </div>
                       {preview ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={preview} alt={`صفحة ${page.pageNumber || index + 1}`} className="w-full max-h-[520px] rounded-xl border object-contain bg-muted/30" />
+                        <TelegramPageImage src={preview} pageNumber={getSubmissionPageNumber(page, index)} />
                       ) : (
                         <div className="rounded-xl border border-dashed bg-muted/30 p-4 text-xs text-muted-foreground space-y-1">
                           <p>لا يوجد رابط مباشر للمعاينة داخل TeacherPro.</p>
-                          {page.localPath && <p>المسار المحلي في البوت: <code>{page.localPath}</code></p>}
-                          {page.fileId && <p>Telegram fileId: <code>{page.fileId}</code></p>}
-                          {page.messageId && <p>messageId: <code>{page.messageId}</code></p>}
+                          {firstPageString(page, ['localPath', 'local_path', 'path']) && <p>المسار المحلي في البوت: <code>{firstPageString(page, ['localPath', 'local_path', 'path'])}</code></p>}
+                          {getSubmissionPageFileId(page) && <p>Telegram fileId: <code>{getSubmissionPageFileId(page)}</code></p>}
+                          {firstPageString(page, ['messageId', 'message_id', 'telegramMessageId']) && <p>messageId: <code>{firstPageString(page, ['messageId', 'message_id', 'telegramMessageId'])}</code></p>}
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                        <span>الملف: {page.fileName || "—"}</span>
-                        <span>الحجم: {page.size || "—"}</span>
-                        <span>العرض: {page.width || "—"}</span>
-                        <span>الارتفاع: {page.height || "—"}</span>
+                        <span>الملف: {firstPageString(page, ['fileName', 'file_name', 'filename']) || "—"}</span>
+                        <span>الحجم: {firstPageString(page, ['size', 'fileSize', 'file_size']) || "—"}</span>
+                        <span>العرض: {firstPageString(page, ['width']) || "—"}</span>
+                        <span>الارتفاع: {firstPageString(page, ['height']) || "—"}</span>
                       </div>
                     </div>
                   );

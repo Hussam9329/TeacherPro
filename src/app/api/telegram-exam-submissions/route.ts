@@ -8,20 +8,42 @@ import { isMissingDatabaseObjectError, routeErrorResponse, validationError } fro
 import { ensureTelegramSubmissionSchema, resetTelegramSubmissionSchemaEnsureCache, telegramSubmissionSchemaMessage } from '@/lib/telegram-submission-schema';
 
 type IncomingPage = {
+  [key: string]: unknown;
   pageNumber?: unknown;
+  page_number?: unknown;
+  page?: unknown;
   fileId?: unknown;
+  file_id?: unknown;
+  telegramFileId?: unknown;
+  telegram_file_id?: unknown;
   fileUniqueId?: unknown;
+  file_unique_id?: unknown;
+  telegramFileUniqueId?: unknown;
   fileName?: unknown;
+  file_name?: unknown;
+  filename?: unknown;
   mimeType?: unknown;
+  mime_type?: unknown;
+  contentType?: unknown;
   url?: unknown;
+  fileUrl?: unknown;
+  file_url?: unknown;
   dataUrl?: unknown;
+  data_url?: unknown;
   localPath?: unknown;
+  local_path?: unknown;
+  path?: unknown;
   size?: unknown;
+  fileSize?: unknown;
+  file_size?: unknown;
   width?: unknown;
   height?: unknown;
   messageId?: unknown;
+  message_id?: unknown;
+  telegramMessageId?: unknown;
   caption?: unknown;
   downloadedAt?: unknown;
+  downloaded_at?: unknown;
 };
 
 function readEnv(name: string): string | undefined {
@@ -30,6 +52,16 @@ function readEnv(name: string): string | undefined {
 
 function readBotIngestToken(): string {
   return (readEnv('TEACHERPRO_BOT_INGEST_TOKEN') || '').trim();
+}
+
+function readTelegramBotToken(): string {
+  return (
+    readEnv('TEACHERPRO_BOT_TOKEN')
+    || readEnv('TEACHERPRO_TELEGRAM_BOT_TOKEN')
+    || readEnv('TELEGRAM_BOT_TOKEN')
+    || readEnv('BOT_TOKEN')
+    || ''
+  ).trim();
 }
 
 function constantTimeEqual(left: string, right: string): boolean {
@@ -74,6 +106,7 @@ function getBotIntegrationConfig(req: NextRequest) {
     apiUrl,
     ingestUrl: apiUrl ? `${apiUrl}/api/telegram-exam-submissions` : '/api/telegram-exam-submissions',
     tokenConfigured: Boolean(readBotIngestToken()),
+    telegramBotTokenConfigured: Boolean(readTelegramBotToken()),
     usingEmbeddedToken: false,
   };
 }
@@ -106,27 +139,63 @@ function readStringArray(value: unknown): string[] {
   }
 }
 
+
+function firstPageValue(page: IncomingPage | undefined, keys: string[]): unknown {
+  if (!page) return undefined;
+  for (const key of keys) {
+    const value = page[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+  }
+  return undefined;
+}
+
+function cleanPageText(page: IncomingPage | undefined, keys: string[], max = 2000): string {
+  return textValue(firstPageValue(page, keys), max);
+}
+
+function cleanPageNumber(page: IncomingPage | undefined, fallback: number): number {
+  const value = firstPageValue(page, ['pageNumber', 'page_number', 'page', 'index']);
+  return Math.max(1, Math.trunc(numberValue(value, fallback)));
+}
+
+function cleanPageNumeric(page: IncomingPage | undefined, keys: string[]): number {
+  return numberValue(firstPageValue(page, keys), NaN);
+}
+
 function sanitizePages(value: unknown): Array<Record<string, string | number>> {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 20).map((page: IncomingPage, index) => {
-    const pageNumber = Math.max(1, Math.trunc(numberValue(page?.pageNumber, index + 1)));
+    const pageNumber = cleanPageNumber(page, index + 1);
     const cleaned: Record<string, string | number> = { pageNumber };
 
     // dataUrl is intentionally EXCLUDED — bots must send fileId/url/localPath
     // for the actual image content. dataUrl (base64 inline image) is rejected
     // to prevent payload bloat and abuse. The teacher-pro side fetches the
     // image from Telegram using fileId when needed for correction.
-    const stringFields: Array<keyof IncomingPage> = [
-      'fileId', 'fileUniqueId', 'fileName', 'mimeType', 'url',
-      'localPath', 'messageId', 'caption', 'downloadedAt',
+    const fieldAliases: Array<[string, string[]]> = [
+      ['fileId', ['fileId', 'file_id', 'telegramFileId', 'telegram_file_id', 'telegram_fileid']],
+      ['fileUniqueId', ['fileUniqueId', 'file_unique_id', 'telegramFileUniqueId']],
+      ['fileName', ['fileName', 'file_name', 'filename', 'name']],
+      ['mimeType', ['mimeType', 'mime_type', 'contentType', 'content_type']],
+      ['url', ['url', 'fileUrl', 'file_url', 'publicUrl', 'public_url']],
+      ['localPath', ['localPath', 'local_path', 'path', 'filePath', 'file_path']],
+      ['messageId', ['messageId', 'message_id', 'telegramMessageId', 'telegram_message_id']],
+      ['caption', ['caption']],
+      ['downloadedAt', ['downloadedAt', 'downloaded_at']],
     ];
-    for (const field of stringFields) {
-      const cleanedValue = textValue(page?.[field], 2000);
+
+    for (const [field, aliases] of fieldAliases) {
+      const cleanedValue = cleanPageText(page, aliases, 2000);
       if (cleanedValue) cleaned[field] = cleanedValue;
     }
 
-    for (const field of ['size', 'width', 'height'] as const) {
-      const numeric = numberValue(page?.[field], NaN);
+    const numericAliases: Array<[string, string[]]> = [
+      ['size', ['size', 'fileSize', 'file_size']],
+      ['width', ['width']],
+      ['height', ['height']],
+    ];
+    for (const [field, aliases] of numericAliases) {
+      const numeric = cleanPageNumeric(page, aliases);
       if (Number.isFinite(numeric)) cleaned[field] = Math.max(0, Math.trunc(numeric));
     }
 
@@ -242,8 +311,17 @@ export async function POST(req: NextRequest) {
     if (!student) return validationError('الطالب المرسل من البوت غير موجود في TeacherPro.', 404);
     if (!exam) return validationError('الامتحان المرسل من البوت غير موجود في TeacherPro.', 404);
 
-    const pages = sanitizePages(body.pages);
-    const sourceMessageIds = readStringArray(body.sourceMessageIds);
+    const incomingPages = Array.isArray(body.pages)
+      ? body.pages
+      : Array.isArray(body.images)
+        ? body.images
+        : Array.isArray(body.files)
+          ? body.files
+          : Array.isArray(body.photos)
+            ? body.photos
+            : [];
+    const pages = sanitizePages(incomingPages);
+    const sourceMessageIds = readStringArray(body.sourceMessageIds || body.messageIds || body.message_ids);
     const submittedAt = parseDateValue(body.submittedAt) || new Date();
 
     const grade = await db.grade.upsert({

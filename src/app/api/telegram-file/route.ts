@@ -38,7 +38,12 @@ function readEnv(name: string): string | undefined {
   return undefined;
 }
 
-const TELEGRAM_BOT_TOKEN = readEnv('TEACHERPRO_BOT_TOKEN') || readEnv('TELEGRAM_BOT_TOKEN');
+const TELEGRAM_BOT_TOKEN = (
+  readEnv('TEACHERPRO_BOT_TOKEN')
+  || readEnv('TEACHERPRO_TELEGRAM_BOT_TOKEN')
+  || readEnv('TELEGRAM_BOT_TOKEN')
+  || readEnv('BOT_TOKEN')
+);
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org';
 
@@ -71,7 +76,7 @@ export async function GET(req: NextRequest) {
 
   if (!TELEGRAM_BOT_TOKEN) {
     return NextResponse.json(
-      { error: 'TEACHERPRO_BOT_TOKEN غير مضبوط. مطلوب لجلب صور التليغرام.' },
+      { error: 'TEACHERPRO_BOT_TOKEN أو TELEGRAM_BOT_TOKEN غير مضبوط. مطلوب لجلب صور التليغرام.' },
       { status: 503 },
     );
   }
@@ -100,11 +105,18 @@ export async function GET(req: NextRequest) {
       if (!Array.isArray(pages)) {
         return validationError('لا توجد صفحات لهذا السجل', 404);
       }
-      const belongs = pages.some(
-        (page: unknown) =>
-          typeof page === 'object' && page !== null &&
-          String((page as Record<string, unknown>).fileId || '') === fileId,
-      );
+      const belongs = pages.some((page: unknown) => {
+        if (typeof page !== 'object' || page === null) return false;
+        const record = page as Record<string, unknown>;
+        const candidateIds = [
+          record.fileId,
+          record.file_id,
+          record.telegramFileId,
+          record.telegram_file_id,
+          record.telegram_fileid,
+        ];
+        return candidateIds.some((candidate) => String(candidate || '').trim() === fileId);
+      });
       if (!belongs) {
         return validationError('الملف غير مرتبط بهذا السجل', 403);
       }

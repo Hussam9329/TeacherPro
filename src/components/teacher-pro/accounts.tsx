@@ -25,6 +25,12 @@ const PERMISSION_CATEGORIES = [
   'واتساب', 'الحسابات', 'السجلات', 'نسخ الديمو',
 ];
 
+const ACCOUNT_DIALOG_CONTENT_CLASS = 'max-h-[88vh] max-w-2xl overflow-hidden p-0 flex flex-col';
+const ACCOUNT_DIALOG_HEADER_CLASS = 'shrink-0 px-6 pt-6 pb-3';
+const ACCOUNT_DIALOG_BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-6 py-2 space-y-4';
+const ACCOUNT_DIALOG_FOOTER_CLASS = 'shrink-0 border-t bg-background/95 px-6 py-4';
+
+
 function getPermissionsByCategory(permissions: PermissionEntry[]) {
   const map = new Map<string, PermissionEntry[]>();
   for (const p of permissions) {
@@ -232,12 +238,12 @@ function RolesTab() {
 
       {/* Add Role Dialog */}
       <Dialog open={showAddRoleDialog} onOpenChange={setShowAddRoleDialog}>
-        <DialogContent dir="rtl" className="max-h-[88vh] max-w-2xl overflow-y-auto">
-          <DialogHeader>
+        <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
+          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
             <DialogTitle>إضافة دور جديد</DialogTitle>
             <DialogDescription>أنشئ دوراً جديداً وحدد الصلاحيات المطلوبة</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className={ACCOUNT_DIALOG_BODY_CLASS}>
             <div className="space-y-2">
               <Label htmlFor="role-name">اسم الدور</Label>
               <Input id="role-name" name="roleName" autoComplete="off" value={newRoleName} onChange={e => setNewRoleName(e.target.value)} placeholder="اسم الدور بالعربية" />
@@ -247,7 +253,7 @@ function RolesTab() {
               <PermissionChecklist perms={newRolePerms} onChange={setNewRolePerms} />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
             <Button variant="outline" onClick={() => setShowAddRoleDialog(false)}>إلغاء</Button>
             <Button onClick={handleAddRole} disabled={isAddingRole}>{isAddingRole ? 'جاري الإضافة...' : 'إضافة'}</Button>
           </DialogFooter>
@@ -256,8 +262,8 @@ function RolesTab() {
 
       {/* Edit Role Permissions Dialog */}
       <Dialog open={!!editRoleId} onOpenChange={() => { setEditRoleId(null); setEditRolePerms([]); }}>
-        <DialogContent dir="rtl" className="max-h-[88vh] max-w-2xl overflow-y-auto">
-          <DialogHeader>
+        <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
+          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
             <DialogTitle>تعديل صلاحيات الدور - {roles.find(r => r.id === editRoleId)?.name}</DialogTitle>
             <DialogDescription>
               {roles.find(r => r.id === editRoleId)?.isDefault
@@ -265,8 +271,10 @@ function RolesTab() {
                 : 'حدد الصلاحيات المطلوبة لهذا الدور'}
             </DialogDescription>
           </DialogHeader>
-          <PermissionChecklist perms={editRolePerms} onChange={setEditRolePerms} readOnly={editRoleId === 'role_admin'} />
-          <DialogFooter>
+          <div className={ACCOUNT_DIALOG_BODY_CLASS}>
+            <PermissionChecklist perms={editRolePerms} onChange={setEditRolePerms} readOnly={editRoleId === 'role_admin'} />
+          </div>
+          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
             <Button variant="outline" onClick={() => { setEditRoleId(null); setEditRolePerms([]); }}>إلغاء</Button>
             <Button onClick={handleSaveRole} disabled={isSavingRole || editRoleId === 'role_admin'}>{isSavingRole ? 'جاري الحفظ...' : editRoleId === 'role_admin' ? 'صلاحيات المدير كاملة دائماً' : 'حفظ'}</Button>
           </DialogFooter>
@@ -490,12 +498,12 @@ function UsersTab() {
 
       {/* Edit User Dialog */}
       <Dialog open={editUserDialog.open} onOpenChange={o => setEditUserDialog(prev => ({ ...prev, open: o }))}>
-        <DialogContent dir="rtl">
-          <DialogHeader>
+        <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
+          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
             <DialogTitle>تعديل المستخدم</DialogTitle>
             <DialogDescription>أدخل الاسم الجديد، واترك رمز المرور فارغاً إذا لا تريد تغييره</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className={ACCOUNT_DIALOG_BODY_CLASS}>
             <div className="space-y-2">
               <Label htmlFor="user-edit-name">الاسم الكامل</Label>
               <Input id="user-edit-name" name="name" autoComplete="name" value={editUserDialog.name} onChange={e => setEditUserDialog(prev => ({ ...prev, name: e.target.value }))} />
@@ -508,7 +516,7 @@ function UsersTab() {
               <Input id="user-edit-password" name="password" autoComplete="new-password" value={editUserDialog.password} onChange={e => setEditUserDialog(prev => ({ ...prev, password: e.target.value }))} placeholder="اتركه فارغاً للإبقاء على الرمز الحالي" />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
             <Button variant="outline" onClick={() => setEditUserDialog(prev => ({ ...prev, open: false }))}>إلغاء</Button>
             <Button onClick={handleEditUserSave} disabled={isSavingUser}>{isSavingUser ? 'جاري الحفظ...' : 'حفظ'}</Button>
           </DialogFooter>
@@ -535,12 +543,12 @@ function UsersTab() {
 
       {/* Add User Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent dir="rtl" className="max-h-[88vh] max-w-2xl overflow-y-auto">
-          <DialogHeader>
+        <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
+          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
             <DialogTitle>إضافة مستخدم جديد</DialogTitle>
             <DialogDescription>أنشئ حساب مستخدم جديد وحدد دوره وصلاحياته</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className={ACCOUNT_DIALOG_BODY_CLASS}>
             <div className="space-y-2">
               <Label htmlFor="new-username">اسم المستخدم</Label>
               <Input id="new-username" name="username" autoComplete="username" value={newUser.username} onChange={e => setNewUser(p => ({ ...p, username: e.target.value }))} placeholder="مثال: teacher.admin" />
@@ -573,7 +581,7 @@ function UsersTab() {
               <PermissionChecklist perms={newUser.permissions} onChange={(permissions) => setNewUser(prev => ({ ...prev, permissions }))} />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
             <Button variant="outline" onClick={() => setShowAddDialog(false)}>إلغاء</Button>
             <Button onClick={handleAddUser} disabled={isAddingUser}>{isAddingUser ? 'جاري الإضافة...' : 'إضافة'}</Button>
           </DialogFooter>
@@ -582,17 +590,19 @@ function UsersTab() {
 
       {/* Edit Permissions Dialog */}
       <Dialog open={!!editPermsId} onOpenChange={() => { setEditPermsId(''); setEditPerms([]); }}>
-        <DialogContent dir="rtl" className="max-h-[88vh] max-w-2xl overflow-y-auto">
-          <DialogHeader>
+        <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
+          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
             <DialogTitle>تحديث الصلاحيات - {users.find(u => u.id === editPermsId)?.name}</DialogTitle>
             <DialogDescription>فعّل الصلاحيات التي تريد السماح بها فقط، ثم اضغط حفظ لتطبيقها.</DialogDescription>
           </DialogHeader>
-          <PermissionChecklist
-            perms={editPerms}
-            onChange={setEditPerms}
-            readOnly={users.find(u => u.id === editPermsId)?.username.trim().toLowerCase() === 'admin' || users.find(u => u.id === editPermsId)?.roleId === 'role_admin'}
-          />
-          <DialogFooter>
+          <div className={ACCOUNT_DIALOG_BODY_CLASS}>
+            <PermissionChecklist
+              perms={editPerms}
+              onChange={setEditPerms}
+              readOnly={users.find(u => u.id === editPermsId)?.username.trim().toLowerCase() === 'admin' || users.find(u => u.id === editPermsId)?.roleId === 'role_admin'}
+            />
+          </div>
+          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
             <Button variant="outline" onClick={() => { setEditPermsId(''); setEditPerms([]); }}>إلغاء</Button>
             <Button onClick={handleSavePermissions} disabled={isSavingPermissions}>{isSavingPermissions ? 'جاري الحفظ...' : (users.find(u => u.id === editPermsId)?.username.trim().toLowerCase() === 'admin' || users.find(u => u.id === editPermsId)?.roleId === 'role_admin') ? 'تأكيد الصلاحيات الكاملة' : 'حفظ'}</Button>
           </DialogFooter>
