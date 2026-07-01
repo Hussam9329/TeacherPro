@@ -21,7 +21,7 @@ import {
 } from './course-config';
 import { formatGradeScore, isExamAvailableForEntry, isExamOnOrAfterStudentRegistration, isGradeEntered } from './exam-utils';
 import { toBaghdadDateTimeLocal } from './baghdad-time';
-import { formatAppDate } from './format';
+import { formatAppDate, toLatinDigits } from './format';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -220,6 +220,60 @@ export interface LogEntry {
   action: string;
   details: string;
   time: string;
+}
+
+export interface LogClearOptions {
+  scopeIds: string[];
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+const LOG_CLEAR_SCOPE_MODULES: Record<string, string[] | 'all-audit' | 'opportunity'> = {
+  'audit-all': 'all-audit',
+  'audit-grades': ['الدرجات'],
+  'audit-students': ['تسجيل الطلاب', 'سجل الطلاب', 'الطلاب'],
+  'audit-exams': ['الامتحانات', 'الدورات', 'الفصول والفرص'],
+  'audit-followup': ['المتابعة'],
+  'audit-correction': ['التصحيح الإلكتروني'],
+  'audit-accounts': ['الحسابات', 'أمان الحسابات', 'تسجيل الدخول', 'الصلاحيات'],
+  'audit-exports': ['تصدير', 'النسخ الاحتياطي'],
+  'opportunity-logs': 'opportunity',
+};
+
+function parseLooseDateForClear(value: string | undefined): number | null {
+  if (!value) return null;
+  const normalized = toLatinDigits(String(value)).trim().replace(/\//g, '-');
+  const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  }
+  const parsed = new Date(normalized);
+  return Number.isNaN(parsed.getTime()) ? null : Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
+function valueIsWithinClearRange(value: string | undefined, dateFrom?: string, dateTo?: string): boolean {
+  const valueTime = parseLooseDateForClear(value);
+  if (valueTime === null) return true;
+  const fromTime = parseLooseDateForClear(dateFrom);
+  const toTime = parseLooseDateForClear(dateTo);
+  if (fromTime !== null && valueTime < fromTime) return false;
+  if (toTime !== null && valueTime > toTime) return false;
+  return true;
+}
+
+function shouldClearAuditLogLocally(log: LogEntry, options: LogClearOptions): boolean {
+  if (!valueIsWithinClearRange(log.time, options.dateFrom, options.dateTo)) return false;
+  const scopes = new Set(options.scopeIds || []);
+  if (scopes.has('audit-all')) return true;
+  return [...scopes].some((scope) => {
+    const modules = LOG_CLEAR_SCOPE_MODULES[scope];
+    return Array.isArray(modules) && modules.includes(log.module);
+  });
+}
+
+function shouldClearOpportunityLogLocally(log: OpportunityLog, options: LogClearOptions): boolean {
+  if (!(options.scopeIds || []).includes('opportunity-logs')) return false;
+  return valueIsWithinClearRange(log.date, options.dateFrom, options.dateTo);
 }
 
 
@@ -571,7 +625,7 @@ interface TeacherState {
 
 
   logAction: (module: string, action: string, details?: string) => void;
-  clearLogs: (password: string) => Promise<{ ok: boolean; message: string }>;
+  clearLogs: (password: string, options: LogClearOptions) => Promise<{ ok: boolean; message: string }>;
   exportBackup: () => string;
   importBackup: (jsonText: string) => { ok: boolean; message: string };
   exportMonthlyReport: (month?: string) => string;
@@ -2067,17 +2121,23 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => logApi.add({ ...log, userName: user, userId: currentUser.id }));
       },
 
-      clearLogs: async (password) => {
+      clearLogs: async (password, options) => {
         const currentUser = get().currentUser();
         if (!currentUser || !hasFullAdminAccess(currentUser)) {
           return { ok: false, message: 'هذه العملية متاحة لمدير النظام فقط' };
         }
-        const result = await logApi.clear(password);
+        if (!options?.scopeIds?.length) {
+          return { ok: false, message: 'اختر نوعاً واحداً على الأقل من السجلات المراد تصفيرها' };
+        }
+        const result = await logApi.clear(password, options);
         if (!result.ok) {
           return { ok: false, message: result.error || 'تعذر تصفير السجلات' };
         }
-        set({ logs: [], opportunityLogs: [] });
-        return { ok: true, message: 'تم تصفير سجلات النظام وسجل حركات الفرص بنجاح' };
+        set((s) => ({
+          logs: s.logs.filter((log) => !shouldClearAuditLogLocally(log, options)),
+          opportunityLogs: s.opportunityLogs.filter((log) => !shouldClearOpportunityLogLocally(log, options)),
+        }));
+        return { ok: true, message: 'تم تصفير السجلات المحددة حسب الاختيارات والفترة الزمنية' };
       },
 
       addCourse: (courseInput) => {
