@@ -59,8 +59,8 @@ export async function GET(req: NextRequest) {
     const examId = String(searchParams.get('examId') || '').trim();
     const studentId = String(searchParams.get('studentId') || '').trim();
     const status = String(searchParams.get('status') || '').trim();
-    const hasListParams = ['examId', 'studentId', 'status', 'page', 'pageSize'].some((key) => searchParams.has(key));
-
+    // Always paginate list reads. /api/backup is the dedicated full-export
+    // endpoint; reading /api/grades must never dump the whole grades table.
     const where: Prisma.GradeWhereInput = {};
     if (examId) where.examId = examId;
     if (studentId) where.studentId = studentId;
@@ -69,14 +69,6 @@ export async function GET(req: NextRequest) {
     // Important: GET must stay read-only. Legacy data repair is handled by
     // Prisma migration 20260702002000_grade_status_cleanup_and_indexes, not by
     // this read endpoint.
-    if (!hasListParams) {
-      const grades = await db.grade.findMany({
-        orderBy: { updatedAt: 'desc' },
-        include: { student: true, exam: true },
-      });
-      return NextResponse.json({ grades });
-    }
-
     const page = parsePositiveInt(searchParams.get('page'), 1, 1_000_000);
     const pageSize = parsePositiveInt(searchParams.get('pageSize'), 100, 500);
     const skip = (page - 1) * pageSize;

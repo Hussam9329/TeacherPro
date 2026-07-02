@@ -252,6 +252,15 @@ function buildStudentFilterWhere(
   const status = String(searchParams.get("status") ?? "").trim();
   if (status) and.push({ status });
 
+  const courseId = String(searchParams.get("courseId") ?? "").trim();
+  if (courseId) and.push({ courseId });
+
+  const courseIds = String(searchParams.get("courseIds") ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (courseIds.length > 0) and.push({ courseId: { in: courseIds } });
+
   const courseProgram = String(searchParams.get("courseProgram") ?? "").trim();
   if (courseProgram) and.push({ courseProgram });
 
@@ -282,7 +291,9 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   const searchParams = new URL(req.url).searchParams;
-  const wantsPaging = searchParams.has("page") || searchParams.has("pageSize");
+  // Always paginate list reads. The dedicated /api/backup route is the only
+  // endpoint allowed to export the full student table. This prevents accidental
+  // first-load downloads of thousands of students.
   const page = readPositiveIntegerParam(searchParams, "page", 1);
   const pageSize = clampPageSize(
     readPositiveIntegerParam(searchParams, "pageSize", 50),
@@ -313,22 +324,21 @@ export async function GET(req: NextRequest) {
     db.student.count({ where }),
     db.student.findMany({
       where,
-      orderBy: [{ createdAt: "desc" }],
-      ...(wantsPaging ? { skip: (page - 1) * pageSize, take: pageSize } : {}),
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     }),
   ]);
 
-  const totalPages = wantsPaging
-    ? Math.max(1, Math.ceil(totalCount / pageSize))
-    : 1;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   return NextResponse.json({
     students,
     totalCount,
-    page: wantsPaging ? page : 1,
-    pageSize: wantsPaging ? pageSize : totalCount,
+    page,
+    pageSize,
     totalPages,
-    hasMore: wantsPaging ? page < totalPages : false,
+    hasMore: page < totalPages,
   });
 }
 

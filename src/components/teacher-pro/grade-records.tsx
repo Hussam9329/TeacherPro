@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { useTeacherStore } from "@/lib/teacher-store";
+import React, { useEffect, useMemo, useState } from "react";
+import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
+import { gradeApi } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -117,6 +118,8 @@ export function GradeRecordsView() {
     updateGrade,
     deleteGrade,
     classification,
+    mergeStudentsCache,
+    mergeGradesCache,
   } = useTeacherStore();
 
   const [search, setSearch] = useState("");
@@ -142,6 +145,36 @@ export function GradeRecordsView() {
   });
   const { locked: isDeletingGrade, runLocked: runDeleteGradeLocked } =
     useActionLock();
+
+  useEffect(() => {
+    let cancelled = false;
+    const rawStatus = ["درجة", "غائب", "غش"].includes(filterStatus)
+      ? filterStatus
+      : undefined;
+
+    gradeApi
+      .list({
+        examId: filterExamId || undefined,
+        status: rawStatus,
+        page,
+        pageSize,
+      })
+      .then((result) => {
+        if (cancelled || !result?.grades?.length) return;
+        mergeGradesCache(result.grades as unknown as Grade[]);
+        const relatedStudents = result.grades
+          .map((grade) => (grade as Record<string, unknown>).student)
+          .filter(Boolean) as unknown as Student[];
+        if (relatedStudents.length) mergeStudentsCache(relatedStudents);
+      })
+      .catch(() => {
+        // لا نقطع الصفحة؛ إذا فشل الاتصال تبقى آخر نتائج محفوظة بالكاش.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filterExamId, filterStatus, page, pageSize, mergeGradesCache, mergeStudentsCache]);
 
   const isAcademicAccountingRow = (gradeId: string) => {
     const grade = grades.find((item) => item.id === gradeId);

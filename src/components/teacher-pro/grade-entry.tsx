@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useTeacherStore } from "@/lib/teacher-store";
+import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
+import { gradeApi, studentApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,6 +152,8 @@ export function GradeEntryView() {
     clearAbsentGradesForExam,
     courseName,
     classification,
+    mergeStudentsCache,
+    mergeGradesCache,
   } = useTeacherStore();
 
   const [selectedExamId, setSelectedExamId] = useState("");
@@ -198,6 +201,43 @@ export function GradeEntryView() {
     );
     return () => window.clearTimeout(timeout);
   }, [gradeEntryNotice]);
+
+  useEffect(() => {
+    const selectedExam = exams.find((exam) => exam.id === selectedExamId);
+    if (!selectedExam) return;
+
+    let cancelled = false;
+    const courseIds = selectedExam.courseIds.join(",");
+
+    studentApi
+      .list({ courseIds, page: 1, pageSize: 500 })
+      .then((result) => {
+        if (!cancelled && result?.students?.length) {
+          mergeStudentsCache(result.students as unknown as Student[]);
+        }
+      })
+      .catch(() => {
+        // لا نعرض خطأ مزعج هنا؛ الصفحة تبقى تعمل على الكاش المحلي إن وجد.
+      });
+
+    gradeApi
+      .list({ examId: selectedExam.id, page: 1, pageSize: 500 })
+      .then((result) => {
+        if (cancelled || !result?.grades?.length) return;
+        mergeGradesCache(result.grades as unknown as Grade[]);
+        const relatedStudents = result.grades
+          .map((grade) => (grade as Record<string, unknown>).student)
+          .filter(Boolean) as unknown as Student[];
+        if (relatedStudents.length) mergeStudentsCache(relatedStudents);
+      })
+      .catch(() => {
+        // الكاش المحلي والـ outbox يمنعان خسارة العمل عند فشل الاتصال المؤقت.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedExamId, exams, mergeStudentsCache, mergeGradesCache]);
 
   const locationFilterOptions = useMemo(
     () => getStudentLocationFilterOptions(students),

@@ -402,6 +402,8 @@ export interface StudentListQuery {
   courseTerm?: string;
   studyType?: string;
   location?: string;
+  courseId?: string;
+  courseIds?: string;
   page?: number;
   pageSize?: number;
 }
@@ -422,6 +424,9 @@ export interface GradeListQuery {
   page?: number;
   pageSize?: number;
 }
+
+const DEFAULT_STUDENT_PAGE_SIZE = 50;
+const DEFAULT_GRADE_PAGE_SIZE = 100;
 
 export interface GradeListResponse {
   grades: Array<Record<string, unknown>>;
@@ -447,12 +452,14 @@ function buildQueryString(
  * Load all data from the server via parallel per-resource endpoints.
  *
  * Previously this tried /api/backup first (one huge JSON response with
- * all tables). Now it always uses the per-resource endpoints in parallel
- * because:
- *   - Parallel small requests are faster than one huge request on Vercel
- *   - Each endpoint respects per-resource permissions (non-admin users
- *     get 403 on resources they can't see, which is silently skipped)
- *   - /api/backup remains available for the dedicated backup/export feature
+ * all tables). Now it uses only lightweight per-resource endpoints in
+ * parallel and deliberately skips heavy tables (students and grades) on
+ * the first load. Those datasets are loaded by their own screens using
+ * paginated/search endpoints.
+ *
+ * Why this matters: opening the app must not download thousands of students
+ * and grades before the user even chooses a page. /api/backup remains
+ * available only for the dedicated backup/export feature.
  *
  * Returns null if the session is invalid (401) or no data could be loaded.
  */
@@ -471,9 +478,7 @@ export async function loadAllFromServer(): Promise<ServerData | null> {
       "course-chapters",
       [403],
     ),
-    apiGetResponse<Pick<ServerData, "students">>("students", [403]),
     apiGetResponse<Pick<ServerData, "exams">>("exams", [403]),
-    apiGetResponse<Pick<ServerData, "grades">>("grades", [403]),
     apiGetResponse<Pick<ServerData, "opportunityLogs">>(
       "opportunity-logs",
       [403],
@@ -554,8 +559,10 @@ export const studentApi = {
       courseTerm: query.courseTerm,
       studyType: query.studyType,
       location: query.location,
-      page: query.page,
-      pageSize: query.pageSize,
+      courseId: query.courseId,
+      courseIds: query.courseIds,
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? DEFAULT_STUDENT_PAGE_SIZE,
     });
     return apiGet<StudentListResponse>(
       `students${queryString ? `?${queryString}` : ""}`,
@@ -588,8 +595,8 @@ export const gradeApi = {
       examId: query.examId,
       studentId: query.studentId,
       status: query.status,
-      page: query.page,
-      pageSize: query.pageSize,
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? DEFAULT_GRADE_PAGE_SIZE,
     });
     return apiGet<GradeListResponse>(
       `grades${queryString ? `?${queryString}` : ""}`,

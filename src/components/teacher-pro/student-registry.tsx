@@ -336,6 +336,7 @@ export function StudentRegistryView() {
     setSection,
     courseName,
     activeChapterForCourse,
+    mergeStudentsCache,
   } = useTeacherStore();
 
   const [search, setSearch] = useState("");
@@ -355,6 +356,8 @@ export function StudentRegistryView() {
     null,
   );
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
+  const [activeStudentsTotal, setActiveStudentsTotal] = useState<number | null>(null);
+  const [dismissedStudentsTotal, setDismissedStudentsTotal] = useState<number | null>(null);
 
   const [dismissDialog, setDismissDialog] = useState<{
     student: Student | null;
@@ -416,7 +419,9 @@ export function StudentRegistryView() {
         }
 
         const nextTotalPages = Math.max(1, Number(result.totalPages || 1));
-        setServerStudents((result.students || []) as unknown as Student[]);
+        const nextStudents = (result.students || []) as unknown as Student[];
+        setServerStudents(nextStudents);
+        mergeStudentsCache(nextStudents);
         setServerTotalCount(Number(result.totalCount || 0));
         setServerTotalPages(nextTotalPages);
 
@@ -448,7 +453,29 @@ export function StudentRegistryView() {
     page,
     pageSize,
     serverRefreshKey,
+    mergeStudentsCache,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      studentApi.list({ status: "نشط", page: 1, pageSize: 1 }),
+      studentApi.list({ status: "مفصول", page: 1, pageSize: 1 }),
+    ])
+      .then(([activeResult, dismissedResult]) => {
+        if (cancelled) return;
+        setActiveStudentsTotal(activeResult ? Number(activeResult.totalCount || 0) : null);
+        setDismissedStudentsTotal(dismissedResult ? Number(dismissedResult.totalCount || 0) : null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setActiveStudentsTotal(null);
+        setDismissedStudentsTotal(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [serverRefreshKey]);
 
   useEffect(() => {
     if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
@@ -1091,7 +1118,7 @@ export function StudentRegistryView() {
             <div>
               <p className="text-xs text-muted-foreground">الطلاب النشطون</p>
               <p className="text-2xl font-black">
-                {students.filter((student) => student.status === "نشط").length}
+                {activeStudentsTotal ?? students.filter((student) => student.status === "نشط").length}
               </p>
             </div>
             <Button
@@ -1111,7 +1138,7 @@ export function StudentRegistryView() {
             <div>
               <p className="text-xs text-muted-foreground">قائمة المفصولين</p>
               <p className="text-2xl font-black text-destructive">
-                {dismissedStudents.length}
+                {dismissedStudentsTotal ?? dismissedStudents.length}
               </p>
             </div>
             <Button

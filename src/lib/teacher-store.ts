@@ -543,6 +543,8 @@ interface TeacherState {
 
   loadFromServer: () => Promise<boolean>;
   restoreSession: () => Promise<boolean>;
+  mergeStudentsCache: (students: Student[]) => void;
+  mergeGradesCache: (grades: Grade[]) => void;
 
   setSection: (section: SectionId) => void;
   toggleSidebar: () => void;
@@ -653,6 +655,48 @@ function nowText(): string {
   const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
   return `${date} ${time}`;
 }
+
+function mergeRecordsById<T extends { id: string }>(current: T[], incoming: T[]): T[] {
+  if (incoming.length === 0) return current;
+  const byId = new Map<string, T>();
+  current.forEach((item) => byId.set(item.id, item));
+  incoming.forEach((item) => {
+    const existing = byId.get(item.id);
+    byId.set(item.id, existing ? { ...existing, ...item } : item);
+  });
+  return Array.from(byId.values());
+}
+
+function normalizeStudentRecord(st: Record<string, unknown>): Student {
+  const { groupId: _groupId, ...studentData } = st;
+  void _groupId;
+  return {
+    ...(studentData as Record<string, unknown>),
+    school: String(st.school || ''),
+    opportunities: Number(st.opportunities || 0),
+    baseOpportunities: Number(st.baseOpportunities || 0),
+    accountingGraceDays: normalizeGraceDaysValue(st.accountingGraceDays),
+    dismissalNotes: String(st.dismissalNotes || ''),
+    createdAt: st.createdAt ? String(st.createdAt).slice(0, 10) : todayISO(),
+    courseProgram: String(st.courseProgram || ''),
+    courseTerm: String(st.courseTerm || ''),
+    studyType: String(st.studyType || ''),
+    locationScope: String(st.locationScope || ''),
+    baghdadMode: String(st.baghdadMode || ''),
+  } as Student;
+}
+
+function normalizeGradeRecord(g: Record<string, unknown>): Grade {
+  return {
+    ...(g as Record<string, unknown>),
+    status: sanitizeGradeStatus(g.status),
+    score: g.score === null || g.score === undefined ? null : Number(g.score),
+    academicAccountingChecked: Boolean(g.academicAccountingChecked),
+    createdAt: g.createdAt ? String(g.createdAt).slice(0, 10) : todayISO(),
+    updatedAt: g.updatedAt ? String(g.updatedAt).slice(0, 10) : todayISO(),
+  } as Grade;
+}
+
 
 function firstAvailableSection(user: User | undefined, roles: Role[]): SectionId {
   if (!user) return 'dashboard';
@@ -1787,6 +1831,16 @@ export const useTeacherStore = create<TeacherState>()(
       dbConnected: false,
       dbLoading: false,
 
+      mergeStudentsCache: (incomingStudents) => {
+        const normalized = incomingStudents.map((student) => normalizeStudentRecord(student as unknown as Record<string, unknown>));
+        set((s) => ({ students: mergeRecordsById(s.students, normalized) }));
+      },
+
+      mergeGradesCache: (incomingGrades) => {
+        const normalized = incomingGrades.map((grade) => normalizeGradeRecord(grade as unknown as Record<string, unknown>));
+        set((s) => ({ grades: mergeRecordsById(s.grades, normalized) }));
+      },
+
       loadFromServer: async () => {
         set({ dbLoading: true });
         try {
@@ -1817,24 +1871,9 @@ export const useTeacherStore = create<TeacherState>()(
             archive: parseArrayField<ArchiveEntry>(cc.archive),
           })) as CourseChapter[];
 
-          const students = (serverData.students || []).map((st: Record<string, unknown>) => {
-            const { groupId: _groupId, ...studentData } = st;
-            void _groupId;
-            return {
-            ...studentData,
-            school: String(st.school || ''),
-            opportunities: Number(st.opportunities || 0),
-            baseOpportunities: Number(st.baseOpportunities || 0),
-            accountingGraceDays: normalizeGraceDaysValue(st.accountingGraceDays),
-            dismissalNotes: String(st.dismissalNotes || ''),
-            createdAt: st.createdAt ? String(st.createdAt).slice(0, 10) : todayISO(),
-            courseProgram: String(st.courseProgram || ''),
-            courseTerm: String(st.courseTerm || ''),
-            studyType: String(st.studyType || ''),
-            locationScope: String(st.locationScope || ''),
-            baghdadMode: String(st.baghdadMode || ''),
-          };
-          }) as Student[];
+          const students = serverData.students
+            ? serverData.students.map((st: Record<string, unknown>) => normalizeStudentRecord(st))
+            : get().students;
 
           const exams = (serverData.exams || []).map((ex: Record<string, unknown>) => {
             const { groupId: _groupId, ...examData } = ex;
@@ -1856,14 +1895,9 @@ export const useTeacherStore = create<TeacherState>()(
           };
           }) as Exam[];
 
-          const grades = mergePendingGradeSavesIntoGrades((serverData.grades || []).map((g: Record<string, unknown>) => ({
-            ...g,
-            status: sanitizeGradeStatus(g.status),
-            score: g.score === null || g.score === undefined ? null : Number(g.score),
-            academicAccountingChecked: Boolean(g.academicAccountingChecked),
-            createdAt: g.createdAt ? String(g.createdAt).slice(0, 10) : todayISO(),
-            updatedAt: g.updatedAt ? String(g.updatedAt).slice(0, 10) : todayISO(),
-          })) as Grade[]);
+          const grades = serverData.grades
+            ? mergePendingGradeSavesIntoGrades(serverData.grades.map((g: Record<string, unknown>) => normalizeGradeRecord(g)))
+            : mergePendingGradeSavesIntoGrades(get().grades);
 
           const opportunityLogs = (serverData.opportunityLogs || []).map((ol: Record<string, unknown>) => ({
             ...ol,
@@ -1959,7 +1993,9 @@ export const useTeacherStore = create<TeacherState>()(
           });
           attachPendingGradeBrowserEvents(get);
           schedulePendingGradeFlush(get, 900);
-          repairAbsentDiscountAccountingIfNeeded(get);
+          if (serverData.students && serverData.grades) {
+            repairAbsentDiscountAccountingIfNeeded(get);
+          }
 
           // Note: we no longer auto-sync the admin user's role/permissions
           // on every load. That update required accounts.manage permission
@@ -2020,6 +2056,7 @@ export const useTeacherStore = create<TeacherState>()(
         }
 
         const sessionUser = normalizeAdminAccessUser(userFromAuthApi(authResult.user));
+        const previousUserId = get().currentUserId;
         set((s) => ({
           users: s.users.some((u) => u.id === sessionUser.id)
             ? s.users.map((u) => u.id === sessionUser.id ? { ...u, ...sessionUser } : normalizeAdminAccessUser(u))
@@ -2027,6 +2064,8 @@ export const useTeacherStore = create<TeacherState>()(
           roles: mergeDefaultRoles(s.roles),
           currentUserId: sessionUser.id,
           isAuthenticated: true,
+          students: previousUserId !== sessionUser.id ? [] : s.students,
+          grades: previousUserId !== sessionUser.id ? [] : s.grades,
         }));
         return true;
       },
@@ -2045,6 +2084,8 @@ export const useTeacherStore = create<TeacherState>()(
           currentUserId: sessionUser.id,
           isAuthenticated: true,
           currentSection: 'dashboard',
+          students: [],
+          grades: [],
         }));
 
         // loadFromServer() is handled by the layout's useEffect when isAuthenticated becomes true.
@@ -2067,7 +2108,7 @@ export const useTeacherStore = create<TeacherState>()(
       logout: () => {
         void authApi.logout();
         const admin = get().users.find((u) => isPrimaryAdminUser(u) && u.active) || get().users.find((u) => u.roleId === ADMIN_ROLE_ID && u.active);
-        set({ currentUserId: admin?.id || 'u_admin', currentSection: 'dashboard', isAuthenticated: false });
+        set({ currentUserId: admin?.id || 'u_admin', currentSection: 'dashboard', isAuthenticated: false, students: [], grades: [] });
         get().logAction('تسجيل الدخول', 'تسجيل خروج', 'إغلاق جلسة المستخدم');
       },
 
