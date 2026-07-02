@@ -81,7 +81,6 @@ export async function POST(req: NextRequest) {
     const noDiscount = parseBoolean(body.noDiscount);
     const exam = await db.exam.create({
       data: {
-        id: body.id,
         name: String(body.name ?? '').trim(),
         type: body.type,
         courseIds: JSON.stringify(parseCourseIds(body.courseIds)),

@@ -37,7 +37,7 @@ function sensitivePermissions(value: unknown): string[] {
 function isAdminUser(user: { username?: string | null; roleId?: string | null; role?: string | null }): boolean {
   return String(user.username || '').trim().toLowerCase() === ADMIN_USERNAME
     || String(user.roleId || '') === ADMIN_ROLE_ID
-    || String(user.role || '') === 'مدير النظام';
+;
 }
 
 export async function GET(req: NextRequest) {

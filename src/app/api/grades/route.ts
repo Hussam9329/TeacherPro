@@ -187,7 +187,9 @@ export async function POST(req: NextRequest) {
         ...(checked !== undefined ? { academicAccountingChecked: checked } : {}),
       },
       create: {
-        id: body.id,
+        // id is accepted from client for offline sync reconciliation.
+        // Server falls back to cuid() if empty.
+        id: body.id || undefined,
         studentId: body.studentId,
         examId: body.examId,
         status: body.status,

@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const courseChapters = await db.courseChapter.findMany({
+    const courseChapters = await db.courseChapter.findMany({ take: 500,
       orderBy: { courseId: 'asc' },
       include: { course: true, chapter: true },
     });

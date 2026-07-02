@@ -135,7 +135,6 @@ export async function POST(req: NextRequest) {
     const studyTypes = getAvailableStudyTypes(body);
     const course = await db.course.create({
       data: {
-        id: body.id,
         name: String(body.name ?? '').trim(),
         active: body.active ?? true,
         availablePrograms: stringifyJson(body.availablePrograms || []),

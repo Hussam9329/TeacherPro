@@ -45,7 +45,6 @@ export async function POST(req: NextRequest) {
     if (validationMessage) return validationError(validationMessage);
     const chapter = await db.chapter.create({
       data: {
-        id: body.id,
         name: String(body.name ?? '').trim(),
         opportunities: Number(body.opportunities || 0),
       },

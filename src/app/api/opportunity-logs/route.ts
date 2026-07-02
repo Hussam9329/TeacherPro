@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
       ]);
       return NextResponse.json({ opportunityLogs, total, page, limit, totalPages: Math.ceil(total / limit) });
     }
-    const opportunityLogs = await db.opportunityLog.findMany({ orderBy: { date: 'desc' } });
+    const opportunityLogs = await db.opportunityLog.findMany({ orderBy: { date: 'desc' }, take: 500 });
     return NextResponse.json({ opportunityLogs });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل سجل الفرص حالياً.');
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       examId: body.examId ? String(body.examId) : null,
     };
     const log = body.id
-      ? await db.opportunityLog.upsert({ where: { id: String(body.id) }, update: data, create: { id: String(body.id), ...data } })
+      ? await db.opportunityLog.create({ data: { ...data } })
       : await db.opportunityLog.create({ data });
     return NextResponse.json({ log }, { status: 201 });
   } catch (error) {

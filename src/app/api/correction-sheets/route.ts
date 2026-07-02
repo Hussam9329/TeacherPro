@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
     const correctionSheets = await db.correctionSheet.findMany({
       orderBy: { startedAt: 'desc' },
       include: { student: true, exam: true, corrector: true },
+      take: 500,
     });
     return NextResponse.json({ correctionSheets });
   } catch (error) {
@@ -56,7 +57,6 @@ export async function POST(req: NextRequest) {
     if (existing) return validationError('توجد ورقة تصحيح مسجلة لهذا الطالب في نفس الامتحان', 409);
     const correctionSheet = await db.correctionSheet.create({
       data: {
-        id: body.id,
         status: body.status || 'قيد التصحيح',
         startedAt: body.startedAt ? new Date(body.startedAt) : undefined,
         finishedAt: body.finishedAt ? new Date(body.finishedAt) : undefined,

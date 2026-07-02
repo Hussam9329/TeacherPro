@@ -191,7 +191,7 @@ export function GradeRecordsView() {
           q: debouncedSearch || undefined,
           courseId: filterCourseId || undefined,
           nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
-          pageSize: 500,
+          pageSize: 200,
         })
       : gradeApi.list({
           examId: filterExamId || undefined,

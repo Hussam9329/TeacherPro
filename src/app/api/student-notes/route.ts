@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const studentNotes = await withFollowupTables(
-      () => db.studentNote.findMany({ orderBy: { date: 'desc' } }),
+      () => db.studentNote.findMany({ orderBy: { date: 'desc' }, take: 500 }),
       'StudentNote',
     );
     return NextResponse.json({ studentNotes });

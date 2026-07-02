@@ -385,9 +385,23 @@ export async function POST(req: NextRequest) {
   if (graceDaysError)
     return NextResponse.json({ error: graceDaysError }, { status: 400 });
 
-  const duplicateSource = await db.student.findMany({
-    select: { id: true, name: true, phone: true, telegram: true },
+  // Use targeted queries on indexed columns instead of loading all students
+  const { nameKey, phoneKey, telegramKey } = getStudentUniqueKeys({
+    name: body.name,
+    phone: body.phone,
+    telegram: body.telegram,
   });
+  const duplicateConditions = [];
+  if (nameKey) duplicateConditions.push({ nameKey });
+  if (phoneKey) duplicateConditions.push({ phoneKey });
+  if (telegramKey) duplicateConditions.push({ telegramKey });
+  const duplicateSource = duplicateConditions.length
+    ? await db.student.findMany({
+        where: { OR: duplicateConditions },
+        select: { id: true, name: true, phone: true, telegram: true },
+        take: 10,
+      })
+    : [];
   const duplicateMessage = getStudentDuplicateMessage(duplicateSource, {
     name: body.name,
     phone: body.phone,
@@ -531,9 +545,23 @@ export async function PUT(req: NextRequest) {
     data.phone !== undefined ||
     data.telegram !== undefined
   ) {
-    const duplicateSource = await db.student.findMany({
-      select: { id: true, name: true, phone: true, telegram: true },
+    // Use targeted queries instead of loading all students
+    const { nameKey: updateNameKey, phoneKey: updatePhoneKey, telegramKey: updateTelegramKey } = getStudentUniqueKeys({
+      name: data.name ?? current?.name,
+      phone: data.phone ?? current?.phone,
+      telegram: data.telegram ?? current?.telegram,
     });
+    const updateDuplicateConditions = [];
+    if (updateNameKey) updateDuplicateConditions.push({ nameKey: updateNameKey });
+    if (updatePhoneKey) updateDuplicateConditions.push({ phoneKey: updatePhoneKey });
+    if (updateTelegramKey) updateDuplicateConditions.push({ telegramKey: updateTelegramKey });
+    const duplicateSource = updateDuplicateConditions.length
+      ? await db.student.findMany({
+          where: { OR: updateDuplicateConditions },
+          select: { id: true, name: true, phone: true, telegram: true },
+          take: 10,
+        })
+      : [];
     const current = await db.student.findUnique({
       where: { id },
       select: { name: true, phone: true, telegram: true },
