@@ -502,7 +502,7 @@ export function StudentRegistryView() {
 
     if (
       editDialog.form.studyType &&
-      !editAvailableStudyTypes.includes(editDialog.form.studyType as string)
+      !(editAvailableStudyTypes as readonly string[]).includes(editDialog.form.studyType)
     ) {
       patch.studyType = "";
       patch.locationScope = "";

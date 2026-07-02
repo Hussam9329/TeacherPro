@@ -321,7 +321,7 @@ export function StudentRegisterView() {
 
   useEffect(() => {
     if (!form.studyType) return;
-    if (courseAvailableStudyTypes.includes(form.studyType as string)) return;
+    if ((courseAvailableStudyTypes as readonly string[]).includes(form.studyType)) return;
     queueMicrotask(() => {
       setForm((prev) => ({
         ...prev,

@@ -77,7 +77,7 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
         return `الموقع "${scope}" غير صالح`;
     }
     if (config.scopes.includes('بغداد')) {
-      if (!config.baghdadMode || !BAGHDAD_MODES.includes(config.baghdadMode as string))
+      if (!config.baghdadMode || !(BAGHDAD_MODES as readonly string[]).includes(config.baghdadMode))
         return `يجب اختيار نوع بغداد لنوع الدراسة "${studyType}"`;
       if (studyType === 'حضوري' && config.baghdadMode !== 'بغداد - مخصص')
         return 'نوع بغداد للدراسة الحضورية يجب أن يكون بغداد - مخصص';
@@ -186,19 +186,19 @@ export async function PUT(req: NextRequest) {
       });
 
       for (const student of existingStudents) {
-        if (student.courseProgram && !newPrograms.includes(student.courseProgram as string)) {
+        if (student.courseProgram && !(newPrograms as readonly string[]).includes(student.courseProgram)) {
           return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
         }
         if (student.courseProgram && student.studyType) {
           const newStudyTypesForProgram = getAvailableStudyTypesForProgram(draftCourse, student.courseProgram);
-          if (!newStudyTypesForProgram.includes(student.studyType as string)) {
+          if (!(newStudyTypesForProgram as readonly string[]).includes(student.studyType)) {
             return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
           }
         }
         if (student.studyType && student.locationScope) {
           if (student.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE) continue;
           const studyConfig = newLocationConfig[student.studyType as StudyType];
-          if (studyConfig && !studyConfig.scopes?.includes(student.locationScope as string)) {
+          if (studyConfig && !(studyConfig.scopes as readonly string[] | undefined)?.includes(student.locationScope)) {
             return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
           }
           if (student.locationScope === 'بغداد' && student.subSite && studyConfig?.baghdadMode === 'بغداد - مخصص') {
