@@ -210,10 +210,10 @@ export function GradeEntryView() {
     const courseIds = selectedExam.courseIds.join(",");
 
     studentApi
-      .list({ courseIds, page: 1, pageSize: 500 })
+      .listAll({ courseIds, pageSize: 500 })
       .then((result) => {
-        if (!cancelled && result?.students?.length) {
-          mergeStudentsCache(result.students as unknown as Student[]);
+        if (!cancelled) {
+          mergeStudentsCache((result?.students || []) as unknown as Student[]);
         }
       })
       .catch(() => {
@@ -221,11 +221,12 @@ export function GradeEntryView() {
       });
 
     gradeApi
-      .list({ examId: selectedExam.id, page: 1, pageSize: 500 })
+      .listAll({ examId: selectedExam.id, pageSize: 500 })
       .then((result) => {
-        if (cancelled || !result?.grades?.length) return;
-        mergeGradesCache(result.grades as unknown as Grade[]);
-        const relatedStudents = result.grades
+        if (cancelled) return;
+        const loadedGrades = result?.grades || [];
+        mergeGradesCache(loadedGrades as unknown as Grade[]);
+        const relatedStudents = loadedGrades
           .map((grade) => (grade as Record<string, unknown>).student)
           .filter(Boolean) as unknown as Student[];
         if (relatedStudents.length) mergeStudentsCache(relatedStudents);

@@ -421,12 +421,17 @@ export interface GradeListQuery {
   examId?: string;
   studentId?: string;
   status?: string;
+  q?: string;
+  courseId?: string;
+  nameLetter?: string;
   page?: number;
   pageSize?: number;
 }
 
 const DEFAULT_STUDENT_PAGE_SIZE = 50;
 const DEFAULT_GRADE_PAGE_SIZE = 100;
+const LIST_ALL_PAGE_SIZE = 500;
+const LIST_ALL_MAX_PAGES = 100;
 
 export interface GradeListResponse {
   grades: Array<Record<string, unknown>>;
@@ -569,6 +574,34 @@ export const studentApi = {
     );
   },
   add: (student: Record<string, unknown>) => apiPost("students", student),
+  listAll: async (
+    query: StudentListQuery = {},
+  ): Promise<StudentListResponse | null> => {
+    const pageSize = Math.min(Math.max(Number(query.pageSize || LIST_ALL_PAGE_SIZE), 1), LIST_ALL_PAGE_SIZE);
+    const collected: Array<Record<string, unknown>> = [];
+    let page = 1;
+    let totalCount = 0;
+    let totalPages = 1;
+
+    while (page <= totalPages && page <= LIST_ALL_MAX_PAGES) {
+      const result = await studentApi.list({ ...query, page, pageSize });
+      if (!result) return null;
+      totalCount = Number(result.totalCount || 0);
+      totalPages = Math.max(1, Number(result.totalPages || 1));
+      collected.push(...(result.students || []));
+      if (!result.hasMore) break;
+      page += 1;
+    }
+
+    return {
+      students: collected,
+      totalCount,
+      page: 1,
+      pageSize,
+      totalPages,
+      hasMore: collected.length < totalCount,
+    };
+  },
   bulkAdd: (students: Array<Record<string, unknown>>) =>
     apiPost("students/bulk", { students }),
   update: (id: string, updates: Record<string, unknown>) =>
@@ -595,6 +628,9 @@ export const gradeApi = {
       examId: query.examId,
       studentId: query.studentId,
       status: query.status,
+      q: query.q,
+      courseId: query.courseId,
+      nameLetter: query.nameLetter,
       page: query.page ?? 1,
       pageSize: query.pageSize ?? DEFAULT_GRADE_PAGE_SIZE,
     });
@@ -603,6 +639,34 @@ export const gradeApi = {
     );
   },
   add: (grade: Record<string, unknown>) => apiPost("grades", grade),
+  listAll: async (
+    query: GradeListQuery = {},
+  ): Promise<GradeListResponse | null> => {
+    const pageSize = Math.min(Math.max(Number(query.pageSize || LIST_ALL_PAGE_SIZE), 1), LIST_ALL_PAGE_SIZE);
+    const collected: Array<Record<string, unknown>> = [];
+    let page = 1;
+    let totalCount = 0;
+    let totalPages = 1;
+
+    while (page <= totalPages && page <= LIST_ALL_MAX_PAGES) {
+      const result = await gradeApi.list({ ...query, page, pageSize });
+      if (!result) return null;
+      totalCount = Number(result.totalCount || 0);
+      totalPages = Math.max(1, Number(result.totalPages || 1));
+      collected.push(...(result.grades || []));
+      if (!result.hasMore) break;
+      page += 1;
+    }
+
+    return {
+      grades: collected,
+      totalCount,
+      page: 1,
+      pageSize,
+      totalPages,
+      hasMore: collected.length < totalCount,
+    };
+  },
   bulkAdd: (grades: Array<Record<string, unknown>>) =>
     apiPost("grades/bulk", { grades }),
   update: (id: string, updates: Record<string, unknown>) =>

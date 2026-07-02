@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   useTeacherStore,
   type Exam,
@@ -8,6 +8,7 @@ import {
   type Student,
   type StudentNote,
 } from "@/lib/teacher-store";
+import { gradeApi, studentApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -373,7 +374,29 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     courseName,
     activeChapterForCourse,
     classification,
+    mergeStudentsCache,
+    mergeGradesCache,
   } = useTeacherStore();
+
+  useEffect(() => {
+    let cancelled = false;
+    const loads = [studentApi.listAll({ pageSize: 500 })];
+    const gradeLoad = view === "leaves" ? Promise.resolve(null) : gradeApi.listAll({ pageSize: 500 });
+
+    Promise.all([loads[0], gradeLoad])
+      .then(([studentResult, gradeResult]) => {
+        if (cancelled) return;
+        mergeStudentsCache((studentResult?.students || []) as unknown as Student[]);
+        mergeGradesCache((gradeResult?.grades || []) as unknown as Grade[]);
+      })
+      .catch(() => {
+        // الصفحة تستخدم آخر كاش متاح إذا فشل الاتصال المؤقت.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [view, mergeStudentsCache, mergeGradesCache]);
 
   const [globalSearch, setGlobalSearch] = useState("");
   const [leaveStudentId, setLeaveStudentId] = useState("");

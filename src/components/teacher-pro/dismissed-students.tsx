@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { useTeacherStore } from "@/lib/teacher-store";
+import React, { useEffect, useMemo, useState } from "react";
+import { useTeacherStore, type Student } from "@/lib/teacher-store";
+import { studentApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,7 @@ type ViewMode = "cards" | "table";
 type NotesFilter = "all" | "with-notes" | "without-notes";
 
 export function DismissedStudentsView() {
-  const { students, courses, courseName, reactivateStudent, updateStudent } = useTeacherStore();
+  const { students, courses, courseName, reactivateStudent, updateStudent, mergeStudentsCache } = useTeacherStore();
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 180);
   const [filterCourseId, setFilterCourseId] = useState("");
@@ -31,6 +32,23 @@ export function DismissedStudentsView() {
   const [filterNotes, setFilterNotes] = useState<NotesFilter>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    studentApi
+      .listAll({ status: "مفصول", pageSize: 500 })
+      .then((result) => {
+        if (!cancelled) {
+          mergeStudentsCache((result?.students || []) as unknown as Student[]);
+        }
+      })
+      .catch(() => {
+        // تبقى آخر نسخة محملة متاحة إذا فشل الاتصال.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mergeStudentsCache]);
 
   const dismissedTypes = useMemo(
     () => Array.from(new Set(students.filter((student) => student.status === "مفصول").map((student) => student.dismissalType || "مفصول"))).filter(Boolean),

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Exam, type Grade, type Student } from "@/lib/teacher-store";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { ClipboardCheck, Eye, Loader2, PlusCircle, ShieldAlert } from "lucide-react";
 import { toLatinDigits } from "@/lib/format";
 import { normalizeStudentName, normalizeTelegramIdentifier, sanitizeTelegramInput } from "@/lib/student-utils";
+import { gradeApi, studentApi } from "@/lib/api";
 
 const EXPECTED_COLUMNS = 3;
 const SAMPLE_TEXT = `عبدالله عبدالرحمن محمود داود	@zzzcr8	11
@@ -91,16 +92,42 @@ function examLabel(exam: Exam) {
 }
 
 export function GradeBulkImportView() {
-  const { exams, students, grades, courses, bulkAddGrades } = useTeacherStore();
+  const { exams, students, grades, courses, bulkAddGrades, mergeStudentsCache, mergeGradesCache } = useTeacherStore();
   const [selectedExamId, setSelectedExamId] = useState("");
   const [rawText, setRawText] = useState("");
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [previewDone, setPreviewDone] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isLoadingReferenceData, setIsLoadingReferenceData] = useState(false);
 
   const selectedExam = useMemo(() => exams.find((exam) => exam.id === selectedExamId) || null, [exams, selectedExamId]);
   const activeExams = useMemo(() => exams.filter((exam) => exam.active), [exams]);
+
+  useEffect(() => {
+    if (!selectedExam) return;
+    let cancelled = false;
+    setIsLoadingReferenceData(true);
+    Promise.all([
+      studentApi.listAll({ courseIds: selectedExam.courseIds.join(","), pageSize: 500 }),
+      gradeApi.listAll({ examId: selectedExam.id, pageSize: 500 }),
+    ])
+      .then(([studentResult, gradeResult]) => {
+        if (cancelled) return;
+        mergeStudentsCache((studentResult?.students || []) as unknown as Student[]);
+        mergeGradesCache((gradeResult?.grades || []) as unknown as Grade[]);
+      })
+      .catch(() => {
+        toast.error("تعذر تحميل بيانات المطابقة من الخادم. سيتم الاعتماد على آخر كاش متاح.");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingReferenceData(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedExam, mergeStudentsCache, mergeGradesCache]);
 
   const summary = useMemo(() => {
     const valid = previewRows.filter((row) => row.student && row.score !== null && row.errors.length === 0).length;
@@ -110,7 +137,7 @@ export function GradeBulkImportView() {
     return { total: previewRows.length, valid, updates, errorRows, warningRows };
   }, [previewRows]);
 
-  const canImport = previewDone && summary.valid > 0 && summary.errorRows === 0 && Boolean(selectedExam) && !isImporting;
+  const canImport = previewDone && summary.valid > 0 && summary.errorRows === 0 && Boolean(selectedExam) && !isImporting && !isLoadingReferenceData;
 
   const buildPreview = () => {
     if (!selectedExam) {
@@ -296,9 +323,9 @@ export function GradeBulkImportView() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={buildPreview} disabled={!selectedExamId || !rawText.trim()} className="rounded-2xl">
+            <Button type="button" onClick={buildPreview} disabled={!selectedExamId || !rawText.trim() || isLoadingReferenceData} className="rounded-2xl">
               <Eye className="ml-2 h-4 w-4" />
-              معاينة وتحقق
+              {isLoadingReferenceData ? "جاري تجهيز بيانات المطابقة..." : "معاينة وتحقق"}
             </Button>
             <Button type="button" onClick={() => setConfirmOpen(true)} disabled={!canImport} className="rounded-2xl">
               <PlusCircle className="ml-2 h-4 w-4" />

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Course, type Student } from "@/lib/teacher-store";
 import { studentApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -190,12 +190,29 @@ function phoneLabel(phone: string) {
 }
 
 export function StudentBulkTextImportView() {
-  const { students, courses, loadFromServer } = useTeacherStore();
+  const { students, courses, loadFromServer, mergeStudentsCache } = useTeacherStore();
   const [rawText, setRawText] = useState("");
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [previewDone, setPreviewDone] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    studentApi
+      .listAll({ pageSize: 500 })
+      .then((result) => {
+        if (!cancelled) {
+          mergeStudentsCache((result?.students || []) as unknown as Student[]);
+        }
+      })
+      .catch(() => {
+        // فحص التكرار المحلي يستخدم آخر كاش متاح عند فشل الاتصال.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mergeStudentsCache]);
 
   const summary = useMemo(() => {
     const valid = previewRows.filter((row) => row.student && row.errors.length === 0).length;

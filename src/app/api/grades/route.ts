@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
-import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { normalizeArabicText, requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { ensureExamSchema } from '@/lib/exam-schema';
 
 async function validateGradePayload(body: Record<string, unknown>) {
@@ -50,21 +50,88 @@ function parsePositiveInt(value: string | null, fallback: number, max: number): 
   return Math.min(Math.floor(parsed), max);
 }
 
+function buildGradeSearchWhere(rawQuery: string): Prisma.GradeWhereInput | null {
+  const query = rawQuery.trim();
+  if (!query) return null;
+
+  const normalizedQuery = normalizeArabicText(query);
+  const compactQuery = query.replace(/\s+/g, '');
+  const telegramQuery = query.startsWith('@') ? query : `@${query}`;
+
+  const studentSearch: Prisma.StudentWhereInput[] = [
+    { name: { contains: query, mode: 'insensitive' } },
+    { code: { startsWith: query, mode: 'insensitive' } },
+    { phone: { startsWith: compactQuery, mode: 'insensitive' } },
+    { parentPhone: { startsWith: compactQuery, mode: 'insensitive' } },
+    { telegram: { startsWith: telegramQuery, mode: 'insensitive' } },
+  ];
+
+  if (normalizedQuery) {
+    studentSearch.push({ nameKey: { contains: normalizedQuery, mode: 'insensitive' } });
+  }
+  if (compactQuery.length >= 7) {
+    studentSearch.push(
+      { phone: { contains: compactQuery, mode: 'insensitive' } },
+      { parentPhone: { contains: compactQuery, mode: 'insensitive' } },
+    );
+  }
+
+  return {
+    OR: [
+      { notes: { contains: query, mode: 'insensitive' } },
+      { student: { is: { OR: studentSearch } } },
+      { exam: { is: { name: { contains: query, mode: 'insensitive' } } } },
+    ],
+  };
+}
+
+function buildNameLetterWhere(letter: string): Prisma.GradeWhereInput | null {
+  const rawLetter = letter.trim();
+  if (!rawLetter || rawLetter === 'all') return null;
+  const normalizedLetter = normalizeArabicText(rawLetter).slice(0, 1);
+
+  const studentWhere: Prisma.StudentWhereInput[] = [
+    { name: { startsWith: rawLetter, mode: 'insensitive' } },
+  ];
+  if (normalizedLetter) {
+    studentWhere.push({ nameKey: { startsWith: normalizedLetter, mode: 'insensitive' } });
+  }
+
+  return { student: { is: { OR: studentWhere } } };
+}
+
+function buildGradeWhere(searchParams: URLSearchParams): Prisma.GradeWhereInput {
+  const and: Prisma.GradeWhereInput[] = [];
+  const examId = String(searchParams.get('examId') || '').trim();
+  const studentId = String(searchParams.get('studentId') || '').trim();
+  const status = String(searchParams.get('status') || '').trim();
+  const courseId = String(searchParams.get('courseId') || '').trim();
+  const search = String(searchParams.get('q') || '').trim();
+  const nameLetter = String(searchParams.get('nameLetter') || '').trim();
+
+  if (examId) and.push({ examId });
+  if (studentId) and.push({ studentId });
+  if (status) and.push({ status });
+  if (courseId) and.push({ student: { is: { courseId } } });
+
+  const letterWhere = buildNameLetterWhere(nameLetter);
+  if (letterWhere) and.push(letterWhere);
+
+  const searchWhere = buildGradeSearchWhere(search);
+  if (searchWhere) and.push(searchWhere);
+
+  return and.length > 0 ? { AND: and } : {};
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, 'grades.view');
   if (authError) return authError;
 
   try {
     const { searchParams } = new URL(req.url);
-    const examId = String(searchParams.get('examId') || '').trim();
-    const studentId = String(searchParams.get('studentId') || '').trim();
-    const status = String(searchParams.get('status') || '').trim();
     // Always paginate list reads. /api/backup is the dedicated full-export
     // endpoint; reading /api/grades must never dump the whole grades table.
-    const where: Prisma.GradeWhereInput = {};
-    if (examId) where.examId = examId;
-    if (studentId) where.studentId = studentId;
-    if (status) where.status = status;
+    const where = buildGradeWhere(searchParams);
 
     // Important: GET must stay read-only. Legacy data repair is handled by
     // Prisma migration 20260702002000_grade_status_cleanup_and_indexes, not by

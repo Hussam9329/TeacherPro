@@ -60,6 +60,7 @@ import {
 
 type GradeStatus = "درجة" | "غائب" | "غش";
 type ViewMode = "cards" | "table";
+type HydratedGrade = Grade & { student?: Student; exam?: unknown };
 
 type GradeExportRow = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -74,6 +75,21 @@ type GradeExportRow = {
 const englishNumberFormatter = new Intl.NumberFormat("en-US");
 const formatEnglishNumber = (value: number) =>
   englishNumberFormatter.format(value);
+
+const clientOnlyGradeStatusFilters = new Set<GradeStatusFilter>([
+  "full-mark",
+  "grace-period",
+  "discounted",
+  "failed",
+  "academic-accounting",
+  "has-grade",
+]);
+
+function serverStatusForGradeFilter(filter: GradeStatusFilter): GradeStatus | undefined {
+  if (filter === "absent") return "غائب";
+  if (filter === "cheating") return "غش";
+  return undefined;
+}
 
 const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
   {
@@ -131,6 +147,13 @@ export function GradeRecordsView() {
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [serverGrades, setServerGrades] = useState<HydratedGrade[] | null>(null);
+  const [serverTotalCount, setServerTotalCount] = useState(0);
+  const [serverTotalPages, setServerTotalPages] = useState(1);
+  const [serverGradesLoading, setServerGradesLoading] = useState(false);
+  const [serverGradesError, setServerGradesError] = useState<string | null>(null);
+  const [serverClientFiltered, setServerClientFiltered] = useState(false);
+  const [serverRefreshKey, setServerRefreshKey] = useState(0);
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     id: "",
@@ -147,34 +170,84 @@ export function GradeRecordsView() {
     useActionLock();
 
   useEffect(() => {
-    let cancelled = false;
-    const rawStatus = ["درجة", "غائب", "غش"].includes(filterStatus)
-      ? filterStatus
-      : undefined;
+    setPage(1);
+  }, [debouncedSearch, filterExamId, filterStatus, filterNameLetter, filterCourseId]);
 
-    gradeApi
-      .list({
-        examId: filterExamId || undefined,
-        status: rawStatus,
-        page,
-        pageSize,
-      })
-      .then((result) => {
-        if (cancelled || !result?.grades?.length) return;
-        mergeGradesCache(result.grades as unknown as Grade[]);
-        const relatedStudents = result.grades
-          .map((grade) => (grade as Record<string, unknown>).student)
-          .filter(Boolean) as unknown as Student[];
+  useEffect(() => {
+    let cancelled = false;
+    const needsClientStatusFilter = clientOnlyGradeStatusFilters.has(filterStatus);
+    const rawStatus = needsClientStatusFilter
+      ? undefined
+      : serverStatusForGradeFilter(filterStatus);
+
+    setServerClientFiltered(needsClientStatusFilter);
+    setServerGradesLoading(true);
+    setServerGradesError(null);
+
+    const request = needsClientStatusFilter
+      ? gradeApi.listAll({
+          examId: filterExamId || undefined,
+          q: debouncedSearch || undefined,
+          courseId: filterCourseId || undefined,
+          nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
+          pageSize: 500,
+        })
+      : gradeApi.list({
+          examId: filterExamId || undefined,
+          status: rawStatus,
+          q: debouncedSearch || undefined,
+          courseId: filterCourseId || undefined,
+          nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
+          page,
+          pageSize,
+        });
+
+    request.then((result) => {
+        if (cancelled) return;
+        if (!result) {
+          setServerGrades(null);
+          setServerGradesError("تعذر تحميل سجل الدرجات من الخادم. سيتم عرض آخر نسخة محفوظة مؤقتاً.");
+          return;
+        }
+
+        const loadedGrades = (result.grades || []) as unknown as HydratedGrade[];
+        const nextTotalPages = Math.max(1, Number(result.totalPages || 1));
+        setServerGrades(loadedGrades);
+        setServerTotalCount(Number(result.totalCount || 0));
+        setServerTotalPages(nextTotalPages);
+        mergeGradesCache(loadedGrades as unknown as Grade[]);
+
+        const relatedStudents = loadedGrades
+          .map((grade) => grade.student)
+          .filter(Boolean) as Student[];
         if (relatedStudents.length) mergeStudentsCache(relatedStudents);
+
+        if (page > nextTotalPages) setPage(nextTotalPages);
       })
       .catch(() => {
-        // لا نقطع الصفحة؛ إذا فشل الاتصال تبقى آخر نتائج محفوظة بالكاش.
+        if (cancelled) return;
+        setServerGrades(null);
+        setServerGradesError("تعذر تحميل سجل الدرجات من الخادم. سيتم عرض آخر نسخة محفوظة مؤقتاً.");
+      })
+      .finally(() => {
+        if (!cancelled) setServerGradesLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [filterExamId, filterStatus, page, pageSize, mergeGradesCache, mergeStudentsCache]);
+  }, [
+    debouncedSearch,
+    filterExamId,
+    filterStatus,
+    filterNameLetter,
+    filterCourseId,
+    page,
+    pageSize,
+    serverRefreshKey,
+    mergeGradesCache,
+    mergeStudentsCache,
+  ]);
 
   const isAcademicAccountingRow = (gradeId: string) => {
     const grade = grades.find((item) => item.id === gradeId);
@@ -270,19 +343,35 @@ export function GradeRecordsView() {
       return;
     }
     updateGrade(gradeId, { academicAccountingChecked: checked });
+    setServerGrades((current) =>
+      current
+        ? current.map((grade) =>
+            grade.id === gradeId
+              ? { ...grade, academicAccountingChecked: checked }
+              : grade,
+          )
+        : current,
+    );
     toast.success(
       checked ? "تم تأشير محاسبة الرسوب" : "تم إلغاء تأشير محاسبة الرسوب",
     );
   };
 
-  const studentById = useMemo(
-    () => new Map(students.map((student) => [student.id, student])),
-    [students],
-  );
-  const examById = useMemo(
-    () => new Map(exams.map((exam) => [exam.id, exam])),
-    [exams],
-  );
+  const studentById = useMemo(() => {
+    const map = new Map(students.map((student) => [student.id, student]));
+    serverGrades?.forEach((grade) => {
+      if (grade.student?.id) map.set(grade.student.id, grade.student);
+    });
+    return map;
+  }, [students, serverGrades]);
+  const examById = useMemo(() => {
+    const map = new Map(exams.map((exam) => [exam.id, exam]));
+    serverGrades?.forEach((grade) => {
+      const exam = grade.exam as (typeof exams)[number] | undefined;
+      if (exam?.id) map.set(exam.id, exam);
+    });
+    return map;
+  }, [exams, serverGrades]);
   const nameLetterOptions = useMemo(
     () => buildArabicLetterOptions(students.map((student) => student.name)),
     [students],
@@ -366,7 +455,7 @@ export function GradeRecordsView() {
     debouncedSearch,
   ]);
 
-  const filtered = useMemo(() => {
+  const localFiltered = useMemo(() => {
     return grades.filter((grade) => {
       const student = studentById.get(grade.studentId);
       const exam = examById.get(grade.examId);
@@ -391,7 +480,7 @@ export function GradeRecordsView() {
       const cls = classification(grade, exam, student);
       if (!gradeMatchesStatusFilter(filterStatus, grade, exam, cls))
         return false;
-      if (filterCourseId && !exam.courseIds.includes(filterCourseId))
+      if (filterCourseId && student.courseId !== filterCourseId)
         return false;
       return true;
     });
@@ -407,8 +496,41 @@ export function GradeRecordsView() {
     classification,
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const serverLocallyFiltered = useMemo(() => {
+    return (serverGrades ?? []).filter((grade) => {
+      const student = studentById.get(grade.studentId);
+      const exam = examById.get(grade.examId);
+      if (!student || !exam || !isGradeEntered(grade, exam)) return false;
+      const cls = classification(grade, exam, student);
+      return gradeMatchesStatusFilter(filterStatus, grade, exam, cls);
+    });
+  }, [serverGrades, studentById, examById, filterStatus, classification]);
+
+  const usingServerGrades = serverGrades !== null;
+  const filtered = usingServerGrades
+    ? serverClientFiltered
+      ? serverLocallyFiltered
+      : (serverGrades ?? [])
+    : localFiltered;
+  const filteredTotalCount = usingServerGrades
+    ? serverClientFiltered
+      ? serverLocallyFiltered.length
+      : serverTotalCount
+    : localFiltered.length;
+  const totalPages = usingServerGrades
+    ? serverClientFiltered
+      ? Math.max(1, Math.ceil(serverLocallyFiltered.length / pageSize))
+      : serverTotalPages
+    : Math.max(1, Math.ceil(localFiltered.length / pageSize));
+  const paged = usingServerGrades
+    ? serverClientFiltered
+      ? serverLocallyFiltered.slice((page - 1) * pageSize, page * pageSize)
+      : (serverGrades ?? [])
+    : localFiltered.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const openEditGradeDialog = (gradeId: string) => {
     const grade = grades.find((item) => item.id === gradeId);
@@ -463,6 +585,21 @@ export function GradeRecordsView() {
       notes: editDialog.notes,
       academicAccountingChecked: false,
     });
+    setServerGrades((current) =>
+      current
+        ? current.map((grade) =>
+            grade.id === editDialog.id
+              ? {
+                  ...grade,
+                  status: editDialog.status,
+                  score,
+                  notes: editDialog.notes,
+                  academicAccountingChecked: false,
+                }
+              : grade,
+          )
+        : current,
+    );
     setEditDialog({
       open: false,
       id: "",
@@ -470,6 +607,7 @@ export function GradeRecordsView() {
       score: "",
       notes: "",
     });
+    setServerRefreshKey((key) => key + 1);
     toast.success("تم تعديل الدرجة وإعادة الاحتساب");
   };
 
@@ -488,7 +626,16 @@ export function GradeRecordsView() {
 
   const handleDeleteGrade = runDeleteGradeLocked(async () => {
     const ok = deleteGrade(deleteDialog.id);
-    ok ? toast.success("تم حذف الدرجة") : toast.error("تعذر حذف الدرجة");
+    if (ok) {
+      setServerGrades((current) =>
+        current ? current.filter((grade) => grade.id !== deleteDialog.id) : current,
+      );
+      setServerTotalCount((count) => Math.max(0, count - 1));
+      setServerRefreshKey((key) => key + 1);
+      toast.success("تم حذف الدرجة");
+    } else {
+      toast.error("تعذر حذف الدرجة");
+    }
     setDeleteDialog({ open: false, id: "", label: "" });
   });
 
@@ -669,7 +816,7 @@ export function GradeRecordsView() {
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
-          عرض {paged.length} من {filtered.length} سجل
+          عرض {paged.length} من {filteredTotalCount} سجل
         </span>
         <div className="flex items-center gap-2">
           <Label htmlFor="grade-records-pageSize" className="text-xs">
@@ -693,6 +840,18 @@ export function GradeRecordsView() {
           </Select>
         </div>
       </div>
+
+      {serverGradesLoading && (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
+          جاري تحميل سجل الدرجات من قاعدة البيانات...
+        </div>
+      )}
+
+      {serverGradesError && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300">
+          {serverGradesError}
+        </div>
+      )}
 
       {viewMode === "cards" ? (
         <div className="space-y-2">

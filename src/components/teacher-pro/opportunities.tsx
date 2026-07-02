@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { useTeacherStore } from "@/lib/teacher-store";
+import React, { useEffect, useState, useMemo } from "react";
+import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
+import { gradeApi, studentApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -55,6 +56,8 @@ export function OpportunitiesView() {
     undoOpportunityLog,
     courseName,
     activeChapterForCourse,
+    mergeStudentsCache,
+    mergeGradesCache,
   } = useTeacherStore();
 
   const [filterCourseId, setFilterCourseId] = useState("");
@@ -81,6 +84,25 @@ export function OpportunitiesView() {
   const [bulkExcludeFullOpportunities, setBulkExcludeFullOpportunities] = useState(true);
   const { locked: isApplyingAction, runLocked: runActionLocked } =
     useActionLock();
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      studentApi.listAll({ pageSize: 500 }),
+      gradeApi.listAll({ pageSize: 500 }),
+    ])
+      .then(([studentResult, gradeResult]) => {
+        if (cancelled) return;
+        mergeStudentsCache((studentResult?.students || []) as unknown as Student[]);
+        mergeGradesCache((gradeResult?.grades || []) as unknown as Grade[]);
+      })
+      .catch(() => {
+        // لا نمنع الصفحة من العمل؛ تعرض آخر كاش معروف إذا تعذر الاتصال.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mergeStudentsCache, mergeGradesCache]);
 
   const filtered = useMemo(() => {
     return students.filter((s) => {
