@@ -546,6 +546,10 @@ export async function PUT(req: NextRequest) {
     data.telegram !== undefined
   ) {
     // Use targeted queries instead of loading all students
+    const current = await db.student.findUnique({
+      where: { id },
+      select: { name: true, phone: true, telegram: true },
+    });
     const { nameKey: updateNameKey, phoneKey: updatePhoneKey, telegramKey: updateTelegramKey } = getStudentUniqueKeys({
       name: data.name ?? current?.name,
       phone: data.phone ?? current?.phone,
@@ -562,10 +566,6 @@ export async function PUT(req: NextRequest) {
           take: 10,
         })
       : [];
-    const current = await db.student.findUnique({
-      where: { id },
-      select: { name: true, phone: true, telegram: true },
-    });
     const duplicateMessage = getStudentDuplicateMessage(
       duplicateSource,
       {
