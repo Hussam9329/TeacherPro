@@ -360,7 +360,7 @@ export function StudentRegistryView() {
         }
 
         const nextTotalPages = Math.max(1, Number(result.totalPages || 1));
-        setServerStudents((result.students || []) as Student[]);
+        setServerStudents((result.students || []) as unknown as Student[]);
         setServerTotalCount(Number(result.totalCount || 0));
         setServerTotalPages(nextTotalPages);
 
