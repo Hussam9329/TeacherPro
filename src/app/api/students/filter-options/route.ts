@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   try {
     // Use distinct query instead of loading all students
     const results = await db.student.findMany({
-      where: { active: true },
+      where: { status: 'نشط' },
       select: { locationScope: true, subSite: true, mainSite: true },
       distinct: ['locationScope', 'subSite'],
       take: 200,
