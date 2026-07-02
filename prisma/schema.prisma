@@ -85,6 +85,9 @@ model Student {
 
   @@index([courseId])
   @@index([status])
+  @@index([parentPhone])
+  @@index([mainSite])
+  @@index([subSite])
 }
 
 model Exam {

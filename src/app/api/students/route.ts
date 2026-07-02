@@ -1,9 +1,10 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission } from '@/lib/server-auth';
+import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 import { getPhoneValidationError, sanitizePhoneInput } from "@/lib/format";
 import {
   getStudentDuplicateMessage,
@@ -15,7 +16,7 @@ import { normalizeArabicText } from "@/lib/route-helpers";
 import {
   validateStudentCourseChoices,
   resolveSubSite,
-} from '@/lib/course-config';
+} from "@/lib/course-config";
 
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -24,40 +25,39 @@ function normalizeGraceDays(value: unknown): number {
 }
 
 function validateGraceDays(value: unknown): string | null {
-  if (value === undefined || value === null || value === '') return null;
+  if (value === undefined || value === null || value === "") return null;
   const numeric = Number(value);
   if (!Number.isInteger(numeric) || numeric < 0 || numeric > 30) {
-    return 'فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم';
+    return "فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم";
   }
   return null;
 }
 
-
 const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
   // Primary/derived fields
-  'code',
-  'nameKey',
-  'phoneKey',
-  'telegramKey',
+  "code",
+  "nameKey",
+  "phoneKey",
+  "telegramKey",
   // Prisma relation objects that may be present after GET /api/students include: { course: true }
-  'course',
-  'grades',
-  'opportunityLogs',
-  'studentLeaves',
-  'studentCalls',
-  'studentNotes',
-  'correctionSheets',
-  'telegramExamSubmissions',
+  "course",
+  "grades",
+  "opportunityLogs",
+  "studentLeaves",
+  "studentCalls",
+  "studentNotes",
+  "correctionSheets",
+  "telegramExamSubmissions",
   // Client-only / stale accounting fields from older builds
-  'receiptNo',
-  'codeSequence',
-  'totalAmount',
-  'paidAmount',
-  'installments',
-  'accountingStart',
-  'groupId',
+  "receiptNo",
+  "codeSequence",
+  "totalAmount",
+  "paidAmount",
+  "installments",
+  "accountingStart",
+  "groupId",
   // Any Prisma timestamps/unknown values that should never be updated from this route
-  'updatedAt',
+  "updatedAt",
 ]);
 
 function stripNonWritableStudentUpdateFields(data: Record<string, unknown>) {
@@ -70,51 +70,192 @@ function getPrismaStudentErrorResponse(error: unknown) {
   const prismaError = error as { code?: string; meta?: { target?: unknown } };
   if (prismaError.code === "P2002") {
     const targetValue = prismaError.meta?.target;
-    const target = Array.isArray(targetValue) ? targetValue.join(",") : String(targetValue ?? "");
+    const target = Array.isArray(targetValue)
+      ? targetValue.join(",")
+      : String(targetValue ?? "");
     if (target.includes("telegramKey")) {
-      return NextResponse.json({ error: "معرف التليكرام مسجل مسبقاً لطالب آخر" }, { status: 409 });
+      return NextResponse.json(
+        { error: "معرف التليكرام مسجل مسبقاً لطالب آخر" },
+        { status: 409 },
+      );
     }
     if (target.includes("phoneKey")) {
-      return NextResponse.json({ error: "رقم الهاتف مسجل مسبقاً لطالب آخر" }, { status: 409 });
+      return NextResponse.json(
+        { error: "رقم الهاتف مسجل مسبقاً لطالب آخر" },
+        { status: 409 },
+      );
     }
     if (target.includes("nameKey")) {
-      return NextResponse.json({ error: "اسم الطالب مسجل مسبقاً لطالب آخر" }, { status: 409 });
+      return NextResponse.json(
+        { error: "اسم الطالب مسجل مسبقاً لطالب آخر" },
+        { status: 409 },
+      );
     }
-    return NextResponse.json({ error: "توجد بيانات فريدة مسجلة مسبقاً" }, { status: 409 });
+    return NextResponse.json(
+      { error: "توجد بيانات فريدة مسجلة مسبقاً" },
+      { status: 409 },
+    );
   }
 
   if (prismaError.code === "P2003") {
-    return NextResponse.json({ error: "لا يمكن حفظ الطالب لأن الدورة المحددة غير موجودة أو مرتبطة ببيانات غير صالحة" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error:
+          "لا يمكن حفظ الطالب لأن الدورة المحددة غير موجودة أو مرتبطة ببيانات غير صالحة",
+      },
+      { status: 400 },
+    );
   }
 
   if (prismaError.code === "P2025") {
-    return NextResponse.json({ error: "تعذر العثور على الطالب المطلوب. حدّث الصفحة ثم حاول مرة أخرى." }, { status: 404 });
+    return NextResponse.json(
+      {
+        error: "تعذر العثور على الطالب المطلوب. حدّث الصفحة ثم حاول مرة أخرى.",
+      },
+      { status: 404 },
+    );
   }
 
   console.error("[API] /api/students error:", error);
-  return NextResponse.json({ error: "تعذر حفظ بيانات الطالب حالياً. تحقق من الاتصال ثم حاول مرة أخرى." }, { status: 500 });
+  return NextResponse.json(
+    {
+      error: "تعذر حفظ بيانات الطالب حالياً. تحقق من الاتصال ثم حاول مرة أخرى.",
+    },
+    { status: 500 },
+  );
+}
+
+function readPositiveIntegerParam(
+  searchParams: URLSearchParams,
+  key: string,
+  fallback: number,
+): number {
+  const value = Number(searchParams.get(key) ?? fallback);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return Math.trunc(value);
+}
+
+function clampPageSize(value: number): number {
+  return Math.min(500, Math.max(1, value));
+}
+
+function buildLocationWhere(location: string): Prisma.StudentWhereInput | null {
+  const normalized = normalizeArabicText(location);
+  if (!normalized) return null;
+
+  if (normalized === normalizeArabicText("بغداد")) {
+    return { locationScope: "بغداد" };
+  }
+
+  if (normalized === normalizeArabicText("خارج القطر")) {
+    return { locationScope: "خارج القطر" };
+  }
+
+  return {
+    OR: [
+      { subSite: { equals: location, mode: "insensitive" } },
+      { mainSite: { equals: location, mode: "insensitive" } },
+      { subSite: { contains: location, mode: "insensitive" } },
+      { mainSite: { contains: location, mode: "insensitive" } },
+    ],
+  };
+}
+
+function buildStudentListWhere(
+  searchParams: URLSearchParams,
+): Prisma.StudentWhereInput {
+  const and: Prisma.StudentWhereInput[] = [];
+  const rawQuery = String(searchParams.get("q") ?? "").trim();
+
+  if (rawQuery) {
+    const normalizedQuery = normalizeArabicText(rawQuery);
+    const numericQuery = sanitizePhoneInput(rawQuery);
+    const telegramQuery = sanitizeTelegramInput(rawQuery).toLowerCase();
+
+    const or: Prisma.StudentWhereInput[] = [
+      { name: { contains: rawQuery, mode: "insensitive" } },
+      { nameKey: { contains: normalizedQuery, mode: "insensitive" } },
+      { code: { contains: rawQuery, mode: "insensitive" } },
+      { telegram: { contains: rawQuery, mode: "insensitive" } },
+    ];
+
+    if (telegramQuery) {
+      or.push({
+        telegramKey: { contains: telegramQuery, mode: "insensitive" },
+      });
+    }
+    if (numericQuery) {
+      or.push(
+        { phone: { contains: numericQuery, mode: "insensitive" } },
+        { phoneKey: { contains: numericQuery, mode: "insensitive" } },
+        { parentPhone: { contains: numericQuery, mode: "insensitive" } },
+      );
+    } else {
+      or.push(
+        { phone: { contains: rawQuery, mode: "insensitive" } },
+        { parentPhone: { contains: rawQuery, mode: "insensitive" } },
+      );
+    }
+
+    and.push({ OR: or });
+  }
+
+  const status = String(searchParams.get("status") ?? "").trim();
+  if (status) and.push({ status });
+
+  const courseProgram = String(searchParams.get("courseProgram") ?? "").trim();
+  if (courseProgram) and.push({ courseProgram });
+
+  const courseTerm = String(searchParams.get("courseTerm") ?? "").trim();
+  if (courseProgram === "كورسات" && courseTerm) and.push({ courseTerm });
+
+  const studyType = String(searchParams.get("studyType") ?? "").trim();
+  if (studyType) and.push({ studyType });
+
+  const location = String(searchParams.get("location") ?? "").trim();
+  const locationWhere = location ? buildLocationWhere(location) : null;
+  if (locationWhere) and.push(locationWhere);
+
+  return and.length > 0 ? { AND: and } : {};
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, 'students.view');
+  const authError = await requirePermission(req, "students.view");
   if (authError) return authError;
 
-  const query = new URL(req.url).searchParams.get("q") || "";
-  const students = await db.student.findMany({
-    orderBy: { createdAt: "desc" },
+  const searchParams = new URL(req.url).searchParams;
+  const wantsPaging = searchParams.has("page") || searchParams.has("pageSize");
+  const page = readPositiveIntegerParam(searchParams, "page", 1);
+  const pageSize = clampPageSize(
+    readPositiveIntegerParam(searchParams, "pageSize", 50),
+  );
+  const where = buildStudentListWhere(searchParams);
+
+  const [totalCount, students] = await db.$transaction([
+    db.student.count({ where }),
+    db.student.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      ...(wantsPaging ? { skip: (page - 1) * pageSize, take: pageSize } : {}),
+    }),
+  ]);
+
+  const totalPages = wantsPaging
+    ? Math.max(1, Math.ceil(totalCount / pageSize))
+    : 1;
+
+  return NextResponse.json({
+    students,
+    totalCount,
+    page: wantsPaging ? page : 1,
+    pageSize: wantsPaging ? pageSize : totalCount,
+    totalPages,
+    hasMore: wantsPaging ? page < totalPages : false,
   });
-  const normalizedQuery = normalizeArabicText(query);
-  const filteredStudents = normalizedQuery
-    ? students.filter((student) =>
-        [student.name, student.phone, student.parentPhone, student.telegram, student.code]
-          .some((field) => normalizeArabicText(field).includes(normalizedQuery)),
-      )
-    : students;
-  return NextResponse.json({ students: filteredStudents });
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, 'students.add');
+  const authError = await requirePermission(req, "students.add");
   if (authError) return authError;
 
   const body = await req.json();
@@ -167,7 +308,6 @@ export async function POST(req: NextRequest) {
   if (duplicateMessage)
     return NextResponse.json({ error: duplicateMessage }, { status: 409 });
 
-
   const uniqueKeys = getStudentUniqueKeys({
     name: body.name,
     phone: body.phone,
@@ -175,14 +315,19 @@ export async function POST(req: NextRequest) {
   });
 
   // Validate student course choices against course settings
-  const course = await db.course.findUnique({ where: { id: String(body.courseId ?? '') } });
+  const course = await db.course.findUnique({
+    where: { id: String(body.courseId ?? "") },
+  });
   if (!course) {
-    return NextResponse.json({ error: 'الدورة المحددة غير موجودة' }, { status: 400 });
+    return NextResponse.json(
+      { error: "الدورة المحددة غير موجودة" },
+      { status: 400 },
+    );
   }
 
   const courseChoices = {
     courseProgram: body.courseProgram,
-    courseTerm: body.courseProgram === 'كورسات' ? body.courseTerm : null,
+    courseTerm: body.courseProgram === "كورسات" ? body.courseTerm : null,
     studyType: body.studyType,
     locationScope: body.locationScope,
     baghdadMode: body.baghdadMode,
@@ -191,39 +336,51 @@ export async function POST(req: NextRequest) {
 
   const choiceValidation = validateStudentCourseChoices(course, courseChoices);
   if (!choiceValidation.ok) {
-    return NextResponse.json({ error: choiceValidation.error }, { status: 400 });
+    return NextResponse.json(
+      { error: choiceValidation.error },
+      { status: 400 },
+    );
   }
 
   // Auto-resolve subSite based on course settings
-  const resolvedSubSite = resolveSubSite(course, String(body.studyType ?? ''), String(body.locationScope ?? ''), String(body.baghdadMode ?? ''), String(body.subSite ?? ''));
+  const resolvedSubSite = resolveSubSite(
+    course,
+    String(body.studyType ?? ""),
+    String(body.locationScope ?? ""),
+    String(body.baghdadMode ?? ""),
+    String(body.subSite ?? ""),
+  );
 
   try {
     const student = await db.student.create({
       data: {
-      id: body.id,
-      name: String(body.name ?? "").trim(),
-      school: String(body.school ?? "").trim(),
-      gender: body.gender,
-      phone: sanitizePhoneInput(String(body.phone ?? "")),
-      parentPhone: sanitizePhoneInput(String(body.parentPhone ?? "")),
-      telegram: sanitizeTelegramInput(String(body.telegram ?? "")),
-      courseProgram: body.courseProgram || null,
-      courseTerm: body.courseProgram === 'كورسات' ? (body.courseTerm || null) : null,
-      studyType: body.studyType || null,
-      locationScope: body.locationScope || null,
-      baghdadMode: body.baghdadMode || null,
-      mainSite: body.locationScope || body.mainSite,
-      subSite: resolvedSubSite || body.subSite,
-      code: body.code,
-      status: body.status || "نشط",
-      dismissalType: body.dismissalType,
-      dismissalReason: body.dismissalReason,
-      dismissalNotes: body.dismissalNotes ? String(body.dismissalNotes) : null,
-      createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
-      opportunities: Number(body.opportunities || 0),
-      baseOpportunities: Number(body.baseOpportunities || 0),
-      accountingGraceDays: normalizeGraceDays(body.accountingGraceDays),
-      courseId: body.courseId,
+        id: body.id,
+        name: String(body.name ?? "").trim(),
+        school: String(body.school ?? "").trim(),
+        gender: body.gender,
+        phone: sanitizePhoneInput(String(body.phone ?? "")),
+        parentPhone: sanitizePhoneInput(String(body.parentPhone ?? "")),
+        telegram: sanitizeTelegramInput(String(body.telegram ?? "")),
+        courseProgram: body.courseProgram || null,
+        courseTerm:
+          body.courseProgram === "كورسات" ? body.courseTerm || null : null,
+        studyType: body.studyType || null,
+        locationScope: body.locationScope || null,
+        baghdadMode: body.baghdadMode || null,
+        mainSite: body.locationScope || body.mainSite,
+        subSite: resolvedSubSite || body.subSite,
+        code: body.code,
+        status: body.status || "نشط",
+        dismissalType: body.dismissalType,
+        dismissalReason: body.dismissalReason,
+        dismissalNotes: body.dismissalNotes
+          ? String(body.dismissalNotes)
+          : null,
+        createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
+        opportunities: Number(body.opportunities || 0),
+        baseOpportunities: Number(body.baseOpportunities || 0),
+        accountingGraceDays: normalizeGraceDays(body.accountingGraceDays),
+        courseId: body.courseId,
         ...uniqueKeys,
       },
     });
@@ -234,14 +391,17 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const authError = await requirePermission(req, 'students.edit');
+  const authError = await requirePermission(req, "students.edit");
   if (authError) return authError;
 
   const body = await req.json();
   const { id, ...data } = body;
   stripNonWritableStudentUpdateFields(data);
   if (!id)
-    return NextResponse.json({ error: "تعذر تحديد الطالب المطلوب" }, { status: 400 });
+    return NextResponse.json(
+      { error: "تعذر تحديد الطالب المطلوب" },
+      { status: 400 },
+    );
   if (data.name !== undefined) {
     const nameError = getRequiredTextError(
       String(data.name ?? ""),
@@ -311,7 +471,8 @@ export async function PUT(req: NextRequest) {
   });
   if (data.name !== undefined) data.nameKey = updateUniqueKeys.nameKey;
   if (data.phone !== undefined) data.phoneKey = updateUniqueKeys.phoneKey;
-  if (data.telegram !== undefined) data.telegramKey = updateUniqueKeys.telegramKey;
+  if (data.telegram !== undefined)
+    data.telegramKey = updateUniqueKeys.telegramKey;
 
   if (data.createdAt !== undefined)
     data.createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
@@ -321,44 +482,78 @@ export async function PUT(req: NextRequest) {
     data.baseOpportunities = Number(data.baseOpportunities);
 
   // If course-related fields are being updated, validate against course settings
-  if (data.courseProgram !== undefined || data.courseTerm !== undefined || data.studyType !== undefined ||
-      data.locationScope !== undefined || data.baghdadMode !== undefined ||
-      data.subSite !== undefined || data.courseId !== undefined) {
-    const targetCourseId = data.courseId !== undefined ? data.courseId :
-      (await db.student.findUnique({ where: { id }, select: { courseId: true } }))?.courseId;
+  if (
+    data.courseProgram !== undefined ||
+    data.courseTerm !== undefined ||
+    data.studyType !== undefined ||
+    data.locationScope !== undefined ||
+    data.baghdadMode !== undefined ||
+    data.subSite !== undefined ||
+    data.courseId !== undefined
+  ) {
+    const targetCourseId =
+      data.courseId !== undefined
+        ? data.courseId
+        : (
+            await db.student.findUnique({
+              where: { id },
+              select: { courseId: true },
+            })
+          )?.courseId;
 
     if (targetCourseId) {
-      const course = await db.course.findUnique({ where: { id: String(targetCourseId) } });
+      const course = await db.course.findUnique({
+        where: { id: String(targetCourseId) },
+      });
       if (!course) {
-        return NextResponse.json({ error: 'الدورة المحددة غير موجودة' }, { status: 400 });
+        return NextResponse.json(
+          { error: "الدورة المحددة غير موجودة" },
+          { status: 400 },
+        );
       }
       {
-        const current = await db.student.findUnique({ where: { id }, select: {
-          courseProgram: true, courseTerm: true, studyType: true,
-          locationScope: true, baghdadMode: true, subSite: true
-        }});
+        const current = await db.student.findUnique({
+          where: { id },
+          select: {
+            courseProgram: true,
+            courseTerm: true,
+            studyType: true,
+            locationScope: true,
+            baghdadMode: true,
+            subSite: true,
+          },
+        });
 
         const courseChoices = {
           courseProgram: data.courseProgram ?? current?.courseProgram,
-          courseTerm: data.courseProgram === 'كورسات' ? (data.courseTerm ?? current?.courseTerm) : null,
+          courseTerm:
+            data.courseProgram === "كورسات"
+              ? (data.courseTerm ?? current?.courseTerm)
+              : null,
           studyType: data.studyType ?? current?.studyType,
           locationScope: data.locationScope ?? current?.locationScope,
           baghdadMode: data.baghdadMode ?? current?.baghdadMode,
           subSite: data.subSite ?? current?.subSite,
         };
 
-        const choiceValidation = validateStudentCourseChoices(course, courseChoices);
+        const choiceValidation = validateStudentCourseChoices(
+          course,
+          courseChoices,
+        );
         if (!choiceValidation.ok) {
-          return NextResponse.json({ error: choiceValidation.error }, { status: 400 });
+          return NextResponse.json(
+            { error: choiceValidation.error },
+            { status: 400 },
+          );
         }
 
         // Auto-resolve subSite
         const resolvedSubSite = resolveSubSite(
           course,
-          String(courseChoices.studyType ?? ''),
-          String(courseChoices.locationScope ?? ''),
-          String(courseChoices.baghdadMode ?? ''),
-          String(courseChoices.subSite ?? '')
+          String(courseChoices.studyType ?? ""),
+          String(courseChoices.locationScope ?? ""),
+          String(courseChoices.baghdadMode ?? ""),
+          String(courseChoices.subSite ?? ""),
         );
         if (resolvedSubSite) data.subSite = resolvedSubSite;
       }
@@ -374,13 +569,16 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const authError = await requirePermission(req, 'students.delete');
+  const authError = await requirePermission(req, "students.delete");
   if (authError) return authError;
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id)
-    return NextResponse.json({ error: "تعذر تحديد الطالب المطلوب" }, { status: 400 });
+    return NextResponse.json(
+      { error: "تعذر تحديد الطالب المطلوب" },
+      { status: 400 },
+    );
   try {
     await db.student.delete({ where: { id } });
     return NextResponse.json({ ok: true });

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
+import { studentApi } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,8 +43,12 @@ import {
 } from "@/lib/format";
 import {
   COURSE_TERMS,
-  getAvailablePrograms, getAvailableStudyTypesForProgram,
-  getBaghdadSites, getProvinceOptions, getLocationScopes, getBaghdadMode,
+  getAvailablePrograms,
+  getAvailableStudyTypesForProgram,
+  getBaghdadSites,
+  getProvinceOptions,
+  getLocationScopes,
+  getBaghdadMode,
   OUT_OF_COUNTRY_LOCATION_SCOPE,
 } from "@/lib/course-config";
 import {
@@ -79,21 +84,32 @@ import {
   studentMatchesListFilters,
 } from "@/lib/student-list-filters";
 
-
 const studentExportColumns: ExportColumn<any>[] = [
   { key: "code", label: "الكود", value: (s) => s.code || "" },
   { key: "name", label: "الاسم", value: (s) => s.name || "" },
   { key: "school", label: "المدرسة", value: (s) => s.school || "" },
   { key: "gender", label: "الجنس", value: (s) => s.gender || "" },
   { key: "course", label: "الدورة", value: (s) => s.courseName || "" },
-  { key: "courseProgram", label: "نوع الدورة", value: (s) => s.courseProgram || "" },
+  {
+    key: "courseProgram",
+    label: "نوع الدورة",
+    value: (s) => s.courseProgram || "",
+  },
   { key: "courseTerm", label: "الكورس", value: (s) => s.courseTerm || "" },
   { key: "studyType", label: "نوع الدراسة", value: (s) => s.studyType || "" },
-  { key: "locationScope", label: "نطاق الموقع", value: (s) => s.locationScope || "" },
+  {
+    key: "locationScope",
+    label: "نطاق الموقع",
+    value: (s) => s.locationScope || "",
+  },
   { key: "location", label: "الموقع", value: (s) => s.locationText || "" },
   { key: "status", label: "الحالة", value: (s) => s.status || "" },
   { key: "opportunities", label: "الفرص", value: (s) => s.opportunities ?? "" },
-  { key: "grace", label: "فترة السماح", value: (s) => `${s.accountingGraceDays ?? 0} يوم` },
+  {
+    key: "grace",
+    label: "فترة السماح",
+    value: (s) => `${s.accountingGraceDays ?? 0} يوم`,
+  },
   { key: "phone", label: "الهاتف", value: (s) => s.phone || "" },
   { key: "parentPhone", label: "ولي الأمر", value: (s) => s.parentPhone || "" },
   { key: "telegram", label: "التليكرام", value: (s) => s.telegram || "" },
@@ -159,9 +175,10 @@ function getStudentEditForm(student: Student): StudentEditForm {
 
 function whatsappLink(phone: string): string {
   const sanitized = sanitizePhoneInput(phone);
-  const appPhone = sanitized.startsWith("07") && sanitized.length === 11
-    ? `964${sanitized.slice(1)}`
-    : sanitized;
+  const appPhone =
+    sanitized.startsWith("07") && sanitized.length === 11
+      ? `964${sanitized.slice(1)}`
+      : sanitized;
   return `whatsapp://send?phone=${encodeURIComponent(appPhone)}`;
 }
 
@@ -183,9 +200,15 @@ function isValidGraceDays(value: string): boolean {
 }
 
 function graceEndDate(student: Student): string {
-  const start = new Date(`${String(student.createdAt || '').slice(0, 10)}T00:00:00`);
+  const start = new Date(
+    `${String(student.createdAt || "").slice(0, 10)}T00:00:00`,
+  );
   const days = Number(student.accountingGraceDays || 0);
-  if (!Number.isFinite(start.getTime()) || days <= 0) return formatAppDate(student.createdAt, String(student.createdAt || '').slice(0, 10) || '-');
+  if (!Number.isFinite(start.getTime()) || days <= 0)
+    return formatAppDate(
+      student.createdAt,
+      String(student.createdAt || "").slice(0, 10) || "-",
+    );
   const end = new Date(start);
   end.setDate(end.getDate() + days - 1);
   return formatAppDate(end);
@@ -194,11 +217,15 @@ function graceEndDate(student: Student): string {
 function isStudentCurrentlyInGrace(student: Student): boolean {
   const days = Number(student.accountingGraceDays || 0);
   if (days <= 0) return false;
-  const start = new Date(`${String(student.createdAt || '').slice(0, 10)}T00:00:00`);
+  const start = new Date(
+    `${String(student.createdAt || "").slice(0, 10)}T00:00:00`,
+  );
   const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00`);
   const endExclusive = new Date(start);
   endExclusive.setDate(endExclusive.getDate() + days);
-  return Number.isFinite(start.getTime()) && today >= start && today < endExclusive;
+  return (
+    Number.isFinite(start.getTime()) && today >= start && today < endExclusive
+  );
 }
 
 function ContactLink({
@@ -264,6 +291,14 @@ export function StudentRegistryView() {
   const [viewMode, setViewMode] = useState<RegistryViewMode>("cards");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
+  const [serverStudents, setServerStudents] = useState<Student[] | null>(null);
+  const [serverTotalCount, setServerTotalCount] = useState(0);
+  const [serverTotalPages, setServerTotalPages] = useState(1);
+  const [serverStudentsLoading, setServerStudentsLoading] = useState(false);
+  const [serverStudentsError, setServerStudentsError] = useState<string | null>(
+    null,
+  );
+  const [serverRefreshKey, setServerRefreshKey] = useState(0);
 
   const [dismissDialog, setDismissDialog] = useState<{
     student: Student | null;
@@ -292,7 +327,72 @@ export function StudentRegistryView() {
   const { locked: isDeletingStudent, runLocked: runDeleteStudentLocked } =
     useActionLock();
   const debouncedSearch = useDebouncedValue(search, 180);
-  const locationFilterOptions = useMemo(() => getStudentLocationFilterOptions(students), [students]);
+  const locationFilterOptions = useMemo(
+    () => getStudentLocationFilterOptions(students),
+    [students],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    setServerStudentsLoading(true);
+    setServerStudentsError(null);
+
+    studentApi
+      .list({
+        q: debouncedSearch,
+        status: filterStatus,
+        courseProgram: filterCourseProgram,
+        courseTerm: filterCourseProgram === "كورسات" ? filterCourseTerm : "",
+        studyType: filterStudyType,
+        location: filterLocation,
+        page,
+        pageSize,
+      })
+      .then((result) => {
+        if (cancelled) return;
+        if (!result) {
+          setServerStudents(null);
+          setServerStudentsError(
+            "تعذر تحميل نتائج الطلاب من الخادم. سيتم عرض النسخة المحلية مؤقتاً.",
+          );
+          return;
+        }
+
+        const nextTotalPages = Math.max(1, Number(result.totalPages || 1));
+        setServerStudents((result.students || []) as Student[]);
+        setServerTotalCount(Number(result.totalCount || 0));
+        setServerTotalPages(nextTotalPages);
+
+        if (page > nextTotalPages) {
+          setPage(nextTotalPages);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setServerStudents(null);
+        setServerStudentsError(
+          "تعذر تحميل نتائج الطلاب من الخادم. سيتم عرض النسخة المحلية مؤقتاً.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setServerStudentsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    debouncedSearch,
+    filterStatus,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
+    filterLocation,
+    page,
+    pageSize,
+    serverRefreshKey,
+  ]);
 
   useEffect(() => {
     if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
@@ -305,7 +405,6 @@ export function StudentRegistryView() {
     [courses],
   );
 
-
   const editSelectedCourse = useMemo(
     () => courses.find((c) => c.id === editDialog.form.courseId),
     [courses, editDialog.form.courseId],
@@ -317,49 +416,77 @@ export function StudentRegistryView() {
   );
 
   const editEffectiveCourseProgram = useMemo(
-    () => editAvailablePrograms.length === 1 ? editAvailablePrograms[0] : editDialog.form.courseProgram,
+    () =>
+      editAvailablePrograms.length === 1
+        ? editAvailablePrograms[0]
+        : editDialog.form.courseProgram,
     [editAvailablePrograms, editDialog.form.courseProgram],
   );
 
   const editAvailableStudyTypes = useMemo(
-    () => (editSelectedCourse && editEffectiveCourseProgram
-      ? getAvailableStudyTypesForProgram(editSelectedCourse, editEffectiveCourseProgram)
-      : []),
+    () =>
+      editSelectedCourse && editEffectiveCourseProgram
+        ? getAvailableStudyTypesForProgram(
+            editSelectedCourse,
+            editEffectiveCourseProgram,
+          )
+        : [],
     [editSelectedCourse, editEffectiveCourseProgram],
   );
 
   const editLocationScopes = useMemo(
-    () => (editSelectedCourse && editDialog.form.studyType ? getLocationScopes(editSelectedCourse, editDialog.form.studyType) : []),
+    () =>
+      editSelectedCourse && editDialog.form.studyType
+        ? getLocationScopes(editSelectedCourse, editDialog.form.studyType)
+        : [],
     [editSelectedCourse, editDialog.form.studyType],
   );
 
   const editBaghdadMode = useMemo(
-    () => (editSelectedCourse && editDialog.form.studyType ? getBaghdadMode(editSelectedCourse, editDialog.form.studyType) : undefined),
+    () =>
+      editSelectedCourse && editDialog.form.studyType
+        ? getBaghdadMode(editSelectedCourse, editDialog.form.studyType)
+        : undefined,
     [editSelectedCourse, editDialog.form.studyType],
   );
 
   const editBaghdadSites = useMemo(
-    () => (editSelectedCourse && editDialog.form.studyType ? getBaghdadSites(editSelectedCourse, editDialog.form.studyType) : []),
+    () =>
+      editSelectedCourse && editDialog.form.studyType
+        ? getBaghdadSites(editSelectedCourse, editDialog.form.studyType)
+        : [],
     [editSelectedCourse, editDialog.form.studyType],
   );
 
   const editProvinces = useMemo(
-    () => (editSelectedCourse && editDialog.form.studyType ? getProvinceOptions(editSelectedCourse, editDialog.form.studyType) : []),
+    () =>
+      editSelectedCourse && editDialog.form.studyType
+        ? getProvinceOptions(editSelectedCourse, editDialog.form.studyType)
+        : [],
     [editSelectedCourse, editDialog.form.studyType],
   );
 
-  const isEditOutOfCountry = editDialog.form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE;
+  const isEditOutOfCountry =
+    editDialog.form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE;
 
   const editSubSiteOptions = useMemo<string[]>(() => {
-    if (!editSelectedCourse || !editDialog.form.studyType || isEditOutOfCountry) return [];
+    if (!editSelectedCourse || !editDialog.form.studyType || isEditOutOfCountry)
+      return [];
     if (editDialog.form.locationScope === "بغداد") {
       if (editBaghdadMode === "عموم بغداد") return [];
       if (editBaghdadMode === "بغداد - مخصص") return editBaghdadSites;
     }
     if (editDialog.form.locationScope === "محافظات") return editProvinces;
     return [];
-  }, [editSelectedCourse, editDialog.form.studyType, editDialog.form.locationScope, isEditOutOfCountry, editBaghdadMode, editBaghdadSites, editProvinces]);
-
+  }, [
+    editSelectedCourse,
+    editDialog.form.studyType,
+    editDialog.form.locationScope,
+    isEditOutOfCountry,
+    editBaghdadMode,
+    editBaghdadSites,
+    editProvinces,
+  ]);
 
   // Reset dependent fields when course or studyType changes
   useEffect(() => {
@@ -373,7 +500,10 @@ export function StudentRegistryView() {
       needsPatch = true;
     }
 
-    if (editDialog.form.studyType && !editAvailableStudyTypes.includes(editDialog.form.studyType as any)) {
+    if (
+      editDialog.form.studyType &&
+      !editAvailableStudyTypes.includes(editDialog.form.studyType as any)
+    ) {
       patch.studyType = "";
       patch.locationScope = "";
       patch.baghdadMode = "";
@@ -388,19 +518,37 @@ export function StudentRegistryView() {
     }
 
     // Auto-resolve subSite for عموم بغداد
-    if (editDialog.form.locationScope === "بغداد" && editBaghdadMode === "عموم بغداد" && editDialog.form.subSite !== "عموم بغداد") {
+    if (
+      editDialog.form.locationScope === "بغداد" &&
+      editBaghdadMode === "عموم بغداد" &&
+      editDialog.form.subSite !== "عموم بغداد"
+    ) {
       patch.subSite = "عموم بغداد";
       needsPatch = true;
     }
 
     // Reset subSite if not in options
-    if (!isEditOutOfCountry && editSubSiteOptions.length > 0 && editDialog.form.subSite && !editSubSiteOptions.includes(editDialog.form.subSite) && !(editDialog.form.locationScope === "بغداد" && editBaghdadMode === "عموم بغداد")) {
+    if (
+      !isEditOutOfCountry &&
+      editSubSiteOptions.length > 0 &&
+      editDialog.form.subSite &&
+      !editSubSiteOptions.includes(editDialog.form.subSite) &&
+      !(
+        editDialog.form.locationScope === "بغداد" &&
+        editBaghdadMode === "عموم بغداد"
+      )
+    ) {
       patch.subSite = "";
       needsPatch = true;
     }
 
     // Clear subSite if no options available
-    if (!isEditOutOfCountry && editSubSiteOptions.length === 0 && editDialog.form.subSite && editDialog.form.subSite !== "عموم بغداد") {
+    if (
+      !isEditOutOfCountry &&
+      editSubSiteOptions.length === 0 &&
+      editDialog.form.subSite &&
+      editDialog.form.subSite !== "عموم بغداد"
+    ) {
       patch.subSite = "";
       needsPatch = true;
     }
@@ -451,7 +599,6 @@ export function StudentRegistryView() {
     }));
   };
 
-
   const validateEditForm = () => {
     const form = editDialog.form;
     const requiredChecks: [boolean, string][] = [
@@ -469,7 +616,6 @@ export function StudentRegistryView() {
       [Boolean(form.createdAt), "تاريخ إضافة الطالب مطلوب"],
     ];
 
-
     const missing = requiredChecks.find(([ok]) => !ok);
     if (missing) return missing[1];
 
@@ -486,10 +632,17 @@ export function StudentRegistryView() {
     if (editLocationScopes.length > 0 && !form.locationScope) {
       return "يرجى اختيار الموقع";
     }
-    if (form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE && !form.subSite.trim()) {
+    if (
+      form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE &&
+      !form.subSite.trim()
+    ) {
       return "يرجى إدخال الدولة عند اختيار خارج القطر";
     }
-    if (form.locationScope !== OUT_OF_COUNTRY_LOCATION_SCOPE && editSubSiteOptions.length > 0 && !form.subSite) {
+    if (
+      form.locationScope !== OUT_OF_COUNTRY_LOCATION_SCOPE &&
+      editSubSiteOptions.length > 0 &&
+      !form.subSite
+    ) {
       return "يرجى اختيار الموقع الفرعي";
     }
 
@@ -541,13 +694,23 @@ export function StudentRegistryView() {
       parentPhone: form.parentPhone.trim(),
       telegram: sanitizeTelegramInput(form.telegram),
       courseProgram: (editEffectiveCourseProgram || "") as any,
-      courseTerm: (editEffectiveCourseProgram === "كورسات" ? form.courseTerm : "") as any,
+      courseTerm: (editEffectiveCourseProgram === "كورسات"
+        ? form.courseTerm
+        : "") as any,
       studyType: form.studyType as any,
       locationScope: form.locationScope as any,
-      baghdadMode: (form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE ? "" : (form.baghdadMode || (editBaghdadMode || ""))) as any,
+      baghdadMode: (form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE
+        ? ""
+        : form.baghdadMode || editBaghdadMode || "") as any,
       courseId: form.courseId,
       mainSite: form.locationScope,
-      subSite: form.subSite || (form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE ? "" : (editBaghdadMode === "عموم بغداد" ? "عموم بغداد" : "")),
+      subSite:
+        form.subSite ||
+        (form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE
+          ? ""
+          : editBaghdadMode === "عموم بغداد"
+            ? "عموم بغداد"
+            : ""),
       createdAt: form.createdAt,
       accountingGraceDays: Number(form.accountingGraceDays || 0),
     });
@@ -557,6 +720,7 @@ export function StudentRegistryView() {
       return;
     }
     setEditDialog({ open: false, id: "", form: emptyEditForm });
+    setServerRefreshKey((value) => value + 1);
     toast.success("تم تعديل بيانات الطالب", {
       description: "تم تحديث جميع حقول الطالب بنجاح",
     });
@@ -568,34 +732,38 @@ export function StudentRegistryView() {
 
   const handleDeleteConfirm = runDeleteStudentLocked(async () => {
     const ok = deleteStudent(deleteDialog.id);
-    if (ok) { toast.success("تم حذف الطالب"); } else { toast.error("تعذر حذف الطالب"); }
+    if (ok) {
+      setServerRefreshKey((value) => value + 1);
+      toast.success("تم حذف الطالب");
+    } else {
+      toast.error("تعذر حذف الطالب");
+    }
     setDeleteDialog({ open: false, id: "", studentName: "" });
   });
 
-  const filtered = useMemo(() => {
+  const localFiltered = useMemo(() => {
     return students.filter((s) => {
       if (
         debouncedSearch &&
         !searchAny(debouncedSearch, [
           s.name,
-          s.school,
           s.code,
           s.telegram,
           s.phone,
           s.parentPhone,
-          s.dismissalType,
-          s.dismissalReason,
-          s.dismissalNotes,
         ])
       )
         return false;
       if (filterStatus && s.status !== filterStatus) return false;
-      if (!studentMatchesListFilters(s, {
-        courseProgram: filterCourseProgram,
-        courseTerm: filterCourseTerm,
-        studyType: filterStudyType,
-        location: filterLocation,
-      })) return false;
+      if (
+        !studentMatchesListFilters(s, {
+          courseProgram: filterCourseProgram,
+          courseTerm: filterCourseTerm,
+          studyType: filterStudyType,
+          location: filterLocation,
+        })
+      )
+        return false;
       return true;
     });
   }, [
@@ -608,10 +776,23 @@ export function StudentRegistryView() {
     filterLocation,
   ]);
 
-  const totalPages = Math.ceil(filtered.length / pageSize);
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const dismissedStudents = students.filter((student) => student.status === "مفصول");
-  const noActiveChapterStudents = students.filter((student) => !activeChapterForCourse(student.courseId));
+  const usingServerStudents = Boolean(serverStudents);
+  const filtered = usingServerStudents ? serverStudents! : localFiltered;
+  const filteredTotalCount = usingServerStudents
+    ? serverTotalCount
+    : localFiltered.length;
+  const totalPages = usingServerStudents
+    ? serverTotalPages
+    : Math.max(1, Math.ceil(localFiltered.length / pageSize));
+  const paged = usingServerStudents
+    ? filtered
+    : localFiltered.slice((page - 1) * pageSize, page * pageSize);
+  const dismissedStudents = students.filter(
+    (student) => student.status === "مفصول",
+  );
+  const noActiveChapterStudents = students.filter(
+    (student) => !activeChapterForCourse(student.courseId),
+  );
 
   const handleDismiss = () => {
     if (!dismissDialog.student) return;
@@ -619,7 +800,12 @@ export function StudentRegistryView() {
       toast.error("يرجى إدخال سبب الفصل");
       return;
     }
-    dismissStudent(dismissDialog.student.id, dismissType, dismissReason.trim(), dismissNotes.trim());
+    dismissStudent(
+      dismissDialog.student.id,
+      dismissType,
+      dismissReason.trim(),
+      dismissNotes.trim(),
+    );
     setDismissDialog({ student: null, open: false });
     setDismissReason("");
     setDismissNotes("");
@@ -631,20 +817,16 @@ export function StudentRegistryView() {
     toast.success("تم إعادة تفعيل الطالب");
   };
 
-
-
-  const studentExportRows = filtered.map((student) => ({
+  const studentExportRows = localFiltered.map((student) => ({
     ...student,
     courseName: courseName(student.courseId),
     locationText: `${student.locationScope || student.mainSite || ""} - ${student.subSite || ""}`,
   }));
 
-
   const studentOppLogs = (studentId: string) =>
     opportunityLogs.filter((l) => l.studentId === studentId);
   const studentGrades = (studentId: string) =>
     grades.filter((g) => g.studentId === studentId);
-
 
   const resetFilters = () => {
     setSearch("");
@@ -658,7 +840,8 @@ export function StudentRegistryView() {
   };
 
   const activeFileStudent = fileDialog.student
-    ? students.find((student) => student.id === fileDialog.student?.id) || fileDialog.student
+    ? students.find((student) => student.id === fileDialog.student?.id) ||
+      fileDialog.student
     : null;
 
   if (fileDialog.open && activeFileStudent) {
@@ -726,7 +909,9 @@ export function StudentRegistryView() {
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {STUDENT_FILTER_COURSE_PROGRAMS.map((program) => (
-                    <SelectItem key={program} value={program}>{program}</SelectItem>
+                    <SelectItem key={program} value={program}>
+                      {program}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -750,7 +935,9 @@ export function StudentRegistryView() {
                   <SelectContent>
                     <SelectItem value="all">الكل</SelectItem>
                     {STUDENT_FILTER_COURSE_TERMS.map((term) => (
-                      <SelectItem key={term} value={term}>{term}</SelectItem>
+                      <SelectItem key={term} value={term}>
+                        {term}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -774,7 +961,9 @@ export function StudentRegistryView() {
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {STUDENT_FILTER_STUDY_TYPES.map((studyType) => (
-                    <SelectItem key={studyType} value={studyType}>{studyType}</SelectItem>
+                    <SelectItem key={studyType} value={studyType}>
+                      {studyType}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -797,16 +986,28 @@ export function StudentRegistryView() {
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   {locationFilterOptions.map((location) => (
-                    <SelectItem key={location} value={location}>{location}</SelectItem>
+                    <SelectItem key={location} value={location}>
+                      {location}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="registry-view" className="text-xs">طريقة العرض</Label>
-              <Select value={viewMode} onValueChange={(v) => setViewMode(v as RegistryViewMode)}>
-                <SelectTrigger id="registry-view"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="cards">الكارتات</SelectItem><SelectItem value="table">الجدول</SelectItem></SelectContent>
+              <Label htmlFor="registry-view" className="text-xs">
+                طريقة العرض
+              </Label>
+              <Select
+                value={viewMode}
+                onValueChange={(v) => setViewMode(v as RegistryViewMode)}
+              >
+                <SelectTrigger id="registry-view">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cards">الكارتات</SelectItem>
+                  <SelectItem value="table">الجدول</SelectItem>
+                </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
@@ -829,34 +1030,66 @@ export function StudentRegistryView() {
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">الطلاب النشطون</p>
-              <p className="text-2xl font-black">{students.filter((student) => student.status === "نشط").length}</p>
+              <p className="text-2xl font-black">
+                {students.filter((student) => student.status === "نشط").length}
+              </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => { setFilterStatus("نشط"); setPage(1); }}>عرض</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setFilterStatus("نشط");
+                setPage(1);
+              }}
+            >
+              عرض
+            </Button>
           </CardContent>
         </Card>
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">قائمة المفصولين</p>
-              <p className="text-2xl font-black text-destructive">{dismissedStudents.length}</p>
+              <p className="text-2xl font-black text-destructive">
+                {dismissedStudents.length}
+              </p>
             </div>
-            <Button variant="destructive" size="sm" onClick={() => { setFilterStatus("مفصول"); setPage(1); }}>عرض المفصولين</Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setFilterStatus("مفصول");
+                setPage(1);
+              }}
+            >
+              عرض المفصولين
+            </Button>
           </CardContent>
         </Card>
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">بدون فصل نشط</p>
-              <p className="text-2xl font-black text-amber-600">{noActiveChapterStudents.length}</p>
+              <p className="text-2xl font-black text-amber-600">
+                {noActiveChapterStudents.length}
+              </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => { resetFilters(); }}>عرض الكل</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                resetFilters();
+              }}
+            >
+              عرض الكل
+            </Button>
           </CardContent>
         </Card>
       </div>
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
-          عرض {paged.length} من {filtered.length} طالب
+          عرض {paged.length} من {filteredTotalCount} طالب
         </span>
         <div className="flex items-center gap-2">
           <Label htmlFor="registry-pageSize" className="text-xs">
@@ -882,24 +1115,45 @@ export function StudentRegistryView() {
         </div>
       </div>
 
-      {students.length === 0 ? (
+      {serverStudentsLoading && (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
+          جاري تحميل نتائج الطلاب من قاعدة البيانات...
+        </div>
+      )}
+
+      {serverStudentsError && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300">
+          {serverStudentsError}
+        </div>
+      )}
+
+      {students.length === 0 &&
+      filteredTotalCount === 0 &&
+      !serverStudentsLoading ? (
         <EmptyState
           icon={UserPlus}
           title="لم تقم بإضافة طلاب بعد"
           description="ابدأ بإضافة أول طالب، وبعدها ستظهر البطاقات والفلاتر والإحصائيات هنا تلقائياً."
           action={
-            <Button onClick={() => setSection("student-register")} className="min-h-11 px-6">
+            <Button
+              onClick={() => setSection("student-register")}
+              className="min-h-11 px-6"
+            >
               إضافة طالب الآن
             </Button>
           }
         />
-      ) : filtered.length === 0 ? (
+      ) : filteredTotalCount === 0 ? (
         <EmptyState
           icon={SearchX}
           title="لا توجد نتائج مطابقة"
           description="الفلاتر تعمل معاً؛ غيّر شروط البحث أو امسح الفلاتر لعرض كل الطلاب."
           action={
-            <Button variant="outline" onClick={resetFilters} className="min-h-11 px-6">
+            <Button
+              variant="outline"
+              onClick={resetFilters}
+              className="min-h-11 px-6"
+            >
               مسح الفلاتر
             </Button>
           }
@@ -907,45 +1161,182 @@ export function StudentRegistryView() {
       ) : viewMode === "cards" ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {paged.map((student) => (
-            <Card key={student.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10">
+            <Card
+              key={student.id}
+              className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10"
+            >
               <CardContent className="p-4">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
                     <p className="font-bold">{student.name}</p>
-                    <p className="text-xs text-muted-foreground">{student.code} - {student.school || "بدون مدرسة"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {student.code} - {student.school || "بدون مدرسة"}
+                    </p>
                   </div>
-                  <Badge variant={student.status === "نشط" ? "default" : "destructive"}>{student.status}</Badge>
+                  <Badge
+                    variant={
+                      student.status === "نشط" ? "default" : "destructive"
+                    }
+                  >
+                    {student.status}
+                  </Badge>
                 </div>
 
                 <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-xs text-muted-foreground">الدورة</span><p className="text-xs font-medium">{courseName(student.courseId)}</p></div>
-                  <div><span className="text-xs text-muted-foreground">نوع الدورة</span><p className="text-xs font-medium">{student.courseProgram ? student.courseProgram === "كورسات" ? `كورسات - ${student.courseTerm}` : student.courseProgram : "-"}</p></div>
-                  <div><span className="text-xs text-muted-foreground">نوع الدراسة</span><p className="text-xs font-medium">{student.studyType || "-"}</p></div>
-                  <div><span className="text-xs text-muted-foreground">الموقع</span><p className="text-xs font-medium">{`${student.locationScope || student.mainSite || "-"} - ${student.subSite || "-"}`}</p></div>
-                  <div><span className="text-xs text-muted-foreground">الفرص</span><p className="text-xs font-medium">{activeChapterForCourse(student.courseId) ? `${student.opportunities} / ${student.baseOpportunities}` : "0 / 0 - لم يتم اختيار الفصل"}</p></div>
-                  <div><span className="text-xs text-muted-foreground">السماح</span><p className="text-xs font-medium">{student.accountingGraceDays ?? 0} يوم</p></div>
-                  <div><span className="text-xs text-muted-foreground">تاريخ الإضافة</span><p className="text-xs font-medium">{formatAppDate(student.createdAt, student.createdAt || "-")}</p></div>
-                  <div><span className="text-xs text-muted-foreground">تليكرام</span><p className="text-xs">{student.telegram ? <ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink> : "-"}</p></div>
-                  <div><span className="text-xs text-muted-foreground">رقم الطالب</span><p className="text-xs"><ContactLink href={whatsappLink(student.phone)}>{student.phone}</ContactLink></p></div>
-                  <div><span className="text-xs text-muted-foreground">ولي الأمر</span><p className="text-xs"><ContactLink href={whatsappLink(student.parentPhone)}>{student.parentPhone}</ContactLink></p></div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      الدورة
+                    </span>
+                    <p className="text-xs font-medium">
+                      {courseName(student.courseId)}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      نوع الدورة
+                    </span>
+                    <p className="text-xs font-medium">
+                      {student.courseProgram
+                        ? student.courseProgram === "كورسات"
+                          ? `كورسات - ${student.courseTerm}`
+                          : student.courseProgram
+                        : "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      نوع الدراسة
+                    </span>
+                    <p className="text-xs font-medium">
+                      {student.studyType || "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      الموقع
+                    </span>
+                    <p className="text-xs font-medium">{`${student.locationScope || student.mainSite || "-"} - ${student.subSite || "-"}`}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">الفرص</span>
+                    <p className="text-xs font-medium">
+                      {activeChapterForCourse(student.courseId)
+                        ? `${student.opportunities} / ${student.baseOpportunities}`
+                        : "0 / 0 - لم يتم اختيار الفصل"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      السماح
+                    </span>
+                    <p className="text-xs font-medium">
+                      {student.accountingGraceDays ?? 0} يوم
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      تاريخ الإضافة
+                    </span>
+                    <p className="text-xs font-medium">
+                      {formatAppDate(
+                        student.createdAt,
+                        student.createdAt || "-",
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      تليكرام
+                    </span>
+                    <p className="text-xs">
+                      {student.telegram ? (
+                        <ContactLink href={telegramLink(student.telegram)}>
+                          {student.telegram}
+                        </ContactLink>
+                      ) : (
+                        "-"
+                      )}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      رقم الطالب
+                    </span>
+                    <p className="text-xs">
+                      <ContactLink href={whatsappLink(student.phone)}>
+                        {student.phone}
+                      </ContactLink>
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      ولي الأمر
+                    </span>
+                    <p className="text-xs">
+                      <ContactLink href={whatsappLink(student.parentPhone)}>
+                        {student.parentPhone}
+                      </ContactLink>
+                    </p>
+                  </div>
                 </div>
 
                 {student.status === "مفصول" && (
                   <div className="mb-3 rounded bg-destructive/10 p-2 text-xs text-destructive">
-                    <div>{student.dismissalType} - {student.dismissalReason}</div>
-                    {student.dismissalNotes && <div className="mt-1 text-destructive/80">ملاحظات: {student.dismissalNotes}</div>}
+                    <div>
+                      {student.dismissalType} - {student.dismissalReason}
+                    </div>
+                    {student.dismissalNotes && (
+                      <div className="mt-1 text-destructive/80">
+                        ملاحظات: {student.dismissalNotes}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <Button variant="outline" size="sm" className="min-h-11 text-xs" onClick={() => setFileDialog({ student, open: true })}>ملف الطالب</Button>
-                  <Button variant="secondary" size="sm" className="min-h-11 text-xs" onClick={() => openEditDialog(student)}>تعديل</Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11 text-xs"
+                    onClick={() => setFileDialog({ student, open: true })}
+                  >
+                    ملف الطالب
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="min-h-11 text-xs"
+                    onClick={() => openEditDialog(student)}
+                  >
+                    تعديل
+                  </Button>
                   {student.status === "نشط" ? (
-                    <Button variant="destructive" size="sm" className="min-h-11 text-xs" onClick={() => setDismissDialog({ student, open: true })}>فصل</Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="min-h-11 text-xs"
+                      onClick={() => setDismissDialog({ student, open: true })}
+                    >
+                      فصل
+                    </Button>
                   ) : (
-                    <Button variant="default" size="sm" className="min-h-11 text-xs" onClick={() => handleReactivate(student.id)}>إعادة تفعيل</Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="min-h-11 text-xs"
+                      onClick={() => handleReactivate(student.id)}
+                    >
+                      إعادة تفعيل
+                    </Button>
                   )}
-                  <Button variant="destructive" size="sm" className="min-h-11 text-xs" onClick={() => openDeleteDialog(student)}>حذف</Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="min-h-11 text-xs"
+                    onClick={() => openDeleteDialog(student)}
+                  >
+                    حذف
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -972,22 +1363,88 @@ export function StudentRegistryView() {
             <tbody>
               {paged.map((student) => (
                 <tr key={student.id} className="border-t align-top">
-                  <td className="p-3 font-medium">{student.name}<div className="text-xs text-muted-foreground">{student.school || "بدون مدرسة"}</div></td>
+                  <td className="p-3 font-medium">
+                    {student.name}
+                    <div className="text-xs text-muted-foreground">
+                      {student.school || "بدون مدرسة"}
+                    </div>
+                  </td>
                   <td className="p-3">{student.code}</td>
                   <td className="p-3">{courseName(student.courseId)}</td>
                   <td className="p-3">{student.studyType || "—"}</td>
                   <td className="p-3 min-w-40">{`${student.locationScope || student.mainSite || "-"} - ${student.subSite || "-"}`}</td>
-                  <td className="p-3"><ContactLink href={whatsappLink(student.phone)}>{student.phone}</ContactLink></td>
-                  <td className="p-3">{student.telegram ? <ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink> : "—"}</td>
-                  <td className="p-3">{activeChapterForCourse(student.courseId) ? `${student.opportunities} / ${student.baseOpportunities}` : "0 / 0"}</td>
-                  <td className="p-3">{student.accountingGraceDays ?? 0} يوم</td>
-                  <td className="p-3"><Badge variant={student.status === "نشط" ? "default" : "destructive"}>{student.status}</Badge></td>
+                  <td className="p-3">
+                    <ContactLink href={whatsappLink(student.phone)}>
+                      {student.phone}
+                    </ContactLink>
+                  </td>
+                  <td className="p-3">
+                    {student.telegram ? (
+                      <ContactLink href={telegramLink(student.telegram)}>
+                        {student.telegram}
+                      </ContactLink>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="p-3">
+                    {activeChapterForCourse(student.courseId)
+                      ? `${student.opportunities} / ${student.baseOpportunities}`
+                      : "0 / 0"}
+                  </td>
+                  <td className="p-3">
+                    {student.accountingGraceDays ?? 0} يوم
+                  </td>
+                  <td className="p-3">
+                    <Badge
+                      variant={
+                        student.status === "نشط" ? "default" : "destructive"
+                      }
+                    >
+                      {student.status}
+                    </Badge>
+                  </td>
                   <td className="p-3 min-w-56">
                     <div className="flex flex-wrap gap-1">
-                      <Button variant="outline" size="sm" onClick={() => setFileDialog({ student, open: true })}>ملف</Button>
-                      <Button variant="secondary" size="sm" onClick={() => openEditDialog(student)}>تعديل</Button>
-                      {student.status === "نشط" ? <Button variant="destructive" size="sm" onClick={() => setDismissDialog({ student, open: true })}>فصل</Button> : <Button size="sm" onClick={() => handleReactivate(student.id)}>تفعيل</Button>}
-                      <Button variant="destructive" size="sm" onClick={() => openDeleteDialog(student)}>حذف</Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFileDialog({ student, open: true })}
+                      >
+                        ملف
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => openEditDialog(student)}
+                      >
+                        تعديل
+                      </Button>
+                      {student.status === "نشط" ? (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() =>
+                            setDismissDialog({ student, open: true })
+                          }
+                        >
+                          فصل
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => handleReactivate(student.id)}
+                        >
+                          تفعيل
+                        </Button>
+                      )}
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => openDeleteDialog(student)}
+                      >
+                        حذف
+                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -1416,7 +1873,11 @@ export function StudentRegistryView() {
                         <Label htmlFor="edit-locationScope">الموقع</Label>
                         <Select
                           name="locationScope"
-                          value={isEditOutOfCountry ? "" : editDialog.form.locationScope}
+                          value={
+                            isEditOutOfCountry
+                              ? ""
+                              : editDialog.form.locationScope
+                          }
                           onValueChange={(v) =>
                             setEditDialog((prev) => ({
                               ...prev,
@@ -1452,7 +1913,9 @@ export function StudentRegistryView() {
                                 ...prev,
                                 form: {
                                   ...prev.form,
-                                  locationScope: event.target.checked ? OUT_OF_COUNTRY_LOCATION_SCOPE : "",
+                                  locationScope: event.target.checked
+                                    ? OUT_OF_COUNTRY_LOCATION_SCOPE
+                                    : "",
                                   baghdadMode: "",
                                   subSite: "",
                                 },
@@ -1476,13 +1939,16 @@ export function StudentRegistryView() {
                           name="subSite"
                           autoComplete="off"
                           value={editDialog.form.subSite}
-                          onChange={(e) => updateEditForm("subSite", e.target.value)}
+                          onChange={(e) =>
+                            updateEditForm("subSite", e.target.value)
+                          }
                           placeholder="مثلاً: تركيا"
                           required
                           className="h-12 rounded-2xl"
                         />
                         <p className="text-xs text-muted-foreground">
-                          خيار خارج القطر عام لكل الدورات ولا يحتاج تفعيله من إعدادات الدورة.
+                          خيار خارج القطر عام لكل الدورات ولا يحتاج تفعيله من
+                          إعدادات الدورة.
                         </p>
                       </div>
                     )}
@@ -1640,7 +2106,11 @@ export function StudentRegistryView() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="dismiss-type">نوع الفصل</Label>
-              <Select name="type" value={dismissType} onValueChange={setDismissType}>
+              <Select
+                name="type"
+                value={dismissType}
+                onValueChange={setDismissType}
+              >
                 <SelectTrigger id="dismiss-type">
                   <SelectValue />
                 </SelectTrigger>
@@ -1689,7 +2159,6 @@ export function StudentRegistryView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
     </div>
   );
 }
