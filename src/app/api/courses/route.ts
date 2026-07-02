@@ -46,7 +46,7 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
   const programs = parseJsonArray<string>(body.availablePrograms);
   if (programs.length === 0) return 'يجب اختيار خيار واحد على الأقل من نوع الدورة';
   for (const p of programs) {
-    if (!COURSE_PROGRAMS.includes(p as string)) return `نوع الدورة "${p}" غير صالح`;
+    if (!(COURSE_PROGRAMS as readonly string[]).includes(p)) return `نوع الدورة "${p}" غير صالح`;
   }
 
   // Validate study types per course program
@@ -56,7 +56,7 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
     const studyTypes = parseJsonArray<string>(studyTypesByProgram[program as keyof StudyTypesByProgram]);
     if (studyTypes.length === 0) return `يجب اختيار نوع دراسة واحد على الأقل لنوع الدورة "${program}"`;
     for (const st of studyTypes) {
-      if (!STUDY_TYPES.includes(st as string)) return `نوع الدراسة "${st}" غير صالح`;
+      if (!(STUDY_TYPES as readonly string[]).includes(st)) return `نوع الدراسة "${st}" غير صالح`;
       studyTypesSet.add(st);
     }
   }
@@ -73,7 +73,7 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
     if (!config.scopes || config.scopes.length === 0)
       return `يجب اختيار بغداد أو محافظات لنوع الدراسة "${studyType}"`;
     for (const scope of config.scopes) {
-      if (!LOCATION_SCOPES.includes(scope as string))
+      if (!(LOCATION_SCOPES as readonly string[]).includes(scope))
         return `الموقع "${scope}" غير صالح`;
     }
     if (config.scopes.includes('بغداد')) {
@@ -92,7 +92,7 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
       }
       for (const prov of config.provinces) {
         const normalizedProvince = normalizeIraqiProvinceName(prov);
-        if (!IRAQI_PROVINCES.includes(normalizedProvince as string))
+        if (!(IRAQI_PROVINCES as readonly string[]).includes(normalizedProvince))
           return `المحافظة "${prov}" غير صالحة`;
       }
     }
