@@ -394,7 +394,7 @@ export function StudentRegistryView() {
       .then((data) => {
         if (data?.locations) {
           // Extract unique scope values for the dropdown
-          const scopes = Array.from(new Set(data.locations.map((l: { scope: string }) => l.scope).filter(Boolean)));
+          const scopes: string[] = Array.from(new Set(data.locations.map((l: { scope: string }) => l.scope).filter(Boolean))) as string[];
           setLocationFilterOptions(scopes);
         }
       })
