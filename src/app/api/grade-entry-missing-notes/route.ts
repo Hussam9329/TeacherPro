@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
         },
       }),
     );
-    return NextResponse.json({ note: normalize(note) }, { status: 201 });
+    return NextResponse.json({ note: normalize(note as NoteRow) }, { status: 201 });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حفظ الملاحظة حالياً.');
   }

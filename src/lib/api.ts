@@ -65,7 +65,6 @@ function isTransientHttpStatus(status: number): boolean {
   return (
     status === 0 ||
     status === 408 ||
-    status === 409 ||
     status === 425 ||
     status === 429 ||
     status >= 500
@@ -479,25 +478,13 @@ export async function loadAllFromServer(): Promise<ServerData | null> {
   const endpointLoaders = [
     apiGetResponse<Pick<ServerData, "courses">>("courses", [403]),
     apiGetResponse<Pick<ServerData, "chapters">>("chapters", [403]),
-    apiGetResponse<Pick<ServerData, "courseChapters">>(
-      "course-chapters",
-      [403],
-    ),
+    // Heavy, fast-growing tables are intentionally not loaded here:
+    // course-chapters, opportunity-logs, student-leaves, student-calls,
+    // student-notes, correction-sheets, logs, students and grades.
+    // Their screens/actions load them lazily so the first app open stays light.
     apiGetResponse<Pick<ServerData, "exams">>("exams", [403]),
-    apiGetResponse<Pick<ServerData, "opportunityLogs">>(
-      "opportunity-logs",
-      [403],
-    ),
-    apiGetResponse<Pick<ServerData, "studentLeaves">>("student-leaves", [403]),
-    apiGetResponse<Pick<ServerData, "studentCalls">>("student-calls", [403]),
-    apiGetResponse<Pick<ServerData, "studentNotes">>("student-notes", [403]),
-    apiGetResponse<Pick<ServerData, "correctionSheets">>(
-      "correction-sheets",
-      [403],
-    ),
     apiGetResponse<Pick<ServerData, "users">>("users", [403]),
     apiGetResponse<Pick<ServerData, "roles">>("roles", [403]),
-    apiGetResponse<Pick<ServerData, "logs">>("logs", [403]),
   ];
   const results = await Promise.all(endpointLoaders);
   const merged = results.reduce<ServerData>((acc, result) => {
@@ -538,6 +525,7 @@ export const chapterApi = {
 // ─── CourseChapter API ────────────────────────────────────────────────────────
 
 export const courseChapterApi = {
+  list: () => apiGet<Pick<ServerData, "courseChapters">>("course-chapters"),
   add: (cc: {
     id: string;
     courseId: string;
@@ -667,8 +655,6 @@ export const gradeApi = {
       hasMore: collected.length < totalCount,
     };
   },
-  bulkAdd: (grades: Array<Record<string, unknown>>) =>
-    apiPost("grades/bulk", { grades }),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("grades", { id, ...updates }),
   remove: (id: string, studentId?: string, examId?: string) =>
@@ -707,6 +693,7 @@ export const gradeApi = {
 // ─── OpportunityLog API ───────────────────────────────────────────────────────
 
 export const opportunityLogApi = {
+  list: () => apiGet<Pick<ServerData, "opportunityLogs">>("opportunity-logs?page=1&limit=500"),
   add: (log: Record<string, unknown>) => apiPost("opportunity-logs", log),
   bulkAdjust: (payload: {
     students?: Array<Record<string, unknown>>;
@@ -719,6 +706,7 @@ export const opportunityLogApi = {
 // ─── Follow-up API ───────────────────────────────────────────────────────────
 
 export const studentLeaveApi = {
+  list: () => apiGet<Pick<ServerData, "studentLeaves">>("student-leaves"),
   add: (leave: Record<string, unknown>) => apiPost("student-leaves", leave),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-leaves", { id, ...updates }),
@@ -726,6 +714,7 @@ export const studentLeaveApi = {
 };
 
 export const studentCallApi = {
+  list: () => apiGet<Pick<ServerData, "studentCalls">>("student-calls"),
   add: (call: Record<string, unknown>) => apiPost("student-calls", call),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-calls", { id, ...updates }),
@@ -733,6 +722,7 @@ export const studentCallApi = {
 };
 
 export const studentNoteApi = {
+  list: () => apiGet<Pick<ServerData, "studentNotes">>("student-notes"),
   add: (note: Record<string, unknown>) => apiPost("student-notes", note),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-notes", { id, ...updates }),
@@ -742,6 +732,7 @@ export const studentNoteApi = {
 // ─── CorrectionSheet API ──────────────────────────────────────────────────────
 
 export const correctionSheetApi = {
+  list: () => apiGet<Pick<ServerData, "correctionSheets">>("correction-sheets?page=1&limit=500"),
   add: (sheet: Record<string, unknown>) => apiPost("correction-sheets", sheet),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("correction-sheets", { id, ...updates }),
@@ -769,6 +760,7 @@ export const roleApi = {
 // ─── Log API ──────────────────────────────────────────────────────────────────
 
 export const logApi = {
+  list: () => apiGet<Pick<ServerData, "logs">>("logs?page=1&limit=500"),
   add: async (log: Record<string, unknown>): Promise<ApiResult> => {
     // Use direct fetch instead of apiPost so that 403 responses (server-only
     // audit entries) don't trigger console.warn noise. The UI creates local

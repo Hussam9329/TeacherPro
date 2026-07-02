@@ -166,6 +166,7 @@ export function GradeRecordsView() {
     score: "",
     notes: "",
   });
+  const [reactivationEditConfirmOpen, setReactivationEditConfirmOpen] = useState(false);
   const { locked: isDeletingGrade, runLocked: runDeleteGradeLocked } =
     useActionLock();
 
@@ -314,28 +315,20 @@ export function GradeRecordsView() {
     return false;
   };
 
-  const confirmReactivatedStudentGradeEdit = (
+  const editNeedsReactivationWarning = (
     studentId: string,
     gradeId: string,
     status: GradeStatus,
     score: number | null,
     notes: string,
-  ) => {
-    if (
-      !editMayReturnReactivatedStudentToDismissal(
-        studentId,
-        gradeId,
-        status,
-        score,
-        notes,
-      )
-    )
-      return true;
-    const student = students.find((item) => item.id === studentId);
-    return window.confirm(
-      `درجة ${student?.name || "هذا الطالب"} الجديدة قد تستهلك الفرصة الأخيرة وتعيد الطالب إلى المفصولين. هل تريد المتابعة؟`,
+  ) =>
+    editMayReturnReactivatedStudentToDismissal(
+      studentId,
+      gradeId,
+      status,
+      score,
+      notes,
     );
-  };
 
   const toggleAcademicAccounting = (gradeId: string, checked: boolean) => {
     if (!isAcademicAccountingRow(gradeId)) {
@@ -550,10 +543,10 @@ export function GradeRecordsView() {
     });
   };
 
-  const handleSaveEditGrade = () => {
+  const validateEditDialogScore = () => {
     const grade = grades.find((item) => item.id === editDialog.id);
     const exam = grade ? exams.find((item) => item.id === grade.examId) : null;
-    if (!grade || !exam) return;
+    if (!grade || !exam) return null;
     const score =
       editDialog.status === "درجة"
         ? Number(toLatinDigits(editDialog.score))
@@ -566,18 +559,15 @@ export function GradeRecordsView() {
         score > exam.fullMark)
     ) {
       toast.error(`الدرجة يجب أن تكون بين 0 و ${exam.fullMark}`);
-      return;
+      return null;
     }
-    if (
-      !confirmReactivatedStudentGradeEdit(
-        grade.studentId,
-        grade.id,
-        editDialog.status,
-        score,
-        editDialog.notes,
-      )
-    )
-      return;
+    return { grade, score };
+  };
+
+  const saveEditGradeUnchecked = () => {
+    const validated = validateEditDialogScore();
+    if (!validated) return;
+    const { score } = validated;
 
     updateGrade(editDialog.id, {
       status: editDialog.status,
@@ -609,6 +599,25 @@ export function GradeRecordsView() {
     });
     setServerRefreshKey((key) => key + 1);
     toast.success("تم تعديل الدرجة وإعادة الاحتساب");
+  };
+
+  const handleSaveEditGrade = () => {
+    const validated = validateEditDialogScore();
+    if (!validated) return;
+    const { grade, score } = validated;
+    if (
+      editNeedsReactivationWarning(
+        grade.studentId,
+        grade.id,
+        editDialog.status,
+        score,
+        editDialog.notes,
+      )
+    ) {
+      setReactivationEditConfirmOpen(true);
+      return;
+    }
+    saveEditGradeUnchecked();
   };
 
   const openDeleteGradeDialog = (gradeId: string) => {
@@ -1147,6 +1156,29 @@ export function GradeRecordsView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={reactivationEditConfirmOpen} onOpenChange={setReactivationEditConfirmOpen}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأكيد تعديل درجة طالب مُعاد تنشيطه</AlertDialogTitle>
+            <AlertDialogDescription>
+              الدرجة الجديدة قد تستهلك الفرصة الأخيرة وتعيد الطالب إلى المفصولين. هل تريد المتابعة؟
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                setReactivationEditConfirmOpen(false);
+                saveEditGradeUnchecked();
+              }}
+            >
+              متابعة
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={deleteDialog.open}

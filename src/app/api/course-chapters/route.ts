@@ -81,7 +81,6 @@ export async function POST(req: NextRequest) {
     if (existing) return validationError('الفصل مرتبط مسبقاً بهذه الدورة', 409);
     const courseChapter = await db.courseChapter.create({
       data: {
-        id: body.id,
         active: body.active ?? false,
         archived: body.archived ?? false,
         archive: body.archive ?? '[]',

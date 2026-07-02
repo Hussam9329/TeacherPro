@@ -159,17 +159,17 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const module = String(body?.module ?? '').trim().slice(0, 60);
+  const logModule = String(body?.module ?? '').trim().slice(0, 60);
   const action = String(body?.action ?? '').trim().slice(0, 120);
   const details = body?.details === undefined || body?.details === null
     ? null
     : String(body.details).slice(0, 500);
 
-  if (!module || !action) {
+  if (!logModule || !action) {
     return NextResponse.json({ error: 'الوحدة والإجراء مطلوبان.' }, { status: 400 });
   }
 
-  if (!isAllowedClientLogEntry(module, action)) {
+  if (!isAllowedClientLogEntry(logModule, action)) {
     return NextResponse.json(
       { error: 'لا يمكن كتابة سجل بهذا المركب (module/action) من العميل.' },
       { status: 403 },
@@ -178,7 +178,7 @@ export async function POST(req: NextRequest) {
 
   const log = await db.auditLog.create({
     data: {
-      module,
+      module: logModule,
       action,
       details,
       userId: principal.id,

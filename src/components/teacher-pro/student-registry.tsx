@@ -1571,7 +1571,7 @@ export function StudentRegistryView() {
       >
         <DialogContent
           dir="rtl"
-          className="left-0 top-0 h-screen max-h-screen w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:max-w-none sm:rounded-none sm:p-0"
+          className="teacherpro-fullscreen-dialog left-0 top-0 h-dvh max-h-dvh w-dvw max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:max-w-none sm:rounded-none sm:p-0"
         >
           <DialogHeader className="border-b border-border/70 bg-gradient-to-l from-primary/12 via-background to-muted/50 px-6 py-5 pr-16 text-right">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -1593,7 +1593,7 @@ export function StudentRegistryView() {
             </div>
           </DialogHeader>
 
-          <div className="app-scrollbar h-[calc(100vh-10.5rem)] overflow-y-auto p-4 md:p-6">
+          <div className="app-scrollbar h-[calc(100dvh-10.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] overflow-y-auto p-4 md:p-6">
             <div className="grid gap-5 lg:grid-cols-[0.9fr_1.6fr]">
               <aside className="space-y-4">
                 <div className="rounded-[1.75rem] border border-primary/20 bg-primary/5 p-4 shadow-sm">

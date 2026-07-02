@@ -43,32 +43,14 @@ type ButtonProps = React.ComponentPropsWithoutRef<"button"> &
   };
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, onClick, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
-    const clickLockRef = React.useRef(false);
-
-    const handleClick: React.MouseEventHandler<HTMLButtonElement> = (event) => {
-      if (props.disabled) return;
-      if (clickLockRef.current) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-
-      clickLockRef.current = true;
-      window.setTimeout(() => {
-        clickLockRef.current = false;
-      }, 650);
-
-      onClick?.(event);
-    };
 
     return (
       <Comp
         ref={ref}
         data-slot="button"
         className={cn(buttonVariants({ variant, size, className }))}
-        onClick={handleClick}
         {...props}
       />
     );

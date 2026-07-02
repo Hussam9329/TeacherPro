@@ -83,7 +83,6 @@ export async function POST(req: NextRequest) {
     if (securityError) return securityError;
     const role = await db.role.create({
       data: {
-        id: body.id,
         name: String(body.name ?? '').trim(),
         isDefault: body.isDefault ?? false,
         permissions: normalizePermissions(body.permissions),

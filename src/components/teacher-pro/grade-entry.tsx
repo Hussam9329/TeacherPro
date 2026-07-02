@@ -9,6 +9,24 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -54,6 +72,15 @@ type GradeEntryNotice = {
   type: "success" | "error" | "info";
   message: string;
   at: number;
+};
+
+type PendingConfirm = {
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  destructive?: boolean;
+  onConfirm: () => void;
+  onCancel?: () => void;
 };
 
 const GRADE_ENTRY_NOTES_STORAGE_KEY = "teacherpro-grade-entry-notes-v1";
@@ -157,6 +184,9 @@ export function GradeEntryView() {
   } = useTeacherStore();
 
   const [selectedExamId, setSelectedExamId] = useState("");
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [quickScanOpen, setQuickScanOpen] = useState(false);
+  const [quickScanValue, setQuickScanValue] = useState("");
   const [search, setSearch] = useState("");
   const [filterCourseProgram, setFilterCourseProgram] = useState("");
   const [filterCourseTerm, setFilterCourseTerm] = useState("");
@@ -521,20 +551,29 @@ export function GradeEntryView() {
     );
   };
 
-  const confirmReactivatedStudentGradeEdit = (
+  const requestReactivatedStudentGradeEdit = (
     studentId: string,
-    draftOverride?: DraftGrade,
+    draftOverride: DraftGrade | undefined,
+    onConfirm: () => void,
+    onCancel?: () => void,
   ) => {
-    if (!needsReactivationWarning(studentId, draftOverride)) return true;
-    const student = studentById.get(studentId);
-    const confirmed = window.confirm(
-      `درجة ${student?.name || "هذا الطالب"} الجديدة قد تستهلك الفرصة الأخيرة وتعيد الطالب إلى المفصولين. هل تريد المتابعة؟`,
-    );
-    if (confirmed) {
-      const key = reactivationWarningKey(studentId);
-      setReactivationWarningsAccepted((prev) => ({ ...prev, [key]: true }));
+    if (!needsReactivationWarning(studentId, draftOverride)) {
+      onConfirm();
+      return;
     }
-    return confirmed;
+    const student = studentById.get(studentId);
+    setPendingConfirm({
+      title: "تأكيد تعديل درجة طالب مُعاد تنشيطه",
+      description: `درجة ${student?.name || "هذا الطالب"} الجديدة قد تستهلك الفرصة الأخيرة وتعيد الطالب إلى المفصولين. هل تريد المتابعة؟`,
+      confirmLabel: "متابعة",
+      destructive: true,
+      onConfirm: () => {
+        const key = reactivationWarningKey(studentId);
+        setReactivationWarningsAccepted((prev) => ({ ...prev, [key]: true }));
+        onConfirm();
+      },
+      onCancel,
+    });
   };
 
   const restoreDraftFromSavedGrade = (studentId: string) => {
@@ -733,11 +772,14 @@ export function GradeEntryView() {
       }
     }
 
-    if (
-      !options.skipReactivationWarning &&
-      !confirmReactivatedStudentGradeEdit(studentId, draft)
-    )
+    if (!options.skipReactivationWarning && needsReactivationWarning(studentId, draft)) {
+      requestReactivatedStudentGradeEdit(
+        studentId,
+        draft,
+        () => void saveGrade(studentId, draft, { ...options, skipReactivationWarning: true }),
+      );
       return;
+    }
 
     setSavingRows((prev) => ({ ...prev, [studentId]: true }));
     addGrade({
@@ -799,11 +841,16 @@ export function GradeEntryView() {
     }
 
     if (needsReactivationWarning(studentId, draft)) {
-      const confirmed = confirmReactivatedStudentGradeEdit(studentId, draft);
-      if (!confirmed) {
-        restoreDraftFromSavedGrade(studentId);
-        return;
-      }
+      requestReactivatedStudentGradeEdit(
+        studentId,
+        draft,
+        () => void saveGrade(studentId, draft, {
+          silent: true,
+          skipReactivationWarning: true,
+        }),
+        () => restoreDraftFromSavedGrade(studentId),
+      );
+      return;
     }
 
     void saveGrade(studentId, draft, {
@@ -858,11 +905,19 @@ export function GradeEntryView() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `سيتم إلغاء حالة غائب من ${absentGradesForSelectedExam.length} طالب في امتحان ${selectedExam.name} وإرجاعهم كأن الدرجة لم تُسجل لهم. هل تريد المتابعة؟`,
-    );
-    if (!confirmed) return;
+    setPendingConfirm({
+      title: "إلغاء حالات الغياب",
+      description: `سيتم إلغاء حالة غائب من ${absentGradesForSelectedExam.length} طالب في امتحان ${selectedExam.name} وإرجاعهم كأن الدرجة لم تُسجل لهم. هل تريد المتابعة؟`,
+      confirmLabel: "إلغاء الغياب",
+      destructive: true,
+      onConfirm: () => {
+        void handleClearAbsentGradesConfirmed();
+      },
+    });
+  });
 
+  const handleClearAbsentGradesConfirmed = async () => {
+    if (!selectedExam) return;
     const affectedStudentIds = new Set(
       absentGradesForSelectedExam.map((grade) => grade.studentId),
     );
@@ -899,7 +954,7 @@ export function GradeEntryView() {
       });
       toast.success(`تم إلغاء حالة غائب من ${removedCount} طالب`);
     }
-  });
+  };
 
   const handleMarkAllMissingAsAbsent = () => {
     if (!selectedExam) return;
@@ -907,11 +962,17 @@ export function GradeEntryView() {
       toast.info("لا يوجد طلاب بدون درجة لتسجيلهم غائبين في هذا الامتحان");
       return;
     }
+    setPendingConfirm({
+      title: "تسجيل غير المدخلين كغائبين",
+      description: `سيتم تسجيل ${missingExamStudents.length} طالب من كل طلاب الدورة المرتبطين بامتحان ${selectedExam.name} كغائبين. لن يتم تعديل أي درجة موجودة مسبقًا. هل تريد المتابعة؟`,
+      confirmLabel: "تسجيل كغائب",
+      destructive: true,
+      onConfirm: handleMarkAllMissingAsAbsentConfirmed,
+    });
+  };
 
-    const confirmed = window.confirm(
-      `سيتم تسجيل ${missingExamStudents.length} طالب من كل طلاب الدورة المرتبطين بامتحان ${selectedExam.name} كغائبين. لن يتم تعديل أي درجة موجودة مسبقًا. هل تريد المتابعة؟`,
-    );
-    if (!confirmed) return;
+  const handleMarkAllMissingAsAbsentConfirmed = () => {
+    if (!selectedExam) return;
 
     const timestamp = new Date().toLocaleTimeString("ar-IQ", {
       hour: "2-digit",
@@ -946,8 +1007,14 @@ export function GradeEntryView() {
   };
 
   const handleQuickScan = () => {
-    const code = window.prompt("امسح QR/باركود أو اكتب كود الطالب للبحث");
-    if (code?.trim()) setSearch(code.trim());
+    setQuickScanValue(search);
+    setQuickScanOpen(true);
+  };
+
+  const submitQuickScan = () => {
+    const value = quickScanValue.trim();
+    if (value) setSearch(value);
+    setQuickScanOpen(false);
   };
 
   const handleExamChange = (examId: string) => {
@@ -1001,6 +1068,58 @@ export function GradeEntryView() {
           </div>
         </div>
       )}
+
+
+      <AlertDialog
+        open={Boolean(pendingConfirm)}
+        onOpenChange={(open) => {
+          if (open) return;
+          pendingConfirm?.onCancel?.();
+          setPendingConfirm(null);
+        }}
+      >
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{pendingConfirm?.title || "تأكيد العملية"}</AlertDialogTitle>
+            <AlertDialogDescription>{pendingConfirm?.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className={pendingConfirm?.destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+              onClick={() => {
+                const action = pendingConfirm?.onConfirm;
+                setPendingConfirm(null);
+                action?.();
+              }}
+            >
+              {pendingConfirm?.confirmLabel || "تأكيد"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={quickScanOpen} onOpenChange={setQuickScanOpen}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle>بحث / مسح QR</DialogTitle>
+            <DialogDescription>امسح QR/باركود أو اكتب كود الطالب للبحث.</DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={quickScanValue}
+            onChange={(event) => setQuickScanValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") submitQuickScan();
+            }}
+            placeholder="كود الطالب أو النص المقروء من الماسح"
+          />
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setQuickScanOpen(false)}>إلغاء</Button>
+            <Button type="button" onClick={submitQuickScan}>بحث</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader>

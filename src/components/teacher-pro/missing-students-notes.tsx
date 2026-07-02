@@ -6,6 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { formatAppDate } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
@@ -36,6 +46,7 @@ export function MissingStudentsNotesView() {
   const { exams, setSection } = useTeacherStore();
   const [notes, setNotes] = useState<GradeEntryMissingNote[]>([]);
   const [search, setSearch] = useState("");
+  const [deleteDialogNote, setDeleteDialogNote] = useState<GradeEntryMissingNote | null>(null);
 
   const refreshNotes = () => setNotes(readGradeEntryMissingNotes());
 
@@ -67,16 +78,37 @@ export function MissingStudentsNotesView() {
   const totalCharacters = notes.reduce((sum, note) => sum + note.text.length, 0);
 
   const handleDeleteNote = (note: GradeEntryMissingNote) => {
-    const confirmed = window.confirm(
-      `سيتم حذف ملاحظات امتحان ${note.examName}. هل تريد المتابعة؟`,
-    );
-    if (!confirmed) return;
-    deleteGradeEntryMissingNote(note.examId);
+    setDeleteDialogNote(note);
+  };
+
+  const confirmDeleteNote = () => {
+    if (!deleteDialogNote) return;
+    deleteGradeEntryMissingNote(deleteDialogNote.examId);
+    setDeleteDialogNote(null);
     refreshNotes();
   };
 
   return (
     <div className="section-stack">
+      <AlertDialog open={Boolean(deleteDialogNote)} onOpenChange={(open) => !open && setDeleteDialogNote(null)}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>حذف الملاحظة</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم حذف ملاحظات امتحان {deleteDialogNote?.examName || "هذا الامتحان"}. هل تريد المتابعة؟
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmDeleteNote}
+            >
+              حذف
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 className="text-2xl font-black tracking-tight">الطلاب الغير موجودين</h2>

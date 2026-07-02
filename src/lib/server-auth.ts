@@ -89,8 +89,7 @@ function mergePermissions(...values: unknown[]): string[] {
 
 function isAdminUser(user: { username?: string | null; roleId?: string | null; role?: string | null }): boolean {
   return String(user.username || '').trim().toLowerCase() === 'admin'
-    || String(user.roleId || '') === 'role_admin'
-    || String(user.role || '') === 'مدير النظام';
+    || String(user.roleId || '') === 'role_admin';
 }
 
 async function findUserById(id: string) {

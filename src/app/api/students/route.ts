@@ -442,7 +442,6 @@ export async function POST(req: NextRequest) {
   try {
     const student = await db.student.create({
       data: {
-        id: body.id,
         name: String(body.name ?? "").trim(),
         school: String(body.school ?? "").trim(),
         gender: body.gender,

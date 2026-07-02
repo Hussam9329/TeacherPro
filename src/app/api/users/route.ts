@@ -173,7 +173,6 @@ export async function POST(req: NextRequest) {
 
     const user = await db.appUser.create({
       data: {
-        id: body.id,
         username: String(body.username ?? '').trim(),
         name: String(body.name ?? '').trim(),
         passwordHash: await normalizePasswordForStorage(password),

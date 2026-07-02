@@ -6,7 +6,7 @@ import {
   courseApi, chapterApi, courseChapterApi,
   studentApi, examApi, gradeApi, opportunityLogApi, studentLeaveApi, studentCallApi, studentNoteApi, correctionSheetApi,
   userApi, roleApi, logApi, authApi,
-  loadAllFromServer, type ApiResult, type AuthApiUser, type ServerData,
+  loadAllFromServer, type ApiResult, type AuthApiUser,
 } from './api';
 import { getStudentDuplicateMessage, sanitizeTelegramInput } from './student-utils';
 import {
@@ -294,7 +294,6 @@ export type SectionId =
   | 'dismissed-students'
   | 'exam-new'
   | 'grade-entry'
-  | 'grade-bulk-import'
   | 'exam-records'
   | 'grade-records'
   | 'opportunities'
@@ -375,7 +374,6 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   'dismissed-students': 'students.view',
   'exam-new': 'exams.add',
   'grade-entry': 'grades.add',
-  'grade-bulk-import': 'grades.add',
   'exam-records': 'exams.view',
   'grade-records': 'grades.view',
   'opportunities': 'opportunities.view',
@@ -542,6 +540,7 @@ interface TeacherState {
   isAuthenticated: boolean;
 
   loadFromServer: () => Promise<boolean>;
+  loadSectionDataFromServer: (section: SectionId) => Promise<void>;
   restoreSession: () => Promise<boolean>;
   mergeStudentsCache: (students: Student[]) => void;
   mergeGradesCache: (grades: Grade[]) => void;
@@ -588,7 +587,6 @@ interface TeacherState {
   deleteExam: (id: string) => boolean;
 
   addGrade: (grade: Omit<Grade, 'id' | 'createdAt' | 'updatedAt' | 'academicAccountingChecked'> & { academicAccountingChecked?: boolean }) => void;
-  bulkAddGrades: (grades: Array<Omit<Grade, 'id' | 'createdAt' | 'updatedAt' | 'academicAccountingChecked'> & { academicAccountingChecked?: boolean }>) => { added: number; updated: number };
   updateGrade: (id: string, updates: Partial<Grade>) => void;
   deleteGrade: (id: string) => boolean;
   clearAbsentGradesForExam: (examId: string) => number;
@@ -1745,18 +1743,29 @@ async function flushPendingGradeSaves(getState: () => TeacherState): Promise<voi
 
   pendingGradeFlushInFlight = true;
   try {
-    const chunk = pending.slice(0, 100);
-    const result = await gradeApi.bulkAdd(chunk.map(gradeSaveForApi));
+    const chunk = pending.slice(0, 25);
+    const flushed: PendingGradeSave[] = [];
+    let lastFailure: ApiResult | null = null;
 
-    if (result.ok) {
-      removeFlushedPendingGradeSaves(chunk);
-      const remaining = readPendingGradeSaves();
+    for (const item of chunk) {
+      const result = await gradeApi.add(gradeSaveForApi(item));
+      if (!result.ok) {
+        lastFailure = result;
+        break;
+      }
+      flushed.push(item);
+    }
+
+    if (flushed.length > 0) removeFlushedPendingGradeSaves(flushed);
+
+    const remaining = readPendingGradeSaves();
+    if (!lastFailure) {
       if (remaining.length > 0) schedulePendingGradeFlush(getState, 300);
       return;
     }
 
-    notifyPendingGradeSyncIssue(getState, result);
-    schedulePendingGradeFlush(getState, result.transient ? 5000 : 15000);
+    notifyPendingGradeSyncIssue(getState, lastFailure);
+    if (remaining.length > 0) schedulePendingGradeFlush(getState, lastFailure.transient ? 5000 : 15000);
   } finally {
     pendingGradeFlushInFlight = false;
   }
@@ -1866,10 +1875,12 @@ export const useTeacherStore = create<TeacherState>()(
             ...ch, opportunities: Number(ch.opportunities || 0),
           })) as Chapter[];
 
-          const courseChapters = (serverData.courseChapters || []).map((cc: Record<string, unknown>) => ({
-            ...cc, active: Boolean(cc.active), archived: Boolean(cc.archived),
-            archive: parseArrayField<ArchiveEntry>(cc.archive),
-          })) as CourseChapter[];
+          const courseChapters = serverData.courseChapters
+            ? serverData.courseChapters.map((cc: Record<string, unknown>) => ({
+                ...cc, active: Boolean(cc.active), archived: Boolean(cc.archived),
+                archive: parseArrayField<ArchiveEntry>(cc.archive),
+              })) as CourseChapter[]
+            : get().courseChapters;
 
           const students = serverData.students
             ? serverData.students.map((st: Record<string, unknown>) => normalizeStudentRecord(st))
@@ -1899,47 +1910,57 @@ export const useTeacherStore = create<TeacherState>()(
             ? mergePendingGradeSavesIntoGrades(serverData.grades.map((g: Record<string, unknown>) => normalizeGradeRecord(g)))
             : mergePendingGradeSavesIntoGrades(get().grades);
 
-          const opportunityLogs = (serverData.opportunityLogs || []).map((ol: Record<string, unknown>) => ({
-            ...ol,
-            amount: Number(ol.amount || 0),
-            date: ol.date ? String(ol.date).slice(0, 10) : todayISO(),
-          })) as OpportunityLog[];
+          const opportunityLogs = serverData.opportunityLogs
+            ? serverData.opportunityLogs.map((ol: Record<string, unknown>) => ({
+                ...ol,
+                amount: Number(ol.amount || 0),
+                date: ol.date ? String(ol.date).slice(0, 10) : todayISO(),
+              })) as OpportunityLog[]
+            : get().opportunityLogs;
 
-          const studentLeaves = (serverData.studentLeaves || []).map((leave: Record<string, unknown>) => normalizeStudentLeave({
-            ...leave,
-            date: leave.date ? String(leave.date).slice(0, 10) : todayISO(),
-            dateFrom: leave.dateFrom ? String(leave.dateFrom).slice(0, 10) : (leave.date ? String(leave.date).slice(0, 10) : todayISO()),
-            dateTo: leave.dateTo ? String(leave.dateTo).slice(0, 10) : (leave.date ? String(leave.date).slice(0, 10) : todayISO()),
-          }));
+          const studentLeaves = serverData.studentLeaves
+            ? serverData.studentLeaves.map((leave: Record<string, unknown>) => normalizeStudentLeave({
+                ...leave,
+                date: leave.date ? String(leave.date).slice(0, 10) : todayISO(),
+                dateFrom: leave.dateFrom ? String(leave.dateFrom).slice(0, 10) : (leave.date ? String(leave.date).slice(0, 10) : todayISO()),
+                dateTo: leave.dateTo ? String(leave.dateTo).slice(0, 10) : (leave.date ? String(leave.date).slice(0, 10) : todayISO()),
+              }))
+            : get().studentLeaves;
 
-          const studentCalls = (serverData.studentCalls || []).map((call: Record<string, unknown>) => ({
-            ...call,
-            examId: String(call.examId || ''),
-            status: String(call.status || (call.completed ? 'تم الاتصال' : 'لم يرد')),
-            completed: Boolean(call.completed),
-            completedAt: call.completedAt ? String(call.completedAt) : '',
-            createdAt: call.createdAt ? String(call.createdAt).slice(0, 10) : todayISO(),
-            notes: String(call.notes || ''),
-          })) as StudentCall[];
+          const studentCalls = serverData.studentCalls
+            ? serverData.studentCalls.map((call: Record<string, unknown>) => ({
+                ...call,
+                examId: String(call.examId || ''),
+                status: String(call.status || (call.completed ? 'تم الاتصال' : 'لم يرد')),
+                completed: Boolean(call.completed),
+                completedAt: call.completedAt ? String(call.completedAt) : '',
+                createdAt: call.createdAt ? String(call.createdAt).slice(0, 10) : todayISO(),
+                notes: String(call.notes || ''),
+              })) as StudentCall[]
+            : get().studentCalls;
 
-          const studentNotes = (serverData.studentNotes || []).map((note: Record<string, unknown>) => ({
-            ...note,
-            kind: String(note.kind || ''),
-            text: String(note.text || ''),
-            sourceType: String(note.sourceType || ''),
-            sourceId: String(note.sourceId || ''),
-            dismissalKey: String(note.dismissalKey || ''),
-            dismissalType: String(note.dismissalType || ''),
-            dismissalReason: String(note.dismissalReason || ''),
-            dismissalDate: note.dismissalDate ? String(note.dismissalDate).slice(0, 10) : '',
-            date: note.date ? String(note.date).slice(0, 10) : todayISO(),
-          })) as StudentNote[];
+          const studentNotes = serverData.studentNotes
+            ? serverData.studentNotes.map((note: Record<string, unknown>) => ({
+                ...note,
+                kind: String(note.kind || ''),
+                text: String(note.text || ''),
+                sourceType: String(note.sourceType || ''),
+                sourceId: String(note.sourceId || ''),
+                dismissalKey: String(note.dismissalKey || ''),
+                dismissalType: String(note.dismissalType || ''),
+                dismissalReason: String(note.dismissalReason || ''),
+                dismissalDate: note.dismissalDate ? String(note.dismissalDate).slice(0, 10) : '',
+                date: note.date ? String(note.date).slice(0, 10) : todayISO(),
+              })) as StudentNote[]
+            : get().studentNotes;
 
-          const correctionSheets = (serverData.correctionSheets || []).map((cs: Record<string, unknown>) => ({
-            ...cs,
-            correctionErrors: Number(cs.correctionErrors || 0),
-            sumErrors: Number(cs.sumErrors || 0),
-          })) as CorrectionSheet[];
+          const correctionSheets = serverData.correctionSheets
+            ? serverData.correctionSheets.map((cs: Record<string, unknown>) => ({
+                ...cs,
+                correctionErrors: Number(cs.correctionErrors || 0),
+                sumErrors: Number(cs.sumErrors || 0),
+              })) as CorrectionSheet[]
+            : get().correctionSheets;
 
           const parsedUsers = (serverData.users || []).map((u: Record<string, unknown>) => ({
             ...u,
@@ -1977,14 +1998,16 @@ export const useTeacherStore = create<TeacherState>()(
                 ? loadedAdmin.id
                 : get().currentUserId;
 
-          const logs = (serverData.logs || []).map((l: Record<string, unknown>) => ({
-            id: String(l.id || uid('log')),
-            user: String(l.user || l.userName || 'مدير النظام'),
-            module: String(l.module || ''),
-            action: String(l.action || ''),
-            details: String(l.details || ''),
-            time: l.time ? String(l.time) : nowText(),
-          })) as LogEntry[];
+          const logs = serverData.logs
+            ? serverData.logs.map((l: Record<string, unknown>) => ({
+                id: String(l.id || uid('log')),
+                user: String(l.user || l.userName || 'مدير النظام'),
+                module: String(l.module || ''),
+                action: String(l.action || ''),
+                details: String(l.details || ''),
+                time: l.time ? String(l.time) : nowText(),
+              })) as LogEntry[]
+            : get().logs;
 
           set({
             courses, chapters, courseChapters, students,
@@ -2007,6 +2030,113 @@ export const useTeacherStore = create<TeacherState>()(
           console.warn('[Store] Failed to load from server:', e);
           set({ dbLoading: false, dbConnected: false });
           return false;
+        }
+      },
+
+
+      loadSectionDataFromServer: async (section) => {
+        if (!get().isAuthenticated) return;
+
+        const nextState: Partial<TeacherState> = {};
+
+        try {
+          if ([
+            'courses',
+            'chapters',
+            'exam-new',
+            'grade-entry',
+          ].includes(section)) {
+            const data = await courseChapterApi.list();
+            if (data?.courseChapters) {
+              nextState.courseChapters = data.courseChapters.map((cc: Record<string, unknown>) => ({
+                ...cc,
+                active: Boolean(cc.active),
+                archived: Boolean(cc.archived),
+                archive: parseArrayField<ArchiveEntry>(cc.archive),
+              })) as CourseChapter[];
+            }
+          }
+
+          if (section === 'opportunities') {
+            const data = await opportunityLogApi.list();
+            if (data?.opportunityLogs) {
+              nextState.opportunityLogs = data.opportunityLogs.map((ol: Record<string, unknown>) => ({
+                ...ol,
+                amount: Number(ol.amount || 0),
+                date: ol.date ? String(ol.date).slice(0, 10) : todayISO(),
+              })) as OpportunityLog[];
+            }
+          }
+
+          if (['follow-up', 'follow-up-calls', 'follow-up-leaves', 'follow-up-pledges', 'dismissed-students'].includes(section)) {
+            const [leavesData, callsData, notesData] = await Promise.all([
+              studentLeaveApi.list(),
+              studentCallApi.list(),
+              studentNoteApi.list(),
+            ]);
+            if (leavesData?.studentLeaves) {
+              nextState.studentLeaves = leavesData.studentLeaves.map((leave: Record<string, unknown>) => normalizeStudentLeave({
+                ...leave,
+                date: leave.date ? String(leave.date).slice(0, 10) : todayISO(),
+                dateFrom: leave.dateFrom ? String(leave.dateFrom).slice(0, 10) : (leave.date ? String(leave.date).slice(0, 10) : todayISO()),
+                dateTo: leave.dateTo ? String(leave.dateTo).slice(0, 10) : (leave.date ? String(leave.date).slice(0, 10) : todayISO()),
+              }));
+            }
+            if (callsData?.studentCalls) {
+              nextState.studentCalls = callsData.studentCalls.map((call: Record<string, unknown>) => ({
+                ...call,
+                examId: String(call.examId || ''),
+                status: String(call.status || (call.completed ? 'تم الاتصال' : 'لم يرد')),
+                completed: Boolean(call.completed),
+                completedAt: call.completedAt ? String(call.completedAt) : '',
+                createdAt: call.createdAt ? String(call.createdAt).slice(0, 10) : todayISO(),
+                notes: String(call.notes || ''),
+              })) as StudentCall[];
+            }
+            if (notesData?.studentNotes) {
+              nextState.studentNotes = notesData.studentNotes.map((note: Record<string, unknown>) => ({
+                ...note,
+                kind: String(note.kind || ''),
+                text: String(note.text || ''),
+                sourceType: String(note.sourceType || ''),
+                sourceId: String(note.sourceId || ''),
+                dismissalKey: String(note.dismissalKey || ''),
+                dismissalType: String(note.dismissalType || ''),
+                dismissalReason: String(note.dismissalReason || ''),
+                dismissalDate: note.dismissalDate ? String(note.dismissalDate).slice(0, 10) : '',
+                date: note.date ? String(note.date).slice(0, 10) : todayISO(),
+              })) as StudentNote[];
+            }
+          }
+
+          if (section === 'e-correction') {
+            const data = await correctionSheetApi.list();
+            if (data?.correctionSheets) {
+              nextState.correctionSheets = data.correctionSheets.map((cs: Record<string, unknown>) => ({
+                ...cs,
+                correctionErrors: Number(cs.correctionErrors || 0),
+                sumErrors: Number(cs.sumErrors || 0),
+              })) as CorrectionSheet[];
+            }
+          }
+
+          if (section === 'logs' || section === 'admin-log-reset') {
+            const data = await logApi.list();
+            if (data?.logs) {
+              nextState.logs = data.logs.map((l: Record<string, unknown>) => ({
+                id: String(l.id || uid('log')),
+                user: String(l.user || l.userName || 'مدير النظام'),
+                module: String(l.module || ''),
+                action: String(l.action || ''),
+                details: String(l.details || ''),
+                time: l.time ? String(l.time) : nowText(),
+              })) as LogEntry[];
+            }
+          }
+
+          if (Object.keys(nextState).length > 0) set(nextState);
+        } catch (error) {
+          console.warn('[Store] Failed to lazy-load section data:', section, error);
         }
       },
 
@@ -2701,64 +2831,6 @@ export const useTeacherStore = create<TeacherState>()(
         get().logAction('الدرجات', existing ? 'تعديل درجة' : 'إدخال درجة', `${get().studentName(grade.studentId)} - ${stateBefore.exams.find((e) => e.id === grade.examId)?.name || ''}`);
         queueGradeSaves(get, [grade]);
         get().recalculateAcademicEffects(grade.studentId);
-      },
-      bulkAddGrades: (gradeItems) => {
-        const stateBefore = get();
-        const now = todayISO();
-        const validItems = gradeItems.filter((item) => {
-          if (isStudentExcusedForExam(stateBefore, item.studentId, item.examId)) {
-            const examName = stateBefore.exams.find((exam) => exam.id === item.examId)?.name || '';
-            get().logAction('الدرجات', 'رفض إدخال جماعي لطالب مجاز', `${get().studentName(item.studentId)} - ${examName}`);
-            return false;
-          }
-          return true;
-        });
-
-        if (validItems.length === 0) return { added: 0, updated: 0 };
-
-        const affectedStudentIds = new Set<string>();
-        const nextGrades = [...stateBefore.grades];
-        const gradesToSync: Grade[] = [];
-        let added = 0;
-        let updated = 0;
-
-        validItems.forEach((item) => {
-          const existingIndex = nextGrades.findIndex((grade) => grade.studentId === item.studentId && grade.examId === item.examId);
-          const normalized: Grade = existingIndex >= 0
-            ? {
-                ...nextGrades[existingIndex],
-                ...item,
-                status: item.status,
-                score: item.score,
-                notes: item.notes,
-                academicAccountingChecked: Boolean(item.academicAccountingChecked),
-                updatedAt: now,
-              }
-            : {
-                ...item,
-                id: uid('gr'),
-                academicAccountingChecked: Boolean(item.academicAccountingChecked),
-                createdAt: now,
-                updatedAt: now,
-              };
-
-          if (existingIndex >= 0) {
-            nextGrades[existingIndex] = normalized;
-            updated += 1;
-          } else {
-            nextGrades.push(normalized);
-            added += 1;
-          }
-          gradesToSync.push(normalized);
-          affectedStudentIds.add(normalized.studentId);
-        });
-
-        set({ grades: nextGrades });
-        const examNames = Array.from(new Set(gradesToSync.map((grade) => stateBefore.exams.find((exam) => exam.id === grade.examId)?.name || 'امتحان'))).join('، ');
-        get().logAction('الدرجات', 'إضافة درجات جماعية', `${gradesToSync.length} درجة - ${examNames}`);
-        queueGradeSaves(get, gradesToSync);
-        get().recalculateAcademicEffects(Array.from(affectedStudentIds));
-        return { added, updated };
       },
       updateGrade: (id, updates) => {
         const stateBefore = get();

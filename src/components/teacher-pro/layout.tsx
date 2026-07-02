@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import {
   LayoutDashboard,
@@ -8,7 +8,7 @@ import {
   BookMarked,
   UserPlus,
   ClipboardList,
-  ClipboardCheck,
+  
   UsersRound,
   UserX,
   FileText,
@@ -84,7 +84,6 @@ const menuItems: {
   { id: "dismissed-students", title: "المفصولون", sub: "قائمة", icon: UserX },
   { id: "exam-new", title: "إضافة الامتحان", sub: "القواعد", icon: FileText },
   { id: "grade-entry", title: "تسجيل الدرجات", sub: "إدخال", icon: PenTool },
-  { id: "grade-bulk-import", title: "إضافة درجات جماعية", sub: "لصق ومعاينة", icon: ClipboardCheck },
   { id: "exam-records", title: "سجل الامتحانات", sub: "PDF", icon: FileCheck },
   { id: "grade-records", title: "سجل الدرجات", sub: "سجل", icon: BarChart3 },
   { id: "opportunities", title: "إدارة الفرص", sub: "خصم/إضافة", icon: Target },
@@ -108,7 +107,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
   { title: "الطلاب", itemIds: ["student-register", "student-bulk-import", "student-registry", "dismissed-students"] },
   {
     title: "الامتحانات والدرجات",
-    itemIds: ["exam-new", "grade-entry", "grade-bulk-import", "exam-records", "grade-records", "missing-students-notes"],
+    itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records", "missing-students-notes"],
   },
   { title: "المتابعة", itemIds: ["follow-up-calls", "follow-up-leaves", "follow-up-pledges"] },
   { title: "الإدارة", itemIds: ["accounts", "logs", "admin-log-reset"] },
@@ -148,7 +147,6 @@ import { StudentRegistryView } from "./student-registry";
 import { DismissedStudentsView } from "./dismissed-students";
 import { ExamNewView } from "./exam-new";
 import { GradeEntryView } from "./grade-entry";
-import { GradeBulkImportView } from "./grade-bulk-import";
 import { MissingStudentsNotesView } from "./missing-students-notes";
 import { ExamRecordsView } from "./exam-records";
 import { GradeRecordsView } from "./grade-records";
@@ -170,7 +168,6 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "dismissed-students": DismissedStudentsView,
   "exam-new": ExamNewView,
   "grade-entry": GradeEntryView,
-  "grade-bulk-import": GradeBulkImportView,
   "missing-students-notes": MissingStudentsNotesView,
   "exam-records": ExamRecordsView,
   "grade-records": GradeRecordsView,
@@ -207,7 +204,7 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
   };
 
   return (
-    <div className="app-bg min-h-screen flex items-center justify-center bg-background p-4" dir="rtl">
+    <div className="app-bg min-h-dvh flex items-center justify-center bg-background p-4" dir="rtl">
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,rgba(147,51,234,0.18),transparent_32rem)]" />
       <div className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-border/70 bg-card/95 shadow-2xl backdrop-blur-xl">
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-primary via-fuchsia-500 to-indigo-500" />
@@ -278,8 +275,11 @@ export function TeacherProLayout() {
     dbConnected,
     dbLoading,
     loadFromServer,
+    loadSectionDataFromServer,
     restoreSession,
   } = useTeacherStore();
+
+  const lazyLoadedSectionsRef = useRef<Set<SectionId>>(new Set());
 
   const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>(() => {
     // Open all families by default
@@ -436,6 +436,13 @@ export function TeacherProLayout() {
   }, [initDone, isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated || dbLoading) return;
+    if (lazyLoadedSectionsRef.current.has(currentSection)) return;
+    lazyLoadedSectionsRef.current.add(currentSection);
+    void loadSectionDataFromServer(currentSection);
+  }, [currentSection, dbLoading, isAuthenticated, loadSectionDataFromServer]);
+
+  useEffect(() => {
     if (!isAuthenticated) return;
     const timer = window.setInterval(() => {
       void restoreSession();
@@ -532,7 +539,7 @@ export function TeacherProLayout() {
 
   if (!authChecked) {
     return (
-      <div className="app-bg flex min-h-screen items-center justify-center bg-background p-6" dir="rtl">
+      <div className="app-bg flex min-h-dvh items-center justify-center bg-background p-6" dir="rtl">
         <div className="w-full max-w-md">
           <LoadingState
             title="جاري التحقق من الجلسة..."
@@ -548,7 +555,7 @@ export function TeacherProLayout() {
   }
 
   return (
-    <div className="app-bg flex h-screen min-h-screen overflow-hidden bg-background" dir="rtl">
+    <div className="app-bg flex h-dvh min-h-dvh overflow-hidden bg-background" dir="rtl">
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
@@ -558,7 +565,7 @@ export function TeacherProLayout() {
 
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 right-0 z-50 w-[19rem] h-screen lg:h-auto bg-sidebar text-sidebar-foreground border-l border-sidebar-border flex flex-col transition-transform duration-300 overflow-hidden shadow-2xl lg:shadow-none",
+          "fixed lg:static inset-y-0 right-0 z-50 w-[19rem] h-dvh lg:h-auto bg-sidebar text-sidebar-foreground border-l border-sidebar-border flex flex-col transition-transform duration-300 overflow-hidden shadow-2xl lg:shadow-none",
           sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
         )}
       >
@@ -848,7 +855,7 @@ export function TeacherProLayout() {
         </div>
       </aside>
 
-      <main className="flex h-screen min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="flex h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="sticky top-0 z-30 border-b border-border/70 bg-background/75 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65">
           <div className="flex items-center justify-between gap-2 px-3 py-2 md:px-6 md:py-3">
             <div className="flex items-center gap-2 md:gap-3">
