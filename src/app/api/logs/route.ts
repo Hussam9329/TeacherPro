@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthPrincipal, requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
+import { routeErrorResponse } from '@/lib/route-helpers';
 
 /**
  * Whitelist of (module, action) pairs the CLIENT is allowed to write.
