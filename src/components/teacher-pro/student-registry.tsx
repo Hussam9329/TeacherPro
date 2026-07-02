@@ -262,6 +262,62 @@ function StudentFileItem({
   );
 }
 
+function looksLikeTelegramIdentifierSearch(query: string): boolean {
+  const trimmed = toLatinDigits(query).trim();
+  const telegramKey = normalizeTelegramIdentifier(trimmed);
+  if (telegramKey.length < 3) return false;
+  return (
+    /^@?[A-Za-z0-9_]+$/.test(trimmed) &&
+    (trimmed.startsWith("@") || /[A-Za-z_]/.test(trimmed))
+  );
+}
+
+function studentMatchesExactIdentifierSearch(student: Student, query: string): boolean {
+  const trimmed = toLatinDigits(query).trim();
+  const queryTelegramKey = normalizeTelegramIdentifier(trimmed);
+  const studentTelegramKey = normalizeTelegramIdentifier(student.telegram);
+  const queryCode = trimmed.toLocaleLowerCase("ar-IQ");
+  const studentCode = String(student.code ?? "").trim().toLocaleLowerCase("ar-IQ");
+
+  if (studentTelegramKey && studentTelegramKey === queryTelegramKey) return true;
+  if (!trimmed.startsWith("@") && studentCode && studentCode === queryCode) return true;
+  return false;
+}
+
+function studentMatchesPrefixIdentifierSearch(student: Student, query: string): boolean {
+  const trimmed = toLatinDigits(query).trim();
+  const queryTelegramKey = normalizeTelegramIdentifier(trimmed);
+  const studentTelegramKey = normalizeTelegramIdentifier(student.telegram);
+  const queryCode = trimmed.toLocaleLowerCase("ar-IQ");
+  const studentCode = String(student.code ?? "").trim().toLocaleLowerCase("ar-IQ");
+
+  if (studentTelegramKey && studentTelegramKey.startsWith(queryTelegramKey)) return true;
+  if (!trimmed.startsWith("@") && studentCode && studentCode.startsWith(queryCode)) return true;
+  return false;
+}
+
+function studentMatchesRegistrySearch(
+  student: Student,
+  query: string,
+  hasExactIdentifierMatch: boolean,
+): boolean {
+  if (!query.trim()) return true;
+
+  if (looksLikeTelegramIdentifierSearch(query)) {
+    return hasExactIdentifierMatch
+      ? studentMatchesExactIdentifierSearch(student, query)
+      : studentMatchesPrefixIdentifierSearch(student, query);
+  }
+
+  return searchAny(query, [
+    student.name,
+    student.code,
+    student.telegram,
+    student.phone,
+    student.parentPhone,
+  ]);
+}
+
 export function StudentRegistryView() {
   const {
     students,
@@ -742,16 +798,20 @@ export function StudentRegistryView() {
   });
 
   const localFiltered = useMemo(() => {
+    const hasExactIdentifierMatch =
+      looksLikeTelegramIdentifierSearch(debouncedSearch) &&
+      students.some((student) =>
+        studentMatchesExactIdentifierSearch(student, debouncedSearch),
+      );
+
     return students.filter((s) => {
       if (
         debouncedSearch &&
-        !searchAny(debouncedSearch, [
-          s.name,
-          s.code,
-          s.telegram,
-          s.phone,
-          s.parentPhone,
-        ])
+        !studentMatchesRegistrySearch(
+          s,
+          debouncedSearch,
+          hasExactIdentifierMatch,
+        )
       )
         return false;
       if (filterStatus && s.status !== filterStatus) return false;
