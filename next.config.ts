@@ -25,7 +25,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   /* config options here */
-  reactStrictMode: false,
+  reactStrictMode: true,
   async headers() {
     return [
       {
