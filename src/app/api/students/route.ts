@@ -391,7 +391,7 @@ export async function POST(req: NextRequest) {
     phone: body.phone,
     telegram: body.telegram,
   });
-  const duplicateConditions = [];
+  const duplicateConditions: Record<string, string>[] = [];
   if (nameKey) duplicateConditions.push({ nameKey });
   if (phoneKey) duplicateConditions.push({ phoneKey });
   if (telegramKey) duplicateConditions.push({ telegramKey });
@@ -551,7 +551,7 @@ export async function PUT(req: NextRequest) {
       phone: data.phone ?? current?.phone,
       telegram: data.telegram ?? current?.telegram,
     });
-    const updateDuplicateConditions = [];
+    const updateDuplicateConditions: Record<string, string>[] = [];
     if (updateNameKey) updateDuplicateConditions.push({ nameKey: updateNameKey });
     if (updatePhoneKey) updateDuplicateConditions.push({ phoneKey: updatePhoneKey });
     if (updateTelegramKey) updateDuplicateConditions.push({ telegramKey: updateTelegramKey });
