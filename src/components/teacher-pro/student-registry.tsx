@@ -693,15 +693,15 @@ export function StudentRegistryView() {
       phone: form.phone.trim(),
       parentPhone: form.parentPhone.trim(),
       telegram: sanitizeTelegramInput(form.telegram),
-      courseProgram: (editEffectiveCourseProgram || "") as string,
+      courseProgram: (editEffectiveCourseProgram || "") as any,
       courseTerm: (editEffectiveCourseProgram === "كورسات"
         ? form.courseTerm
-        : "") as string,
-      studyType: form.studyType as string,
-      locationScope: form.locationScope as string,
+        : "") as any,
+      studyType: form.studyType as any,
+      locationScope: form.locationScope as any,
       baghdadMode: (form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE
         ? ""
-        : form.baghdadMode || editBaghdadMode || "") as string,
+        : form.baghdadMode || editBaghdadMode || "") as any,
       courseId: form.courseId,
       mainSite: form.locationScope,
       subSite:
