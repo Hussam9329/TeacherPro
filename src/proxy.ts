@@ -7,7 +7,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  * Global CSRF guard. Any non-GET request to /api/* must come with a
  * valid Origin or Referer that matches the deployed host.
  */
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const url = new URL(req.url);
   if (!url.pathname.startsWith('/api/')) return NextResponse.next();
   if (url.pathname.startsWith('/api/telegram-exam-submissions')) {
