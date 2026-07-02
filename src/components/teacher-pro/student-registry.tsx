@@ -386,10 +386,19 @@ export function StudentRegistryView() {
   const { locked: isDeletingStudent, runLocked: runDeleteStudentLocked } =
     useActionLock();
   const debouncedSearch = useDebouncedValue(search, 180);
-  const locationFilterOptions = useMemo(
-    () => getStudentLocationFilterOptions(students),
-    [students],
-  );
+  // Fetch location filter options from server (distinct query, not all students)
+  const [locationFilterOptions, setLocationFilterOptions] = useState<{ scope: string; subSite: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/students/filter-options", { credentials: "same-origin" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.locations) setLocationFilterOptions(data.locations);
+      })
+      .catch(() => {
+        // Fallback to local computation if server fails
+        setLocationFilterOptions(getStudentLocationFilterOptions(students));
+      });
+  }, [students]);
 
   useEffect(() => {
     let cancelled = false;
@@ -904,7 +913,10 @@ export function StudentRegistryView() {
     toast.success("تم إعادة تفعيل الطالب");
   };
 
-  const studentExportRows = localFiltered.map((student) => ({
+  // Export rows: use current filtered results (server or local).
+  // For full server-side export, the ExportDialog fetches from /api/students/export
+  // with the same filter params — this local mapping is for preview only.
+  const studentExportRows = (usingServerStudents ? serverStudents! : localFiltered).map((student) => ({
     ...student,
     courseName: courseName(student.courseId),
     locationText: `${student.locationScope || student.mainSite || ""} - ${student.subSite || ""}`,
