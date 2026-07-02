@@ -1,6 +1,7 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
@@ -43,17 +44,63 @@ async function validateGradePayload(body: Record<string, unknown>) {
   return null;
 }
 
+function parsePositiveInt(value: string | null, fallback: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, 'grades.view');
   if (authError) return authError;
 
   try {
-    await ensureExamSchema();
+    const { searchParams } = new URL(req.url);
+    const examId = String(searchParams.get('examId') || '').trim();
+    const studentId = String(searchParams.get('studentId') || '').trim();
+    const status = String(searchParams.get('status') || '').trim();
+    const hasListParams = ['examId', 'studentId', 'status', 'page', 'pageSize'].some((key) => searchParams.has(key));
 
-    // ترحيل آمن للبيانات القديمة: حالة الإجازة صارت تدار من StudentLeave وليس من grades.
-    await db.grade.updateMany({ where: { status: 'مجاز' }, data: { status: 'غائب' } }).catch(() => null);
-    const grades = await db.grade.findMany({ orderBy: { updatedAt: 'desc' }, include: { student: true, exam: true } });
-    return NextResponse.json({ grades });
+    const where: Prisma.GradeWhereInput = {};
+    if (examId) where.examId = examId;
+    if (studentId) where.studentId = studentId;
+    if (status) where.status = status;
+
+    // Important: GET must stay read-only. Legacy data repair is handled by
+    // Prisma migration 20260702002000_grade_status_cleanup_and_indexes, not by
+    // this read endpoint.
+    if (!hasListParams) {
+      const grades = await db.grade.findMany({
+        orderBy: { updatedAt: 'desc' },
+        include: { student: true, exam: true },
+      });
+      return NextResponse.json({ grades });
+    }
+
+    const page = parsePositiveInt(searchParams.get('page'), 1, 1_000_000);
+    const pageSize = parsePositiveInt(searchParams.get('pageSize'), 100, 500);
+    const skip = (page - 1) * pageSize;
+
+    const [totalCount, grades] = await Promise.all([
+      db.grade.count({ where }),
+      db.grade.findMany({
+        where,
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take: pageSize,
+        include: { student: true, exam: true },
+      }),
+    ]);
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+    return NextResponse.json({
+      grades,
+      totalCount,
+      page,
+      pageSize,
+      totalPages,
+      hasMore: page < totalPages,
+    });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل الدرجات حالياً.');
   }

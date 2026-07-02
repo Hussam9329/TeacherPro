@@ -132,6 +132,8 @@ model Grade {
 
   @@unique([studentId, examId])
   @@index([examId])
+  @@index([status])
+  @@index([updatedAt])
 }
 
 model OpportunityLog {

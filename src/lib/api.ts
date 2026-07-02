@@ -415,6 +415,23 @@ export interface StudentListResponse {
   hasMore: boolean;
 }
 
+export interface GradeListQuery {
+  examId?: string;
+  studentId?: string;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface GradeListResponse {
+  grades: Array<Record<string, unknown>>;
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
 function buildQueryString(
   params: Record<string, string | number | undefined>,
 ): string {
@@ -564,6 +581,20 @@ export const examApi = {
 // ─── Grade API ────────────────────────────────────────────────────────────────
 
 export const gradeApi = {
+  list: async (
+    query: GradeListQuery = {},
+  ): Promise<GradeListResponse | null> => {
+    const queryString = buildQueryString({
+      examId: query.examId,
+      studentId: query.studentId,
+      status: query.status,
+      page: query.page,
+      pageSize: query.pageSize,
+    });
+    return apiGet<GradeListResponse>(
+      `grades${queryString ? `?${queryString}` : ""}`,
+    );
+  },
   add: (grade: Record<string, unknown>) => apiPost("grades", grade),
   bulkAdd: (grades: Array<Record<string, unknown>>) =>
     apiPost("grades/bulk", { grades }),
