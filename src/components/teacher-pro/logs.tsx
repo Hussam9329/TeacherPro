@@ -19,7 +19,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 
 
-const logExportColumns: ExportColumn<Record<string, unknown>>[] = [
+const logExportColumns: ExportColumn<any>[] = [
   { key: "time", label: "الوقت", value: (log) => log.time || "" },
   { key: "user", label: "المستخدم", value: (log) => log.user || "" },
   { key: "module", label: "الوحدة", value: (log) => log.module || "" },

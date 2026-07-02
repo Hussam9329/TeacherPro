@@ -44,7 +44,7 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 
 
-const examGradeExportColumns: ExportColumn<Record<string, unknown>>[] = [
+const examGradeExportColumns: ExportColumn<any>[] = [
   { key: "index", label: "#", value: (row) => Number(row.index ?? 0) + 1 },
   { key: "code", label: "الكود", value: (row) => row.student?.code || "" },
   { key: "student", label: "الطالب", value: (row) => row.student?.name || "" },
