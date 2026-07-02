@@ -387,12 +387,16 @@ export function StudentRegistryView() {
     useActionLock();
   const debouncedSearch = useDebouncedValue(search, 180);
   // Fetch location filter options from server (distinct query, not all students)
-  const [locationFilterOptions, setLocationFilterOptions] = useState<{ scope: string; subSite: string }[]>([]);
+  const [locationFilterOptions, setLocationFilterOptions] = useState<string[]>([]);
   useEffect(() => {
     fetch("/api/students/filter-options", { credentials: "same-origin" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.locations) setLocationFilterOptions(data.locations);
+        if (data?.locations) {
+          // Extract unique scope values for the dropdown
+          const scopes = Array.from(new Set(data.locations.map((l: { scope: string }) => l.scope).filter(Boolean)));
+          setLocationFilterOptions(scopes);
+        }
       })
       .catch(() => {
         // Fallback to local computation if server fails
