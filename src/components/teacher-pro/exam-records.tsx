@@ -45,7 +45,7 @@ import { ExportDialog, type ExportColumn } from "./export-dialog";
 
 
 const examGradeExportColumns: ExportColumn<Record<string, unknown>>[] = [
-  { key: "index", label: "#", value: (row) => row.index + 1 },
+  { key: "index", label: "#", value: (row) => Number(row.index ?? 0) + 1 },
   { key: "code", label: "الكود", value: (row) => row.student?.code || "" },
   { key: "student", label: "الطالب", value: (row) => row.student?.name || "" },
   { key: "course", label: "الدورة", value: (row) => row.courseName || "" },
