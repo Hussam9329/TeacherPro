@@ -19,17 +19,45 @@ import { useActionLock } from '@/hooks/use-action-lock';
 
 // ─── Permission categories for grouping ──────────────────────────────────────
 
-const PERMISSION_CATEGORIES = [
-  'النظام', 'الدورات', 'المواقع', 'الفصول',
-  'الطلاب', 'الامتحانات', 'الدرجات', 'الفرص', 'التصحيح',
-  'واتساب', 'الحسابات', 'السجلات', 'نسخ الديمو',
+const PREFERRED_PERMISSION_CATEGORIES = [
+  'النظام',
+  'الدورات',
+  'الفصول',
+  'الطلاب',
+  'الامتحانات',
+  'الدرجات',
+  'الفرص',
+  'المتابعة',
+  'التصحيح',
+  'التصحيح الإلكتروني',
+  'الحسابات',
+  'السجلات',
+  'المواقع',
+  'واتساب',
+  'نسخ الديمو',
 ];
 
-const ACCOUNT_DIALOG_CONTENT_CLASS = 'max-h-[88vh] max-w-2xl overflow-hidden p-0 flex flex-col';
+const ALL_PERMISSION_CATEGORIES = Array.from(new Set(PERMISSION_CATALOG.map(permission => permission.category))) as string[];
+const PERMISSION_CATEGORIES: string[] = [
+  ...PREFERRED_PERMISSION_CATEGORIES.filter(category => ALL_PERMISSION_CATEGORIES.includes(category)),
+  ...ALL_PERMISSION_CATEGORIES.filter(category => !PREFERRED_PERMISSION_CATEGORIES.includes(category)),
+];
+
+const ACCOUNT_DIALOG_CONTENT_CLASS = 'max-h-[88vh] max-w-3xl overflow-hidden p-0 flex flex-col';
 const ACCOUNT_DIALOG_HEADER_CLASS = 'shrink-0 px-6 pt-6 pb-3';
 const ACCOUNT_DIALOG_BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-6 py-2 space-y-4';
 const ACCOUNT_DIALOG_FOOTER_CLASS = 'shrink-0 border-t bg-background/95 px-6 py-4';
 
+const PERMISSION_LEVEL_LABELS: Record<PermissionEntry['level'], string> = {
+  read: 'عرض',
+  write: 'إضافة/تعديل',
+  delete: 'حذف',
+  manage: 'إدارة',
+};
+
+function normalizePermissionIds(permissions: string[]) {
+  return Array.from(new Set(permissions.filter(Boolean)));
+}
 
 function getPermissionsByCategory(permissions: PermissionEntry[]) {
   const map = new Map<string, PermissionEntry[]>();
@@ -40,6 +68,117 @@ function getPermissionsByCategory(permissions: PermissionEntry[]) {
   return map;
 }
 
+function selectedPermissions(permissions: string[]) {
+  const selected = new Set(normalizePermissionIds(permissions));
+  return PERMISSION_CATALOG.filter(permission => selected.has(permission.id));
+}
+
+function selectedPermissionCategories(permissions: string[]) {
+  const selected = new Set(normalizePermissionIds(permissions));
+  return PERMISSION_CATEGORIES.filter(cat => {
+    const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
+    return catPerms.some(p => selected.has(p));
+  });
+}
+
+function PermissionCategoryBadges({ permissions, limit = 5 }: { permissions: string[]; limit?: number }) {
+  const categories = selectedPermissionCategories(permissions);
+
+  if (categories.length === 0) {
+    return <Badge variant="outline" className="text-[10px]">بدون صلاحيات</Badge>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {categories.slice(0, limit).map(cat => (
+        <Badge key={cat} variant="outline" className="text-[10px]">{cat}</Badge>
+      ))}
+      {categories.length > limit && (
+        <Badge variant="outline" className="text-[10px]">+{categories.length - limit}</Badge>
+      )}
+    </div>
+  );
+}
+
+function PermissionCompactSummary({ permissions }: { permissions: string[] }) {
+  const normalized = normalizePermissionIds(permissions);
+  const selected = new Set(normalized);
+  const categoryRows = PERMISSION_CATEGORIES
+    .map(category => {
+      const categoryPermissions = PERMISSION_CATALOG.filter(permission => permission.category === category);
+      const count = categoryPermissions.filter(permission => selected.has(permission.id)).length;
+      return { category, count, total: categoryPermissions.length };
+    })
+    .filter(row => row.count > 0);
+
+  return (
+    <div className="rounded-xl border bg-muted/25 p-3 text-xs">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="font-semibold">تفصيل مختصر للصلاحيات</span>
+        <Badge variant="secondary" className="text-[10px]">{normalized.length} / {PERMISSION_CATALOG.length}</Badge>
+      </div>
+      {categoryRows.length === 0 ? (
+        <p className="text-muted-foreground">لا توجد صلاحيات مفعّلة لهذا الحساب.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+          {categoryRows.slice(0, 6).map(row => (
+            <div key={row.category} className="flex items-center justify-between rounded-lg border bg-background/70 px-2 py-1">
+              <span className="font-medium">{row.category}</span>
+              <span className="text-muted-foreground">{row.count}/{row.total}</span>
+            </div>
+          ))}
+          {categoryRows.length > 6 && (
+            <div className="rounded-lg border bg-background/70 px-2 py-1 text-muted-foreground">
+              +{categoryRows.length - 6} أقسام أخرى
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PermissionDetailsList({ permissions, showEmpty = false }: { permissions: string[]; showEmpty?: boolean }) {
+  const selected = new Set(normalizePermissionIds(permissions));
+  const catalogByCategory = getPermissionsByCategory(PERMISSION_CATALOG);
+
+  return (
+    <div className="space-y-3">
+      {PERMISSION_CATEGORIES.map(category => {
+        const categoryPermissions = catalogByCategory.get(category) || [];
+        if (categoryPermissions.length === 0) return null;
+        const enabledPermissions = categoryPermissions.filter(permission => selected.has(permission.id));
+        if (!showEmpty && enabledPermissions.length === 0) return null;
+
+        return (
+          <div key={category} className="rounded-xl border bg-background p-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="font-semibold">{category}</div>
+              <Badge variant={enabledPermissions.length === categoryPermissions.length ? 'default' : 'secondary'} className="text-[10px]">
+                {enabledPermissions.length} من {categoryPermissions.length}
+              </Badge>
+            </div>
+            {enabledPermissions.length === 0 ? (
+              <p className="text-xs text-muted-foreground">لا توجد صلاحيات مفعّلة ضمن هذا القسم.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                {enabledPermissions.map(permission => (
+                  <div key={permission.id} className="rounded-lg border bg-muted/20 p-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium">{permission.label}</span>
+                      <Badge variant="outline" className="text-[10px]">{PERMISSION_LEVEL_LABELS[permission.level]}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{permission.description}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function PermissionChecklist({
   perms,
@@ -65,7 +204,7 @@ function PermissionChecklist({
   };
 
   return (
-    <ScrollArea className="max-h-96">
+    <ScrollArea className="max-h-[52vh] rounded-xl border bg-muted/15 p-3">
       <div className="space-y-4">
         {PERMISSION_CATEGORIES.map(cat => {
           const catPerms = catalogByCategory.get(cat);
@@ -75,29 +214,38 @@ function PermissionChecklist({
           const someChecked = catIds.some(p => perms.includes(p));
 
           return (
-            <div key={cat} className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id={`perm-cat-${cat}`}
-                  name={`perm-cat-${cat}`}
-                  checked={allChecked ? true : someChecked ? 'indeterminate' : false}
-                  onCheckedChange={() => toggleCategory(cat)}
-                  disabled={readOnly}
-                />
-                <Label htmlFor={`perm-cat-${cat}`} className="font-semibold text-sm">{cat}</Label>
+            <div key={cat} className="space-y-2 rounded-xl border bg-background p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id={`perm-cat-${cat}`}
+                    name={`perm-cat-${cat}`}
+                    checked={allChecked ? true : someChecked ? 'indeterminate' : false}
+                    onCheckedChange={() => toggleCategory(cat)}
+                    disabled={readOnly}
+                  />
+                  <Label htmlFor={`perm-cat-${cat}`} className="font-semibold text-sm">{cat}</Label>
+                </div>
+                <Badge variant="outline" className="text-[10px]">{catIds.filter(p => perms.includes(p)).length}/{catIds.length}</Badge>
               </div>
-              <div className="grid grid-cols-2 gap-1.5 pr-6">
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {catPerms.map(perm => (
-                  <div key={perm.id} className="flex items-center gap-1.5">
+                  <div key={perm.id} className="flex items-start gap-2 rounded-lg border bg-muted/15 p-2">
                     <Checkbox
                       id={`perm-${perm.id}`}
                       name={`perm-${perm.id}`}
                       checked={perms.includes(perm.id)}
                       onCheckedChange={() => togglePermission(perm.id)}
                       disabled={readOnly}
-                      className="h-3.5 w-3.5"
+                      className="mt-1 h-3.5 w-3.5"
                     />
-                    <Label htmlFor={`perm-${perm.id}`} className="text-xs">{perm.label}</Label>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Label htmlFor={`perm-${perm.id}`} className="text-xs font-semibold">{perm.label}</Label>
+                        <Badge variant="secondary" className="text-[9px]">{PERMISSION_LEVEL_LABELS[perm.level]}</Badge>
+                      </div>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{perm.description}</p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -198,26 +346,9 @@ function RolesTab() {
                   </div>
                 </div>
 
-                <div className="mb-3">
-                  <div className="flex flex-wrap gap-1">
-                    {PERMISSION_CATEGORIES.filter(cat => {
-                      const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                      return catPerms.some(p => displayedRolePermissions.includes(p));
-                    }).slice(0, 5).map(cat => (
-                      <Badge key={cat} variant="outline" className="text-[10px]">{cat}</Badge>
-                    ))}
-                    {PERMISSION_CATEGORIES.filter(cat => {
-                      const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                      return catPerms.some(p => displayedRolePermissions.includes(p));
-                    }).length > 5 && (
-                      <Badge variant="outline" className="text-[10px]">
-                        +{PERMISSION_CATEGORIES.filter(cat => {
-                          const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                          return catPerms.some(p => displayedRolePermissions.includes(p));
-                        }).length - 5}
-                      </Badge>
-                    )}
-                  </div>
+                <div className="mb-3 space-y-3">
+                  <PermissionCategoryBadges permissions={displayedRolePermissions} limit={5} />
+                  <PermissionCompactSummary permissions={displayedRolePermissions} />
                 </div>
 
                 <div className="flex gap-2">
@@ -317,6 +448,7 @@ function UsersTab() {
 
   const [editUserDialog, setEditUserDialog] = useState({ open: false, id: '', name: '', password: '' });
   const [deleteUserDialog, setDeleteUserDialog] = useState({ open: false, id: '', userName: '' });
+  const [detailsUserId, setDetailsUserId] = useState('');
   const { locked: isAddingUser, runLocked: runAddUserLocked } = useActionLock();
   const { locked: isSavingUser, runLocked: runSaveUserLocked } = useActionLock();
   const { locked: isSavingPermissions, runLocked: runSavePermissionsLocked } = useActionLock();
@@ -405,6 +537,18 @@ function UsersTab() {
   const getRoleName = (roleId: string) => roles.find(r => r.id === roleId)?.name || 'غير محدد';
   const generatePasscode = () => String(Math.floor(100000 + Math.random() * 900000));
 
+  const detailsUser = users.find(u => u.id === detailsUserId) || null;
+  const detailsUserRole = detailsUser ? roles.find(r => r.id === detailsUser.roleId) : null;
+  const detailsIsAdmin = Boolean(detailsUser && (detailsUser.username.trim().toLowerCase() === 'admin' || detailsUser.roleId === 'role_admin'));
+  const detailsPermissions = detailsUser
+    ? detailsIsAdmin ? PERMISSION_CATALOG.map(p => p.id) : detailsUser.permissions
+    : [];
+  const detailsRolePermissions = detailsUserRole
+    ? detailsUserRole.id === 'role_admin' ? PERMISSION_CATALOG.map(p => p.id) : detailsUserRole.permissions
+    : [];
+  const detailsExtraPermissions = selectedPermissions(detailsPermissions.filter(permission => !detailsRolePermissions.includes(permission)));
+  const detailsMissingRolePermissions = selectedPermissions(detailsRolePermissions.filter(permission => !detailsPermissions.includes(permission)));
+
 
   return (
     <div className="space-y-4">
@@ -440,32 +584,20 @@ function UsersTab() {
                   </div>
                 </div>
 
-                <div className="mb-3">
-                  <p className="text-xs text-muted-foreground mb-1">الصلاحيات ({displayedUserPermissions.length})</p>
-                  <div className="flex flex-wrap gap-1">
-                    {PERMISSION_CATEGORIES.filter(cat => {
-                      const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                      return catPerms.some(p => displayedUserPermissions.includes(p));
-                    }).slice(0, 4).map(cat => (
-                      <Badge key={cat} variant="outline" className="text-[10px]">{cat}</Badge>
-                    ))}
-                    {PERMISSION_CATEGORIES.filter(cat => {
-                      const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                      return catPerms.some(p => displayedUserPermissions.includes(p));
-                    }).length > 4 && (
-                      <Badge variant="outline" className="text-[10px]">
-                        +{PERMISSION_CATEGORIES.filter(cat => {
-                          const catPerms = PERMISSION_CATALOG.filter(p => p.category === cat).map(p => p.id);
-                          return catPerms.some(p => displayedUserPermissions.includes(p));
-                        }).length - 4}
-                      </Badge>
-                    )}
+                <div className="mb-3 space-y-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">الصلاحيات الفعلية ({displayedUserPermissions.length})</p>
+                    <PermissionCategoryBadges permissions={displayedUserPermissions} limit={4} />
                   </div>
+                  <PermissionCompactSummary permissions={displayedUserPermissions} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
+                  <Button variant="outline" size="sm" className="text-xs" onClick={() => setDetailsUserId(user.id)}>
+                    تفاصيل الصلاحيات
+                  </Button>
                   <Button variant="outline" size="sm" className="text-xs" onClick={() => handleEditPermissions(user.id)}>
-                    {isAdminUser ? 'صلاحيات كاملة' : 'الصلاحيات'}
+                    {isAdminUser ? 'صلاحيات كاملة' : 'تعديل الصلاحيات'}
                   </Button>
                   <Button variant="secondary" size="sm" className="text-xs" onClick={() => openEditUserDialog(user.id)}>
                     تعديل
@@ -495,6 +627,87 @@ function UsersTab() {
           );
         })}
       </div>
+
+      {/* User Permissions Details Dialog */}
+      <Dialog open={!!detailsUserId} onOpenChange={(open) => { if (!open) setDetailsUserId(''); }}>
+        <DialogContent dir="rtl" className={ACCOUNT_DIALOG_CONTENT_CLASS}>
+          <DialogHeader className={ACCOUNT_DIALOG_HEADER_CLASS}>
+            <DialogTitle>تفاصيل صلاحيات الحساب - {detailsUser?.name || ''}</DialogTitle>
+            <DialogDescription>
+              عرض تفصيلي للصلاحيات الفعلية حسب الحساب والدور، حتى تعرف بالضبط شنو يستطيع هذا المستخدم يشوف أو يعدّل.
+            </DialogDescription>
+          </DialogHeader>
+          <div className={ACCOUNT_DIALOG_BODY_CLASS}>
+            {detailsUser && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="rounded-xl border bg-muted/25 p-3">
+                    <p className="text-xs text-muted-foreground">اسم المستخدم</p>
+                    <p className="font-semibold">@{detailsUser.username}</p>
+                  </div>
+                  <div className="rounded-xl border bg-muted/25 p-3">
+                    <p className="text-xs text-muted-foreground">الدور</p>
+                    <p className="font-semibold">{detailsUserRole?.name || 'غير محدد'}</p>
+                  </div>
+                  <div className="rounded-xl border bg-muted/25 p-3">
+                    <p className="text-xs text-muted-foreground">الحالة</p>
+                    <p className="font-semibold">{detailsUser.active ? 'فعال' : 'معطل'}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-primary/5 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">الصلاحيات الفعلية</p>
+                      <p className="text-xs text-muted-foreground">
+                        {detailsIsAdmin
+                          ? 'هذا الحساب مدير عام، لذلك يمتلك كل صلاحيات النظام دائماً.'
+                          : 'هذه هي الصلاحيات التي تُستخدم فعلياً عند دخول هذا الحساب.'}
+                      </p>
+                    </div>
+                    <Badge variant="default">{detailsPermissions.length} صلاحية</Badge>
+                  </div>
+                </div>
+
+                {!detailsIsAdmin && (detailsExtraPermissions.length > 0 || detailsMissingRolePermissions.length > 0) && (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {detailsExtraPermissions.length > 0 && (
+                      <div className="rounded-xl border bg-muted/20 p-3">
+                        <p className="mb-2 text-sm font-semibold">صلاحيات إضافية على الدور</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {detailsExtraPermissions.map(permission => (
+                            <Badge key={permission.id} variant="outline" className="text-[10px]">{permission.label}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {detailsMissingRolePermissions.length > 0 && (
+                      <div className="rounded-xl border bg-muted/20 p-3">
+                        <p className="mb-2 text-sm font-semibold">صلاحيات موجودة بالدور لكنها غير مفعّلة للحساب</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {detailsMissingRolePermissions.map(permission => (
+                            <Badge key={permission.id} variant="outline" className="text-[10px]">{permission.label}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <PermissionDetailsList permissions={detailsPermissions} />
+              </div>
+            )}
+          </div>
+          <DialogFooter className={ACCOUNT_DIALOG_FOOTER_CLASS}>
+            <Button variant="outline" onClick={() => setDetailsUserId('')}>إغلاق</Button>
+            {detailsUser && !detailsIsAdmin && (
+              <Button onClick={() => { const id = detailsUser.id; setDetailsUserId(''); handleEditPermissions(id); }}>
+                تعديل صلاحيات هذا الحساب
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit User Dialog */}
       <Dialog open={editUserDialog.open} onOpenChange={o => setEditUserDialog(prev => ({ ...prev, open: o }))}>

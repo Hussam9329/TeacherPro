@@ -353,8 +353,8 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
   { id: 'follow-up.view', label: 'عرض المتابعة', category: 'المتابعة', level: 'read', description: 'عرض الإجازات والمكالمات وملف الطالب' },
   { id: 'follow-up.manage', label: 'إدارة المتابعة', category: 'المتابعة', level: 'manage', description: 'إضافة الإجازات والمكالمات والملاحظات' },
   // التصحيح
-  { id: 'correction.view', label: 'عرض التصحيح', category: 'التصحيح', level: 'read', description: 'عرض لوحة التصحيح الإلكتروني' },
-  { id: 'correction.manage', label: 'إدارة التصحيح', category: 'التصحيح', level: 'manage', description: 'إضافة وتعديل أوراق التصحيح' },
+  { id: 'correction.view', label: 'عرض التصحيح الإلكتروني', category: 'التصحيح الإلكتروني', level: 'read', description: 'عرض لوحة التصحيح الإلكتروني ومستلمات البوت' },
+  { id: 'correction.manage', label: 'إدارة التصحيح الإلكتروني', category: 'التصحيح الإلكتروني', level: 'manage', description: 'إضافة وتعديل أوراق التصحيح ومستلمات البوت' },
   // الحسابات
   { id: 'accounts.view', label: 'عرض الحسابات', category: 'الحسابات', level: 'read', description: 'عرض قائمة الحسابات' },
   { id: 'accounts.manage', label: 'إدارة الحسابات', category: 'الحسابات', level: 'manage', description: 'إضافة وتعديل وحذف الحسابات' },
