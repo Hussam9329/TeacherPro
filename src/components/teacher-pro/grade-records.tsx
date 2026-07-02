@@ -61,9 +61,12 @@ type GradeStatus = "درجة" | "غائب" | "غش";
 type ViewMode = "cards" | "table";
 
 type GradeExportRow = {
-  grade: Record<string, unknown>;
-  student: Record<string, unknown>;
-  exam: Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  grade: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  student: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  exam: any;
   classificationText: string;
 };
 
