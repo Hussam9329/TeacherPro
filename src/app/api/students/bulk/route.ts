@@ -15,6 +15,7 @@ import {
   resolveSubSite,
   validateStudentCourseChoices,
 } from '@/lib/course-config';
+import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
 
 type BulkStudentPayload = {
   name?: unknown;
@@ -96,6 +97,9 @@ function getPrismaStudentErrorResponse(error: unknown) {
 export async function POST(req: NextRequest) {
   const authError = await requirePermission(req, 'students.add');
   if (authError) return authError;
+
+  const rateLimitError = await checkApiRateLimit(req, API_RATE_LIMITS.bulkStudents);
+  if (rateLimitError) return rateLimitError;
 
   const body = await req.json().catch(() => ({}));
   const rows = Array.isArray(body.students) ? body.students as BulkStudentPayload[] : [];

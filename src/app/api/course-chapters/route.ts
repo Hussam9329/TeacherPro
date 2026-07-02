@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAnyPermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
 
 type ArchiveEntry = { studentId: string; opportunities: number; date?: string };
 
@@ -104,6 +105,11 @@ export async function PUT(req: NextRequest) {
     if (!id) return validationError('تعذر تحديد رابط الفصل بالدورة');
 
     const syncStudentOpportunities = body.syncStudentOpportunities === true;
+    if (syncStudentOpportunities) {
+      const rateLimitError = await checkApiRateLimit(req, API_RATE_LIMITS.studentOpportunitySync);
+      if (rateLimitError) return rateLimitError;
+    }
+
     const updateData: {
       active?: boolean;
       archived?: boolean;

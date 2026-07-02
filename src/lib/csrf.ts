@@ -28,22 +28,34 @@ export function checkOrigin(req: NextRequest): NextResponse | null {
     return null;
   }
 
-  const allowedHosts = new Set([host, 'localhost', '127.0.0.1']);
-  // Also accept Vercel preview domains derived from the host root.
-  const hostRoot = host.split(':')[0];
-  allowedHosts.add(hostRoot);
+  const normalizeHost = (value: string): string => value.trim().toLowerCase().replace(/\.$/, '');
+  const requestHost = normalizeHost(host);
+  const requestHostname = normalizeHost(host.split(':')[0] || host);
+
+  const isLocalhost = (value: string): boolean => value === 'localhost' || value === '127.0.0.1';
 
   const checkUrl = (value: string | null): boolean => {
     if (!value) return false;
     if (value === 'null') return false; // sandboxed iframe origin
     try {
       const url = new URL(value);
-      const urlHost = url.host.split(':')[0] || url.host;
-      if (allowedHosts.has(urlHost) || allowedHosts.has(url.host)) return true;
-      // Allow same root domain (e.g. teacherpro-eight.vercel.app matches vercel.app preview)
-      if (urlHost.endsWith(`.${hostRoot}`) || hostRoot.endsWith(`.${urlHost}`)) {
-        return true;
-      }
+      const urlHost = normalizeHost(url.host);
+      const urlHostname = normalizeHost(url.hostname);
+
+      // Exact same host including port is always valid.
+      if (urlHost === requestHost) return true;
+
+      // Local development may use different ports between tools; keep this
+      // exception limited to localhost/127.0.0.1 only.
+      if (isLocalhost(requestHostname) && isLocalhost(urlHostname)) return true;
+
+      // Production rule: accept only the deployed host itself or a real
+      // subdomain of that host. Never accept the parent domain.
+      // Example: app.example.com accepts api.app.example.com, but does NOT
+      // accept example.com.
+      if (urlHostname === requestHostname) return true;
+      if (urlHostname.endsWith(`.${requestHostname}`)) return true;
+
       return false;
     } catch {
       return false;

@@ -6,6 +6,7 @@ import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { ensureExamSchema } from '@/lib/exam-schema';
+import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
 
 type BulkGradeInput = {
   id?: unknown;
@@ -24,6 +25,9 @@ function asText(value: unknown): string {
 export async function POST(req: NextRequest) {
   const authError = await requirePermission(req, 'grades.add');
   if (authError) return authError;
+
+  const rateLimitError = await checkApiRateLimit(req, API_RATE_LIMITS.bulkGrades);
+  if (rateLimitError) return rateLimitError;
 
   try {
     await ensureExamSchema();

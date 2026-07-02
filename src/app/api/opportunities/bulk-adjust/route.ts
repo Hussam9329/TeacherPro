@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withFollowupTables } from "@/lib/followup-schema";
+import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 
 type StudentUpdatePayload = {
   id?: unknown;
@@ -129,6 +130,9 @@ function normalizeStudentNotes(value: unknown) {
 export async function POST(req: NextRequest) {
   const authError = await requirePermission(req, "opportunities.manage");
   if (authError) return authError;
+
+  const rateLimitError = await checkApiRateLimit(req, API_RATE_LIMITS.bulkOpportunities);
+  if (rateLimitError) return rateLimitError;
 
   try {
     const body = await req.json();

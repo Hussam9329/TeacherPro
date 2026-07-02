@@ -11,6 +11,7 @@ import { routeErrorResponse } from '@/lib/route-helpers';
 import { ensureInitialAdminSeed } from '@/lib/admin-seed';
 import { writeSecurityAudit } from '@/lib/security-audit';
 import { ensureLogClearBackupTable, insertLogClearBackup } from '@/lib/log-clear-backups';
+import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
 
 const CLEAR_SCOPE_DEFINITIONS = {
   'audit-all': {
@@ -146,6 +147,9 @@ export async function POST(req: NextRequest) {
     if (!principal.isAdmin) {
       return NextResponse.json({ error: 'هذه العملية متاحة لمدير النظام فقط.' }, { status: 403 });
     }
+
+    const rateLimitError = await checkApiRateLimit(req, API_RATE_LIMITS.adminHeavy);
+    if (rateLimitError) return rateLimitError;
 
     await ensureInitialAdminSeed();
 
