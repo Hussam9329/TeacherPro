@@ -321,7 +321,7 @@ export function StudentRegisterView() {
 
   useEffect(() => {
     if (!form.studyType) return;
-    if (courseAvailableStudyTypes.includes(form.studyType as any)) return;
+    if (courseAvailableStudyTypes.includes(form.studyType as string)) return;
     queueMicrotask(() => {
       setForm((prev) => ({
         ...prev,
@@ -508,11 +508,11 @@ export function StudentRegisterView() {
         phone: form.phone.trim(),
         parentPhone: form.parentPhone.trim(),
         telegram: sanitizeTelegramInput(form.telegram),
-        courseProgram: effectiveCourseProgram as any,
-        courseTerm: (effectiveCourseProgram === "كورسات" ? form.courseTerm : "") as any,
-        studyType: form.studyType as any,
-        locationScope: form.locationScope as any,
-        baghdadMode: effectiveBaghdadMode as any,
+        courseProgram: effectiveCourseProgram as string,
+        courseTerm: (effectiveCourseProgram === "كورسات" ? form.courseTerm : "") as string,
+        studyType: form.studyType as string,
+        locationScope: form.locationScope as string,
+        baghdadMode: effectiveBaghdadMode as string,
         courseId: form.courseId,
         mainSite: form.locationScope,
         subSite: effectiveSubSite,

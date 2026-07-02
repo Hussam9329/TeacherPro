@@ -84,7 +84,7 @@ import {
   studentMatchesListFilters,
 } from "@/lib/student-list-filters";
 
-const studentExportColumns: ExportColumn<any>[] = [
+const studentExportColumns: ExportColumn<Record<string, unknown>>[] = [
   { key: "code", label: "الكود", value: (s) => s.code || "" },
   { key: "name", label: "الاسم", value: (s) => s.name || "" },
   { key: "school", label: "المدرسة", value: (s) => s.school || "" },
@@ -502,7 +502,7 @@ export function StudentRegistryView() {
 
     if (
       editDialog.form.studyType &&
-      !editAvailableStudyTypes.includes(editDialog.form.studyType as any)
+      !editAvailableStudyTypes.includes(editDialog.form.studyType as string)
     ) {
       patch.studyType = "";
       patch.locationScope = "";
@@ -693,15 +693,15 @@ export function StudentRegistryView() {
       phone: form.phone.trim(),
       parentPhone: form.parentPhone.trim(),
       telegram: sanitizeTelegramInput(form.telegram),
-      courseProgram: (editEffectiveCourseProgram || "") as any,
+      courseProgram: (editEffectiveCourseProgram || "") as string,
       courseTerm: (editEffectiveCourseProgram === "كورسات"
         ? form.courseTerm
-        : "") as any,
-      studyType: form.studyType as any,
-      locationScope: form.locationScope as any,
+        : "") as string,
+      studyType: form.studyType as string,
+      locationScope: form.locationScope as string,
       baghdadMode: (form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE
         ? ""
-        : form.baghdadMode || editBaghdadMode || "") as any,
+        : form.baghdadMode || editBaghdadMode || "") as string,
       courseId: form.courseId,
       mainSite: form.locationScope,
       subSite:

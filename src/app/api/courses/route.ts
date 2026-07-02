@@ -46,7 +46,7 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
   const programs = parseJsonArray<string>(body.availablePrograms);
   if (programs.length === 0) return 'يجب اختيار خيار واحد على الأقل من نوع الدورة';
   for (const p of programs) {
-    if (!COURSE_PROGRAMS.includes(p as any)) return `نوع الدورة "${p}" غير صالح`;
+    if (!COURSE_PROGRAMS.includes(p as string)) return `نوع الدورة "${p}" غير صالح`;
   }
 
   // Validate study types per course program
@@ -56,7 +56,7 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
     const studyTypes = parseJsonArray<string>(studyTypesByProgram[program as keyof StudyTypesByProgram]);
     if (studyTypes.length === 0) return `يجب اختيار نوع دراسة واحد على الأقل لنوع الدورة "${program}"`;
     for (const st of studyTypes) {
-      if (!STUDY_TYPES.includes(st as any)) return `نوع الدراسة "${st}" غير صالح`;
+      if (!STUDY_TYPES.includes(st as string)) return `نوع الدراسة "${st}" غير صالح`;
       studyTypesSet.add(st);
     }
   }
@@ -73,11 +73,11 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
     if (!config.scopes || config.scopes.length === 0)
       return `يجب اختيار بغداد أو محافظات لنوع الدراسة "${studyType}"`;
     for (const scope of config.scopes) {
-      if (!LOCATION_SCOPES.includes(scope as any))
+      if (!LOCATION_SCOPES.includes(scope as string))
         return `الموقع "${scope}" غير صالح`;
     }
     if (config.scopes.includes('بغداد')) {
-      if (!config.baghdadMode || !BAGHDAD_MODES.includes(config.baghdadMode as any))
+      if (!config.baghdadMode || !BAGHDAD_MODES.includes(config.baghdadMode as string))
         return `يجب اختيار نوع بغداد لنوع الدراسة "${studyType}"`;
       if (studyType === 'حضوري' && config.baghdadMode !== 'بغداد - مخصص')
         return 'نوع بغداد للدراسة الحضورية يجب أن يكون بغداد - مخصص';
@@ -92,7 +92,7 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
       }
       for (const prov of config.provinces) {
         const normalizedProvince = normalizeIraqiProvinceName(prov);
-        if (!IRAQI_PROVINCES.includes(normalizedProvince as any))
+        if (!IRAQI_PROVINCES.includes(normalizedProvince as string))
           return `المحافظة "${prov}" غير صالحة`;
       }
     }
@@ -186,19 +186,19 @@ export async function PUT(req: NextRequest) {
       });
 
       for (const student of existingStudents) {
-        if (student.courseProgram && !newPrograms.includes(student.courseProgram as any)) {
+        if (student.courseProgram && !newPrograms.includes(student.courseProgram as string)) {
           return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
         }
         if (student.courseProgram && student.studyType) {
           const newStudyTypesForProgram = getAvailableStudyTypesForProgram(draftCourse, student.courseProgram);
-          if (!newStudyTypesForProgram.includes(student.studyType as any)) {
+          if (!newStudyTypesForProgram.includes(student.studyType as string)) {
             return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
           }
         }
         if (student.studyType && student.locationScope) {
           if (student.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE) continue;
           const studyConfig = newLocationConfig[student.studyType as StudyType];
-          if (studyConfig && !studyConfig.scopes?.includes(student.locationScope as any)) {
+          if (studyConfig && !studyConfig.scopes?.includes(student.locationScope as string)) {
             return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
           }
           if (student.locationScope === 'بغداد' && student.subSite && studyConfig?.baghdadMode === 'بغداد - مخصص') {

@@ -2178,12 +2178,12 @@ export const useTeacherStore = create<TeacherState>()(
           const nextPrograms = getAvailablePrograms(draftCourse);
 
           for (const student of courseStudents) {
-            if (student.courseProgram && !nextPrograms.includes(student.courseProgram as any)) {
+            if (student.courseProgram && !nextPrograms.includes(student.courseProgram as string)) {
               return { ok: false, message: `لا يمكن إزالة "${student.courseProgram}" لأنه مستخدم من طلاب مسجلين` };
             }
             if (student.courseProgram && student.studyType) {
               const nextStudyTypes = getAvailableStudyTypesForProgram(draftCourse, student.courseProgram);
-              if (!nextStudyTypes.includes(student.studyType as any)) {
+              if (!nextStudyTypes.includes(student.studyType as string)) {
                 return { ok: false, message: `لا يمكن إزالة "${student.studyType}" من "${student.courseProgram}" لأنه مستخدم من طلاب مسجلين` };
               }
             }

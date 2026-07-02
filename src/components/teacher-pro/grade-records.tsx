@@ -61,9 +61,9 @@ type GradeStatus = "درجة" | "غائب" | "غش";
 type ViewMode = "cards" | "table";
 
 type GradeExportRow = {
-  grade: any;
-  student: any;
-  exam: any;
+  grade: Record<string, unknown>;
+  student: Record<string, unknown>;
+  exam: Record<string, unknown>;
   classificationText: string;
 };
 
