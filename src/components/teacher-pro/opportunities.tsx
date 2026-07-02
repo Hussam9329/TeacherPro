@@ -31,7 +31,7 @@ import { formatGradeScore } from "@/lib/exam-utils";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 
 
-const opportunityExportColumns: ExportColumn<Record<string, unknown>>[] = [
+const opportunityExportColumns: ExportColumn<Record<string, unknown> ExportColumn<Record<string, unknown>> { index?: number; student?: Record<string, unknown>; grade?: Record<string, unknown>; exam?: Record<string, unknown>; cls?: { text?: string }; courseName?: string; }>[] = [
   { key: "student", label: "الطالب", value: (s) => s.name || "" },
   { key: "code", label: "الكود", value: (s) => s.code || "" },
   { key: "course", label: "الدورة", value: (s) => s.courseName || "" },

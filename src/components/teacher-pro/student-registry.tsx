@@ -84,7 +84,7 @@ import {
   studentMatchesListFilters,
 } from "@/lib/student-list-filters";
 
-const studentExportColumns: ExportColumn<Record<string, unknown>>[] = [
+const studentExportColumns: ExportColumn<Record<string, unknown> ExportColumn<Record<string, unknown>> { index?: number; student?: Record<string, unknown>; grade?: Record<string, unknown>; exam?: Record<string, unknown>; cls?: { text?: string }; courseName?: string; }>[] = [
   { key: "code", label: "الكود", value: (s) => s.code || "" },
   { key: "name", label: "الاسم", value: (s) => s.name || "" },
   { key: "school", label: "المدرسة", value: (s) => s.school || "" },
