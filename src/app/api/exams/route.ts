@@ -51,8 +51,17 @@ export async function GET(req: NextRequest) {
 
   try {
     await ensureExamSchema();
-
-    const exams = await db.exam.findMany({ orderBy: { date: 'desc' }, include: { grades: true } });
+    const { isPaginatedRequest, parsePagination } = await import('@/lib/pagination');
+    if (isPaginatedRequest(req)) {
+      const { page, limit, skip } = parsePagination(req);
+      const [exams, total] = await Promise.all([
+        db.exam.findMany({ orderBy: { date: 'desc' }, skip, take: limit }),
+        db.exam.count(),
+      ]);
+      return NextResponse.json({ exams, total, page, limit, totalPages: Math.ceil(total / limit) });
+    }
+    // Default: return all exams WITHOUT grades (grades fetched separately via /api/grades)
+    const exams = await db.exam.findMany({ orderBy: { date: 'desc' } });
     return NextResponse.json({ exams });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل الامتحانات حالياً.');

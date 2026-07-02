@@ -23,7 +23,15 @@ export async function GET(req: NextRequest) {
 
   try {
     await ensureExamSchema();
-
+    const { isPaginatedRequest, parsePagination } = await import('@/lib/pagination');
+    if (isPaginatedRequest(req)) {
+      const { page, limit, skip } = parsePagination(req);
+      const [correctionSheets, total] = await Promise.all([
+        db.correctionSheet.findMany({ orderBy: { startedAt: 'desc' }, include: { student: true, exam: true, corrector: true }, skip, take: limit }),
+        db.correctionSheet.count(),
+      ]);
+      return NextResponse.json({ correctionSheets, total, page, limit, totalPages: Math.ceil(total / limit) });
+    }
     const correctionSheets = await db.correctionSheet.findMany({
       orderBy: { startedAt: 'desc' },
       include: { student: true, exam: true, corrector: true },

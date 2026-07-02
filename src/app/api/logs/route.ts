@@ -123,8 +123,21 @@ export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, 'logs.view');
   if (authError) return authError;
 
-  const logs = await db.auditLog.findMany({ orderBy: { time: 'desc' }, take: 500 });
-  return NextResponse.json({ logs });
+  try {
+    const { isPaginatedRequest, parsePagination } = await import('@/lib/pagination');
+    if (isPaginatedRequest(req)) {
+      const { page, limit, skip } = parsePagination(req);
+      const [logs, total] = await Promise.all([
+        db.auditLog.findMany({ orderBy: { time: 'desc' }, skip, take: limit }),
+        db.auditLog.count(),
+      ]);
+      return NextResponse.json({ logs, total, page, limit, totalPages: Math.ceil(total / limit) });
+    }
+    const logs = await db.auditLog.findMany({ orderBy: { time: 'desc' }, take: 500 });
+    return NextResponse.json({ logs });
+  } catch (error) {
+    return routeErrorResponse(error, 'تعذر تحميل السجلات حالياً.');
+  }
 }
 
 /**

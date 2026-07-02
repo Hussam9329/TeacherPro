@@ -19,6 +19,15 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const { isPaginatedRequest, parsePagination } = await import('@/lib/pagination');
+    if (isPaginatedRequest(req)) {
+      const { page, limit, skip } = parsePagination(req);
+      const [chapters, total] = await Promise.all([
+        db.chapter.findMany({ orderBy: { name: 'asc' }, include: { courseLinks: true }, skip, take: limit }),
+        db.chapter.count(),
+      ]);
+      return NextResponse.json({ chapters, total, page, limit, totalPages: Math.ceil(total / limit) });
+    }
     const chapters = await db.chapter.findMany({ orderBy: { name: 'asc' }, include: { courseLinks: true } });
     return NextResponse.json({ chapters });
   } catch (error) {

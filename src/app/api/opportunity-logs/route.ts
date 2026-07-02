@@ -49,6 +49,15 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    const { isPaginatedRequest, parsePagination } = await import('@/lib/pagination');
+    if (isPaginatedRequest(req)) {
+      const { page, limit, skip } = parsePagination(req);
+      const [opportunityLogs, total] = await Promise.all([
+        db.opportunityLog.findMany({ orderBy: { date: 'desc' }, skip, take: limit }),
+        db.opportunityLog.count(),
+      ]);
+      return NextResponse.json({ opportunityLogs, total, page, limit, totalPages: Math.ceil(total / limit) });
+    }
     const opportunityLogs = await db.opportunityLog.findMany({ orderBy: { date: 'desc' } });
     return NextResponse.json({ opportunityLogs });
   } catch (error) {
