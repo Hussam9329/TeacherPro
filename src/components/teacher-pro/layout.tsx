@@ -850,26 +850,26 @@ export function TeacherProLayout() {
 
       <main className="flex h-screen min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="sticky top-0 z-30 border-b border-border/70 bg-background/75 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65">
-          <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-6">
-            <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between gap-2 px-3 py-2 md:px-6 md:py-3">
+            <div className="flex items-center gap-2 md:gap-3">
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden"
+                className="lg:hidden shrink-0"
                 onClick={toggleSidebar}
               >
                 <Menu className="w-5 h-5" />
               </Button>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="hidden sm:inline-flex">
+                  <Badge variant="outline" className="hidden sm:inline-flex shrink-0">
                     {currentMenu?.sub || "نظرة عامة"}
                   </Badge>
-                  <h2 className="font-black text-lg md:text-xl tracking-tight text-gradient-brand">
+                  <h2 className="font-black text-base md:text-xl tracking-tight text-gradient-brand truncate">
                     {currentMenu?.title || "لوحة النظام"}
                   </h2>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-0.5 hidden md:block">
                   إدارة ذكية وسريعة للطلاب والامتحانات والفرص
                 </p>
               </div>
@@ -879,7 +879,7 @@ export function TeacherProLayout() {
                 variant="outline"
                 size="icon"
                 onClick={toggleTheme}
-                className="rounded-full"
+                className="rounded-full shrink-0"
               >
                 {theme === "dark" ? (
                   <Sun className="w-4 h-4" />
@@ -887,7 +887,7 @@ export function TeacherProLayout() {
                   <Moon className="w-4 h-4" />
                 )}
               </Button>
-              <Badge variant="secondary" className="hidden sm:flex">
+              <Badge variant="secondary" className="hidden sm:flex shrink-0">
                 {user?.name || "غير مسجل"}
               </Badge>
             </div>
@@ -900,8 +900,8 @@ export function TeacherProLayout() {
           </div>
         )}
 
-        <div className="app-scrollbar page-enter flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 xl:p-8">
-          <div className="content-container space-y-6" data-teacherpro-active-content="true" data-teacherpro-section={currentSection}>
+        <div className="app-scrollbar page-enter flex-1 overflow-y-auto overscroll-contain p-3 md:p-6 xl:p-8">
+          <div className="content-container space-y-4 md:space-y-6" data-teacherpro-active-content="true" data-teacherpro-section={currentSection}>
             {dbLoading && <LoadingState />}
             {isAdmin || canAccess(currentSection) ? (
               <CurrentComponent />

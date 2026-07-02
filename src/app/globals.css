@@ -494,3 +494,109 @@ button[data-slot="button"][class*="text-destructive"] svg {
   content-visibility: auto;
   contain-intrinsic-size: 92px;
 }
+
+/* ─── تحسينات الهاتف ─────────────────────────────────────────────────── */
+
+/* منع zoom عند التركيز على input في iOS (font-size < 16px يسبب zoom) */
+@media (max-width: 640px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="url"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  /* تقليل padding في الهاتف لاستغلال الشاشة */
+  .content-container {
+    max-width: 100%;
+  }
+
+  /* الأزرار أكبر للمس أسهل */
+  [data-slot="button"] {
+    min-height: 40px;
+  }
+
+  [data-slot="button"][data-size="sm"] {
+    min-height: 36px;
+  }
+
+  /* الجداول: horizontal scroll بدل ضغط الأعمدة */
+  .table-wrap, [class*="overflow-x"] {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* منع overflow أفقي في الصفحة كلها */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* الـ cards تاخذ عرض كامل */
+  [data-slot="card"] {
+    width: 100%;
+  }
+
+  /* تقليل المسافات في الهاتف */
+  .section-stack {
+    gap: 0.75rem;
+  }
+
+  /* الـ badges أصغر على الهاتف */
+  [data-slot="badge"] {
+    font-size: 10px;
+  }
+
+  /* الـ dialog ياخذ عرض كامل على الهاتف */
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"] {
+    width: calc(100vw - 1rem) !important;
+    max-width: calc(100vw - 1rem) !important;
+    margin: 0.5rem !important;
+  }
+
+  /* الـ textarea أقل ارتفاع على الهاتف */
+  textarea {
+    min-height: 80px;
+  }
+
+  /* tap highlight لون أوضح */
+  * {
+    -webkit-tap-highlight-color: rgba(147, 51, 234, 0.15);
+  }
+
+  /* منع text selection accident على الأزرار */
+  button, a {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* safe area للهواتف ذات الـ notch */
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* تحسين الـ scroll على الهاتف */
+@media (max-width: 1024px) {
+  .app-scrollbar {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* الـ sidebar أسرع في الإغلاق */
+  aside {
+    transition-duration: 200ms !important;
+  }
+}
+
+/* منع pull-to-refresh على الصفحات التي فيها scroll داخلي */
+@media (max-width: 640px) {
+  .app-scrollbar {
+    overscroll-behavior: contain;
+  }
+}
