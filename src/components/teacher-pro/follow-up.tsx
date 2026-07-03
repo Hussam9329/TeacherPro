@@ -30,27 +30,28 @@ import { searchAny } from "@/lib/validation";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { formatGradeScore } from "@/lib/exam-utils";
-import {
-  buildArabicLetterOptions,
-  gradeMatchesStatusFilter,
-  gradeStatusFilterLabels,
-  gradeStatusFilterOptions,
-  matchesArabicLetterFilter,
-  type GradeStatusFilter,
-} from "@/lib/grade-status-filters";
 
 type FollowView = "leaves" | "calls" | "pledges";
 type CallCategory =
   | "absent"
+  | "discounted"
   | "failed"
   | "low-pass"
   | "full"
   | "passed"
   | "cheating";
+type CallStatusFilter =
+  | "all"
+  | "absent"
+  | "discounted"
+  | "failed"
+  | "cheating"
+  | "passed"
+  | "full";
+type CallGradeDisplayMode = "latest" | "latest-two" | "all";
 type PledgeTypeFilter = "all" | "temporary" | "final";
 type PledgeStatusFilter = "all" | "pledged" | "pending" | "reactivated";
 type ContactStatus = "" | "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
-type CallGradeSort = "latest" | "exam" | "score-desc" | "score-asc" | "name";
 
 type CallGradeItem = {
   id: string;
@@ -125,11 +126,32 @@ type LeaveMode = "exam" | "period";
 
 const callCategoryLabels: Record<CallCategory, string> = {
   absent: "غائب",
+  discounted: "مخصوم",
   failed: "راسب",
   "low-pass": "ناجح بدرجة منخفضة",
   full: "درجة كاملة",
   passed: "ناجح",
   cheating: "غش",
+};
+
+const callStatusFilterLabels: Record<CallStatusFilter, string> = {
+  all: "كل الحالات",
+  absent: "الغائبين",
+  discounted: "المخصومين",
+  failed: "الراسبين",
+  cheating: "طلاب الغش",
+  passed: "الطلاب الناجحين",
+  full: "الدرجات الكاملة",
+};
+
+const callStatusFilterOptions = Object.keys(
+  callStatusFilterLabels,
+) as CallStatusFilter[];
+
+const callGradeDisplayModeLabels: Record<CallGradeDisplayMode, string> = {
+  latest: "آخر امتحان",
+  "latest-two": "آخر امتحانين",
+  all: "جميع الامتحانات",
 };
 
 const CONTACT_STATUS_EMPTY_VALUE = "__empty__";
@@ -144,23 +166,11 @@ const contactStatusOptions: Array<{
   { value: "الرقم خاطئ", label: "الرقم خاطئ" },
 ];
 const CALL_PAGE_SIZE = 120;
-const excludedCallGradeStatusFilters = new Set<GradeStatusFilter>(["grace-period"]);
-const callGradeStatusFilterOptions = gradeStatusFilterOptions.filter(
-  (option) => !excludedCallGradeStatusFilters.has(option),
-);
 const nonCallableGradeKinds = new Set([
   "grace",
   "before-registration",
   "excused",
-  "missing",
 ]);
-const callGradeSortLabels: Record<CallGradeSort, string> = {
-  latest: "آخر درجة أولاً",
-  exam: "حسب الامتحان",
-  "score-desc": "حسب الدرجة: الأعلى أولاً",
-  "score-asc": "حسب الدرجة: الأقل أولاً",
-  name: "حسب الأحرف الأبجدية",
-};
 
 const callExportColumns: ExportColumn<CallExportRow>[] = [
   {
@@ -246,19 +256,6 @@ function telegramLink(telegram: string): string {
   return username ? `https://t.me/${encodeURIComponent(username)}` : "#";
 }
 
-function gradeScoreForSort(grade: Grade, direction: "asc" | "desc") {
-  if (
-    grade.status === "درجة" &&
-    grade.score !== null &&
-    Number.isFinite(Number(grade.score))
-  ) {
-    return Number(grade.score);
-  }
-  return direction === "asc"
-    ? Number.POSITIVE_INFINITY
-    : Number.NEGATIVE_INFINITY;
-}
-
 function gradeTimeValue(grade: Grade, exam: Exam) {
   const value = grade.updatedAt || grade.createdAt || exam.date || "";
   const time = new Date(value).getTime();
@@ -273,6 +270,57 @@ function sortGradeItemsByLatest(items: CallGradeItem[]) {
       b.sortTime - a.sortTime ||
       String(b.exam.date || "").localeCompare(String(a.exam.date || ""), "ar"),
   );
+}
+
+function examIncludesCourse(exam: Exam, courseId: string) {
+  return Boolean(courseId && Array.isArray(exam.courseIds) && exam.courseIds.includes(courseId));
+}
+
+function numericGradeScore(grade: Grade | null | undefined): number | null {
+  if (!grade || grade.status !== "درجة") return null;
+  const score = Number(grade.score);
+  return Number.isFinite(score) ? score : null;
+}
+
+function callGradeMatchesStatusFilter(
+  filter: CallStatusFilter,
+  item: CallGradeItem | null,
+): boolean {
+  if (filter === "all") return true;
+  if (!item) return false;
+  const { grade, exam } = item;
+  const score = numericGradeScore(grade);
+  const fullMark = Number(exam.fullMark || 0);
+  const passMark = Number(exam.passMark || 0);
+  const discountMark = Number(exam.discountMark || 0);
+
+  switch (filter) {
+    case "absent":
+      return grade.status === "غائب";
+    case "cheating":
+      return grade.status === "غش";
+    case "full":
+      return score !== null && score === fullMark;
+    case "passed":
+      return score !== null && score >= passMark;
+    case "discounted":
+      return score !== null && !exam.noDiscount && score <= discountMark;
+    case "failed":
+      if (score === null) return false;
+      if (exam.noDiscount) return score >= 1 && score < passMark;
+      return score >= 1 && score <= discountMark;
+    default:
+      return true;
+  }
+}
+
+function visibleCallGradeItems(
+  items: CallGradeItem[],
+  mode: CallGradeDisplayMode,
+): CallGradeItem[] {
+  if (mode === "all") return items;
+  if (mode === "latest-two") return items.slice(0, 2);
+  return items.slice(0, 1);
 }
 
 function contactStatusSelectValue(
@@ -356,6 +404,7 @@ function buildDismissalKey(parts: {
 
 function FollowUpViewBase({ view }: { view: FollowView }) {
   const {
+    courses,
     students,
     exams,
     grades,
@@ -379,18 +428,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   } = useTeacherStore();
 
   useEffect(() => {
+    if (view !== "leaves") return;
     let cancelled = false;
-    // Use listAll to fetch ALL students + grades via automatic pagination.
-    // list() only returns one page (50-200 rows), which is not enough
-    // for follow-up that needs all records to build call/leave rows.
-    const studentLoad = studentApi.listAll({ pageSize: 200 });
-    const gradeLoad = view === "leaves" ? Promise.resolve(null) : gradeApi.listAll({ pageSize: 200 });
 
-    Promise.all([studentLoad, gradeLoad])
-      .then(([studentResult, gradeResult]) => {
+    studentApi
+      .list({ pageSize: 200 })
+      .then((studentResult) => {
         if (cancelled) return;
         mergeStudentsCache((studentResult?.students || []) as unknown as Student[]);
-        mergeGradesCache((gradeResult?.grades || []) as unknown as Grade[]);
       })
       .catch(() => {
         // الصفحة تستخدم آخر كاش متاح إذا فشل الاتصال المؤقت.
@@ -399,7 +444,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return () => {
       cancelled = true;
     };
-  }, [view, mergeStudentsCache, mergeGradesCache]);
+  }, [view, mergeStudentsCache]);
 
   const [globalSearch, setGlobalSearch] = useState("");
   const [leaveStudentId, setLeaveStudentId] = useState("");
@@ -413,13 +458,17 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [leaveDateTo, setLeaveDateTo] = useState(todayISO());
   const [leaveNotes, setLeaveNotes] = useState("");
 
+  const [callCourseId, setCallCourseId] = useState("");
   const [callExamId, setCallExamId] = useState("");
-  const [callGradeStatusFilter, setCallGradeStatusFilter] =
-    useState<GradeStatusFilter>("all");
-  const [callNameLetter, setCallNameLetter] = useState("all");
-  const [callSearch, setCallSearch] = useState("");
-  const [callGradeSort, setCallGradeSort] = useState<CallGradeSort>("latest");
+  const [callStatusFilter, setCallStatusFilter] =
+    useState<CallStatusFilter>("all");
+  const [callGeneralSearch, setCallGeneralSearch] = useState("");
+  const [callFilterSearch, setCallFilterSearch] = useState("");
   const [callGradePage, setCallGradePage] = useState(1);
+  const [callLoading, setCallLoading] = useState(false);
+  const [callGradeDisplayModes, setCallGradeDisplayModes] = useState<
+    Record<string, CallGradeDisplayMode>
+  >({});
   const [pledgeSearch, setPledgeSearch] = useState("");
   const [pledgeTypeFilter, setPledgeTypeFilter] =
     useState<PledgeTypeFilter>("all");
@@ -428,6 +477,47 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   const [profileStudentId, setProfileStudentId] = useState("");
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+
+  useEffect(() => {
+    setCallExamId("");
+    setCallStatusFilter("all");
+    setCallFilterSearch("");
+    setCallGradePage(1);
+    setCallGradeDisplayModes({});
+  }, [callCourseId]);
+
+  useEffect(() => {
+    setCallStatusFilter("all");
+    setCallFilterSearch("");
+    setCallGradePage(1);
+    setCallGradeDisplayModes({});
+  }, [callExamId]);
+
+  useEffect(() => {
+    if (view !== "calls" || !callCourseId) return;
+    let cancelled = false;
+    setCallLoading(true);
+
+    Promise.all([
+      studentApi.listAll({ courseId: callCourseId, pageSize: 200 }),
+      gradeApi.listAll({ courseId: callCourseId, pageSize: 200 }),
+    ])
+      .then(([studentResult, gradeResult]) => {
+        if (cancelled) return;
+        mergeStudentsCache((studentResult?.students || []) as unknown as Student[]);
+        mergeGradesCache((gradeResult?.grades || []) as unknown as Grade[]);
+      })
+      .catch(() => {
+        toast.error("تعذر تحميل بيانات المكالمات لهذه الدورة. سيتم استخدام آخر بيانات محفوظة محلياً.");
+      })
+      .finally(() => {
+        if (!cancelled) setCallLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [view, callCourseId, mergeStudentsCache, mergeGradesCache]);
 
   const filteredStudents = useMemo(() => {
     const query = globalSearch;
@@ -454,9 +544,23 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   );
   const selectedProfileStudent =
     students.find((student) => student.id === profileStudentId) || null;
-  const selectedCallExam = exams.find((exam) => exam.id === callExamId) || null;
-  const callExportDocumentTitle = selectedCallExam?.name || "كل الامتحانات";
-  const callExportFileName = selectedCallExam?.name || "المكالمات-كل-الامتحانات";
+  const selectedCallCourse = courses.find((course) => course.id === callCourseId) || null;
+  const callCourseExams = useMemo(
+    () =>
+      callCourseId
+        ? exams.filter((exam) => examIncludesCourse(exam, callCourseId))
+        : [],
+    [exams, callCourseId],
+  );
+  const selectedCallExam = callCourseExams.find((exam) => exam.id === callExamId) || null;
+  const callCourseSelected = Boolean(selectedCallCourse);
+  const callExamSelected = Boolean(selectedCallExam);
+  const callExportDocumentTitle = selectedCallExam
+    ? `${selectedCallCourse?.name || "الدورة"} - ${selectedCallExam.name}`
+    : "المكالمات";
+  const callExportFileName = selectedCallExam
+    ? `المكالمات-${selectedCallCourse?.name || "الدورة"}-${selectedCallExam.name}`
+    : "المكالمات";
   const leaveReason =
     leaveReasonChoice === "أخرى" ? customLeaveReason.trim() : leaveReasonChoice;
 
@@ -558,6 +662,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     if (grade.status === "درجة" && grade.score !== null) {
       const score = Number(grade.score);
       if (Number.isFinite(score)) {
+        if (!exam.noDiscount && score <= Number(exam.discountMark || 0)) {
+          return {
+            category: "discounted",
+            label: callCategoryLabels.discounted,
+            reason: `ضمن درجة الخصم: ${score}/${exam.fullMark}`,
+          };
+        }
         if (score < exam.passMark) {
           return {
             category: "failed",
@@ -597,35 +708,37 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const callRows = useMemo<CallStudentRow[]>(() => {
+    if (!callCourseSelected || !selectedCallExam || !examIncludesCourse(selectedCallExam, callCourseId)) {
+      return [];
+    }
+
+    const courseStudents = students.filter(
+      (student) => student.courseId === callCourseId && student.status !== "مفصول",
+    );
+    const courseStudentIds = new Set(courseStudents.map((student) => student.id));
     const studentById = new Map<string, Student>(
-      students.map((student) => [student.id, student] as [string, Student]),
+      courseStudents.map((student) => [student.id, student] as [string, Student]),
     );
     const examById = new Map<string, Exam>(
-      exams.map((exam) => [exam.id, exam] as [string, Exam]),
+      exams
+        .filter((exam) => examIncludesCourse(exam, callCourseId))
+        .map((exam) => [exam.id, exam] as [string, Exam]),
     );
     const grouped = new Map<
       string,
       { student: Student; items: CallGradeItem[] }
     >();
 
-    // أولاً: أضف كل الطلاب النشطين حتى لو ما عندهم درجات.
-    // هذا يخلي قائمة المكالمات تعرض كل الطلاب افتراضياً.
-    students.forEach((student) => {
-      if (student.status === "مفصول") return; // المفصولون لا يظهرون افتراضياً
-      if (!grouped.has(student.id)) {
-        grouped.set(student.id, { student, items: [] as CallGradeItem[] });
-      }
+    courseStudents.forEach((student) => {
+      grouped.set(student.id, { student, items: [] });
     });
 
-    // ثانياً: اربط الدرجات بالطلاب
     grades.forEach((grade) => {
+      if (!courseStudentIds.has(grade.studentId)) return;
       const student = studentById.get(grade.studentId);
       const exam = examById.get(grade.examId);
       if (!student || !exam) return;
       const cls = classification(grade, exam, student);
-
-      // الحالات غير المحتسبة أكاديمياً تبقى محفوظة في سجل الدرجات،
-      // لكنها لا تدخل قائمة المكالمات حتى لا يتم الاتصال بطالب داخل السماح أو خارج نطاق الامتحان.
       if (nonCallableGradeKinds.has(cls.kind)) return;
 
       const info = gradeCallInfo(grade, exam);
@@ -637,10 +750,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         ...info,
         sortTime: gradeTimeValue(grade, exam),
       };
-      const current = grouped.get(student.id) ?? {
-        student,
-        items: [] as CallGradeItem[],
-      };
+      const current = grouped.get(student.id) ?? { student, items: [] as CallGradeItem[] };
       current.items.push(item);
       grouped.set(student.id, current);
     });
@@ -648,113 +758,67 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const rows = Array.from(grouped.values())
       .flatMap<CallStudentRow>(({ student, items }) => {
         const sortedItems = sortGradeItemsByLatest(items);
-        // إذا لا يوجد فلتر امتحان ولا فلتر حالة، اعرض كل الطلاب
-        // (حتى الذين ليس لديهم درجات في أي امتحان)
-        const hasActiveFilter = callExamId || callGradeStatusFilter !== "all";
+        const examItem = sortedItems.find((item) => item.exam.id === selectedCallExam.id) || null;
+        if (!callGradeMatchesStatusFilter(callStatusFilter, examItem)) return [];
 
-        let relevantItems = sortedItems;
-        if (hasActiveFilter) {
-          // طبّق الفلاتر على الـ items
-          relevantItems = sortedItems.filter((item) => {
-            if (callExamId && item.exam.id !== callExamId) return false;
-            const cls = classification(item.grade, item.exam, student);
-            if (nonCallableGradeKinds.has(cls.kind)) return false;
-            if (
-              !gradeMatchesStatusFilter(
-                callGradeStatusFilter,
-                item.grade,
-                item.exam,
-                cls,
-              )
-            )
-              return false;
-            return true;
-          });
-          if (relevantItems.length === 0) return [];
-        }
-        if (!matchesArabicLetterFilter(student.name, callNameLetter)) return [];
-        const focusItem = relevantItems[0] || sortedItems[0] || null;
+        const searchValues = [
+          student.name,
+          student.code,
+          student.phone,
+          student.parentPhone,
+          student.telegram,
+          student.school,
+          student.status,
+          student.studyType,
+          selectedCallCourse?.name,
+          selectedCallExam.name,
+          examItem?.grade.status,
+          examItem ? formatGradeScore(examItem.grade, examItem.exam, "—") : "",
+          examItem?.reason,
+          examItem?.grade.notes,
+          ...sortedItems.flatMap((item) => [
+            item.exam.name,
+            item.grade.status,
+            formatGradeScore(item.grade, item.exam, "—"),
+            item.reason,
+            item.grade.notes,
+            callStatusForLog(callLogForGrade(student, item)),
+          ]),
+          callNoteForStudent(student.id)?.notes,
+        ];
+
+        if (callGeneralSearch && !searchAny(callGeneralSearch, searchValues)) return [];
+        if (callFilterSearch && !searchAny(callFilterSearch, searchValues)) return [];
+
         return [
           {
             id: `student:${student.id}`,
             student,
             items: sortedItems,
-            focusItem,
+            focusItem: examItem,
           },
         ];
-      })
-      .filter(
-        (row) =>
-          !callSearch ||
-          searchAny(callSearch, [
-            row.student.name,
-            row.student.code,
-            row.student.phone,
-            row.student.parentPhone,
-            row.student.telegram,
-            row.student.school,
-            row.student.status,
-            row.student.studyType,
-            ...row.items.flatMap((item) => [
-              item.exam.name,
-              item.grade.status,
-              formatGradeScore(item.grade, item.exam, "—"),
-              item.reason,
-              item.grade.notes,
-              callStatusForLog(callLogForGrade(row.student, item)),
-            ]),
-            callNoteForStudent(row.student.id)?.notes,
-          ]),
-      );
+      });
 
     return rows.sort((a, b) => {
-      const studentA = a.student.name || "";
-      const studentB = b.student.name || "";
-      const examA = `${a.focusItem?.exam?.name || ""} ${a.focusItem?.exam?.date || ""}`;
-      const examB = `${b.focusItem?.exam?.name || ""} ${b.focusItem?.exam?.date || ""}`;
-      if (callGradeSort === "name") {
-        return (
-          studentA.localeCompare(studentB, "ar") ||
-          examA.localeCompare(examB, "ar")
-        );
-      }
-      if (callGradeSort === "score-desc") {
-        return (
-          gradeScoreForSort(b.focusItem?.grade as Grade, "desc") -
-            gradeScoreForSort(a.focusItem?.grade as Grade, "desc") ||
-          studentA.localeCompare(studentB, "ar") ||
-          examA.localeCompare(examB, "ar")
-        );
-      }
-      if (callGradeSort === "score-asc") {
-        return (
-          gradeScoreForSort(a.focusItem?.grade as Grade, "asc") -
-            gradeScoreForSort(b.focusItem?.grade as Grade, "asc") ||
-          studentA.localeCompare(studentB, "ar") ||
-          examA.localeCompare(examB, "ar")
-        );
-      }
-      if (callGradeSort === "exam") {
-        return (
-          examA.localeCompare(examB, "ar") ||
-          studentA.localeCompare(studentB, "ar")
-        );
-      }
+      const aTime = a.focusItem?.sortTime || 0;
+      const bTime = b.focusItem?.sortTime || 0;
       return (
-        (b.focusItem?.sortTime || 0) - (a.focusItem?.sortTime || 0) ||
-        examA.localeCompare(examB, "ar") ||
-        studentA.localeCompare(studentB, "ar")
+        bTime - aTime ||
+        String(a.student.name || "").localeCompare(String(b.student.name || ""), "ar")
       );
     });
   }, [
     grades,
     students,
     exams,
-    callExamId,
-    callGradeStatusFilter,
-    callNameLetter,
-    callSearch,
-    callGradeSort,
+    callCourseSelected,
+    selectedCallCourse,
+    selectedCallExam,
+    callCourseId,
+    callStatusFilter,
+    callGeneralSearch,
+    callFilterSearch,
     callLogLookup,
     callStudentNoteLookup,
     classification,
@@ -1339,6 +1403,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           <Badge
             variant={
               item.category === "absent" ||
+              item.category === "discounted" ||
               item.category === "failed" ||
               item.category === "cheating"
                 ? "destructive"
@@ -1374,6 +1439,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const call = callLogForRow(row);
     const contactStatus = callStatusForLog(call);
     const callStudentNote = callNoteForStudent(row.student.id);
+    const displayMode = callGradeDisplayModes[row.student.id] || "latest";
+    const displayedGradeItems = visibleCallGradeItems(row.items, displayMode);
     const focusValue = item
       ? item.category === "absent"
         ? "غائب"
@@ -1400,7 +1467,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             {courseName(row.student.courseId)} - {row.student.studyType || "—"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            عدد الدرجات المعروضة لهذا الطالب: <b>{row.items.length}</b>
+            الدرجات المعروضة: <b>{displayedGradeItems.length}</b> من <b>{row.items.length}</b>
           </p>
         </div>
         <div className="space-y-2">
@@ -1413,6 +1480,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <Badge
                 variant={
                   item?.category === "absent" ||
+                  item?.category === "discounted" ||
                   item?.category === "failed" ||
                   item?.category === "cheating"
                     ? "destructive"
@@ -1433,14 +1501,41 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             ) : null}
           </div>
           <div className="space-y-2">
-            <p className="text-xs font-bold text-muted-foreground">
-              كل درجات الطالب
-            </p>
-            <div className="grid gap-2 md:grid-cols-2">
-              {row.items.map((gradeItem) =>
-                renderCallGradeChip(row, gradeItem),
-              )}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-bold text-muted-foreground">
+                درجات الطالب
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {(Object.keys(callGradeDisplayModeLabels) as CallGradeDisplayMode[]).map((mode) => (
+                  <Button
+                    key={mode}
+                    type="button"
+                    size="sm"
+                    variant={displayMode === mode ? "default" : "outline"}
+                    className="h-7 rounded-full px-2 text-[11px]"
+                    onClick={() =>
+                      setCallGradeDisplayModes((current) => ({
+                        ...current,
+                        [row.student.id]: mode,
+                      }))
+                    }
+                  >
+                    {callGradeDisplayModeLabels[mode]}
+                  </Button>
+                ))}
+              </div>
             </div>
+            {displayedGradeItems.length === 0 ? (
+              <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+                لا توجد درجات محفوظة لهذا الطالب ضمن امتحانات هذه الدورة.
+              </p>
+            ) : (
+              <div className="grid gap-2 md:grid-cols-2">
+                {displayedGradeItems.map((gradeItem) =>
+                  renderCallGradeChip(row, gradeItem),
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1454,6 +1549,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           </Label>
           <Select
             value={contactStatusSelectValue(contactStatus)}
+            disabled={!row.focusItem}
             onValueChange={(value) =>
               saveCallStatus(row, contactStatusFromSelectValue(value))
             }
@@ -1777,135 +1873,146 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <CardHeader>
               <CardTitle>المكالمات المرتبطة بسجل الدرجات</CardTitle>
               <p className="text-sm text-muted-foreground">
-                كل صف هنا طالب واحد فقط، وداخله كل درجاته، مع إبراز آخر امتحان
-                نزلت له درجة أو الامتحان المختار من الفلتر.
+                اختر الدورة أولاً، بعدها تظهر امتحاناتها فقط، ثم تظهر قائمة طلاب الدورة حسب الامتحان المختار وحالة الدرجة.
               </p>
             </CardHeader>
-            <CardContent className="grid gap-3 p-4 md:grid-cols-5">
+            <CardContent className="space-y-4 p-4">
               <div className="space-y-2">
-                <Label>الامتحان</Label>
-                <Select
-                  value={callExamId || "all"}
-                  onValueChange={(value) => {
-                    setCallExamId(value === "all" ? "" : value);
-                    setCallGradePage(1);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="كل الامتحانات" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">كل الامتحانات</SelectItem>
-                    {exams.map((exam) => (
-                      <SelectItem key={exam.id} value={exam.id}>
-                        {exam.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>حالة الدرجة</Label>
-                <Select
-                  value={callGradeStatusFilter}
-                  onValueChange={(value) => {
-                    setCallGradeStatusFilter(value as GradeStatusFilter);
-                    setCallGradePage(1);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {callGradeStatusFilterOptions.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {gradeStatusFilterLabels[option]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>فلترة الاسم أبجدياً</Label>
-                <Select
-                  value={callNameLetter}
-                  onValueChange={(value) => {
-                    setCallNameLetter(value);
-                    setCallGradePage(1);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="كل الأحرف" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">كل الأحرف</SelectItem>
-                    {buildArabicLetterOptions(
-                      students.map((student) => student.name),
-                    ).map((letter) => (
-                      <SelectItem key={letter} value={letter}>
-                        {letter}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>الفرز</Label>
-                <Select
-                  value={callGradeSort}
-                  onValueChange={(value) => {
-                    setCallGradeSort(value as CallGradeSort);
-                    setCallGradePage(1);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(callGradeSortLabels) as CallGradeSort[]).map(
-                      (key) => (
-                        <SelectItem key={key} value={key}>
-                          {callGradeSortLabels[key]}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>بحث</Label>
+                <Label>بحث عام قبل الفرز</Label>
                 <Input
-                  id="follow-up-calls-search"
-                  name="search"
+                  id="follow-up-calls-general-search"
+                  name="calls-general-search"
                   data-teacherpro-search="true"
-                  value={callSearch}
+                  value={callGeneralSearch}
                   onChange={(event) => {
-                    setCallSearch(event.target.value);
+                    setCallGeneralSearch(event.target.value);
                     setCallGradePage(1);
                   }}
-                  placeholder="طالب / كود / امتحان / درجة / حالة طالب / إجراء تواصل"
+                  placeholder="بحث عام: اسم / كود / هاتف / تليكرام / مدرسة / امتحان / درجة"
                 />
               </div>
-              <div className="space-y-2">
-                <Label>تصدير</Label>
-                <ExportDialog
-                  title="تصدير المكالمات"
-                  fileName={callExportFileName}
-                  rows={callExportRows}
-                  columns={callExportColumns}
-                  triggerLabel="تصدير"
-                  description="تقرير المكالمات حسب الفلاتر الحالية"
-                  pdfTitle={callExportDocumentTitle}
-                  pdfFileName={callExportFileName}
-                />
+              <div className="grid gap-3 md:grid-cols-5">
+                <div className="space-y-2">
+                  <Label>الدورة</Label>
+                  <Select
+                    value={callCourseId || "__none__"}
+                    onValueChange={(value) => {
+                      setCallCourseId(value === "__none__" ? "" : value);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر الدورة أولاً" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">كل الدورات / بدون اختيار</SelectItem>
+                      {courses.map((course) => (
+                        <SelectItem key={course.id} value={course.id}>
+                          {course.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>الامتحان</Label>
+                  <Select
+                    value={callExamId || "__none__"}
+                    disabled={!callCourseSelected}
+                    onValueChange={(value) => {
+                      setCallExamId(value === "__none__" ? "" : value);
+                      setCallGradePage(1);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر امتحان الدورة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">كل الامتحانات / بدون اختيار</SelectItem>
+                      {callCourseExams.map((exam) => (
+                        <SelectItem key={exam.id} value={exam.id}>
+                          {exam.name} - {formatAppDate(exam.date)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>حالة الطالب في الامتحان</Label>
+                  <Select
+                    value={callStatusFilter}
+                    disabled={!callExamSelected}
+                    onValueChange={(value) => {
+                      setCallStatusFilter(value as CallStatusFilter);
+                      setCallGradePage(1);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {callStatusFilterOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {callStatusFilterLabels[option]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>بحث داخل الفرز</Label>
+                  <Input
+                    id="follow-up-calls-filter-search"
+                    name="calls-filter-search"
+                    data-teacherpro-search="true"
+                    disabled={!callExamSelected}
+                    value={callFilterSearch}
+                    onChange={(event) => {
+                      setCallFilterSearch(event.target.value);
+                      setCallGradePage(1);
+                    }}
+                    placeholder="بحث داخل نتائج الدورة والامتحان"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>تصدير</Label>
+                  {callExamSelected ? (
+                    <ExportDialog
+                      title="تصدير المكالمات"
+                      fileName={callExportFileName}
+                      rows={callExportRows}
+                      columns={callExportColumns}
+                      triggerLabel="تصدير"
+                      description="تقرير المكالمات حسب الدورة والامتحان والفلاتر الحالية"
+                      pdfTitle={callExportDocumentTitle}
+                      pdfFileName={callExportFileName}
+                    />
+                  ) : (
+                    <Button className="w-full" variant="outline" disabled>
+                      اختر الدورة والامتحان
+                    </Button>
+                  )}
+                </div>
               </div>
+              {!callCourseSelected ? (
+                <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
+                  اختر الدورة أولاً حتى يتم تفعيل الامتحانات وبقية الفلاتر.
+                </p>
+              ) : !callExamSelected ? (
+                <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
+                  تم اختيار الدورة. اختر امتحاناً من امتحانات هذه الدورة لعرض الطلاب.
+                </p>
+              ) : callLoading ? (
+                <p className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
+                  جاري تحميل طلاب ودرجات هذه الدورة...
+                </p>
+              ) : null}
             </CardContent>
           </Card>
           <div className="grid gap-3 md:grid-cols-5">
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">
-                  الطلاب المعروضون
+                  الطلاب المطابقون
                 </p>
                 <b className="text-2xl">{callStats.total}</b>
               </CardContent>
@@ -1939,8 +2046,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <CardHeader>
               <CardTitle>قائمة الطلاب ودرجاتهم</CardTitle>
               <p className="text-sm text-muted-foreground">
-                كل طالب يظهر مرة واحدة فقط؛ تعرض كل درجاته مع تركيز واضح على آخر
-                امتحان نزلت له درجة أو الامتحان المختار.
+                لا تظهر القائمة إلا بعد اختيار دورة ثم امتحان. كل طالب يظهر مرة واحدة مع محور الامتحان المختار وإمكانية عرض آخر امتحان، آخر امتحانين، أو جميع امتحاناته.
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -1952,9 +2058,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   الصفحة <b>{callSafePage}</b> من <b>{callTotalPages}</b>
                 </span>
               </div>
-              {visibleCallRows.length === 0 ? (
+              {!callExamSelected ? (
                 <p className="empty-state py-8">
-                  لا يوجد طلاب مطابقون للمكالمات والدرجات
+                  اختر الدورة ثم الامتحان لعرض الطلاب.
+                </p>
+              ) : visibleCallRows.length === 0 ? (
+                <p className="empty-state py-8">
+                  لا يوجد طلاب مطابقون للدورة والامتحان والفلاتر الحالية.
                 </p>
               ) : (
                 visibleCallRows.map(renderCallRow)
