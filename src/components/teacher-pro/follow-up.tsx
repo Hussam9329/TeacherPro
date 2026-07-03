@@ -513,7 +513,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const callLogForRow = (row: CallStudentRow) =>
-    callLogForGrade(row.student, row.focusItem);
+    row.focusItem ? callLogForGrade(row.student, row.focusItem) : undefined;
 
   const callStatusForLog = (
     call: ReturnType<typeof callLogForRow>,
@@ -1132,6 +1132,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }));
 
   const saveCallStatus = (row: CallStudentRow, status: ContactStatus) => {
+    if (!row.focusItem) return;
     const item = row.focusItem;
     const existing = callLogForGrade(row.student, item);
     if (!status && !existing) return;
