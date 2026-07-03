@@ -67,7 +67,7 @@ type CallStudentRow = {
   id: string;
   student: Student;
   items: CallGradeItem[];
-  focusItem: CallGradeItem;
+  focusItem: CallGradeItem | null;
 };
 
 type CallExportRow = {
@@ -182,18 +182,18 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
   {
     key: "exam",
     label: "الامتحان المحور",
-    value: ({ row }) => row.focusItem.exam.name || "",
+    value: ({ row }) => row.focusItem?.exam?.name || "",
   },
   {
     key: "gradeStatus",
     label: "حالة الدرجة",
-    value: ({ row }) => row.focusItem.label || "",
+    value: ({ row }) => row.focusItem?.label || "",
   },
   {
     key: "grade",
     label: "الدرجة",
     value: ({ row }) =>
-      formatGradeScore(row.focusItem.grade, row.focusItem.exam, "—"),
+      row.focusItem ? formatGradeScore(row.focusItem.grade, row.focusItem.exam, "—") : "",
   },
   {
     key: "contact",
@@ -673,7 +673,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           if (relevantItems.length === 0) return [];
         }
         if (!matchesArabicLetterFilter(student.name, callNameLetter)) return [];
-        const focusItem = relevantItems[0] || sortedItems[0];
+        const focusItem = relevantItems[0] || sortedItems[0] || null;
         return [
           {
             id: `student:${student.id}`,
@@ -720,16 +720,16 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       }
       if (callGradeSort === "score-desc") {
         return (
-          gradeScoreForSort(b.focusItem.grade, "desc") -
-            gradeScoreForSort(a.focusItem.grade, "desc") ||
+          gradeScoreForSort(b.focusItem?.grade, "desc") -
+            gradeScoreForSort(a.focusItem?.grade, "desc") ||
           studentA.localeCompare(studentB, "ar") ||
           examA.localeCompare(examB, "ar")
         );
       }
       if (callGradeSort === "score-asc") {
         return (
-          gradeScoreForSort(a.focusItem.grade, "asc") -
-            gradeScoreForSort(b.focusItem.grade, "asc") ||
+          gradeScoreForSort(a.focusItem?.grade, "asc") -
+            gradeScoreForSort(b.focusItem?.grade, "asc") ||
           studentA.localeCompare(studentB, "ar") ||
           examA.localeCompare(examB, "ar")
         );
@@ -741,7 +741,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         );
       }
       return (
-        b.focusItem.sortTime - a.focusItem.sortTime ||
+        (b.focusItem?.sortTime || 0) - (a.focusItem?.sortTime || 0) ||
         examA.localeCompare(examB, "ar") ||
         studentA.localeCompare(studentB, "ar")
       );
@@ -1321,7 +1321,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const renderCallGradeChip = (row: CallStudentRow, item: CallGradeItem) => {
-    const isFocus = item.id === row.focusItem.id;
+    const isFocus = row.focusItem && item.id === row.focusItem.id;
     const call = callLogForGrade(row.student, item);
     const value =
       item.category === "absent"
