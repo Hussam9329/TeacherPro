@@ -710,8 +710,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return rows.sort((a, b) => {
       const studentA = a.student.name || "";
       const studentB = b.student.name || "";
-      const examA = `${a.focusItem.exam.name || ""} ${a.focusItem.exam.date || ""}`;
-      const examB = `${b.focusItem.exam.name || ""} ${b.focusItem.exam.date || ""}`;
+      const examA = `${a.focusItem?.exam?.name || ""} ${a.focusItem?.exam?.date || ""}`;
+      const examB = `${b.focusItem?.exam?.name || ""} ${b.focusItem?.exam?.date || ""}`;
       if (callGradeSort === "name") {
         return (
           studentA.localeCompare(studentB, "ar") ||
