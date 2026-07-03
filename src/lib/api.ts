@@ -437,6 +437,33 @@ const DEFAULT_GRADE_PAGE_SIZE = 100;
 const LIST_ALL_PAGE_SIZE = 200;
 const LIST_ALL_MAX_PAGES = 5;
 
+
+export interface OpportunityStatsResponse {
+  total: number;
+  hasOpportunities: number;
+  noOpportunities: number;
+  dismissed: number;
+  active: number;
+  source: "database";
+}
+
+export interface CallStatsQuery {
+  courseId?: string;
+  examId?: string;
+  statusFilter?: string;
+  q?: string;
+  filterQ?: string;
+}
+
+export interface CallStatsResponse {
+  total: number;
+  contacted: number;
+  unanswered: number;
+  wrong: number;
+  noAction: number;
+  source: "database";
+}
+
 export interface GradeListResponse {
   grades: Array<Record<string, unknown>>;
   totalCount: number;
@@ -692,6 +719,33 @@ export const gradeApi = {
       console.warn("[API] DELETE /api/grades absent-by-exam network error:", e);
       return { ok: false, error: msg, status: 0, transient: true };
     }
+  },
+};
+
+// ─── Database Stats APIs ─────────────────────────────────────────────────────
+
+export const opportunityStatsApi = {
+  get: (query: { courseId?: string; status?: string; opportunityCount?: string; q?: string } = {}) => {
+    const queryString = buildQueryString({
+      courseId: query.courseId,
+      status: query.status,
+      opportunityCount: query.opportunityCount,
+      q: query.q,
+    });
+    return apiGet<OpportunityStatsResponse>(`opportunities/stats${queryString ? `?${queryString}` : ""}`);
+  },
+};
+
+export const callStatsApi = {
+  get: (query: CallStatsQuery = {}) => {
+    const queryString = buildQueryString({
+      courseId: query.courseId,
+      examId: query.examId,
+      statusFilter: query.statusFilter,
+      q: query.q,
+      filterQ: query.filterQ,
+    });
+    return apiGet<CallStatsResponse>(`student-calls/stats${queryString ? `?${queryString}` : ""}`);
   },
 };
 

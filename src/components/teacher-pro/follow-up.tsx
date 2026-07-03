@@ -8,7 +8,7 @@ import {
   type Student,
   type StudentNote,
 } from "@/lib/teacher-store";
-import { gradeApi, studentApi } from "@/lib/api";
+import { callStatsApi, gradeApi, studentApi, type CallStatsResponse } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -466,6 +466,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [callFilterSearch, setCallFilterSearch] = useState("");
   const [callGradePage, setCallGradePage] = useState(1);
   const [callLoading, setCallLoading] = useState(false);
+  const [callDatabaseStats, setCallDatabaseStats] = useState<CallStatsResponse | null>(null);
+  const [callDatabaseStatsLoading, setCallDatabaseStatsLoading] = useState(false);
   const [callGradeDisplayModes, setCallGradeDisplayModes] = useState<
     Record<string, CallGradeDisplayMode>
   >({});
@@ -520,6 +522,41 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       cancelled = true;
     };
   }, [view, mergeStudentsCache, mergeGradesCache]);
+
+  useEffect(() => {
+    if (view !== "calls" || !callCourseId || !callExamId) {
+      setCallDatabaseStats(null);
+      setCallDatabaseStatsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setCallDatabaseStatsLoading(true);
+      callStatsApi
+        .get({
+          courseId: callCourseId,
+          examId: callExamId,
+          statusFilter: callStatusFilter,
+          q: callGeneralSearch,
+          filterQ: callFilterSearch,
+        })
+        .then((result) => {
+          if (!cancelled) setCallDatabaseStats(result);
+        })
+        .catch(() => {
+          if (!cancelled) setCallDatabaseStats(null);
+        })
+        .finally(() => {
+          if (!cancelled) setCallDatabaseStatsLoading(false);
+        });
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [view, callCourseId, callExamId, callStatusFilter, callGeneralSearch, callFilterSearch]);
 
   const filteredStudents = useMemo(() => {
     const query = globalSearch;
@@ -865,6 +902,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       ).length,
     };
   }, [callRows, callLogLookup]);
+
+  const displayedCallStats = callDatabaseStats ?? callStats;
+  const callStatsSuffix = callDatabaseStatsLoading ? "…" : "";
 
   const dismissalInfoForStudent = (
     student: Student,
@@ -2022,33 +2062,33 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">
-                  الطلاب المطابقون
+                  الطلاب المطابقون من قاعدة البيانات
                 </p>
-                <b className="text-2xl">{callStats.total}</b>
+                <b className="text-2xl">{displayedCallStats.total}{callStatsSuffix}</b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">تم الاتصال</p>
-                <b className="text-2xl">{callStats.contacted}</b>
+                <b className="text-2xl">{displayedCallStats.contacted}{callStatsSuffix}</b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">لم يرد</p>
-                <b className="text-2xl">{callStats.unanswered}</b>
+                <b className="text-2xl">{displayedCallStats.unanswered}{callStatsSuffix}</b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">الرقم خاطئ</p>
-                <b className="text-2xl">{callStats.wrong}</b>
+                <b className="text-2xl">{displayedCallStats.wrong}{callStatsSuffix}</b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">بدون إجراء</p>
-                <b className="text-2xl">{callStats.noAction}</b>
+                <b className="text-2xl">{displayedCallStats.noAction}{callStatsSuffix}</b>
               </CardContent>
             </Card>
           </div>
@@ -2062,7 +2102,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-muted/40 px-3 py-2 text-sm">
                 <span>
-                  عدد الطلاب: <b>{callRows.length}</b>
+                  عدد الطلاب الكلي من قاعدة البيانات: <b>{displayedCallStats.total}{callStatsSuffix}</b>
                 </span>
                 <span>
                   الصفحة <b>{callSafePage}</b> من <b>{callTotalPages}</b>

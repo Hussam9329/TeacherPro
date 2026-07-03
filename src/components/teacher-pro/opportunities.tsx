@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
-import { gradeApi, studentApi } from "@/lib/api";
+import { gradeApi, opportunityStatsApi, studentApi, type OpportunityStatsResponse } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -68,6 +68,8 @@ export function OpportunitiesView() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [detailsStudentId, setDetailsStudentId] = useState("");
+  const [databaseStats, setDatabaseStats] = useState<OpportunityStatsResponse | null>(null);
+  const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
 
   // Action dialog
   const [actionDialog, setActionDialog] = useState<{
@@ -103,6 +105,34 @@ export function OpportunitiesView() {
       cancelled = true;
     };
   }, [mergeStudentsCache, mergeGradesCache]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setDatabaseStatsLoading(true);
+      opportunityStatsApi
+        .get({
+          courseId: filterCourseId,
+          status: filterStatus,
+          opportunityCount: filterOpportunityCount,
+          q: debouncedSearch,
+        })
+        .then((result) => {
+          if (!cancelled) setDatabaseStats(result);
+        })
+        .catch(() => {
+          if (!cancelled) setDatabaseStats(null);
+        })
+        .finally(() => {
+          if (!cancelled) setDatabaseStatsLoading(false);
+        });
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [filterCourseId, filterStatus, filterOpportunityCount, debouncedSearch]);
 
   const filtered = useMemo(() => {
     return students.filter((s) => {
@@ -172,6 +202,11 @@ export function OpportunitiesView() {
       } as Record<string, string>)[filterStatus] || "حالة مخصصة"
     : "كل الحالات";
   const activeOpportunityFilterName = filterOpportunityCount ? `${filterOpportunityCount} فرصة` : "كل أعداد الفرص";
+  const statsTotal = databaseStats?.total ?? filtered.length;
+  const statsHasOpportunities = databaseStats?.hasOpportunities ?? filtered.filter((s) => s.opportunities > 0 && s.status === "نشط").length;
+  const statsNoOpportunities = databaseStats?.noOpportunities ?? filtered.filter((s) => s.opportunities === 0 && s.status === "نشط").length;
+  const statsDismissed = databaseStats?.dismissed ?? filtered.filter((s) => s.status === "مفصول").length;
+  const statsSuffix = databaseStatsLoading ? "…" : "";
 
 
   const clearFilters = () => {
@@ -430,11 +465,7 @@ export function OpportunitiesView() {
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-              {
-                filtered.filter(
-                  (s) => s.opportunities > 0 && s.status === "نشط",
-                ).length
-              }
+              {statsHasOpportunities}{statsSuffix}
             </p>
             <p className="text-xs text-muted-foreground">طلاب لديهم فرص</p>
           </CardContent>
@@ -442,11 +473,7 @@ export function OpportunitiesView() {
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-              {
-                filtered.filter(
-                  (s) => s.opportunities === 0 && s.status === "نشط",
-                ).length
-              }
+              {statsNoOpportunities}{statsSuffix}
             </p>
             <p className="text-xs text-muted-foreground">طلاب بدون فرص</p>
           </CardContent>
@@ -454,15 +481,15 @@ export function OpportunitiesView() {
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">
-              {filtered.filter((s) => s.status === "مفصول").length}
+              {statsDismissed}{statsSuffix}
             </p>
             <p className="text-xs text-muted-foreground">مفصولون</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold">{filtered.length}</p>
-            <p className="text-xs text-muted-foreground">إجمالي</p>
+            <p className="text-2xl font-bold">{statsTotal}{statsSuffix}</p>
+            <p className="text-xs text-muted-foreground">إجمالي من قاعدة البيانات</p>
           </CardContent>
         </Card>
       </div>
