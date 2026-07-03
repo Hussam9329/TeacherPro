@@ -381,7 +381,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   useEffect(() => {
     let cancelled = false;
     const loads = [studentApi.list({ pageSize: 200 })];
-    const gradeLoad = view === "leaves" ? Promise.resolve(null) : gradeApi.list({ pageSize: 200 });
+    // For calls view, fetch more grades (500) to ensure absent students appear.
+    // For other views, 200 is enough.
+    const gradePageSize = view === "calls" ? 500 : 200;
+    const gradeLoad = view === "leaves" ? Promise.resolve(null) : gradeApi.list({ pageSize: gradePageSize });
 
     Promise.all([loads[0], gradeLoad])
       .then(([studentResult, gradeResult]) => {

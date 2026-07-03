@@ -378,6 +378,7 @@ export function TeacherProLayout() {
     };
 
     const handleGlobalSearchShortcut = (event: KeyboardEvent) => {
+      if (!event.key) return;
       const key = event.key.toLowerCase();
       const isSearchShortcut =
         (event.ctrlKey || event.metaKey) &&
