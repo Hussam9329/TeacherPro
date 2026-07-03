@@ -494,13 +494,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }, [callExamId]);
 
   useEffect(() => {
-    if (view !== "calls" || !callCourseId) return;
+    if (view !== "calls") return;
     let cancelled = false;
     setCallLoading(true);
 
+    // تحميل كل الطلاب والدرجات مرة واحدة (بدون فلتر courseId)
+    // الفلترة تتم client-side في callRows
     Promise.all([
-      studentApi.listAll({ courseId: callCourseId, pageSize: 200 }),
-      gradeApi.listAll({ courseId: callCourseId, pageSize: 200 }),
+      studentApi.list({ pageSize: 200 }),
+      gradeApi.list({ pageSize: 200 }),
     ])
       .then(([studentResult, gradeResult]) => {
         if (cancelled) return;
@@ -508,7 +510,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         mergeGradesCache((gradeResult?.grades || []) as unknown as Grade[]);
       })
       .catch(() => {
-        toast.error("تعذر تحميل بيانات المكالمات لهذه الدورة. سيتم استخدام آخر بيانات محفوظة محلياً.");
+        toast.error("تعذر تحميل بيانات المكالمات. سيتم استخدام آخر بيانات محفوظة محلياً.");
       })
       .finally(() => {
         if (!cancelled) setCallLoading(false);
@@ -517,7 +519,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return () => {
       cancelled = true;
     };
-  }, [view, callCourseId, mergeStudentsCache, mergeGradesCache]);
+  }, [view, mergeStudentsCache, mergeGradesCache]);
 
   const filteredStudents = useMemo(() => {
     const query = globalSearch;
@@ -708,13 +710,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const callRows = useMemo<CallStudentRow[]>(() => {
-    if (!callCourseSelected || !selectedCallExam || !examIncludesCourse(selectedCallExam, callCourseId)) {
-      return [];
-    }
-
-    const courseStudents = students.filter(
-      (student) => student.courseId === callCourseId && student.status !== "مفصول",
-    );
+    // إذا لا يوجد دورة محددة، اعرض كل الطلاب النشطين
+    const courseStudents = callCourseId
+      ? students.filter(
+          (student) => student.courseId === callCourseId && student.status !== "مفصول",
+        )
+      : students.filter((student) => student.status !== "مفصول");
     const courseStudentIds = new Set(courseStudents.map((student) => student.id));
     const studentById = new Map<string, Student>(
       courseStudents.map((student) => [student.id, student] as [string, Student]),
@@ -758,8 +759,17 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const rows = Array.from(grouped.values())
       .flatMap<CallStudentRow>(({ student, items }) => {
         const sortedItems = sortGradeItemsByLatest(items);
-        const examItem = sortedItems.find((item) => item.exam.id === selectedCallExam.id) || null;
-        if (!callGradeMatchesStatusFilter(callStatusFilter, examItem)) return [];
+        // إذا لا يوجد امتحان محدد، اعرض كل الطلاب (بفلاتر الحالة على كل الدرجات)
+        // إذا يوجد امتحان محدد، اعرض فقط الطلاب الذين لديهم درجة في ذلك الامتحان
+        const examItem = selectedCallExam
+          ? sortedItems.find((item) => item.exam.id === selectedCallExam.id) || null
+          : sortedItems[0] || null;
+
+        // فلتر الحالة
+        if (callStatusFilter && callStatusFilter !== "all") {
+          if (!examItem) return [];
+          if (!callGradeMatchesStatusFilter(callStatusFilter, examItem)) return [];
+        }
 
         const searchValues = [
           student.name,
@@ -770,12 +780,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           student.school,
           student.status,
           student.studyType,
-          selectedCallCourse?.name,
-          selectedCallExam.name,
-          examItem?.grade.status,
+          selectedCallCourse?.name || "",
+          selectedCallExam?.name || "",
+          examItem?.grade.status || "",
           examItem ? formatGradeScore(examItem.grade, examItem.exam, "—") : "",
-          examItem?.reason,
-          examItem?.grade.notes,
+          examItem?.reason || "",
+          examItem?.grade.notes || "",
           ...sortedItems.flatMap((item) => [
             item.exam.name,
             item.grade.status,
