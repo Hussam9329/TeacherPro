@@ -608,6 +608,16 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       { student: Student; items: CallGradeItem[] }
     >();
 
+    // أولاً: أضف كل الطلاب النشطين حتى لو ما عندهم درجات.
+    // هذا يخلي قائمة المكالمات تعرض كل الطلاب افتراضياً.
+    students.forEach((student) => {
+      if (student.status === "مفصول") return; // المفصولون لا يظهرون افتراضياً
+      if (!grouped.has(student.id)) {
+        grouped.set(student.id, { student, items: [] as CallGradeItem[] });
+      }
+    });
+
+    // ثانياً: اربط الدرجات بالطلاب
     grades.forEach((grade) => {
       const student = studentById.get(grade.studentId);
       const exam = examById.get(grade.examId);
@@ -638,22 +648,30 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const rows = Array.from(grouped.values())
       .flatMap<CallStudentRow>(({ student, items }) => {
         const sortedItems = sortGradeItemsByLatest(items);
-        const relevantItems = sortedItems.filter((item) => {
-          if (callExamId && item.exam.id !== callExamId) return false;
-          const cls = classification(item.grade, item.exam, student);
-          if (nonCallableGradeKinds.has(cls.kind)) return false;
-          if (
-            !gradeMatchesStatusFilter(
-              callGradeStatusFilter,
-              item.grade,
-              item.exam,
-              cls,
+        // إذا لا يوجد فلتر امتحان ولا فلتر حالة، اعرض كل الطلاب
+        // (حتى الذين ليس لديهم درجات في أي امتحان)
+        const hasActiveFilter = callExamId || callGradeStatusFilter !== "all";
+
+        let relevantItems = sortedItems;
+        if (hasActiveFilter) {
+          // طبّق الفلاتر على الـ items
+          relevantItems = sortedItems.filter((item) => {
+            if (callExamId && item.exam.id !== callExamId) return false;
+            const cls = classification(item.grade, item.exam, student);
+            if (nonCallableGradeKinds.has(cls.kind)) return false;
+            if (
+              !gradeMatchesStatusFilter(
+                callGradeStatusFilter,
+                item.grade,
+                item.exam,
+                cls,
+              )
             )
-          )
-            return false;
-          return true;
-        });
-        if (relevantItems.length === 0) return [];
+              return false;
+            return true;
+          });
+          if (relevantItems.length === 0) return [];
+        }
         if (!matchesArabicLetterFilter(student.name, callNameLetter)) return [];
         const focusItem = relevantItems[0] || sortedItems[0];
         return [
