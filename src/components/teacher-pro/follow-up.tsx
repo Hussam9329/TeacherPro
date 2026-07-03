@@ -1150,7 +1150,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       completedAt: completed ? todayISO() : "",
       notes:
         existing?.notes ||
-        `${item.reason} | ${item.exam.name} | ${formatGradeScore(item.grade, item.exam, "—")}`,
+        `${item?.reason || ""} | ${item.exam.name} | ${formatGradeScore(item.grade, item.exam, "—")}`,
     };
     if (existing) updateStudentCall(existing.id, payload);
     else addStudentCall(payload);
@@ -1334,7 +1334,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         className={`rounded-2xl border px-3 py-2 text-xs ${isFocus ? "border-primary bg-primary/10" : "bg-muted/35"}`}
       >
         <div className="flex flex-wrap items-center gap-2">
-          <b>{item.exam.name}</b>
+          <b>{item?.exam?.name || "—"}</b>
           {isFocus ? <Badge>آخر/محور المتابعة</Badge> : null}
           <Badge
             variant={
@@ -1345,15 +1345,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 : "secondary"
             }
           >
-            {item.label}
+            {item?.label || "—"}
           </Badge>
         </div>
         <p className="mt-1 text-muted-foreground">
-          {formatAppDate(item.exam.date)} - الدرجة:{" "}
+          {item ? formatAppDate(item.exam.date) : "—"} - الدرجة:{" "}
           <span className="font-bold text-foreground">{value}</span>
         </p>
-        {item.category !== "absent" ? (
-          <p className="mt-1 text-muted-foreground">{item.reason}</p>
+        {item?.category !== "absent" ? (
+          <p className="mt-1 text-muted-foreground">{item?.reason || ""}</p>
         ) : null}
         {call ? (
           <p className="mt-1 text-muted-foreground">
@@ -1374,10 +1374,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const call = callLogForRow(row);
     const contactStatus = callStatusForLog(call);
     const callStudentNote = callNoteForStudent(row.student.id);
-    const focusValue =
-      item.category === "absent"
+    const focusValue = item
+      ? item.category === "absent"
         ? "غائب"
-        : formatGradeScore(item.grade, item.exam, "—");
+        : formatGradeScore(item.grade, item.exam, "—")
+      : "—";
     return (
       <div
         key={row.id}
@@ -1408,26 +1409,26 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               آخر امتحان / محور المتابعة الحالي
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <b>{item.exam.name}</b>
+              <b>{item?.exam?.name || "—"}</b>
               <Badge
                 variant={
-                  item.category === "absent" ||
-                  item.category === "failed" ||
-                  item.category === "cheating"
+                  item?.category === "absent" ||
+                  item?.category === "failed" ||
+                  item?.category === "cheating"
                     ? "destructive"
                     : "secondary"
                 }
               >
-                {item.label}
+                {item?.label || "—"}
               </Badge>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              {formatAppDate(item.exam.date)} - الدرجة:{" "}
+              {item ? formatAppDate(item.exam.date) : "—"} - الدرجة:{" "}
               <span className="font-bold text-foreground">{focusValue}</span>
             </p>
-            {item.category !== "absent" ? (
+            {item?.category !== "absent" ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                {item.reason}
+                {item?.reason || ""}
               </p>
             ) : null}
           </div>
