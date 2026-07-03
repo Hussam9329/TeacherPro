@@ -798,7 +798,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const callRows = useMemo<CallStudentRow[]>(() => {
-    if (!callCourseId || !selectedCallExam) return [];
+    // لا نرجع قائمة فارغة إذا ما في امتحان محدد — نعرض كل الطلاب
     const courseStudents = callPageStudentIds
       .map((studentId) => students.find((student) => student.id === studentId))
       .filter((student): student is Student => Boolean(student));
@@ -806,7 +806,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const studentById = new Map<string, Student>(
       courseStudents.map((student) => [student.id, student] as [string, Student]),
     );
-    const examById = new Map<string, Exam>([[selectedCallExam.id, selectedCallExam]]);
+    // خريطة كل الامتحانات (وليس الامتحان المحدد فقط) حتى تظهر كل درجات الطالب
+    const examById = new Map<string, Exam>(
+      exams.map((exam) => [exam.id, exam] as [string, Exam]),
+    );
     const grouped = new Map<
       string,
       { student: Student; items: CallGradeItem[] }
@@ -841,12 +844,28 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const rows = Array.from(grouped.values())
       .flatMap<CallStudentRow>(({ student, items }) => {
         const sortedItems = sortGradeItemsByLatest(items);
-        const examItem = sortedItems.find((item) => item.exam.id === selectedCallExam.id) || null;
 
-        // فلتر الحالة
-        if (callStatusFilter && callStatusFilter !== "all") {
-          if (!examItem) return [];
-          if (!callGradeMatchesStatusFilter(callStatusFilter, examItem)) return [];
+        // إذا يوجد امتحان محدد، اعرض فقط الطلاب الذين لديهم درجة في ذلك الامتحان
+        // وإذا لا يوجد امتحان محدد، اعرض كل الطلاب بكل درجاتهم
+        let displayItems = sortedItems;
+        let focusItem: CallGradeItem | null = sortedItems[0] || null;
+
+        if (selectedCallExam) {
+          const examItem = sortedItems.find((item) => item.exam.id === selectedCallExam.id) || null;
+          // إذا يوجد فلتر حالة + امتحان محدد، اعرض فقط المطابقين
+          if (callStatusFilter && callStatusFilter !== "all") {
+            if (!examItem) return [];
+            if (!callGradeMatchesStatusFilter(callStatusFilter, examItem)) return [];
+          }
+          focusItem = examItem;
+        } else if (callStatusFilter && callStatusFilter !== "all") {
+          // فلتر حالة بدون امتحان محدد — اعرض الطلاب الذين لديهم درجة مطابقة في أي امتحان
+          const matching = sortedItems.filter((item) =>
+            callGradeMatchesStatusFilter(callStatusFilter, item)
+          );
+          if (matching.length === 0) return [];
+          displayItems = matching;
+          focusItem = matching[0];
         }
 
         const searchValues = [
@@ -860,10 +879,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           student.studyType,
           selectedCallCourse?.name || "",
           selectedCallExam?.name || "",
-          examItem?.grade.status || "",
-          examItem ? formatGradeScore(examItem.grade, examItem.exam, "—") : "",
-          examItem?.reason || "",
-          examItem?.grade.notes || "",
+          focusItem?.grade.status || "",
+          focusItem ? formatGradeScore(focusItem.grade, focusItem.exam, "—") : "",
+          focusItem?.reason || "",
+          focusItem?.grade.notes || "",
           ...sortedItems.flatMap((item) => [
             item.exam.name,
             item.grade.status,
@@ -882,8 +901,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           {
             id: `student:${student.id}`,
             student,
-            items: sortedItems,
-            focusItem: examItem,
+            items: displayItems,
+            focusItem,
           },
         ];
       });
@@ -899,6 +918,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }, [
     grades,
     students,
+    exams,
     callPageStudentIds,
     selectedCallCourse,
     selectedCallExam,
