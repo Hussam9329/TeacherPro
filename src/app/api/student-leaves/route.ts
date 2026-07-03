@@ -84,7 +84,15 @@ export async function GET(req: NextRequest) {
     const [totalCount, studentLeaves] = await withFollowupTables(
       () => Promise.all([
         db.studentLeave.count(),
-        db.studentLeave.findMany({ orderBy: [{ dateFrom: 'desc' }, { date: 'desc' }], skip, take: pageSize }),
+        db.studentLeave.findMany({
+          orderBy: [{ dateFrom: 'desc' }, { date: 'desc' }],
+          skip,
+          take: pageSize,
+          include: {
+            student: true,
+            exam: true,
+          },
+        }),
       ]),
       'StudentLeave',
     );
@@ -118,7 +126,13 @@ export async function POST(req: NextRequest) {
       if (data.leaveType === 'exam' && data.examId) {
         await tx.studentLeave.deleteMany({ where: { studentId: data.studentId, examId: data.examId } });
       }
-      const savedLeave = await tx.studentLeave.create({ data });
+      const savedLeave = await tx.studentLeave.create({
+        data,
+        include: {
+          student: true,
+          exam: true,
+        },
+      });
 
       if (affectedExamIds.length) {
         await tx.grade.deleteMany({ where: { studentId: data.studentId, examId: { in: affectedExamIds } } });
@@ -153,7 +167,14 @@ export async function PUT(req: NextRequest) {
     if (body.dateTo !== undefined || body.leaveType !== undefined) data.dateTo = normalized.dateTo;
     if (body.notes !== undefined) data.notes = normalized.notes;
     const studentLeave = await withFollowupTables(
-      () => db.studentLeave.update({ where: { id }, data }),
+      () => db.studentLeave.update({
+        where: { id },
+        data,
+        include: {
+          student: true,
+          exam: true,
+        },
+      }),
       'StudentLeave',
     );
     return NextResponse.json({ studentLeave });

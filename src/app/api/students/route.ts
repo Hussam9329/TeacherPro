@@ -274,6 +274,22 @@ function buildStudentFilterWhere(
   const locationWhere = location ? buildLocationWhere(location) : null;
   if (locationWhere) and.push(locationWhere);
 
+  // Database-side filters used by إدارة الفرص. Keep them under explicit
+  // names so normal student status filtering remains the literal Arabic value.
+  const opportunityStatus = String(searchParams.get("opportunityStatus") ?? "").trim();
+  if (opportunityStatus === "active") and.push({ status: "نشط" });
+  else if (opportunityStatus === "dismissed") and.push({ status: "مفصول" });
+  else if (opportunityStatus === "has-opportunities") and.push({ status: "نشط", opportunities: { gt: 0 } });
+  else if (opportunityStatus === "no-opportunities") and.push({ status: "نشط", opportunities: 0 });
+  else if (opportunityStatus === "temporary-dismissal") and.push({ status: "مفصول", dismissalType: "فصل مؤقت" });
+  else if (opportunityStatus === "final-dismissal") and.push({ status: "مفصول", dismissalType: "فصل نهائي" });
+
+  const opportunityCount = String(searchParams.get("opportunityCount") ?? "").trim();
+  if (opportunityCount !== "") {
+    const count = Number(opportunityCount);
+    if (Number.isFinite(count) && count >= 0) and.push({ opportunities: Math.trunc(count) });
+  }
+
   return and;
 }
 

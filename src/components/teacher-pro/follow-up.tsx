@@ -6,9 +6,15 @@ import {
   type Exam,
   type Grade,
   type Student,
+  type StudentCall,
   type StudentNote,
 } from "@/lib/teacher-store";
-import { callStatsApi, gradeApi, studentApi, type CallStatsResponse } from "@/lib/api";
+import {
+  callCandidatesApi,
+  callStatsApi,
+  studentApi,
+  type CallStatsResponse,
+} from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +36,7 @@ import { searchAny } from "@/lib/validation";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { formatGradeScore } from "@/lib/exam-utils";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 
 type FollowView = "leaves" | "calls" | "pledges";
 type CallCategory =
@@ -427,12 +434,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     mergeGradesCache,
   } = useTeacherStore();
 
+  const [globalSearch, setGlobalSearch] = useState("");
+  const debouncedGlobalSearch = useDebouncedValue(globalSearch, 180);
+
   useEffect(() => {
     if (view !== "leaves") return;
     let cancelled = false;
 
     studentApi
-      .list({ pageSize: 200 })
+      .list({ q: debouncedGlobalSearch, pageSize: debouncedGlobalSearch.trim() ? 30 : 50 })
       .then((studentResult) => {
         if (cancelled) return;
         mergeStudentsCache((studentResult?.students || []) as unknown as Student[]);
@@ -444,9 +454,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return () => {
       cancelled = true;
     };
-  }, [view, mergeStudentsCache]);
+  }, [view, debouncedGlobalSearch, mergeStudentsCache]);
 
-  const [globalSearch, setGlobalSearch] = useState("");
   const [leaveStudentId, setLeaveStudentId] = useState("");
   const [leaveMode, setLeaveMode] = useState<LeaveMode>("exam");
   const [leaveExamId, setLeaveExamId] = useState("");
@@ -466,6 +475,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [callFilterSearch, setCallFilterSearch] = useState("");
   const [callGradePage, setCallGradePage] = useState(1);
   const [callLoading, setCallLoading] = useState(false);
+  const [callPageStudentIds, setCallPageStudentIds] = useState<string[]>([]);
+  const [callPageStudentCalls, setCallPageStudentCalls] = useState<StudentCall[]>([]);
+  const [callServerPageInfo, setCallServerPageInfo] = useState({ totalCount: 0, totalPages: 1, hasMore: false });
   const [callDatabaseStats, setCallDatabaseStats] = useState<CallStatsResponse | null>(null);
   const [callDatabaseStatsLoading, setCallDatabaseStatsLoading] = useState(false);
   const [callGradeDisplayModes, setCallGradeDisplayModes] = useState<
@@ -496,23 +508,47 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }, [callExamId]);
 
   useEffect(() => {
-    if (view !== "calls") return;
+    if (view !== "calls" || !callCourseId || !callExamId) {
+      setCallPageStudentIds([]);
+      setCallPageStudentCalls([]);
+      setCallServerPageInfo({ totalCount: 0, totalPages: 1, hasMore: false });
+      setCallLoading(false);
+      return;
+    }
     let cancelled = false;
     setCallLoading(true);
 
-    // تحميل كل الطلاب والدرجات مرة واحدة (بدون فلتر courseId)
-    // الفلترة تتم client-side في callRows
-    Promise.all([
-      studentApi.list({ pageSize: 200 }),
-      gradeApi.list({ pageSize: 200 }),
-    ])
-      .then(([studentResult, gradeResult]) => {
-        if (cancelled) return;
-        mergeStudentsCache((studentResult?.students || []) as unknown as Student[]);
-        mergeGradesCache((gradeResult?.grades || []) as unknown as Grade[]);
+    callCandidatesApi
+      .get({
+        courseId: callCourseId,
+        examId: callExamId,
+        statusFilter: callStatusFilter,
+        q: callGeneralSearch,
+        filterQ: callFilterSearch,
+        page: callGradePage,
+        pageSize: CALL_PAGE_SIZE,
+      })
+      .then((result) => {
+        if (cancelled || !result) return;
+        const pageStudents = (result.students || []) as unknown as Student[];
+        const pageGrades = (result.grades || []) as unknown as Grade[];
+        mergeStudentsCache(pageStudents);
+        mergeGradesCache(pageGrades);
+        setCallPageStudentIds(pageStudents.map((student) => student.id));
+        setCallPageStudentCalls((result.studentCalls || []) as unknown as StudentCall[]);
+        setCallServerPageInfo({
+          totalCount: Number(result.totalCount || 0),
+          totalPages: Math.max(1, Number(result.totalPages || 1)),
+          hasMore: Boolean(result.hasMore),
+        });
       })
       .catch(() => {
-        toast.error("تعذر تحميل بيانات المكالمات. سيتم استخدام آخر بيانات محفوظة محلياً.");
+        if (!cancelled) {
+          setCallPageStudentIds([]);
+          setCallPageStudentCalls([]);
+          setCallServerPageInfo({ totalCount: 0, totalPages: 1, hasMore: false });
+          toast.error("تعذر تحميل طلاب المكالمات من قاعدة البيانات.");
+        }
       })
       .finally(() => {
         if (!cancelled) setCallLoading(false);
@@ -521,7 +557,17 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return () => {
       cancelled = true;
     };
-  }, [view, mergeStudentsCache, mergeGradesCache]);
+  }, [
+    view,
+    callCourseId,
+    callExamId,
+    callStatusFilter,
+    callGeneralSearch,
+    callFilterSearch,
+    callGradePage,
+    mergeStudentsCache,
+    mergeGradesCache,
+  ]);
 
   useEffect(() => {
     if (view !== "calls" || !callCourseId || !callExamId) {
@@ -640,14 +686,19 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return dismissalGroupFromType(student.dismissalType || "فصل مؤقت");
   };
 
+  const effectiveStudentCalls = useMemo(
+    () => [...studentCalls, ...callPageStudentCalls],
+    [studentCalls, callPageStudentCalls],
+  );
+
   const callLogLookup = useMemo(() => {
-    const map = new Map<string, (typeof studentCalls)[number]>();
-    studentCalls.forEach((call) => {
+    const map = new Map<string, (typeof effectiveStudentCalls)[number]>();
+    effectiveStudentCalls.forEach((call) => {
       const key = `${call.studentId}::${String(call.examId || "")}::${call.category}`;
-      if (!map.has(key)) map.set(key, call);
+      map.set(key, call);
     });
     return map;
-  }, [studentCalls]);
+  }, [effectiveStudentCalls]);
 
   const callLogForGrade = (student: Student, item: CallGradeItem) => {
     const exactKey = `${student.id}::${item.exam.id}::${item.callKey}`;
@@ -669,13 +720,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const callStudentNoteLookup = useMemo(() => {
-    const map = new Map<string, (typeof studentCalls)[number]>();
-    studentCalls.forEach((call) => {
+    const map = new Map<string, (typeof effectiveStudentCalls)[number]>();
+    effectiveStudentCalls.forEach((call) => {
       if (call.category === CALL_STUDENT_NOTE_CATEGORY)
         map.set(call.studentId, call);
     });
     return map;
-  }, [studentCalls]);
+  }, [effectiveStudentCalls]);
 
   const callNoteForStudent = (studentId: string) =>
     callStudentNoteLookup.get(studentId);
@@ -747,21 +798,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const callRows = useMemo<CallStudentRow[]>(() => {
-    // إذا لا يوجد دورة محددة، اعرض كل الطلاب النشطين
-    const courseStudents = callCourseId
-      ? students.filter(
-          (student) => student.courseId === callCourseId && student.status !== "مفصول",
-        )
-      : students.filter((student) => student.status !== "مفصول");
+    if (!callCourseId || !selectedCallExam) return [];
+    const courseStudents = callPageStudentIds
+      .map((studentId) => students.find((student) => student.id === studentId))
+      .filter((student): student is Student => Boolean(student));
     const courseStudentIds = new Set(courseStudents.map((student) => student.id));
     const studentById = new Map<string, Student>(
       courseStudents.map((student) => [student.id, student] as [string, Student]),
     );
-    const examById = new Map<string, Exam>(
-      exams
-        .filter((exam) => examIncludesCourse(exam, callCourseId))
-        .map((exam) => [exam.id, exam] as [string, Exam]),
-    );
+    const examById = new Map<string, Exam>([[selectedCallExam.id, selectedCallExam]]);
     const grouped = new Map<
       string,
       { student: Student; items: CallGradeItem[] }
@@ -796,11 +841,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const rows = Array.from(grouped.values())
       .flatMap<CallStudentRow>(({ student, items }) => {
         const sortedItems = sortGradeItemsByLatest(items);
-        // إذا لا يوجد امتحان محدد، اعرض كل الطلاب (بفلاتر الحالة على كل الدرجات)
-        // إذا يوجد امتحان محدد، اعرض فقط الطلاب الذين لديهم درجة في ذلك الامتحان
-        const examItem = selectedCallExam
-          ? sortedItems.find((item) => item.exam.id === selectedCallExam.id) || null
-          : sortedItems[0] || null;
+        const examItem = sortedItems.find((item) => item.exam.id === selectedCallExam.id) || null;
 
         // فلتر الحالة
         if (callStatusFilter && callStatusFilter !== "all") {
@@ -858,11 +899,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }, [
     grades,
     students,
-    exams,
-    callCourseSelected,
+    callPageStudentIds,
     selectedCallCourse,
     selectedCallExam,
-    callCourseId,
     callStatusFilter,
     callGeneralSearch,
     callFilterSearch,
@@ -871,15 +910,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     classification,
   ]);
 
-  const callTotalPages = Math.max(
-    1,
-    Math.ceil(callRows.length / CALL_PAGE_SIZE),
-  );
+  const callTotalPages = Math.max(1, callServerPageInfo.totalPages);
   const callSafePage = Math.min(callGradePage, callTotalPages);
-  const visibleCallRows = callRows.slice(
-    (callSafePage - 1) * CALL_PAGE_SIZE,
-    callSafePage * CALL_PAGE_SIZE,
-  );
+  const visibleCallRows = callRows;
 
   const callStats = useMemo(() => {
     const rowsWithCalls = callRows.map((row) => ({
@@ -887,7 +920,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       call: callLogForRow(row),
     }));
     return {
-      total: callRows.length,
+      total: callServerPageInfo.totalCount || callRows.length,
       contacted: rowsWithCalls.filter(
         ({ call }) => callStatusForLog(call) === "تم الاتصال",
       ).length,
@@ -901,7 +934,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         ({ call }) => callStatusForLog(call) === "",
       ).length,
     };
-  }, [callRows, callLogLookup]);
+  }, [callRows, callLogLookup, callServerPageInfo.totalCount]);
 
   const displayedCallStats = callDatabaseStats ?? callStats;
   const callStatsSuffix = callDatabaseStatsLoading ? "…" : "";
@@ -1355,17 +1388,21 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           <p className="empty-state py-6">لا توجد إجازات مسجلة</p>
         ) : (
           studentLeaves.map((leave) => {
+            const relatedStudent = leave.student && typeof leave.student === "object" ? leave.student : null;
+            const relatedExam = leave.exam && typeof leave.exam === "object" ? leave.exam : null;
             const student = students.find(
               (item) => item.id === leave.studentId,
-            );
-            const exam = exams.find((item) => item.id === leave.examId);
+            ) || relatedStudent;
+            const exam = exams.find((item) => item.id === leave.examId) || relatedExam;
             const isPeriod = (leave.leaveType || "exam") === "period";
+            const studentDisplayName = student?.name || "طالب غير محمل";
+            const studentDisplayCode = student?.code ? ` (${student.code})` : "";
             return (
               <div
                 key={leave.id}
                 className="grid gap-2 rounded-2xl border bg-card/80 p-3 text-sm lg:grid-cols-[1.1fr_1fr_1.4fr_1fr_auto] lg:items-center"
               >
-                <b>{student?.name || "طالب محذوف"}</b>
+                <b>{studentDisplayName}{studentDisplayCode}</b>
                 <span>{leave.reason}</span>
                 <span>
                   {isPeriod

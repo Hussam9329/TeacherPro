@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
-import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
-import { gradeApi, opportunityStatsApi, studentApi, type OpportunityStatsResponse } from "@/lib/api";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
+import { useTeacherStore, type Student } from "@/lib/teacher-store";
+import { opportunityStatsApi, studentApi, type OpportunityStatsResponse } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,10 +25,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
-import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { formatGradeScore } from "@/lib/exam-utils";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 
 
@@ -48,7 +46,6 @@ export function OpportunitiesView() {
     students,
     courses,
     exams,
-    grades,
     opportunityLogs,
     adjustOpportunities,
     bulkAdjustOpportunities,
@@ -57,7 +54,6 @@ export function OpportunitiesView() {
     courseName,
     activeChapterForCourse,
     mergeStudentsCache,
-    mergeGradesCache,
   } = useTeacherStore();
 
   const [filterCourseId, setFilterCourseId] = useState("");
@@ -67,6 +63,11 @@ export function OpportunitiesView() {
   const debouncedSearch = useDebouncedValue(search, 180);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
+  const [serverStudents, setServerStudents] = useState<Student[]>([]);
+  const [serverTotalCount, setServerTotalCount] = useState(0);
+  const [serverTotalPages, setServerTotalPages] = useState(1);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [detailsStudentId, setDetailsStudentId] = useState("");
   const [databaseStats, setDatabaseStats] = useState<OpportunityStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
@@ -89,22 +90,39 @@ export function OpportunitiesView() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      studentApi.listAll({ pageSize: 200 }),
-      gradeApi.listAll({ pageSize: 200 }),
-    ])
-      .then(([studentResult, gradeResult]) => {
-        if (cancelled) return;
-        mergeStudentsCache((studentResult?.students || []) as unknown as Student[]);
-        mergeGradesCache((gradeResult?.grades || []) as unknown as Grade[]);
+    setStudentsLoading(true);
+    studentApi
+      .list({
+        page,
+        pageSize,
+        courseId: filterCourseId,
+        opportunityStatus: filterStatus,
+        opportunityCount: filterOpportunityCount,
+        q: debouncedSearch,
+      })
+      .then((studentResult) => {
+        if (cancelled || !studentResult) return;
+        const nextStudents = (studentResult.students || []) as unknown as Student[];
+        setServerStudents(nextStudents);
+        setServerTotalCount(Number(studentResult.totalCount || 0));
+        setServerTotalPages(Math.max(1, Number(studentResult.totalPages || 1)));
+        mergeStudentsCache(nextStudents);
       })
       .catch(() => {
-        // لا نمنع الصفحة من العمل؛ تعرض آخر كاش معروف إذا تعذر الاتصال.
+        if (!cancelled) {
+          setServerStudents([]);
+          setServerTotalCount(0);
+          setServerTotalPages(1);
+          toast.error("تعذر تحميل طلاب الفرص من قاعدة البيانات.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setStudentsLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [mergeStudentsCache, mergeGradesCache]);
+  }, [page, pageSize, filterCourseId, filterStatus, filterOpportunityCount, debouncedSearch, refreshKey, mergeStudentsCache]);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,39 +152,20 @@ export function OpportunitiesView() {
     };
   }, [filterCourseId, filterStatus, filterOpportunityCount, debouncedSearch]);
 
-  const filtered = useMemo(() => {
-    return students.filter((s) => {
-      if (filterCourseId && s.courseId !== filterCourseId) return false;
-      if (filterStatus === 'active' && s.status !== 'نشط') return false;
-      if (filterStatus === 'dismissed' && s.status !== 'مفصول') return false;
-      if (filterStatus === 'has-opportunities' && !(s.opportunities > 0 && s.status === 'نشط')) return false;
-      if (filterStatus === 'no-opportunities' && !(s.opportunities === 0 && s.status === 'نشط')) return false;
-      if (filterStatus === 'temporary-dismissal' && !(s.status === 'مفصول' && s.dismissalType === 'فصل مؤقت')) return false;
-      if (filterStatus === 'final-dismissal' && !(s.status === 'مفصول' && s.dismissalType === 'فصل نهائي')) return false;
-      if (filterOpportunityCount && s.opportunities !== Number(filterOpportunityCount)) return false;
-      if (debouncedSearch && !searchAny(debouncedSearch, [s.name, s.code, s.phone, s.parentPhone, s.telegram, s.school, s.subSite, s.status, s.dismissalType, s.dismissalReason, s.dismissalNotes])) return false;
-      return true;
-    });
-  }, [students, filterCourseId, filterStatus, filterOpportunityCount, debouncedSearch]);
+  const filtered = serverStudents;
+  const totalPages = serverTotalPages;
+  const paged = serverStudents;
 
-  const totalPages = Math.ceil(filtered.length / pageSize);
-  const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
-
-  const opportunityCountOptions = useMemo(() => {
-    return Array.from(new Set(students.map((student) => Number(student.opportunities || 0))))
-      .filter((count) => Number.isFinite(count) && count >= 0)
-      .sort((a, b) => a - b);
-  }, [students]);
 
   const bulkEligibleStudents = useMemo(
     () => filtered.filter((student) => Boolean(activeChapterForCourse(student.courseId))),
     [filtered, activeChapterForCourse],
   );
 
-  const fullOpportunityLimitFor = (student: typeof students[number]) => {
+  const fullOpportunityLimitFor = useCallback((student: Student) => {
     const base = Number(student.baseOpportunities || 0);
     return base > 0 ? base : 3;
-  };
+  }, []);
 
   const currentBulkTargets = useMemo(() => {
     return bulkEligibleStudents.filter((student) => {
@@ -179,7 +178,7 @@ export function OpportunitiesView() {
       }
       return true;
     });
-  }, [bulkEligibleStudents, bulkActionDialog.type, bulkExcludeDismissed, bulkExcludeFullOpportunities]);
+  }, [bulkEligibleStudents, bulkActionDialog.type, bulkExcludeDismissed, bulkExcludeFullOpportunities, fullOpportunityLimitFor]);
 
   const bulkSkippedNoActiveChapterCount = filtered.length - bulkEligibleStudents.length;
   const bulkExcludedDismissedCount = bulkActionDialog.type === "add" && bulkExcludeDismissed
@@ -202,7 +201,7 @@ export function OpportunitiesView() {
       } as Record<string, string>)[filterStatus] || "حالة مخصصة"
     : "كل الحالات";
   const activeOpportunityFilterName = filterOpportunityCount ? `${filterOpportunityCount} فرصة` : "كل أعداد الفرص";
-  const statsTotal = databaseStats?.total ?? filtered.length;
+  const statsTotal = databaseStats?.total ?? serverTotalCount;
   const statsHasOpportunities = databaseStats?.hasOpportunities ?? filtered.filter((s) => s.opportunities > 0 && s.status === "نشط").length;
   const statsNoOpportunities = databaseStats?.noOpportunities ?? filtered.filter((s) => s.opportunities === 0 && s.status === "نشط").length;
   const statsDismissed = databaseStats?.dismissed ?? filtered.filter((s) => s.status === "مفصول").length;
@@ -218,8 +217,8 @@ export function OpportunitiesView() {
   };
 
   const selectedDetailsStudent = useMemo(
-    () => students.find((student) => student.id === detailsStudentId) || null,
-    [students, detailsStudentId],
+    () => students.find((student) => student.id === detailsStudentId) || serverStudents.find((student) => student.id === detailsStudentId) || null,
+    [students, serverStudents, detailsStudentId],
   );
 
   const selectedDetailsLogs = useMemo(() => {
@@ -298,7 +297,6 @@ export function OpportunitiesView() {
 
   const renderLogExamDetails = (log: typeof opportunityLogs[number]) => {
     const exam = exams.find((item) => item.id === log.examId);
-    const grade = grades.find((item) => item.studentId === log.studentId && item.examId === log.examId);
     if (!log.examId) return <div className="rounded-xl border bg-muted/40 p-3 text-xs text-muted-foreground">حركة يدوية من إدارة الفرص، وليست مرتبطة بامتحان محدد.</div>;
     if (!exam) return <div className="rounded-xl border bg-muted/40 p-3 text-xs text-muted-foreground">الامتحان المرتبط بهذه الحركة غير موجود حالياً أو تم حذفه.</div>;
     return (
@@ -306,8 +304,7 @@ export function OpportunitiesView() {
         <div><span className="font-bold text-foreground">الامتحان: </span><span className="text-muted-foreground">{exam.name}</span></div>
         <div><span className="font-bold text-foreground">التاريخ: </span><span className="text-muted-foreground">{formatAppDate(exam.date)}</span></div>
         <div><span className="font-bold text-foreground">النوع: </span><span className="text-muted-foreground">{exam.type}</span></div>
-        <div><span className="font-bold text-foreground">درجة الطالب: </span><span className="text-muted-foreground">{grade ? formatGradeScore(grade, exam, "—") : "لا توجد درجة مسجلة"}</span></div>
-        {grade?.notes ? <div className="md:col-span-2"><span className="font-bold text-foreground">ملاحظات الدرجة: </span><span className="text-muted-foreground">{grade.notes}</span></div> : null}
+        <div><span className="font-bold text-foreground">درجة الطالب: </span><span className="text-muted-foreground">تُعرض من سجل الدرجات عند فتح تفاصيل الامتحان</span></div>
       </div>
     );
   };
@@ -335,6 +332,7 @@ export function OpportunitiesView() {
     setActionDialog({ studentId: "", type: "add", open: false });
     setReason("");
     setAmount(1);
+    setRefreshKey((key) => key + 1);
   });
 
   const handleBulkAction = runActionLocked(async () => {
@@ -373,6 +371,7 @@ export function OpportunitiesView() {
     setBulkAmount(1);
     setBulkExcludeDismissed(true);
     setBulkExcludeFullOpportunities(true);
+    setRefreshKey((key) => key + 1);
   });
 
 
@@ -412,13 +411,18 @@ export function OpportunitiesView() {
             </div>
             <div className="space-y-1">
               <Label htmlFor="opp-count" className="text-xs font-bold">عدد الفرص</Label>
-              <Select name="opportunityCount" value={filterOpportunityCount || "all"} onValueChange={(v) => { setFilterOpportunityCount(v === "all" ? "" : v); setPage(1); }}>
-                <SelectTrigger id="opp-count"><SelectValue placeholder="كل الأعداد" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل أعداد الفرص</SelectItem>
-                  {opportunityCountOptions.map((count) => <SelectItem key={count} value={String(count)}>{count} فرصة</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Input
+                id="opp-count"
+                name="opportunityCount"
+                inputMode="numeric"
+                value={filterOpportunityCount}
+                onChange={(event) => {
+                  const value = toLatinDigits(event.target.value).replace(/[^0-9]/g, "");
+                  setFilterOpportunityCount(value);
+                  setPage(1);
+                }}
+                placeholder="كل الأعداد أو اكتب رقماً"
+              />
             </div>
             <div className="flex items-end gap-2"><Button variant="outline" className="h-10 flex-1" onClick={clearFilters} disabled={!search && !filterCourseId && !filterStatus && !filterOpportunityCount}>مسح</Button><ExportDialog
                 title="تصدير إدارة الفرص"
@@ -501,7 +505,11 @@ export function OpportunitiesView() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {paged.map((student) => {
+            {studentsLoading ? (
+              <p className="empty-state py-8">جاري تحميل الطلاب من قاعدة البيانات...</p>
+            ) : paged.length === 0 ? (
+              <p className="empty-state py-8">لا يوجد طلاب مطابقون للفلاتر الحالية</p>
+            ) : paged.map((student) => {
               const activeChapter = activeChapterForCourse(student.courseId);
               const hasChapter = Boolean(activeChapter);
               const oppPercent =

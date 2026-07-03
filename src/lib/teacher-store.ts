@@ -140,6 +140,9 @@ export interface StudentLeave {
   dateFrom: string;
   dateTo: string;
   notes: string;
+  /** Optional relation included by /api/student-leaves so the UI does not show "طالب محذوف" when the local students cache is paginated. */
+  student?: Partial<Student> | null;
+  exam?: Partial<Exam> | null;
 }
 
 export interface StudentCall {
@@ -1197,22 +1200,30 @@ function normalizeLeaveType(value: unknown): StudentLeaveType {
 }
 
 function normalizeStudentLeave(leaveInput: Partial<StudentLeave> | Record<string, unknown>): StudentLeave {
-  const leave = leaveInput as Partial<StudentLeave>;
+  const leave = leaveInput as Partial<StudentLeave> & Record<string, unknown>;
   const leaveType = normalizeLeaveType(leave.leaveType);
   const date = dayKey(leave.date) || todayISO();
   const dateFrom = dayKey(leave.dateFrom) || date;
   const dateTo = dayKey(leave.dateTo) || dateFrom;
+  const relatedStudent = leave.student && typeof leave.student === 'object'
+    ? (leave.student as Partial<Student>)
+    : null;
+  const relatedExam = leave.exam && typeof leave.exam === 'object'
+    ? (leave.exam as Partial<Exam>)
+    : null;
   return {
     id: String(leave.id || ''),
-    studentId: String(leave.studentId || ''),
-    examId: String(leave.examId || ''),
+    studentId: String(leave.studentId || relatedStudent?.id || ''),
+    examId: String(leave.examId || relatedExam?.id || ''),
     leaveType,
     reason: String(leave.reason || ''),
-    studyType: String(leave.studyType || ''),
+    studyType: String(leave.studyType || relatedStudent?.studyType || ''),
     date,
     dateFrom: dateFrom <= dateTo ? dateFrom : dateTo,
     dateTo: dateFrom <= dateTo ? dateTo : dateFrom,
     notes: String(leave.notes || ''),
+    student: relatedStudent,
+    exam: relatedExam,
   };
 }
 

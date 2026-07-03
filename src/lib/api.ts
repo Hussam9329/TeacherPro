@@ -408,6 +408,9 @@ export interface StudentListQuery {
   location?: string;
   courseId?: string;
   courseIds?: string;
+  /** Used by OpportunitiesView for database-paginated opportunity filters. */
+  opportunityStatus?: string;
+  opportunityCount?: string;
   page?: number;
   pageSize?: number;
 }
@@ -461,6 +464,23 @@ export interface CallStatsResponse {
   unanswered: number;
   wrong: number;
   noAction: number;
+  source: "database";
+}
+
+export interface CallCandidatesQuery extends CallStatsQuery {
+  page?: number;
+  pageSize?: number;
+}
+
+export interface CallCandidatesResponse {
+  students: Array<Record<string, unknown>>;
+  grades: Array<Record<string, unknown>>;
+  studentCalls: Array<Record<string, unknown>>;
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasMore: boolean;
   source: "database";
 }
 
@@ -586,6 +606,8 @@ export const studentApi = {
       location: query.location,
       courseId: query.courseId,
       courseIds: query.courseIds,
+      opportunityStatus: query.opportunityStatus,
+      opportunityCount: query.opportunityCount,
       page: query.page ?? 1,
       pageSize: query.pageSize ?? DEFAULT_STUDENT_PAGE_SIZE,
     });
@@ -746,6 +768,21 @@ export const callStatsApi = {
       filterQ: query.filterQ,
     });
     return apiGet<CallStatsResponse>(`student-calls/stats${queryString ? `?${queryString}` : ""}`);
+  },
+};
+
+export const callCandidatesApi = {
+  get: (query: CallCandidatesQuery = {}) => {
+    const queryString = buildQueryString({
+      courseId: query.courseId,
+      examId: query.examId,
+      statusFilter: query.statusFilter,
+      q: query.q,
+      filterQ: query.filterQ,
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? 120,
+    });
+    return apiGet<CallCandidatesResponse>(`student-calls/candidates${queryString ? `?${queryString}` : ""}`);
   },
 };
 
