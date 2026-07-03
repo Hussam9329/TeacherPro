@@ -88,8 +88,8 @@ export function OpportunitiesView() {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      studentApi.list({ pageSize: 200 }),
-      gradeApi.list({ pageSize: 200 }),
+      studentApi.listAll({ pageSize: 200 }),
+      gradeApi.listAll({ pageSize: 200 }),
     ])
       .then(([studentResult, gradeResult]) => {
         if (cancelled) return;

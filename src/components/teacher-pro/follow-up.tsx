@@ -380,13 +380,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   useEffect(() => {
     let cancelled = false;
-    const loads = [studentApi.list({ pageSize: 200 })];
-    // For calls view, fetch more grades (500) to ensure absent students appear.
-    // For other views, 200 is enough.
-    const gradePageSize = view === "calls" ? 500 : 200;
-    const gradeLoad = view === "leaves" ? Promise.resolve(null) : gradeApi.list({ pageSize: gradePageSize });
+    // Use listAll to fetch ALL students + grades via automatic pagination.
+    // list() only returns one page (50-200 rows), which is not enough
+    // for follow-up that needs all records to build call/leave rows.
+    const studentLoad = studentApi.listAll({ pageSize: 200 });
+    const gradeLoad = view === "leaves" ? Promise.resolve(null) : gradeApi.listAll({ pageSize: 200 });
 
-    Promise.all([loads[0], gradeLoad])
+    Promise.all([studentLoad, gradeLoad])
       .then(([studentResult, gradeResult]) => {
         if (cancelled) return;
         mergeStudentsCache((studentResult?.students || []) as unknown as Student[]);
