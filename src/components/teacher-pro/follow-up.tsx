@@ -720,16 +720,16 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       }
       if (callGradeSort === "score-desc") {
         return (
-          gradeScoreForSort(b.focusItem?.grade, "desc") -
-            gradeScoreForSort(a.focusItem?.grade, "desc") ||
+          gradeScoreForSort(b.focusItem?.grade as Grade, "desc") -
+            gradeScoreForSort(a.focusItem?.grade as Grade, "desc") ||
           studentA.localeCompare(studentB, "ar") ||
           examA.localeCompare(examB, "ar")
         );
       }
       if (callGradeSort === "score-asc") {
         return (
-          gradeScoreForSort(a.focusItem?.grade, "asc") -
-            gradeScoreForSort(b.focusItem?.grade, "asc") ||
+          gradeScoreForSort(a.focusItem?.grade as Grade, "asc") -
+            gradeScoreForSort(b.focusItem?.grade as Grade, "asc") ||
           studentA.localeCompare(studentB, "ar") ||
           examA.localeCompare(examB, "ar")
         );
