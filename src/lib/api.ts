@@ -59,6 +59,7 @@ export interface ApiResult {
   status?: number;
   transient?: boolean;
   queued?: boolean;
+  data?: unknown;
 }
 
 function isTransientHttpStatus(status: number): boolean {
@@ -116,7 +117,11 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
           transient: isTransientHttpStatus(res.status),
         };
       }
-      return { ok: true };
+      const contentType = res.headers.get("content-type") || "";
+      const responseData = contentType.includes("application/json")
+        ? await res.json().catch(() => null)
+        : null;
+      return { ok: true, data: responseData };
     } catch (e) {
       const msg = toUserFriendlyError(
         e instanceof Error ? e.message : "Network error",
@@ -429,8 +434,8 @@ export interface GradeListQuery {
 
 const DEFAULT_STUDENT_PAGE_SIZE = 50;
 const DEFAULT_GRADE_PAGE_SIZE = 100;
-const LIST_ALL_PAGE_SIZE = 500;
-const LIST_ALL_MAX_PAGES = 100;
+const LIST_ALL_PAGE_SIZE = 200;
+const LIST_ALL_MAX_PAGES = 5;
 
 export interface GradeListResponse {
   grades: Array<Record<string, unknown>>;
@@ -525,7 +530,7 @@ export const chapterApi = {
 // ─── CourseChapter API ────────────────────────────────────────────────────────
 
 export const courseChapterApi = {
-  list: () => apiGet<Pick<ServerData, "courseChapters">>("course-chapters"),
+  list: () => apiGet<Pick<ServerData, "courseChapters">>("course-chapters?page=1&pageSize=200"),
   add: (cc: {
     id: string;
     courseId: string;
@@ -693,7 +698,7 @@ export const gradeApi = {
 // ─── OpportunityLog API ───────────────────────────────────────────────────────
 
 export const opportunityLogApi = {
-  list: () => apiGet<Pick<ServerData, "opportunityLogs">>("opportunity-logs?page=1&limit=500"),
+  list: () => apiGet<Pick<ServerData, "opportunityLogs">>("opportunity-logs?page=1&pageSize=200"),
   add: (log: Record<string, unknown>) => apiPost("opportunity-logs", log),
   bulkAdjust: (payload: {
     students?: Array<Record<string, unknown>>;
@@ -706,7 +711,7 @@ export const opportunityLogApi = {
 // ─── Follow-up API ───────────────────────────────────────────────────────────
 
 export const studentLeaveApi = {
-  list: () => apiGet<Pick<ServerData, "studentLeaves">>("student-leaves"),
+  list: () => apiGet<Pick<ServerData, "studentLeaves">>("student-leaves?page=1&pageSize=200"),
   add: (leave: Record<string, unknown>) => apiPost("student-leaves", leave),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-leaves", { id, ...updates }),
@@ -714,7 +719,7 @@ export const studentLeaveApi = {
 };
 
 export const studentCallApi = {
-  list: () => apiGet<Pick<ServerData, "studentCalls">>("student-calls"),
+  list: () => apiGet<Pick<ServerData, "studentCalls">>("student-calls?page=1&pageSize=200"),
   add: (call: Record<string, unknown>) => apiPost("student-calls", call),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-calls", { id, ...updates }),
@@ -722,7 +727,7 @@ export const studentCallApi = {
 };
 
 export const studentNoteApi = {
-  list: () => apiGet<Pick<ServerData, "studentNotes">>("student-notes"),
+  list: () => apiGet<Pick<ServerData, "studentNotes">>("student-notes?page=1&pageSize=200"),
   add: (note: Record<string, unknown>) => apiPost("student-notes", note),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-notes", { id, ...updates }),
@@ -732,7 +737,7 @@ export const studentNoteApi = {
 // ─── CorrectionSheet API ──────────────────────────────────────────────────────
 
 export const correctionSheetApi = {
-  list: () => apiGet<Pick<ServerData, "correctionSheets">>("correction-sheets?page=1&limit=500"),
+  list: () => apiGet<Pick<ServerData, "correctionSheets">>("correction-sheets?page=1&pageSize=200"),
   add: (sheet: Record<string, unknown>) => apiPost("correction-sheets", sheet),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("correction-sheets", { id, ...updates }),
@@ -760,7 +765,7 @@ export const roleApi = {
 // ─── Log API ──────────────────────────────────────────────────────────────────
 
 export const logApi = {
-  list: () => apiGet<Pick<ServerData, "logs">>("logs?page=1&limit=500"),
+  list: () => apiGet<Pick<ServerData, "logs">>("logs?page=1&pageSize=200"),
   add: async (log: Record<string, unknown>): Promise<ApiResult> => {
     // Use direct fetch instead of apiPost so that 403 responses (server-only
     // audit entries) don't trigger console.warn noise. The UI creates local

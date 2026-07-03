@@ -380,8 +380,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   useEffect(() => {
     let cancelled = false;
-    const loads = [studentApi.listAll({ pageSize: 200 })];
-    const gradeLoad = view === "leaves" ? Promise.resolve(null) : gradeApi.listAll({ pageSize: 200 });
+    const loads = [studentApi.list({ pageSize: 200 })];
+    const gradeLoad = view === "leaves" ? Promise.resolve(null) : gradeApi.list({ pageSize: 200 });
 
     Promise.all([loads[0], gradeLoad])
       .then(([studentResult, gradeResult]) => {

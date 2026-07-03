@@ -23,21 +23,19 @@ export async function GET(req: NextRequest) {
 
   try {
     await ensureExamSchema();
-    const { isPaginatedRequest, parsePagination } = await import('@/lib/pagination');
-    if (isPaginatedRequest(req)) {
-      const { page, limit, skip } = parsePagination(req);
-      const [correctionSheets, total] = await Promise.all([
-        db.correctionSheet.findMany({ orderBy: { startedAt: 'desc' }, include: { student: true, exam: true, corrector: true }, skip, take: limit }),
-        db.correctionSheet.count(),
-      ]);
-      return NextResponse.json({ correctionSheets, total, page, limit, totalPages: Math.ceil(total / limit) });
-    }
-    const correctionSheets = await db.correctionSheet.findMany({
-      orderBy: { startedAt: 'desc' },
-      include: { student: true, exam: true, corrector: true },
-      take: 500,
-    });
-    return NextResponse.json({ correctionSheets });
+    const { parsePagination } = await import('@/lib/pagination');
+    const { page, limit, skip } = parsePagination(req);
+    const [correctionSheets, totalCount] = await Promise.all([
+      db.correctionSheet.findMany({
+        orderBy: { startedAt: 'desc' },
+        include: { student: true, exam: true, corrector: true },
+        skip,
+        take: limit,
+      }),
+      db.correctionSheet.count(),
+    ]);
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+    return NextResponse.json({ correctionSheets, total: totalCount, totalCount, page, limit, pageSize: limit, totalPages, hasMore: page < totalPages });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل أوراق التصحيح حالياً.');
   }

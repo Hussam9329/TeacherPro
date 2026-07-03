@@ -931,6 +931,24 @@ export function StudentRegistryView() {
   const studentGrades = (studentId: string) =>
     grades.filter((g) => g.studentId === studentId);
 
+  const fetchStudentExportRows = async () => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("q", debouncedSearch);
+    if (filterStatus) params.set("status", filterStatus);
+    if (filterCourseProgram) params.set("courseProgram", filterCourseProgram);
+    if (filterCourseTerm) params.set("courseTerm", filterCourseTerm);
+    if (filterStudyType) params.set("studyType", filterStudyType);
+    if (filterLocation) params.set("location", filterLocation);
+    const res = await fetch(`/api/students/export?${params.toString()}`, { credentials: "same-origin" });
+    if (!res.ok) throw new Error("students export failed");
+    const json = (await res.json()) as { students?: Student[] };
+    return (json.students || []).map((student) => ({
+      ...student,
+      courseName: courseName(student.courseId),
+      locationText: `${student.locationScope || student.mainSite || ""} - ${student.subSite || ""}`,
+    }));
+  };
+
   const resetFilters = () => {
     setSearch("");
     setFilterStatus("");
@@ -1119,6 +1137,7 @@ export function StudentRegistryView() {
                 title="تصدير سجل الطلاب"
                 fileName="students"
                 rows={studentExportRows}
+                fetchRows={fetchStudentExportRows}
                 columns={studentExportColumns}
                 triggerLabel="تصدير"
                 description="تقرير سجل الطلاب حسب الفلاتر الحالية"

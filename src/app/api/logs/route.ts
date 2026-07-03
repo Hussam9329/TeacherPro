@@ -73,9 +73,6 @@ const ALLOWED_CLIENT_LOG_ENTRIES: Record<string, Set<string>> = {
     'تعديل درجة',
     // 'حذف درجة' → server-only
     // 'رفض إدخال درجة لطالب مجاز' → server-only
-    // 'إضافة درجات جماعية' → server-only (bulk is sensitive)
-    // 'إلغاء حالة غائب جماعي' → server-only (bulk is sensitive)
-    // 'تسجيل الصفحة كغائب' → server-only (bulk is sensitive)
   ]),
   'إدارة الفرص': new Set([
     // All opportunity operations affect academic status → server-only
@@ -125,17 +122,14 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const { isPaginatedRequest, parsePagination } = await import('@/lib/pagination');
-    if (isPaginatedRequest(req)) {
-      const { page, limit, skip } = parsePagination(req);
-      const [logs, total] = await Promise.all([
-        db.auditLog.findMany({ orderBy: { time: 'desc' }, skip, take: limit }),
-        db.auditLog.count(),
-      ]);
-      return NextResponse.json({ logs, total, page, limit, totalPages: Math.ceil(total / limit) });
-    }
-    const logs = await db.auditLog.findMany({ orderBy: { time: 'desc' }, take: 500 });
-    return NextResponse.json({ logs });
+    const { parsePagination } = await import('@/lib/pagination');
+    const { page, limit, skip } = parsePagination(req);
+    const [logs, totalCount] = await Promise.all([
+      db.auditLog.findMany({ orderBy: { time: 'desc' }, skip, take: limit }),
+      db.auditLog.count(),
+    ]);
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+    return NextResponse.json({ logs, total: totalCount, totalCount, page, limit, pageSize: limit, totalPages, hasMore: page < totalPages });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل السجلات حالياً.');
   }

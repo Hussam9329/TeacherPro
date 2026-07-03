@@ -200,7 +200,7 @@ export function StudentBulkTextImportView() {
   useEffect(() => {
     let cancelled = false;
     studentApi
-      .listAll({ pageSize: 500 })
+      .list({ pageSize: 200 })
       .then((result) => {
         if (!cancelled) {
           mergeStudentsCache((result?.students || []) as unknown as Student[]);

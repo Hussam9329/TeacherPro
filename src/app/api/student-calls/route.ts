@@ -22,6 +22,19 @@ function dateOrNow(value: unknown): Date {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
+function readListPagination(req: NextRequest, fallbackPageSize = 100, maxPageSize = 200) {
+  const searchParams = new URL(req.url).searchParams;
+  const rawPageSize = searchParams.get("pageSize") ?? searchParams.get("limit");
+  const rawPage = searchParams.get("page");
+  const pageNumber = Number(rawPage ?? 1);
+  const pageSizeNumber = Number(rawPageSize ?? fallbackPageSize);
+  const page = Number.isFinite(pageNumber) && pageNumber > 0 ? Math.floor(pageNumber) : 1;
+  const pageSize = Number.isFinite(pageSizeNumber) && pageSizeNumber > 0
+    ? Math.min(Math.floor(pageSizeNumber), maxPageSize)
+    : fallbackPageSize;
+  return { page, pageSize, skip: (page - 1) * pageSize };
+}
+
 function normalizeCallStatus(body: Record<string, unknown>): string {
   if (Object.prototype.hasOwnProperty.call(body, "status")) {
     return String(body.status ?? "").trim();
@@ -50,11 +63,16 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const studentCalls = await withFollowupTables(
-      () => db.studentCall.findMany({ orderBy: { createdAt: "desc" }, take: 500 }),
+    const { page, pageSize, skip } = readListPagination(req);
+    const [totalCount, studentCalls] = await withFollowupTables(
+      () => Promise.all([
+        db.studentCall.count(),
+        db.studentCall.findMany({ orderBy: { createdAt: "desc" }, skip, take: pageSize }),
+      ]),
       "StudentCall",
     );
-    return NextResponse.json({ studentCalls });
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    return NextResponse.json({ studentCalls, totalCount, page, pageSize, totalPages, hasMore: page < totalPages });
   } catch (error) {
     return routeErrorResponse(error, "تعذر تحميل المكالمات حالياً.");
   }
@@ -69,16 +87,9 @@ export async function POST(req: NextRequest) {
     const data = normalizeCallPayload(body);
     const studentError = requireText(data.studentId, "الطالب");
     if (studentError) return validationError(studentError);
-    const id = String(body.id || "").trim();
+    // Never trust client-provided IDs on create. The server owns primary keys.
     const studentCall = await withFollowupTables(
-      () =>
-        id
-          ? db.studentCall.upsert({
-              where: { id },
-              update: data,
-              create: { id, ...data },
-            })
-          : db.studentCall.create({ data }),
+      () => db.studentCall.create({ data }),
       "StudentCall",
     );
     return NextResponse.json({ studentCall }, { status: 201 });

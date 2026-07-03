@@ -126,7 +126,6 @@ export async function checkApiRateLimit(
 
 export const API_RATE_LIMITS = {
   backup: { key: 'backup', limit: 6, windowSeconds: 5 * 60, message: 'طلبات النسخ الاحتياطي كثيرة خلال مدة قصيرة. انتظر قليلاً ثم حاول مرة أخرى.' },
-  bulkGrades: { key: 'bulk-grades', limit: 20, windowSeconds: 5 * 60, message: 'طلبات حفظ الدرجات الجماعية كثيرة خلال مدة قصيرة. انتظر قليلاً ثم حاول مرة أخرى.' },
   bulkOpportunities: { key: 'bulk-opportunities', limit: 15, windowSeconds: 5 * 60, message: 'طلبات تعديل الفرص الجماعية كثيرة خلال مدة قصيرة. انتظر قليلاً ثم حاول مرة أخرى.' },
   bulkStudents: { key: 'bulk-students', limit: 10, windowSeconds: 10 * 60, message: 'طلبات الإضافة الجماعية للطلاب كثيرة خلال مدة قصيرة. انتظر قليلاً ثم حاول مرة أخرى.' },
   studentOpportunitySync: { key: 'student-opportunity-sync', limit: 10, windowSeconds: 10 * 60, message: 'طلبات مزامنة فرص الطلاب كثيرة خلال مدة قصيرة. انتظر قليلاً ثم حاول مرة أخرى.' },

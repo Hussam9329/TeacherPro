@@ -23,7 +23,7 @@ function HydrationGuard({ children }: { children: React.ReactNode }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          minHeight: '100vh',
+          minHeight: '100dvh',
           fontFamily: 'system-ui, sans-serif',
           direction: 'rtl',
           color: '#6b21a8',

@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export default function NotFound() {
   return (
     <main
-      className="app-bg flex min-h-screen items-center justify-center p-6"
+      className="app-bg flex min-h-dvh items-center justify-center p-6"
       dir="rtl"
     >
       <Card className="w-full max-w-xl border-primary/20 bg-card/90 text-center shadow-xl backdrop-blur-xl">

@@ -49,17 +49,23 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const { isPaginatedRequest, parsePagination } = await import('@/lib/pagination');
-    if (isPaginatedRequest(req)) {
-      const { page, limit, skip } = parsePagination(req);
-      const [opportunityLogs, total] = await Promise.all([
-        db.opportunityLog.findMany({ orderBy: { date: 'desc' }, skip, take: limit }),
-        db.opportunityLog.count(),
-      ]);
-      return NextResponse.json({ opportunityLogs, total, page, limit, totalPages: Math.ceil(total / limit) });
-    }
-    const opportunityLogs = await db.opportunityLog.findMany({ orderBy: { date: 'desc' }, take: 500 });
-    return NextResponse.json({ opportunityLogs });
+    const { parsePagination } = await import('@/lib/pagination');
+    const { page, limit, skip } = parsePagination(req);
+    const [opportunityLogs, totalCount] = await Promise.all([
+      db.opportunityLog.findMany({ orderBy: { date: 'desc' }, skip, take: limit }),
+      db.opportunityLog.count(),
+    ]);
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+    return NextResponse.json({
+      opportunityLogs,
+      total: totalCount,
+      totalCount,
+      page,
+      limit,
+      pageSize: limit,
+      totalPages,
+      hasMore: page < totalPages,
+    });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل سجل الفرص حالياً.');
   }
@@ -87,9 +93,8 @@ export async function POST(req: NextRequest) {
       studentId: String(body.studentId),
       examId: body.examId ? String(body.examId) : null,
     };
-    const log = body.id
-      ? await db.opportunityLog.create({ data: { ...data } })
-      : await db.opportunityLog.create({ data });
+    // Never trust client-provided IDs on create. The server owns primary keys.
+    const log = await db.opportunityLog.create({ data });
     return NextResponse.json({ log }, { status: 201 });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حفظ حركة الفرص حالياً.');

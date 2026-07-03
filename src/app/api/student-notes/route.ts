@@ -7,6 +7,19 @@ import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { withFollowupTables } from '@/lib/followup-schema';
 
+function readListPagination(req: NextRequest, fallbackPageSize = 100, maxPageSize = 200) {
+  const searchParams = new URL(req.url).searchParams;
+  const rawPageSize = searchParams.get('pageSize') ?? searchParams.get('limit');
+  const rawPage = searchParams.get('page');
+  const pageNumber = Number(rawPage ?? 1);
+  const pageSizeNumber = Number(rawPageSize ?? fallbackPageSize);
+  const page = Number.isFinite(pageNumber) && pageNumber > 0 ? Math.floor(pageNumber) : 1;
+  const pageSize = Number.isFinite(pageSizeNumber) && pageSizeNumber > 0
+    ? Math.min(Math.floor(pageSizeNumber), maxPageSize)
+    : fallbackPageSize;
+  return { page, pageSize, skip: (page - 1) * pageSize };
+}
+
 function dateOrNow(value: unknown): Date {
   const date = value ? new Date(String(value)) : new Date();
   return Number.isNaN(date.getTime()) ? new Date() : date;
@@ -38,11 +51,16 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const studentNotes = await withFollowupTables(
-      () => db.studentNote.findMany({ orderBy: { date: 'desc' }, take: 500 }),
+    const { page, pageSize, skip } = readListPagination(req);
+    const [totalCount, studentNotes] = await withFollowupTables(
+      () => Promise.all([
+        db.studentNote.count(),
+        db.studentNote.findMany({ orderBy: { date: 'desc' }, skip, take: pageSize }),
+      ]),
       'StudentNote',
     );
-    return NextResponse.json({ studentNotes });
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    return NextResponse.json({ studentNotes, totalCount, page, pageSize, totalPages, hasMore: page < totalPages });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل الملاحظات حالياً.');
   }
@@ -59,11 +77,9 @@ export async function POST(req: NextRequest) {
     if (studentError) return validationError(studentError);
     const textError = requireText(data.text, 'نص الملاحظة');
     if (textError) return validationError(textError);
-    const id = String(body.id || '').trim();
+    // Never trust client-provided IDs on create. The server owns primary keys.
     const studentNote = await withFollowupTables(
-      () => id
-        ? db.studentNote.upsert({ where: { id }, update: data, create: { id, ...data } })
-        : db.studentNote.create({ data }),
+      () => db.studentNote.create({ data }),
       'StudentNote',
     );
     return NextResponse.json({ studentNote }, { status: 201 });

@@ -186,12 +186,13 @@ export function GradeRecordsView() {
     setServerGradesError(null);
 
     const request = needsClientStatusFilter
-      ? gradeApi.listAll({
+      ? gradeApi.list({
           examId: filterExamId || undefined,
           q: debouncedSearch || undefined,
           courseId: filterCourseId || undefined,
           nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
-          pageSize: 200,
+          page,
+          pageSize,
         })
       : gradeApi.list({
           examId: filterExamId || undefined,
@@ -657,6 +658,31 @@ export function GradeRecordsView() {
     return { grade, student, exam, classificationText: cls.text };
   });
 
+  const fetchGradeExportRows = async (): Promise<GradeExportRow[]> => {
+    const params = new URLSearchParams();
+    const needsClientStatusFilter = clientOnlyGradeStatusFilters.has(filterStatus);
+    const rawStatus = needsClientStatusFilter ? undefined : serverStatusForGradeFilter(filterStatus);
+    if (filterExamId) params.set("examId", filterExamId);
+    if (rawStatus) params.set("status", rawStatus);
+    if (debouncedSearch) params.set("q", debouncedSearch);
+    if (filterCourseId) params.set("courseId", filterCourseId);
+    if (filterNameLetter !== "all") params.set("nameLetter", filterNameLetter);
+    const res = await fetch(`/api/grades/export?${params.toString()}`, { credentials: "same-origin" });
+    if (!res.ok) throw new Error("grades export failed");
+    const json = (await res.json()) as { grades?: HydratedGrade[] };
+    return (json.grades || [])
+      .map((grade) => {
+        const student = grade.student || studentById.get(grade.studentId);
+        const exam = (grade.exam as (typeof exams)[number] | undefined) || examById.get(grade.examId);
+        const cls = exam ? classification(grade, exam, student) : { text: "", kind: "" };
+        return { grade, student, exam, classificationText: cls.text, classificationResult: cls };
+      })
+      .filter(({ grade, exam, classificationResult }) =>
+        exam ? gradeMatchesStatusFilter(filterStatus, grade, exam, classificationResult) : true,
+      )
+      .map(({ grade, student, exam, classificationText }) => ({ grade, student, exam, classificationText }));
+  };
+
 
   return (
     <div className="space-y-4">
@@ -814,6 +840,7 @@ export function GradeRecordsView() {
                 title="تصدير سجل الدرجات"
                 fileName="grades"
                 rows={exportRows}
+                fetchRows={fetchGradeExportRows}
                 columns={gradeExportColumns}
                 triggerLabel="تصدير"
                 description="تقرير سجل الدرجات حسب الفلاتر الحالية"

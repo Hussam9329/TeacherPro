@@ -665,6 +665,24 @@ function mergeRecordsById<T extends { id: string }>(current: T[], incoming: T[])
   return Array.from(byId.values());
 }
 
+function gradeIdentityKey(grade: Pick<Grade, 'studentId' | 'examId'>): string {
+  return `${grade.studentId}:${grade.examId}`;
+}
+
+function mergeGradesByIdentity(current: Grade[], incoming: Grade[]): Grade[] {
+  if (incoming.length === 0) return current;
+  const byIdentity = new Map<string, Grade>();
+  current.forEach((grade) => byIdentity.set(gradeIdentityKey(grade), grade));
+  incoming.forEach((grade) => {
+    const key = gradeIdentityKey(grade);
+    const existing = byIdentity.get(key);
+    // Prefer incoming/server IDs. This prevents duplicate local temporary IDs after
+    // the server rejects client-provided IDs and creates its own primary key.
+    byIdentity.set(key, existing ? { ...existing, ...grade, id: grade.id || existing.id } : grade);
+  });
+  return Array.from(byIdentity.values());
+}
+
 function normalizeStudentRecord(st: Record<string, unknown>): Student {
   const { groupId: _groupId, ...studentData } = st;
   void _groupId;
@@ -1549,8 +1567,7 @@ const SERVER_ONLY_LOG_ACTIONS = new Set([
   'حذف امتحان مع سجلاته وإعادة احتساب التأثيرات',
   'حذف درجة', 'رفض إدخال درجة لطالب مجاز',
   'حذف إجازة',
-  // Bulk
-  'إضافة درجات جماعية', 'إلغاء حالة غائب جماعي', 'تسجيل الصفحة كغائب',
+  // Large/sensitive actions
   'إضافة فرص جماعية', 'خصم فرص جماعي', 'تعديل فرص طالب', 'إعادة تعيين فرص طالب',
   // Security
   'محاولة دخول مرفوضة',
@@ -1569,7 +1586,7 @@ function isServerOnlyLogEntry(module: string, action: string): boolean {
 function syncToServer(
   getState: () => TeacherState,
   action: () => unknown,
-  options: { description?: string; rollback?: () => void } = {},
+  options: { description?: string; rollback?: () => void; onSuccess?: (result: unknown) => void } = {},
 ): void {
   void Promise.resolve()
     .then(action)
@@ -1577,6 +1594,7 @@ function syncToServer(
       if (isFailedApiResult(result)) {
         throw result;
       }
+      options.onSuccess?.(result);
     })
     .catch((error) => {
       // إذا كان الطلب مؤجلاً في outbox (queued)، لا نعرض خطأ ولا نرجع الحالة.
@@ -1588,6 +1606,19 @@ function syncToServer(
       if (!isTransientSyncFailure(error)) options.rollback?.();
       notifySyncFailure(getState, options.description || '', error);
     });
+}
+
+function nestedRecordValue(source: unknown, key: string): Record<string, unknown> | null {
+  if (!source || typeof source !== 'object') return null;
+  const record = source as Record<string, unknown>;
+  const value = record[key];
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+function serverRecordFromApiResult(result: unknown, key: string): Record<string, unknown> | null {
+  if (!result || typeof result !== 'object') return null;
+  const data = (result as ApiResult).data;
+  return nestedRecordValue(data, key);
 }
 
 const PENDING_GRADE_SAVES_KEY = 'teacherpro-pending-grade-saves-v1';
@@ -1669,7 +1700,7 @@ function writePendingGradeSaves(items: PendingGradeSave[]): void {
 
 function gradeSaveForApi(item: PendingGradeSave): Record<string, unknown> {
   return {
-    id: item.id,
+    clientId: item.id,
     studentId: item.studentId,
     examId: item.examId,
     status: item.status,
@@ -1847,7 +1878,7 @@ export const useTeacherStore = create<TeacherState>()(
 
       mergeGradesCache: (incomingGrades) => {
         const normalized = incomingGrades.map((grade) => normalizeGradeRecord(grade as unknown as Record<string, unknown>));
-        set((s) => ({ grades: mergeRecordsById(s.grades, normalized) }));
+        set((s) => ({ grades: mergeGradesByIdentity(s.grades, normalized) }));
       },
 
       loadFromServer: async () => {
@@ -2896,11 +2927,11 @@ export const useTeacherStore = create<TeacherState>()(
         }));
         get().logAction(
           'الدرجات',
-          'إلغاء حالة غائب جماعي',
+          'إلغاء حالات الغياب',
           `${exam.name} - ${absentGrades.length} طالب`,
         );
         syncToServer(get, () => gradeApi.removeAbsentByExam(examId), {
-          description: 'إلغاء حالة غائب جماعي',
+          description: 'إلغاء حالات الغياب',
           rollback: () => set(previousState),
         });
         get().recalculateAcademicEffects(affectedStudentIds);
@@ -3194,6 +3225,14 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => studentLeaveApi.add(leave as unknown as Record<string, unknown>), {
           description: 'إضافة إجازة',
           rollback: () => set(previousState),
+          onSuccess: (result) => {
+            const saved = serverRecordFromApiResult(result, 'studentLeave');
+            const serverId = String(saved?.id || '').trim();
+            if (!serverId || serverId === leave.id) return;
+            set((s) => ({
+              studentLeaves: s.studentLeaves.map((item) => item.id === leave.id ? { ...item, id: serverId } : item),
+            }));
+          },
         });
         get().recalculateAcademicEffects(leave.studentId);
       },
@@ -3233,6 +3272,14 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => studentCallApi.add(call as unknown as Record<string, unknown>), {
           description: 'تسجيل مكالمة',
           rollback: () => set({ studentCalls: previousCalls }),
+          onSuccess: (result) => {
+            const saved = serverRecordFromApiResult(result, 'studentCall');
+            const serverId = String(saved?.id || '').trim();
+            if (!serverId || serverId === call.id) return;
+            set((s) => ({
+              studentCalls: s.studentCalls.map((item) => item.id === call.id ? { ...item, id: serverId } : item),
+            }));
+          },
         });
       },
       updateStudentCall: (id, updates) => {
@@ -3251,6 +3298,14 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => studentNoteApi.add(note as unknown as Record<string, unknown>), {
           description: 'إضافة ملاحظة',
           rollback: () => set({ studentNotes: previousNotes }),
+          onSuccess: (result) => {
+            const saved = serverRecordFromApiResult(result, 'studentNote');
+            const serverId = String(saved?.id || '').trim();
+            if (!serverId || serverId === note.id) return;
+            set((s) => ({
+              studentNotes: s.studentNotes.map((item) => item.id === note.id ? { ...item, id: serverId } : item),
+            }));
+          },
         });
       },
       deleteStudentNote: (id) => {

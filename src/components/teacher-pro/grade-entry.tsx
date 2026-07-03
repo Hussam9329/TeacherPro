@@ -240,7 +240,7 @@ export function GradeEntryView() {
     const courseIds = selectedExam.courseIds.join(",");
 
     studentApi
-      .listAll({ courseIds, pageSize: 500 })
+      .list({ courseIds, pageSize: 200 })
       .then((result) => {
         if (!cancelled) {
           mergeStudentsCache((result?.students || []) as unknown as Student[]);
@@ -251,7 +251,7 @@ export function GradeEntryView() {
       });
 
     gradeApi
-      .listAll({ examId: selectedExam.id, pageSize: 500 })
+      .list({ examId: selectedExam.id, pageSize: 200 })
       .then((result) => {
         if (cancelled) return;
         const loadedGrades = result?.grades || [];

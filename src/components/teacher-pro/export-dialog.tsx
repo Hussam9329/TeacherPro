@@ -199,6 +199,7 @@ export function ExportDialog<T = Record<string, unknown>>({
   pageOrientation = "portrait",
   pdfTitle,
   pdfFileName,
+  fetchRows,
 }: {
   title: string;
   fileName: string;
@@ -211,11 +212,13 @@ export function ExportDialog<T = Record<string, unknown>>({
   pageOrientation?: PageOrientation;
   pdfTitle?: string;
   pdfFileName?: string;
+  fetchRows?: () => Promise<T[]>;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedColumnKeys, setSelectedColumnKeys] = useState<string[]>(() =>
     defaultColumnKeys(columns, defaultSelectedColumnKeys),
   );
+  const [exporting, setExporting] = useState(false);
 
   const safeFileName = useMemo(() => {
     const base = String(fileName || "export").trim().replace(/[^\w\u0600-\u06FF-]+/g, "-");
@@ -243,8 +246,8 @@ export function ExportDialog<T = Record<string, unknown>>({
 
   const availableFormats: ExportFormat[] = formats.length > 0 ? formats : ["csv"];
 
-  const ensureExportable = () => {
-    if (rows.length === 0) {
+  const ensureExportable = (exportRows: T[]) => {
+    if (exportRows.length === 0) {
       toast.error("لا توجد بيانات للتصدير");
       return false;
     }
@@ -255,41 +258,59 @@ export function ExportDialog<T = Record<string, unknown>>({
     return true;
   };
 
-  const exportCsv = () => {
-    if (!ensureExportable()) return;
-    const csv = buildCsv(rows, selectedColumns);
+  const loadExportRows = async (): Promise<T[] | null> => {
+    if (!fetchRows) return rows;
+    setExporting(true);
+    try {
+      const loadedRows = await fetchRows();
+      return loadedRows;
+    } catch (error) {
+      console.error("[ExportDialog] failed to fetch server export rows:", error);
+      toast.error("تعذر تحميل بيانات التصدير الكاملة من الخادم");
+      return null;
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportCsv = (exportRows: T[]) => {
+    if (!ensureExportable(exportRows)) return;
+    const csv = buildCsv(exportRows, selectedColumns);
     downloadBlob(csv, `${safeFileName}.csv`, "text/csv;charset=utf-8");
-    toast.success(`تم تصدير ${rows.length} صف و ${selectedColumns.length} عمود بصيغة CSV`);
+    toast.success(`تم تصدير ${exportRows.length} صف و ${selectedColumns.length} عمود بصيغة CSV`);
     setOpen(false);
   };
 
-  const exportExcel = () => {
-    if (!ensureExportable()) return;
-    const excelText = buildPlainExcel(rows, selectedColumns);
+  const exportExcel = (exportRows: T[]) => {
+    if (!ensureExportable(exportRows)) return;
+    const excelText = buildPlainExcel(exportRows, selectedColumns);
     downloadBlob(excelText, `${safeFileName}.xls`, "application/vnd.ms-excel;charset=utf-8");
-    toast.success(`تم تصدير ${rows.length} صف و ${selectedColumns.length} عمود بصيغة Excel بدون تنسيق`);
+    toast.success(`تم تصدير ${exportRows.length} صف و ${selectedColumns.length} عمود بصيغة Excel بدون تنسيق`);
     setOpen(false);
   };
 
-  const exportHtml = () => {
-    if (!ensureExportable()) return;
-    const html = buildHtml(rows, selectedColumns, title);
+  const exportHtml = (exportRows: T[]) => {
+    if (!ensureExportable(exportRows)) return;
+    const html = buildHtml(exportRows, selectedColumns, title);
     downloadBlob(html, `${safeFileName}.html`, "text/html;charset=utf-8");
-    toast.success(`تم تصدير ${rows.length} صف و ${selectedColumns.length} عمود بصيغة HTML`);
+    toast.success(`تم تصدير ${exportRows.length} صف و ${selectedColumns.length} عمود بصيغة HTML`);
     setOpen(false);
   };
 
-  const exportPdf = () => {
-    if (!ensureExportable()) return;
+  const exportPdf = (exportRows: T[], pendingWindow?: Window | null) => {
+    if (!ensureExportable(exportRows)) {
+      pendingWindow?.close();
+      return;
+    }
     const printableTitle = String(pdfTitle || title || "تقرير").trim() || "تقرير";
     const printableFileName = sanitizeExportFileName(pdfFileName || printableTitle || safeFileName);
-    const html = buildHtml(rows, selectedColumns, printableTitle, {
+    const html = buildHtml(exportRows, selectedColumns, printableTitle, {
       printable: true,
       orientation: pageOrientation,
       documentTitle: printableTitle,
       safeUrlName: printableFileName,
     });
-    const win = window.open("", `${printableFileName}-pdf`);
+    const win = pendingWindow || window.open("", `${printableFileName}-pdf`);
     if (!win) {
       toast.error("المتصفح منع نافذة الطباعة");
       return;
@@ -301,15 +322,25 @@ export function ExportDialog<T = Record<string, unknown>>({
       win.history.replaceState(null, printableTitle, `/${encodeURIComponent(printableFileName)}.pdf`);
     } catch {}
     win.focus();
-    toast.success(`تم فتح تقرير PDF بـ ${selectedColumns.length} عمود`);
+    toast.success(`تم فتح تقرير PDF بـ ${exportRows.length} صف و ${selectedColumns.length} عمود`);
     setOpen(false);
   };
 
-  const handleExport = (format: ExportFormat) => {
-    if (format === "csv") exportCsv();
-    if (format === "excel") exportExcel();
-    if (format === "html") exportHtml();
-    if (format === "pdf") exportPdf();
+  const handleExport = async (format: ExportFormat) => {
+    const pendingPdfWindow = format === "pdf" ? window.open("", `${safeFileName}-pdf`) : null;
+    if (pendingPdfWindow) {
+      pendingPdfWindow.document.write("<p dir='rtl' style='font-family:sans-serif;padding:16px'>جاري تجهيز التقرير...</p>");
+      pendingPdfWindow.document.close();
+    }
+    const exportRows = await loadExportRows();
+    if (!exportRows) {
+      pendingPdfWindow?.close();
+      return;
+    }
+    if (format === "csv") exportCsv(exportRows);
+    if (format === "excel") exportExcel(exportRows);
+    if (format === "html") exportHtml(exportRows);
+    if (format === "pdf") exportPdf(exportRows, pendingPdfWindow);
   };
 
   const toggleColumn = (key: string, checked: boolean) => {
@@ -340,7 +371,7 @@ export function ExportDialog<T = Record<string, unknown>>({
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-1 gap-2 rounded-xl border bg-muted/30 p-3 text-sm sm:grid-cols-2">
             <p className="text-muted-foreground">
-              عدد الصفوف القابلة للتصدير: <b>{rows.length}</b>
+              عدد الصفوف المعروضة حالياً: <b>{rows.length}</b>
             </p>
             <p className="text-muted-foreground">
               الأعمدة المختارة: <b>{selectedColumns.length}</b> من <b>{columns.length}</b>
@@ -390,10 +421,10 @@ export function ExportDialog<T = Record<string, unknown>>({
                 variant="outline"
                 className="gap-2"
                 onClick={() => handleExport(format)}
-                disabled={rows.length === 0 || selectedColumns.length === 0}
+                disabled={exporting || (!fetchRows && rows.length === 0) || selectedColumns.length === 0}
               >
                 <Icon className="h-4 w-4" />
-                {exportFormatLabels[format]}
+                {exporting ? "جاري التحضير..." : exportFormatLabels[format]}
               </Button>
             );
           })}

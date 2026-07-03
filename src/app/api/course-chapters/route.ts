@@ -7,6 +7,19 @@ import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
 
+function readListPagination(req: NextRequest, fallbackPageSize = 100, maxPageSize = 200) {
+  const searchParams = new URL(req.url).searchParams;
+  const rawPageSize = searchParams.get('pageSize') ?? searchParams.get('limit');
+  const rawPage = searchParams.get('page');
+  const pageNumber = Number(rawPage ?? 1);
+  const pageSizeNumber = Number(rawPageSize ?? fallbackPageSize);
+  const page = Number.isFinite(pageNumber) && pageNumber > 0 ? Math.floor(pageNumber) : 1;
+  const pageSize = Number.isFinite(pageSizeNumber) && pageSizeNumber > 0
+    ? Math.min(Math.floor(pageSizeNumber), maxPageSize)
+    : fallbackPageSize;
+  return { page, pageSize, skip: (page - 1) * pageSize };
+}
+
 type ArchiveEntry = { studentId: string; opportunities: number; date?: string };
 
 function normalizeBoolean(value: unknown): boolean | undefined {
@@ -55,11 +68,18 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const courseChapters = await db.courseChapter.findMany({ take: 500,
-      orderBy: { courseId: 'asc' },
-      include: { course: true, chapter: true },
-    });
-    return NextResponse.json({ courseChapters });
+    const { page, pageSize, skip } = readListPagination(req);
+    const [totalCount, courseChapters] = await Promise.all([
+      db.courseChapter.count(),
+      db.courseChapter.findMany({
+        orderBy: { courseId: 'asc' },
+        include: { course: true, chapter: true },
+        skip,
+        take: pageSize,
+      }),
+    ]);
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    return NextResponse.json({ courseChapters, totalCount, page, pageSize, totalPages, hasMore: page < totalPages });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل روابط الفصول بالدورات حالياً.');
   }
@@ -172,7 +192,7 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const authError = await requireAnyPermission(req, ['chapters.edit', 'courses.edit']);
+  const authError = await requireAnyPermission(req, ['chapters.delete', 'courses.delete']);
   if (authError) return authError;
 
   try {

@@ -7,6 +7,19 @@ import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { ensureFollowupTables, withFollowupTables } from '@/lib/followup-schema';
 
+function readListPagination(req: NextRequest, fallbackPageSize = 100, maxPageSize = 200) {
+  const searchParams = new URL(req.url).searchParams;
+  const rawPageSize = searchParams.get('pageSize') ?? searchParams.get('limit');
+  const rawPage = searchParams.get('page');
+  const pageNumber = Number(rawPage ?? 1);
+  const pageSizeNumber = Number(rawPageSize ?? fallbackPageSize);
+  const page = Number.isFinite(pageNumber) && pageNumber > 0 ? Math.floor(pageNumber) : 1;
+  const pageSize = Number.isFinite(pageSizeNumber) && pageSizeNumber > 0
+    ? Math.min(Math.floor(pageSizeNumber), maxPageSize)
+    : fallbackPageSize;
+  return { page, pageSize, skip: (page - 1) * pageSize };
+}
+
 function dateOrNow(value: unknown): Date {
   const date = value ? new Date(String(value)) : new Date();
   return Number.isNaN(date.getTime()) ? new Date() : date;
@@ -67,11 +80,16 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const studentLeaves = await withFollowupTables(
-      () => db.studentLeave.findMany({ orderBy: [{ dateFrom: 'desc' }, { date: 'desc' }], take: 500 }),
+    const { page, pageSize, skip } = readListPagination(req);
+    const [totalCount, studentLeaves] = await withFollowupTables(
+      () => Promise.all([
+        db.studentLeave.count(),
+        db.studentLeave.findMany({ orderBy: [{ dateFrom: 'desc' }, { date: 'desc' }], skip, take: pageSize }),
+      ]),
       'StudentLeave',
     );
-    return NextResponse.json({ studentLeaves });
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    return NextResponse.json({ studentLeaves, totalCount, page, pageSize, totalPages, hasMore: page < totalPages });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل الإجازات حالياً.');
   }
@@ -94,28 +112,13 @@ export async function POST(req: NextRequest) {
     const reasonError = requireText(data.reason, 'سبب الإجازة');
     if (reasonError) return validationError(reasonError);
 
-    const id = String(body.id || '').trim();
     const leave = await withFollowupTables(() => db.$transaction(async (tx) => {
       const affectedExamIds = await getAffectedExamIds(tx, data);
-      const savedLeave = id
-        ? await (async () => {
-            if (data.leaveType === 'exam' && data.examId) {
-              await tx.studentLeave.deleteMany({
-                where: { studentId: data.studentId, examId: data.examId, id: { not: id } },
-              });
-            }
-            return tx.studentLeave.upsert({
-              where: { id },
-              update: data,
-              create: { id, ...data },
-            });
-          })()
-        : await (async () => {
-            if (data.leaveType === 'exam' && data.examId) {
-              await tx.studentLeave.deleteMany({ where: { studentId: data.studentId, examId: data.examId } });
-            }
-            return tx.studentLeave.create({ data });
-          })();
+      // Never trust client-provided IDs on create. The server owns primary keys.
+      if (data.leaveType === 'exam' && data.examId) {
+        await tx.studentLeave.deleteMany({ where: { studentId: data.studentId, examId: data.examId } });
+      }
+      const savedLeave = await tx.studentLeave.create({ data });
 
       if (affectedExamIds.length) {
         await tx.grade.deleteMany({ where: { studentId: data.studentId, examId: { in: affectedExamIds } } });

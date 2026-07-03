@@ -187,9 +187,8 @@ export async function POST(req: NextRequest) {
         ...(checked !== undefined ? { academicAccountingChecked: checked } : {}),
       },
       create: {
-        // id is accepted from client for offline sync reconciliation.
-        // Server falls back to cuid() if empty.
-        id: body.id || undefined,
+        // Never trust client-provided IDs on create. Offline/client IDs stay local only;
+        // the server reconciles records by the unique studentId + examId pair.
         studentId: body.studentId,
         examId: body.examId,
         status: body.status,
