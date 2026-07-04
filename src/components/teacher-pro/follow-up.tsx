@@ -798,7 +798,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const callRows = useMemo<CallStudentRow[]>(() => {
-    // لا نرجع قائمة فارغة إذا ما في امتحان محدد — نعرض كل الطلاب
+    // لا يتم بناء القائمة إلا بعد اختيار الدورة والامتحان من قاعدة البيانات.
     const courseStudents = callPageStudentIds
       .map((studentId) => students.find((student) => student.id === studentId))
       .filter((student): student is Student => Boolean(student));
@@ -806,7 +806,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const studentById = new Map<string, Student>(
       courseStudents.map((student) => [student.id, student] as [string, Student]),
     );
-    // خريطة كل الامتحانات (وليس الامتحان المحدد فقط) حتى تظهر كل درجات الطالب
+    // خريطة الامتحانات المتاحة لعرض تفاصيل درجة الطالب المحملة من قاعدة البيانات.
     const examById = new Map<string, Exam>(
       exams.map((exam) => [exam.id, exam] as [string, Exam]),
     );
@@ -845,8 +845,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       .flatMap<CallStudentRow>(({ student, items }) => {
         const sortedItems = sortGradeItemsByLatest(items);
 
-        // إذا يوجد امتحان محدد، اعرض فقط الطلاب الذين لديهم درجة في ذلك الامتحان
-        // وإذا لا يوجد امتحان محدد، اعرض كل الطلاب بكل درجاتهم
+        // بعد اختيار الامتحان، اعرض فقط الطلاب ودرجة هذا الامتحان.
         let displayItems = sortedItems;
         let focusItem: CallGradeItem | null = sortedItems[0] || null;
 
@@ -2011,7 +2010,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                       <SelectValue placeholder="اختر الدورة أولاً" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">كل الدورات / بدون اختيار</SelectItem>
+                      <SelectItem value="__none__">بدون اختيار دورة</SelectItem>
                       {courses.map((course) => (
                         <SelectItem key={course.id} value={course.id}>
                           {course.name}
@@ -2034,7 +2033,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                       <SelectValue placeholder="اختر امتحان الدورة" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">كل الامتحانات / بدون اختيار</SelectItem>
+                      <SelectItem value="__none__">بدون اختيار امتحان</SelectItem>
                       {callCourseExams.map((exam) => (
                         <SelectItem key={exam.id} value={exam.id}>
                           {exam.name} - {formatAppDate(exam.date)}

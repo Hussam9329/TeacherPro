@@ -484,7 +484,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
               </Label>
               <Select
                 name="examId"
-                value={filterExamId}
+                value={filterExamId || "all"}
                 onValueChange={(v) => setFilterExamId(v === "all" ? "" : v)}
               >
                 <SelectTrigger id="ecorrection-exam">
@@ -506,7 +506,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
               </Label>
               <Select
                 name="status"
-                value={filterStatus}
+                value={filterStatus || "all"}
                 onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}
               >
                 <SelectTrigger id="ecorrection-status">
@@ -680,7 +680,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
             </div>
             <div className="space-y-1">
               <Label htmlFor="bot-exam" className="text-xs">الامتحان</Label>
-              <Select value={botFilterExamId} onValueChange={(v) => setBotFilterExamId(v === "all" ? "" : v)}>
+              <Select value={botFilterExamId || "all"} onValueChange={(v) => setBotFilterExamId(v === "all" ? "" : v)}>
                 <SelectTrigger id="bot-exam"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
@@ -690,7 +690,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
             </div>
             <div className="space-y-1">
               <Label htmlFor="bot-status" className="text-xs">الحالة</Label>
-              <Select value={botFilterStatus} onValueChange={(v) => setBotFilterStatus(v === "all" ? "" : v)}>
+              <Select value={botFilterStatus || "all"} onValueChange={(v) => setBotFilterStatus(v === "all" ? "" : v)}>
                 <SelectTrigger id="bot-status"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>

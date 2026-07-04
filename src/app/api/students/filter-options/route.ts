@@ -6,9 +6,9 @@ import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 
 /**
- * Returns distinct location options (locationScope, subSite) for student
- * filtering. Used by student-registry to populate filter dropdowns
- * without loading all students.
+ * Returns distinct location options (locationScope, subSite, mainSite) for student
+ * filtering across all students the user is allowed to view. Used by
+ * student-registry to populate filter dropdowns without loading all students.
  *
  * Returns: { locations: { scope: string, subSite: string }[] }
  */
@@ -19,10 +19,8 @@ export async function GET(req: NextRequest) {
   try {
     // Use distinct query instead of loading all students
     const results = await db.student.findMany({
-      where: { status: 'نشط' },
       select: { locationScope: true, subSite: true, mainSite: true },
-      distinct: ['locationScope', 'subSite'],
-      take: 200,
+      distinct: ['locationScope', 'subSite', 'mainSite'],
     });
 
     const locations = results

@@ -437,8 +437,7 @@ export interface GradeListQuery {
 
 const DEFAULT_STUDENT_PAGE_SIZE = 50;
 const DEFAULT_GRADE_PAGE_SIZE = 100;
-const LIST_ALL_PAGE_SIZE = 200;
-const LIST_ALL_MAX_PAGES = 5;
+const LIST_ALL_PAGE_SIZE = 500;
 
 
 export interface OpportunityStatsResponse {
@@ -491,6 +490,67 @@ export interface GradeListResponse {
   pageSize: number;
   totalPages: number;
   hasMore: boolean;
+}
+
+interface PaginatedApiEnvelope extends Record<string, unknown> {
+  total?: number;
+  totalCount?: number;
+  page?: number;
+  pageSize?: number;
+  limit?: number;
+  totalPages?: number;
+  hasMore?: boolean;
+}
+
+async function apiGetAllPages<T extends Record<string, unknown>>(
+  endpoint: string,
+  collectionKey: keyof T,
+  requestedPageSize = 500,
+): Promise<T | null> {
+  const collected: unknown[] = [];
+  let page = 1;
+  let totalPages = 1;
+  let lastResponse: (T & PaginatedApiEnvelope) | null = null;
+
+  while (page <= totalPages) {
+    const separator = endpoint.includes("?") ? "&" : "?";
+    const response = await apiGet<T & PaginatedApiEnvelope>(
+      `${endpoint}${separator}page=${page}&pageSize=${requestedPageSize}`,
+    );
+    if (!response) return null;
+
+    lastResponse = response;
+    const pageItems = response[collectionKey];
+    if (Array.isArray(pageItems)) collected.push(...pageItems);
+
+    const effectivePageSize = Number(response.pageSize || response.limit || requestedPageSize);
+    const total = Number(response.totalCount ?? response.total ?? collected.length);
+    totalPages = Math.max(
+      1,
+      Number(response.totalPages || 0) || Math.ceil(total / Math.max(1, effectivePageSize)),
+    );
+
+    if (!response.hasMore || page >= totalPages) break;
+    page += 1;
+
+    // Defensive guard against malformed paginated responses. This is not a data cap;
+    // normal APIs stop through hasMore/totalPages above.
+    if (page > 10000) {
+      console.warn(`[API] Aborted all-pages read for /api/${endpoint}: invalid pagination metadata.`);
+      break;
+    }
+  }
+
+  return {
+    ...(lastResponse || ({} as T)),
+    [collectionKey]: collected,
+    totalCount: Number(lastResponse?.totalCount ?? lastResponse?.total ?? collected.length),
+    total: Number(lastResponse?.total ?? lastResponse?.totalCount ?? collected.length),
+    page: 1,
+    pageSize: collected.length,
+    totalPages: 1,
+    hasMore: false,
+  } as T;
 }
 
 function buildQueryString(
@@ -577,7 +637,7 @@ export const chapterApi = {
 // ─── CourseChapter API ────────────────────────────────────────────────────────
 
 export const courseChapterApi = {
-  list: () => apiGet<Pick<ServerData, "courseChapters">>("course-chapters?page=1&pageSize=200"),
+  list: () => apiGetAllPages<Pick<ServerData, "courseChapters">>("course-chapters", "courseChapters"),
   add: (cc: {
     id: string;
     courseId: string;
@@ -625,13 +685,13 @@ export const studentApi = {
     let totalCount = 0;
     let totalPages = 1;
 
-    while (page <= totalPages && page <= LIST_ALL_MAX_PAGES) {
+    while (page <= totalPages) {
       const result = await studentApi.list({ ...query, page, pageSize });
       if (!result) return null;
       totalCount = Number(result.totalCount || 0);
       totalPages = Math.max(1, Number(result.totalPages || 1));
       collected.push(...(result.students || []));
-      if (!result.hasMore) break;
+      if (!result.hasMore || page >= totalPages) break;
       page += 1;
     }
 
@@ -639,9 +699,9 @@ export const studentApi = {
       students: collected,
       totalCount,
       page: 1,
-      pageSize,
-      totalPages,
-      hasMore: collected.length < totalCount,
+      pageSize: collected.length,
+      totalPages: 1,
+      hasMore: false,
     };
   },
   bulkAdd: (students: Array<Record<string, unknown>>) =>
@@ -690,13 +750,13 @@ export const gradeApi = {
     let totalCount = 0;
     let totalPages = 1;
 
-    while (page <= totalPages && page <= LIST_ALL_MAX_PAGES) {
+    while (page <= totalPages) {
       const result = await gradeApi.list({ ...query, page, pageSize });
       if (!result) return null;
       totalCount = Number(result.totalCount || 0);
       totalPages = Math.max(1, Number(result.totalPages || 1));
       collected.push(...(result.grades || []));
-      if (!result.hasMore) break;
+      if (!result.hasMore || page >= totalPages) break;
       page += 1;
     }
 
@@ -704,9 +764,9 @@ export const gradeApi = {
       grades: collected,
       totalCount,
       page: 1,
-      pageSize,
-      totalPages,
-      hasMore: collected.length < totalCount,
+      pageSize: collected.length,
+      totalPages: 1,
+      hasMore: false,
     };
   },
   update: (id: string, updates: Record<string, unknown>) =>
@@ -789,7 +849,7 @@ export const callCandidatesApi = {
 // ─── OpportunityLog API ───────────────────────────────────────────────────────
 
 export const opportunityLogApi = {
-  list: () => apiGet<Pick<ServerData, "opportunityLogs">>("opportunity-logs?page=1&pageSize=200"),
+  list: () => apiGetAllPages<Pick<ServerData, "opportunityLogs">>("opportunity-logs", "opportunityLogs"),
   add: (log: Record<string, unknown>) => apiPost("opportunity-logs", log),
   bulkAdjust: (payload: {
     students?: Array<Record<string, unknown>>;
@@ -802,7 +862,7 @@ export const opportunityLogApi = {
 // ─── Follow-up API ───────────────────────────────────────────────────────────
 
 export const studentLeaveApi = {
-  list: () => apiGet<Pick<ServerData, "studentLeaves">>("student-leaves?page=1&pageSize=200"),
+  list: () => apiGetAllPages<Pick<ServerData, "studentLeaves">>("student-leaves", "studentLeaves"),
   add: (leave: Record<string, unknown>) => apiPost("student-leaves", leave),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-leaves", { id, ...updates }),
@@ -810,7 +870,7 @@ export const studentLeaveApi = {
 };
 
 export const studentCallApi = {
-  list: () => apiGet<Pick<ServerData, "studentCalls">>("student-calls?page=1&pageSize=200"),
+  list: () => apiGetAllPages<Pick<ServerData, "studentCalls">>("student-calls", "studentCalls"),
   add: (call: Record<string, unknown>) => apiPost("student-calls", call),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-calls", { id, ...updates }),
@@ -818,7 +878,7 @@ export const studentCallApi = {
 };
 
 export const studentNoteApi = {
-  list: () => apiGet<Pick<ServerData, "studentNotes">>("student-notes?page=1&pageSize=200"),
+  list: () => apiGetAllPages<Pick<ServerData, "studentNotes">>("student-notes", "studentNotes"),
   add: (note: Record<string, unknown>) => apiPost("student-notes", note),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-notes", { id, ...updates }),
@@ -828,7 +888,7 @@ export const studentNoteApi = {
 // ─── CorrectionSheet API ──────────────────────────────────────────────────────
 
 export const correctionSheetApi = {
-  list: () => apiGet<Pick<ServerData, "correctionSheets">>("correction-sheets?page=1&pageSize=200"),
+  list: () => apiGetAllPages<Pick<ServerData, "correctionSheets">>("correction-sheets", "correctionSheets"),
   add: (sheet: Record<string, unknown>) => apiPost("correction-sheets", sheet),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("correction-sheets", { id, ...updates }),
@@ -856,7 +916,7 @@ export const roleApi = {
 // ─── Log API ──────────────────────────────────────────────────────────────────
 
 export const logApi = {
-  list: () => apiGet<Pick<ServerData, "logs">>("logs?page=1&pageSize=200"),
+  list: () => apiGetAllPages<Pick<ServerData, "logs">>("logs", "logs"),
   add: async (log: Record<string, unknown>): Promise<ApiResult> => {
     // Use direct fetch instead of apiPost so that 403 responses (server-only
     // audit entries) don't trigger console.warn noise. The UI creates local

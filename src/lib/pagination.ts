@@ -21,7 +21,7 @@ import { NextRequest } from 'next/server';
 export function parsePagination(req: NextRequest): { page: number; limit: number; skip: number } {
   const url = new URL(req.url);
   const page = Math.max(1, Number(url.searchParams.get('page') || '1'));
-  const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('pageSize') || url.searchParams.get('limit') || '50')));
+  const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('pageSize') || url.searchParams.get('limit') || '50')));
   return { page, limit, skip: (page - 1) * limit };
 }
 

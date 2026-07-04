@@ -13,6 +13,7 @@ import {
 } from "@/lib/student-utils";
 import { getRequiredTextError } from "@/lib/validation";
 import { normalizeArabicText } from "@/lib/route-helpers";
+import { normalizeListFilter } from "@/lib/all-filter";
 import {
   validateStudentCourseChoices,
   resolveSubSite,
@@ -249,34 +250,34 @@ function buildStudentFilterWhere(
 ): Prisma.StudentWhereInput[] {
   const and: Prisma.StudentWhereInput[] = [];
 
-  const status = String(searchParams.get("status") ?? "").trim();
+  const status = normalizeListFilter(searchParams.get("status"));
   if (status) and.push({ status });
 
-  const courseId = String(searchParams.get("courseId") ?? "").trim();
+  const courseId = normalizeListFilter(searchParams.get("courseId"));
   if (courseId) and.push({ courseId });
 
   const courseIds = String(searchParams.get("courseIds") ?? "")
     .split(",")
-    .map((item) => item.trim())
+    .map((item) => normalizeListFilter(item))
     .filter(Boolean);
   if (courseIds.length > 0) and.push({ courseId: { in: courseIds } });
 
-  const courseProgram = String(searchParams.get("courseProgram") ?? "").trim();
+  const courseProgram = normalizeListFilter(searchParams.get("courseProgram"));
   if (courseProgram) and.push({ courseProgram });
 
-  const courseTerm = String(searchParams.get("courseTerm") ?? "").trim();
+  const courseTerm = normalizeListFilter(searchParams.get("courseTerm"));
   if (courseProgram === "كورسات" && courseTerm) and.push({ courseTerm });
 
-  const studyType = String(searchParams.get("studyType") ?? "").trim();
+  const studyType = normalizeListFilter(searchParams.get("studyType"));
   if (studyType) and.push({ studyType });
 
-  const location = String(searchParams.get("location") ?? "").trim();
+  const location = normalizeListFilter(searchParams.get("location"));
   const locationWhere = location ? buildLocationWhere(location) : null;
   if (locationWhere) and.push(locationWhere);
 
   // Database-side filters used by إدارة الفرص. Keep them under explicit
   // names so normal student status filtering remains the literal Arabic value.
-  const opportunityStatus = String(searchParams.get("opportunityStatus") ?? "").trim();
+  const opportunityStatus = normalizeListFilter(searchParams.get("opportunityStatus"));
   if (opportunityStatus === "active") and.push({ status: "نشط" });
   else if (opportunityStatus === "dismissed") and.push({ status: "مفصول" });
   else if (opportunityStatus === "has-opportunities") and.push({ status: "نشط", opportunities: { gt: 0 } });
@@ -284,7 +285,7 @@ function buildStudentFilterWhere(
   else if (opportunityStatus === "temporary-dismissal") and.push({ status: "مفصول", dismissalType: "فصل مؤقت" });
   else if (opportunityStatus === "final-dismissal") and.push({ status: "مفصول", dismissalType: "فصل نهائي" });
 
-  const opportunityCount = String(searchParams.get("opportunityCount") ?? "").trim();
+  const opportunityCount = normalizeListFilter(searchParams.get("opportunityCount"));
   if (opportunityCount !== "") {
     const count = Number(opportunityCount);
     if (Number.isFinite(count) && count >= 0) and.push({ opportunities: Math.trunc(count) });

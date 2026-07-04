@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse } from "@/lib/route-helpers";
+import { normalizeListFilter } from "@/lib/all-filter";
 import { withFollowupTables } from "@/lib/followup-schema";
 
 type CallStatusFilter =
@@ -159,9 +160,9 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const courseId = String(searchParams.get("courseId") || "").trim();
-    const examId = String(searchParams.get("examId") || "").trim();
-    const statusFilter = (String(searchParams.get("statusFilter") || "all").trim() || "all") as CallStatusFilter;
+    const courseId = normalizeListFilter(searchParams.get("courseId"));
+    const examId = normalizeListFilter(searchParams.get("examId"));
+    const statusFilter = (normalizeListFilter(searchParams.get("statusFilter")) || "all") as CallStatusFilter;
     const generalSearch = String(searchParams.get("q") || "").trim();
     const filterSearch = String(searchParams.get("filterQ") || "").trim();
 

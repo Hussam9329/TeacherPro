@@ -7,6 +7,7 @@ import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { normalizeArabicText, requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { ensureExamSchema } from '@/lib/exam-schema';
+import { normalizeListFilter } from '@/lib/all-filter';
 
 async function validateGradePayload(body: Record<string, unknown>) {
   const studentError = requireText(body.studentId, 'الطالب');
@@ -102,12 +103,12 @@ function buildNameLetterWhere(letter: string): Prisma.GradeWhereInput | null {
 
 function buildGradeWhere(searchParams: URLSearchParams): Prisma.GradeWhereInput {
   const and: Prisma.GradeWhereInput[] = [];
-  const examId = String(searchParams.get('examId') || '').trim();
-  const studentId = String(searchParams.get('studentId') || '').trim();
-  const status = String(searchParams.get('status') || '').trim();
-  const courseId = String(searchParams.get('courseId') || '').trim();
+  const examId = normalizeListFilter(searchParams.get('examId'));
+  const studentId = normalizeListFilter(searchParams.get('studentId'));
+  const status = normalizeListFilter(searchParams.get('status'));
+  const courseId = normalizeListFilter(searchParams.get('courseId'));
   const search = String(searchParams.get('q') || '').trim();
-  const nameLetter = String(searchParams.get('nameLetter') || '').trim();
+  const nameLetter = normalizeListFilter(searchParams.get('nameLetter'));
 
   if (examId) and.push({ examId });
   if (studentId) and.push({ studentId });

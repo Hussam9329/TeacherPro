@@ -7,7 +7,7 @@ import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { withFollowupTables } from '@/lib/followup-schema';
 
-function readListPagination(req: NextRequest, fallbackPageSize = 100, maxPageSize = 200) {
+function readListPagination(req: NextRequest, fallbackPageSize = 100, maxPageSize = 500) {
   const searchParams = new URL(req.url).searchParams;
   const rawPageSize = searchParams.get('pageSize') ?? searchParams.get('limit');
   const rawPage = searchParams.get('page');

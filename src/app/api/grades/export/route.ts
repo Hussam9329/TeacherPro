@@ -6,8 +6,8 @@ import type { Prisma } from '@prisma/client';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { normalizeArabicText } from '@/lib/route-helpers';
+import { normalizeListFilter } from '@/lib/all-filter';
 
-const EXPORT_LIMIT = 10000;
 
 function buildGradeSearchWhere(rawQuery: string): Prisma.GradeWhereInput | null {
   const query = rawQuery.trim();
@@ -55,12 +55,12 @@ function buildNameLetterWhere(letter: string): Prisma.GradeWhereInput | null {
 
 function buildGradeExportWhere(searchParams: URLSearchParams): Prisma.GradeWhereInput {
   const and: Prisma.GradeWhereInput[] = [];
-  const examId = String(searchParams.get('examId') || '').trim();
-  const studentId = String(searchParams.get('studentId') || '').trim();
-  const status = String(searchParams.get('status') || '').trim();
-  const courseId = String(searchParams.get('courseId') || '').trim();
+  const examId = normalizeListFilter(searchParams.get('examId'));
+  const studentId = normalizeListFilter(searchParams.get('studentId'));
+  const status = normalizeListFilter(searchParams.get('status'));
+  const courseId = normalizeListFilter(searchParams.get('courseId'));
   const q = String(searchParams.get('q') || '').trim();
-  const nameLetter = String(searchParams.get('nameLetter') || '').trim();
+  const nameLetter = normalizeListFilter(searchParams.get('nameLetter'));
 
   if (examId) and.push({ examId });
   if (studentId) and.push({ studentId });
@@ -89,11 +89,10 @@ export async function GET(req: NextRequest) {
         where,
         orderBy: { updatedAt: 'desc' },
         include: { student: true, exam: true },
-        take: EXPORT_LIMIT,
       }),
     ]);
 
-    return NextResponse.json({ grades, total: grades.length, totalCount, capped: totalCount > EXPORT_LIMIT });
+    return NextResponse.json({ grades, total: grades.length, totalCount, capped: false });
   } catch (error) {
     console.error('[API] /api/grades/export error:', error);
     return NextResponse.json(

@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { sanitizePhoneInput } from "@/lib/format";
 import { sanitizeTelegramInput } from "@/lib/student-utils";
 import { normalizeArabicText, routeErrorResponse } from "@/lib/route-helpers";
+import { normalizeListFilter } from "@/lib/all-filter";
 
 function composeWhere(parts: Prisma.StudentWhereInput[]): Prisma.StudentWhereInput {
   return parts.length > 0 ? { AND: parts } : {};
@@ -55,9 +56,9 @@ function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
 
 function buildOpportunityFilters(searchParams: URLSearchParams): Prisma.StudentWhereInput[] {
   const and: Prisma.StudentWhereInput[] = [];
-  const courseId = String(searchParams.get("courseId") || "").trim();
-  const status = String(searchParams.get("status") || "").trim();
-  const opportunityCount = String(searchParams.get("opportunityCount") || "").trim();
+  const courseId = normalizeListFilter(searchParams.get("courseId"));
+  const status = normalizeListFilter(searchParams.get("status"));
+  const opportunityCount = normalizeListFilter(searchParams.get("opportunityCount"));
   const query = String(searchParams.get("q") || "").trim();
 
   if (courseId) and.push({ courseId });

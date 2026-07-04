@@ -376,10 +376,22 @@ export function OpportunitiesView() {
 
 
 
-  const opportunityExportRows = filtered.map((student) => ({
+  const mapOpportunityExportRow = (student: Student) => ({
     ...student,
     courseName: courseName(student.courseId),
-  }));
+  });
+
+  const opportunityExportRows = filtered.map(mapOpportunityExportRow);
+
+  const fetchOpportunityExportRows = async () => {
+    const result = await studentApi.listAll({
+      courseId: filterCourseId,
+      opportunityStatus: filterStatus,
+      opportunityCount: filterOpportunityCount,
+      q: debouncedSearch,
+    });
+    return ((result?.students || []) as unknown as Student[]).map(mapOpportunityExportRow);
+  };
 
 
   return (
@@ -428,6 +440,7 @@ export function OpportunitiesView() {
                 title="تصدير إدارة الفرص"
                 fileName="opportunities"
                 rows={opportunityExportRows}
+                fetchRows={fetchOpportunityExportRows}
                 columns={opportunityExportColumns}
                 triggerLabel="تصدير"
                 description="تقرير إدارة الفرص حسب الفلاتر الحالية"

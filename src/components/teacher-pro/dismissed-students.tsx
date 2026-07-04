@@ -36,7 +36,7 @@ export function DismissedStudentsView() {
   useEffect(() => {
     let cancelled = false;
     studentApi
-      .list({ status: "مفصول", pageSize: 200 })
+      .listAll({ status: "مفصول" })
       .then((result) => {
         if (!cancelled) {
           mergeStudentsCache((result?.students || []) as unknown as Student[]);

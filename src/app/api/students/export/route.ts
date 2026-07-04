@@ -8,8 +8,8 @@ import { db } from '@/lib/db';
 import { normalizeArabicText } from '@/lib/route-helpers';
 import { sanitizePhoneInput } from '@/lib/format';
 import { sanitizeTelegramInput } from '@/lib/student-utils';
+import { normalizeListFilter } from '@/lib/all-filter';
 
-const EXPORT_LIMIT = 10000;
 
 function buildLocationWhere(location: string): Prisma.StudentWhereInput | null {
   const normalized = normalizeArabicText(location);
@@ -69,12 +69,12 @@ function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
 function buildStudentExportWhere(searchParams: URLSearchParams): Prisma.StudentWhereInput {
   const and: Prisma.StudentWhereInput[] = [];
   const q = String(searchParams.get('q') || '').trim();
-  const courseId = String(searchParams.get('courseId') || '').trim();
-  const status = String(searchParams.get('status') || '').trim();
-  const courseProgram = String(searchParams.get('courseProgram') || '').trim();
-  const courseTerm = String(searchParams.get('courseTerm') || '').trim();
-  const studyType = String(searchParams.get('studyType') || '').trim();
-  const location = String(searchParams.get('location') || searchParams.get('locationScope') || '').trim();
+  const courseId = normalizeListFilter(searchParams.get('courseId'));
+  const status = normalizeListFilter(searchParams.get('status'));
+  const courseProgram = normalizeListFilter(searchParams.get('courseProgram'));
+  const courseTerm = normalizeListFilter(searchParams.get('courseTerm'));
+  const studyType = normalizeListFilter(searchParams.get('studyType'));
+  const location = normalizeListFilter(searchParams.get('location') || searchParams.get('locationScope'));
 
   if (courseId) and.push({ courseId });
   if (status) and.push({ status });
@@ -104,11 +104,10 @@ export async function GET(req: NextRequest) {
         where,
         orderBy: { createdAt: 'desc' },
         include: { course: true },
-        take: EXPORT_LIMIT,
       }),
     ]);
 
-    return NextResponse.json({ students, total: students.length, totalCount, capped: totalCount > EXPORT_LIMIT });
+    return NextResponse.json({ students, total: students.length, totalCount, capped: false });
   } catch (error) {
     console.error('[API] /api/students/export error:', error);
     return NextResponse.json(

@@ -88,7 +88,7 @@ export function LogsView() {
               </Label>
               <Select
                 name="module"
-                value={filterModule}
+                value={filterModule || "all"}
                 onValueChange={(v) => {
                   setFilterModule(v === "all" ? "" : v);
                   setPage(1);
@@ -113,7 +113,7 @@ export function LogsView() {
               </Label>
               <Select
                 name="userId"
-                value={filterUser}
+                value={filterUser || "all"}
                 onValueChange={(v) => {
                   setFilterUser(v === "all" ? "" : v);
                   setPage(1);
