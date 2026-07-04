@@ -359,6 +359,46 @@ export async function GET(req: NextRequest) {
   });
 }
 
+/**
+ * عند إضافة طالب جديد، تحقق من الفصل النشط المرتبط بدورته.
+ * إذا كان هناك فصل نشط، امنح الطالب نفس فرص زملائه (baseOpportunities).
+ * إذا لم يكن هناك فصل نشط أو تم تحديد فرص صراحة في body، استخدم القيمة المرسلة.
+ */
+async function getInitialOpportunities(
+  body: Record<string, unknown>,
+  course: { id: string } | null,
+): Promise<{ opportunities: number; baseOpportunities: number }> {
+  // إذا تم تحديد فرص صراحة، احترمها
+  if (body.opportunities !== undefined && body.opportunities !== null) {
+    return {
+      opportunities: Number(body.opportunities || 0),
+      baseOpportunities: Number(body.baseOpportunities || body.opportunities || 0),
+    };
+  }
+
+  // ابحث عن فصل نشط مرتبط بدورة هذا الطالب
+  if (!course) {
+    return { opportunities: 0, baseOpportunities: 0 };
+  }
+
+  const activeCourseChapter = await db.courseChapter.findFirst({
+    where: { courseId: course.id, active: true, archived: false },
+    select: { chapterId: true },
+  });
+
+  if (!activeCourseChapter) {
+    return { opportunities: 0, baseOpportunities: 0 };
+  }
+
+  const chapter = await db.chapter.findUnique({
+    where: { id: activeCourseChapter.chapterId },
+    select: { opportunities: true },
+  });
+
+  const opp = Number(chapter?.opportunities || 0);
+  return { opportunities: opp, baseOpportunities: opp };
+}
+
 export async function POST(req: NextRequest) {
   const authError = await requirePermission(req, "students.add");
   if (authError) return authError;
@@ -495,8 +535,9 @@ export async function POST(req: NextRequest) {
           ? String(body.dismissalNotes)
           : null,
         createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
-        opportunities: Number(body.opportunities || 0),
-        baseOpportunities: Number(body.baseOpportunities || 0),
+        // إذا لم يتم تحديد فرص صراحة، تحقق من الفصل النشط المرتبط بالدورة
+        // لمنح الطالب الجديد نفس فرص زملائه تلقائياً.
+        ...(await getInitialOpportunities(body, course)),
         accountingGraceDays: normalizeGraceDays(body.accountingGraceDays),
         courseId: body.courseId,
         ...uniqueKeys,
