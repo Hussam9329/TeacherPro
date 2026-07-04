@@ -18,7 +18,6 @@ import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 
-
 const logExportColumns: ExportColumn<any>[] = [
   { key: "time", label: "الوقت", value: (log) => log.time || "" },
   { key: "user", label: "المستخدم", value: (log) => log.user || "" },
@@ -46,7 +45,10 @@ export function LogsView() {
 
   const filtered = useMemo(() => {
     return logs.filter((l) => {
-      if (debouncedSearch && !searchAny(debouncedSearch, [l.action, l.details, l.module, l.user]))
+      if (
+        debouncedSearch &&
+        !searchAny(debouncedSearch, [l.action, l.details, l.module, l.user])
+      )
         return false;
       if (filterModule && l.module !== filterModule) return false;
       if (filterUser && l.user !== filterUser) return false;
@@ -57,31 +59,12 @@ export function LogsView() {
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-
-
   return (
     <div className="space-y-4">
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="logs-search" className="text-xs">
-                بحث
-              </Label>
-              <Input
-                id="logs-search"
-                name="search"
-                data-teacherpro-search="true"
-                autoComplete="off"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="إجراء / تفاصيل"
-              />
-            </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4 lg:grid-cols-6">
             <div className="space-y-1">
               <Label htmlFor="logs-module" className="text-xs">
                 الوحدة
@@ -131,6 +114,23 @@ export function LogsView() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label htmlFor="logs-search" className="text-xs">
+                بحث
+              </Label>
+              <Input
+                id="logs-search"
+                name="search"
+                data-teacherpro-search="true"
+                autoComplete="off"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="إجراء / تفاصيل"
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="logs-pageSize" className="text-xs">

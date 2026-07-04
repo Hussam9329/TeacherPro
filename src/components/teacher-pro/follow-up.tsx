@@ -48,13 +48,7 @@ type CallCategory =
   | "passed"
   | "cheating";
 type CallStatusFilter =
-  | "all"
-  | "absent"
-  | "discounted"
-  | "failed"
-  | "cheating"
-  | "passed"
-  | "full";
+  "all" | "absent" | "discounted" | "failed" | "cheating" | "passed" | "full";
 type CallGradeDisplayMode = "latest" | "latest-two" | "all";
 type PledgeTypeFilter = "all" | "temporary" | "final";
 type PledgeStatusFilter = "all" | "pledged" | "pending" | "reactivated";
@@ -210,7 +204,9 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
     key: "grade",
     label: "الدرجة",
     value: ({ row }) =>
-      row.focusItem ? formatGradeScore(row.focusItem.grade, row.focusItem.exam, "—") : "",
+      row.focusItem
+        ? formatGradeScore(row.focusItem.grade, row.focusItem.exam, "—")
+        : "",
   },
   {
     key: "contact",
@@ -280,7 +276,11 @@ function sortGradeItemsByLatest(items: CallGradeItem[]) {
 }
 
 function examIncludesCourse(exam: Exam, courseId: string) {
-  return Boolean(courseId && Array.isArray(exam.courseIds) && exam.courseIds.includes(courseId));
+  return Boolean(
+    courseId &&
+    Array.isArray(exam.courseIds) &&
+    exam.courseIds.includes(courseId),
+  );
 }
 
 function numericGradeScore(grade: Grade | null | undefined): number | null {
@@ -442,10 +442,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     let cancelled = false;
 
     studentApi
-      .list({ q: debouncedGlobalSearch, pageSize: debouncedGlobalSearch.trim() ? 30 : 50 })
+      .list({
+        q: debouncedGlobalSearch,
+        pageSize: debouncedGlobalSearch.trim() ? 30 : 50,
+      })
       .then((studentResult) => {
         if (cancelled) return;
-        mergeStudentsCache((studentResult?.students || []) as unknown as Student[]);
+        mergeStudentsCache(
+          (studentResult?.students || []) as unknown as Student[],
+        );
       })
       .catch(() => {
         // الصفحة تستخدم آخر كاش متاح إذا فشل الاتصال المؤقت.
@@ -476,10 +481,18 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [callGradePage, setCallGradePage] = useState(1);
   const [callLoading, setCallLoading] = useState(false);
   const [callPageStudentIds, setCallPageStudentIds] = useState<string[]>([]);
-  const [callPageStudentCalls, setCallPageStudentCalls] = useState<StudentCall[]>([]);
-  const [callServerPageInfo, setCallServerPageInfo] = useState({ totalCount: 0, totalPages: 1, hasMore: false });
-  const [callDatabaseStats, setCallDatabaseStats] = useState<CallStatsResponse | null>(null);
-  const [callDatabaseStatsLoading, setCallDatabaseStatsLoading] = useState(false);
+  const [callPageStudentCalls, setCallPageStudentCalls] = useState<
+    StudentCall[]
+  >([]);
+  const [callServerPageInfo, setCallServerPageInfo] = useState({
+    totalCount: 0,
+    totalPages: 1,
+    hasMore: false,
+  });
+  const [callDatabaseStats, setCallDatabaseStats] =
+    useState<CallStatsResponse | null>(null);
+  const [callDatabaseStatsLoading, setCallDatabaseStatsLoading] =
+    useState(false);
   const [callGradeDisplayModes, setCallGradeDisplayModes] = useState<
     Record<string, CallGradeDisplayMode>
   >({});
@@ -535,7 +548,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         mergeStudentsCache(pageStudents);
         mergeGradesCache(pageGrades);
         setCallPageStudentIds(pageStudents.map((student) => student.id));
-        setCallPageStudentCalls((result.studentCalls || []) as unknown as StudentCall[]);
+        setCallPageStudentCalls(
+          (result.studentCalls || []) as unknown as StudentCall[],
+        );
         setCallServerPageInfo({
           totalCount: Number(result.totalCount || 0),
           totalPages: Math.max(1, Number(result.totalPages || 1)),
@@ -546,7 +561,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         if (!cancelled) {
           setCallPageStudentIds([]);
           setCallPageStudentCalls([]);
-          setCallServerPageInfo({ totalCount: 0, totalPages: 1, hasMore: false });
+          setCallServerPageInfo({
+            totalCount: 0,
+            totalPages: 1,
+            hasMore: false,
+          });
           toast.error("تعذر تحميل طلاب المكالمات من قاعدة البيانات.");
         }
       })
@@ -602,7 +621,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [view, callCourseId, callExamId, callStatusFilter, callGeneralSearch, callFilterSearch]);
+  }, [
+    view,
+    callCourseId,
+    callExamId,
+    callStatusFilter,
+    callGeneralSearch,
+    callFilterSearch,
+  ]);
 
   const filteredStudents = useMemo(() => {
     const query = globalSearch;
@@ -629,7 +655,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   );
   const selectedProfileStudent =
     students.find((student) => student.id === profileStudentId) || null;
-  const selectedCallCourse = courses.find((course) => course.id === callCourseId) || null;
+  const selectedCallCourse =
+    courses.find((course) => course.id === callCourseId) || null;
   const callCourseExams = useMemo(
     () =>
       callCourseId
@@ -637,7 +664,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         : [],
     [exams, callCourseId],
   );
-  const selectedCallExam = callCourseExams.find((exam) => exam.id === callExamId) || null;
+  const selectedCallExam =
+    callCourseExams.find((exam) => exam.id === callExamId) || null;
   const callCourseSelected = Boolean(selectedCallCourse);
   const callExamSelected = Boolean(selectedCallExam);
   const callExportDocumentTitle = selectedCallExam
@@ -802,9 +830,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const courseStudents = callPageStudentIds
       .map((studentId) => students.find((student) => student.id === studentId))
       .filter((student): student is Student => Boolean(student));
-    const courseStudentIds = new Set(courseStudents.map((student) => student.id));
+    const courseStudentIds = new Set(
+      courseStudents.map((student) => student.id),
+    );
     const studentById = new Map<string, Student>(
-      courseStudents.map((student) => [student.id, student] as [string, Student]),
+      courseStudents.map(
+        (student) => [student.id, student] as [string, Student],
+      ),
     );
     // خريطة الامتحانات المتاحة لعرض تفاصيل درجة الطالب المحملة من قاعدة البيانات.
     const examById = new Map<string, Exam>(
@@ -836,13 +868,16 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         ...info,
         sortTime: gradeTimeValue(grade, exam),
       };
-      const current = grouped.get(student.id) ?? { student, items: [] as CallGradeItem[] };
+      const current = grouped.get(student.id) ?? {
+        student,
+        items: [] as CallGradeItem[],
+      };
       current.items.push(item);
       grouped.set(student.id, current);
     });
 
-    const rows = Array.from(grouped.values())
-      .flatMap<CallStudentRow>(({ student, items }) => {
+    const rows = Array.from(grouped.values()).flatMap<CallStudentRow>(
+      ({ student, items }) => {
         const sortedItems = sortGradeItemsByLatest(items);
 
         // بعد اختيار الامتحان، اعرض فقط الطلاب ودرجة هذا الامتحان.
@@ -850,17 +885,20 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         let focusItem: CallGradeItem | null = sortedItems[0] || null;
 
         if (selectedCallExam) {
-          const examItem = sortedItems.find((item) => item.exam.id === selectedCallExam.id) || null;
+          const examItem =
+            sortedItems.find((item) => item.exam.id === selectedCallExam.id) ||
+            null;
           // إذا يوجد فلتر حالة + امتحان محدد، اعرض فقط المطابقين
           if (callStatusFilter && callStatusFilter !== "all") {
             if (!examItem) return [];
-            if (!callGradeMatchesStatusFilter(callStatusFilter, examItem)) return [];
+            if (!callGradeMatchesStatusFilter(callStatusFilter, examItem))
+              return [];
           }
           focusItem = examItem;
         } else if (callStatusFilter && callStatusFilter !== "all") {
           // فلتر حالة بدون امتحان محدد — اعرض الطلاب الذين لديهم درجة مطابقة في أي امتحان
           const matching = sortedItems.filter((item) =>
-            callGradeMatchesStatusFilter(callStatusFilter, item)
+            callGradeMatchesStatusFilter(callStatusFilter, item),
           );
           if (matching.length === 0) return [];
           displayItems = matching;
@@ -879,7 +917,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           selectedCallCourse?.name || "",
           selectedCallExam?.name || "",
           focusItem?.grade.status || "",
-          focusItem ? formatGradeScore(focusItem.grade, focusItem.exam, "—") : "",
+          focusItem
+            ? formatGradeScore(focusItem.grade, focusItem.exam, "—")
+            : "",
           focusItem?.reason || "",
           focusItem?.grade.notes || "",
           ...sortedItems.flatMap((item) => [
@@ -893,8 +933,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           callNoteForStudent(student.id)?.notes,
         ];
 
-        if (callGeneralSearch && !searchAny(callGeneralSearch, searchValues)) return [];
-        if (callFilterSearch && !searchAny(callFilterSearch, searchValues)) return [];
+        if (callGeneralSearch && !searchAny(callGeneralSearch, searchValues))
+          return [];
+        if (callFilterSearch && !searchAny(callFilterSearch, searchValues))
+          return [];
 
         return [
           {
@@ -904,14 +946,18 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             focusItem,
           },
         ];
-      });
+      },
+    );
 
     return rows.sort((a, b) => {
       const aTime = a.focusItem?.sortTime || 0;
       const bTime = b.focusItem?.sortTime || 0;
       return (
         bTime - aTime ||
-        String(a.student.name || "").localeCompare(String(b.student.name || ""), "ar")
+        String(a.student.name || "").localeCompare(
+          String(b.student.name || ""),
+          "ar",
+        )
       );
     });
   }, [
@@ -1317,7 +1363,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     if (serverGrades.length) mergeGradesCache(serverGrades);
 
     const gradeByStudentId = new Map<string, Grade>();
-    serverGrades.forEach((grade) => gradeByStudentId.set(grade.studentId, grade));
+    serverGrades.forEach((grade) =>
+      gradeByStudentId.set(grade.studentId, grade),
+    );
 
     const serverCallLookup = new Map<string, StudentCall>();
     serverCalls.forEach((call) => {
@@ -1340,7 +1388,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         ...info,
         sortTime: gradeTimeValue(grade, selectedCallExam),
       };
-      if (callStatusFilter && callStatusFilter !== "all" && !callGradeMatchesStatusFilter(callStatusFilter, item)) {
+      if (
+        callStatusFilter &&
+        callStatusFilter !== "all" &&
+        !callGradeMatchesStatusFilter(callStatusFilter, item)
+      ) {
         return [];
       }
 
@@ -1353,7 +1405,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       const exactKey = `${student.id}::${selectedCallExam.id}::${item.callKey}`;
       const legacyKey = `${student.id}::${selectedCallExam.id}::${item.category}`;
       const noteKey = `${student.id}::::${CALL_STUDENT_NOTE_CATEGORY}`;
-      const call = serverCallLookup.get(exactKey) || serverCallLookup.get(legacyKey);
+      const call =
+        serverCallLookup.get(exactKey) || serverCallLookup.get(legacyKey);
       const note = serverCallLookup.get(noteKey)?.notes || "";
 
       return [{ row, status: callStatusForLog(call), note, courseName }];
@@ -1364,7 +1417,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       const bTime = b.row.focusItem?.sortTime || 0;
       return (
         bTime - aTime ||
-        String(a.row.student.name || "").localeCompare(String(b.row.student.name || ""), "ar")
+        String(a.row.student.name || "").localeCompare(
+          String(b.row.student.name || ""),
+          "ar",
+        )
       );
     });
   };
@@ -1412,8 +1468,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     if (existing) updateStudentCall(existing.id, payload);
     else if (notes.trim()) addStudentCall(payload);
   };
-
-
 
   const openProfile = (studentId: string) => {
     setProfileStudentId(studentId);
@@ -1479,21 +1533,31 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           <p className="empty-state py-6">لا توجد إجازات مسجلة</p>
         ) : (
           studentLeaves.map((leave) => {
-            const relatedStudent = leave.student && typeof leave.student === "object" ? leave.student : null;
-            const relatedExam = leave.exam && typeof leave.exam === "object" ? leave.exam : null;
-            const student = students.find(
-              (item) => item.id === leave.studentId,
-            ) || relatedStudent;
-            const exam = exams.find((item) => item.id === leave.examId) || relatedExam;
+            const relatedStudent =
+              leave.student && typeof leave.student === "object"
+                ? leave.student
+                : null;
+            const relatedExam =
+              leave.exam && typeof leave.exam === "object" ? leave.exam : null;
+            const student =
+              students.find((item) => item.id === leave.studentId) ||
+              relatedStudent;
+            const exam =
+              exams.find((item) => item.id === leave.examId) || relatedExam;
             const isPeriod = (leave.leaveType || "exam") === "period";
             const studentDisplayName = student?.name || "طالب غير محمل";
-            const studentDisplayCode = student?.code ? ` (${student.code})` : "";
+            const studentDisplayCode = student?.code
+              ? ` (${student.code})`
+              : "";
             return (
               <div
                 key={leave.id}
                 className="grid gap-2 rounded-2xl border bg-card/80 p-3 text-sm lg:grid-cols-[1.1fr_1fr_1.4fr_1fr_auto] lg:items-center"
               >
-                <b>{studentDisplayName}{studentDisplayCode}</b>
+                <b>
+                  {studentDisplayName}
+                  {studentDisplayCode}
+                </b>
                 <span>{leave.reason}</span>
                 <span>
                   {isPeriod
@@ -1645,7 +1709,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             {courseName(row.student.courseId)} - {row.student.studyType || "—"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            الدرجات المعروضة: <b>{displayedGradeItems.length}</b> من <b>{row.items.length}</b>
+            الدرجات المعروضة: <b>{displayedGradeItems.length}</b> من{" "}
+            <b>{row.items.length}</b>
           </p>
         </div>
         <div className="space-y-2">
@@ -1684,7 +1749,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 درجات الطالب
               </p>
               <div className="flex flex-wrap gap-1">
-                {(Object.keys(callGradeDisplayModeLabels) as CallGradeDisplayMode[]).map((mode) => (
+                {(
+                  Object.keys(
+                    callGradeDisplayModeLabels,
+                  ) as CallGradeDisplayMode[]
+                ).map((mode) => (
                   <Button
                     key={mode}
                     type="button"
@@ -2051,25 +2120,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <CardHeader>
               <CardTitle>المكالمات المرتبطة بسجل الدرجات</CardTitle>
               <p className="text-sm text-muted-foreground">
-                اختر الدورة أولاً، بعدها تظهر امتحاناتها فقط، ثم تظهر قائمة طلاب الدورة حسب الامتحان المختار وحالة الدرجة.
+                اختر الدورة أولاً، بعدها تظهر امتحاناتها فقط، ثم تظهر قائمة طلاب
+                الدورة حسب الامتحان المختار وحالة الدرجة.
               </p>
             </CardHeader>
             <CardContent className="space-y-4 p-4">
-              <div className="space-y-2">
-                <Label>بحث عام قبل الفرز</Label>
-                <Input
-                  id="follow-up-calls-general-search"
-                  name="calls-general-search"
-                  data-teacherpro-search="true"
-                  value={callGeneralSearch}
-                  onChange={(event) => {
-                    setCallGeneralSearch(event.target.value);
-                    setCallGradePage(1);
-                  }}
-                  placeholder="بحث عام: اسم / كود / هاتف / تليكرام / مدرسة / امتحان / درجة"
-                />
-              </div>
-              <div className="grid gap-3 md:grid-cols-5">
+              <div className="grid gap-3 md:grid-cols-6">
                 <div className="space-y-2">
                   <Label>الدورة</Label>
                   <Select
@@ -2105,7 +2161,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                       <SelectValue placeholder="اختر امتحان الدورة" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__none__">بدون اختيار امتحان</SelectItem>
+                      <SelectItem value="__none__">
+                        بدون اختيار امتحان
+                      </SelectItem>
                       {callCourseExams.map((exam) => (
                         <SelectItem key={exam.id} value={exam.id}>
                           {exam.name} - {formatAppDate(exam.date)}
@@ -2136,7 +2194,21 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-2">
+                  <Label>بحث عام قبل الفرز</Label>
+                  <Input
+                    id="follow-up-calls-general-search"
+                    name="calls-general-search"
+                    data-teacherpro-search="true"
+                    value={callGeneralSearch}
+                    onChange={(event) => {
+                      setCallGeneralSearch(event.target.value);
+                      setCallGradePage(1);
+                    }}
+                    placeholder="اسم / كود / هاتف / تليكرام / مدرسة / امتحان / درجة"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
                   <Label>بحث داخل الفرز</Label>
                   <Input
                     id="follow-up-calls-filter-search"
@@ -2178,7 +2250,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </p>
               ) : !callExamSelected ? (
                 <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
-                  تم اختيار الدورة. اختر امتحاناً من امتحانات هذه الدورة لعرض الطلاب.
+                  تم اختيار الدورة. اختر امتحاناً من امتحانات هذه الدورة لعرض
+                  الطلاب.
                 </p>
               ) : callLoading ? (
                 <p className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
@@ -2193,31 +2266,46 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 <p className="text-xs text-muted-foreground">
                   الطلاب المطابقون من قاعدة البيانات
                 </p>
-                <b className="text-2xl">{displayedCallStats.total}{callStatsSuffix}</b>
+                <b className="text-2xl">
+                  {displayedCallStats.total}
+                  {callStatsSuffix}
+                </b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">تم الاتصال</p>
-                <b className="text-2xl">{displayedCallStats.contacted}{callStatsSuffix}</b>
+                <b className="text-2xl">
+                  {displayedCallStats.contacted}
+                  {callStatsSuffix}
+                </b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">لم يرد</p>
-                <b className="text-2xl">{displayedCallStats.unanswered}{callStatsSuffix}</b>
+                <b className="text-2xl">
+                  {displayedCallStats.unanswered}
+                  {callStatsSuffix}
+                </b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">الرقم خاطئ</p>
-                <b className="text-2xl">{displayedCallStats.wrong}{callStatsSuffix}</b>
+                <b className="text-2xl">
+                  {displayedCallStats.wrong}
+                  {callStatsSuffix}
+                </b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">بدون إجراء</p>
-                <b className="text-2xl">{displayedCallStats.noAction}{callStatsSuffix}</b>
+                <b className="text-2xl">
+                  {displayedCallStats.noAction}
+                  {callStatsSuffix}
+                </b>
               </CardContent>
             </Card>
           </div>
@@ -2225,13 +2313,19 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <CardHeader>
               <CardTitle>قائمة الطلاب ودرجاتهم</CardTitle>
               <p className="text-sm text-muted-foreground">
-                لا تظهر القائمة إلا بعد اختيار دورة ثم امتحان. كل طالب يظهر مرة واحدة مع محور الامتحان المختار وإمكانية عرض آخر امتحان، آخر امتحانين، أو جميع امتحاناته.
+                لا تظهر القائمة إلا بعد اختيار دورة ثم امتحان. كل طالب يظهر مرة
+                واحدة مع محور الامتحان المختار وإمكانية عرض آخر امتحان، آخر
+                امتحانين، أو جميع امتحاناته.
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-muted/40 px-3 py-2 text-sm">
                 <span>
-                  عدد الطلاب الكلي من قاعدة البيانات: <b>{displayedCallStats.total}{callStatsSuffix}</b>
+                  عدد الطلاب الكلي من قاعدة البيانات:{" "}
+                  <b>
+                    {displayedCallStats.total}
+                    {callStatsSuffix}
+                  </b>
                 </span>
                 <span>
                   الصفحة <b>{callSafePage}</b> من <b>{callTotalPages}</b>

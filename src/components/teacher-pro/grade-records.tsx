@@ -2,7 +2,11 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
-import { gradeApi, gradeCoverageStatsApi, type GradeCoverageStatsResponse } from "@/lib/api";
+import {
+  gradeApi,
+  gradeCoverageStatsApi,
+  type GradeCoverageStatsResponse,
+} from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,7 +79,9 @@ const englishNumberFormatter = new Intl.NumberFormat("en-US");
 const formatEnglishNumber = (value: number) =>
   englishNumberFormatter.format(value);
 
-function serverStatusForGradeFilter(filter: GradeStatusFilter): GradeStatus | undefined {
+function serverStatusForGradeFilter(
+  filter: GradeStatusFilter,
+): GradeStatus | undefined {
   if (filter === "absent") return "غائب";
   if (filter === "cheating") return "غش";
   return undefined;
@@ -137,13 +143,19 @@ export function GradeRecordsView() {
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [serverGrades, setServerGrades] = useState<HydratedGrade[] | null>(null);
+  const [serverGrades, setServerGrades] = useState<HydratedGrade[] | null>(
+    null,
+  );
   const [serverTotalCount, setServerTotalCount] = useState(0);
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [serverGradesLoading, setServerGradesLoading] = useState(false);
-  const [serverGradesError, setServerGradesError] = useState<string | null>(null);
-  const [gradeCoverageStats, setGradeCoverageStats] = useState<GradeCoverageStatsResponse | null>(null);
-  const [gradeCoverageStatsLoading, setGradeCoverageStatsLoading] = useState(false);
+  const [serverGradesError, setServerGradesError] = useState<string | null>(
+    null,
+  );
+  const [gradeCoverageStats, setGradeCoverageStats] =
+    useState<GradeCoverageStatsResponse | null>(null);
+  const [gradeCoverageStatsLoading, setGradeCoverageStatsLoading] =
+    useState(false);
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
@@ -157,13 +169,20 @@ export function GradeRecordsView() {
     score: "",
     notes: "",
   });
-  const [reactivationEditConfirmOpen, setReactivationEditConfirmOpen] = useState(false);
+  const [reactivationEditConfirmOpen, setReactivationEditConfirmOpen] =
+    useState(false);
   const { locked: isDeletingGrade, runLocked: runDeleteGradeLocked } =
     useActionLock();
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, filterExamId, filterStatus, filterNameLetter, filterCourseId]);
+  }, [
+    debouncedSearch,
+    filterExamId,
+    filterStatus,
+    filterNameLetter,
+    filterCourseId,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,11 +206,14 @@ export function GradeRecordsView() {
         if (cancelled) return;
         if (!result) {
           setServerGrades(null);
-          setServerGradesError("تعذر تحميل سجل الدرجات من الخادم. سيتم عرض آخر نسخة محفوظة مؤقتاً.");
+          setServerGradesError(
+            "تعذر تحميل سجل الدرجات من الخادم. سيتم عرض آخر نسخة محفوظة مؤقتاً.",
+          );
           return;
         }
 
-        const loadedGrades = (result.grades || []) as unknown as HydratedGrade[];
+        const loadedGrades = (result.grades ||
+          []) as unknown as HydratedGrade[];
         const nextTotalPages = Math.max(1, Number(result.totalPages || 1));
         setServerGrades(loadedGrades);
         setServerTotalCount(Number(result.totalCount || 0));
@@ -208,7 +230,9 @@ export function GradeRecordsView() {
       .catch(() => {
         if (cancelled) return;
         setServerGrades(null);
-        setServerGradesError("تعذر تحميل سجل الدرجات من الخادم. سيتم عرض آخر نسخة محفوظة مؤقتاً.");
+        setServerGradesError(
+          "تعذر تحميل سجل الدرجات من الخادم. سيتم عرض آخر نسخة محفوظة مؤقتاً.",
+        );
       })
       .finally(() => {
         if (!cancelled) setServerGradesLoading(false);
@@ -253,7 +277,13 @@ export function GradeRecordsView() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, filterExamId, filterNameLetter, filterCourseId, serverRefreshKey]);
+  }, [
+    debouncedSearch,
+    filterExamId,
+    filterNameLetter,
+    filterCourseId,
+    serverRefreshKey,
+  ]);
 
   const isAcademicAccountingRow = (gradeId: string) => {
     const grade = grades.find((item) => item.id === gradeId);
@@ -371,7 +401,36 @@ export function GradeRecordsView() {
     return map;
   }, [exams, serverGrades]);
   const nameLetterOptions = useMemo(
-    () => ["ا", "ب", "ت", "ث", "ج", "ح", "خ", "د", "ذ", "ر", "ز", "س", "ش", "ص", "ض", "ط", "ظ", "ع", "غ", "ف", "ق", "ك", "ل", "م", "ن", "ه", "و", "ي"],
+    () => [
+      "ا",
+      "ب",
+      "ت",
+      "ث",
+      "ج",
+      "ح",
+      "خ",
+      "د",
+      "ذ",
+      "ر",
+      "ز",
+      "س",
+      "ش",
+      "ص",
+      "ض",
+      "ط",
+      "ظ",
+      "ع",
+      "غ",
+      "ف",
+      "ق",
+      "ك",
+      "ل",
+      "م",
+      "ن",
+      "ه",
+      "و",
+      "ي",
+    ],
     [],
   );
 
@@ -437,7 +496,9 @@ export function GradeRecordsView() {
       withGrade,
       withoutGrade,
       total: scopedStudents.length,
-      scopeLabel: selectedExam ? `ضمن ${selectedExam.name}` : "ضمن كل الامتحانات",
+      scopeLabel: selectedExam
+        ? `ضمن ${selectedExam.name}`
+        : "ضمن كل الامتحانات",
       missingHint: selectedExam
         ? "لم تُدخل لهم درجة لهذا الامتحان"
         : "لا يملكون أي سجل درجة لحد الآن",
@@ -492,8 +553,7 @@ export function GradeRecordsView() {
       const cls = classification(grade, exam, student);
       if (!gradeMatchesStatusFilter(filterStatus, grade, exam, cls))
         return false;
-      if (filterCourseId && student.courseId !== filterCourseId)
-        return false;
+      if (filterCourseId && student.courseId !== filterCourseId) return false;
       return true;
     });
   }, [
@@ -510,7 +570,9 @@ export function GradeRecordsView() {
 
   const usingServerGrades = serverGrades !== null;
   const filtered = usingServerGrades ? (serverGrades ?? []) : localFiltered;
-  const filteredTotalCount = usingServerGrades ? serverTotalCount : localFiltered.length;
+  const filteredTotalCount = usingServerGrades
+    ? serverTotalCount
+    : localFiltered.length;
   const totalPages = usingServerGrades
     ? serverTotalPages
     : Math.max(1, Math.ceil(localFiltered.length / pageSize));
@@ -634,7 +696,9 @@ export function GradeRecordsView() {
     const ok = deleteGrade(deleteDialog.id);
     if (ok) {
       setServerGrades((current) =>
-        current ? current.filter((grade) => grade.id !== deleteDialog.id) : current,
+        current
+          ? current.filter((grade) => grade.id !== deleteDialog.id)
+          : current,
       );
       setServerTotalCount((count) => Math.max(0, count - 1));
       setServerRefreshKey((key) => key + 1);
@@ -644,8 +708,6 @@ export function GradeRecordsView() {
     }
     setDeleteDialog({ open: false, id: "", label: "" });
   });
-
-
 
   const exportRows = filtered.map((grade) => {
     const student = studentById.get(grade.studentId);
@@ -663,31 +725,42 @@ export function GradeRecordsView() {
     if (debouncedSearch) params.set("q", debouncedSearch);
     if (filterCourseId) params.set("courseId", filterCourseId);
     if (filterNameLetter !== "all") params.set("nameLetter", filterNameLetter);
-    const res = await fetch(`/api/grades/export?${params.toString()}`, { credentials: "same-origin" });
+    const res = await fetch(`/api/grades/export?${params.toString()}`, {
+      credentials: "same-origin",
+    });
     if (!res.ok) throw new Error("grades export failed");
     const json = (await res.json()) as { grades?: HydratedGrade[] };
     return (json.grades || []).map((grade) => {
       const student = grade.student || studentById.get(grade.studentId);
-      const exam = (grade.exam as (typeof exams)[number] | undefined) || examById.get(grade.examId);
+      const exam =
+        (grade.exam as (typeof exams)[number] | undefined) ||
+        examById.get(grade.examId);
       const cls = exam ? classification(grade, exam, student) : { text: "" };
       return { grade, student, exam, classificationText: cls.text };
     });
   };
-
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <StatCard
           label="طلاب لديهم درجة"
-          value={gradeCoverageStatsLoading && !gradeCoverageStats ? "…" : formatEnglishNumber(displayedGradeCoverage.withGrade)}
+          value={
+            gradeCoverageStatsLoading && !gradeCoverageStats
+              ? "…"
+              : formatEnglishNumber(displayedGradeCoverage.withGrade)
+          }
           icon={CheckCircle2}
           tone="success"
           hint={`${displayedGradeCoverage.scopeLabel} من أصل ${formatEnglishNumber(displayedGradeCoverage.total)} طالب`}
         />
         <StatCard
           label="طلاب بلا درجة"
-          value={gradeCoverageStatsLoading && !gradeCoverageStats ? "…" : formatEnglishNumber(displayedGradeCoverage.withoutGrade)}
+          value={
+            gradeCoverageStatsLoading && !gradeCoverageStats
+              ? "…"
+              : formatEnglishNumber(displayedGradeCoverage.withoutGrade)
+          }
           icon={UserX}
           tone="warning"
           hint={displayedGradeCoverage.missingHint}
@@ -698,20 +771,28 @@ export function GradeRecordsView() {
         <CardContent className="p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
             <div className="space-y-1">
-              <Label htmlFor="grade-records-search" className="text-xs">
-                بحث
+              <Label htmlFor="grade-records-course" className="text-xs">
+                الدورة
               </Label>
-              <Input
-                id="grade-records-search"
-                name="search"
-                data-teacherpro-search="true"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
+              <Select
+                value={filterCourseId || "all"}
+                onValueChange={(v) => {
+                  setFilterCourseId(v === "all" ? "" : v);
                   setPage(1);
                 }}
-                placeholder="اسم / كود / تليكرام / امتحان"
-              />
+              >
+                <SelectTrigger id="grade-records-course">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {courses.map((course) => (
+                    <SelectItem key={course.id} value={course.id}>
+                      {course.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label htmlFor="grade-records-exam" className="text-xs">
@@ -784,29 +865,21 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="grade-records-course" className="text-xs">
-                الدورة
+            <div className="space-y-1 2xl:col-span-2">
+              <Label htmlFor="grade-records-search" className="text-xs">
+                بحث
               </Label>
-              <Select
-                value={filterCourseId || "all"}
-                onValueChange={(v) => {
-                  setFilterCourseId(v === "all" ? "" : v);
+              <Input
+                id="grade-records-search"
+                name="search"
+                data-teacherpro-search="true"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
                   setPage(1);
                 }}
-              >
-                <SelectTrigger id="grade-records-course">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {courses.map((course) => (
-                    <SelectItem key={course.id} value={course.id}>
-                      {course.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="اسم / كود / تليكرام / امتحان"
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="grade-records-view" className="text-xs">
@@ -1175,12 +1248,18 @@ export function GradeRecordsView() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={reactivationEditConfirmOpen} onOpenChange={setReactivationEditConfirmOpen}>
+      <AlertDialog
+        open={reactivationEditConfirmOpen}
+        onOpenChange={setReactivationEditConfirmOpen}
+      >
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد تعديل درجة طالب مُعاد تنشيطه</AlertDialogTitle>
+            <AlertDialogTitle>
+              تأكيد تعديل درجة طالب مُعاد تنشيطه
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              الدرجة الجديدة قد تستهلك الفرصة الأخيرة وتعيد الطالب إلى المفصولين. هل تريد المتابعة؟
+              الدرجة الجديدة قد تستهلك الفرصة الأخيرة وتعيد الطالب إلى
+              المفصولين. هل تريد المتابعة؟
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

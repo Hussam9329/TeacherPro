@@ -272,27 +272,45 @@ function looksLikeTelegramIdentifierSearch(query: string): boolean {
   );
 }
 
-function studentMatchesExactIdentifierSearch(student: Student, query: string): boolean {
+function studentMatchesExactIdentifierSearch(
+  student: Student,
+  query: string,
+): boolean {
   const trimmed = toLatinDigits(query).trim();
   const queryTelegramKey = normalizeTelegramIdentifier(trimmed);
   const studentTelegramKey = normalizeTelegramIdentifier(student.telegram);
   const queryCode = trimmed.toLocaleLowerCase("ar-IQ");
-  const studentCode = String(student.code ?? "").trim().toLocaleLowerCase("ar-IQ");
+  const studentCode = String(student.code ?? "")
+    .trim()
+    .toLocaleLowerCase("ar-IQ");
 
-  if (studentTelegramKey && studentTelegramKey === queryTelegramKey) return true;
-  if (!trimmed.startsWith("@") && studentCode && studentCode === queryCode) return true;
+  if (studentTelegramKey && studentTelegramKey === queryTelegramKey)
+    return true;
+  if (!trimmed.startsWith("@") && studentCode && studentCode === queryCode)
+    return true;
   return false;
 }
 
-function studentMatchesPrefixIdentifierSearch(student: Student, query: string): boolean {
+function studentMatchesPrefixIdentifierSearch(
+  student: Student,
+  query: string,
+): boolean {
   const trimmed = toLatinDigits(query).trim();
   const queryTelegramKey = normalizeTelegramIdentifier(trimmed);
   const studentTelegramKey = normalizeTelegramIdentifier(student.telegram);
   const queryCode = trimmed.toLocaleLowerCase("ar-IQ");
-  const studentCode = String(student.code ?? "").trim().toLocaleLowerCase("ar-IQ");
+  const studentCode = String(student.code ?? "")
+    .trim()
+    .toLocaleLowerCase("ar-IQ");
 
-  if (studentTelegramKey && studentTelegramKey.startsWith(queryTelegramKey)) return true;
-  if (!trimmed.startsWith("@") && studentCode && studentCode.startsWith(queryCode)) return true;
+  if (studentTelegramKey && studentTelegramKey.startsWith(queryTelegramKey))
+    return true;
+  if (
+    !trimmed.startsWith("@") &&
+    studentCode &&
+    studentCode.startsWith(queryCode)
+  )
+    return true;
   return false;
 }
 
@@ -356,9 +374,14 @@ export function StudentRegistryView() {
     null,
   );
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
-  const [activeStudentsTotal, setActiveStudentsTotal] = useState<number | null>(null);
-  const [dismissedStudentsTotal, setDismissedStudentsTotal] = useState<number | null>(null);
-  const [noActiveChapterStudentsTotal, setNoActiveChapterStudentsTotal] = useState<number | null>(null);
+  const [activeStudentsTotal, setActiveStudentsTotal] = useState<number | null>(
+    null,
+  );
+  const [dismissedStudentsTotal, setDismissedStudentsTotal] = useState<
+    number | null
+  >(null);
+  const [noActiveChapterStudentsTotal, setNoActiveChapterStudentsTotal] =
+    useState<number | null>(null);
 
   const [dismissDialog, setDismissDialog] = useState<{
     student: Student | null;
@@ -388,14 +411,22 @@ export function StudentRegistryView() {
     useActionLock();
   const debouncedSearch = useDebouncedValue(search, 180);
   // Fetch location filter options from server (distinct query, not all students)
-  const [locationFilterOptions, setLocationFilterOptions] = useState<string[]>([]);
+  const [locationFilterOptions, setLocationFilterOptions] = useState<string[]>(
+    [],
+  );
   useEffect(() => {
     fetch("/api/students/filter-options", { credentials: "same-origin" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.locations) {
           // Extract unique scope values for the dropdown
-          const scopes: string[] = Array.from(new Set(data.locations.map((l: { scope: string }) => l.scope).filter(Boolean))) as string[];
+          const scopes: string[] = Array.from(
+            new Set(
+              data.locations
+                .map((l: { scope: string }) => l.scope)
+                .filter(Boolean),
+            ),
+          ) as string[];
           setLocationFilterOptions(scopes);
         }
       })
@@ -477,8 +508,12 @@ export function StudentRegistryView() {
       .then((result) => {
         if (cancelled) return;
         setActiveStudentsTotal(result ? Number(result.active || 0) : null);
-        setDismissedStudentsTotal(result ? Number(result.dismissed || 0) : null);
-        setNoActiveChapterStudentsTotal(result ? Number(result.noActiveChapter || 0) : null);
+        setDismissedStudentsTotal(
+          result ? Number(result.dismissed || 0) : null,
+        );
+        setNoActiveChapterStudentsTotal(
+          result ? Number(result.noActiveChapter || 0) : null,
+        );
       })
       .catch(() => {
         if (cancelled) return;
@@ -599,7 +634,9 @@ export function StudentRegistryView() {
 
     if (
       editDialog.form.studyType &&
-      !(editAvailableStudyTypes as readonly string[]).includes(editDialog.form.studyType)
+      !(editAvailableStudyTypes as readonly string[]).includes(
+        editDialog.form.studyType,
+      )
     ) {
       patch.studyType = "";
       patch.locationScope = "";
@@ -918,7 +955,9 @@ export function StudentRegistryView() {
   // Export rows: use current filtered results (server or local).
   // For full server-side export, the ExportDialog fetches from /api/students/export
   // with the same filter params — this local mapping is for preview only.
-  const studentExportRows = (usingServerStudents ? serverStudents! : localFiltered).map((student) => ({
+  const studentExportRows = (
+    usingServerStudents ? serverStudents! : localFiltered
+  ).map((student) => ({
     ...student,
     courseName: courseName(student.courseId),
     locationText: `${student.locationScope || student.mainSite || ""} - ${student.subSite || ""}`,
@@ -937,7 +976,9 @@ export function StudentRegistryView() {
     if (filterCourseTerm) params.set("courseTerm", filterCourseTerm);
     if (filterStudyType) params.set("studyType", filterStudyType);
     if (filterLocation) params.set("location", filterLocation);
-    const res = await fetch(`/api/students/export?${params.toString()}`, { credentials: "same-origin" });
+    const res = await fetch(`/api/students/export?${params.toString()}`, {
+      credentials: "same-origin",
+    });
     if (!res.ok) throw new Error("students export failed");
     const json = (await res.json()) as { students?: Student[] };
     return (json.students || []).map((student) => ({
@@ -992,24 +1033,7 @@ export function StudentRegistryView() {
     <div className="space-y-4">
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-            <div className="space-y-1">
-              <Label htmlFor="registry-search" className="text-xs">
-                بحث
-              </Label>
-              <Input
-                id="registry-search"
-                name="search"
-                data-teacherpro-search="true"
-                autoComplete="off"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="اسم / كود / تليكرام / هاتف"
-              />
-            </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
             <div className="space-y-1">
               <Label htmlFor="registry-program" className="text-xs">
                 نوع الدورة
@@ -1113,6 +1137,45 @@ export function StudentRegistryView() {
               </Select>
             </div>
             <div className="space-y-1">
+              <Label htmlFor="registry-status" className="text-xs">
+                الحالة
+              </Label>
+              <Select
+                name="status"
+                value={filterStatus || "all"}
+                onValueChange={(v) => {
+                  setFilterStatus(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-status">
+                  <SelectValue placeholder="كل الحالات" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الحالات</SelectItem>
+                  <SelectItem value="نشط">نشط</SelectItem>
+                  <SelectItem value="مفصول">مفصول</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 2xl:col-span-2">
+              <Label htmlFor="registry-search" className="text-xs">
+                بحث
+              </Label>
+              <Input
+                id="registry-search"
+                name="search"
+                data-teacherpro-search="true"
+                autoComplete="off"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="اسم / كود / تليكرام / هاتف"
+              />
+            </div>
+            <div className="space-y-1">
               <Label htmlFor="registry-view" className="text-xs">
                 طريقة العرض
               </Label>
@@ -1151,7 +1214,8 @@ export function StudentRegistryView() {
             <div>
               <p className="text-xs text-muted-foreground">الطلاب النشطون</p>
               <p className="text-2xl font-black">
-                {activeStudentsTotal ?? students.filter((student) => student.status === "نشط").length}
+                {activeStudentsTotal ??
+                  students.filter((student) => student.status === "نشط").length}
               </p>
             </div>
             <Button

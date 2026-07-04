@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
 import { gradeApi, studentApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -91,10 +97,14 @@ function readStoredGradeEntryNotes(): Record<string, string> {
     const raw = window.localStorage.getItem(GRADE_ENTRY_NOTES_STORAGE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return {};
     return Object.fromEntries(
       Object.entries(parsed)
-        .filter(([key, value]) => typeof key === "string" && typeof value === "string")
+        .filter(
+          ([key, value]) =>
+            typeof key === "string" && typeof value === "string",
+        )
         .map(([key, value]) => [key, value as string]),
     );
   } catch (error) {
@@ -109,7 +119,10 @@ function writeStoredGradeEntryNotes(notes: Record<string, string>): void {
     const compactNotes = Object.fromEntries(
       Object.entries(notes).filter(([, value]) => value.trim().length > 0),
     );
-    window.localStorage.setItem(GRADE_ENTRY_NOTES_STORAGE_KEY, JSON.stringify(compactNotes));
+    window.localStorage.setItem(
+      GRADE_ENTRY_NOTES_STORAGE_KEY,
+      JSON.stringify(compactNotes),
+    );
   } catch (error) {
     console.warn("[GradeEntry] Failed to write local entry notes:", error);
   }
@@ -155,7 +168,6 @@ const GradeEntrySearchInput = React.memo(function GradeEntrySearchInput({
   );
 });
 
-
 function normalizeGradeScoreInput(value: string, fullMark: number) {
   const normalized = toLatinDigits(value).trim();
   if (!normalized) return "";
@@ -184,7 +196,9 @@ export function GradeEntryView() {
   } = useTeacherStore();
 
   const [selectedExamId, setSelectedExamId] = useState("");
-  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(
+    null,
+  );
   const [quickScanOpen, setQuickScanOpen] = useState(false);
   const [quickScanValue, setQuickScanValue] = useState("");
   const [search, setSearch] = useState("");
@@ -198,8 +212,11 @@ export function GradeEntryView() {
   const [drafts, setDrafts] = useState<Record<string, DraftGrade>>({});
   const [savingRows, setSavingRows] = useState<Record<string, boolean>>({});
   const [savedRows, setSavedRows] = useState<Record<string, string>>({});
-  const [gradeEntryNotice, setGradeEntryNotice] = useState<GradeEntryNotice | null>(null);
-  const [entryNotesByExam, setEntryNotesByExam] = useState<Record<string, string>>({});
+  const [gradeEntryNotice, setGradeEntryNotice] =
+    useState<GradeEntryNotice | null>(null);
+  const [entryNotesByExam, setEntryNotesByExam] = useState<
+    Record<string, string>
+  >({});
   const [missingStudentsNote, setMissingStudentsNote] = useState("");
   const [editableRows, setEditableRows] = useState<Record<string, boolean>>({});
   const [reactivationWarningsAccepted, setReactivationWarningsAccepted] =
@@ -207,7 +224,10 @@ export function GradeEntryView() {
   const [clockTick, setClockTick] = useState(0);
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const missingStudentsNoteLoadedRef = useRef("");
-  const { locked: clearingAbsentGrades, runLocked: runClearAbsentGradesLocked } = useActionLock();
+  const {
+    locked: clearingAbsentGrades,
+    runLocked: runClearAbsentGradesLocked,
+  } = useActionLock();
 
   useEffect(() => {
     setEntryNotesByExam(readStoredGradeEntryNotes());
@@ -217,16 +237,20 @@ export function GradeEntryView() {
     writeStoredGradeEntryNotes(entryNotesByExam);
   }, [entryNotesByExam]);
 
-  const showGradeEntryNotice = useCallback((type: GradeEntryNotice["type"], message: string) => {
-    setGradeEntryNotice({ type, message, at: Date.now() });
-  }, []);
+  const showGradeEntryNotice = useCallback(
+    (type: GradeEntryNotice["type"], message: string) => {
+      setGradeEntryNotice({ type, message, at: Date.now() });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!gradeEntryNotice) return;
     const timeout = window.setTimeout(
-      () => setGradeEntryNotice((current) =>
-        current?.at === gradeEntryNotice.at ? null : current,
-      ),
+      () =>
+        setGradeEntryNotice((current) =>
+          current?.at === gradeEntryNotice.at ? null : current,
+        ),
       gradeEntryNotice.type === "success" ? 2200 : 5000,
     );
     return () => window.clearTimeout(timeout);
@@ -301,24 +325,29 @@ export function GradeEntryView() {
     return () => window.clearInterval(timer);
   }, []);
 
-
   useEffect(() => {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ message?: string }>).detail;
       showGradeEntryNotice(
         "error",
-        detail?.message || "تعذر مزامنة التغيير الآن، وتم الاحتفاظ به محلياً للمحاولة لاحقاً.",
+        detail?.message ||
+          "تعذر مزامنة التغيير الآن، وتم الاحتفاظ به محلياً للمحاولة لاحقاً.",
       );
     };
     window.addEventListener("teacherpro:grade-entry-sync-error", handler);
-    return () => window.removeEventListener("teacherpro:grade-entry-sync-error", handler);
+    return () =>
+      window.removeEventListener("teacherpro:grade-entry-sync-error", handler);
   }, [showGradeEntryNotice]);
 
   const selectedExam = exams.find((e) => e.id === selectedExamId);
-  const selectedExamEntryNotes = selectedExamId ? entryNotesByExam[selectedExamId] || "" : "";
+  const selectedExamEntryNotes = selectedExamId
+    ? entryNotesByExam[selectedExamId] || ""
+    : "";
 
   useEffect(() => {
-    const savedNote = selectedExam ? findGradeEntryMissingNote(selectedExam.id)?.text || "" : "";
+    const savedNote = selectedExam
+      ? findGradeEntryMissingNote(selectedExam.id)?.text || ""
+      : "";
     missingStudentsNoteLoadedRef.current = savedNote;
     setMissingStudentsNote(savedNote);
   }, [selectedExam?.id]);
@@ -373,7 +402,9 @@ export function GradeEntryView() {
     for (const leave of studentLeaves) {
       if ((leave.leaveType || "exam") === "period") {
         const from = String(leave.dateFrom || leave.date || "").slice(0, 10);
-        const to = String(leave.dateTo || leave.dateFrom || leave.date || "").slice(0, 10);
+        const to = String(
+          leave.dateTo || leave.dateFrom || leave.date || "",
+        ).slice(0, 10);
         if (examDate && from && to && examDate >= from && examDate <= to) {
           map.set(leave.studentId, leave);
         }
@@ -410,17 +441,19 @@ export function GradeEntryView() {
     for (const student of students) {
       map.set(
         student.id,
-        normalizeForSearch([
-          student.name,
-          student.code,
-          student.telegram,
-          student.phone,
-          student.parentPhone,
-          student.school,
-          student.subSite,
-          student.locationScope,
-          student.mainSite,
-        ].join(" ")),
+        normalizeForSearch(
+          [
+            student.name,
+            student.code,
+            student.telegram,
+            student.phone,
+            student.parentPhone,
+            student.school,
+            student.subSite,
+            student.locationScope,
+            student.mainSite,
+          ].join(" "),
+        ),
       );
     }
     return map;
@@ -458,7 +491,9 @@ export function GradeEntryView() {
   const isStudentInGraceForSelectedExam = (studentId: string) => {
     if (!selectedExam) return false;
     const student = studentById.get(studentId);
-    return Boolean(student && isExamWithinStudentGracePeriod(student, selectedExam));
+    return Boolean(
+      student && isExamWithinStudentGracePeriod(student, selectedExam),
+    );
   };
 
   const gradeHasAutomaticEffect = (studentId: string, examId: string) =>
@@ -625,7 +660,9 @@ export function GradeEntryView() {
           return false;
         if (
           normalizedSearch &&
-          !(studentSearchTextById.get(student.id) || "").includes(normalizedSearch)
+          !(studentSearchTextById.get(student.id) || "").includes(
+            normalizedSearch,
+          )
         )
           return false;
         const hasLeave = leaveByStudentId.has(student.id);
@@ -724,7 +761,10 @@ export function GradeEntryView() {
     setSearch((current) => (current === value ? current : value));
   }, []);
 
-  const focusFirstGradeInput = useCallback(() => focusGradeInputAt(0), [gradeInputStudentIds]);
+  const focusFirstGradeInput = useCallback(
+    () => focusGradeInputAt(0),
+    [gradeInputStudentIds],
+  );
 
   const missingChapterCourses = useMemo(() => {
     if (!selectedExam) return [];
@@ -772,11 +812,18 @@ export function GradeEntryView() {
       }
     }
 
-    if (!options.skipReactivationWarning && needsReactivationWarning(studentId, draft)) {
+    if (
+      !options.skipReactivationWarning &&
+      needsReactivationWarning(studentId, draft)
+    ) {
       requestReactivatedStudentGradeEdit(
         studentId,
         draft,
-        () => void saveGrade(studentId, draft, { ...options, skipReactivationWarning: true }),
+        () =>
+          void saveGrade(studentId, draft, {
+            ...options,
+            skipReactivationWarning: true,
+          }),
       );
       return;
     }
@@ -795,7 +842,11 @@ export function GradeEntryView() {
       ...prev,
       [studentId]: `تم حفظها ${new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`,
     }));
-    if (!options.silent) showGradeEntryNotice("success", "تم حفظ الدرجة محلياً وستتم مزامنتها تلقائياً");
+    if (!options.silent)
+      showGradeEntryNotice(
+        "success",
+        "تم حفظ الدرجة محلياً وستتم مزامنتها تلقائياً",
+      );
   };
 
   const autoSaveGrade = (studentId: string, draftOverride?: DraftGrade) => {
@@ -844,10 +895,11 @@ export function GradeEntryView() {
       requestReactivatedStudentGradeEdit(
         studentId,
         draft,
-        () => void saveGrade(studentId, draft, {
-          silent: true,
-          skipReactivationWarning: true,
-        }),
+        () =>
+          void saveGrade(studentId, draft, {
+            silent: true,
+            skipReactivationWarning: true,
+          }),
         () => restoreDraftFromSavedGrade(studentId),
       );
       return;
@@ -1003,7 +1055,9 @@ export function GradeEntryView() {
     setDrafts((prev) => ({ ...prev, ...nextDrafts }));
     setSavedRows((prev) => ({ ...prev, ...nextSavedRows }));
     setEditableRows((prev) => ({ ...prev, ...nextEditableRows }));
-    toast.success(`تم تسجيل ${missingExamStudents.length} طالب من كل طلاب الامتحان كغائب وستتم المزامنة تلقائياً`);
+    toast.success(
+      `تم تسجيل ${missingExamStudents.length} طالب من كل طلاب الامتحان كغائب وستتم المزامنة تلقائياً`,
+    );
   };
 
   const handleQuickScan = () => {
@@ -1069,7 +1123,6 @@ export function GradeEntryView() {
         </div>
       )}
 
-
       <AlertDialog
         open={Boolean(pendingConfirm)}
         onOpenChange={(open) => {
@@ -1080,13 +1133,21 @@ export function GradeEntryView() {
       >
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>{pendingConfirm?.title || "تأكيد العملية"}</AlertDialogTitle>
-            <AlertDialogDescription>{pendingConfirm?.description}</AlertDialogDescription>
+            <AlertDialogTitle>
+              {pendingConfirm?.title || "تأكيد العملية"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingConfirm?.description}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              className={pendingConfirm?.destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+              className={
+                pendingConfirm?.destructive
+                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  : undefined
+              }
               onClick={() => {
                 const action = pendingConfirm?.onConfirm;
                 setPendingConfirm(null);
@@ -1103,7 +1164,9 @@ export function GradeEntryView() {
         <DialogContent dir="rtl">
           <DialogHeader>
             <DialogTitle>بحث / مسح QR</DialogTitle>
-            <DialogDescription>امسح QR/باركود أو اكتب كود الطالب للبحث.</DialogDescription>
+            <DialogDescription>
+              امسح QR/باركود أو اكتب كود الطالب للبحث.
+            </DialogDescription>
           </DialogHeader>
           <Input
             autoFocus
@@ -1115,8 +1178,16 @@ export function GradeEntryView() {
             placeholder="كود الطالب أو النص المقروء من الماسح"
           />
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setQuickScanOpen(false)}>إلغاء</Button>
-            <Button type="button" onClick={submitQuickScan}>بحث</Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setQuickScanOpen(false)}
+            >
+              إلغاء
+            </Button>
+            <Button type="button" onClick={submitQuickScan}>
+              بحث
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1127,26 +1198,6 @@ export function GradeEntryView() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div className="space-y-2 lg:col-span-2">
-              <Label htmlFor="grade-entry-exam">اختر الامتحان</Label>
-              <Select
-                name="examId"
-                value={selectedExamId}
-                onValueChange={handleExamChange}
-              >
-                <SelectTrigger id="grade-entry-exam">
-                  <SelectValue placeholder="اختر الامتحان" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activeExams.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.name} ({e.type}) - {formatAppDate(e.date)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="grade-entry-program">نوع الدورة</Label>
               <Select
@@ -1227,6 +1278,26 @@ export function GradeEntryView() {
                   {locationFilterOptions.map((location) => (
                     <SelectItem key={location} value={location}>
                       {location}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2 lg:col-span-2">
+              <Label htmlFor="grade-entry-exam">اختر الامتحان</Label>
+              <Select
+                name="examId"
+                value={selectedExamId}
+                onValueChange={handleExamChange}
+              >
+                <SelectTrigger id="grade-entry-exam">
+                  <SelectValue placeholder="اختر الامتحان" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeExams.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.name} ({e.type}) - {formatAppDate(e.date)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1317,11 +1388,16 @@ export function GradeEntryView() {
             <div className="mt-4 rounded-2xl border bg-muted/25 p-4">
               <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <Label htmlFor="grade-entry-general-notes" className="text-sm font-black">
+                  <Label
+                    htmlFor="grade-entry-general-notes"
+                    className="text-sm font-black"
+                  >
                     ملاحظات مدخل الدرجات
                   </Label>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    اكتب أي ملاحظات سريعة تخص هذا الامتحان، مثل اسم طالب ودرجته أو حالة طالب غير موجود. هذه الملاحظات لا تدخل ضمن الدرجات ولا تغيّر بيانات الطلاب.
+                    اكتب أي ملاحظات سريعة تخص هذا الامتحان، مثل اسم طالب ودرجته
+                    أو حالة طالب غير موجود. هذه الملاحظات لا تدخل ضمن الدرجات
+                    ولا تغيّر بيانات الطلاب.
                   </p>
                 </div>
                 {selectedExamEntryNotes.trim() && (
@@ -1339,12 +1415,16 @@ export function GradeEntryView() {
               <textarea
                 id="grade-entry-general-notes"
                 value={selectedExamEntryNotes}
-                onChange={(event) => updateSelectedExamEntryNotes(event.target.value)}
+                onChange={(event) =>
+                  updateSelectedExamEntryNotes(event.target.value)
+                }
                 placeholder={`مثال: طالب اسمه أحمد علي درجته 42 وغير موجود ضمن القائمة / صورة ورقة غير واضحة / ملاحظة خاصة بامتحان ${selectedExam.name}`}
                 className="min-h-[140px] w-full resize-y rounded-2xl border bg-background px-4 py-3 text-sm leading-6 outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/25"
               />
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>محفوظة محلياً لهذا الامتحان فقط حتى لو تم تحديث الصفحة.</span>
+                <span>
+                  محفوظة محلياً لهذا الامتحان فقط حتى لو تم تحديث الصفحة.
+                </span>
                 <span>{selectedExamEntryNotes.length} حرف</span>
               </div>
             </div>
@@ -1357,10 +1437,13 @@ export function GradeEntryView() {
           <CardHeader className="pb-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle className="text-base">ملاحظات مدخل الدرجات</CardTitle>
+                <CardTitle className="text-base">
+                  ملاحظات مدخل الدرجات
+                </CardTitle>
                 <p className="mt-1 text-xs leading-6 text-muted-foreground">
-                  اكتب هنا أسماء أو درجات طلاب غير موجودين أثناء إدخال درجات هذا الامتحان.
-                  ستظهر كل الملاحظات لاحقاً من زر الطلاب الغير موجودين في لوحة النظام.
+                  اكتب هنا أسماء أو درجات طلاب غير موجودين أثناء إدخال درجات هذا
+                  الامتحان. ستظهر كل الملاحظات لاحقاً من زر الطلاب الغير موجودين
+                  في لوحة النظام.
                 </p>
               </div>
               {missingStudentsNote.trim() && (
@@ -1389,7 +1472,9 @@ export function GradeEntryView() {
             />
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
               <span>يتم الحفظ تلقائياً لكل امتحان على حدة.</span>
-              {missingStudentsNote.trim() && <span>{missingStudentsNote.trim().length} حرف</span>}
+              {missingStudentsNote.trim() && (
+                <span>{missingStudentsNote.trim().length} حرف</span>
+              )}
             </div>
           </CardContent>
         </Card>

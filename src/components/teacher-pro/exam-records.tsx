@@ -35,14 +35,22 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
-import { formatBaghdadDateTime, toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
+import {
+  formatBaghdadDateTime,
+  toBaghdadDateTimeLocal,
+} from "@/lib/baghdad-time";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { formatGradeScore, getExamStatus, hasActiveChapterLink, splitSelection } from "@/lib/exam-utils";
+import {
+  formatGradeScore,
+  getExamStatus,
+  hasActiveChapterLink,
+  splitSelection,
+  type ExamStatusLabel,
+} from "@/lib/exam-utils";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
-
 
 const examGradeExportColumns: ExportColumn<any>[] = [
   { key: "index", label: "#", value: (row) => Number(row.index ?? 0) + 1 },
@@ -50,10 +58,22 @@ const examGradeExportColumns: ExportColumn<any>[] = [
   { key: "student", label: "الطالب", value: (row) => row.student?.name || "" },
   { key: "course", label: "الدورة", value: (row) => row.courseName || "" },
   { key: "status", label: "الحالة", value: (row) => row.grade.status || "" },
-  { key: "score", label: "الدرجة", value: (row) => formatGradeScore(row.grade, row.exam, "") },
-  { key: "classification", label: "التصنيف", value: (row) => row.cls.text || "" },
+  {
+    key: "score",
+    label: "الدرجة",
+    value: (row) => formatGradeScore(row.grade, row.exam, ""),
+  },
+  {
+    key: "classification",
+    label: "التصنيف",
+    value: (row) => row.cls.text || "",
+  },
   { key: "phone", label: "الهاتف", value: (row) => row.student?.phone || "" },
-  { key: "telegram", label: "التليكرام", value: (row) => row.student?.telegram || "" },
+  {
+    key: "telegram",
+    label: "التليكرام",
+    value: (row) => row.student?.telegram || "",
+  },
   { key: "notes", label: "ملاحظات", value: (row) => row.grade.notes || "" },
 ];
 
@@ -93,7 +113,10 @@ function formatDateTime(value?: string | null) {
 }
 
 function defaultDeactivateDateTime(exam: Exam) {
-  return toDateTimeLocalValue(exam.scheduledDeactivateAt) || `${exam.date || new Date().toISOString().slice(0, 10)}T08:00`;
+  return (
+    toDateTimeLocalValue(exam.scheduledDeactivateAt) ||
+    `${exam.date || new Date().toISOString().slice(0, 10)}T08:00`
+  );
 }
 
 function defaultDateTimeForDate(date: string) {
@@ -101,7 +124,9 @@ function defaultDateTimeForDate(date: string) {
 }
 
 function toggleSelection(values: string[], value: string): string[] {
-  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+  return values.includes(value)
+    ? values.filter((item) => item !== value)
+    : [...values, value];
 }
 
 function statusModeFromExam(exam: Exam): ExamStatusMode {
@@ -148,26 +173,62 @@ export function ExamRecordsView() {
   const debouncedSearch = useDebouncedValue(search, 180);
   const [filterType, setFilterType] = useState("");
   const [filterCourseId, setFilterCourseId] = useState("");
+  const [filterStatus, setFilterStatus] = useState<ExamStatusLabel | "">("");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
-  const [deleteDialog, setDeleteDialog] = useState({ open: false, id: "", name: "" });
-  const [editDialog, setEditDialog] = useState<FullExamEditState>(() => emptyEditState());
-  const [deactivateDialog, setDeactivateDialog] = useState({ open: false, id: "", name: "", scheduledDeactivateAt: "" });
+  const [deleteDialog, setDeleteDialog] = useState({
+    open: false,
+    id: "",
+    name: "",
+  });
+  const [editDialog, setEditDialog] = useState<FullExamEditState>(() =>
+    emptyEditState(),
+  );
+  const [deactivateDialog, setDeactivateDialog] = useState({
+    open: false,
+    id: "",
+    name: "",
+    scheduledDeactivateAt: "",
+  });
   const [clockTick, setClockTick] = useState(0);
-  const { locked: isDeletingExam, runLocked: runDeleteExamLocked } = useActionLock();
+  const { locked: isDeletingExam, runLocked: runDeleteExamLocked } =
+    useActionLock();
 
   useEffect(() => {
-    const timer = window.setInterval(() => setClockTick((tick) => tick + 1), 30000);
+    const timer = window.setInterval(
+      () => setClockTick((tick) => tick + 1),
+      30000,
+    );
     return () => window.clearInterval(timer);
   }, []);
 
   const filteredExams = useMemo(() => {
     return exams.filter((exam) => {
-      if (debouncedSearch && !searchAny(debouncedSearch, [exam.name, exam.date, getExamStatus(exam), exam.mainSite, ...exam.courseIds.map(courseName)])) return false;
+      if (
+        debouncedSearch &&
+        !searchAny(debouncedSearch, [
+          exam.name,
+          exam.date,
+          getExamStatus(exam),
+          exam.mainSite,
+          ...exam.courseIds.map(courseName),
+        ])
+      )
+        return false;
       if (filterType && exam.type !== filterType) return false;
-      if (filterCourseId && !exam.courseIds.includes(filterCourseId)) return false;
+      if (filterCourseId && !exam.courseIds.includes(filterCourseId))
+        return false;
+      if (filterStatus && getExamStatus(exam) !== filterStatus) return false;
       return true;
     });
-  }, [exams, debouncedSearch, filterType, filterCourseId, courseName, clockTick]);
+  }, [
+    exams,
+    debouncedSearch,
+    filterType,
+    filterCourseId,
+    filterStatus,
+    courseName,
+    clockTick,
+  ]);
 
   const examRows = (examId: string) => {
     const exam = exams.find((item) => item.id === examId);
@@ -180,18 +241,31 @@ export function ExamRecordsView() {
         return { grade, student, cls };
       })
       .filter((row) => row.student)
-      .sort((a, b) => (a.student?.name || "").localeCompare(b.student?.name || "", "ar"));
+      .sort((a, b) =>
+        (a.student?.name || "").localeCompare(b.student?.name || "", "ar"),
+      );
   };
 
   const examStats = (examId: string) => {
     const rows = examRows(examId);
-    const protectedKinds = ["grace", "excused", "before-registration", "missing", "no-discount"];
-    const accountableRows = rows.filter((row) => !protectedKinds.includes(row.cls.kind));
+    const protectedKinds = [
+      "grace",
+      "excused",
+      "before-registration",
+      "missing",
+      "no-discount",
+    ];
+    const accountableRows = rows.filter(
+      (row) => !protectedKinds.includes(row.cls.kind),
+    );
     return {
       rows,
       passCount: rows.filter((row) => row.cls.kind === "pass").length,
-      notPassedCount: accountableRows.filter((row) => row.cls.kind !== "pass").length,
-      protectedCount: rows.filter((row) => protectedKinds.includes(row.cls.kind)).length,
+      notPassedCount: accountableRows.filter((row) => row.cls.kind !== "pass")
+        .length,
+      protectedCount: rows.filter((row) =>
+        protectedKinds.includes(row.cls.kind),
+      ).length,
     };
   };
 
@@ -202,21 +276,34 @@ export function ExamRecordsView() {
       { label: "تاريخ الامتحان", value: formatAppDate(exam.date) },
       { label: "نوع الامتحان", value: exam.type },
       { label: "حالة الامتحان", value: getExamStatus(exam) },
-      { label: "الدورات", value: exam.courseIds.map(courseName).join("، ") || "—" },
+      {
+        label: "الدورات",
+        value: exam.courseIds.map(courseName).join("، ") || "—",
+      },
       { label: "الموقع", value: mainSites.join("، ") || "الكل" },
       { label: "الدرجة الكاملة", value: exam.fullMark },
       { label: "درجة النجاح", value: exam.passMark },
       { label: "بدون خصم", value: exam.noDiscount ? "نعم" : "لا" },
-      { label: "درجة الخصم", value: exam.noDiscount ? "معطل" : exam.discountMark },
-      { label: "خصم الفرص", value: exam.noDiscount ? "معطل" : exam.opportunitiesPenalty },
-      { label: "درجة الفصل", value: exam.noDiscount ? "معطل" : (exam.dismissalGrade ?? "—") },
+      {
+        label: "درجة الخصم",
+        value: exam.noDiscount ? "معطل" : exam.discountMark,
+      },
+      {
+        label: "خصم الفرص",
+        value: exam.noDiscount ? "معطل" : exam.opportunitiesPenalty,
+      },
+      {
+        label: "درجة الفصل",
+        value: exam.noDiscount ? "معطل" : (exam.dismissalGrade ?? "—"),
+      },
       { label: "تفعيل مجدول", value: formatDateTime(exam.scheduledActivateAt) },
-      { label: "تعطيل مجدول", value: formatDateTime(exam.scheduledDeactivateAt) },
+      {
+        label: "تعطيل مجدول",
+        value: formatDateTime(exam.scheduledDeactivateAt),
+      },
       { label: "عدد سجلات الدرجات", value: rowsCount },
     ];
   };
-
-
 
   const availableMainSitesForEdit = (state: FullExamEditState) => {
     return [...MAIN_SITE_OPTIONS];
@@ -236,12 +323,22 @@ export function ExamRecordsView() {
       fullMark: String(exam.fullMark),
       passMark: String(exam.passMark),
       discountMark: String(exam.discountMark),
-      opportunitiesPenaltyNum: typeof exam.opportunitiesPenalty === "number" ? String(exam.opportunitiesPenalty) : "1",
-      dismissalGrade: exam.dismissalGrade === null || exam.dismissalGrade === undefined ? "" : String(exam.dismissalGrade),
+      opportunitiesPenaltyNum:
+        typeof exam.opportunitiesPenalty === "number"
+          ? String(exam.opportunitiesPenalty)
+          : "1",
+      dismissalGrade:
+        exam.dismissalGrade === null || exam.dismissalGrade === undefined
+          ? ""
+          : String(exam.dismissalGrade),
       noDiscount: Boolean(exam.noDiscount),
       statusMode: statusModeFromExam(exam),
-      scheduledActivateAt: toDateTimeLocalValue(exam.scheduledActivateAt) || defaultDateTimeForDate(exam.date),
-      scheduledDeactivateAt: toDateTimeLocalValue(exam.scheduledDeactivateAt) || defaultDeactivateDateTime(exam),
+      scheduledActivateAt:
+        toDateTimeLocalValue(exam.scheduledActivateAt) ||
+        defaultDateTimeForDate(exam.date),
+      scheduledDeactivateAt:
+        toDateTimeLocalValue(exam.scheduledDeactivateAt) ||
+        defaultDeactivateDateTime(exam),
     });
   };
 
@@ -250,20 +347,35 @@ export function ExamRecordsView() {
     const passMark = Number(toLatinDigits(state.passMark));
     const isFinalExam = state.type === "فاينل";
     const noDiscount = Boolean(state.noDiscount);
-    const discountMark = isFinalExam || noDiscount ? 0 : Number(toLatinDigits(state.discountMark));
+    const discountMark =
+      isFinalExam || noDiscount ? 0 : Number(toLatinDigits(state.discountMark));
     if (!state.name.trim()) return "اسم الامتحان مطلوب";
     if (state.courseIds.length === 0) return "اختر دورة واحدة على الأقل";
-    const invalidCourses = state.courseIds.filter((courseId) => !hasActiveChapterLink(courseChapters, courseId));
-    if (invalidCourses.length > 0) return `لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourses.map(courseName).join("، ")}`;
+    const invalidCourses = state.courseIds.filter(
+      (courseId) => !hasActiveChapterLink(courseChapters, courseId),
+    );
+    if (invalidCourses.length > 0)
+      return `لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourses.map(courseName).join("، ")}`;
     if (state.mainSites.length === 0) return "اختر موقعاً واحداً على الأقل";
-    if (![fullMark, passMark, discountMark].every(Number.isFinite)) return "درجات الامتحان يجب أن تكون أرقاماً";
+    if (![fullMark, passMark, discountMark].every(Number.isFinite))
+      return "درجات الامتحان يجب أن تكون أرقاماً";
     if (fullMark <= 0) return "الدرجة الكاملة يجب أن تكون أكبر من صفر";
-    if (passMark < 0 || passMark > fullMark) return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
-    if (!noDiscount && (discountMark < 0 || discountMark > fullMark)) return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
-    if (!noDiscount && !isFinalExam && passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
-    if (!noDiscount && !isFinalExam && Number(toLatinDigits(state.opportunitiesPenaltyNum) || 0) <= 0) return "خصم الفرص يجب أن يكون أكبر من صفر";
-    if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ ووقت التفعيل المجدول";
-    if (state.statusMode === "تعطيل مجدول" && !state.scheduledDeactivateAt) return "حدد تاريخ ووقت التعطيل المجدول";
+    if (passMark < 0 || passMark > fullMark)
+      return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
+    if (!noDiscount && (discountMark < 0 || discountMark > fullMark))
+      return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
+    if (!noDiscount && !isFinalExam && passMark <= discountMark)
+      return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
+    if (
+      !noDiscount &&
+      !isFinalExam &&
+      Number(toLatinDigits(state.opportunitiesPenaltyNum) || 0) <= 0
+    )
+      return "خصم الفرص يجب أن يكون أكبر من صفر";
+    if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt)
+      return "حدد تاريخ ووقت التفعيل المجدول";
+    if (state.statusMode === "تعطيل مجدول" && !state.scheduledDeactivateAt)
+      return "حدد تاريخ ووقت التعطيل المجدول";
     return null;
   };
 
@@ -272,13 +384,26 @@ export function ExamRecordsView() {
     if (error) return toast.error(error);
     const isFinalExam = editDialog.type === "فاينل";
     const noDiscount = Boolean(editDialog.noDiscount);
-    const statusPatch = editDialog.statusMode === "نشط"
-      ? { active: true, scheduledActivateAt: "", scheduledDeactivateAt: "" }
-      : editDialog.statusMode === "معطل"
-        ? { active: false, scheduledActivateAt: "", scheduledDeactivateAt: "" }
-        : editDialog.statusMode === "تفعيل مجدول"
-          ? { active: false, scheduledActivateAt: editDialog.scheduledActivateAt, scheduledDeactivateAt: "" }
-          : { active: true, scheduledActivateAt: "", scheduledDeactivateAt: editDialog.scheduledDeactivateAt };
+    const statusPatch =
+      editDialog.statusMode === "نشط"
+        ? { active: true, scheduledActivateAt: "", scheduledDeactivateAt: "" }
+        : editDialog.statusMode === "معطل"
+          ? {
+              active: false,
+              scheduledActivateAt: "",
+              scheduledDeactivateAt: "",
+            }
+          : editDialog.statusMode === "تفعيل مجدول"
+            ? {
+                active: false,
+                scheduledActivateAt: editDialog.scheduledActivateAt,
+                scheduledDeactivateAt: "",
+              }
+            : {
+                active: true,
+                scheduledActivateAt: "",
+                scheduledDeactivateAt: editDialog.scheduledDeactivateAt,
+              };
 
     updateExam(editDialog.id, {
       name: editDialog.name.trim(),
@@ -288,9 +413,19 @@ export function ExamRecordsView() {
       date: editDialog.date,
       fullMark: Number(toLatinDigits(editDialog.fullMark)),
       passMark: Number(toLatinDigits(editDialog.passMark)),
-      discountMark: isFinalExam || noDiscount ? 0 : Number(toLatinDigits(editDialog.discountMark)),
-      opportunitiesPenalty: noDiscount ? 0 : (isFinalExam ? "فصل مؤقت" : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum) || 1)),
-      dismissalGrade: !noDiscount && isFinalExam && editDialog.dismissalGrade ? Number(toLatinDigits(editDialog.dismissalGrade)) : null,
+      discountMark:
+        isFinalExam || noDiscount
+          ? 0
+          : Number(toLatinDigits(editDialog.discountMark)),
+      opportunitiesPenalty: noDiscount
+        ? 0
+        : isFinalExam
+          ? "فصل مؤقت"
+          : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum) || 1),
+      dismissalGrade:
+        !noDiscount && isFinalExam && editDialog.dismissalGrade
+          ? Number(toLatinDigits(editDialog.dismissalGrade))
+          : null,
       noDiscount,
       ...statusPatch,
     });
@@ -319,13 +454,23 @@ export function ExamRecordsView() {
       scheduledActivateAt: "",
       scheduledDeactivateAt: deactivateDialog.scheduledDeactivateAt,
     });
-    setDeactivateDialog({ open: false, id: "", name: "", scheduledDeactivateAt: "" });
+    setDeactivateDialog({
+      open: false,
+      id: "",
+      name: "",
+      scheduledDeactivateAt: "",
+    });
     toast.success("تمت جدولة تعطيل الامتحان");
   };
 
   const handleClearScheduledDeactivate = () => {
     updateExam(deactivateDialog.id, { scheduledDeactivateAt: "" });
-    setDeactivateDialog({ open: false, id: "", name: "", scheduledDeactivateAt: "" });
+    setDeactivateDialog({
+      open: false,
+      id: "",
+      name: "",
+      scheduledDeactivateAt: "",
+    });
     toast.success("تم إلغاء التعطيل المجدول");
   };
 
@@ -344,28 +489,62 @@ export function ExamRecordsView() {
     const isFinalExam = editDialog.type === "فاينل";
     const noDiscount = Boolean(editDialog.noDiscount);
     const mainSitesForEdit = availableMainSitesForEdit(editDialog);
-    const eligibleCourses = courses.filter((course) => hasActiveChapterLink(courseChapters, course.id));
-    const allCoursesSelected = eligibleCourses.length > 0 && eligibleCourses.every((course) => editDialog.courseIds.includes(course.id));
-    const allSitesSelected = mainSitesForEdit.length > 0 && mainSitesForEdit.every((site) => editDialog.mainSites.includes(site));
+    const eligibleCourses = courses.filter((course) =>
+      hasActiveChapterLink(courseChapters, course.id),
+    );
+    const allCoursesSelected =
+      eligibleCourses.length > 0 &&
+      eligibleCourses.every((course) =>
+        editDialog.courseIds.includes(course.id),
+      );
+    const allSitesSelected =
+      mainSitesForEdit.length > 0 &&
+      mainSitesForEdit.every((site) => editDialog.mainSites.includes(site));
 
     return (
       <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="space-y-1 md:col-span-2">
             <Label htmlFor="edit-exam-name">اسم الامتحان</Label>
-            <Input id="edit-exam-name" value={editDialog.name} onChange={(e) => setEditDialog((prev) => ({ ...prev, name: e.target.value }))} />
+            <Input
+              id="edit-exam-name"
+              value={editDialog.name}
+              onChange={(e) =>
+                setEditDialog((prev) => ({ ...prev, name: e.target.value }))
+              }
+            />
           </div>
           <div className="space-y-1">
             <Label htmlFor="edit-exam-type">نوع الامتحان</Label>
-            <Select value={editDialog.type} onValueChange={(value) => setEditDialog((prev) => ({
-              ...prev,
-              type: value as Exam["type"],
-              discountMark: value === "فاينل" || prev.noDiscount ? "0" : (prev.discountMark || "45"),
-              opportunitiesPenaltyNum: value === "فاينل" || prev.noDiscount ? "0" : (prev.opportunitiesPenaltyNum || "1"),
-              dismissalGrade: value === "فاينل" && !prev.noDiscount ? prev.dismissalGrade : "",
-            }))}>
-              <SelectTrigger id="edit-exam-type"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="يومي">يومي</SelectItem><SelectItem value="تراكمي">تراكمي</SelectItem><SelectItem value="فاينل">فاينل</SelectItem></SelectContent>
+            <Select
+              value={editDialog.type}
+              onValueChange={(value) =>
+                setEditDialog((prev) => ({
+                  ...prev,
+                  type: value as Exam["type"],
+                  discountMark:
+                    value === "فاينل" || prev.noDiscount
+                      ? "0"
+                      : prev.discountMark || "45",
+                  opportunitiesPenaltyNum:
+                    value === "فاينل" || prev.noDiscount
+                      ? "0"
+                      : prev.opportunitiesPenaltyNum || "1",
+                  dismissalGrade:
+                    value === "فاينل" && !prev.noDiscount
+                      ? prev.dismissalGrade
+                      : "",
+                }))
+              }
+            >
+              <SelectTrigger id="edit-exam-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="يومي">يومي</SelectItem>
+                <SelectItem value="تراكمي">تراكمي</SelectItem>
+                <SelectItem value="فاينل">فاينل</SelectItem>
+              </SelectContent>
             </Select>
           </div>
           <div className="space-y-1">
@@ -373,28 +552,65 @@ export function ExamRecordsView() {
             <DateInput
               id="edit-exam-date"
               value={editDialog.date}
-              onChange={(value) => setEditDialog((prev) => ({
-                ...prev,
-                date: value,
-                scheduledActivateAt: prev.statusMode === "تفعيل مجدول" ? defaultDateTimeForDate(value) : prev.scheduledActivateAt,
-                scheduledDeactivateAt: prev.statusMode === "تعطيل مجدول" ? defaultDateTimeForDate(value) : prev.scheduledDeactivateAt,
-              }))}
+              onChange={(value) =>
+                setEditDialog((prev) => ({
+                  ...prev,
+                  date: value,
+                  scheduledActivateAt:
+                    prev.statusMode === "تفعيل مجدول"
+                      ? defaultDateTimeForDate(value)
+                      : prev.scheduledActivateAt,
+                  scheduledDeactivateAt:
+                    prev.statusMode === "تعطيل مجدول"
+                      ? defaultDateTimeForDate(value)
+                      : prev.scheduledDeactivateAt,
+                }))
+              }
             />
           </div>
           <div className="space-y-1 md:col-span-2">
             <Label>الدورات</Label>
             <div className="max-h-44 space-y-2 overflow-y-auto rounded-xl border p-3">
               <label className="flex items-center gap-2 border-b pb-2 text-sm font-bold">
-                <Checkbox checked={allCoursesSelected} onCheckedChange={() => setEditDialog((prev) => ({ ...prev, courseIds: allCoursesSelected ? [] : eligibleCourses.map((course) => course.id) }))} />
+                <Checkbox
+                  checked={allCoursesSelected}
+                  onCheckedChange={() =>
+                    setEditDialog((prev) => ({
+                      ...prev,
+                      courseIds: allCoursesSelected
+                        ? []
+                        : eligibleCourses.map((course) => course.id),
+                    }))
+                  }
+                />
                 الكل
               </label>
               {courses.map((course) => {
-                const eligible = hasActiveChapterLink(courseChapters, course.id);
+                const eligible = hasActiveChapterLink(
+                  courseChapters,
+                  course.id,
+                );
                 return (
-                  <label key={course.id} className="flex items-center gap-2 text-sm">
-                    <Checkbox checked={editDialog.courseIds.includes(course.id)} disabled={!eligible} onCheckedChange={() => setEditDialog((prev) => ({ ...prev, courseIds: toggleSelection(prev.courseIds, course.id) }))} />
+                  <label
+                    key={course.id}
+                    className="flex items-center gap-2 text-sm"
+                  >
+                    <Checkbox
+                      checked={editDialog.courseIds.includes(course.id)}
+                      disabled={!eligible}
+                      onCheckedChange={() =>
+                        setEditDialog((prev) => ({
+                          ...prev,
+                          courseIds: toggleSelection(prev.courseIds, course.id),
+                        }))
+                      }
+                    />
                     <span>{course.name}</span>
-                    {!eligible && <Badge variant="destructive" className="text-[10px]">بدون فصل نشط</Badge>}
+                    {!eligible && (
+                      <Badge variant="destructive" className="text-[10px]">
+                        بدون فصل نشط
+                      </Badge>
+                    )}
                   </label>
                 );
               })}
@@ -404,12 +620,28 @@ export function ExamRecordsView() {
             <Label>الموقع</Label>
             <div className="max-h-44 space-y-2 overflow-y-auto rounded-xl border p-3">
               <label className="flex items-center gap-2 border-b pb-2 text-sm font-bold">
-                <Checkbox checked={allSitesSelected} onCheckedChange={() => setEditDialog((prev) => ({ ...prev, mainSites: allSitesSelected ? [] : [...mainSitesForEdit] }))} />
+                <Checkbox
+                  checked={allSitesSelected}
+                  onCheckedChange={() =>
+                    setEditDialog((prev) => ({
+                      ...prev,
+                      mainSites: allSitesSelected ? [] : [...mainSitesForEdit],
+                    }))
+                  }
+                />
                 الكل
               </label>
               {mainSitesForEdit.map((site) => (
                 <label key={site} className="flex items-center gap-2 text-sm">
-                  <Checkbox checked={editDialog.mainSites.includes(site)} onCheckedChange={() => setEditDialog((prev) => ({ ...prev, mainSites: toggleSelection(prev.mainSites, site) }))} />
+                  <Checkbox
+                    checked={editDialog.mainSites.includes(site)}
+                    onCheckedChange={() =>
+                      setEditDialog((prev) => ({
+                        ...prev,
+                        mainSites: toggleSelection(prev.mainSites, site),
+                      }))
+                    }
+                  />
                   <span>{site}</span>
                 </label>
               ))}
@@ -417,11 +649,29 @@ export function ExamRecordsView() {
           </div>
           <div className="space-y-1">
             <Label>الدرجة الكاملة</Label>
-            <Input type="number" value={editDialog.fullMark} onChange={(e) => setEditDialog((prev) => ({ ...prev, fullMark: toLatinDigits(e.target.value) }))} />
+            <Input
+              type="number"
+              value={editDialog.fullMark}
+              onChange={(e) =>
+                setEditDialog((prev) => ({
+                  ...prev,
+                  fullMark: toLatinDigits(e.target.value),
+                }))
+              }
+            />
           </div>
           <div className="space-y-1">
             <Label>درجة النجاح</Label>
-            <Input type="number" value={editDialog.passMark} onChange={(e) => setEditDialog((prev) => ({ ...prev, passMark: toLatinDigits(e.target.value) }))} />
+            <Input
+              type="number"
+              value={editDialog.passMark}
+              onChange={(e) =>
+                setEditDialog((prev) => ({
+                  ...prev,
+                  passMark: toLatinDigits(e.target.value),
+                }))
+              }
+            />
           </div>
           <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 md:col-span-2 dark:border-sky-900/50 dark:bg-sky-950/20">
             <label className="flex cursor-pointer items-start gap-3 text-sm">
@@ -432,60 +682,171 @@ export function ExamRecordsView() {
                   setEditDialog((prev) => ({
                     ...prev,
                     noDiscount: enabled,
-                    discountMark: enabled || prev.type === "فاينل" ? "0" : (prev.discountMark && prev.discountMark !== "0" ? prev.discountMark : "45"),
-                    opportunitiesPenaltyNum: enabled || prev.type === "فاينل" ? "0" : (prev.opportunitiesPenaltyNum && prev.opportunitiesPenaltyNum !== "0" ? prev.opportunitiesPenaltyNum : "1"),
+                    discountMark:
+                      enabled || prev.type === "فاينل"
+                        ? "0"
+                        : prev.discountMark && prev.discountMark !== "0"
+                          ? prev.discountMark
+                          : "45",
+                    opportunitiesPenaltyNum:
+                      enabled || prev.type === "فاينل"
+                        ? "0"
+                        : prev.opportunitiesPenaltyNum &&
+                            prev.opportunitiesPenaltyNum !== "0"
+                          ? prev.opportunitiesPenaltyNum
+                          : "1",
                     dismissalGrade: enabled ? "" : prev.dismissalGrade,
                   }));
                 }}
               />
               <span>
                 <span className="block font-semibold">امتحان بدون خصم</span>
-                <span className="block text-xs text-muted-foreground">عند التفعيل لا يحاسب الطالب على الدرجة أو الغياب، وتعطل درجة الخصم وخصم الفرص ودرجة الفصل.</span>
+                <span className="block text-xs text-muted-foreground">
+                  عند التفعيل لا يحاسب الطالب على الدرجة أو الغياب، وتعطل درجة
+                  الخصم وخصم الفرص ودرجة الفصل.
+                </span>
               </span>
             </label>
           </div>
           <div className="space-y-1">
             <Label>درجة الخصم</Label>
-            <Input type="number" disabled={isFinalExam || noDiscount} value={isFinalExam || noDiscount ? "0" : editDialog.discountMark} onChange={(e) => setEditDialog((prev) => ({ ...prev, discountMark: toLatinDigits(e.target.value) }))} />
-            {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
-            {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ الحكم يكون من درجة الفصل.</p>}
-            {!noDiscount && !isFinalExam && Number(editDialog.passMark) <= Number(editDialog.discountMark) && <p className="text-xs text-destructive">درجة النجاح يجب أن تكون أكبر من درجة الخصم.</p>}
+            <Input
+              type="number"
+              disabled={isFinalExam || noDiscount}
+              value={isFinalExam || noDiscount ? "0" : editDialog.discountMark}
+              onChange={(e) =>
+                setEditDialog((prev) => ({
+                  ...prev,
+                  discountMark: toLatinDigits(e.target.value),
+                }))
+              }
+            />
+            {noDiscount && (
+              <p className="text-xs text-sky-600">
+                معطل لأن الامتحان بدون خصم.
+              </p>
+            )}
+            {isFinalExam && !noDiscount && (
+              <p className="text-xs text-amber-600">
+                معطل في الفاينل؛ الحكم يكون من درجة الفصل.
+              </p>
+            )}
+            {!noDiscount &&
+              !isFinalExam &&
+              Number(editDialog.passMark) <=
+                Number(editDialog.discountMark) && (
+                <p className="text-xs text-destructive">
+                  درجة النجاح يجب أن تكون أكبر من درجة الخصم.
+                </p>
+              )}
           </div>
           <div className="space-y-1">
             <Label>خصم الفرص</Label>
-            <Input type="number" disabled={isFinalExam || noDiscount} value={isFinalExam || noDiscount ? "0" : editDialog.opportunitiesPenaltyNum} onChange={(e) => setEditDialog((prev) => ({ ...prev, opportunitiesPenaltyNum: toLatinDigits(e.target.value) }))} />
-            {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
-            {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ يعالج الفصل من درجة الفصل أو الغياب/الغش.</p>}
+            <Input
+              type="number"
+              disabled={isFinalExam || noDiscount}
+              value={
+                isFinalExam || noDiscount
+                  ? "0"
+                  : editDialog.opportunitiesPenaltyNum
+              }
+              onChange={(e) =>
+                setEditDialog((prev) => ({
+                  ...prev,
+                  opportunitiesPenaltyNum: toLatinDigits(e.target.value),
+                }))
+              }
+            />
+            {noDiscount && (
+              <p className="text-xs text-sky-600">
+                معطل لأن الامتحان بدون خصم.
+              </p>
+            )}
+            {isFinalExam && !noDiscount && (
+              <p className="text-xs text-amber-600">
+                معطل في الفاينل؛ يعالج الفصل من درجة الفصل أو الغياب/الغش.
+              </p>
+            )}
           </div>
           {isFinalExam && (
             <div className="space-y-1">
               <Label>درجة الفصل</Label>
-              <Input type="number" disabled={noDiscount} value={noDiscount ? "" : editDialog.dismissalGrade} onChange={(e) => setEditDialog((prev) => ({ ...prev, dismissalGrade: toLatinDigits(e.target.value) }))} />
-              {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
+              <Input
+                type="number"
+                disabled={noDiscount}
+                value={noDiscount ? "" : editDialog.dismissalGrade}
+                onChange={(e) =>
+                  setEditDialog((prev) => ({
+                    ...prev,
+                    dismissalGrade: toLatinDigits(e.target.value),
+                  }))
+                }
+              />
+              {noDiscount && (
+                <p className="text-xs text-sky-600">
+                  معطل لأن الامتحان بدون خصم.
+                </p>
+              )}
             </div>
           )}
           <div className="space-y-1">
             <Label>حالة الامتحان</Label>
-            <Select value={editDialog.statusMode} onValueChange={(value) => setEditDialog((prev) => ({
-              ...prev,
-              statusMode: value as ExamStatusMode,
-              scheduledActivateAt: value === "تفعيل مجدول" && !prev.scheduledActivateAt ? defaultDateTimeForDate(prev.date) : prev.scheduledActivateAt,
-              scheduledDeactivateAt: value === "تعطيل مجدول" && !prev.scheduledDeactivateAt ? defaultDateTimeForDate(prev.date) : prev.scheduledDeactivateAt,
-            }))}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="نشط">نشط</SelectItem><SelectItem value="تفعيل مجدول">تفعيل مجدول</SelectItem><SelectItem value="تعطيل مجدول">تعطيل مجدول</SelectItem><SelectItem value="معطل">معطل</SelectItem></SelectContent>
+            <Select
+              value={editDialog.statusMode}
+              onValueChange={(value) =>
+                setEditDialog((prev) => ({
+                  ...prev,
+                  statusMode: value as ExamStatusMode,
+                  scheduledActivateAt:
+                    value === "تفعيل مجدول" && !prev.scheduledActivateAt
+                      ? defaultDateTimeForDate(prev.date)
+                      : prev.scheduledActivateAt,
+                  scheduledDeactivateAt:
+                    value === "تعطيل مجدول" && !prev.scheduledDeactivateAt
+                      ? defaultDateTimeForDate(prev.date)
+                      : prev.scheduledDeactivateAt,
+                }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="نشط">نشط</SelectItem>
+                <SelectItem value="تفعيل مجدول">تفعيل مجدول</SelectItem>
+                <SelectItem value="تعطيل مجدول">تعطيل مجدول</SelectItem>
+                <SelectItem value="معطل">معطل</SelectItem>
+              </SelectContent>
             </Select>
           </div>
           {editDialog.statusMode === "تفعيل مجدول" && (
             <div className="space-y-1">
               <Label>تاريخ ووقت التفعيل</Label>
-              <Input type="datetime-local" value={editDialog.scheduledActivateAt} onChange={(e) => setEditDialog((prev) => ({ ...prev, scheduledActivateAt: e.target.value }))} />
+              <Input
+                type="datetime-local"
+                value={editDialog.scheduledActivateAt}
+                onChange={(e) =>
+                  setEditDialog((prev) => ({
+                    ...prev,
+                    scheduledActivateAt: e.target.value,
+                  }))
+                }
+              />
             </div>
           )}
           {editDialog.statusMode === "تعطيل مجدول" && (
             <div className="space-y-1">
               <Label>تاريخ ووقت التعطيل</Label>
-              <Input type="datetime-local" value={editDialog.scheduledDeactivateAt} onChange={(e) => setEditDialog((prev) => ({ ...prev, scheduledDeactivateAt: e.target.value }))} />
+              <Input
+                type="datetime-local"
+                value={editDialog.scheduledDeactivateAt}
+                onChange={(e) =>
+                  setEditDialog((prev) => ({
+                    ...prev,
+                    scheduledDeactivateAt: e.target.value,
+                  }))
+                }
+              />
             </div>
           )}
         </div>
@@ -510,25 +871,53 @@ export function ExamRecordsView() {
           description={`تقرير درجات امتحان ${exam.name}`}
         />
       </div>
-      <Button variant="outline" size="sm" onClick={() => toggleExam(exam.id)}>{exam.active ? "تعطيل الآن" : "تفعيل الآن"}</Button>
-      <Button variant="outline" size="sm" onClick={() => openScheduleDeactivateDialog(exam.id)}>تعطيل مجدول</Button>
-      <Button variant="secondary" size="sm" onClick={() => openEditExamDialog(exam.id)}>تعديل</Button>
-      <Button variant="destructive" size="sm" onClick={() => openDeleteExamDialog(exam.id)}>حذف</Button>
+      <Button variant="outline" size="sm" onClick={() => toggleExam(exam.id)}>
+        {exam.active ? "تعطيل الآن" : "تفعيل الآن"}
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => openScheduleDeactivateDialog(exam.id)}
+      >
+        تعطيل مجدول
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => openEditExamDialog(exam.id)}
+      >
+        تعديل
+      </Button>
+      <Button
+        variant="destructive"
+        size="sm"
+        onClick={() => openDeleteExamDialog(exam.id)}
+      >
+        حذف
+      </Button>
     </div>
   );
 
   const renderCards = () => (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       {filteredExams.map((exam) => {
-        const { rows, passCount, notPassedCount, protectedCount } = examStats(exam.id);
+        const { rows, passCount, notPassedCount, protectedCount } = examStats(
+          exam.id,
+        );
         const details = examDetails(exam, rows.length);
         return (
-          <Card key={exam.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10">
+          <Card
+            key={exam.id}
+            className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10"
+          >
             <CardHeader className="pb-2">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <CardTitle className="text-base">{exam.name}</CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">{formatAppDate(exam.date)} - {exam.courseIds.map(courseName).join("، ")}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatAppDate(exam.date)} -{" "}
+                    {exam.courseIds.map(courseName).join("، ")}
+                  </p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     <Badge>{exam.type}</Badge>
                     <Badge variant="outline">{getExamStatus(exam)}</Badge>
@@ -539,29 +928,63 @@ export function ExamRecordsView() {
             </CardHeader>
             <CardContent>
               <div className="mb-3 grid grid-cols-2 gap-2 text-center md:grid-cols-4">
-                <div className="rounded bg-emerald-50 p-2 dark:bg-emerald-950/40"><p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{passCount}</p><p className="text-[10px] text-muted-foreground">ناجح</p></div>
-                <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40"><p className="text-lg font-bold text-rose-600 dark:text-rose-400">{notPassedCount}</p><p className="text-[10px] text-muted-foreground">محاسب/غائب</p></div>
-                <div className="rounded bg-cyan-50 p-2 dark:bg-cyan-950/40"><p className="text-lg font-bold text-cyan-600 dark:text-cyan-400">{protectedCount}</p><p className="text-[10px] text-muted-foreground">سماح/إجازة</p></div>
-                <div className="rounded bg-sky-50 p-2 dark:bg-sky-950/40"><p className="text-lg font-bold text-sky-600 dark:text-sky-400">{rows.length}</p><p className="text-[10px] text-muted-foreground">إجمالي</p></div>
+                <div className="rounded bg-emerald-50 p-2 dark:bg-emerald-950/40">
+                  <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                    {passCount}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">ناجح</p>
+                </div>
+                <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40">
+                  <p className="text-lg font-bold text-rose-600 dark:text-rose-400">
+                    {notPassedCount}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    محاسب/غائب
+                  </p>
+                </div>
+                <div className="rounded bg-cyan-50 p-2 dark:bg-cyan-950/40">
+                  <p className="text-lg font-bold text-cyan-600 dark:text-cyan-400">
+                    {protectedCount}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    سماح/إجازة
+                  </p>
+                </div>
+                <div className="rounded bg-sky-50 p-2 dark:bg-sky-950/40">
+                  <p className="text-lg font-bold text-sky-600 dark:text-sky-400">
+                    {rows.length}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">إجمالي</p>
+                </div>
               </div>
 
               <div className="mb-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-2 xl:grid-cols-3">
                 {details.map((item) => (
-                  <div key={item.label} className="rounded-xl border bg-muted/40 p-2">
-                    <p className="text-[10px] text-muted-foreground">{item.label}</p>
+                  <div
+                    key={item.label}
+                    className="rounded-xl border bg-muted/40 p-2"
+                  >
+                    <p className="text-[10px] text-muted-foreground">
+                      {item.label}
+                    </p>
                     <p className="mt-0.5 font-semibold">{item.value}</p>
                   </div>
                 ))}
               </div>
 
               <div className="rounded-xl border border-dashed bg-muted/30 p-3 text-center text-xs text-muted-foreground">
-                تم إخفاء تفاصيل درجات الطلاب من سجل الامتحانات. يمكن مراجعة الدرجات من قائمة سجل الدرجات.
+                تم إخفاء تفاصيل درجات الطلاب من سجل الامتحانات. يمكن مراجعة
+                الدرجات من قائمة سجل الدرجات.
               </div>
             </CardContent>
           </Card>
         );
       })}
-      {filteredExams.length === 0 && <div className="empty-state xl:col-span-2">لا توجد امتحانات مطابقة للفلاتر.</div>}
+      {filteredExams.length === 0 && (
+        <div className="empty-state xl:col-span-2">
+          لا توجد امتحانات مطابقة للفلاتر.
+        </div>
+      )}
     </div>
   );
 
@@ -594,17 +1017,40 @@ export function ExamRecordsView() {
               <tr key={exam.id} className="border-t align-top">
                 <td className="p-3 font-bold">{exam.name}</td>
                 <td className="p-3">{formatAppDate(exam.date)}</td>
-                <td className="p-3"><div className="flex flex-wrap gap-1"><Badge>{exam.type}</Badge>{exam.noDiscount && <Badge variant="secondary">بدون خصم</Badge>}</div></td>
-                <td className="p-3"><Badge variant="outline">{getExamStatus(exam)}</Badge></td>
-                <td className="p-3 min-w-44">{exam.courseIds.map(courseName).join("، ") || "—"}</td>
-                <td className="p-3 min-w-36">{splitSelection(exam.mainSite).join("، ") || "الكل"}</td>
+                <td className="p-3">
+                  <div className="flex flex-wrap gap-1">
+                    <Badge>{exam.type}</Badge>
+                    {exam.noDiscount && (
+                      <Badge variant="secondary">بدون خصم</Badge>
+                    )}
+                  </div>
+                </td>
+                <td className="p-3">
+                  <Badge variant="outline">{getExamStatus(exam)}</Badge>
+                </td>
+                <td className="p-3 min-w-44">
+                  {exam.courseIds.map(courseName).join("، ") || "—"}
+                </td>
+                <td className="p-3 min-w-36">
+                  {splitSelection(exam.mainSite).join("، ") || "الكل"}
+                </td>
                 <td className="p-3">{exam.fullMark}</td>
                 <td className="p-3">{exam.passMark}</td>
-                <td className="p-3">{exam.noDiscount ? "معطل" : exam.discountMark}</td>
-                <td className="p-3">{exam.noDiscount ? "معطل" : exam.opportunitiesPenalty}</td>
-                <td className="p-3">{exam.noDiscount ? "معطل" : (exam.dismissalGrade ?? "—")}</td>
-                <td className="p-3 min-w-36">{formatDateTime(exam.scheduledActivateAt)}</td>
-                <td className="p-3 min-w-36">{formatDateTime(exam.scheduledDeactivateAt)}</td>
+                <td className="p-3">
+                  {exam.noDiscount ? "معطل" : exam.discountMark}
+                </td>
+                <td className="p-3">
+                  {exam.noDiscount ? "معطل" : exam.opportunitiesPenalty}
+                </td>
+                <td className="p-3">
+                  {exam.noDiscount ? "معطل" : (exam.dismissalGrade ?? "—")}
+                </td>
+                <td className="p-3 min-w-36">
+                  {formatDateTime(exam.scheduledActivateAt)}
+                </td>
+                <td className="p-3 min-w-36">
+                  {formatDateTime(exam.scheduledDeactivateAt)}
+                </td>
                 <td className="p-3">{rows.length}</td>
                 <td className="p-3 min-w-80">{renderExamActions(exam)}</td>
               </tr>
@@ -612,7 +1058,12 @@ export function ExamRecordsView() {
           })}
           {filteredExams.length === 0 && (
             <tr>
-              <td colSpan={15} className="p-8 text-center text-muted-foreground">لا توجد امتحانات مطابقة للفلاتر.</td>
+              <td
+                colSpan={15}
+                className="p-8 text-center text-muted-foreground"
+              >
+                لا توجد امتحانات مطابقة للفلاتر.
+              </td>
             </tr>
           )}
         </tbody>
@@ -624,30 +1075,97 @@ export function ExamRecordsView() {
     <div className="space-y-4">
       <Card>
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="space-y-1">
+              <Label htmlFor="exam-records-course" className="text-xs">
+                الدورة
+              </Label>
+              <Select
+                value={filterCourseId || "all"}
+                onValueChange={(v) => setFilterCourseId(v === "all" ? "" : v)}
+              >
+                <SelectTrigger id="exam-records-course">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {courses.map((course) => (
+                    <SelectItem key={course.id} value={course.id}>
+                      {course.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="exam-records-type" className="text-xs">
+                نوع الامتحان
+              </Label>
+              <Select
+                value={filterType || "all"}
+                onValueChange={(v) => setFilterType(v === "all" ? "" : v)}
+              >
+                <SelectTrigger id="exam-records-type">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="يومي">يومي</SelectItem>
+                  <SelectItem value="تراكمي">تراكمي</SelectItem>
+                  <SelectItem value="فاينل">فاينل</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="exam-records-status" className="text-xs">
+                حالة الامتحان
+              </Label>
+              <Select
+                value={filterStatus || "all"}
+                onValueChange={(v) =>
+                  setFilterStatus(v === "all" ? "" : (v as ExamStatusLabel))
+                }
+              >
+                <SelectTrigger id="exam-records-status">
+                  <SelectValue placeholder="كل الحالات" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الحالات</SelectItem>
+                  <SelectItem value="نشط">نشط</SelectItem>
+                  <SelectItem value="تفعيل مجدول">تفعيل مجدول</SelectItem>
+                  <SelectItem value="تعطيل مجدول">تعطيل مجدول</SelectItem>
+                  <SelectItem value="معطل">معطل</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1 lg:col-span-2">
-              <Label htmlFor="exam-records-search" className="text-xs">بحث</Label>
-              <Input id="exam-records-search" name="search" data-teacherpro-search="true" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="اسم الامتحان / التاريخ / الدورة / الحالة" />
+              <Label htmlFor="exam-records-search" className="text-xs">
+                بحث
+              </Label>
+              <Input
+                id="exam-records-search"
+                name="search"
+                data-teacherpro-search="true"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="اسم الامتحان / التاريخ / الدورة / الحالة"
+              />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="exam-records-type" className="text-xs">نوع الامتحان</Label>
-              <Select value={filterType || "all"} onValueChange={(v) => setFilterType(v === "all" ? "" : v)}>
-                <SelectTrigger id="exam-records-type"><SelectValue placeholder="الكل" /></SelectTrigger>
-                <SelectContent><SelectItem value="all">الكل</SelectItem><SelectItem value="يومي">يومي</SelectItem><SelectItem value="تراكمي">تراكمي</SelectItem><SelectItem value="فاينل">فاينل</SelectItem></SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="exam-records-course" className="text-xs">الدورة</Label>
-              <Select value={filterCourseId || "all"} onValueChange={(v) => setFilterCourseId(v === "all" ? "" : v)}>
-                <SelectTrigger id="exam-records-course"><SelectValue placeholder="الكل" /></SelectTrigger>
-                <SelectContent><SelectItem value="all">الكل</SelectItem>{courses.map((course) => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="exam-records-view" className="text-xs">طريقة العرض</Label>
-              <Select value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)}>
-                <SelectTrigger id="exam-records-view"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="cards">الكارتات</SelectItem><SelectItem value="table">الجدول</SelectItem></SelectContent>
+              <Label htmlFor="exam-records-view" className="text-xs">
+                طريقة العرض
+              </Label>
+              <Select
+                value={viewMode}
+                onValueChange={(v) => setViewMode(v as ViewMode)}
+              >
+                <SelectTrigger id="exam-records-view">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cards">الكارتات</SelectItem>
+                  <SelectItem value="table">الجدول</SelectItem>
+                </SelectContent>
               </Select>
             </div>
           </div>
@@ -656,44 +1174,102 @@ export function ExamRecordsView() {
 
       {viewMode === "cards" ? renderCards() : renderTable()}
 
-      <Dialog open={editDialog.open} onOpenChange={(open) => setEditDialog((prev) => ({ ...prev, open }))}>
+      <Dialog
+        open={editDialog.open}
+        onOpenChange={(open) => setEditDialog((prev) => ({ ...prev, open }))}
+      >
         <DialogContent dir="rtl" className="max-w-5xl">
-          <DialogHeader><DialogTitle>تعديل الامتحان بالكامل</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>تعديل الامتحان بالكامل</DialogTitle>
+          </DialogHeader>
           {renderEditExamFields()}
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditDialog(emptyEditState())}>إلغاء</Button>
+            <Button
+              variant="ghost"
+              onClick={() => setEditDialog(emptyEditState())}
+            >
+              إلغاء
+            </Button>
             <Button onClick={handleEditExam}>حفظ التعديل الكامل</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deactivateDialog.open} onOpenChange={(open) => setDeactivateDialog((prev) => ({ ...prev, open }))}>
+      <Dialog
+        open={deactivateDialog.open}
+        onOpenChange={(open) =>
+          setDeactivateDialog((prev) => ({ ...prev, open }))
+        }
+      >
         <DialogContent dir="rtl">
-          <DialogHeader><DialogTitle>تعطيل مجدول للامتحان</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>تعطيل مجدول للامتحان</DialogTitle>
+          </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">سيبقى الامتحان نشطًا إلى أن يصل تاريخ ووقت التعطيل المحدد.</p>
+            <p className="text-sm text-muted-foreground">
+              سيبقى الامتحان نشطًا إلى أن يصل تاريخ ووقت التعطيل المحدد.
+            </p>
             <div className="space-y-2">
-              <Label htmlFor="scheduled-deactivate-at">تاريخ ووقت التعطيل</Label>
+              <Label htmlFor="scheduled-deactivate-at">
+                تاريخ ووقت التعطيل
+              </Label>
               <Input
                 id="scheduled-deactivate-at"
                 type="datetime-local"
                 value={deactivateDialog.scheduledDeactivateAt}
-                onChange={(e) => setDeactivateDialog((prev) => ({ ...prev, scheduledDeactivateAt: e.target.value }))}
+                onChange={(e) =>
+                  setDeactivateDialog((prev) => ({
+                    ...prev,
+                    scheduledDeactivateAt: e.target.value,
+                  }))
+                }
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setDeactivateDialog({ open: false, id: "", name: "", scheduledDeactivateAt: "" })}>إلغاء</Button>
-            <Button variant="outline" onClick={handleClearScheduledDeactivate}>إلغاء التعطيل المجدول</Button>
+            <Button
+              variant="ghost"
+              onClick={() =>
+                setDeactivateDialog({
+                  open: false,
+                  id: "",
+                  name: "",
+                  scheduledDeactivateAt: "",
+                })
+              }
+            >
+              إلغاء
+            </Button>
+            <Button variant="outline" onClick={handleClearScheduledDeactivate}>
+              إلغاء التعطيل المجدول
+            </Button>
             <Button onClick={handleScheduleDeactivate}>حفظ الجدولة</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog((prev) => ({ ...prev, open }))}>
+      <AlertDialog
+        open={deleteDialog.open}
+        onOpenChange={(open) => setDeleteDialog((prev) => ({ ...prev, open }))}
+      >
         <AlertDialogContent dir="rtl">
-          <AlertDialogHeader><AlertDialogTitle>تأكيد الحذف</AlertDialogTitle><AlertDialogDescription>هل أنت متأكد من حذف الامتحان &quot;{deleteDialog.name}&quot;؟ سيتم حذف الدرجات وأوراق التصحيح التابعة له.</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>إلغاء</AlertDialogCancel><AlertDialogAction onClick={handleDeleteExam} disabled={isDeletingExam} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingExam ? "جاري الحذف..." : "حذف"}</AlertDialogAction></AlertDialogFooter>
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل أنت متأكد من حذف الامتحان &quot;{deleteDialog.name}&quot;؟ سيتم
+              حذف الدرجات وأوراق التصحيح التابعة له.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteExam}
+              disabled={isDeletingExam}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingExam ? "جاري الحذف..." : "حذف"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
