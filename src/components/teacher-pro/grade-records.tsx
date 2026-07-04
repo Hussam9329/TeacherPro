@@ -928,6 +928,80 @@ export function GradeRecordsView() {
               </Select>
             </div>
             <div className="space-y-1">
+              <Label htmlFor="grade-records-program" className="text-xs">
+                نوع الدورة
+              </Label>
+              <Select
+                value={filterCourseProgram || "all"}
+                onValueChange={(v) => {
+                  setFilterCourseProgram(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="grade-records-program">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {availableProgramsForFilter.map((program) => (
+                    <SelectItem key={program} value={program}>
+                      {program}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {filterCourseProgram === "كورسات" && (
+              <div className="space-y-1">
+                <Label htmlFor="grade-records-term" className="text-xs">
+                  الكورس
+                </Label>
+                <Select
+                  value={filterCourseTerm || "all"}
+                  onValueChange={(v) => {
+                    setFilterCourseTerm(v === "all" ? "" : v);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger id="grade-records-term">
+                    <SelectValue placeholder="الكل" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">الكل</SelectItem>
+                    {STUDENT_FILTER_COURSE_TERMS.map((term) => (
+                      <SelectItem key={term} value={term}>
+                        {term}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-1">
+              <Label htmlFor="grade-records-study-type" className="text-xs">
+                نوع الدراسة
+              </Label>
+              <Select
+                value={filterStudyType || "all"}
+                onValueChange={(v) => {
+                  setFilterStudyType(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="grade-records-study-type">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {availableStudyTypesForFilter.map((studyType) => (
+                    <SelectItem key={studyType} value={studyType}>
+                      {studyType}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
               <Label htmlFor="grade-records-exam" className="text-xs">
                 الامتحان
               </Label>
