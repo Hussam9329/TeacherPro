@@ -441,16 +441,19 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     if (view !== "leaves") return;
     let cancelled = false;
 
-    studentApi
-      .list({
-        q: debouncedGlobalSearch,
-        pageSize: debouncedGlobalSearch.trim() ? 30 : 50,
-      })
-      .then((studentResult) => {
+    // حمّل المفصولين بشكل صريح (صفحة التعهدات تعتمد عليهم)
+    // + حمّل الطلاب العاديين للبحث
+    Promise.all([
+      studentApi.list({ status: "مفصول", pageSize: 200 }),
+      studentApi.list({ pageSize: 200 }),
+    ])
+      .then(([dismissedResult, allResult]) => {
         if (cancelled) return;
-        mergeStudentsCache(
-          (studentResult?.students || []) as unknown as Student[],
-        );
+        const all = [
+          ...(dismissedResult?.students || []),
+          ...(allResult?.students || []),
+        ];
+        mergeStudentsCache(all as unknown as Student[]);
       })
       .catch(() => {
         // الصفحة تستخدم آخر كاش متاح إذا فشل الاتصال المؤقت.
