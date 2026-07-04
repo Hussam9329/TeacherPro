@@ -1297,6 +1297,78 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     courseName,
   }));
 
+  const fetchCallExportRows = async (): Promise<CallExportRow[]> => {
+    if (!callCourseId || !callExamId || !selectedCallExam) return [];
+    const result = await callCandidatesApi.listAll({
+      courseId: callCourseId,
+      examId: callExamId,
+      statusFilter: callStatusFilter,
+      q: callGeneralSearch,
+      filterQ: callFilterSearch,
+      pageSize: 200,
+    });
+    if (!result) throw new Error("call candidates export failed");
+
+    const serverStudents = (result.students || []) as unknown as Student[];
+    const serverGrades = (result.grades || []) as unknown as Grade[];
+    const serverCalls = (result.studentCalls || []) as unknown as StudentCall[];
+
+    if (serverStudents.length) mergeStudentsCache(serverStudents);
+    if (serverGrades.length) mergeGradesCache(serverGrades);
+
+    const gradeByStudentId = new Map<string, Grade>();
+    serverGrades.forEach((grade) => gradeByStudentId.set(grade.studentId, grade));
+
+    const serverCallLookup = new Map<string, StudentCall>();
+    serverCalls.forEach((call) => {
+      const key = `${call.studentId}::${String(call.examId || "")}::${call.category}`;
+      if (!serverCallLookup.has(key)) serverCallLookup.set(key, call);
+    });
+
+    const exportedRows = serverStudents.flatMap<CallExportRow>((student) => {
+      const grade = gradeByStudentId.get(student.id);
+      if (!grade) return [];
+      const cls = classification(grade, selectedCallExam, student);
+      if (nonCallableGradeKinds.has(cls.kind)) return [];
+
+      const info = gradeCallInfo(grade, selectedCallExam);
+      const item: CallGradeItem = {
+        id: `grade:${grade.id}`,
+        callKey: `grade:${grade.id}`,
+        exam: selectedCallExam,
+        grade,
+        ...info,
+        sortTime: gradeTimeValue(grade, selectedCallExam),
+      };
+      if (callStatusFilter && callStatusFilter !== "all" && !callGradeMatchesStatusFilter(callStatusFilter, item)) {
+        return [];
+      }
+
+      const row: CallStudentRow = {
+        id: `student:${student.id}`,
+        student,
+        items: [item],
+        focusItem: item,
+      };
+      const exactKey = `${student.id}::${selectedCallExam.id}::${item.callKey}`;
+      const legacyKey = `${student.id}::${selectedCallExam.id}::${item.category}`;
+      const noteKey = `${student.id}::::${CALL_STUDENT_NOTE_CATEGORY}`;
+      const call = serverCallLookup.get(exactKey) || serverCallLookup.get(legacyKey);
+      const note = serverCallLookup.get(noteKey)?.notes || "";
+
+      return [{ row, status: callStatusForLog(call), note, courseName }];
+    });
+
+    return exportedRows.sort((a, b) => {
+      const aTime = a.row.focusItem?.sortTime || 0;
+      const bTime = b.row.focusItem?.sortTime || 0;
+      return (
+        bTime - aTime ||
+        String(a.row.student.name || "").localeCompare(String(b.row.student.name || ""), "ar")
+      );
+    });
+  };
+
   const saveCallStatus = (row: CallStudentRow, status: ContactStatus) => {
     if (!row.focusItem) return;
     const item = row.focusItem;
@@ -2086,6 +2158,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                       title="تصدير المكالمات"
                       fileName={callExportFileName}
                       rows={callExportRows}
+                      fetchRows={fetchCallExportRows}
                       columns={callExportColumns}
                       triggerLabel="تصدير"
                       description="تقرير المكالمات حسب الدورة والامتحان والفلاتر الحالية"

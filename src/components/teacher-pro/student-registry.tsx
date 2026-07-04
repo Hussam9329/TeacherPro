@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
-import { studentApi } from "@/lib/api";
+import { studentApi, studentStatsApi } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -358,6 +358,7 @@ export function StudentRegistryView() {
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
   const [activeStudentsTotal, setActiveStudentsTotal] = useState<number | null>(null);
   const [dismissedStudentsTotal, setDismissedStudentsTotal] = useState<number | null>(null);
+  const [noActiveChapterStudentsTotal, setNoActiveChapterStudentsTotal] = useState<number | null>(null);
 
   const [dismissDialog, setDismissDialog] = useState<{
     student: Student | null;
@@ -471,19 +472,19 @@ export function StudentRegistryView() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      studentApi.list({ status: "نشط", page: 1, pageSize: 1 }),
-      studentApi.list({ status: "مفصول", page: 1, pageSize: 1 }),
-    ])
-      .then(([activeResult, dismissedResult]) => {
+    studentStatsApi
+      .get()
+      .then((result) => {
         if (cancelled) return;
-        setActiveStudentsTotal(activeResult ? Number(activeResult.totalCount || 0) : null);
-        setDismissedStudentsTotal(dismissedResult ? Number(dismissedResult.totalCount || 0) : null);
+        setActiveStudentsTotal(result ? Number(result.active || 0) : null);
+        setDismissedStudentsTotal(result ? Number(result.dismissed || 0) : null);
+        setNoActiveChapterStudentsTotal(result ? Number(result.noActiveChapter || 0) : null);
       })
       .catch(() => {
         if (cancelled) return;
         setActiveStudentsTotal(null);
         setDismissedStudentsTotal(null);
+        setNoActiveChapterStudentsTotal(null);
       });
     return () => {
       cancelled = true;
@@ -890,9 +891,6 @@ export function StudentRegistryView() {
   const dismissedStudents = students.filter(
     (student) => student.status === "مفصول",
   );
-  const noActiveChapterStudents = students.filter(
-    (student) => !activeChapterForCourse(student.courseId),
-  );
 
   const handleDismiss = () => {
     if (!dismissDialog.student) return;
@@ -1193,7 +1191,7 @@ export function StudentRegistryView() {
             <div>
               <p className="text-xs text-muted-foreground">بدون فصل نشط</p>
               <p className="text-2xl font-black text-amber-600">
-                {noActiveChapterStudents.length}
+                {noActiveChapterStudentsTotal ?? "…"}
               </p>
             </div>
             <Button

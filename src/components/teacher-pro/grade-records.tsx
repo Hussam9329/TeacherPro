@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
-import { gradeApi } from "@/lib/api";
+import { gradeApi, gradeCoverageStatsApi, type GradeCoverageStatsResponse } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +50,6 @@ import { useActionLock } from "@/hooks/use-action-lock";
 import { CheckCircle2, UserX } from "lucide-react";
 import { StatCard } from "./ui-kit";
 import {
-  buildArabicLetterOptions,
   gradeMatchesStatusFilter,
   gradeStatusFilterLabels,
   gradeStatusFilterOptions,
@@ -75,15 +74,6 @@ type GradeExportRow = {
 const englishNumberFormatter = new Intl.NumberFormat("en-US");
 const formatEnglishNumber = (value: number) =>
   englishNumberFormatter.format(value);
-
-const clientOnlyGradeStatusFilters = new Set<GradeStatusFilter>([
-  "full-mark",
-  "grace-period",
-  "discounted",
-  "failed",
-  "academic-accounting",
-  "has-grade",
-]);
 
 function serverStatusForGradeFilter(filter: GradeStatusFilter): GradeStatus | undefined {
   if (filter === "absent") return "غائب";
@@ -152,7 +142,8 @@ export function GradeRecordsView() {
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [serverGradesLoading, setServerGradesLoading] = useState(false);
   const [serverGradesError, setServerGradesError] = useState<string | null>(null);
-  const [serverClientFiltered, setServerClientFiltered] = useState(false);
+  const [gradeCoverageStats, setGradeCoverageStats] = useState<GradeCoverageStatsResponse | null>(null);
+  const [gradeCoverageStatsLoading, setGradeCoverageStatsLoading] = useState(false);
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
@@ -176,35 +167,23 @@ export function GradeRecordsView() {
 
   useEffect(() => {
     let cancelled = false;
-    const needsClientStatusFilter = clientOnlyGradeStatusFilters.has(filterStatus);
-    const rawStatus = needsClientStatusFilter
-      ? undefined
-      : serverStatusForGradeFilter(filterStatus);
+    const rawStatus = serverStatusForGradeFilter(filterStatus);
 
-    setServerClientFiltered(needsClientStatusFilter);
     setServerGradesLoading(true);
     setServerGradesError(null);
 
-    const request = needsClientStatusFilter
-      ? gradeApi.list({
-          examId: filterExamId || undefined,
-          q: debouncedSearch || undefined,
-          courseId: filterCourseId || undefined,
-          nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
-          page,
-          pageSize,
-        })
-      : gradeApi.list({
-          examId: filterExamId || undefined,
-          status: rawStatus,
-          q: debouncedSearch || undefined,
-          courseId: filterCourseId || undefined,
-          nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
-          page,
-          pageSize,
-        });
-
-    request.then((result) => {
+    gradeApi
+      .list({
+        examId: filterExamId || undefined,
+        status: rawStatus,
+        statusFilter: filterStatus,
+        q: debouncedSearch || undefined,
+        courseId: filterCourseId || undefined,
+        nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
+        page,
+        pageSize,
+      })
+      .then((result) => {
         if (cancelled) return;
         if (!result) {
           setServerGrades(null);
@@ -250,6 +229,31 @@ export function GradeRecordsView() {
     mergeGradesCache,
     mergeStudentsCache,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setGradeCoverageStatsLoading(true);
+    gradeCoverageStatsApi
+      .get({
+        examId: filterExamId || undefined,
+        courseId: filterCourseId || undefined,
+        nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
+        q: debouncedSearch || undefined,
+      })
+      .then((result) => {
+        if (!cancelled) setGradeCoverageStats(result);
+      })
+      .catch(() => {
+        if (!cancelled) setGradeCoverageStats(null);
+      })
+      .finally(() => {
+        if (!cancelled) setGradeCoverageStatsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, filterExamId, filterNameLetter, filterCourseId, serverRefreshKey]);
 
   const isAcademicAccountingRow = (gradeId: string) => {
     const grade = grades.find((item) => item.id === gradeId);
@@ -367,8 +371,8 @@ export function GradeRecordsView() {
     return map;
   }, [exams, serverGrades]);
   const nameLetterOptions = useMemo(
-    () => buildArabicLetterOptions(students.map((student) => student.name)),
-    [students],
+    () => ["ا", "ب", "ت", "ث", "ج", "ح", "خ", "د", "ذ", "ر", "ز", "س", "ش", "ص", "ض", "ط", "ظ", "ع", "غ", "ف", "ق", "ك", "ل", "م", "ن", "ه", "و", "ي"],
+    [],
   );
 
   const gradeCoverageDashboard = useMemo(() => {
@@ -449,6 +453,20 @@ export function GradeRecordsView() {
     debouncedSearch,
   ]);
 
+  const displayedGradeCoverage = gradeCoverageStats
+    ? {
+        withGrade: gradeCoverageStats.withGrade,
+        withoutGrade: gradeCoverageStats.withoutGrade,
+        total: gradeCoverageStats.total,
+        scopeLabel: filterExamId
+          ? `ضمن ${examById.get(filterExamId)?.name || "الامتحان المحدد"}`
+          : "ضمن كل الامتحانات",
+        missingHint: filterExamId
+          ? "لم تُدخل لهم درجة لهذا الامتحان"
+          : "لا يملكون أي سجل درجة لحد الآن",
+      }
+    : gradeCoverageDashboard;
+
   const localFiltered = useMemo(() => {
     return grades.filter((grade) => {
       const student = studentById.get(grade.studentId);
@@ -490,36 +508,14 @@ export function GradeRecordsView() {
     classification,
   ]);
 
-  const serverLocallyFiltered = useMemo(() => {
-    return (serverGrades ?? []).filter((grade) => {
-      const student = studentById.get(grade.studentId);
-      const exam = examById.get(grade.examId);
-      if (!student || !exam || !isGradeEntered(grade, exam)) return false;
-      const cls = classification(grade, exam, student);
-      return gradeMatchesStatusFilter(filterStatus, grade, exam, cls);
-    });
-  }, [serverGrades, studentById, examById, filterStatus, classification]);
-
   const usingServerGrades = serverGrades !== null;
-  const filtered = usingServerGrades
-    ? serverClientFiltered
-      ? serverLocallyFiltered
-      : (serverGrades ?? [])
-    : localFiltered;
-  const filteredTotalCount = usingServerGrades
-    ? serverClientFiltered
-      ? serverLocallyFiltered.length
-      : serverTotalCount
-    : localFiltered.length;
+  const filtered = usingServerGrades ? (serverGrades ?? []) : localFiltered;
+  const filteredTotalCount = usingServerGrades ? serverTotalCount : localFiltered.length;
   const totalPages = usingServerGrades
-    ? serverClientFiltered
-      ? Math.max(1, Math.ceil(serverLocallyFiltered.length / pageSize))
-      : serverTotalPages
+    ? serverTotalPages
     : Math.max(1, Math.ceil(localFiltered.length / pageSize));
   const paged = usingServerGrades
-    ? serverClientFiltered
-      ? serverLocallyFiltered.slice((page - 1) * pageSize, page * pageSize)
-      : (serverGrades ?? [])
+    ? (serverGrades ?? [])
     : localFiltered.slice((page - 1) * pageSize, page * pageSize);
 
   useEffect(() => {
@@ -660,27 +656,22 @@ export function GradeRecordsView() {
 
   const fetchGradeExportRows = async (): Promise<GradeExportRow[]> => {
     const params = new URLSearchParams();
-    const needsClientStatusFilter = clientOnlyGradeStatusFilters.has(filterStatus);
-    const rawStatus = needsClientStatusFilter ? undefined : serverStatusForGradeFilter(filterStatus);
+    const rawStatus = serverStatusForGradeFilter(filterStatus);
     if (filterExamId) params.set("examId", filterExamId);
     if (rawStatus) params.set("status", rawStatus);
+    params.set("statusFilter", filterStatus);
     if (debouncedSearch) params.set("q", debouncedSearch);
     if (filterCourseId) params.set("courseId", filterCourseId);
     if (filterNameLetter !== "all") params.set("nameLetter", filterNameLetter);
     const res = await fetch(`/api/grades/export?${params.toString()}`, { credentials: "same-origin" });
     if (!res.ok) throw new Error("grades export failed");
     const json = (await res.json()) as { grades?: HydratedGrade[] };
-    return (json.grades || [])
-      .map((grade) => {
-        const student = grade.student || studentById.get(grade.studentId);
-        const exam = (grade.exam as (typeof exams)[number] | undefined) || examById.get(grade.examId);
-        const cls = exam ? classification(grade, exam, student) : { text: "", kind: "" };
-        return { grade, student, exam, classificationText: cls.text, classificationResult: cls };
-      })
-      .filter(({ grade, exam, classificationResult }) =>
-        exam ? gradeMatchesStatusFilter(filterStatus, grade, exam, classificationResult) : true,
-      )
-      .map(({ grade, student, exam, classificationText }) => ({ grade, student, exam, classificationText }));
+    return (json.grades || []).map((grade) => {
+      const student = grade.student || studentById.get(grade.studentId);
+      const exam = (grade.exam as (typeof exams)[number] | undefined) || examById.get(grade.examId);
+      const cls = exam ? classification(grade, exam, student) : { text: "" };
+      return { grade, student, exam, classificationText: cls.text };
+    });
   };
 
 
@@ -689,17 +680,17 @@ export function GradeRecordsView() {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <StatCard
           label="طلاب لديهم درجة"
-          value={formatEnglishNumber(gradeCoverageDashboard.withGrade)}
+          value={gradeCoverageStatsLoading && !gradeCoverageStats ? "…" : formatEnglishNumber(displayedGradeCoverage.withGrade)}
           icon={CheckCircle2}
           tone="success"
-          hint={`${gradeCoverageDashboard.scopeLabel} من أصل ${formatEnglishNumber(gradeCoverageDashboard.total)} طالب`}
+          hint={`${displayedGradeCoverage.scopeLabel} من أصل ${formatEnglishNumber(displayedGradeCoverage.total)} طالب`}
         />
         <StatCard
           label="طلاب بلا درجة"
-          value={formatEnglishNumber(gradeCoverageDashboard.withoutGrade)}
+          value={gradeCoverageStatsLoading && !gradeCoverageStats ? "…" : formatEnglishNumber(displayedGradeCoverage.withoutGrade)}
           icon={UserX}
           tone="warning"
-          hint={gradeCoverageDashboard.missingHint}
+          hint={displayedGradeCoverage.missingHint}
         />
       </div>
 

@@ -76,6 +76,145 @@ function buildGradeExportWhere(searchParams: URLSearchParams): Prisma.GradeWhere
   return and.length > 0 ? { AND: and } : {};
 }
 
+type GradeStatusFilter =
+  | "all"
+  | "full-mark"
+  | "grace-period"
+  | "absent"
+  | "discounted"
+  | "failed"
+  | "academic-accounting"
+  | "cheating"
+  | "has-grade";
+
+type GradeWithRelations = Prisma.GradeGetPayload<{
+  include: { student: { include: { studentLeaves: true } }; exam: true };
+}>;
+
+const databaseComputedGradeFilters = new Set<GradeStatusFilter>([
+  "full-mark",
+  "grace-period",
+  "discounted",
+  "failed",
+  "academic-accounting",
+  "has-grade",
+]);
+
+function dateKey(value: unknown): string {
+  return String(value || '').slice(0, 10);
+}
+
+function isGradeEnteredForExport(grade: { status?: string | null; score?: number | null }, exam: { fullMark?: number | null }): boolean {
+  if (grade.status === 'درجة') {
+    const score = Number(grade.score);
+    return Number.isFinite(score) && score >= 0 && score <= Number(exam.fullMark || 0);
+  }
+  return grade.status === 'غائب' || grade.status === 'غش';
+}
+
+function isExamBeforeStudentRegistration(
+  student: { createdAt?: Date | string | null },
+  exam: { date?: Date | string | null },
+): boolean {
+  const registeredAt = dateKey(student.createdAt);
+  const examDate = dateKey(exam.date);
+  return Boolean(registeredAt && examDate && examDate < registeredAt);
+}
+
+function isExamWithinGracePeriod(
+  student: { createdAt?: Date | string | null; accountingGraceDays?: number | null },
+  exam: { date?: Date | string | null },
+): boolean {
+  const days = Math.max(0, Math.trunc(Number(student.accountingGraceDays || 0)));
+  if (days <= 0) return false;
+  const start = new Date(`${dateKey(student.createdAt)}T00:00:00.000Z`);
+  const examDate = new Date(`${dateKey(exam.date)}T00:00:00.000Z`);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(examDate.getTime())) return false;
+  const endExclusive = new Date(start);
+  endExclusive.setUTCDate(endExclusive.getUTCDate() + days);
+  return examDate >= start && examDate < endExclusive;
+}
+
+function leaveAppliesToExam(
+  leave: { examId?: string | null; leaveType?: string | null; date?: Date | string | null; dateFrom?: Date | string | null; dateTo?: Date | string | null },
+  exam: { id: string; date?: Date | string | null },
+): boolean {
+  if ((leave.leaveType || 'exam') === 'period') {
+    const examDate = dateKey(exam.date);
+    const from = dateKey(leave.dateFrom || leave.date);
+    const to = dateKey(leave.dateTo || leave.dateFrom || leave.date);
+    return Boolean(examDate && from && to && examDate >= from && examDate <= to);
+  }
+  return leave.examId === exam.id;
+}
+
+function exportClassificationKind(grade: GradeWithRelations): string {
+  const student = grade.student;
+  const exam = grade.exam;
+  if (student.studentLeaves.some((leave) => leaveAppliesToExam(leave, exam))) return 'excused';
+  if (!isGradeEnteredForExport(grade, exam)) return 'missing';
+  if (isExamWithinGracePeriod(student, exam)) return 'grace';
+  if (isExamBeforeStudentRegistration(student, exam)) return 'grace';
+  if (grade.status === 'غش') return 'cheat';
+  if (exam.noDiscount) {
+    if (grade.status === 'درجة' && Number(grade.score || 0) >= Number(exam.passMark || 0)) return 'pass';
+    return 'no-discount';
+  }
+  if (grade.status === 'غائب') return exam.type === 'فاينل' ? 'dismissal' : 'deducted';
+  const score = Number(grade.score) || 0;
+  if (exam.type === 'فاينل') {
+    if (score === 0 || (exam.dismissalGrade !== null && score <= Number(exam.dismissalGrade))) return 'dismissal';
+    if (score >= Number(exam.passMark || 0)) return 'pass';
+    return 'fail';
+  }
+  if (score >= Number(exam.passMark || 0)) return 'pass';
+  if (score > Number(exam.discountMark || 0) && score < Number(exam.passMark || 0)) return 'academic-accounting';
+  return 'deducted';
+}
+
+function gradeMatchesExportStatusFilter(filter: GradeStatusFilter, grade: GradeWithRelations): boolean {
+  if (!isGradeEnteredForExport(grade, grade.exam)) return false;
+  if (!filter || filter === 'all') return true;
+
+  const score = grade.status === 'درجة' && grade.score !== null ? Number(grade.score) : null;
+  const fullMark = Number(grade.exam.fullMark || 0);
+  const passMark = Number(grade.exam.passMark || 0);
+  const discountMark = Number(grade.exam.discountMark || 0);
+  const kind = exportClassificationKind(grade);
+  const isNoAccountingKind = ['grace', 'before-registration', 'excused'].includes(kind);
+
+  switch (filter) {
+    case 'full-mark':
+      return !isNoAccountingKind && score !== null && score === fullMark;
+    case 'grace-period':
+      return kind === 'grace' || kind === 'before-registration';
+    case 'absent':
+      return !isNoAccountingKind && grade.status === 'غائب';
+    case 'discounted':
+      return !isNoAccountingKind && score !== null && !grade.exam.noDiscount && score <= discountMark;
+    case 'failed':
+      return !isNoAccountingKind && score !== null && score < passMark;
+    case 'academic-accounting':
+      return (
+        !isNoAccountingKind &&
+        (kind === 'academic-accounting' ||
+          (score !== null && !grade.exam.noDiscount && score > discountMark && score < passMark))
+      );
+    case 'cheating':
+      return !isNoAccountingKind && grade.status === 'غش';
+    case 'has-grade':
+      return score !== null;
+    default:
+      return true;
+  }
+}
+
+function normalizeGradeStatusFilter(searchParams: URLSearchParams): GradeStatusFilter {
+  const raw = normalizeListFilter(searchParams.get('statusFilter'));
+  const allowed: GradeStatusFilter[] = ['all', 'full-mark', 'grace-period', 'absent', 'discounted', 'failed', 'academic-accounting', 'cheating', 'has-grade'];
+  return allowed.includes(raw as GradeStatusFilter) ? (raw as GradeStatusFilter) : 'all';
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, 'grades.view');
   if (authError) return authError;
@@ -83,10 +222,27 @@ export async function GET(req: NextRequest) {
   try {
     const searchParams = new URL(req.url).searchParams;
     const where = buildGradeExportWhere(searchParams);
-    const [totalCount, grades] = await Promise.all([
-      db.grade.count({ where }),
-      db.grade.findMany({
+    const statusFilter = normalizeGradeStatusFilter(searchParams);
+
+    if (databaseComputedGradeFilters.has(statusFilter)) {
+      const allGrades = await db.grade.findMany({
         where,
+        orderBy: { updatedAt: 'desc' },
+        include: { student: { include: { studentLeaves: true } }, exam: true },
+      });
+      const grades = allGrades.filter((grade) => gradeMatchesExportStatusFilter(statusFilter, grade));
+      return NextResponse.json({ grades, total: grades.length, totalCount: grades.length, capped: false });
+    }
+
+    const finalWhere: Prisma.GradeWhereInput = statusFilter === 'absent'
+      ? { AND: [where, { status: 'غائب' }] }
+      : statusFilter === 'cheating'
+        ? { AND: [where, { status: 'غش' }] }
+        : where;
+    const [totalCount, grades] = await Promise.all([
+      db.grade.count({ where: finalWhere }),
+      db.grade.findMany({
+        where: finalWhere,
         orderBy: { updatedAt: 'desc' },
         include: { student: true, exam: true },
       }),

@@ -428,6 +428,7 @@ export interface GradeListQuery {
   examId?: string;
   studentId?: string;
   status?: string;
+  statusFilter?: string;
   q?: string;
   courseId?: string;
   nameLetter?: string;
@@ -440,12 +441,27 @@ const DEFAULT_GRADE_PAGE_SIZE = 100;
 const LIST_ALL_PAGE_SIZE = 500;
 
 
+export interface StudentStatsResponse {
+  total: number;
+  active: number;
+  dismissed: number;
+  noActiveChapter: number;
+  source: "database";
+}
+
 export interface OpportunityStatsResponse {
   total: number;
   hasOpportunities: number;
   noOpportunities: number;
   dismissed: number;
   active: number;
+  source: "database";
+}
+
+export interface GradeCoverageStatsResponse {
+  withGrade: number;
+  withoutGrade: number;
+  total: number;
   source: "database";
 }
 
@@ -653,6 +669,10 @@ export const courseChapterApi = {
 
 // ─── Student API ──────────────────────────────────────────────────────────────
 
+export const studentStatsApi = {
+  get: () => apiGet<StudentStatsResponse>("students/stats"),
+};
+
 export const studentApi = {
   list: async (
     query: StudentListQuery = {},
@@ -730,6 +750,7 @@ export const gradeApi = {
       examId: query.examId,
       studentId: query.studentId,
       status: query.status,
+      statusFilter: query.statusFilter,
       q: query.q,
       courseId: query.courseId,
       nameLetter: query.nameLetter,
@@ -806,6 +827,18 @@ export const gradeApi = {
 
 // ─── Database Stats APIs ─────────────────────────────────────────────────────
 
+export const gradeCoverageStatsApi = {
+  get: (query: { examId?: string; courseId?: string; nameLetter?: string; q?: string } = {}) => {
+    const queryString = buildQueryString({
+      examId: query.examId,
+      courseId: query.courseId,
+      nameLetter: query.nameLetter,
+      q: query.q,
+    });
+    return apiGet<GradeCoverageStatsResponse>(`grades/stats${queryString ? `?${queryString}` : ""}`);
+  },
+};
+
 export const opportunityStatsApi = {
   get: (query: { courseId?: string; status?: string; opportunityCount?: string; q?: string } = {}) => {
     const queryString = buildQueryString({
@@ -843,6 +876,39 @@ export const callCandidatesApi = {
       pageSize: query.pageSize ?? 120,
     });
     return apiGet<CallCandidatesResponse>(`student-calls/candidates${queryString ? `?${queryString}` : ""}`);
+  },
+  listAll: async (query: CallCandidatesQuery = {}): Promise<CallCandidatesResponse | null> => {
+    const pageSize = Math.min(Math.max(Number(query.pageSize || 200), 1), 200);
+    const collectedStudents: Array<Record<string, unknown>> = [];
+    const collectedGrades: Array<Record<string, unknown>> = [];
+    const collectedCalls: Array<Record<string, unknown>> = [];
+    let page = 1;
+    let totalCount = 0;
+    let totalPages = 1;
+
+    while (page <= totalPages) {
+      const result = await callCandidatesApi.get({ ...query, page, pageSize });
+      if (!result) return null;
+      totalCount = Number(result.totalCount || 0);
+      totalPages = Math.max(1, Number(result.totalPages || 1));
+      collectedStudents.push(...(result.students || []));
+      collectedGrades.push(...(result.grades || []));
+      collectedCalls.push(...(result.studentCalls || []));
+      if (!result.hasMore || page >= totalPages) break;
+      page += 1;
+    }
+
+    return {
+      students: collectedStudents,
+      grades: collectedGrades,
+      studentCalls: collectedCalls,
+      totalCount,
+      page: 1,
+      pageSize: collectedStudents.length,
+      totalPages: 1,
+      hasMore: false,
+      source: "database",
+    };
   },
 };
 
