@@ -49,10 +49,7 @@ import {
 } from "@/lib/grade-entry-notes";
 import { useActionLock } from "@/hooks/use-action-lock";
 import {
-  STUDENT_FILTER_COURSE_PROGRAMS,
   STUDENT_FILTER_COURSE_TERMS,
-  STUDENT_FILTER_STUDY_TYPES,
-  getStudentLocationFilterOptions,
   studentMatchesListFilters,
 } from "@/lib/student-list-filters";
 import {
@@ -65,7 +62,12 @@ import {
   splitSelection,
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
-import { examMatchesAcademicFilters } from "@/lib/filter-sequence";
+import {
+  examMatchesAcademicFilters,
+  getAcademicCourseProgramFilterOptions,
+  getAcademicLocationFilterOptions,
+  getAcademicStudyTypeFilterOptions,
+} from "@/lib/filter-sequence";
 
 type DraftGrade = {
   status: "درجة" | "غائب" | "غش";
@@ -315,16 +317,66 @@ export function GradeEntryView() {
     mergeGradesCache,
   ]);
 
+  const availableProgramsForFilter = useMemo(
+    () =>
+      getAcademicCourseProgramFilterOptions(
+        courses,
+        { courseId: filterCourseId },
+        students,
+      ),
+    [courses, students, filterCourseId],
+  );
+
+  const availableStudyTypesForFilter = useMemo(
+    () =>
+      getAcademicStudyTypeFilterOptions(
+        courses,
+        { courseId: filterCourseId, courseProgram: filterCourseProgram },
+        students,
+      ),
+    [courses, students, filterCourseId, filterCourseProgram],
+  );
+
   const locationFilterOptions = useMemo(
-    () => getStudentLocationFilterOptions(students),
-    [students],
+    () =>
+      getAcademicLocationFilterOptions(students, {
+        courseId: filterCourseId,
+        courseProgram: filterCourseProgram,
+        courseTerm: filterCourseProgram === "كورسات" ? filterCourseTerm : "",
+        studyType: filterStudyType,
+      }),
+    [
+      students,
+      filterCourseId,
+      filterCourseProgram,
+      filterCourseTerm,
+      filterStudyType,
+    ],
   );
 
   useEffect(() => {
+    if (filterCourseProgram && !availableProgramsForFilter.includes(filterCourseProgram as any)) {
+      setFilterCourseProgram("");
+      return;
+    }
     if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
       setFilterCourseTerm("");
     }
-  }, [filterCourseProgram, filterCourseTerm]);
+    if (filterStudyType && !availableStudyTypesForFilter.includes(filterStudyType as any)) {
+      setFilterStudyType("");
+    }
+    if (filterLocation && !locationFilterOptions.includes(filterLocation)) {
+      setFilterLocation("");
+    }
+  }, [
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
+    filterLocation,
+    availableProgramsForFilter,
+    availableStudyTypesForFilter,
+    locationFilterOptions,
+  ]);
 
   useEffect(() => {
     setEntryPage(1);
@@ -1294,7 +1346,7 @@ export function GradeEntryView() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {STUDENT_FILTER_COURSE_PROGRAMS.map((program) => (
+                  {availableProgramsForFilter.map((program) => (
                     <SelectItem key={program} value={program}>
                       {program}
                     </SelectItem>
@@ -1338,7 +1390,7 @@ export function GradeEntryView() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {STUDENT_FILTER_STUDY_TYPES.map((studyType) => (
+                  {availableStudyTypesForFilter.map((studyType) => (
                     <SelectItem key={studyType} value={studyType}>
                       {studyType}
                     </SelectItem>

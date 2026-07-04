@@ -53,11 +53,13 @@ import {
 import { useActionLock } from "@/hooks/use-action-lock";
 import { CheckCircle2, UserX } from "lucide-react";
 import { StatCard } from "./ui-kit";
-import { examMatchesAcademicFilters } from "@/lib/filter-sequence";
 import {
-  STUDENT_FILTER_COURSE_PROGRAMS,
+  examMatchesAcademicFilters,
+  getAcademicCourseProgramFilterOptions,
+  getAcademicStudyTypeFilterOptions,
+} from "@/lib/filter-sequence";
+import {
   STUDENT_FILTER_COURSE_TERMS,
-  STUDENT_FILTER_STUDY_TYPES,
   studentMatchesListFilters,
 } from "@/lib/student-list-filters";
 import {
@@ -424,11 +426,44 @@ export function GradeRecordsView() {
     return map;
   }, [students, serverGrades]);
 
+  const availableProgramsForFilter = useMemo(
+    () =>
+      getAcademicCourseProgramFilterOptions(
+        courses,
+        { courseId: filterCourseId },
+        students,
+      ),
+    [courses, students, filterCourseId],
+  );
+
+  const availableStudyTypesForFilter = useMemo(
+    () =>
+      getAcademicStudyTypeFilterOptions(
+        courses,
+        { courseId: filterCourseId, courseProgram: filterCourseProgram },
+        students,
+      ),
+    [courses, students, filterCourseId, filterCourseProgram],
+  );
+
   useEffect(() => {
+    if (filterCourseProgram && !availableProgramsForFilter.includes(filterCourseProgram as any)) {
+      setFilterCourseProgram("");
+      return;
+    }
     if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
       setFilterCourseTerm("");
     }
-  }, [filterCourseProgram, filterCourseTerm]);
+    if (filterStudyType && !availableStudyTypesForFilter.includes(filterStudyType as any)) {
+      setFilterStudyType("");
+    }
+  }, [
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
+    availableProgramsForFilter,
+    availableStudyTypesForFilter,
+  ]);
 
   const filteredExamOptions = useMemo(
     () =>
@@ -908,7 +943,7 @@ export function GradeRecordsView() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {STUDENT_FILTER_COURSE_PROGRAMS.map((program) => (
+                  {availableProgramsForFilter.map((program) => (
                     <SelectItem key={program} value={program}>
                       {program}
                     </SelectItem>
@@ -958,7 +993,7 @@ export function GradeRecordsView() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {STUDENT_FILTER_STUDY_TYPES.map((studyType) => (
+                  {availableStudyTypesForFilter.map((studyType) => (
                     <SelectItem key={studyType} value={studyType}>
                       {studyType}
                     </SelectItem>

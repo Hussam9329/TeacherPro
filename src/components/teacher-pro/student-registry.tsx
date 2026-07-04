@@ -44,7 +44,6 @@ import {
 import {
   COURSE_TERMS,
   getAvailablePrograms,
-  getAvailableStudyTypes,
   getAvailableStudyTypesForProgram,
   getBaghdadSites,
   getProvinceOptions,
@@ -78,12 +77,14 @@ import { StudentProfileDialog } from "./student-profile-dialog";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import {
-  STUDENT_FILTER_COURSE_PROGRAMS,
   STUDENT_FILTER_COURSE_TERMS,
-  STUDENT_FILTER_STUDY_TYPES,
-  getStudentLocationFilterOptions,
   studentMatchesListFilters,
 } from "@/lib/student-list-filters";
+import {
+  getAcademicCourseProgramFilterOptions,
+  getAcademicLocationFilterOptions,
+  getAcademicStudyTypeFilterOptions,
+} from "@/lib/filter-sequence";
 
 const studentExportColumns: ExportColumn<any>[] = [
   { key: "code", label: "الكود", value: (s) => s.code || "" },
@@ -366,33 +367,46 @@ export function StudentRegistryView() {
   const [filterStudyType, setFilterStudyType] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
 
-  // أنواع الدراسة المتاحة للدورة المختارة (وليس كل الأنواع الثابتة)
-  const availableStudyTypesForFilter = useMemo(() => {
-    if (!filterCourseId) return STUDENT_FILTER_STUDY_TYPES;
-    const course = courses.find((c) => c.id === filterCourseId);
-    if (!course) return STUDENT_FILTER_STUDY_TYPES;
-    const types = getAvailableStudyTypes(course);
-    return types.length > 0 ? types : STUDENT_FILTER_STUDY_TYPES;
-  }, [filterCourseId, courses]);
+  // خيارات الفلاتر تُشتق من إعدادات الدورة/نوع الدورة المختارة، وليس من قوائم ثابتة.
+  const availableProgramsForFilter = useMemo(
+    () =>
+      getAcademicCourseProgramFilterOptions(
+        courses,
+        { courseId: filterCourseId },
+        students,
+      ),
+    [courses, students, filterCourseId],
+  );
 
-  // أنواع البرنامج المتاحة للدورة المختارة
-  const availableProgramsForFilter = useMemo(() => {
-    if (!filterCourseId) return STUDENT_FILTER_COURSE_PROGRAMS;
-    const course = courses.find((c) => c.id === filterCourseId);
-    if (!course) return STUDENT_FILTER_COURSE_PROGRAMS;
-    const programs = getAvailablePrograms(course);
-    return programs.length > 0 ? programs : STUDENT_FILTER_COURSE_PROGRAMS;
-  }, [filterCourseId, courses]);
+  const availableStudyTypesForFilter = useMemo(
+    () =>
+      getAcademicStudyTypeFilterOptions(
+        courses,
+        { courseId: filterCourseId, courseProgram: filterCourseProgram },
+        students,
+      ),
+    [courses, students, filterCourseId, filterCourseProgram],
+  );
 
-  // عند تغيير الدورة، تصفير الفلاتر غير المتاحة
+  // عند تغيير فلتر سابق، يتم تنظيف أي فلتر تابع صار غير متاح.
   useEffect(() => {
+    if (filterCourseProgram && !availableProgramsForFilter.includes(filterCourseProgram as any)) {
+      setFilterCourseProgram("");
+      return;
+    }
+    if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
+      setFilterCourseTerm("");
+    }
     if (filterStudyType && !availableStudyTypesForFilter.includes(filterStudyType as any)) {
       setFilterStudyType("");
     }
-    if (filterCourseProgram && !availableProgramsForFilter.includes(filterCourseProgram as any)) {
-      setFilterCourseProgram("");
-    }
-  }, [filterCourseId, availableStudyTypesForFilter, availableProgramsForFilter, filterStudyType, filterCourseProgram]);
+  }, [
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
+    availableProgramsForFilter,
+    availableStudyTypesForFilter,
+  ]);
 
   const [viewMode, setViewMode] = useState<RegistryViewMode>("cards");
   const [pageSize, setPageSize] = useState(10);
@@ -446,26 +460,62 @@ export function StudentRegistryView() {
     [],
   );
   useEffect(() => {
-    fetch("/api/students/filter-options", { credentials: "same-origin" })
+    const params = new URLSearchParams();
+    if (filterStatus) params.set("status", filterStatus);
+    if (filterCourseId) params.set("courseId", filterCourseId);
+    if (filterCourseProgram) params.set("courseProgram", filterCourseProgram);
+    if (filterCourseProgram === "كورسات" && filterCourseTerm) {
+      params.set("courseTerm", filterCourseTerm);
+    }
+    if (filterStudyType) params.set("studyType", filterStudyType);
+
+    const fallbackLocations = () =>
+      getAcademicLocationFilterOptions(students, {
+        courseId: filterCourseId,
+        courseProgram: filterCourseProgram,
+        courseTerm: filterCourseProgram === "كورسات" ? filterCourseTerm : "",
+        studyType: filterStudyType,
+      });
+
+    fetch(`/api/students/filter-options${params.size ? `?${params.toString()}` : ""}`, {
+      credentials: "same-origin",
+    })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.locations) {
-          // Extract unique scope values for the dropdown
+        if (Array.isArray(data?.locationOptions)) {
+          setLocationFilterOptions(data.locationOptions.filter(Boolean));
+          return;
+        }
+        if (Array.isArray(data?.locations)) {
           const scopes: string[] = Array.from(
             new Set(
               data.locations
-                .map((l: { scope: string }) => l.scope)
+                .map((l: { scope?: string; value?: string }) => l.value || l.scope)
                 .filter(Boolean),
             ),
           ) as string[];
           setLocationFilterOptions(scopes);
+          return;
         }
+        setLocationFilterOptions(fallbackLocations());
       })
       .catch(() => {
-        // Fallback to local computation if server fails
-        setLocationFilterOptions(getStudentLocationFilterOptions(students));
+        setLocationFilterOptions(fallbackLocations());
       });
-  }, [students]);
+  }, [
+    students,
+    filterStatus,
+    filterCourseId,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
+  ]);
+
+  useEffect(() => {
+    if (filterLocation && !locationFilterOptions.includes(filterLocation)) {
+      setFilterLocation("");
+    }
+  }, [filterLocation, locationFilterOptions]);
 
   useEffect(() => {
     let cancelled = false;
