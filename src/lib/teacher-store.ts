@@ -2604,30 +2604,38 @@ export const useTeacherStore = create<TeacherState>()(
         const previousStudents = get().students;
         set((s) => ({ students: s.students.map((st) => st.id === id ? { ...st, ...merged } : st) }));
         get().logAction('سجل الطلاب', 'تعديل بيانات طالب', get().studentName(id));
-        const apiUpdates: Record<string, unknown> = {
-          name: merged.name,
-          school: merged.school,
-          gender: merged.gender,
-          phone: merged.phone,
-          parentPhone: merged.parentPhone,
-          telegram: merged.telegram,
-          courseProgram: merged.courseProgram,
-          courseTerm: merged.courseTerm,
-          studyType: merged.studyType,
-          locationScope: merged.locationScope,
-          baghdadMode: merged.baghdadMode,
-          mainSite: merged.mainSite,
-          subSite: merged.subSite,
-          courseId: merged.courseId,
-          status: merged.status,
-          dismissalType: merged.dismissalType,
-          dismissalReason: merged.dismissalReason,
-          dismissalNotes: merged.dismissalNotes,
-          createdAt: merged.createdAt,
-          opportunities: merged.opportunities,
-          baseOpportunities: merged.baseOpportunities,
-          accountingGraceDays: merged.accountingGraceDays,
+        const apiUpdates: Record<string, unknown> = {};
+        const includeIfProvided = <K extends keyof typeof merged>(key: K) => {
+          if (Object.prototype.hasOwnProperty.call(updates, key)) {
+            apiUpdates[key] = merged[key];
+          }
         };
+
+        // لا ترسل حقول الطالب كاملة إلى الخادم عند تعديل بيانات عادية.
+        // إرسال opportunities/baseOpportunities دائماً كان يجعل تغيير الدورة من سجل الطلاب
+        // يكتب رصيد الفرص المحلي فوق رصيد قاعدة البيانات، مع أن المستخدم لم يطلب تعديل الفرص.
+        includeIfProvided('name');
+        includeIfProvided('school');
+        includeIfProvided('gender');
+        includeIfProvided('phone');
+        includeIfProvided('parentPhone');
+        includeIfProvided('telegram');
+        includeIfProvided('courseProgram');
+        includeIfProvided('courseTerm');
+        includeIfProvided('studyType');
+        includeIfProvided('locationScope');
+        includeIfProvided('baghdadMode');
+        includeIfProvided('mainSite');
+        includeIfProvided('subSite');
+        includeIfProvided('courseId');
+        includeIfProvided('status');
+        includeIfProvided('dismissalType');
+        includeIfProvided('dismissalReason');
+        includeIfProvided('dismissalNotes');
+        includeIfProvided('createdAt');
+        includeIfProvided('opportunities');
+        includeIfProvided('baseOpportunities');
+        includeIfProvided('accountingGraceDays');
         syncToServer(get, () => studentApi.update(id, apiUpdates), {
           description: 'تعديل بيانات طالب',
           rollback: () => set({ students: previousStudents }),
