@@ -14,7 +14,7 @@ export type AcademicFilterState = {
  * to ensure consistent filter behavior.
  */
 export function examMatchesAcademicFilters(
-  exam: { courseIds?: string; [key: string]: unknown },
+  exam: any,
   filters: AcademicFilterState,
   _context?: unknown,
 ): boolean {
