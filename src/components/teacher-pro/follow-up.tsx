@@ -829,10 +829,16 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const callRows = useMemo<CallStudentRow[]>(() => {
-    // لا يتم بناء القائمة إلا بعد اختيار الدورة والامتحان من قاعدة البيانات.
-    const courseStudents = callPageStudentIds
-      .map((studentId) => students.find((student) => student.id === studentId))
-      .filter((student): student is Student => Boolean(student));
+    // استخدم كل الطلاب المتاحين في الـ store، وليس فقط callPageStudentIds.
+    // callPageStudentIds يحتوي على 50 طالب فقط (صفحة واحدة من candidates API)،
+    // لكن grades قد تحتوي على درجات لطلاب ليسوا في تلك الصفحة.
+    // هذا يصلح مشكلة عدم ظهور الطلاب الغائبين عند البحث عنهم.
+    const courseStudents = students
+      .filter((student) => {
+        if (student.status === "مفصول") return false;
+        if (callCourseId && student.courseId !== callCourseId) return false;
+        return true;
+      });
     const courseStudentIds = new Set(
       courseStudents.map((student) => student.id),
     );
@@ -967,7 +973,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     grades,
     students,
     exams,
-    callPageStudentIds,
+    callPageStudentIds, // still used for pagination display
     selectedCallCourse,
     selectedCallExam,
     callStatusFilter,
