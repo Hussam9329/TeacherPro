@@ -48,7 +48,7 @@ type CallCategory =
   | "passed"
   | "cheating";
 type CallStatusFilter =
-  "all" | "absent" | "discounted" | "failed" | "cheating" | "passed" | "full";
+  "all" | "absent" | "discounted" | "failed" | "cheating" | "passed" | "full" | "academic-accounting";
 type CallGradeDisplayMode = "latest" | "latest-two" | "all";
 type PledgeTypeFilter = "all" | "temporary" | "final";
 type PledgeStatusFilter = "all" | "pledged" | "pending" | "reactivated";
@@ -143,6 +143,7 @@ const callStatusFilterLabels: Record<CallStatusFilter, string> = {
   cheating: "طلاب الغش",
   passed: "الطلاب الناجحين",
   full: "الدرجات الكاملة",
+  "academic-accounting": "محاسبة رسوب",
 };
 
 const callStatusFilterOptions = Object.keys(
@@ -316,6 +317,11 @@ function callGradeMatchesStatusFilter(
       if (score === null) return false;
       if (exam.noDiscount) return score >= 1 && score < passMark;
       return score >= 1 && score <= discountMark;
+    case "academic-accounting":
+      // محاسبة رسوب: درجة بين الخصم والنجوب (خصم < درجة < نجوب)
+      if (score === null) return false;
+      if (exam.noDiscount) return false;
+      return score > discountMark && score < passMark;
     default:
       return true;
   }

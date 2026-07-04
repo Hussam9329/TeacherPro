@@ -660,7 +660,6 @@ export function GradeEntryView() {
       status: draft.status,
       score: draft.status === "درجة" ? Number(normalizedScore) : null,
       notes: draft.notes,
-      academicAccountingChecked: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
