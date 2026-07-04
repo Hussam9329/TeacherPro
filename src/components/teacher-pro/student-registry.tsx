@@ -44,6 +44,7 @@ import {
 import {
   COURSE_TERMS,
   getAvailablePrograms,
+  getAvailableStudyTypes,
   getAvailableStudyTypesForProgram,
   getBaghdadSites,
   getProvinceOptions,
@@ -364,6 +365,35 @@ export function StudentRegistryView() {
   const [filterCourseTerm, setFilterCourseTerm] = useState("");
   const [filterStudyType, setFilterStudyType] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
+
+  // أنواع الدراسة المتاحة للدورة المختارة (وليس كل الأنواع الثابتة)
+  const availableStudyTypesForFilter = useMemo(() => {
+    if (!filterCourseId) return STUDENT_FILTER_STUDY_TYPES;
+    const course = courses.find((c) => c.id === filterCourseId);
+    if (!course) return STUDENT_FILTER_STUDY_TYPES;
+    const types = getAvailableStudyTypes(course);
+    return types.length > 0 ? types : STUDENT_FILTER_STUDY_TYPES;
+  }, [filterCourseId, courses]);
+
+  // أنواع البرنامج المتاحة للدورة المختارة
+  const availableProgramsForFilter = useMemo(() => {
+    if (!filterCourseId) return STUDENT_FILTER_COURSE_PROGRAMS;
+    const course = courses.find((c) => c.id === filterCourseId);
+    if (!course) return STUDENT_FILTER_COURSE_PROGRAMS;
+    const programs = getAvailablePrograms(course);
+    return programs.length > 0 ? programs : STUDENT_FILTER_COURSE_PROGRAMS;
+  }, [filterCourseId, courses]);
+
+  // عند تغيير الدورة، تصفير الفلاتر غير المتاحة
+  useEffect(() => {
+    if (filterStudyType && !availableStudyTypesForFilter.includes(filterStudyType as any)) {
+      setFilterStudyType("");
+    }
+    if (filterCourseProgram && !availableProgramsForFilter.includes(filterCourseProgram as any)) {
+      setFilterCourseProgram("");
+    }
+  }, [filterCourseId, availableStudyTypesForFilter, availableProgramsForFilter, filterStudyType, filterCourseProgram]);
+
   const [viewMode, setViewMode] = useState<RegistryViewMode>("cards");
   const [pageSize, setPageSize] = useState(10);
   const [page, setPage] = useState(1);
@@ -1083,7 +1113,7 @@ export function StudentRegistryView() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {STUDENT_FILTER_COURSE_PROGRAMS.map((program) => (
+                  {availableProgramsForFilter.map((program) => (
                     <SelectItem key={program} value={program}>
                       {program}
                     </SelectItem>
@@ -1135,7 +1165,7 @@ export function StudentRegistryView() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {STUDENT_FILTER_STUDY_TYPES.map((studyType) => (
+                  {availableStudyTypesForFilter.map((studyType) => (
                     <SelectItem key={studyType} value={studyType}>
                       {studyType}
                     </SelectItem>
