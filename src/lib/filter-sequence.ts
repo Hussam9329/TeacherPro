@@ -3,6 +3,7 @@ import type { Exam } from "@/lib/teacher-store";
 export type AcademicFilterState = {
   courseId?: string;
   courseProgram?: string;
+  courseTerm?: string;
   studyType?: string;
   locationScope?: string;
   nameLetter?: string;
