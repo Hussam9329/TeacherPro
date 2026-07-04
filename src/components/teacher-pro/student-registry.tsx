@@ -359,6 +359,7 @@ export function StudentRegistryView() {
 
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterCourseId, setFilterCourseId] = useState("");
   const [filterCourseProgram, setFilterCourseProgram] = useState("");
   const [filterCourseTerm, setFilterCourseTerm] = useState("");
   const [filterStudyType, setFilterStudyType] = useState("");
@@ -446,6 +447,7 @@ export function StudentRegistryView() {
       .list({
         q: debouncedSearch,
         status: filterStatus,
+        courseId: filterCourseId,
         courseProgram: filterCourseProgram,
         courseTerm: filterCourseProgram === "كورسات" ? filterCourseTerm : "",
         studyType: filterStudyType,
@@ -491,6 +493,7 @@ export function StudentRegistryView() {
   }, [
     debouncedSearch,
     filterStatus,
+    filterCourseId,
     filterCourseProgram,
     filterCourseTerm,
     filterStudyType,
@@ -893,6 +896,7 @@ export function StudentRegistryView() {
       )
         return false;
       if (filterStatus && s.status !== filterStatus) return false;
+      if (filterCourseId && s.courseId !== filterCourseId) return false;
       if (
         !studentMatchesListFilters(s, {
           courseProgram: filterCourseProgram,
@@ -908,6 +912,7 @@ export function StudentRegistryView() {
     students,
     debouncedSearch,
     filterStatus,
+    filterCourseId,
     filterCourseProgram,
     filterCourseTerm,
     filterStudyType,
@@ -972,6 +977,7 @@ export function StudentRegistryView() {
     const params = new URLSearchParams();
     if (debouncedSearch) params.set("q", debouncedSearch);
     if (filterStatus) params.set("status", filterStatus);
+    if (filterCourseId) params.set("courseId", filterCourseId);
     if (filterCourseProgram) params.set("courseProgram", filterCourseProgram);
     if (filterCourseTerm) params.set("courseTerm", filterCourseTerm);
     if (filterStudyType) params.set("studyType", filterStudyType);
@@ -991,6 +997,7 @@ export function StudentRegistryView() {
   const resetFilters = () => {
     setSearch("");
     setFilterStatus("");
+    setFilterCourseId("");
     setFilterCourseProgram("");
     setFilterCourseTerm("");
     setFilterStudyType("");
@@ -1034,6 +1041,31 @@ export function StudentRegistryView() {
       <Card>
         <CardContent className="p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
+            <div className="space-y-1">
+              <Label htmlFor="registry-course" className="text-xs">
+                الدورة
+              </Label>
+              <Select
+                name="courseId"
+                value={filterCourseId || "all"}
+                onValueChange={(v) => {
+                  setFilterCourseId(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-course">
+                  <SelectValue placeholder="كل الدورات" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الدورات</SelectItem>
+                  {courses.map((course) => (
+                    <SelectItem key={course.id} value={course.id}>
+                      {course.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1">
               <Label htmlFor="registry-program" className="text-xs">
                 نوع الدورة

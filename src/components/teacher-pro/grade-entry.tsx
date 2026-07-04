@@ -65,6 +65,7 @@ import {
   splitSelection,
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
+import { examMatchesAcademicFilters } from "@/lib/filter-sequence";
 
 type DraftGrade = {
   status: "درجة" | "غائب" | "غش";
@@ -182,6 +183,7 @@ export function GradeEntryView() {
   const {
     exams,
     students,
+    courses,
     grades,
     courseChapters,
     studentLeaves,
@@ -202,6 +204,7 @@ export function GradeEntryView() {
   const [quickScanOpen, setQuickScanOpen] = useState(false);
   const [quickScanValue, setQuickScanValue] = useState("");
   const [search, setSearch] = useState("");
+  const [filterCourseId, setFilterCourseId] = useState("");
   const [filterCourseProgram, setFilterCourseProgram] = useState("");
   const [filterCourseTerm, setFilterCourseTerm] = useState("");
   const [filterStudyType, setFilterStudyType] = useState("");
@@ -264,7 +267,16 @@ export function GradeEntryView() {
     const courseIds = selectedExam.courseIds.join(",");
 
     studentApi
-      .listAll({ courseIds })
+      .listAll({
+        courseIds,
+        courseId: filterCourseId || undefined,
+        courseProgram: filterCourseProgram || undefined,
+        courseTerm:
+          filterCourseProgram === "كورسات" && filterCourseTerm
+            ? filterCourseTerm
+            : undefined,
+        studyType: filterStudyType || undefined,
+      })
       .then((result) => {
         if (!cancelled) {
           mergeStudentsCache((result?.students || []) as unknown as Student[]);
@@ -292,7 +304,16 @@ export function GradeEntryView() {
     return () => {
       cancelled = true;
     };
-  }, [selectedExamId, exams, mergeStudentsCache, mergeGradesCache]);
+  }, [
+    selectedExamId,
+    exams,
+    filterCourseId,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
+    mergeStudentsCache,
+    mergeGradesCache,
+  ]);
 
   const locationFilterOptions = useMemo(
     () => getStudentLocationFilterOptions(students),
@@ -310,6 +331,7 @@ export function GradeEntryView() {
   }, [
     selectedExamId,
     search,
+    filterCourseId,
     filterCourseProgram,
     filterCourseTerm,
     filterStudyType,
@@ -373,6 +395,44 @@ export function GradeEntryView() {
     () => exams.filter((e) => isExamAvailableForEntry(e)),
     [exams, clockTick],
   );
+
+  const filteredActiveExams = useMemo(
+    () =>
+      activeExams.filter((exam) =>
+        examMatchesAcademicFilters(
+          exam,
+          {
+            courseId: filterCourseId,
+            courseProgram: filterCourseProgram,
+            courseTerm: filterCourseTerm,
+            studyType: filterStudyType,
+          },
+          { courses, students },
+        ),
+      ),
+    [
+      activeExams,
+      courses,
+      students,
+      filterCourseId,
+      filterCourseProgram,
+      filterCourseTerm,
+      filterStudyType,
+    ],
+  );
+
+  useEffect(() => {
+    if (
+      selectedExamId &&
+      !filteredActiveExams.some((exam) => exam.id === selectedExamId)
+    ) {
+      setSelectedExamId("");
+      setDrafts({});
+      setEditableRows({});
+      setSavedRows({});
+      setReactivationWarningsAccepted({});
+    }
+  }, [filteredActiveExams, selectedExamId]);
   const normalizedSearch = useMemo(() => normalizeForSearch(search), [search]);
   const studentById = useMemo(
     () => new Map(students.map((student) => [student.id, student])),
@@ -644,6 +704,7 @@ export function GradeEntryView() {
     return students
       .filter((student) => {
         if (!selectedExam.courseIds.includes(student.courseId)) return false;
+        if (filterCourseId && student.courseId !== filterCourseId) return false;
         if (!isExamOnOrAfterStudentRegistration(student, selectedExam))
           return false;
         if (!activeChapterCourseIds.has(student.courseId)) return false;
@@ -688,6 +749,7 @@ export function GradeEntryView() {
     activeChapterCourseIds,
     normalizedSearch,
     studentSearchTextById,
+    filterCourseId,
     filterCourseProgram,
     filterCourseTerm,
     filterStudyType,
@@ -918,6 +980,7 @@ export function GradeEntryView() {
     return students
       .filter((student) => {
         if (!selectedExam.courseIds.includes(student.courseId)) return false;
+        if (filterCourseId && student.courseId !== filterCourseId) return false;
         if (!isExamOnOrAfterStudentRegistration(student, selectedExam))
           return false;
         if (!activeChapterCourseIds.has(student.courseId)) return false;
@@ -1197,7 +1260,27 @@ export function GradeEntryView() {
           <CardTitle>تسجيل الدرجات</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+            <div className="space-y-2">
+              <Label htmlFor="grade-entry-course">اسم الدورة</Label>
+              <Select
+                value={filterCourseId || "all"}
+                onValueChange={(v) => setFilterCourseId(v === "all" ? "" : v)}
+              >
+                <SelectTrigger id="grade-entry-course">
+                  <SelectValue placeholder="كل الدورات" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الدورات</SelectItem>
+                  {courses.map((course) => (
+                    <SelectItem key={course.id} value={course.id}>
+                      {course.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="grade-entry-program">نوع الدورة</Label>
               <Select
@@ -1295,7 +1378,7 @@ export function GradeEntryView() {
                   <SelectValue placeholder="اختر الامتحان" />
                 </SelectTrigger>
                 <SelectContent>
-                  {activeExams.map((e) => (
+                  {filteredActiveExams.map((e) => (
                     <SelectItem key={e.id} value={e.id}>
                       {e.name} ({e.type}) - {formatAppDate(e.date)}
                     </SelectItem>

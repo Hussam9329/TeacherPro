@@ -37,6 +37,7 @@ import {
 import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { examMatchesAcademicFilters } from "@/lib/filter-sequence";
 
 type TelegramSubmissionPage = {
   [key: string]: unknown;
@@ -225,6 +226,7 @@ export function ECorrectionView() {
     correctionSheets,
     students,
     exams,
+    courses,
     users,
     addCorrectionSheet,
     updateCorrectionSheet,
@@ -234,6 +236,7 @@ export function ECorrectionView() {
     userName,
   } = useTeacherStore();
 
+  const [filterCourseId, setFilterCourseId] = useState("");
   const [filterExamId, setFilterExamId] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [completeDialog, setCompleteDialog] = useState({
@@ -254,6 +257,7 @@ export function ECorrectionView() {
   const [botSubmissionDialog, setBotSubmissionDialog] =
     useState<TelegramExamSubmission | null>(null);
   const [botSearch, setBotSearch] = useState("");
+  const [botFilterCourseId, setBotFilterCourseId] = useState("");
   const [botFilterExamId, setBotFilterExamId] = useState("");
   const [botFilterStatus, setBotFilterStatus] = useState("");
   const [botSchemaWarning, setBotSchemaWarning] = useState("");
@@ -332,20 +336,68 @@ export function ECorrectionView() {
     }
   };
 
+  const sheetExamOptions = useMemo(
+    () =>
+      exams.filter((exam) =>
+        examMatchesAcademicFilters(
+          exam,
+          { courseId: filterCourseId },
+          { courses, students },
+        ),
+      ),
+    [exams, courses, students, filterCourseId],
+  );
+
+  const botExamOptions = useMemo(
+    () =>
+      exams.filter((exam) =>
+        examMatchesAcademicFilters(
+          exam,
+          { courseId: botFilterCourseId },
+          { courses, students },
+        ),
+      ),
+    [exams, courses, students, botFilterCourseId],
+  );
+
+  useEffect(() => {
+    if (
+      filterExamId &&
+      !sheetExamOptions.some((exam) => exam.id === filterExamId)
+    ) {
+      setFilterExamId("");
+    }
+  }, [filterExamId, sheetExamOptions]);
+
+  useEffect(() => {
+    if (
+      botFilterExamId &&
+      !botExamOptions.some((exam) => exam.id === botFilterExamId)
+    ) {
+      setBotFilterExamId("");
+    }
+  }, [botFilterExamId, botExamOptions]);
+
   // Filter sheets
   const filteredSheets = useMemo(() => {
     return correctionSheets.filter((s) => {
+      const exam = exams.find((item) => item.id === s.examId);
+      if (filterCourseId && !exam?.courseIds.includes(filterCourseId))
+        return false;
       if (filterExamId && s.examId !== filterExamId) return false;
       if (filterStatus && s.status !== filterStatus) return false;
       return true;
     });
-  }, [correctionSheets, filterExamId, filterStatus]);
+  }, [correctionSheets, exams, filterCourseId, filterExamId, filterStatus]);
 
   // Stats
 
   const filteredBotSubmissions = useMemo(() => {
     const normalizedSearch = botSearch.trim().toLowerCase();
     return botSubmissions.filter((submission) => {
+      const exam = exams.find((item) => item.id === submission.examId);
+      if (botFilterCourseId && !exam?.courseIds.includes(botFilterCourseId))
+        return false;
       if (botFilterExamId && submission.examId !== botFilterExamId)
         return false;
       if (botFilterStatus && submission.status !== botFilterStatus)
@@ -365,7 +417,14 @@ export function ECorrectionView() {
         .join(" ");
       return haystack.includes(normalizedSearch);
     });
-  }, [botFilterExamId, botFilterStatus, botSearch, botSubmissions]);
+  }, [
+    botFilterCourseId,
+    botFilterExamId,
+    botFilterStatus,
+    botSearch,
+    botSubmissions,
+    exams,
+  ]);
 
   const botStats = useMemo(() => {
     const totalPages = botSubmissions.reduce(
@@ -553,7 +612,28 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
 
         {/* Sheets Tab */}
         <TabsContent value="sheets" className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="space-y-1">
+              <Label htmlFor="ecorrection-course" className="text-xs">
+                الدورة
+              </Label>
+              <Select
+                value={filterCourseId || "all"}
+                onValueChange={(v) => setFilterCourseId(v === "all" ? "" : v)}
+              >
+                <SelectTrigger id="ecorrection-course">
+                  <SelectValue placeholder="كل الدورات" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الدورات</SelectItem>
+                  {courses.map((course) => (
+                    <SelectItem key={course.id} value={course.id}>
+                      {course.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1">
               <Label htmlFor="ecorrection-exam" className="text-xs">
                 الامتحان
@@ -568,7 +648,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {exams.map((e) => (
+                  {sheetExamOptions.map((e) => (
                     <SelectItem key={e.id} value={e.id}>
                       {e.name}
                     </SelectItem>
@@ -840,7 +920,30 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
             </Card>
           )}
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+            <div className="space-y-1">
+              <Label htmlFor="bot-course" className="text-xs">
+                الدورة
+              </Label>
+              <Select
+                value={botFilterCourseId || "all"}
+                onValueChange={(v) =>
+                  setBotFilterCourseId(v === "all" ? "" : v)
+                }
+              >
+                <SelectTrigger id="bot-course">
+                  <SelectValue placeholder="كل الدورات" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الدورات</SelectItem>
+                  {courses.map((course) => (
+                    <SelectItem key={course.id} value={course.id}>
+                      {course.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1">
               <Label htmlFor="bot-exam" className="text-xs">
                 الامتحان
@@ -854,7 +957,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {exams.map((e) => (
+                  {botExamOptions.map((e) => (
                     <SelectItem key={e.id} value={e.id}>
                       {e.name}
                     </SelectItem>

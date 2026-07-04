@@ -431,6 +431,9 @@ export interface GradeListQuery {
   statusFilter?: string;
   q?: string;
   courseId?: string;
+  courseProgram?: string;
+  courseTerm?: string;
+  studyType?: string;
   nameLetter?: string;
   page?: number;
   pageSize?: number;
@@ -439,7 +442,6 @@ export interface GradeListQuery {
 const DEFAULT_STUDENT_PAGE_SIZE = 50;
 const DEFAULT_GRADE_PAGE_SIZE = 100;
 const LIST_ALL_PAGE_SIZE = 500;
-
 
 export interface StudentStatsResponse {
   total: number;
@@ -539,11 +541,16 @@ async function apiGetAllPages<T extends Record<string, unknown>>(
     const pageItems = response[collectionKey];
     if (Array.isArray(pageItems)) collected.push(...pageItems);
 
-    const effectivePageSize = Number(response.pageSize || response.limit || requestedPageSize);
-    const total = Number(response.totalCount ?? response.total ?? collected.length);
+    const effectivePageSize = Number(
+      response.pageSize || response.limit || requestedPageSize,
+    );
+    const total = Number(
+      response.totalCount ?? response.total ?? collected.length,
+    );
     totalPages = Math.max(
       1,
-      Number(response.totalPages || 0) || Math.ceil(total / Math.max(1, effectivePageSize)),
+      Number(response.totalPages || 0) ||
+        Math.ceil(total / Math.max(1, effectivePageSize)),
     );
 
     if (!response.hasMore || page >= totalPages) break;
@@ -552,7 +559,9 @@ async function apiGetAllPages<T extends Record<string, unknown>>(
     // Defensive guard against malformed paginated responses. This is not a data cap;
     // normal APIs stop through hasMore/totalPages above.
     if (page > 10000) {
-      console.warn(`[API] Aborted all-pages read for /api/${endpoint}: invalid pagination metadata.`);
+      console.warn(
+        `[API] Aborted all-pages read for /api/${endpoint}: invalid pagination metadata.`,
+      );
       break;
     }
   }
@@ -560,8 +569,12 @@ async function apiGetAllPages<T extends Record<string, unknown>>(
   return {
     ...(lastResponse || ({} as T)),
     [collectionKey]: collected,
-    totalCount: Number(lastResponse?.totalCount ?? lastResponse?.total ?? collected.length),
-    total: Number(lastResponse?.total ?? lastResponse?.totalCount ?? collected.length),
+    totalCount: Number(
+      lastResponse?.totalCount ?? lastResponse?.total ?? collected.length,
+    ),
+    total: Number(
+      lastResponse?.total ?? lastResponse?.totalCount ?? collected.length,
+    ),
     page: 1,
     pageSize: collected.length,
     totalPages: 1,
@@ -653,7 +666,11 @@ export const chapterApi = {
 // ─── CourseChapter API ────────────────────────────────────────────────────────
 
 export const courseChapterApi = {
-  list: () => apiGetAllPages<Pick<ServerData, "courseChapters">>("course-chapters", "courseChapters"),
+  list: () =>
+    apiGetAllPages<Pick<ServerData, "courseChapters">>(
+      "course-chapters",
+      "courseChapters",
+    ),
   add: (cc: {
     id: string;
     courseId: string;
@@ -699,7 +716,10 @@ export const studentApi = {
   listAll: async (
     query: StudentListQuery = {},
   ): Promise<StudentListResponse | null> => {
-    const pageSize = Math.min(Math.max(Number(query.pageSize || LIST_ALL_PAGE_SIZE), 1), LIST_ALL_PAGE_SIZE);
+    const pageSize = Math.min(
+      Math.max(Number(query.pageSize || LIST_ALL_PAGE_SIZE), 1),
+      LIST_ALL_PAGE_SIZE,
+    );
     const collected: Array<Record<string, unknown>> = [];
     let page = 1;
     let totalCount = 0;
@@ -753,6 +773,9 @@ export const gradeApi = {
       statusFilter: query.statusFilter,
       q: query.q,
       courseId: query.courseId,
+      courseProgram: query.courseProgram,
+      courseTerm: query.courseTerm,
+      studyType: query.studyType,
       nameLetter: query.nameLetter,
       page: query.page ?? 1,
       pageSize: query.pageSize ?? DEFAULT_GRADE_PAGE_SIZE,
@@ -765,7 +788,10 @@ export const gradeApi = {
   listAll: async (
     query: GradeListQuery = {},
   ): Promise<GradeListResponse | null> => {
-    const pageSize = Math.min(Math.max(Number(query.pageSize || LIST_ALL_PAGE_SIZE), 1), LIST_ALL_PAGE_SIZE);
+    const pageSize = Math.min(
+      Math.max(Number(query.pageSize || LIST_ALL_PAGE_SIZE), 1),
+      LIST_ALL_PAGE_SIZE,
+    );
     const collected: Array<Record<string, unknown>> = [];
     let page = 1;
     let totalCount = 0;
@@ -828,26 +854,50 @@ export const gradeApi = {
 // ─── Database Stats APIs ─────────────────────────────────────────────────────
 
 export const gradeCoverageStatsApi = {
-  get: (query: { examId?: string; courseId?: string; nameLetter?: string; q?: string } = {}) => {
+  get: (
+    query: {
+      examId?: string;
+      courseId?: string;
+      courseProgram?: string;
+      courseTerm?: string;
+      studyType?: string;
+      nameLetter?: string;
+      q?: string;
+    } = {},
+  ) => {
     const queryString = buildQueryString({
       examId: query.examId,
       courseId: query.courseId,
+      courseProgram: query.courseProgram,
+      courseTerm: query.courseTerm,
+      studyType: query.studyType,
       nameLetter: query.nameLetter,
       q: query.q,
     });
-    return apiGet<GradeCoverageStatsResponse>(`grades/stats${queryString ? `?${queryString}` : ""}`);
+    return apiGet<GradeCoverageStatsResponse>(
+      `grades/stats${queryString ? `?${queryString}` : ""}`,
+    );
   },
 };
 
 export const opportunityStatsApi = {
-  get: (query: { courseId?: string; status?: string; opportunityCount?: string; q?: string } = {}) => {
+  get: (
+    query: {
+      courseId?: string;
+      status?: string;
+      opportunityCount?: string;
+      q?: string;
+    } = {},
+  ) => {
     const queryString = buildQueryString({
       courseId: query.courseId,
       status: query.status,
       opportunityCount: query.opportunityCount,
       q: query.q,
     });
-    return apiGet<OpportunityStatsResponse>(`opportunities/stats${queryString ? `?${queryString}` : ""}`);
+    return apiGet<OpportunityStatsResponse>(
+      `opportunities/stats${queryString ? `?${queryString}` : ""}`,
+    );
   },
 };
 
@@ -860,7 +910,9 @@ export const callStatsApi = {
       q: query.q,
       filterQ: query.filterQ,
     });
-    return apiGet<CallStatsResponse>(`student-calls/stats${queryString ? `?${queryString}` : ""}`);
+    return apiGet<CallStatsResponse>(
+      `student-calls/stats${queryString ? `?${queryString}` : ""}`,
+    );
   },
 };
 
@@ -875,9 +927,13 @@ export const callCandidatesApi = {
       page: query.page ?? 1,
       pageSize: query.pageSize ?? 120,
     });
-    return apiGet<CallCandidatesResponse>(`student-calls/candidates${queryString ? `?${queryString}` : ""}`);
+    return apiGet<CallCandidatesResponse>(
+      `student-calls/candidates${queryString ? `?${queryString}` : ""}`,
+    );
   },
-  listAll: async (query: CallCandidatesQuery = {}): Promise<CallCandidatesResponse | null> => {
+  listAll: async (
+    query: CallCandidatesQuery = {},
+  ): Promise<CallCandidatesResponse | null> => {
     const pageSize = Math.min(Math.max(Number(query.pageSize || 200), 1), 200);
     const collectedStudents: Array<Record<string, unknown>> = [];
     const collectedGrades: Array<Record<string, unknown>> = [];
@@ -915,7 +971,11 @@ export const callCandidatesApi = {
 // ─── OpportunityLog API ───────────────────────────────────────────────────────
 
 export const opportunityLogApi = {
-  list: () => apiGetAllPages<Pick<ServerData, "opportunityLogs">>("opportunity-logs", "opportunityLogs"),
+  list: () =>
+    apiGetAllPages<Pick<ServerData, "opportunityLogs">>(
+      "opportunity-logs",
+      "opportunityLogs",
+    ),
   add: (log: Record<string, unknown>) => apiPost("opportunity-logs", log),
   bulkAdjust: (payload: {
     students?: Array<Record<string, unknown>>;
@@ -928,7 +988,11 @@ export const opportunityLogApi = {
 // ─── Follow-up API ───────────────────────────────────────────────────────────
 
 export const studentLeaveApi = {
-  list: () => apiGetAllPages<Pick<ServerData, "studentLeaves">>("student-leaves", "studentLeaves"),
+  list: () =>
+    apiGetAllPages<Pick<ServerData, "studentLeaves">>(
+      "student-leaves",
+      "studentLeaves",
+    ),
   add: (leave: Record<string, unknown>) => apiPost("student-leaves", leave),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-leaves", { id, ...updates }),
@@ -936,7 +1000,11 @@ export const studentLeaveApi = {
 };
 
 export const studentCallApi = {
-  list: () => apiGetAllPages<Pick<ServerData, "studentCalls">>("student-calls", "studentCalls"),
+  list: () =>
+    apiGetAllPages<Pick<ServerData, "studentCalls">>(
+      "student-calls",
+      "studentCalls",
+    ),
   add: (call: Record<string, unknown>) => apiPost("student-calls", call),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-calls", { id, ...updates }),
@@ -944,7 +1012,11 @@ export const studentCallApi = {
 };
 
 export const studentNoteApi = {
-  list: () => apiGetAllPages<Pick<ServerData, "studentNotes">>("student-notes", "studentNotes"),
+  list: () =>
+    apiGetAllPages<Pick<ServerData, "studentNotes">>(
+      "student-notes",
+      "studentNotes",
+    ),
   add: (note: Record<string, unknown>) => apiPost("student-notes", note),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-notes", { id, ...updates }),
@@ -954,7 +1026,11 @@ export const studentNoteApi = {
 // ─── CorrectionSheet API ──────────────────────────────────────────────────────
 
 export const correctionSheetApi = {
-  list: () => apiGetAllPages<Pick<ServerData, "correctionSheets">>("correction-sheets", "correctionSheets"),
+  list: () =>
+    apiGetAllPages<Pick<ServerData, "correctionSheets">>(
+      "correction-sheets",
+      "correctionSheets",
+    ),
   add: (sheet: Record<string, unknown>) => apiPost("correction-sheets", sheet),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("correction-sheets", { id, ...updates }),
@@ -992,39 +1068,59 @@ export const logApi = {
     // or outbox retries. Real audit records for sensitive actions are
     // written by the corresponding server route after the DB mutation.
     try {
-      const res = await fetch('/api/logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
+      const res = await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify(log),
       });
       if (res.ok) return { ok: true };
       if (res.status === 403) return { ok: true }; // server-only entry — expected
       // Other errors (4xx except 403, 5xx) are real failures.
-      const error = await readApiError(res, `تعذر حفظ السجل (رمز ${res.status})`);
-      return { ok: false, error, status: res.status, transient: isTransientHttpStatus(res.status) };
+      const error = await readApiError(
+        res,
+        `تعذر حفظ السجل (رمز ${res.status})`,
+      );
+      return {
+        ok: false,
+        error,
+        status: res.status,
+        transient: isTransientHttpStatus(res.status),
+      };
     } catch (e) {
-      const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
+      const msg = toUserFriendlyError(
+        e instanceof Error ? e.message : "Network error",
+      );
       return { ok: false, error: msg, status: 0, transient: true };
     }
   },
   clear: (password: string, options?: Record<string, unknown>) =>
-    apiPost('logs/clear', { password, ...(options || {}) }),
+    apiPost("logs/clear", { password, ...(options || {}) }),
   restoreLastClear: async (password: string): Promise<ApiResult> => {
     try {
-      const res = await fetch('/api/logs/restore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
+      const res = await fetch("/api/logs/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ password }),
       });
       if (!res.ok) {
-        const error = await readApiError(res, `تعذر استعادة السجلات (رمز ${res.status})`);
-        return { ok: false, error, status: res.status, transient: isTransientHttpStatus(res.status) };
+        const error = await readApiError(
+          res,
+          `تعذر استعادة السجلات (رمز ${res.status})`,
+        );
+        return {
+          ok: false,
+          error,
+          status: res.status,
+          transient: isTransientHttpStatus(res.status),
+        };
       }
       return { ok: true };
     } catch (e) {
-      const msg = toUserFriendlyError(e instanceof Error ? e.message : 'Network error');
+      const msg = toUserFriendlyError(
+        e instanceof Error ? e.message : "Network error",
+      );
       return { ok: false, error: msg, status: 0, transient: true };
     }
   },

@@ -1,41 +1,53 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-import { Prisma } from '@prisma/client';
-import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/server-auth';
-import { db } from '@/lib/db';
-import { normalizeArabicText, requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
-import { ensureExamSchema } from '@/lib/exam-schema';
-import { normalizeListFilter } from '@/lib/all-filter';
+import { Prisma } from "@prisma/client";
+import { NextRequest, NextResponse } from "next/server";
+import { requirePermission } from "@/lib/server-auth";
+import { db } from "@/lib/db";
+import {
+  normalizeArabicText,
+  requireText,
+  routeErrorResponse,
+  validationError,
+} from "@/lib/route-helpers";
+import { ensureExamSchema } from "@/lib/exam-schema";
+import { normalizeListFilter } from "@/lib/all-filter";
 
 async function validateGradePayload(body: Record<string, unknown>) {
-  const studentError = requireText(body.studentId, 'الطالب');
+  const studentError = requireText(body.studentId, "الطالب");
   if (studentError) return studentError;
-  const examError = requireText(body.examId, 'الامتحان');
+  const examError = requireText(body.examId, "الامتحان");
   if (examError) return examError;
-  if (!['درجة', 'غائب', 'غش'].includes(String(body.status ?? ''))) return 'حالة الدرجة غير صحيحة';
+  if (!["درجة", "غائب", "غش"].includes(String(body.status ?? "")))
+    return "حالة الدرجة غير صحيحة";
 
   // تحقق أن الطالب موجود فعلاً ضمن قائمة courseIds للامتحان
   const [exam, student] = await Promise.all([
-    db.exam.findUnique({ where: { id: String(body.examId) }, select: { fullMark: true, courseIds: true } }),
-    db.student.findUnique({ where: { id: String(body.studentId) }, select: { id: true, courseId: true } }),
+    db.exam.findUnique({
+      where: { id: String(body.examId) },
+      select: { fullMark: true, courseIds: true },
+    }),
+    db.student.findUnique({
+      where: { id: String(body.studentId) },
+      select: { id: true, courseId: true },
+    }),
   ]);
-  if (!exam) return 'الامتحان غير موجود';
-  if (!student) return 'الطالب غير موجود';
+  if (!exam) return "الامتحان غير موجود";
+  if (!student) return "الطالب غير موجود";
 
   let courseIds: string[] = [];
   try {
-    const parsed = JSON.parse(exam.courseIds || '[]');
+    const parsed = JSON.parse(exam.courseIds || "[]");
     if (Array.isArray(parsed)) courseIds = parsed.map(String).filter(Boolean);
   } catch {
     courseIds = [];
   }
   if (courseIds.length > 0 && !courseIds.includes(student.courseId)) {
-    return 'الطالب ليس ضمن دورات هذا الامتحان';
+    return "الطالب ليس ضمن دورات هذا الامتحان";
   }
 
-  if (body.status === 'درجة') {
+  if (body.status === "درجة") {
     const score = Number(body.score);
     const fullMark = Number(exam.fullMark || 0);
     if (!Number.isFinite(score) || score < 0 || score > fullMark) {
@@ -45,75 +57,102 @@ async function validateGradePayload(body: Record<string, unknown>) {
   return null;
 }
 
-function parsePositiveInt(value: string | null, fallback: number, max: number): number {
+function parsePositiveInt(
+  value: string | null,
+  fallback: number,
+  max: number,
+): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
   return Math.min(Math.floor(parsed), max);
 }
 
-function buildGradeSearchWhere(rawQuery: string): Prisma.GradeWhereInput | null {
+function buildGradeSearchWhere(
+  rawQuery: string,
+): Prisma.GradeWhereInput | null {
   const query = rawQuery.trim();
   if (!query) return null;
 
   const normalizedQuery = normalizeArabicText(query);
-  const compactQuery = query.replace(/\s+/g, '');
-  const telegramQuery = query.startsWith('@') ? query : `@${query}`;
+  const compactQuery = query.replace(/\s+/g, "");
+  const telegramQuery = query.startsWith("@") ? query : `@${query}`;
 
   const studentSearch: Prisma.StudentWhereInput[] = [
-    { name: { contains: query, mode: 'insensitive' } },
-    { code: { startsWith: query, mode: 'insensitive' } },
-    { phone: { startsWith: compactQuery, mode: 'insensitive' } },
-    { parentPhone: { startsWith: compactQuery, mode: 'insensitive' } },
-    { telegram: { startsWith: telegramQuery, mode: 'insensitive' } },
+    { name: { contains: query, mode: "insensitive" } },
+    { code: { startsWith: query, mode: "insensitive" } },
+    { phone: { startsWith: compactQuery, mode: "insensitive" } },
+    { parentPhone: { startsWith: compactQuery, mode: "insensitive" } },
+    { telegram: { startsWith: telegramQuery, mode: "insensitive" } },
   ];
 
   if (normalizedQuery) {
-    studentSearch.push({ nameKey: { contains: normalizedQuery, mode: 'insensitive' } });
+    studentSearch.push({
+      nameKey: { contains: normalizedQuery, mode: "insensitive" },
+    });
   }
   if (compactQuery.length >= 7) {
     studentSearch.push(
-      { phone: { contains: compactQuery, mode: 'insensitive' } },
-      { parentPhone: { contains: compactQuery, mode: 'insensitive' } },
+      { phone: { contains: compactQuery, mode: "insensitive" } },
+      { parentPhone: { contains: compactQuery, mode: "insensitive" } },
     );
   }
 
   return {
     OR: [
-      { notes: { contains: query, mode: 'insensitive' } },
+      { notes: { contains: query, mode: "insensitive" } },
       { student: { is: { OR: studentSearch } } },
-      { exam: { is: { name: { contains: query, mode: 'insensitive' } } } },
+      { exam: { is: { name: { contains: query, mode: "insensitive" } } } },
     ],
   };
 }
 
 function buildNameLetterWhere(letter: string): Prisma.GradeWhereInput | null {
   const rawLetter = letter.trim();
-  if (!rawLetter || rawLetter === 'all') return null;
+  if (!rawLetter || rawLetter === "all") return null;
   const normalizedLetter = normalizeArabicText(rawLetter).slice(0, 1);
 
   const studentWhere: Prisma.StudentWhereInput[] = [
-    { name: { startsWith: rawLetter, mode: 'insensitive' } },
+    { name: { startsWith: rawLetter, mode: "insensitive" } },
   ];
   if (normalizedLetter) {
-    studentWhere.push({ nameKey: { startsWith: normalizedLetter, mode: 'insensitive' } });
+    studentWhere.push({
+      nameKey: { startsWith: normalizedLetter, mode: "insensitive" },
+    });
   }
 
   return { student: { is: { OR: studentWhere } } };
 }
 
-function buildGradeWhere(searchParams: URLSearchParams): Prisma.GradeWhereInput {
+function buildGradeWhere(
+  searchParams: URLSearchParams,
+): Prisma.GradeWhereInput {
   const and: Prisma.GradeWhereInput[] = [];
-  const examId = normalizeListFilter(searchParams.get('examId'));
-  const studentId = normalizeListFilter(searchParams.get('studentId'));
-  const status = normalizeListFilter(searchParams.get('status'));
-  const courseId = normalizeListFilter(searchParams.get('courseId'));
-  const search = String(searchParams.get('q') || '').trim();
-  const nameLetter = normalizeListFilter(searchParams.get('nameLetter'));
+  const examId = normalizeListFilter(searchParams.get("examId"));
+  const studentId = normalizeListFilter(searchParams.get("studentId"));
+  const status = normalizeListFilter(searchParams.get("status"));
+  const courseId = normalizeListFilter(searchParams.get("courseId"));
+  const courseProgram = normalizeListFilter(searchParams.get("courseProgram"));
+  const courseTerm = normalizeListFilter(searchParams.get("courseTerm"));
+  const studyType = normalizeListFilter(searchParams.get("studyType"));
+  const search = String(searchParams.get("q") || "").trim();
+  const nameLetter = normalizeListFilter(searchParams.get("nameLetter"));
 
   if (examId) and.push({ examId });
   if (studentId) and.push({ studentId });
   if (status) and.push({ status });
-  if (courseId) and.push({ student: { is: { courseId } } });
+
+  const studentAnd: Prisma.StudentWhereInput[] = [];
+  if (courseId) studentAnd.push({ courseId });
+  if (courseProgram) studentAnd.push({ courseProgram });
+  if (courseProgram === "كورسات" && courseTerm) studentAnd.push({ courseTerm });
+  if (studyType) studentAnd.push({ studyType });
+  if (studentAnd.length > 0) {
+    and.push({
+      student: {
+        is: studentAnd.length === 1 ? studentAnd[0] : { AND: studentAnd },
+      },
+    });
+  }
 
   const letterWhere = buildNameLetterWhere(nameLetter);
   if (letterWhere) and.push(letterWhere);
@@ -152,10 +191,17 @@ function dateKey(value: unknown): string {
   return String(value || "").slice(0, 10);
 }
 
-function isGradeEnteredForServer(grade: { status?: string | null; score?: number | null }, exam: { fullMark?: number | null }): boolean {
+function isGradeEnteredForServer(
+  grade: { status?: string | null; score?: number | null },
+  exam: { fullMark?: number | null },
+): boolean {
   if (grade.status === "درجة") {
     const score = Number(grade.score);
-    return Number.isFinite(score) && score >= 0 && score <= Number(exam.fullMark || 0);
+    return (
+      Number.isFinite(score) &&
+      score >= 0 &&
+      score <= Number(exam.fullMark || 0)
+    );
   }
   return grade.status === "غائب" || grade.status === "غش";
 }
@@ -171,28 +217,43 @@ function isExamBeforeStudentRegistration(
 }
 
 function isExamWithinGracePeriod(
-  student: { createdAt?: Date | string | null; accountingGraceDays?: number | null },
+  student: {
+    createdAt?: Date | string | null;
+    accountingGraceDays?: number | null;
+  },
   exam: { date?: Date | string | null },
 ): boolean {
-  const days = Math.max(0, Math.trunc(Number(student.accountingGraceDays || 0)));
+  const days = Math.max(
+    0,
+    Math.trunc(Number(student.accountingGraceDays || 0)),
+  );
   if (days <= 0) return false;
   const start = new Date(`${dateKey(student.createdAt)}T00:00:00.000Z`);
   const examDate = new Date(`${dateKey(exam.date)}T00:00:00.000Z`);
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(examDate.getTime())) return false;
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(examDate.getTime()))
+    return false;
   const endExclusive = new Date(start);
   endExclusive.setUTCDate(endExclusive.getUTCDate() + days);
   return examDate >= start && examDate < endExclusive;
 }
 
 function leaveAppliesToExam(
-  leave: { examId?: string | null; leaveType?: string | null; date?: Date | string | null; dateFrom?: Date | string | null; dateTo?: Date | string | null },
+  leave: {
+    examId?: string | null;
+    leaveType?: string | null;
+    date?: Date | string | null;
+    dateFrom?: Date | string | null;
+    dateTo?: Date | string | null;
+  },
   exam: { id: string; date?: Date | string | null },
 ): boolean {
   if ((leave.leaveType || "exam") === "period") {
     const examDate = dateKey(exam.date);
     const from = dateKey(leave.dateFrom || leave.date);
     const to = dateKey(leave.dateTo || leave.dateFrom || leave.date);
-    return Boolean(examDate && from && to && examDate >= from && examDate <= to);
+    return Boolean(
+      examDate && from && to && examDate >= from && examDate <= to,
+    );
   }
   return leave.examId === exam.id;
 }
@@ -200,13 +261,18 @@ function leaveAppliesToExam(
 function serverClassificationKind(grade: GradeWithRelations): string {
   const student = grade.student;
   const exam = grade.exam;
-  if (student.studentLeaves.some((leave) => leaveAppliesToExam(leave, exam))) return "excused";
+  if (student.studentLeaves.some((leave) => leaveAppliesToExam(leave, exam)))
+    return "excused";
   if (!isGradeEnteredForServer(grade, exam)) return "missing";
   if (isExamWithinGracePeriod(student, exam)) return "grace";
   if (isExamBeforeStudentRegistration(student, exam)) return "grace";
   if (grade.status === "غش") return "cheat";
   if (exam.noDiscount) {
-    if (grade.status === "درجة" && Number(grade.score || 0) >= Number(exam.passMark || 0)) return "pass";
+    if (
+      grade.status === "درجة" &&
+      Number(grade.score || 0) >= Number(exam.passMark || 0)
+    )
+      return "pass";
     return "no-discount";
   }
   if (grade.status === "غائب") {
@@ -215,25 +281,43 @@ function serverClassificationKind(grade: GradeWithRelations): string {
   }
   const score = Number(grade.score) || 0;
   if (exam.type === "فاينل") {
-    if (score === 0 || (exam.dismissalGrade !== null && score <= Number(exam.dismissalGrade))) return "dismissal";
+    if (
+      score === 0 ||
+      (exam.dismissalGrade !== null && score <= Number(exam.dismissalGrade))
+    )
+      return "dismissal";
     if (score >= Number(exam.passMark || 0)) return "pass";
     return "fail";
   }
   if (score >= Number(exam.passMark || 0)) return "pass";
-  if (score > Number(exam.discountMark || 0) && score < Number(exam.passMark || 0)) return "academic-accounting";
+  if (
+    score > Number(exam.discountMark || 0) &&
+    score < Number(exam.passMark || 0)
+  )
+    return "academic-accounting";
   return "deducted";
 }
 
-function gradeMatchesServerStatusFilter(filter: GradeStatusFilter, grade: GradeWithRelations): boolean {
+function gradeMatchesServerStatusFilter(
+  filter: GradeStatusFilter,
+  grade: GradeWithRelations,
+): boolean {
   if (!isGradeEnteredForServer(grade, grade.exam)) return false;
   if (!filter || filter === "all") return true;
 
-  const score = grade.status === "درجة" && grade.score !== null ? Number(grade.score) : null;
+  const score =
+    grade.status === "درجة" && grade.score !== null
+      ? Number(grade.score)
+      : null;
   const fullMark = Number(grade.exam.fullMark || 0);
   const passMark = Number(grade.exam.passMark || 0);
   const discountMark = Number(grade.exam.discountMark || 0);
   const kind = serverClassificationKind(grade);
-  const isNoAccountingKind = ["grace", "before-registration", "excused"].includes(kind);
+  const isNoAccountingKind = [
+    "grace",
+    "before-registration",
+    "excused",
+  ].includes(kind);
 
   switch (filter) {
     case "full-mark":
@@ -243,14 +327,22 @@ function gradeMatchesServerStatusFilter(filter: GradeStatusFilter, grade: GradeW
     case "absent":
       return !isNoAccountingKind && grade.status === "غائب";
     case "discounted":
-      return !isNoAccountingKind && score !== null && !grade.exam.noDiscount && score <= discountMark;
+      return (
+        !isNoAccountingKind &&
+        score !== null &&
+        !grade.exam.noDiscount &&
+        score <= discountMark
+      );
     case "failed":
       return !isNoAccountingKind && score !== null && score < passMark;
     case "academic-accounting":
       return (
         !isNoAccountingKind &&
         (kind === "academic-accounting" ||
-          (score !== null && !grade.exam.noDiscount && score > discountMark && score < passMark))
+          (score !== null &&
+            !grade.exam.noDiscount &&
+            score > discountMark &&
+            score < passMark))
       );
     case "cheating":
       return !isNoAccountingKind && grade.status === "غش";
@@ -261,38 +353,58 @@ function gradeMatchesServerStatusFilter(filter: GradeStatusFilter, grade: GradeW
   }
 }
 
-function normalizeGradeStatusFilter(searchParams: URLSearchParams): GradeStatusFilter {
+function normalizeGradeStatusFilter(
+  searchParams: URLSearchParams,
+): GradeStatusFilter {
   const raw = normalizeListFilter(searchParams.get("statusFilter"));
-  const allowed: GradeStatusFilter[] = ["all", "full-mark", "grace-period", "absent", "discounted", "failed", "academic-accounting", "cheating", "has-grade"];
-  return allowed.includes(raw as GradeStatusFilter) ? (raw as GradeStatusFilter) : "all";
+  const allowed: GradeStatusFilter[] = [
+    "all",
+    "full-mark",
+    "grace-period",
+    "absent",
+    "discounted",
+    "failed",
+    "academic-accounting",
+    "cheating",
+    "has-grade",
+  ];
+  return allowed.includes(raw as GradeStatusFilter)
+    ? (raw as GradeStatusFilter)
+    : "all";
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, 'grades.view');
+  const authError = await requirePermission(req, "grades.view");
   if (authError) return authError;
 
   try {
     const { searchParams } = new URL(req.url);
-    const page = parsePositiveInt(searchParams.get('page'), 1, 1_000_000);
-    const pageSize = parsePositiveInt(searchParams.get('pageSize'), 100, 500);
+    const page = parsePositiveInt(searchParams.get("page"), 1, 1_000_000);
+    const pageSize = parsePositiveInt(searchParams.get("pageSize"), 100, 500);
     const statusFilter = normalizeGradeStatusFilter(searchParams);
 
     // The old UI-only filters (full mark / discounted / failed / accounting / grace)
     // must be computed over the complete database result, then paginated after that.
     // Otherwise page 1 only is filtered locally and totals/exports become incomplete.
     const where = buildGradeWhere(searchParams);
-    const needsDatabaseComputedFilter = databaseComputedGradeFilters.has(statusFilter);
+    const needsDatabaseComputedFilter =
+      databaseComputedGradeFilters.has(statusFilter);
 
     if (needsDatabaseComputedFilter) {
       const allGrades = await db.grade.findMany({
         where,
-        orderBy: { updatedAt: 'desc' },
+        orderBy: { updatedAt: "desc" },
         include: { student: { include: { studentLeaves: true } }, exam: true },
       });
-      const matchingGrades = allGrades.filter((grade) => gradeMatchesServerStatusFilter(statusFilter, grade));
+      const matchingGrades = allGrades.filter((grade) =>
+        gradeMatchesServerStatusFilter(statusFilter, grade),
+      );
       const totalCount = matchingGrades.length;
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-      const grades = matchingGrades.slice((page - 1) * pageSize, page * pageSize);
+      const grades = matchingGrades.slice(
+        (page - 1) * pageSize,
+        page * pageSize,
+      );
 
       return NextResponse.json({
         grades,
@@ -304,18 +416,19 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const finalWhere: Prisma.GradeWhereInput = statusFilter === 'absent'
-      ? { AND: [where, { status: 'غائب' }] }
-      : statusFilter === 'cheating'
-        ? { AND: [where, { status: 'غش' }] }
-        : where;
+    const finalWhere: Prisma.GradeWhereInput =
+      statusFilter === "absent"
+        ? { AND: [where, { status: "غائب" }] }
+        : statusFilter === "cheating"
+          ? { AND: [where, { status: "غش" }] }
+          : where;
     const skip = (page - 1) * pageSize;
 
     const [totalCount, grades] = await Promise.all([
       db.grade.count({ where: finalWhere }),
       db.grade.findMany({
         where: finalWhere,
-        orderBy: { updatedAt: 'desc' },
+        orderBy: { updatedAt: "desc" },
         skip,
         take: pageSize,
         include: { student: true, exam: true },
@@ -332,12 +445,12 @@ export async function GET(req: NextRequest) {
       hasMore: page < totalPages,
     });
   } catch (error) {
-    return routeErrorResponse(error, 'تعذر تحميل الدرجات حالياً.');
+    return routeErrorResponse(error, "تعذر تحميل الدرجات حالياً.");
   }
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, 'grades.add');
+  const authError = await requirePermission(req, "grades.add");
   if (authError) return authError;
 
   try {
@@ -346,16 +459,24 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const validationMessage = await validateGradePayload(body);
     if (validationMessage) return validationError(validationMessage);
-    const checked = body.academicAccountingChecked === undefined
-      ? undefined
-      : Boolean(body.academicAccountingChecked);
+    const checked =
+      body.academicAccountingChecked === undefined
+        ? undefined
+        : Boolean(body.academicAccountingChecked);
     const grade = await db.grade.upsert({
-      where: { studentId_examId: { studentId: body.studentId, examId: body.examId } },
+      where: {
+        studentId_examId: { studentId: body.studentId, examId: body.examId },
+      },
       update: {
         status: body.status,
-        score: body.score === null || body.score === undefined ? null : Number(body.score),
+        score:
+          body.score === null || body.score === undefined
+            ? null
+            : Number(body.score),
         notes: body.notes,
-        ...(checked !== undefined ? { academicAccountingChecked: checked } : {}),
+        ...(checked !== undefined
+          ? { academicAccountingChecked: checked }
+          : {}),
       },
       create: {
         // Never trust client-provided IDs on create. Offline/client IDs stay local only;
@@ -363,19 +484,22 @@ export async function POST(req: NextRequest) {
         studentId: body.studentId,
         examId: body.examId,
         status: body.status,
-        score: body.score === null || body.score === undefined ? null : Number(body.score),
+        score:
+          body.score === null || body.score === undefined
+            ? null
+            : Number(body.score),
         notes: body.notes,
         academicAccountingChecked: Boolean(body.academicAccountingChecked),
       },
     });
     return NextResponse.json({ grade }, { status: 201 });
   } catch (error) {
-    return routeErrorResponse(error, 'تعذر حفظ الدرجة حالياً.');
+    return routeErrorResponse(error, "تعذر حفظ الدرجة حالياً.");
   }
 }
 
 export async function PUT(req: NextRequest) {
-  const authError = await requirePermission(req, 'grades.edit');
+  const authError = await requirePermission(req, "grades.edit");
   if (authError) return authError;
 
   try {
@@ -385,69 +509,101 @@ export async function PUT(req: NextRequest) {
     const { id, ...data } = body;
     delete data.accountingChecked;
 
-    const gradeId = String(id || '').trim();
-    const fallbackStudentId = String(data.studentId || '').trim();
-    const fallbackExamId = String(data.examId || '').trim();
-    if (!gradeId && (!fallbackStudentId || !fallbackExamId)) return validationError('تعذر تحديد الدرجة المطلوبة');
+    const gradeId = String(id || "").trim();
+    const fallbackStudentId = String(data.studentId || "").trim();
+    const fallbackExamId = String(data.examId || "").trim();
+    if (!gradeId && (!fallbackStudentId || !fallbackExamId))
+      return validationError("تعذر تحديد الدرجة المطلوبة");
 
-    if (data.academicAccountingChecked !== undefined) data.academicAccountingChecked = Boolean(data.academicAccountingChecked);
-    if (data.status !== undefined && !['درجة', 'غائب', 'غش'].includes(String(data.status))) return validationError('حالة الدرجة غير صحيحة');
-    if (data.score !== undefined) data.score = data.score === null ? null : Number(data.score);
+    if (data.academicAccountingChecked !== undefined)
+      data.academicAccountingChecked = Boolean(data.academicAccountingChecked);
+    if (
+      data.status !== undefined &&
+      !["درجة", "غائب", "غش"].includes(String(data.status))
+    )
+      return validationError("حالة الدرجة غير صحيحة");
+    if (data.score !== undefined)
+      data.score = data.score === null ? null : Number(data.score);
 
     const current = gradeId
-      ? await db.grade.findUnique({ where: { id: gradeId }, include: { exam: true } })
+      ? await db.grade.findUnique({
+          where: { id: gradeId },
+          include: { exam: true },
+        })
       : null;
-    const fallbackCurrent = !current && fallbackStudentId && fallbackExamId
-      ? await db.grade.findUnique({ where: { studentId_examId: { studentId: fallbackStudentId, examId: fallbackExamId } }, include: { exam: true } })
-      : null;
+    const fallbackCurrent =
+      !current && fallbackStudentId && fallbackExamId
+        ? await db.grade.findUnique({
+            where: {
+              studentId_examId: {
+                studentId: fallbackStudentId,
+                examId: fallbackExamId,
+              },
+            },
+            include: { exam: true },
+          })
+        : null;
     const targetGrade = current || fallbackCurrent;
-    if (!targetGrade) return validationError('سجل الدرجة غير موجود أو تم حذفه مسبقاً', 404);
+    if (!targetGrade)
+      return validationError("سجل الدرجة غير موجود أو تم حذفه مسبقاً", 404);
 
-    if (data.status === 'درجة' || data.score !== undefined) {
+    if (data.status === "درجة" || data.score !== undefined) {
       const nextStatus = String(data.status ?? targetGrade.status);
-      const nextScore = data.score !== undefined ? data.score : targetGrade.score;
-      if (nextStatus === 'درجة') {
+      const nextScore =
+        data.score !== undefined ? data.score : targetGrade.score;
+      if (nextStatus === "درجة") {
         const fullMark = Number(targetGrade.exam.fullMark || 0);
-        if (!Number.isFinite(Number(nextScore)) || Number(nextScore) < 0 || Number(nextScore) > fullMark) {
-          return validationError(`الدرجة يجب أن تكون رقماً بين 0 و ${fullMark}`);
+        if (
+          !Number.isFinite(Number(nextScore)) ||
+          Number(nextScore) < 0 ||
+          Number(nextScore) > fullMark
+        ) {
+          return validationError(
+            `الدرجة يجب أن تكون رقماً بين 0 و ${fullMark}`,
+          );
         }
       }
     }
 
-    const grade = await db.grade.update({ where: { id: targetGrade.id }, data });
+    const grade = await db.grade.update({
+      where: { id: targetGrade.id },
+      data,
+    });
     return NextResponse.json({ grade });
   } catch (error) {
-    return routeErrorResponse(error, 'تعذر تحديث الدرجة حالياً.');
+    return routeErrorResponse(error, "تعذر تحديث الدرجة حالياً.");
   }
 }
 
 export async function DELETE(req: NextRequest) {
-  const authError = await requirePermission(req, 'grades.delete');
+  const authError = await requirePermission(req, "grades.delete");
   if (authError) return authError;
 
   try {
     const { searchParams } = new URL(req.url);
-    const id = searchParams.get('id');
-    const studentId = searchParams.get('studentId');
-    const examId = searchParams.get('examId');
+    const id = searchParams.get("id");
+    const studentId = searchParams.get("studentId");
+    const examId = searchParams.get("examId");
 
-    const status = searchParams.get('status');
+    const status = searchParams.get("status");
 
-    if (examId && status === 'غائب' && !studentId && !id) {
+    if (examId && status === "غائب" && !studentId && !id) {
       const targetGrades = await db.grade.findMany({
-        where: { examId, status: 'غائب' },
+        where: { examId, status: "غائب" },
         select: { id: true, studentId: true },
       });
       if (targetGrades.length === 0) {
         return NextResponse.json({ ok: true, deleted: 0, studentIds: [] });
       }
       const deletedAbsences = await db.grade.deleteMany({
-        where: { examId, status: 'غائب' },
+        where: { examId, status: "غائب" },
       });
       return NextResponse.json({
         ok: true,
         deleted: deletedAbsences.count,
-        studentIds: Array.from(new Set(targetGrades.map((grade) => grade.studentId))),
+        studentIds: Array.from(
+          new Set(targetGrades.map((grade) => grade.studentId)),
+        ),
       });
     }
 
@@ -458,11 +614,13 @@ export async function DELETE(req: NextRequest) {
       }
     }
     if (studentId && examId) {
-      const deletedByPair = await db.grade.deleteMany({ where: { studentId, examId } });
+      const deletedByPair = await db.grade.deleteMany({
+        where: { studentId, examId },
+      });
       return NextResponse.json({ ok: true, deleted: deletedByPair.count });
     }
-    return validationError('تعذر تحديد الدرجة المطلوبة');
+    return validationError("تعذر تحديد الدرجة المطلوبة");
   } catch (error) {
-    return routeErrorResponse(error, 'تعذر حذف الدرجة حالياً.');
+    return routeErrorResponse(error, "تعذر حذف الدرجة حالياً.");
   }
 }

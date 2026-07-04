@@ -53,6 +53,13 @@ import {
 import { useActionLock } from "@/hooks/use-action-lock";
 import { CheckCircle2, UserX } from "lucide-react";
 import { StatCard } from "./ui-kit";
+import { examMatchesAcademicFilters } from "@/lib/filter-sequence";
+import {
+  STUDENT_FILTER_COURSE_PROGRAMS,
+  STUDENT_FILTER_COURSE_TERMS,
+  STUDENT_FILTER_STUDY_TYPES,
+  studentMatchesListFilters,
+} from "@/lib/student-list-filters";
 import {
   gradeMatchesStatusFilter,
   gradeStatusFilterLabels,
@@ -140,6 +147,9 @@ export function GradeRecordsView() {
   const [filterStatus, setFilterStatus] = useState<GradeStatusFilter>("all");
   const [filterNameLetter, setFilterNameLetter] = useState("all");
   const [filterCourseId, setFilterCourseId] = useState("");
+  const [filterCourseProgram, setFilterCourseProgram] = useState("");
+  const [filterCourseTerm, setFilterCourseTerm] = useState("");
+  const [filterStudyType, setFilterStudyType] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -182,6 +192,9 @@ export function GradeRecordsView() {
     filterStatus,
     filterNameLetter,
     filterCourseId,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
   ]);
 
   useEffect(() => {
@@ -198,6 +211,12 @@ export function GradeRecordsView() {
         statusFilter: filterStatus,
         q: debouncedSearch || undefined,
         courseId: filterCourseId || undefined,
+        courseProgram: filterCourseProgram || undefined,
+        courseTerm:
+          filterCourseProgram === "كورسات" && filterCourseTerm
+            ? filterCourseTerm
+            : undefined,
+        studyType: filterStudyType || undefined,
         nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
         page,
         pageSize,
@@ -247,6 +266,9 @@ export function GradeRecordsView() {
     filterStatus,
     filterNameLetter,
     filterCourseId,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
     page,
     pageSize,
     serverRefreshKey,
@@ -261,6 +283,12 @@ export function GradeRecordsView() {
       .get({
         examId: filterExamId || undefined,
         courseId: filterCourseId || undefined,
+        courseProgram: filterCourseProgram || undefined,
+        courseTerm:
+          filterCourseProgram === "كورسات" && filterCourseTerm
+            ? filterCourseTerm
+            : undefined,
+        studyType: filterStudyType || undefined,
         nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
         q: debouncedSearch || undefined,
       })
@@ -282,6 +310,9 @@ export function GradeRecordsView() {
     filterExamId,
     filterNameLetter,
     filterCourseId,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
     serverRefreshKey,
   ]);
 
@@ -392,6 +423,47 @@ export function GradeRecordsView() {
     });
     return map;
   }, [students, serverGrades]);
+
+  useEffect(() => {
+    if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
+      setFilterCourseTerm("");
+    }
+  }, [filterCourseProgram, filterCourseTerm]);
+
+  const filteredExamOptions = useMemo(
+    () =>
+      exams.filter((exam) =>
+        examMatchesAcademicFilters(
+          exam,
+          {
+            courseId: filterCourseId,
+            courseProgram: filterCourseProgram,
+            courseTerm: filterCourseTerm,
+            studyType: filterStudyType,
+          },
+          { courses, students },
+        ),
+      ),
+    [
+      exams,
+      courses,
+      students,
+      filterCourseId,
+      filterCourseProgram,
+      filterCourseTerm,
+      filterStudyType,
+    ],
+  );
+
+  useEffect(() => {
+    if (
+      filterExamId &&
+      !filteredExamOptions.some((exam) => exam.id === filterExamId)
+    ) {
+      setFilterExamId("");
+    }
+  }, [filterExamId, filteredExamOptions]);
+
   const examById = useMemo(() => {
     const map = new Map(exams.map((exam) => [exam.id, exam]));
     serverGrades?.forEach((grade) => {
@@ -444,6 +516,14 @@ export function GradeRecordsView() {
       if (!matchesArabicLetterFilter(student.name, filterNameLetter))
         return false;
       if (filterCourseId && student.courseId !== filterCourseId) return false;
+      if (
+        !studentMatchesListFilters(student, {
+          courseProgram: filterCourseProgram,
+          courseTerm: filterCourseTerm,
+          studyType: filterStudyType,
+        })
+      )
+        return false;
       if (
         debouncedSearch &&
         !searchAny(debouncedSearch, [
@@ -511,6 +591,9 @@ export function GradeRecordsView() {
     filterExamId,
     filterNameLetter,
     filterCourseId,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
     debouncedSearch,
   ]);
 
@@ -554,6 +637,14 @@ export function GradeRecordsView() {
       if (!gradeMatchesStatusFilter(filterStatus, grade, exam, cls))
         return false;
       if (filterCourseId && student.courseId !== filterCourseId) return false;
+      if (
+        !studentMatchesListFilters(student, {
+          courseProgram: filterCourseProgram,
+          courseTerm: filterCourseTerm,
+          studyType: filterStudyType,
+        })
+      )
+        return false;
       return true;
     });
   }, [
@@ -565,6 +656,9 @@ export function GradeRecordsView() {
     filterStatus,
     filterNameLetter,
     filterCourseId,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
     classification,
   ]);
 
@@ -724,6 +818,10 @@ export function GradeRecordsView() {
     params.set("statusFilter", filterStatus);
     if (debouncedSearch) params.set("q", debouncedSearch);
     if (filterCourseId) params.set("courseId", filterCourseId);
+    if (filterCourseProgram) params.set("courseProgram", filterCourseProgram);
+    if (filterCourseProgram === "كورسات" && filterCourseTerm)
+      params.set("courseTerm", filterCourseTerm);
+    if (filterStudyType) params.set("studyType", filterStudyType);
     if (filterNameLetter !== "all") params.set("nameLetter", filterNameLetter);
     const res = await fetch(`/api/grades/export?${params.toString()}`, {
       credentials: "same-origin",
@@ -795,6 +893,80 @@ export function GradeRecordsView() {
               </Select>
             </div>
             <div className="space-y-1">
+              <Label htmlFor="grade-records-program" className="text-xs">
+                نوع الدورة
+              </Label>
+              <Select
+                value={filterCourseProgram || "all"}
+                onValueChange={(v) => {
+                  setFilterCourseProgram(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="grade-records-program">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {STUDENT_FILTER_COURSE_PROGRAMS.map((program) => (
+                    <SelectItem key={program} value={program}>
+                      {program}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {filterCourseProgram === "كورسات" && (
+              <div className="space-y-1">
+                <Label htmlFor="grade-records-term" className="text-xs">
+                  الكورس
+                </Label>
+                <Select
+                  value={filterCourseTerm || "all"}
+                  onValueChange={(v) => {
+                    setFilterCourseTerm(v === "all" ? "" : v);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger id="grade-records-term">
+                    <SelectValue placeholder="الكل" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">الكل</SelectItem>
+                    {STUDENT_FILTER_COURSE_TERMS.map((term) => (
+                      <SelectItem key={term} value={term}>
+                        {term}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-1">
+              <Label htmlFor="grade-records-study-type" className="text-xs">
+                نوع الدراسة
+              </Label>
+              <Select
+                value={filterStudyType || "all"}
+                onValueChange={(v) => {
+                  setFilterStudyType(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="grade-records-study-type">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {STUDENT_FILTER_STUDY_TYPES.map((studyType) => (
+                    <SelectItem key={studyType} value={studyType}>
+                      {studyType}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
               <Label htmlFor="grade-records-exam" className="text-xs">
                 الامتحان
               </Label>
@@ -810,7 +982,7 @@ export function GradeRecordsView() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {exams.map((exam) => (
+                  {filteredExamOptions.map((exam) => (
                     <SelectItem key={exam.id} value={exam.id}>
                       {exam.name}
                     </SelectItem>
