@@ -1104,8 +1104,8 @@ export function ExamRecordsView() {
                 </td>
                 <td className="p-3 min-w-52">
                   <div className="space-y-1">
-                    <Badge variant={entryAvailability.available ? "secondary" : "destructive"}>{entryAvailability.answer}</Badge>
-                    <p className="text-xs text-muted-foreground">{entryAvailability.reason}</p>
+                    <Badge variant={getEntryAvailability(exam).available ? "secondary" : "destructive"}>{getEntryAvailability(exam).answer}</Badge>
+                    <p className="text-xs text-muted-foreground">{getEntryAvailability(exam).reason}</p>
                   </div>
                 </td>
                 <td className="p-3 min-w-44">
