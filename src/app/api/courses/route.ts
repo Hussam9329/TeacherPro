@@ -35,6 +35,111 @@ function parseCourseIds(value: unknown): string[] {
   }
 }
 
+function formatLinkedStudentCount(count: number): string {
+  return `${count} طالب`;
+}
+
+type CourseLinkedStudent = {
+  courseProgram: string | null;
+  courseTerm: string | null;
+  studyType: string | null;
+  locationScope: string | null;
+  baghdadMode: string | null;
+  subSite: string | null;
+};
+
+function countByUsageKey(students: CourseLinkedStudent[], getKey: (student: CourseLinkedStudent) => string): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const student of students) {
+    const key = getKey(student);
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return counts;
+}
+
+function firstUsageBlockMessage(
+  courseName: string,
+  draftCourse: Record<string, unknown>,
+  linkedStudents: CourseLinkedStudent[],
+): string | null {
+  const newPrograms = getAvailablePrograms(draftCourse);
+  const newLocationConfig = getCourseLocationConfig(draftCourse);
+
+  const removedProgramCounts = countByUsageKey(linkedStudents, (student) =>
+    student.courseProgram && !(newPrograms as readonly string[]).includes(student.courseProgram)
+      ? student.courseProgram
+      : ''
+  );
+  const firstRemovedProgram = Array.from(removedProgramCounts.entries())[0];
+  if (firstRemovedProgram) {
+    const [program, count] = firstRemovedProgram;
+    return `لا يمكن حذف نوع الدورة "${program}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${courseName}". انقل الطلاب أو غيّر نوعهم أولاً.`;
+  }
+
+  const removedStudyTypeCounts = countByUsageKey(linkedStudents, (student) => {
+    if (!student.courseProgram || !student.studyType) return '';
+    const newStudyTypesForProgram = getAvailableStudyTypesForProgram(draftCourse, student.courseProgram);
+    return (newStudyTypesForProgram as readonly string[]).includes(student.studyType)
+      ? ''
+      : `${student.courseProgram}|||${student.studyType}`;
+  });
+  const firstRemovedStudyType = Array.from(removedStudyTypeCounts.entries())[0];
+  if (firstRemovedStudyType) {
+    const [key, count] = firstRemovedStudyType;
+    const [program, studyType] = key.split('|||');
+    return `لا يمكن حذف نوع الدراسة "${studyType}" من نوع الدورة "${program}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${courseName}". انقل الطلاب أو غيّر نوع دراستهم أولاً.`;
+  }
+
+  const removedScopeCounts = countByUsageKey(linkedStudents, (student) => {
+    if (!student.studyType || !student.locationScope || student.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE) return '';
+    const studyConfig = newLocationConfig[student.studyType as StudyType];
+    return (studyConfig?.scopes as readonly string[] | undefined)?.includes(student.locationScope)
+      ? ''
+      : `${student.studyType}|||${student.locationScope}`;
+  });
+  const firstRemovedScope = Array.from(removedScopeCounts.entries())[0];
+  if (firstRemovedScope) {
+    const [key, count] = firstRemovedScope;
+    const [studyType, scope] = key.split('|||');
+    return `لا يمكن حذف الموقع "${scope}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${courseName}". انقل الطلاب أو غيّر مواقعهم أولاً.`;
+  }
+
+  const removedBaghdadSiteCounts = countByUsageKey(linkedStudents, (student) => {
+    if (student.locationScope !== 'بغداد' || !student.studyType || !student.subSite) return '';
+    const studyConfig = newLocationConfig[student.studyType as StudyType];
+    if (studyConfig?.baghdadMode !== 'بغداد - مخصص') return '';
+    return studyConfig.baghdadSites?.includes(student.subSite)
+      ? ''
+      : `${student.studyType}|||${student.subSite}`;
+  });
+  const firstRemovedBaghdadSite = Array.from(removedBaghdadSiteCounts.entries())[0];
+  if (firstRemovedBaghdadSite) {
+    const [key, count] = firstRemovedBaghdadSite;
+    const [studyType, site] = key.split('|||');
+    return `لا يمكن حذف موقع بغداد "${site}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${courseName}". انقل الطلاب أو غيّر موقعهم أولاً.`;
+  }
+
+  const removedProvinceCounts = countByUsageKey(linkedStudents, (student) => {
+    if (student.locationScope !== 'محافظات' || !student.studyType || !student.subSite) return '';
+    const studyConfig = newLocationConfig[student.studyType as StudyType];
+    if (!studyConfig?.provinces || studyConfig.provinces.length === 0) return '';
+    const nextProvinces = studyConfig.provinces.map(normalizeIraqiProvinceName);
+    const normalizedStudentProvince = normalizeIraqiProvinceName(student.subSite);
+    return nextProvinces.includes(normalizedStudentProvince)
+      ? ''
+      : `${student.studyType}|||${student.subSite}`;
+  });
+  const firstRemovedProvince = Array.from(removedProvinceCounts.entries())[0];
+  if (firstRemovedProvince) {
+    const [key, count] = firstRemovedProvince;
+    const [studyType, province] = key.split('|||');
+    return `لا يمكن حذف المحافظة "${province}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين بها في دورة "${courseName}". انقل الطلاب أو غيّر محافظاتهم أولاً.`;
+  }
+
+  return null;
+}
+
 
 function validateCoursePayload(body: Record<string, unknown>, isUpdate = false): string | null {
   if (!isUpdate) {
@@ -177,41 +282,13 @@ export async function PUT(req: NextRequest) {
       const validationMessage = validateCoursePayload({ ...draftCourse, name: data.name ?? existingCourse.name }, true);
       if (validationMessage) return validationError(validationMessage);
 
-      const newPrograms = getAvailablePrograms(draftCourse);
-      const newLocationConfig = getCourseLocationConfig(draftCourse);
       const existingStudents = await db.student.findMany({
         where: { courseId: id },
         select: { courseProgram: true, courseTerm: true, studyType: true, locationScope: true, baghdadMode: true, subSite: true }
       });
 
-      for (const student of existingStudents) {
-        if (student.courseProgram && !(newPrograms as readonly string[]).includes(student.courseProgram)) {
-          return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
-        }
-        if (student.courseProgram && student.studyType) {
-          const newStudyTypesForProgram = getAvailableStudyTypesForProgram(draftCourse, student.courseProgram);
-          if (!(newStudyTypesForProgram as readonly string[]).includes(student.studyType)) {
-            return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
-          }
-        }
-        if (student.studyType && student.locationScope) {
-          if (student.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE) continue;
-          const studyConfig = newLocationConfig[student.studyType as StudyType];
-          if (studyConfig && !(studyConfig.scopes as readonly string[] | undefined)?.includes(student.locationScope)) {
-            return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
-          }
-          if (student.locationScope === 'بغداد' && student.subSite && studyConfig?.baghdadMode === 'بغداد - مخصص') {
-            if (studyConfig.baghdadSites && !studyConfig.baghdadSites.includes(student.subSite)) {
-              return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
-            }
-          }
-          if (student.locationScope === 'محافظات' && student.subSite && studyConfig?.provinces && studyConfig.provinces.length > 0) {
-            if (!studyConfig.provinces.map(normalizeIraqiProvinceName).includes(normalizeIraqiProvinceName(student.subSite))) {
-              return validationError('لا يمكن إزالة هذا الخيار لأنه مستخدم من طلاب مسجلين في هذه الدورة', 409);
-            }
-          }
-        }
-      }
+      const usageBlockMessage = firstUsageBlockMessage(existingCourse.name, draftCourse, existingStudents);
+      if (usageBlockMessage) return validationError(usageBlockMessage, 409);
     }
 
     if (data.studyTypesByProgram !== undefined) data.studyTypesByProgram = stringifyJson(data.studyTypesByProgram);
@@ -241,16 +318,25 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد الدورة المطلوبة');
 
+    const course = await db.course.findUnique({ where: { id }, select: { name: true } });
+    if (!course) return validationError('الدورة غير موجودة', 404);
+
     const studentCount = await db.student.count({ where: { courseId: id } });
     if (studentCount > 0) {
-      return validationError('لا يمكن حذف الدورة لأنها مرتبطة بطلاب. انقل الطلاب أولاً.', 409);
+      return validationError(
+        `لا يمكن حذف الدورة "${course.name}" لأن ${formatLinkedStudentCount(studentCount)} مرتبطين بها. استخدم تعطيل الدورة إذا تريد إيقافها بدون حذف بياناتها.`,
+        409,
+      );
     }
 
     const relatedExam = (await db.exam.findMany({
       select: { id: true, name: true, courseIds: true },
     })).find((exam) => parseCourseIds(exam.courseIds).includes(id));
     if (relatedExam) {
-      return validationError(`لا يمكن حذف الدورة لأنها مرتبطة بامتحان: ${relatedExam.name}. احذف أو عدّل الامتحان أولاً.`, 409);
+      return validationError(
+        `لا يمكن حذف الدورة "${course.name}" لأنها مرتبطة بامتحان "${relatedExam.name}". استخدم تعطيل الدورة أو عدّل ربط الامتحان أولاً.`,
+        409,
+      );
     }
 
     await db.$transaction(async (tx) => {

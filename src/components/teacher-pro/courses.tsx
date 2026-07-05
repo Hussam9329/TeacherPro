@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -136,6 +136,49 @@ function validateCourseForm(form: CourseFormState): string | null {
   return null;
 }
 
+function formatListSummary(values: string[], emptyText = "لا توجد خيارات محددة"): string {
+  if (values.length === 0) return emptyText;
+  if (values.length <= 4) return values.join("، ");
+  return `${values.slice(0, 4).join("، ")}، +${values.length - 4}`;
+}
+
+function buildCourseFormSummary(form: CourseFormState) {
+  const courseName = form.name.trim() || "الدورة الجديدة";
+  const normalizedLocationConfig = normalizeCourseLocationConfig(form.locationConfig, form.availableStudyTypes);
+  const programLines = form.availablePrograms.map((program) => {
+    const studyTypes = form.studyTypesByProgram[program] || [];
+    return `${program}: ${formatListSummary(studyTypes, "لم يتم اختيار نوع دراسة")}`;
+  });
+  const locationLines = form.availableStudyTypes.map((studyType) => {
+    const rawConfig = normalizedLocationConfig[studyType] || { scopes: [] };
+    const config = normalizeStudyLocationConfig(studyType, rawConfig);
+    const parts: string[] = [];
+
+    if (config.scopes.includes("بغداد")) {
+      if (config.baghdadMode === "عموم بغداد") {
+        parts.push("عموم بغداد");
+      } else if (config.baghdadMode === "بغداد - مخصص") {
+        parts.push(`بغداد - مخصص: ${formatListSummary(config.baghdadSites || [], "لم تحدد مواقع بغداد بعد")}`);
+      } else {
+        parts.push("بغداد");
+      }
+    }
+    if (config.scopes.includes("محافظات")) {
+      parts.push(`محافظات: ${formatListSummary(config.provinces || [], "لم تحدد المحافظات بعد")}`);
+    }
+
+    return `${studyType}: ${parts.length > 0 ? parts.join("، ") : "لم تحدد المواقع بعد"}`;
+  });
+
+  return {
+    courseName,
+    programCount: form.availablePrograms.length,
+    studyTypeCount: form.availableStudyTypes.length,
+    programLines,
+    locationLines,
+  };
+}
+
 /** Generate a human-readable location summary for a course */
 function buildLocationSummary(course: Course): string {
   const config = getCourseLocationConfig(course);
@@ -184,6 +227,8 @@ function CourseBuilderForm({
   submitLabel: string;
   submitDisabled: boolean;
 }) {
+  const summary = useMemo(() => buildCourseFormSummary(form), [form]);
+
   const handleProgramToggle = (program: CourseProgram) => {
     setForm(prev => {
       const nextPrograms = toggleInArray(prev.availablePrograms, program);
@@ -514,6 +559,42 @@ function CourseBuilderForm({
 
       <Separator />
 
+      <Card className="border-primary/20 bg-primary/5 shadow-none">
+        <CardHeader className="pb-3 pt-4 px-4">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <BookOpen className="size-4 text-primary" />
+            ملخص قبل الحفظ
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 text-sm leading-7 space-y-3">
+          <p className="font-medium text-foreground">
+            هذه الدورة تحتوي على {summary.programCount} نوع دورة و {summary.studyTypeCount} نوع دراسة.
+          </p>
+          <div className="rounded-xl border bg-background/70 p-3">
+            <p className="mb-1 font-semibold text-foreground">ستظهر للطلاب بهذه الخيارات:</p>
+            {summary.programLines.length > 0 ? (
+              <ul className="list-disc space-y-1 pr-5 text-muted-foreground">
+                {summary.programLines.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground">اختر نوع دورة واحد على الأقل حتى تظهر خيارات التسجيل للطلاب.</p>
+            )}
+          </div>
+          <div className="rounded-xl border bg-background/70 p-3">
+            <p className="mb-1 font-semibold text-foreground">هذه المواقع مفعلة:</p>
+            {summary.locationLines.length > 0 ? (
+              <ul className="list-disc space-y-1 pr-5 text-muted-foreground">
+                {summary.locationLines.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground">بعد اختيار نوع الدراسة ستظهر هنا المواقع التي ستكون مفعلة في التسجيل.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
       {/* Submit */}
       <Button
         onClick={onSubmit}
@@ -546,6 +627,7 @@ export function CoursesView() {
     open: false,
     id: "",
     courseName: "",
+    confirmText: "",
   });
 
   // Action locks
@@ -612,17 +694,17 @@ export function CoursesView() {
 
   // ─── Delete handler ────────────────────────────────────────────────────────
   const openDeleteDialog = (id: string, courseName: string) => {
-    setDeleteDialog({ open: true, id, courseName });
+    setDeleteDialog({ open: true, id, courseName, confirmText: "" });
   };
 
   const handleDeleteConfirm = runDeleteCourseLocked(async () => {
-    const ok = deleteCourse(deleteDialog.id);
-    if (ok) {
+    const result = deleteCourse(deleteDialog.id);
+    if (result.ok) {
       toast.success("تم حذف الدورة");
     } else {
-      toast.error("لا يمكن حذف الدورة لأنها مرتبطة ببيانات أخرى");
+      toast.error(result.message);
     }
-    setDeleteDialog({ open: false, id: "", courseName: "" });
+    setDeleteDialog({ open: false, id: "", courseName: "", confirmText: "" });
   });
 
   // ─── Toggle handler ────────────────────────────────────────────────────────
@@ -711,28 +793,36 @@ export function CoursesView() {
                     )}
 
                     {/* Actions */}
-                    <div className="flex gap-2 pt-1">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => openEditDialog(course)}
-                      >
-                        تعديل
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleToggle(course)}
-                      >
-                        {course.active ? "تعطيل" : "تفعيل"}
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => openDeleteDialog(course.id, course.name)}
-                      >
-                        حذف
-                      </Button>
+                    <div className="space-y-2 pt-1">
+                      <div className="flex gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => openEditDialog(course)}
+                        >
+                          تعديل
+                        </Button>
+                        <Button
+                          variant={course.active ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handleToggle(course)}
+                        >
+                          {course.active ? "تعطيل الدورة" : "تفعيل الدورة"}
+                        </Button>
+                      </div>
+                      <div className="border-t pt-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openDeleteDialog(course.id, course.name)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          حذف نهائي
+                        </Button>
+                        <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                          استخدم التعطيل لإيقاف الدورة مؤقتاً. الحذف مخصص للدورات غير المرتبطة فقط.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 );
@@ -783,24 +873,44 @@ export function CoursesView() {
       {/* ─── Delete Course AlertDialog ───────────────────────────────────── */}
       <AlertDialog
         open={deleteDialog.open}
-        onOpenChange={(o) => setDeleteDialog(prev => ({ ...prev, open: o }))}
+        onOpenChange={(o) => setDeleteDialog(prev => ({
+          ...prev,
+          open: o,
+          confirmText: o ? prev.confirmText : "",
+        }))}
       >
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-            <AlertDialogDescription>
-              هل تريد حذف الدورة &quot;{deleteDialog.courseName}&quot;؟ لا يمكن
-              حذف دورة مرتبطة بطلاب أو امتحانات.
+            <AlertDialogTitle>حذف نهائي للدورة</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-right leading-7">
+                <p>
+                  التعطيل هو الخيار الطبيعي إذا تريد إيقاف الدورة عن التسجيل بدون المساس بالبيانات المرتبطة.
+                </p>
+                <p className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-destructive">
+                  الحذف إجراء نهائي ومتاح فقط للدورات غير المرتبطة بطلاب أو امتحانات.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="deleteCourseConfirm">اكتب اسم الدورة لتأكيد الحذف النهائي:</Label>
+                  <Input
+                    id="deleteCourseConfirm"
+                    value={deleteDialog.confirmText}
+                    onChange={(event) => setDeleteDialog(prev => ({ ...prev, confirmText: event.target.value }))}
+                    placeholder={deleteDialog.courseName}
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
-              disabled={isDeletingCourse}
+              disabled={isDeletingCourse || deleteDialog.confirmText.trim() !== deleteDialog.courseName.trim()}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeletingCourse ? "جاري الحذف..." : "حذف"}
+              {isDeletingCourse ? "جاري الحذف..." : "حذف نهائي"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

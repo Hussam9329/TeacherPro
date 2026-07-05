@@ -12,13 +12,17 @@ import { getStudentDuplicateMessage, sanitizeTelegramInput } from './student-uti
 import {
   type CourseLocationConfig,
   type StudyTypesByProgram,
+  type StudyType,
   getAvailablePrograms,
   getAvailableStudyTypes,
   getAvailableStudyTypesForProgram,
+  getCourseLocationConfig,
   getStudyTypesByProgram,
   parseJsonArray,
   parseJsonRecord,
+  OUT_OF_COUNTRY_LOCATION_SCOPE,
 } from './course-config';
+import { normalizeIraqiProvinceName } from './iraq';
 import { formatGradeScore, isExamAvailableForEntry, isExamOnOrAfterStudentRegistration, isGradeEntered } from './exam-utils';
 import { toBaghdadDateTimeLocal } from './baghdad-time';
 import { formatAppDate, toLatinDigits } from './format';
@@ -84,6 +88,94 @@ export interface Student {
   opportunities: number;
   baseOpportunities: number;
   accountingGraceDays: number;
+}
+
+function formatLinkedStudentCount(count: number): string {
+  return `${count} طالب`;
+}
+
+function countStudentsBy<T extends string>(students: Student[], getKey: (student: Student) => T | ''): Map<T, number> {
+  const counts = new Map<T, number>();
+  for (const student of students) {
+    const key = getKey(student);
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return counts;
+}
+
+function buildCourseUsageBlockMessage(course: Course, draftCourse: Course, students: Student[]): string | null {
+  const nextPrograms = getAvailablePrograms(draftCourse);
+  const removedProgramCounts = countStudentsBy(students, (student) =>
+    student.courseProgram && !(nextPrograms as readonly string[]).includes(student.courseProgram)
+      ? student.courseProgram
+      : ''
+  );
+  const firstRemovedProgram = Array.from(removedProgramCounts.entries())[0];
+  if (firstRemovedProgram) {
+    const [program, count] = firstRemovedProgram;
+    return `لا يمكن حذف نوع الدورة "${program}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${course.name}". انقل الطلاب أو غيّر نوعهم أولاً.`;
+  }
+
+  const removedStudyTypeCounts = countStudentsBy(students, (student) => {
+    if (!student.courseProgram || !student.studyType) return '';
+    const nextStudyTypes = getAvailableStudyTypesForProgram(draftCourse, student.courseProgram);
+    return (nextStudyTypes as readonly string[]).includes(student.studyType)
+      ? ''
+      : `${student.courseProgram}|||${student.studyType}`;
+  });
+  const firstRemovedStudyType = Array.from(removedStudyTypeCounts.entries())[0];
+  if (firstRemovedStudyType) {
+    const [key, count] = firstRemovedStudyType;
+    const [program, studyType] = key.split('|||');
+    return `لا يمكن حذف نوع الدراسة "${studyType}" من نوع الدورة "${program}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${course.name}". انقل الطلاب أو غيّر نوع دراستهم أولاً.`;
+  }
+
+  const nextLocationConfig = getCourseLocationConfig(draftCourse);
+
+  const removedScopeCounts = countStudentsBy(students, (student) => {
+    if (!student.studyType || !student.locationScope || student.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE) return '';
+    const studyConfig = nextLocationConfig[student.studyType as StudyType];
+    return (studyConfig?.scopes as readonly string[] | undefined)?.includes(student.locationScope)
+      ? ''
+      : `${student.studyType}|||${student.locationScope}`;
+  });
+  const firstRemovedScope = Array.from(removedScopeCounts.entries())[0];
+  if (firstRemovedScope) {
+    const [key, count] = firstRemovedScope;
+    const [studyType, scope] = key.split('|||');
+    return `لا يمكن حذف الموقع "${scope}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${course.name}". انقل الطلاب أو غيّر مواقعهم أولاً.`;
+  }
+
+  const removedBaghdadSiteCounts = countStudentsBy(students, (student) => {
+    if (student.locationScope !== 'بغداد' || !student.studyType || !student.subSite) return '';
+    const studyConfig = nextLocationConfig[student.studyType as StudyType];
+    if (studyConfig?.baghdadMode !== 'بغداد - مخصص') return '';
+    return studyConfig.baghdadSites?.includes(student.subSite) ? '' : `${student.studyType}|||${student.subSite}`;
+  });
+  const firstRemovedBaghdadSite = Array.from(removedBaghdadSiteCounts.entries())[0];
+  if (firstRemovedBaghdadSite) {
+    const [key, count] = firstRemovedBaghdadSite;
+    const [studyType, site] = key.split('|||');
+    return `لا يمكن حذف موقع بغداد "${site}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${course.name}". انقل الطلاب أو غيّر موقعهم أولاً.`;
+  }
+
+  const removedProvinceCounts = countStudentsBy(students, (student) => {
+    if (student.locationScope !== 'محافظات' || !student.studyType || !student.subSite) return '';
+    const studyConfig = nextLocationConfig[student.studyType as StudyType];
+    if (!studyConfig?.provinces || studyConfig.provinces.length === 0) return '';
+    const nextProvinces = studyConfig.provinces.map(normalizeIraqiProvinceName);
+    const normalizedStudentProvince = normalizeIraqiProvinceName(student.subSite);
+    return nextProvinces.includes(normalizedStudentProvince) ? '' : `${student.studyType}|||${student.subSite}`;
+  });
+  const firstRemovedProvince = Array.from(removedProvinceCounts.entries())[0];
+  if (firstRemovedProvince) {
+    const [key, count] = firstRemovedProvince;
+    const [studyType, province] = key.split('|||');
+    return `لا يمكن حذف المحافظة "${province}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين بها في دورة "${course.name}". انقل الطلاب أو غيّر محافظاتهم أولاً.`;
+  }
+
+  return null;
 }
 
 export interface Exam {
@@ -568,7 +660,7 @@ interface TeacherState {
   addCourse: (course: Omit<Course, 'id' | 'createdAt' | 'active'>) => void;
   updateCourse: (id: string, updates: Partial<Omit<Course, 'id' | 'createdAt'>>) => { ok: boolean; message: string };
   toggleCourse: (id: string) => void;
-  deleteCourse: (id: string) => boolean;
+  deleteCourse: (id: string) => { ok: boolean; message: string };
 
 
   addChapter: (name: string, opportunities: number) => void;
@@ -2388,19 +2480,8 @@ export const useTeacherStore = create<TeacherState>()(
         if (updates.availablePrograms || updates.studyTypesByProgram || updates.availableStudyTypes || updates.locationConfig) {
           const courseStudents = get().students.filter(s => s.courseId === id);
           const draftCourse = { ...course, ...updates };
-          const nextPrograms = getAvailablePrograms(draftCourse);
-
-          for (const student of courseStudents) {
-            if (student.courseProgram && !(nextPrograms as readonly string[]).includes(student.courseProgram)) {
-              return { ok: false, message: `لا يمكن إزالة "${student.courseProgram}" لأنه مستخدم من طلاب مسجلين` };
-            }
-            if (student.courseProgram && student.studyType) {
-              const nextStudyTypes = getAvailableStudyTypesForProgram(draftCourse, student.courseProgram);
-              if (!(nextStudyTypes as readonly string[]).includes(student.studyType)) {
-                return { ok: false, message: `لا يمكن إزالة "${student.studyType}" من "${student.courseProgram}" لأنه مستخدم من طلاب مسجلين` };
-              }
-            }
-          }
+          const usageMessage = buildCourseUsageBlockMessage(course, draftCourse, courseStudents);
+          if (usageMessage) return { ok: false, message: usageMessage };
         }
 
         const normalizedUpdates = updates.studyTypesByProgram || updates.availablePrograms
@@ -2433,10 +2514,18 @@ export const useTeacherStore = create<TeacherState>()(
       deleteCourse: (id) => {
         const state = get();
         const course = state.courses.find((c) => c.id === id);
-        if (!course) return false;
-        if (state.students.some((s) => s.courseId === id) || state.exams.some((e) => e.courseIds.includes(id))) {
-          get().logAction('الدورات', 'رفض حذف دورة', `${course.name} مرتبطة بطلاب أو امتحانات`);
-          return false;
+        if (!course) return { ok: false, message: 'الدورة غير موجودة' };
+        const linkedStudentCount = state.students.filter((s) => s.courseId === id).length;
+        if (linkedStudentCount > 0) {
+          const message = `لا يمكن حذف الدورة "${course.name}" لأن ${formatLinkedStudentCount(linkedStudentCount)} مرتبطين بها. استخدم تعطيل الدورة إذا تريد إيقافها بدون حذف بياناتها.`;
+          get().logAction('الدورات', 'رفض حذف دورة', message);
+          return { ok: false, message };
+        }
+        const linkedExam = state.exams.find((e) => e.courseIds.includes(id));
+        if (linkedExam) {
+          const message = `لا يمكن حذف الدورة "${course.name}" لأنها مرتبطة بامتحان "${linkedExam.name}". استخدم تعطيل الدورة أو عدّل ربط الامتحان أولاً.`;
+          get().logAction('الدورات', 'رفض حذف دورة', message);
+          return { ok: false, message };
         }
         // Delete related course/chapter links from DB
         state.courseChapters.filter(cc => cc.courseId === id).forEach(cc => syncToServer(get, () => courseChapterApi.remove(cc.id)));
@@ -2446,7 +2535,7 @@ export const useTeacherStore = create<TeacherState>()(
         }));
         get().logAction('الدورات', 'حذف دورة', course.name);
         syncToServer(get, () => courseApi.remove(id));
-        return true;
+        return { ok: true, message: '' };
       },
 
       addChapter: (name, opportunities) => {
