@@ -362,17 +362,25 @@ export async function GET(req: NextRequest) {
 /**
  * عند إضافة طالب جديد، تحقق من الفصل النشط المرتبط بدورته.
  * إذا كان هناك فصل نشط، امنح الطالب نفس فرص زملائه (baseOpportunities).
- * إذا لم يكن هناك فصل نشط أو تم تحديد فرص صراحة في body، استخدم القيمة المرسلة.
+ *
+ * ملاحظة هامة: نحترم قيم body فقط إذا كانت أكبر من صفر. السبب هو أن
+ * النموذج في العميل قد يرسل `opportunities: 0` عندما لا يكون
+ * courseChapters محمّلاً محلياً (lazy-load)، وهذا لا يعني أن المستخدم
+ * يريد فعلاً منح الطالب 0 فرصة. لذلك نتحقق دائماً من الفصل النشط
+ * ونستخدم فرصه كقيمة افتراضية.
  */
 async function getInitialOpportunities(
   body: Record<string, unknown>,
   course: { id: string } | null,
 ): Promise<{ opportunities: number; baseOpportunities: number }> {
-  // إذا تم تحديد فرص صراحة، احترمها
-  if (body.opportunities !== undefined && body.opportunities !== null) {
+  const bodyOpp = Number(body.opportunities ?? 0);
+  const bodyBaseOpp = Number(body.baseOpportunities ?? body.opportunities ?? 0);
+
+  // إذا حدد المستخدم قيمة موجبة صراحةً، احترمها
+  if (bodyOpp > 0 || bodyBaseOpp > 0) {
     return {
-      opportunities: Number(body.opportunities || 0),
-      baseOpportunities: Number(body.baseOpportunities || body.opportunities || 0),
+      opportunities: bodyOpp,
+      baseOpportunities: bodyBaseOpp,
     };
   }
 

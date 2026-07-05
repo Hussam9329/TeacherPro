@@ -79,6 +79,8 @@ export function ChaptersView() {
     useActionLock();
   const { locked: isDeletingLink, runLocked: runDeleteLinkLocked } =
     useActionLock();
+  const { locked: isFixingZeroOpp, runLocked: runFixZeroOppLocked } =
+    useActionLock();
 
   const openEditChapterDialog = (id: string) => {
     const chapter = chapters.find((ch) => ch.id === id);
@@ -190,16 +192,58 @@ export function ChaptersView() {
     toast.success("تم تفعيل الفصل وأرشفة الفرص السابقة");
   };
 
+  const handleFixZeroOpportunities = runFixZeroOppLocked(async () => {
+    try {
+      const response = await fetch("/api/students/fix-zero-opportunities", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        toast.error(payload?.error || "تعذر إصلاح فرص الطلاب حالياً.");
+        return;
+      }
+      if (payload?.fixedTotal > 0) {
+        toast.success(payload.message || `تم إصلاح ${payload.fixedTotal} طالب.`);
+        // أعد تحميل بيانات الطلاب في الصفحات الأخرى عبر تحديث بسيط
+        window.dispatchEvent(new CustomEvent("teacherpro:students-updated"));
+      } else {
+        toast.info(payload.message || "لا يوجد طلاب يحتاجون إصلاحاً.");
+      }
+    } catch {
+      toast.error("تعذر الاتصال بالخادم لإصلاح فرص الطلاب.");
+    }
+  });
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle>الفصول والفرص</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             إضافة الفصول للدورات وتفعيل فصل واحد فقط لكل دورة.
           </p>
+          <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/10 p-3 space-y-2">
+            <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+              <strong>إصلاح فرص الطلاب:</strong> إذا لاحظت أن بعض الطلاب فرصهم
+              <code className="mx-1 px-1 rounded bg-amber-100 dark:bg-amber-900/40">0/0</code>
+              رغم أن الفصل مفعّل لدورتهم، اضغط الزر أدناه لمنحهم فرص الفصل النشط تلقائياً.
+              يبحث الإصلاح عن كل طالب فرصه الأساسية صفر في دورة بها فصل نشط ويمنحه نفس فرص زملائه.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleFixZeroOpportunities}
+              disabled={isFixingZeroOpp}
+              className="border-amber-500/50 text-amber-900 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-900/30"
+            >
+              {isFixingZeroOpp ? "جاري الإصلاح..." : "إصلاح فرص الطلاب (0/0)"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

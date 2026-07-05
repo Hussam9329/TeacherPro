@@ -122,6 +122,24 @@ export async function POST(req: NextRequest) {
   const courses = await db.course.findMany({ where: { id: { in: courseIds } } });
   const courseById = new Map(courses.map((course) => [course.id, course]));
 
+  // حمّل روابط الفصول النشطة مرة واحدة لكل الدورات المتضمنة في الاستيراد.
+  // نستخدمها لمنح الطلاب الجدد فرصاً مبدئية صحيحة حتى لو أرسل العميل 0
+  // (يحصل ذلك عندما لا يكون courseChapters محمّلاً في المتصفح وقت الإضافة).
+  const activeCourseChapters = courseIds.length
+    ? await db.courseChapter.findMany({
+        where: { courseId: { in: courseIds }, active: true, archived: false },
+        select: { courseId: true, chapterId: true },
+      })
+    : [];
+  const activeChapterIds = Array.from(new Set(activeCourseChapters.map((cc) => cc.chapterId)));
+  const activeChapters = activeChapterIds.length
+    ? await db.chapter.findMany({ where: { id: { in: activeChapterIds } }, select: { id: true, opportunities: true } })
+    : [];
+  const chapterOppById = new Map(activeChapters.map((ch) => [ch.id, Number(ch.opportunities || 0)]));
+  const activeChapterOppByCourseId = new Map(
+    activeCourseChapters.map((cc) => [cc.courseId, chapterOppById.get(cc.chapterId) ?? 0]),
+  );
+
   const seenNames = new Map<string, number>();
   const seenPhones = new Map<string, number>();
   const seenTelegrams = new Map<string, number>();
@@ -155,7 +173,12 @@ export async function POST(req: NextRequest) {
     const subSite = asText(row.subSite);
     const status = asText(row.status) || 'نشط';
     const graceDays = normalizeGraceDays(row.accountingGraceDays);
-    const opportunities = Math.max(0, parseNumeric(row.opportunities, 0));
+    let opportunities = Math.max(0, parseNumeric(row.opportunities, 0));
+    // إذا لم يحدد المستخدم فرصاً صراحةً، استخدم فرص الفصل النشط المرتبط بالدورة.
+    if (opportunities === 0) {
+      const courseIdForOpp = asText(row.courseId);
+      opportunities = activeChapterOppByCourseId.get(courseIdForOpp) ?? 0;
+    }
 
     const requiredChecks: Array<[boolean, string]> = [
       [Boolean(name), `السطر ${rowNo}: اسم الطالب مطلوب`],

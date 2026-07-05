@@ -2179,6 +2179,15 @@ export const useTeacherStore = create<TeacherState>()(
             'chapters',
             'exam-new',
             'grade-entry',
+            'student-register',
+            'student-bulk-import',
+            'student-registry',
+            'opportunities',
+            'dismissed-students',
+            'follow-up',
+            'follow-up-calls',
+            'follow-up-leaves',
+            'follow-up-pledges',
           ].includes(section)) {
             const data = await courseChapterApi.list();
             if (data?.courseChapters) {
