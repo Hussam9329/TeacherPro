@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useTeacherStore, type Student } from "@/lib/teacher-store";
+import { useTeacherStore, type OpportunityLog, type Student } from "@/lib/teacher-store";
 import { studentApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,10 +26,74 @@ import {
 type ViewMode = "cards" | "table";
 type NotesFilter = "all" | "with-notes" | "without-notes";
 
+type DismissalDetail = {
+  studentId: string;
+  type: string;
+  reason: string;
+  notes?: string;
+  dismissalDate?: string;
+  sourceType?: string;
+  sourceId?: string;
+  examName?: string;
+  examType?: string;
+  examDate?: string;
+  lastGrade?: {
+    status: string;
+    score: number | null;
+    fullMark: number | null;
+    notes?: string;
+    updatedAt?: string;
+  } | null;
+  hasPledge: boolean;
+  pledgeText?: string;
+  pledgeDate?: string;
+};
+
+const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
+
+function dayKey(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : "";
+  return String(value || "").slice(0, 10);
+}
+
+function normalizeDismissalText(value: string | null | undefined): string {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/[ـ]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function isLikelyDismissalLog(log: OpportunityLog, dismissalReason: string): boolean {
+  const rawReason = String(log.reason || "");
+  const logReason = normalizeDismissalText(rawReason);
+  const normalizedReason = normalizeDismissalText(dismissalReason);
+  return (
+    log.action === "فصل تلقائي" ||
+    (log.action === "خصم" && rawReason.startsWith("فصل الطالب")) ||
+    Boolean(normalizedReason && logReason.includes(normalizedReason))
+  );
+}
+
+function formatDismissalGrade(detail: DismissalDetail | null): string {
+  const grade = detail?.lastGrade;
+  if (!grade) return "لا توجد درجة مرتبطة ظاهرة";
+  if (grade.status === "درجة") {
+    const fullMark = grade.fullMark ? ` / ${grade.fullMark}` : "";
+    return `درجة: ${grade.score ?? "—"}${fullMark}`;
+  }
+  return grade.status || "درجة غير محددة";
+}
+
 export function DismissedStudentsView() {
   const {
     students,
     courses,
+    exams,
+    grades,
+    opportunityLogs,
+    studentNotes,
     courseName,
     reactivateStudent,
     updateStudent,
@@ -42,6 +106,7 @@ export function DismissedStudentsView() {
   const [filterNotes, setFilterNotes] = useState<NotesFilter>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [dismissalDetails, setDismissalDetails] = useState<Record<string, DismissalDetail>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +124,24 @@ export function DismissedStudentsView() {
       cancelled = true;
     };
   }, [mergeStudentsCache]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/dismissed-students/details", { credentials: "same-origin" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { details?: DismissalDetail[] } | null) => {
+        if (cancelled || !payload?.details) return;
+        setDismissalDetails(
+          Object.fromEntries(payload.details.map((detail) => [detail.studentId, detail])),
+        );
+      })
+      .catch(() => {
+        // عند فشل الاتصال نستخدم السياق المتاح محلياً بدون تعطيل الصفحة.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const dismissedTypes = useMemo(
     () =>
@@ -113,9 +196,135 @@ export function DismissedStudentsView() {
     debouncedSearch,
   ]);
 
-  const handleReactivate = (studentId: string) => {
-    reactivateStudent(studentId);
+  const buildLocalDismissalDetail = (student: Student): DismissalDetail => {
+    const type = student.dismissalType || "مفصول";
+    const reason = student.dismissalReason || "لا يوجد سبب مسجل";
+    const studentLogs = opportunityLogs
+      .filter((log) => log.studentId === student.id)
+      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    const dismissalLog =
+      studentLogs.find((log) => log.action === "فصل تلقائي") ||
+      studentLogs.find((log) => isLikelyDismissalLog(log, reason));
+    const studentGrades = grades
+      .filter((grade) => grade.studentId === student.id)
+      .sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
+    const linkedGrade = dismissalLog?.examId
+      ? studentGrades.find((grade) => grade.examId === dismissalLog.examId)
+      : undefined;
+    const reasonGrade = linkedGrade || studentGrades.find((grade) => {
+      const exam = exams.find((item) => item.id === grade.examId);
+      const examName = normalizeDismissalText(exam?.name || "");
+      return Boolean(examName && normalizeDismissalText(reason).includes(examName));
+    });
+    const exam = dismissalLog?.examId
+      ? exams.find((item) => item.id === dismissalLog.examId)
+      : reasonGrade
+        ? exams.find((item) => item.id === reasonGrade.examId)
+        : undefined;
+    const sourceNote = studentNotes
+      .filter((note) => note.studentId === student.id && note.kind === "إجراء")
+      .find((note) => {
+        const text = normalizeDismissalText(note.text);
+        return text.includes("فصل الطالب") || text.includes(normalizeDismissalText(reason));
+      });
+    const sourceType = dismissalLog ? "opportunity-log" : sourceNote ? "student-note" : "student-dismissal";
+    const sourceId = dismissalLog?.id || sourceNote?.id || student.id;
+    const dismissalDate = dayKey(dismissalLog?.date || sourceNote?.date || student.createdAt);
+    const normalizedReason = normalizeDismissalText(reason);
+    const pledgeNote = studentNotes
+      .filter((note) => note.studentId === student.id && note.kind === PLEDGE_NOTE_KIND)
+      .find((note) => {
+        if (note.sourceType && note.sourceId) return note.sourceType === sourceType && note.sourceId === sourceId;
+        const noteReason = normalizeDismissalText(note.dismissalReason || note.text);
+        return !noteReason || noteReason.includes(normalizedReason) || normalizedReason.includes(noteReason);
+      });
+
+    return {
+      studentId: student.id,
+      type,
+      reason,
+      notes: student.dismissalNotes || "",
+      dismissalDate,
+      sourceType,
+      sourceId,
+      examName: exam?.name || "",
+      examType: exam?.type || "",
+      examDate: dayKey(exam?.date),
+      lastGrade: reasonGrade
+        ? {
+            status: reasonGrade.status,
+            score: reasonGrade.score,
+            fullMark: exam?.fullMark ?? null,
+            notes: reasonGrade.notes || "",
+            updatedAt: reasonGrade.updatedAt,
+          }
+        : null,
+      hasPledge: Boolean(pledgeNote),
+      pledgeText: pledgeNote?.text || "",
+      pledgeDate: dayKey(pledgeNote?.date),
+    };
+  };
+
+  const dismissalDetailForStudent = (student: Student) =>
+    dismissalDetails[student.id] || buildLocalDismissalDetail(student);
+
+  const handleReactivate = (student: Student) => {
+    const detail = dismissalDetailForStudent(student);
+    if (!detail.hasPledge) {
+      const ok = window.confirm(
+        `لم يتم تسجيل تعهد لهذا الفصل.\n\nالطالب: ${student.name}\nنوع الفصل: ${detail.type || "مفصول"}\nالسبب: ${detail.reason || "لا يوجد سبب مسجل"}\n\nهل تريد إعادة التفعيل رغم عدم وجود تعهد؟`,
+      );
+      if (!ok) return;
+      toast.warning("تمت إعادة التفعيل بدون تعهد مسجل لهذا الفصل");
+    }
+    reactivateStudent(student.id);
     toast.success("تمت إعادة تفعيل الطالب");
+  };
+
+  const renderDismissalContext = (student: Student) => {
+    const detail = dismissalDetailForStudent(student);
+    return (
+      <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-3 text-sm">
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground">سبب الفصل</p>
+            <p className="mt-1 break-words font-medium text-destructive">
+              {detail.reason || student.dismissalReason || "لا يوجد سبب مسجل"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground">نوع الفصل</p>
+            <p className="mt-1 font-medium">{detail.type || student.dismissalType || "مفصول"}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground">الامتحان المرتبط</p>
+            <p className="mt-1">
+              {detail.examName
+                ? `${detail.examName}${detail.examType ? ` - ${detail.examType}` : ""}${detail.examDate ? ` - ${detail.examDate}` : ""}`
+                : "لا يوجد امتحان مرتبط ظاهر"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground">آخر درجة سببت الفصل</p>
+            <p className="mt-1">{formatDismissalGrade(detail)}</p>
+            {detail.lastGrade?.notes ? (
+              <p className="mt-1 text-xs text-muted-foreground">ملاحظة الدرجة: {detail.lastGrade.notes}</p>
+            ) : null}
+          </div>
+        </div>
+        <div
+          className={
+            detail.hasPledge
+              ? "mt-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-2 text-xs text-emerald-700 dark:text-emerald-300"
+              : "mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-200"
+          }
+        >
+          {detail.hasPledge
+            ? `يوجد تعهد مسجل لهذا الفصل${detail.pledgeDate ? ` بتاريخ ${detail.pledgeDate}` : ""}.`
+            : "لم يتم تسجيل تعهد لهذا الفصل. راجع التعهد قبل إعادة التفعيل."}
+        </div>
+      </div>
+    );
   };
 
   const handleSaveNote = (studentId: string) => {
@@ -308,14 +517,12 @@ export function DismissedStudentsView() {
                   </div>
                   <Button
                     size="sm"
-                    onClick={() => handleReactivate(student.id)}
+                    onClick={() => handleReactivate(student)}
                   >
                     إعادة تفعيل
                   </Button>
                 </div>
-                <div className="rounded-xl bg-muted/60 p-3 text-sm text-destructive">
-                  {student.dismissalReason || "لا يوجد سبب مسجل"}
-                </div>
+                {renderDismissalContext(student)}
                 {renderNotesEditor(student)}
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                   <span>الهاتف: {student.phone || "—"}</span>
@@ -338,7 +545,8 @@ export function DismissedStudentsView() {
                 <th className="p-3 text-right">الكود</th>
                 <th className="p-3 text-right">الدورة</th>
                 <th className="p-3 text-right">نوع الفصل</th>
-                <th className="p-3 text-right">السبب</th>
+                <th className="p-3 text-right">تفاصيل الفصل</th>
+                <th className="p-3 text-right">التعهد</th>
                 <th className="p-3 text-right">الملاحظات</th>
                 <th className="p-3 text-right">الفرص</th>
                 <th className="p-3 text-right">الإجراء</th>
@@ -355,8 +563,29 @@ export function DismissedStudentsView() {
                       {student.dismissalType || "مفصول"}
                     </Badge>
                   </td>
-                  <td className="p-3 min-w-64 text-destructive">
-                    {student.dismissalReason || "—"}
+                  <td className="p-3 min-w-80">
+                    {(() => {
+                      const detail = dismissalDetailForStudent(student);
+                      return (
+                        <div className="space-y-1 text-xs">
+                          <p className="font-semibold text-destructive">{detail.reason || student.dismissalReason || "لا يوجد سبب مسجل"}</p>
+                          <p>الامتحان: {detail.examName || "—"}</p>
+                          <p>آخر درجة: {formatDismissalGrade(detail)}</p>
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  <td className="p-3 min-w-56">
+                    {(() => {
+                      const detail = dismissalDetailForStudent(student);
+                      return detail.hasPledge ? (
+                        <Badge variant="outline">تعهد مسجل{detail.pledgeDate ? ` - ${detail.pledgeDate}` : ""}</Badge>
+                      ) : (
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-200">
+                          لم يتم تسجيل تعهد لهذا الفصل.
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="p-3 min-w-72">{renderNotesEditor(student)}</td>
                   <td className="p-3">
@@ -365,7 +594,7 @@ export function DismissedStudentsView() {
                   <td className="p-3">
                     <Button
                       size="sm"
-                      onClick={() => handleReactivate(student.id)}
+                      onClick={() => handleReactivate(student)}
                     >
                       إعادة تفعيل
                     </Button>
