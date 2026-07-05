@@ -467,6 +467,57 @@ export interface GradeCoverageStatsResponse {
   source: "database";
 }
 
+export interface MissingStudentsNotesStatsResponse {
+  total: number;
+  examsWithNotes: number;
+  totalCharacters: number;
+  source: "database";
+  generatedAt?: string;
+}
+
+export interface ExamRecordStat {
+  total: number;
+  passCount: number;
+  notPassedCount: number;
+  protectedCount: number;
+}
+
+export interface ExamStatsResponse {
+  statsByExamId: Record<string, ExamRecordStat>;
+  source: "database";
+  generatedAt?: string;
+}
+
+export interface PledgeStatsResponse {
+  dismissed: number;
+  temporary: number;
+  final: number;
+  pledged: number;
+  pending: number;
+  reactivated: number;
+  source: "database";
+  generatedAt?: string;
+}
+
+export interface StudentProfileStatsResponse {
+  studentId: string;
+  grades: number;
+  exams: number;
+  absent: number;
+  success: number;
+  failed: number;
+  graceGrades: number;
+  noDiscountGrades: number;
+  opportunities: number;
+  baseOpportunities: number;
+  hasActiveChapter: boolean;
+  deductedMovements: number;
+  addedMovements: number;
+  actions: number;
+  source: "database";
+  generatedAt?: string;
+}
+
 export interface CallStatsQuery {
   courseId?: string;
   examId?: string;
@@ -876,6 +927,37 @@ export const gradeCoverageStatsApi = {
     });
     return apiGet<GradeCoverageStatsResponse>(
       `grades/stats${queryString ? `?${queryString}` : ""}`,
+    );
+  },
+};
+
+export const missingStudentsNotesStatsApi = {
+  get: () =>
+    apiGet<MissingStudentsNotesStatsResponse>(
+      "grade-entry-missing-notes/stats",
+    ),
+};
+
+export const examStatsApi = {
+  get: (examIds: string[] = []) => {
+    const queryString = buildQueryString({
+      examIds: examIds.filter(Boolean).join(","),
+    });
+    return apiGet<ExamStatsResponse>(
+      `exams/stats${queryString ? `?${queryString}` : ""}`,
+    );
+  },
+};
+
+export const pledgeStatsApi = {
+  get: () => apiGet<PledgeStatsResponse>("student-notes/pledge-stats"),
+};
+
+export const studentProfileStatsApi = {
+  get: (studentId: string) => {
+    const queryString = buildQueryString({ studentId });
+    return apiGet<StudentProfileStatsResponse>(
+      `students/profile-stats${queryString ? `?${queryString}` : ""}`,
     );
   },
 };

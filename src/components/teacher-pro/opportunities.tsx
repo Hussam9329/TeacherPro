@@ -75,7 +75,6 @@ export function OpportunitiesView() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [serverStudents, setServerStudents] = useState<Student[]>([]);
-  const [serverTotalCount, setServerTotalCount] = useState(0);
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -123,14 +122,12 @@ export function OpportunitiesView() {
         const nextStudents = (studentResult.students ||
           []) as unknown as Student[];
         setServerStudents(nextStudents);
-        setServerTotalCount(Number(studentResult.totalCount || 0));
         setServerTotalPages(Math.max(1, Number(studentResult.totalPages || 1)));
         mergeStudentsCache(nextStudents);
       })
       .catch(() => {
         if (!cancelled) {
           setServerStudents([]);
-          setServerTotalCount(0);
           setServerTotalPages(1);
           toast.error("تعذر تحميل طلاب الفرص من قاعدة البيانات.");
         }
@@ -213,7 +210,7 @@ export function OpportunitiesView() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [filterCourseId, filterStatus, filterOpportunityCount, debouncedSearch]);
+  }, [filterCourseId, filterStatus, filterOpportunityCount, debouncedSearch, refreshKey]);
 
   const filtered = serverStudents;
   const totalPages = serverTotalPages;
@@ -288,17 +285,15 @@ export function OpportunitiesView() {
   const activeOpportunityFilterName = filterOpportunityCount
     ? `${filterOpportunityCount} فرصة`
     : "كل أعداد الفرص";
-  const statsTotal = databaseStats?.total ?? serverTotalCount;
-  const statsHasOpportunities =
-    databaseStats?.hasOpportunities ??
-    filtered.filter((s) => s.opportunities > 0 && s.status === "نشط").length;
-  const statsNoOpportunities =
-    databaseStats?.noOpportunities ??
-    filtered.filter((s) => s.opportunities === 0 && s.status === "نشط").length;
-  const statsDismissed =
-    databaseStats?.dismissed ??
-    filtered.filter((s) => s.status === "مفصول").length;
-  const statsSuffix = databaseStatsLoading ? "…" : "";
+  const databaseStatValue = (value: number | undefined) => {
+    if (databaseStatsLoading && !databaseStats) return "…";
+    return value ?? "—";
+  };
+  const statsTotal = databaseStatValue(databaseStats?.total);
+  const statsHasOpportunities = databaseStatValue(databaseStats?.hasOpportunities);
+  const statsNoOpportunities = databaseStatValue(databaseStats?.noOpportunities);
+  const statsDismissed = databaseStatValue(databaseStats?.dismissed);
+  const statsSuffix = "";
 
   const clearFilters = () => {
     setSearch("");

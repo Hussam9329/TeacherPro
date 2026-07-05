@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { formatAppDate } from "@/lib/format";
 import { formatGradeScore, isExamWithinStudentGracePeriod } from "@/lib/exam-utils";
+import { studentProfileStatsApi, type StudentProfileStatsResponse } from "@/lib/api";
 import { ArrowRightIcon } from "lucide-react";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "actions";
@@ -139,6 +140,8 @@ export function StudentProfileDialog({
   graceEndDate,
 }: StudentProfileDialogProps) {
   const [tab, setTab] = useState<StudentFileTab>("details");
+  const [databaseStats, setDatabaseStats] = useState<StudentProfileStatsResponse | null>(null);
+  const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
 
   const studentGrades = useMemo(
@@ -268,47 +271,59 @@ export function StudentProfileDialog({
   }, [open, student?.id, tab]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || !student?.id) {
+      setDatabaseStats(null);
+      setDatabaseStatsLoading(false);
+      return;
+    }
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onOpenChange(false);
+    let cancelled = false;
+    setDatabaseStatsLoading(true);
+    studentProfileStatsApi
+      .get(student.id)
+      .then((result) => {
+        if (!cancelled) setDatabaseStats(result);
+      })
+      .catch(() => {
+        if (!cancelled) setDatabaseStats(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDatabaseStatsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
     };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onOpenChange]);
+  }, [open, student?.id]);
 
   if (!open || !student) return null;
 
   const activeChapter = activeChapterForCourse(student.courseId);
-  const gradeExam = (grade: Grade) => exams.find((item) => item.id === grade.examId);
-  const gradeInsideGrace = (grade: Grade) => {
-    const exam = gradeExam(grade);
-    return Boolean(exam && isExamWithinStudentGracePeriod(student, exam));
+  const profileStatValue = (value: number | undefined) => {
+    if (databaseStatsLoading && !databaseStats) return "…";
+    return value ?? "—";
   };
-  const gradeInsideNoDiscountExam = (grade: Grade) => Boolean(gradeExam(grade)?.noDiscount);
-  const accountableStudentGrades = studentGrades.filter((grade) => !gradeInsideGrace(grade) && !gradeInsideNoDiscountExam(grade));
-  const graceGradeCount = studentGrades.filter(gradeInsideGrace).length;
-  const noDiscountGradeCount = studentGrades.filter((grade) => !gradeInsideGrace(grade) && gradeInsideNoDiscountExam(grade)).length;
-  const examCount = new Set(studentGrades.map((grade) => grade.examId)).size;
-  const absentCount = accountableStudentGrades.filter((grade) => grade.status === "غائب").length;
-  const successCount = accountableStudentGrades.filter((grade) => {
-    const exam = gradeExam(grade);
-    return grade.status === "درجة" && grade.score !== null && exam && Number(grade.score) >= Number(exam.passMark);
-  }).length;
-  const failedCount = accountableStudentGrades.filter((grade) => {
-    const exam = gradeExam(grade);
-    return grade.status === "درجة" && grade.score !== null && exam && Number(grade.score) < Number(exam.passMark);
-  }).length;
-  const opportunityText = activeChapter ? `${student.opportunities}/${student.baseOpportunities}` : "0/0";
-  const deductedCount = studentOpportunities.filter((log) => log.action === "خصم" || log.action === "خصم تلقائي").length;
-  const addedCount = studentOpportunities.filter((log) => log.action !== "خصم" && log.action !== "خصم تلقائي").length;
+  const opportunityText = databaseStatsLoading && !databaseStats
+    ? "…"
+    : databaseStats
+      ? databaseStats.hasActiveChapter
+        ? `${databaseStats.opportunities}/${databaseStats.baseOpportunities}`
+        : "0/0"
+      : "—";
+  const successCount = profileStatValue(databaseStats?.success);
+  const failedCount = profileStatValue(databaseStats?.failed);
+  const absentCount = profileStatValue(databaseStats?.absent);
+  const graceGradeCount = profileStatValue(databaseStats?.graceGrades);
+  const noDiscountGradeCount = profileStatValue(databaseStats?.noDiscountGrades);
+  const examCount = profileStatValue(databaseStats?.exams);
+  const deductedCount = profileStatValue(databaseStats?.deductedMovements);
+  const addedCount = profileStatValue(databaseStats?.addedMovements);
 
   const cards: { id: StudentFileTab; label: string; value: string | number; hint: string }[] = [
-    { id: "grades", label: "الدرجات", value: studentGrades.length, hint: "عرض درجات الطالب" },
+    { id: "grades", label: "الدرجات", value: profileStatValue(databaseStats?.grades), hint: "عرض درجات الطالب" },
     { id: "exams", label: "الامتحانات", value: examCount, hint: "عدد الامتحانات" },
     { id: "opportunities", label: "الفرص", value: opportunityText, hint: "المتبقي / الأساسي" },
-    { id: "actions", label: "الإجراءات", value: studentActions.length, hint: "حذف/فصل/إعادة تفعيل" },
+    { id: "actions", label: "الإجراءات", value: profileStatValue(databaseStats?.actions), hint: "حذف/فصل/إعادة تفعيل" },
     { id: "details", label: "التفاصيل والغيابات", value: absentCount, hint: "عدد الغيابات المحتسبة" },
     { id: "grades", label: "ضمن السماح", value: graceGradeCount, hint: "درجات محفوظة بدون خصم" },
     { id: "grades", label: "بدون خصم", value: noDiscountGradeCount, hint: "درجات امتحانات لا تحاسب الطالب" },

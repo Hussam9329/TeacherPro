@@ -1326,8 +1326,7 @@ export function StudentRegistryView() {
             <div>
               <p className="text-xs text-muted-foreground">الطلاب النشطون</p>
               <p className="text-2xl font-black">
-                {activeStudentsTotal ??
-                  students.filter((student) => student.status === "نشط").length}
+                {activeStudentsTotal ?? "…"}
               </p>
             </div>
             <Button
@@ -1347,7 +1346,7 @@ export function StudentRegistryView() {
             <div>
               <p className="text-xs text-muted-foreground">قائمة المفصولين</p>
               <p className="text-2xl font-black text-destructive">
-                {dismissedStudentsTotal ?? dismissedStudents.length}
+                {dismissedStudentsTotal ?? "…"}
               </p>
             </div>
             <Button

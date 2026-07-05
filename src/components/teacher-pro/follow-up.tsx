@@ -12,8 +12,10 @@ import {
 import {
   callCandidatesApi,
   callStatsApi,
+  pledgeStatsApi,
   studentApi,
   type CallStatsResponse,
+  type PledgeStatsResponse,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -502,6 +504,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     useState<CallStatsResponse | null>(null);
   const [callDatabaseStatsLoading, setCallDatabaseStatsLoading] =
     useState(false);
+  const [pledgeDatabaseStats, setPledgeDatabaseStats] =
+    useState<PledgeStatsResponse | null>(null);
+  const [pledgeDatabaseStatsLoading, setPledgeDatabaseStatsLoading] =
+    useState(false);
   const [callGradeDisplayModes, setCallGradeDisplayModes] = useState<
     Record<string, CallGradeDisplayMode>
   >({});
@@ -639,6 +645,32 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     callFilterSearch,
   ]);
 
+  useEffect(() => {
+    if (view !== "pledges") {
+      setPledgeDatabaseStats(null);
+      setPledgeDatabaseStatsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPledgeDatabaseStatsLoading(true);
+    pledgeStatsApi
+      .get()
+      .then((result) => {
+        if (!cancelled) setPledgeDatabaseStats(result);
+      })
+      .catch(() => {
+        if (!cancelled) setPledgeDatabaseStats(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPledgeDatabaseStatsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [view, students.length, studentNotes.length]);
+
   const filteredStudents = useMemo(() => {
     const query = globalSearch;
     return students
@@ -716,11 +748,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const text = String(type || "");
     if (text.includes("نهائي") || text.includes("دائم")) return "final";
     return "temporary";
-  };
-
-  const dismissalGroup = (student: Student): "temporary" | "final" | null => {
-    if (student.status !== "مفصول") return null;
-    return dismissalGroupFromType(student.dismissalType || "فصل مؤقت");
   };
 
   const effectiveStudentCalls = useMemo(
@@ -994,30 +1021,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const callSafePage = Math.min(callGradePage, callTotalPages);
   const visibleCallRows = callRows;
 
-  const callStats = useMemo(() => {
-    const rowsWithCalls = callRows.map((row) => ({
-      row,
-      call: callLogForRow(row),
-    }));
-    return {
-      total: callServerPageInfo.totalCount || callRows.length,
-      contacted: rowsWithCalls.filter(
-        ({ call }) => callStatusForLog(call) === "تم الاتصال",
-      ).length,
-      unanswered: rowsWithCalls.filter(
-        ({ call }) => callStatusForLog(call) === "لم يرد",
-      ).length,
-      wrong: rowsWithCalls.filter(
-        ({ call }) => callStatusForLog(call) === "الرقم خاطئ",
-      ).length,
-      noAction: rowsWithCalls.filter(
-        ({ call }) => callStatusForLog(call) === "",
-      ).length,
-    };
-  }, [callRows, callLogLookup, callServerPageInfo.totalCount]);
+  const callStatValue = (value: number | undefined) => {
+    if (callDatabaseStatsLoading && !callDatabaseStats) return "…";
+    return value ?? "—";
+  };
 
-  const displayedCallStats = callDatabaseStats ?? callStats;
-  const callStatsSuffix = callDatabaseStatsLoading ? "…" : "";
+  const pledgeStatValue = (value: number | undefined) => {
+    if (pledgeDatabaseStatsLoading && !pledgeDatabaseStats) return "…";
+    return value ?? "—";
+  };
 
   const dismissalInfoForStudent = (
     student: Student,
@@ -1234,36 +1246,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     pledgeTypeFilter,
     pledgeStatusFilter,
   ]);
-
-  const pledgeStats = useMemo(() => {
-    const dismissed = students.filter((student) => student.status === "مفصول");
-    const temporary = dismissed.filter(
-      (student) => dismissalGroup(student) === "temporary",
-    ).length;
-    const final = dismissed.filter(
-      (student) => dismissalGroup(student) === "final",
-    ).length;
-    const pending = dismissed.filter(
-      (student) => !pledgeNoteForDismissal(student),
-    ).length;
-    const pledged = pledgeNotes.filter((note) =>
-      students.some((student) => student.id === note.studentId),
-    ).length;
-    const reactivated = pledgeNotes.filter((note) =>
-      students.some(
-        (student) =>
-          student.id === note.studentId && student.status !== "مفصول",
-      ),
-    ).length;
-    return {
-      dismissed: dismissed.length,
-      temporary,
-      final,
-      pledged,
-      pending,
-      reactivated,
-    };
-  }, [students, pledgeNotes, opportunityLogs, exams]);
 
   const saveLeave = () => {
     if (!leaveStudentId || !leaveReason.trim()) {
@@ -2282,8 +2264,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   الطلاب المطابقون من قاعدة البيانات
                 </p>
                 <b className="text-2xl">
-                  {displayedCallStats.total}
-                  {callStatsSuffix}
+                  {callStatValue(callDatabaseStats?.total)}
                 </b>
               </CardContent>
             </Card>
@@ -2295,10 +2276,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     : "عدد الطلاب الكلي (كل الحالات)"}
                 </p>
                 <b className="text-2xl text-primary">
-                  {callStatusFilter === "all"
-                    ? displayedCallStats.total
-                    : callRows.length}
-                  {callStatsSuffix}
+                  {callStatValue(callDatabaseStats?.total)}
                 </b>
               </CardContent>
             </Card>
@@ -2306,8 +2284,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">تم الاتصال</p>
                 <b className="text-2xl">
-                  {displayedCallStats.contacted}
-                  {callStatsSuffix}
+                  {callStatValue(callDatabaseStats?.contacted)}
                 </b>
               </CardContent>
             </Card>
@@ -2315,8 +2292,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">لم يرد</p>
                 <b className="text-2xl">
-                  {displayedCallStats.unanswered}
-                  {callStatsSuffix}
+                  {callStatValue(callDatabaseStats?.unanswered)}
                 </b>
               </CardContent>
             </Card>
@@ -2324,8 +2300,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">الرقم خاطئ</p>
                 <b className="text-2xl">
-                  {displayedCallStats.wrong}
-                  {callStatsSuffix}
+                  {callStatValue(callDatabaseStats?.wrong)}
                 </b>
               </CardContent>
             </Card>
@@ -2333,8 +2308,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">بدون إجراء</p>
                 <b className="text-2xl">
-                  {displayedCallStats.noAction}
-                  {callStatsSuffix}
+                  {callStatValue(callDatabaseStats?.noAction)}
                 </b>
               </CardContent>
             </Card>
@@ -2353,8 +2327,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 <span>
                   عدد الطلاب الكلي من قاعدة البيانات:{" "}
                   <b>
-                    {displayedCallStats.total}
-                    {callStatsSuffix}
+                    {callStatValue(callDatabaseStats?.total)}
                   </b>
                 </span>
                 <span>
@@ -2409,25 +2382,25 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">المفصولون الآن</p>
-                <b className="text-2xl">{pledgeStats.dismissed}</b>
+                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.dismissed)}</b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">فصل مؤقت</p>
-                <b className="text-2xl">{pledgeStats.temporary}</b>
+                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.temporary)}</b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">فصل نهائي</p>
-                <b className="text-2xl">{pledgeStats.final}</b>
+                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.final)}</b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">تم التعهد</p>
-                <b className="text-2xl">{pledgeStats.pledged}</b>
+                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.pledged)}</b>
               </CardContent>
             </Card>
             <Card>
@@ -2435,13 +2408,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 <p className="text-xs text-muted-foreground">
                   تم التعهد وإعادة التفعيل
                 </p>
-                <b className="text-2xl">{pledgeStats.reactivated}</b>
+                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.reactivated)}</b>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">بانتظار التعهد</p>
-                <b className="text-2xl">{pledgeStats.pending}</b>
+                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.pending)}</b>
               </CardContent>
             </Card>
           </div>

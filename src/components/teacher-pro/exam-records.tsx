@@ -50,6 +50,7 @@ import {
 } from "@/lib/exam-utils";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { examStatsApi, type ExamRecordStat } from "@/lib/api";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 
 const examGradeExportColumns: ExportColumn<any>[] = [
@@ -175,6 +176,8 @@ export function ExamRecordsView() {
   const [filterCourseId, setFilterCourseId] = useState("");
   const [filterStatus, setFilterStatus] = useState<ExamStatusLabel | "">("");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
+  const [databaseExamStats, setDatabaseExamStats] = useState<Record<string, ExamRecordStat>>({});
+  const [databaseExamStatsLoading, setDatabaseExamStatsLoading] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     id: "",
@@ -230,6 +233,44 @@ export function ExamRecordsView() {
     clockTick,
   ]);
 
+  const filteredExamIdsKey = useMemo(
+    () => filteredExams.map((exam) => exam.id).join(","),
+    [filteredExams],
+  );
+
+  useEffect(() => {
+    const examIds = filteredExamIdsKey.split(",").filter(Boolean);
+    if (examIds.length === 0) {
+      setDatabaseExamStats({});
+      setDatabaseExamStatsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setDatabaseExamStatsLoading(true);
+    examStatsApi
+      .get(examIds)
+      .then((result) => {
+        if (!cancelled) setDatabaseExamStats(result?.statsByExamId || {});
+      })
+      .catch(() => {
+        if (!cancelled) setDatabaseExamStats({});
+      })
+      .finally(() => {
+        if (!cancelled) setDatabaseExamStatsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredExamIdsKey]);
+
+  const examStatValue = (examId: string, key: keyof ExamRecordStat) => {
+    const stat = databaseExamStats[examId];
+    if (databaseExamStatsLoading && !stat) return "…";
+    return stat ? stat[key] : "—";
+  };
+
   const examRows = (examId: string) => {
     const exam = exams.find((item) => item.id === examId);
     if (!exam) return [];
@@ -246,30 +287,7 @@ export function ExamRecordsView() {
       );
   };
 
-  const examStats = (examId: string) => {
-    const rows = examRows(examId);
-    const protectedKinds = [
-      "grace",
-      "excused",
-      "before-registration",
-      "missing",
-      "no-discount",
-    ];
-    const accountableRows = rows.filter(
-      (row) => !protectedKinds.includes(row.cls.kind),
-    );
-    return {
-      rows,
-      passCount: rows.filter((row) => row.cls.kind === "pass").length,
-      notPassedCount: accountableRows.filter((row) => row.cls.kind !== "pass")
-        .length,
-      protectedCount: rows.filter((row) =>
-        protectedKinds.includes(row.cls.kind),
-      ).length,
-    };
-  };
-
-  const examDetails = (exam: Exam, rowsCount: number): ExamDetailItem[] => {
+  const examDetails = (exam: Exam, rowsCount: React.ReactNode): ExamDetailItem[] => {
     const mainSites = splitSelection(exam.mainSite);
     return [
       { label: "اسم الامتحان", value: exam.name },
@@ -305,7 +323,7 @@ export function ExamRecordsView() {
     ];
   };
 
-  const availableMainSitesForEdit = (state: FullExamEditState) => {
+  const availableMainSitesForEdit = (_state: FullExamEditState) => {
     return [...MAIN_SITE_OPTIONS];
   };
 
@@ -901,10 +919,7 @@ export function ExamRecordsView() {
   const renderCards = () => (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       {filteredExams.map((exam) => {
-        const { rows, passCount, notPassedCount, protectedCount } = examStats(
-          exam.id,
-        );
-        const details = examDetails(exam, rows.length);
+        const details = examDetails(exam, examStatValue(exam.id, "total"));
         return (
           <Card
             key={exam.id}
@@ -930,13 +945,13 @@ export function ExamRecordsView() {
               <div className="mb-3 grid grid-cols-2 gap-2 text-center md:grid-cols-4">
                 <div className="rounded bg-emerald-50 p-2 dark:bg-emerald-950/40">
                   <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                    {passCount}
+                    {examStatValue(exam.id, "passCount")}
                   </p>
                   <p className="text-[10px] text-muted-foreground">ناجح</p>
                 </div>
                 <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40">
                   <p className="text-lg font-bold text-rose-600 dark:text-rose-400">
-                    {notPassedCount}
+                    {examStatValue(exam.id, "notPassedCount")}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
                     محاسب/غائب
@@ -944,7 +959,7 @@ export function ExamRecordsView() {
                 </div>
                 <div className="rounded bg-cyan-50 p-2 dark:bg-cyan-950/40">
                   <p className="text-lg font-bold text-cyan-600 dark:text-cyan-400">
-                    {protectedCount}
+                    {examStatValue(exam.id, "protectedCount")}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
                     سماح/إجازة
@@ -952,7 +967,7 @@ export function ExamRecordsView() {
                 </div>
                 <div className="rounded bg-sky-50 p-2 dark:bg-sky-950/40">
                   <p className="text-lg font-bold text-sky-600 dark:text-sky-400">
-                    {rows.length}
+                    {examStatValue(exam.id, "total")}
                   </p>
                   <p className="text-[10px] text-muted-foreground">إجمالي</p>
                 </div>
@@ -1012,7 +1027,6 @@ export function ExamRecordsView() {
         </thead>
         <tbody>
           {filteredExams.map((exam) => {
-            const { rows } = examStats(exam.id);
             return (
               <tr key={exam.id} className="border-t align-top">
                 <td className="p-3 font-bold">{exam.name}</td>
@@ -1051,7 +1065,7 @@ export function ExamRecordsView() {
                 <td className="p-3 min-w-36">
                   {formatDateTime(exam.scheduledDeactivateAt)}
                 </td>
-                <td className="p-3">{rows.length}</td>
+                <td className="p-3">{examStatValue(exam.id, "total")}</td>
                 <td className="p-3 min-w-80">{renderExamActions(exam)}</td>
               </tr>
             );

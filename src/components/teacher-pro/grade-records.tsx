@@ -43,13 +43,7 @@ import { formatAppDate } from "@/lib/format";
 import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import {
-  formatGradeScore,
-  isExamOnOrAfterStudentRegistration,
-  isGradeEntered,
-  splitSelection,
-  studentMatchesExamMainSites,
-} from "@/lib/exam-utils";
+import { formatGradeScore, isGradeEntered } from "@/lib/exam-utils";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { CheckCircle2, UserX } from "lucide-react";
 import { StatCard } from "./ui-kit";
@@ -541,110 +535,22 @@ export function GradeRecordsView() {
     [],
   );
 
-  const gradeCoverageDashboard = useMemo(() => {
-    const selectedExam = filterExamId ? examById.get(filterExamId) : null;
+  const displayedGradeCoverage = {
+    withGrade: gradeCoverageStats?.withGrade,
+    withoutGrade: gradeCoverageStats?.withoutGrade,
+    total: gradeCoverageStats?.total,
+    scopeLabel: filterExamId
+      ? `ضمن ${examById.get(filterExamId)?.name || "الامتحان المحدد"}`
+      : "ضمن كل الامتحانات",
+    missingHint: filterExamId
+      ? "لم تُدخل لهم درجة لهذا الامتحان"
+      : "لا يملكون أي سجل درجة لحد الآن",
+  };
 
-    const studentMatchesDashboardFilters = (
-      student: (typeof students)[number],
-      exam?: (typeof exams)[number] | null,
-    ) => {
-      if (!matchesArabicLetterFilter(student.name, filterNameLetter))
-        return false;
-      if (filterCourseId && student.courseId !== filterCourseId) return false;
-      if (
-        !studentMatchesListFilters(student, {
-          courseProgram: filterCourseProgram,
-          courseTerm: filterCourseTerm,
-          studyType: filterStudyType,
-        })
-      )
-        return false;
-      if (
-        debouncedSearch &&
-        !searchAny(debouncedSearch, [
-          student.name,
-          student.code,
-          student.telegram,
-          student.phone,
-          student.parentPhone,
-          student.school,
-          student.subSite,
-          student.locationScope,
-          student.mainSite,
-          exam?.name,
-        ])
-      )
-        return false;
-      return true;
-    };
-
-    const enteredStudentIds = new Set<string>();
-    for (const grade of grades) {
-      if (selectedExam && grade.examId !== selectedExam.id) continue;
-      const exam = examById.get(grade.examId);
-      if (exam && isGradeEntered(grade, exam)) {
-        enteredStudentIds.add(grade.studentId);
-      }
-    }
-
-    const selectedMainSites = selectedExam
-      ? splitSelection(selectedExam.mainSite)
-      : [];
-
-    const scopedStudents = selectedExam
-      ? students.filter((student) => {
-          if (!selectedExam.courseIds.includes(student.courseId)) return false;
-          if (!isExamOnOrAfterStudentRegistration(student, selectedExam))
-            return false;
-          if (!studentMatchesExamMainSites(student, selectedMainSites))
-            return false;
-          return studentMatchesDashboardFilters(student, selectedExam);
-        })
-      : students.filter((student) => studentMatchesDashboardFilters(student));
-
-    const withGrade = scopedStudents.filter((student) =>
-      enteredStudentIds.has(student.id),
-    ).length;
-    const withoutGrade = Math.max(0, scopedStudents.length - withGrade);
-
-    return {
-      withGrade,
-      withoutGrade,
-      total: scopedStudents.length,
-      scopeLabel: selectedExam
-        ? `ضمن ${selectedExam.name}`
-        : "ضمن كل الامتحانات",
-      missingHint: selectedExam
-        ? "لم تُدخل لهم درجة لهذا الامتحان"
-        : "لا يملكون أي سجل درجة لحد الآن",
-    };
-  }, [
-    grades,
-    students,
-    exams,
-    examById,
-    filterExamId,
-    filterNameLetter,
-    filterCourseId,
-    filterCourseProgram,
-    filterCourseTerm,
-    filterStudyType,
-    debouncedSearch,
-  ]);
-
-  const displayedGradeCoverage = gradeCoverageStats
-    ? {
-        withGrade: gradeCoverageStats.withGrade,
-        withoutGrade: gradeCoverageStats.withoutGrade,
-        total: gradeCoverageStats.total,
-        scopeLabel: filterExamId
-          ? `ضمن ${examById.get(filterExamId)?.name || "الامتحان المحدد"}`
-          : "ضمن كل الامتحانات",
-        missingHint: filterExamId
-          ? "لم تُدخل لهم درجة لهذا الامتحان"
-          : "لا يملكون أي سجل درجة لحد الآن",
-      }
-    : gradeCoverageDashboard;
+  const statValue = (value: number | undefined) => {
+    if (gradeCoverageStatsLoading && !gradeCoverageStats) return "…";
+    return value === undefined ? "—" : formatEnglishNumber(value);
+  };
 
   const localFiltered = useMemo(() => {
     return grades.filter((grade) => {
@@ -878,22 +784,14 @@ export function GradeRecordsView() {
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <StatCard
           label="طلاب لديهم درجة"
-          value={
-            gradeCoverageStatsLoading && !gradeCoverageStats
-              ? "…"
-              : formatEnglishNumber(displayedGradeCoverage.withGrade)
-          }
+          value={statValue(displayedGradeCoverage.withGrade)}
           icon={CheckCircle2}
           tone="success"
-          hint={`${displayedGradeCoverage.scopeLabel} من أصل ${formatEnglishNumber(displayedGradeCoverage.total)} طالب`}
+          hint={`${displayedGradeCoverage.scopeLabel} من أصل ${statValue(displayedGradeCoverage.total)} طالب`}
         />
         <StatCard
           label="طلاب بلا درجة"
-          value={
-            gradeCoverageStatsLoading && !gradeCoverageStats
-              ? "…"
-              : formatEnglishNumber(displayedGradeCoverage.withoutGrade)
-          }
+          value={statValue(displayedGradeCoverage.withoutGrade)}
           icon={UserX}
           tone="warning"
           hint={displayedGradeCoverage.missingHint}

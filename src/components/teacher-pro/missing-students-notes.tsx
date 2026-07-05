@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useTeacherStore } from "@/lib/teacher-store";
+import { missingStudentsNotesStatsApi, type MissingStudentsNotesStatsResponse } from "@/lib/api";
 import { formatAppDate } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
 import {
@@ -47,11 +48,22 @@ export function MissingStudentsNotesView() {
   const [notes, setNotes] = useState<GradeEntryMissingNote[]>([]);
   const [search, setSearch] = useState("");
   const [deleteDialogNote, setDeleteDialogNote] = useState<GradeEntryMissingNote | null>(null);
+  const [databaseStats, setDatabaseStats] = useState<MissingStudentsNotesStatsResponse | null>(null);
+  const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
 
   const refreshNotes = () => setNotes(readGradeEntryMissingNotes());
+  const refreshDatabaseStats = () => {
+    setDatabaseStatsLoading(true);
+    missingStudentsNotesStatsApi
+      .get()
+      .then((result) => setDatabaseStats(result))
+      .catch(() => setDatabaseStats(null))
+      .finally(() => setDatabaseStatsLoading(false));
+  };
 
   useEffect(() => {
     refreshNotes();
+    refreshDatabaseStats();
     void fetchGradeEntryMissingNotesFromServer().then(() => setNotes(readGradeEntryMissingNotes()));
     window.addEventListener(GRADE_ENTRY_MISSING_NOTES_EVENT, refreshNotes);
     window.addEventListener("storage", refreshNotes);
@@ -71,11 +83,8 @@ export function MissingStudentsNotesView() {
     );
   }, [normalizedSearch, notes]);
 
-  const examIdsWithNotes = useMemo(
-    () => new Set(notes.map((note) => note.examId)),
-    [notes],
-  );
-  const totalCharacters = notes.reduce((sum, note) => sum + note.text.length, 0);
+  const statValue = (value: number | undefined) =>
+    databaseStatsLoading && !databaseStats ? "…" : value ?? "—";
 
   const handleDeleteNote = (note: GradeEntryMissingNote) => {
     setDeleteDialogNote(note);
@@ -83,7 +92,7 @@ export function MissingStudentsNotesView() {
 
   const confirmDeleteNote = () => {
     if (!deleteDialogNote) return;
-    deleteGradeEntryMissingNote(deleteDialogNote.examId);
+    void deleteGradeEntryMissingNote(deleteDialogNote.examId).finally(refreshDatabaseStats);
     setDeleteDialogNote(null);
     refreshNotes();
   };
@@ -122,24 +131,24 @@ export function MissingStudentsNotesView() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="عدد الملاحظات"
-          value={notes.length}
+          value={statValue(databaseStats?.total)}
           icon={ClipboardList}
           tone="info"
-          hint="ملاحظات محفوظة من تسجيل الدرجات"
+          hint="عدّ مباشر من قاعدة البيانات"
         />
         <StatCard
           label="امتحانات تحتوي ملاحظات"
-          value={examIdsWithNotes.size}
+          value={statValue(databaseStats?.examsWithNotes)}
           icon={FileText}
           tone="warning"
-          hint="كل امتحان له ملاحظة مستقلة"
+          hint="عدّ مباشر من قاعدة البيانات"
         />
         <StatCard
           label="إجمالي الأحرف"
-          value={totalCharacters}
+          value={statValue(databaseStats?.totalCharacters)}
           icon={AlertTriangle}
           tone="danger"
-          hint="مؤشر سريع لحجم الملاحظات"
+          hint="مجموع النصوص من قاعدة البيانات"
         />
       </div>
 

@@ -81,6 +81,25 @@ type BotIntegrationConfig = {
   usingEmbeddedToken?: boolean;
 };
 
+type CorrectionStatsResponse = {
+  total: number;
+  completed: number;
+  pending: number;
+  totalErrors: number;
+  source: "database";
+  generatedAt?: string;
+};
+
+type BotSubmissionStatsResponse = {
+  total: number;
+  pending: number;
+  inReview: number;
+  done: number;
+  totalPages: number;
+  source: "database";
+  generatedAt?: string;
+};
+
 type TelegramExamSubmission = {
   id: string;
   studentId: string;
@@ -210,7 +229,6 @@ function TelegramPageImage({
     );
   }
 
-  // eslint-disable-next-line @next/next/no-img-element
   return (
     <img
       src={src}
@@ -263,6 +281,10 @@ export function ECorrectionView() {
   const [botSchemaWarning, setBotSchemaWarning] = useState("");
   const [botIntegrationConfig, setBotIntegrationConfig] =
     useState<BotIntegrationConfig>({});
+  const [correctionStats, setCorrectionStats] = useState<CorrectionStatsResponse | null>(null);
+  const [correctionStatsLoading, setCorrectionStatsLoading] = useState(false);
+  const [botDatabaseStats, setBotDatabaseStats] = useState<BotSubmissionStatsResponse | null>(null);
+  const [botDatabaseStatsLoading, setBotDatabaseStatsLoading] = useState(false);
   const { locked: isAddingSheet, runLocked: runAddSheetLocked } =
     useActionLock();
   const { locked: isCompletingSheet, runLocked: runCompleteSheetLocked } =
@@ -301,8 +323,44 @@ export function ECorrectionView() {
     }
   };
 
+  const loadCorrectionStats = async () => {
+    setCorrectionStatsLoading(true);
+    try {
+      const response = await fetch("/api/correction-sheets/stats", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "تعذر تحميل إحصائيات التصحيح");
+      setCorrectionStats(payload as CorrectionStatsResponse);
+    } catch {
+      setCorrectionStats(null);
+    } finally {
+      setCorrectionStatsLoading(false);
+    }
+  };
+
+  const loadBotDatabaseStats = async () => {
+    setBotDatabaseStatsLoading(true);
+    try {
+      const response = await fetch("/api/telegram-exam-submissions/stats", {
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "تعذر تحميل إحصائيات مستلمات البوت");
+      setBotDatabaseStats(payload as BotSubmissionStatsResponse);
+    } catch {
+      setBotDatabaseStats(null);
+    } finally {
+      setBotDatabaseStatsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadBotSubmissions();
+    loadCorrectionStats();
+    loadBotDatabaseStats();
   }, []);
 
   const updateBotSubmissionStatus = async (id: string, status: string) => {
@@ -327,6 +385,7 @@ export function ECorrectionView() {
       );
       if (botSubmissionDialog?.id === id)
         setBotSubmissionDialog(nextSubmission);
+      await loadBotDatabaseStats();
       toast.success("تم تحديث حالة مستلم البوت");
     } catch (error) {
       setBotSubmissions(previous);
@@ -426,23 +485,6 @@ export function ECorrectionView() {
     exams,
   ]);
 
-  const botStats = useMemo(() => {
-    const totalPages = botSubmissions.reduce(
-      (acc, item) => acc + (item.pageCount || item.pages?.length || 0),
-      0,
-    );
-    return {
-      total: botSubmissions.length,
-      pending: botSubmissions.filter(
-        (item) => item.status === "بانتظار التصحيح",
-      ).length,
-      inReview: botSubmissions.filter((item) => item.status === "قيد التصحيح")
-        .length,
-      done: botSubmissions.filter((item) => item.status === "مكتمل").length,
-      totalPages,
-    };
-  }, [botSubmissions]);
-
   const displayedTeacherProApiUrl =
     botIntegrationConfig.apiUrl ||
     (typeof window !== "undefined"
@@ -469,12 +511,15 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
     }
   };
 
-  const completed = correctionSheets.filter((s) => s.status === "مكتمل").length;
-  const pending = correctionSheets.filter((s) => s.status !== "مكتمل").length;
-  const totalErrors = correctionSheets.reduce(
-    (acc, s) => acc + s.correctionErrors + s.sumErrors,
-    0,
-  );
+  const correctionStatValue = (value: number | undefined) => {
+    if (correctionStatsLoading && !correctionStats) return "…";
+    return value ?? "—";
+  };
+
+  const botStatValue = (value: number | undefined) => {
+    if (botDatabaseStatsLoading && !botDatabaseStats) return "…";
+    return value ?? "—";
+  };
 
   // Leaderboard: sorted by total errors (ascending)
   const leaderboard = useMemo(() => {
@@ -528,6 +573,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
       correctionErrors: 0,
       sumErrors: 0,
     });
+    await loadCorrectionStats();
     toast.success("تم إضافة ورقة تصحيح");
   });
 
@@ -547,6 +593,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
       correctionErrors: 0,
       sumErrors: 0,
     });
+    await loadCorrectionStats();
     toast.success("تم إكمال التصحيح وتسجيل الأخطاء");
   });
 
@@ -555,7 +602,12 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
   };
   const handleDeleteSheetConfirm = runDeleteSheetLocked(async () => {
     const ok = deleteCorrectionSheet(deleteSheetDialog.id);
-    ok ? toast.success("تم حذف ورقة التصحيح") : toast.error("تعذر حذف الورقة");
+    if (ok) {
+      await loadCorrectionStats();
+      toast.success("تم حذف ورقة التصحيح");
+    } else {
+      toast.error("تعذر حذف الورقة");
+    }
     setDeleteSheetDialog({ open: false, id: "" });
   });
 
@@ -566,7 +618,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-              {completed}
+              {correctionStatValue(correctionStats?.completed)}
             </p>
             <p className="text-xs text-muted-foreground">مكتمل</p>
           </CardContent>
@@ -574,7 +626,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-              {pending}
+              {correctionStatValue(correctionStats?.pending)}
             </p>
             <p className="text-xs text-muted-foreground">بانتظار التصحيح</p>
           </CardContent>
@@ -582,7 +634,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">
-              {totalErrors}
+              {correctionStatValue(correctionStats?.totalErrors)}
             </p>
             <p className="text-xs text-muted-foreground">إجمالي الأخطاء</p>
           </CardContent>
@@ -743,14 +795,14 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Card>
               <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold">{botStats.total}</p>
+                <p className="text-2xl font-bold">{botStatValue(botDatabaseStats?.total)}</p>
                 <p className="text-xs text-muted-foreground">مستلم من البوت</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
                 <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                  {botStats.pending}
+                  {botStatValue(botDatabaseStats?.pending)}
                 </p>
                 <p className="text-xs text-muted-foreground">بانتظار التصحيح</p>
               </CardContent>
@@ -758,7 +810,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
             <Card>
               <CardContent className="p-4 text-center">
                 <p className="text-2xl font-bold text-sky-600 dark:text-sky-400">
-                  {botStats.inReview}
+                  {botStatValue(botDatabaseStats?.inReview)}
                 </p>
                 <p className="text-xs text-muted-foreground">قيد التصحيح</p>
               </CardContent>
@@ -766,7 +818,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
             <Card>
               <CardContent className="p-4 text-center">
                 <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                  {botStats.done}
+                  {botStatValue(botDatabaseStats?.done)}
                 </p>
                 <p className="text-xs text-muted-foreground">مكتمل</p>
               </CardContent>
@@ -774,7 +826,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
             <Card>
               <CardContent className="p-4 text-center">
                 <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                  {botStats.totalPages}
+                  {botStatValue(botDatabaseStats?.totalPages)}
                 </p>
                 <p className="text-xs text-muted-foreground">صفحات مستلمة</p>
               </CardContent>
