@@ -127,7 +127,16 @@ export async function GET(req: NextRequest) {
     );
     const studentIds = students.map((student) => student.id);
 
-    const examDate = new Date(`${dateKey(exam.date)}T00:00:00.000Z`);
+    const examDateRaw = exam.date instanceof Date ? exam.date : new Date(String(exam.date));
+    // Start of the exam day in UTC. This is the lower bound for dateTo overlap.
+    const examDate = new Date(
+      Date.UTC(
+        examDateRaw.getUTCFullYear(),
+        examDateRaw.getUTCMonth(),
+        examDateRaw.getUTCDate(),
+      ),
+    );
+    // Exclusive end = start of the next UTC day.
     const nextExamDate = dayAfter(examDate);
 
     const [grades, studentLeaves, opportunityLogs] = await Promise.all([
