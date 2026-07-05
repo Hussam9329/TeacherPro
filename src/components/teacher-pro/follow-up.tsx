@@ -143,7 +143,7 @@ const callStatusFilterLabels: Record<CallStatusFilter, string> = {
   cheating: "طلاب الغش",
   passed: "الطلاب الناجحين",
   full: "الدرجات الكاملة",
-  "academic-accounting": "محاسبة رسوب",
+  "academic-accounting": "طلاب المحاسبة",
 };
 
 const callStatusFilterOptions = Object.keys(
