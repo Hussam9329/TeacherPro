@@ -2902,6 +2902,10 @@ export const useTeacherStore = create<TeacherState>()(
         if (!exam) return false;
 
         const relatedGrades = state.grades.filter((grade) => grade.examId === id);
+        if (relatedGrades.length > 0) {
+          get().logAction('الامتحانات', 'منع حذف امتحان عليه درجات', `${exam.name} - ${relatedGrades.length} سجل درجات`);
+          return false;
+        }
         const relatedOpportunityLogs = state.opportunityLogs.filter((log) => opportunityLogBelongsToExam(log, id));
         const relatedCorrectionSheets = state.correctionSheets.filter((sheet) => sheet.examId === id);
         const relatedLeaves = state.studentLeaves.filter((leave) => leave.examId === id);

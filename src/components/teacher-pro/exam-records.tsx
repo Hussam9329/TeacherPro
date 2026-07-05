@@ -113,6 +113,28 @@ function formatDateTime(value?: string | null) {
   return formatBaghdadDateTime(value);
 }
 
+function getEntryAvailability(exam: Exam) {
+  const status = getExamStatus(exam);
+  if (status === "نشط") {
+    return { available: true, answer: "نعم", reason: "الامتحان نشط ويظهر في إدخال الدرجات." };
+  }
+  if (status === "تعطيل مجدول") {
+    return {
+      available: true,
+      answer: "نعم",
+      reason: `نشط حالياً وسيُعطل في ${formatDateTime(exam.scheduledDeactivateAt)}.`,
+    };
+  }
+  if (status === "تفعيل مجدول") {
+    return {
+      available: false,
+      answer: "لا",
+      reason: `لن يظهر في إدخال الدرجات حتى ${formatDateTime(exam.scheduledActivateAt)}.`,
+    };
+  }
+  return { available: false, answer: "لا", reason: "الامتحان معطل حالياً ولا يظهر في إدخال الدرجات." };
+}
+
 function defaultDeactivateDateTime(exam: Exam) {
   return (
     toDateTimeLocalValue(exam.scheduledDeactivateAt) ||
@@ -271,6 +293,12 @@ export function ExamRecordsView() {
     return stat ? stat[key] : "—";
   };
 
+  const examStatNumber = (examId: string, key: keyof ExamRecordStat): number | null => {
+    const stat = databaseExamStats[examId];
+    const value = stat?.[key];
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  };
+
   const examRows = (examId: string) => {
     const exam = exams.find((item) => item.id === examId);
     if (!exam) return [];
@@ -289,11 +317,20 @@ export function ExamRecordsView() {
 
   const examDetails = (exam: Exam, rowsCount: React.ReactNode): ExamDetailItem[] => {
     const mainSites = splitSelection(exam.mainSite);
+    const entryAvailability = getEntryAvailability(exam);
     return [
       { label: "اسم الامتحان", value: exam.name },
       { label: "تاريخ الامتحان", value: formatAppDate(exam.date) },
       { label: "نوع الامتحان", value: exam.type },
       { label: "حالة الامتحان", value: getExamStatus(exam) },
+      {
+        label: "متاح للإدخال",
+        value: (
+          <span className={entryAvailability.available ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
+            {entryAvailability.answer} - {entryAvailability.reason}
+          </span>
+        ),
+      },
       {
         label: "الدورات",
         value: exam.courseIds.map(courseName).join("، ") || "—",
@@ -494,13 +531,26 @@ export function ExamRecordsView() {
 
   const openDeleteExamDialog = (examId: string) => {
     const exam = exams.find((item) => item.id === examId);
-    setDeleteDialog({ open: true, id: examId, name: exam?.name || "" });
+    setDeleteDialog({
+      open: true,
+      id: examId,
+      name: exam?.name || "",
+      gradeCount: examStatNumber(examId, "total"),
+    });
   };
 
   const handleDeleteExam = runDeleteExamLocked(async () => {
+    if (deleteDialog.gradeCount === null) {
+      toast.error("انتظر اكتمال التحقق من سجلات الدرجات قبل الحذف.");
+      return;
+    }
+    if (deleteDialog.gradeCount > 0) {
+      toast.error(`لا يمكن حذف هذا الامتحان لأن عليه ${deleteDialog.gradeCount} سجل درجات. عطّل الامتحان بدلاً من حذفه.`);
+      return;
+    }
     const ok = deleteExam(deleteDialog.id);
     ok ? toast.success("تم حذف الامتحان") : toast.error("تعذر حذف الامتحان");
-    setDeleteDialog({ open: false, id: "", name: "" });
+    setDeleteDialog({ open: false, id: "", name: "", gradeCount: null });
   });
 
   const renderEditExamFields = () => {
@@ -936,6 +986,9 @@ export function ExamRecordsView() {
                   <div className="mt-2 flex flex-wrap gap-1">
                     <Badge>{exam.type}</Badge>
                     <Badge variant="outline">{getExamStatus(exam)}</Badge>
+                    <Badge variant={entryAvailability.available ? "secondary" : "destructive"}>
+                      متاح للإدخال: {entryAvailability.answer}
+                    </Badge>
                   </div>
                 </div>
                 {renderExamActions(exam)}
@@ -1012,6 +1065,7 @@ export function ExamRecordsView() {
             <th className="p-3 text-right">التاريخ</th>
             <th className="p-3 text-right">النوع</th>
             <th className="p-3 text-right">الحالة</th>
+            <th className="p-3 text-right">متاح للإدخال</th>
             <th className="p-3 text-right">الدورات</th>
             <th className="p-3 text-right">الموقع</th>
             <th className="p-3 text-right">الكاملة</th>
@@ -1041,6 +1095,12 @@ export function ExamRecordsView() {
                 </td>
                 <td className="p-3">
                   <Badge variant="outline">{getExamStatus(exam)}</Badge>
+                </td>
+                <td className="p-3 min-w-52">
+                  <div className="space-y-1">
+                    <Badge variant={entryAvailability.available ? "secondary" : "destructive"}>{entryAvailability.answer}</Badge>
+                    <p className="text-xs text-muted-foreground">{entryAvailability.reason}</p>
+                  </div>
                 </td>
                 <td className="p-3 min-w-44">
                   {exam.courseIds.map(courseName).join("، ") || "—"}
@@ -1073,7 +1133,7 @@ export function ExamRecordsView() {
           {filteredExams.length === 0 && (
             <tr>
               <td
-                colSpan={15}
+                colSpan={16}
                 className="p-8 text-center text-muted-foreground"
               >
                 لا توجد امتحانات مطابقة للفلاتر.
@@ -1264,24 +1324,42 @@ export function ExamRecordsView() {
 
       <AlertDialog
         open={deleteDialog.open}
-        onOpenChange={(open) => setDeleteDialog((prev) => ({ ...prev, open }))}
+        onOpenChange={(open) => setDeleteDialog((prev) => open ? { ...prev, open } : { open: false, id: "", name: "", gradeCount: null })}
       >
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-            <AlertDialogDescription>
-              هل أنت متأكد من حذف الامتحان &quot;{deleteDialog.name}&quot;؟ سيتم
-              حذف الدرجات وأوراق التصحيح التابعة له.
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>الامتحان: &quot;{deleteDialog.name}&quot;</p>
+                {deleteDialog.gradeCount === null ? (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                    جاري التحقق من قاعدة البيانات لمعرفة هل توجد درجات مرتبطة بهذا الامتحان.
+                  </p>
+                ) : deleteDialog.gradeCount > 0 ? (
+                  <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 font-semibold text-destructive">
+                    لا يمكن حذف امتحان عليه درجات. يوجد {deleteDialog.gradeCount} سجل درجات مرتبط بهذا الامتحان. استخدم التعطيل إذا كان الهدف إيقاف ظهوره في إدخال الدرجات.
+                  </p>
+                ) : (
+                  <p>لا توجد درجات مرتبطة بهذا الامتحان حسب قاعدة البيانات، ويمكن حذفه.</p>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteExam}
-              disabled={isDeletingExam}
+              disabled={isDeletingExam || deleteDialog.gradeCount === null || Number(deleteDialog.gradeCount) > 0}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeletingExam ? "جاري الحذف..." : "حذف"}
+              {isDeletingExam
+                ? "جاري الحذف..."
+                : deleteDialog.gradeCount === null
+                  ? "جاري التحقق..."
+                  : Number(deleteDialog.gradeCount) > 0
+                    ? "الحذف ممنوع"
+                    : "حذف"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

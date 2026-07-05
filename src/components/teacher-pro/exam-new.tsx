@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { hasActiveChapterLink } from "@/lib/exam-utils";
+import { hasActiveChapterLink, studentMatchesExamMainSites } from "@/lib/exam-utils";
 
 type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
 const EXAM_MAIN_SITE_OPTIONS: string[] = [...MAIN_SITE_OPTIONS];
@@ -51,6 +51,72 @@ function defaultDateTimeForDate(date: string) {
 
 function numberInputValue(value: number | string) {
   return Number(value) === 0 ? "" : String(value);
+}
+
+
+function formatRangeNumber(value: number) {
+  if (!Number.isFinite(value)) return "—";
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
+}
+
+type JudgmentPreviewItem = {
+  title: string;
+  description: string;
+  tone: "ok" | "warn" | "danger" | "info";
+};
+
+function buildJudgmentPreview(state: ExamFormState): JudgmentPreviewItem[] {
+  const fullMark = Number(state.fullMark || 0);
+  const passMark = Number(state.passMark || 0);
+  const discountMark = Number(state.discountMark || 0);
+  const penalty = Number(state.opportunitiesPenaltyNum || 0);
+  const isFinalExam = state.type === "فاينل";
+  const noDiscount = Boolean(state.noDiscount);
+  const dismissalGradeRaw = state.dismissalGrade === "" ? null : Number(state.dismissalGrade);
+  const dismissalGrade = Number.isFinite(Number(dismissalGradeRaw)) ? Number(dismissalGradeRaw) : null;
+  const items: JudgmentPreviewItem[] = [];
+
+  if (noDiscount) {
+    items.push({
+      title: `الدرجات من 0 إلى ${formatRangeNumber(fullMark)}`,
+      description: `لا تخصم فرص. من ${formatRangeNumber(passMark)} فما فوق تظهر ناجح، وأقل من ذلك تظهر بدون خصم.`,
+      tone: "info",
+    });
+    items.push({ title: "الغياب", description: "لا يخصم فرص لأن الامتحان بدون خصم.", tone: "info" });
+    items.push({ title: "الغش", description: "يبقى إجراءً خطيراً: أول غش يفصل مؤقتاً ويصفر الفرص، والغش المتكرر يفصل نهائياً.", tone: "danger" });
+    return items;
+  }
+
+  if (isFinalExam) {
+    if (dismissalGrade !== null) {
+      items.push({ title: `من 0 إلى ${formatRangeNumber(dismissalGrade)}`, description: "فصل مؤقت حسب درجة الفصل في الفاينل.", tone: "danger" });
+      if (dismissalGrade >= passMark) {
+        items.push({ title: "تنبيه تداخل", description: "درجة الفصل تساوي أو تتجاوز درجة النجاح، وهذا يجعل حكم الفصل يتداخل مع النجاح. راجع القيم قبل الحفظ.", tone: "danger" });
+      }
+      items.push({ title: `أكبر من ${formatRangeNumber(dismissalGrade)} وأقل من ${formatRangeNumber(passMark)}`, description: "راسب في الفاينل بدون خصم فرص مباشر.", tone: "warn" });
+    } else {
+      items.push({ title: "درجة 0", description: "فصل مؤقت في الفاينل.", tone: "danger" });
+      items.push({ title: `أكبر من 0 وأقل من ${formatRangeNumber(passMark)}`, description: "راسب.", tone: "warn" });
+    }
+    items.push({ title: `من ${formatRangeNumber(passMark)} فما فوق`, description: "ناجح.", tone: "ok" });
+    items.push({ title: "الغياب", description: "فصل مؤقت لأنه غياب ضمن فاينل.", tone: "danger" });
+    items.push({ title: "الغش", description: "أول غش يفصل مؤقتاً ويصفر الفرص، والغش المتكرر يفصل نهائياً.", tone: "danger" });
+    return items;
+  }
+
+  items.push({ title: `من 0 إلى ${formatRangeNumber(discountMark)}`, description: `مخصوم: يخصم ${formatRangeNumber(penalty)} فرصة من الطالب.`, tone: "danger" });
+  items.push({ title: `أكبر من ${formatRangeNumber(discountMark)} وأقل من ${formatRangeNumber(passMark)}`, description: "راسب/محاسبة رسوب بدون خصم فرص مباشر.", tone: "warn" });
+  items.push({ title: `من ${formatRangeNumber(passMark)} فما فوق`, description: "ناجح.", tone: "ok" });
+  items.push({ title: "الغياب", description: `مخصوم: يخصم ${formatRangeNumber(penalty)} فرصة.`, tone: "danger" });
+  items.push({ title: "الغش", description: "أول غش يفصل مؤقتاً ويصفر الفرص، والغش المتكرر يفصل نهائياً.", tone: "danger" });
+  return items;
+}
+
+function judgmentToneClass(tone: JudgmentPreviewItem["tone"]) {
+  if (tone === "ok") return "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100";
+  if (tone === "danger") return "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-100";
+  if (tone === "warn") return "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100";
+  return "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100";
 }
 
 function emptyForm(): ExamFormState {
@@ -108,6 +174,7 @@ export function ExamNewView() {
   const {
     courses,
     courseChapters,
+    students,
     addExam,
     courseName,
   } = useTeacherStore();
@@ -118,6 +185,15 @@ export function ExamNewView() {
   const activeCourses = useMemo(() => courses.filter((course) => course.active), [courses]);
 
   const availableMainSitesFor = (_state: ExamFormState): string[] => EXAM_MAIN_SITE_OPTIONS;
+
+  const selectedSiteMatchedStudentsCount = (state: ExamFormState) => {
+    if (state.courseIds.length === 0 || state.mainSites.length === 0) return null;
+    return students.filter((student) =>
+      student.status === "نشط" &&
+      state.courseIds.includes(student.courseId) &&
+      studentMatchesExamMainSites(student, state.mainSites),
+    ).length;
+  };
 
   const validateForm = (state: ExamFormState) => {
     const fullMark = Number(state.fullMark);
@@ -162,9 +238,11 @@ export function ExamNewView() {
 
   const renderCourseSelector = (state: ExamFormState, setState: (updater: (prev: ExamFormState) => ExamFormState) => void, allId: string) => {
     const eligibleCourses = activeCourses.filter((course) => hasActiveChapterLink(courseChapters, course.id));
+    const excludedCourses = activeCourses.filter((course) => !hasActiveChapterLink(courseChapters, course.id));
     const allSelected = eligibleCourses.length > 0 && eligibleCourses.every((course) => state.courseIds.includes(course.id));
     return (
-      <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-3">
+      <div className="space-y-3">
+        <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-3">
         <div className="flex items-center gap-2 border-b pb-2">
           <Checkbox
             id={allId}
@@ -173,25 +251,38 @@ export function ExamNewView() {
           />
           <Label htmlFor={allId} className="text-sm font-bold">الكل للدورات المربوطة بفصل</Label>
         </div>
-        {activeCourses.map((course) => {
-          const eligible = hasActiveChapterLink(courseChapters, course.id);
-          return (
-            <div key={course.id} className="flex items-center gap-2">
-              <Checkbox
-                id={`${allId}-${course.id}`}
-                checked={state.courseIds.includes(course.id)}
-                disabled={!eligible}
-                onCheckedChange={() => setState((prev) => toggleCourseSelection(prev, course.id))}
-              />
-              <Label htmlFor={`${allId}-${course.id}`} className="text-sm">
-                {course.name}
-              </Label>
-              <Badge variant={eligible ? "outline" : "destructive"} className="text-[10px]">
-                {eligible ? (course.availablePrograms?.join("، ") || "—") : "لم يتم اختيار فصل"}
-              </Badge>
-            </div>
-          );
-        })}
+          {activeCourses.map((course) => {
+            const eligible = hasActiveChapterLink(courseChapters, course.id);
+            return (
+              <div key={course.id} className="flex items-center gap-2">
+                <Checkbox
+                  id={`${allId}-${course.id}`}
+                  checked={state.courseIds.includes(course.id)}
+                  disabled={!eligible}
+                  onCheckedChange={() => setState((prev) => toggleCourseSelection(prev, course.id))}
+                />
+                <Label htmlFor={`${allId}-${course.id}`} className="text-sm">
+                  {course.name}
+                </Label>
+                <Badge variant={eligible ? "outline" : "destructive"} className="text-[10px]">
+                  {eligible ? (course.availablePrograms?.join("، ") || "—") : "مستبعدة: بلا فصل نشط"}
+                </Badge>
+              </div>
+            );
+          })}
+        </div>
+        {excludedCourses.length > 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+            <p className="font-bold">دورات مستبعدة من اختيار الكل</p>
+            <ul className="mt-2 list-disc space-y-1 pr-5">
+              {excludedCourses.map((course) => (
+                <li key={course.id}>
+                  دورة {course.name} مستبعدة لأنها بلا فصل نشط.
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     );
   };
@@ -236,6 +327,8 @@ export function ExamNewView() {
     const noDiscount = Boolean(state.noDiscount);
     const mainSitesForState = availableMainSitesFor(state);
     const allMainSitesSelected = mainSitesForState.length > 0 && state.mainSites.length === mainSitesForState.length;
+    const matchedStudentsCount = selectedSiteMatchedStudentsCount(state);
+    const judgmentPreview = buildJudgmentPreview(state);
 
     return (
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -296,6 +389,16 @@ export function ExamNewView() {
               </div>
             ))}
           </div>
+          {matchedStudentsCount === 0 && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
+              لا يوجد طلاب مطابقون لهذه المواقع في الدورات المختارة. قد يتم إنشاء الامتحان بدون نتائج متوقعة.
+            </div>
+          )}
+          {matchedStudentsCount !== null && matchedStudentsCount > 0 && (
+            <p className="text-xs text-muted-foreground">
+              الطلاب المتوقع شمولهم حسب الدورات والمواقع المختارة: {matchedStudentsCount}
+            </p>
+          )}
         </div>
         <div className="space-y-2 rounded-lg border border-dashed p-3 md:col-span-2 xl:col-span-3">
           <div className="flex items-start gap-2">
@@ -350,6 +453,20 @@ export function ExamNewView() {
           {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
         </div>
         {isFinalExam && <div className="space-y-2"><Label>درجة الفصل</Label><Input type="number" disabled={noDiscount} value={noDiscount ? "" : state.dismissalGrade} onChange={(e) => setState((p) => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} />{noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}</div>}
+        <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4 md:col-span-2 xl:col-span-3">
+          <div>
+            <h3 className="font-bold">معاينة الحكم قبل الحفظ</h3>
+            <p className="text-xs text-muted-foreground">هذه المعاينة توضح كيف سيتعامل النظام مع الدرجات والغياب والغش حسب القيم الحالية.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {judgmentPreview.map((item) => (
+              <div key={`${item.title}-${item.description}`} className={`rounded-lg border p-3 text-sm ${judgmentToneClass(item.tone)}`}>
+                <p className="font-bold">{item.title}</p>
+                <p className="mt-1 text-xs leading-5">{item.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
         {renderStatusControls(state, setState, prefix)}
       </div>
     );

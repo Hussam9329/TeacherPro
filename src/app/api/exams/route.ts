@@ -27,6 +27,25 @@ function parseBoolean(value: unknown): boolean {
   return value === true || value === 'true' || value === '1' || value === 1;
 }
 
+
+async function courseNamesWithoutActiveChapter(courseIds: string[]): Promise<string[]> {
+  const uniqueCourseIds = Array.from(new Set(courseIds.filter(Boolean)));
+  if (uniqueCourseIds.length === 0) return [];
+  const courses = await db.course.findMany({
+    where: { id: { in: uniqueCourseIds } },
+    select: { id: true, name: true },
+  }) as Array<{ id: string; name: string }>;
+  const activeLinks = await db.courseChapter.findMany({
+    where: { courseId: { in: uniqueCourseIds }, active: true, archived: false },
+    select: { courseId: true },
+  }) as Array<{ courseId: string }>;
+  const activeCourseIds = new Set(activeLinks.map((link) => link.courseId));
+  const courseNameById = new Map<string, string>(courses.map((course) => [course.id, course.name]));
+  return uniqueCourseIds
+    .filter((courseId) => !activeCourseIds.has(courseId))
+    .map((courseId) => courseNameById.get(courseId) || courseId);
+}
+
 function validateExamPayload(body: Record<string, unknown>) {
   const nameError = requireText(body.name, 'اسم الامتحان');
   if (nameError) return nameError;
@@ -78,12 +97,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const validationMessage = validateExamPayload(body);
     if (validationMessage) return validationError(validationMessage);
+    const parsedCourseIds = parseCourseIds(body.courseIds);
+    const invalidCourseNames = await courseNamesWithoutActiveChapter(parsedCourseIds);
+    if (invalidCourseNames.length > 0) {
+      return validationError(`لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourseNames.join('، ')}`);
+    }
     const noDiscount = parseBoolean(body.noDiscount);
     const exam = await db.exam.create({
       data: {
         name: String(body.name ?? '').trim(),
         type: body.type,
-        courseIds: JSON.stringify(parseCourseIds(body.courseIds)),
+        courseIds: JSON.stringify(parsedCourseIds),
         mainSite: body.mainSite,
         date: body.date ? new Date(body.date) : new Date(),
         fullMark: Number(body.fullMark || 100),
@@ -145,6 +169,11 @@ export async function PUT(req: NextRequest) {
       noDiscount: data.noDiscount ?? existingExam.noDiscount,
     });
     if (candidateValidationMessage) return validationError(candidateValidationMessage);
+    const candidateCourseIds = parseCourseIds(data.courseIds ?? existingExam.courseIds);
+    const invalidCourseNames = await courseNamesWithoutActiveChapter(candidateCourseIds);
+    if (invalidCourseNames.length > 0) {
+      return validationError(`لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourseNames.join('، ')}`);
+    }
     const effectiveNoDiscount = Boolean(data.noDiscount ?? existingExam.noDiscount);
     if (effectiveNoDiscount) {
       data.discountMark = 0;
@@ -172,10 +201,18 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد الامتحان المطلوب');
 
+    const [exam, gradeCount] = await Promise.all([
+      db.exam.findUnique({ where: { id }, select: { id: true, name: true } }),
+      db.grade.count({ where: { examId: id } }),
+    ]);
+    if (!exam) return validationError('الامتحان المطلوب غير موجود');
+    if (gradeCount > 0) {
+      return validationError(`لا يمكن حذف الامتحان "${exam.name}" لأن عليه ${gradeCount} سجل درجات. عطّل الامتحان بدلاً من حذفه.`);
+    }
+
     await db.$transaction(async (tx) => {
       await tx.correctionSheet.deleteMany({ where: { examId: id } });
       await tx.opportunityLog.deleteMany({ where: { examId: id } });
-      await tx.grade.deleteMany({ where: { examId: id } });
       await tx.exam.delete({ where: { id } });
     });
     return NextResponse.json({ ok: true });
