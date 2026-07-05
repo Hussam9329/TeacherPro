@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Course, type Student } from "@/lib/teacher-store";
 import { studentApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Card,
   CardContent,
@@ -80,6 +81,32 @@ type PreviewRow = {
   student: BulkStudentDraft | null;
   errors: string[];
   warnings: string[];
+};
+
+type PreviewCategory = "ready" | "needsEdit" | "duplicate" | "unknownCourseOrLocation";
+type ImportPolicy = "valid-only" | "fail-on-error";
+
+const PREVIEW_CATEGORY_COPY: Record<PreviewCategory, { title: string; description: string; badge: string }> = {
+  ready: {
+    title: "جاهز للاستيراد",
+    description: "هذه الأسطر لا تحتوي على أخطاء مانعة ويمكن استيرادها الآن.",
+    badge: "صالح",
+  },
+  needsEdit: {
+    title: "يحتاج تعديل",
+    description: "بيانات ناقصة أو غير صحيحة مثل الاسم، الهاتف، الجنس، الحالة، أو عدد الأعمدة.",
+    badge: "يحتاج تعديل",
+  },
+  duplicate: {
+    title: "مكرر",
+    description: "أسطر تتعارض مع طالب موجود أو تتكرر داخل النص نفسه.",
+    badge: "مكرر",
+  },
+  unknownCourseOrLocation: {
+    title: "غير معروف الدورة/الموقع",
+    description: "الدورة غير موجودة، أو نوع الدراسة/الموقع غير مفعّل ضمن إعدادات الدورة.",
+    badge: "دورة/موقع",
+  },
 };
 
 function normalizeText(value: string): string {
@@ -189,6 +216,21 @@ function phoneLabel(phone: string) {
   return phone || "—";
 }
 
+function isDuplicateIssue(message: string): boolean {
+  return /مكرر|مسجل مسبق|موجود مسبق/.test(message);
+}
+
+function isUnknownCourseOrLocationIssue(message: string): boolean {
+  return /الدورة غير موجودة|الدورة المحددة غير موجودة|غير متاح|غير مفعّلة|غير مفعله|الموقع|موقع بغداد|محافظة|بغداد/.test(message);
+}
+
+function getPreviewCategory(row: PreviewRow): PreviewCategory {
+  if (row.errors.length === 0) return "ready";
+  if (row.errors.some(isDuplicateIssue)) return "duplicate";
+  if (row.errors.some(isUnknownCourseOrLocationIssue)) return "unknownCourseOrLocation";
+  return "needsEdit";
+}
+
 export function StudentBulkTextImportView() {
   const { students, courses, loadFromServer, mergeStudentsCache } = useTeacherStore();
   const [rawText, setRawText] = useState("");
@@ -196,6 +238,7 @@ export function StudentBulkTextImportView() {
   const [previewDone, setPreviewDone] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [importPolicy, setImportPolicy] = useState<ImportPolicy>("valid-only");
 
   useEffect(() => {
     let cancelled = false;
@@ -214,14 +257,41 @@ export function StudentBulkTextImportView() {
     };
   }, [mergeStudentsCache]);
 
-  const summary = useMemo(() => {
-    const valid = previewRows.filter((row) => row.student && row.errors.length === 0).length;
-    const errorRows = previewRows.filter((row) => row.errors.length > 0).length;
-    const warningRows = previewRows.filter((row) => row.warnings.length > 0 && row.errors.length === 0).length;
-    return { total: previewRows.length, valid, errorRows, warningRows };
+  const groupedPreviewRows = useMemo(() => {
+    const groups: Record<PreviewCategory, PreviewRow[]> = {
+      ready: [],
+      needsEdit: [],
+      duplicate: [],
+      unknownCourseOrLocation: [],
+    };
+
+    for (const row of previewRows) {
+      groups[getPreviewCategory(row)].push(row);
+    }
+
+    return groups;
   }, [previewRows]);
 
-  const canImport = previewDone && summary.valid > 0 && summary.errorRows === 0 && !isImporting;
+  const summary = useMemo(() => {
+    const ready = groupedPreviewRows.ready.filter((row) => row.student).length;
+    const blockingRows = previewRows.filter((row) => row.errors.length > 0).length;
+    const warningRows = previewRows.filter((row) => row.warnings.length > 0 && row.errors.length === 0).length;
+    return {
+      total: previewRows.length,
+      ready,
+      blockingRows,
+      warningRows,
+      needsEdit: groupedPreviewRows.needsEdit.length,
+      duplicate: groupedPreviewRows.duplicate.length,
+      unknownCourseOrLocation: groupedPreviewRows.unknownCourseOrLocation.length,
+    };
+  }, [groupedPreviewRows, previewRows]);
+
+  const canImport =
+    previewDone &&
+    summary.ready > 0 &&
+    !isImporting &&
+    (importPolicy === "valid-only" || summary.blockingRows === 0);
 
   const buildPreview = () => {
     const parsedRows = splitRows(rawText);
@@ -388,18 +458,31 @@ export function StudentBulkTextImportView() {
     setPreviewRows(result);
     setPreviewDone(true);
     const errorsCount = result.filter((row) => row.errors.length > 0).length;
+    const readyCount = result.filter((row) => row.student && row.errors.length === 0).length;
     if (errorsCount > 0) {
-      toast.error("المعاينة اكتملت مع أخطاء", { description: `راجع ${errorsCount} سطر قبل الإضافة` });
+      toast.error("المعاينة اكتملت مع أخطاء", { description: `جاهز ${readyCount} سطر، ويحتاج ${errorsCount} سطر إلى مراجعة` });
     } else {
       toast.success("المعاينة سليمة", { description: `جاهز لإضافة ${result.length} طالب بعد التأكيد` });
     }
   };
 
   const confirmImport = async () => {
-    if (!canImport) return;
+    if (!previewDone || isImporting) return;
+    if (importPolicy === "fail-on-error" && summary.blockingRows > 0) {
+      toast.error("تم إلغاء الاستيراد حسب السياسة المختارة", {
+        description: "صحح كل الأسطر الخاطئة أو غيّر السياسة إلى استيراد الصحيح فقط.",
+      });
+      return;
+    }
+
     const studentsToImport = previewRows
       .filter((row): row is PreviewRow & { student: BulkStudentDraft } => Boolean(row.student) && row.errors.length === 0)
       .map((row) => row.student);
+
+    if (studentsToImport.length === 0) {
+      toast.error("لا توجد أسطر جاهزة للاستيراد");
+      return;
+    }
 
     setIsImporting(true);
     const result = await studentApi.bulkAdd(studentsToImport as unknown as Array<Record<string, unknown>>);
@@ -416,6 +499,51 @@ export function StudentBulkTextImportView() {
     setRawText("");
     setPreviewRows([]);
     setPreviewDone(false);
+  };
+
+  const renderPreviewRow = (row: PreviewRow) => {
+    const courseName = row.rawCells[3] || "—";
+    const category = getPreviewCategory(row);
+
+    return (
+      <tr key={row.rowNumber} className="border-b align-top last:border-b-0">
+        <td className="p-3 font-bold">{row.rowNumber}</td>
+        <td className="p-3">
+          <div className="font-bold">{row.student?.name || row.rawCells[0] || "—"}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{row.student?.school || row.rawCells[1] || "—"}</div>
+        </td>
+        <td className="p-3">{courseName}</td>
+        <td className="p-3">{row.student?.courseProgram || row.rawCells[4] || "—"}</td>
+        <td className="p-3">{row.student?.studyType || row.rawCells[6] || "—"}</td>
+        <td className="p-3">{row.student ? `${row.student.locationScope} - ${row.student.subSite}` : (row.rawCells[8] || row.rawCells[7] || "—")}</td>
+        <td className="p-3 dir-ltr text-left">{row.student?.phone || normalizePhone(row.rawCells[12] || "") || "—"}</td>
+        <td className="p-3">{row.student?.status || row.rawCells[9] || "—"}</td>
+        <td className="p-3">
+          {row.errors.length === 0 ? (
+            <div className="space-y-2">
+              <Badge variant="secondary">
+                <ClipboardCheck className="size-3" />
+                {PREVIEW_CATEGORY_COPY.ready.badge}
+              </Badge>
+              {row.warnings.map((warning, index) => (
+                <div key={index} className="text-xs leading-5 text-amber-600 dark:text-amber-300">{warning}</div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Badge variant={category === "duplicate" || category === "unknownCourseOrLocation" ? "destructive" : "outline"}>
+                {PREVIEW_CATEGORY_COPY[category].badge}
+              </Badge>
+              <div className="space-y-1">
+                {row.errors.map((error, index) => (
+                  <div key={index} className="text-xs leading-5 text-destructive">• {error}</div>
+                ))}
+              </div>
+            </div>
+          )}
+        </td>
+      </tr>
+    );
   };
 
   return (
@@ -488,86 +616,109 @@ export function StudentBulkTextImportView() {
               <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h3 className="text-lg font-black">نتيجة المعاينة</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    يتم منع الإضافة إذا وجد خطأ واحد على الأقل، أما التحذيرات فتظهر للمراجعة فقط.
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    المعاينة مقسمة حتى يعرف المستخدم بالضبط ما الذي سيُستورد وما الذي يحتاج مراجعة.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge>{summary.total} سطر</Badge>
-                  <Badge variant="secondary">{summary.valid} صالح</Badge>
-                  <Badge variant={summary.errorRows ? "destructive" : "outline"}>{summary.errorRows} خطأ</Badge>
+                  <Badge variant="secondary">{summary.ready} جاهز</Badge>
+                  <Badge variant={summary.needsEdit ? "destructive" : "outline"}>{summary.needsEdit} يحتاج تعديل</Badge>
+                  <Badge variant={summary.duplicate ? "destructive" : "outline"}>{summary.duplicate} مكرر</Badge>
+                  <Badge variant={summary.unknownCourseOrLocation ? "destructive" : "outline"}>{summary.unknownCourseOrLocation} دورة/موقع</Badge>
                   <Badge variant="outline">{summary.warningRows} تحذير</Badge>
                 </div>
               </div>
 
-              {summary.errorRows > 0 && (
-                <div className="mb-4 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm leading-7 text-destructive">
+              <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                <div className="mb-3 font-black">سياسة الاستيراد</div>
+                <RadioGroup
+                  value={importPolicy}
+                  onValueChange={(value) => setImportPolicy(value as ImportPolicy)}
+                  className="grid gap-3 md:grid-cols-2"
+                >
+                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-background/70 p-4 transition hover:border-primary/40">
+                    <RadioGroupItem value="valid-only" className="mt-1" />
+                    <span>
+                      <span className="block font-bold">استيراد الصحيح فقط</span>
+                      <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+                        سيتم استيراد الأسطر الجاهزة فقط، وتبقى الأسطر الخاطئة ظاهرة حتى يعدلها المستخدم لاحقاً.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-background/70 p-4 transition hover:border-primary/40">
+                    <RadioGroupItem value="fail-on-error" className="mt-1" />
+                    <span>
+                      <span className="block font-bold">إلغاء الاستيراد إذا يوجد خطأ واحد</span>
+                      <span className="mt-1 block text-sm leading-6 text-muted-foreground">
+                        لن يتم استيراد أي طالب إلا بعد أن تصبح كل الأسطر ضمن قسم جاهز للاستيراد.
+                      </span>
+                    </span>
+                  </label>
+                </RadioGroup>
+              </div>
+
+              {summary.blockingRows > 0 && (
+                <div className={`mb-4 rounded-2xl border p-4 text-sm leading-7 ${
+                  importPolicy === "valid-only"
+                    ? "border-amber-300/50 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+                    : "border-destructive/30 bg-destructive/10 text-destructive"
+                }`}>
                   <ShieldAlert className="ml-2 inline size-4" />
-                  توجد أخطاء تمنع الإضافة. صحح الأسطر ثم أعد المعاينة.
+                  {importPolicy === "valid-only"
+                    ? `سيتم استيراد ${summary.ready} طالب جاهز فقط، وتجاهل ${summary.blockingRows} سطر يحتاج مراجعة.`
+                    : `لن يتم الاستيراد لأن هناك ${summary.blockingRows} سطر يحتوي على خطأ مانع.`}
                 </div>
               )}
 
-              <div className="max-h-[520px] overflow-auto rounded-2xl border">
-                <table className="w-full min-w-[980px] text-right text-sm">
-                  <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
-                    <tr className="border-b">
-                      <th className="p-3">السطر</th>
-                      <th className="p-3">الطالب</th>
-                      <th className="p-3">الدورة</th>
-                      <th className="p-3">البرنامج</th>
-                      <th className="p-3">الدراسة</th>
-                      <th className="p-3">الموقع</th>
-                      <th className="p-3">هاتف الطالب</th>
-                      <th className="p-3">الحالة</th>
-                      <th className="p-3">الفحص</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewRows.map((row) => {
-                      const courseName = row.rawCells[3] || "—";
-                      return (
-                        <tr key={row.rowNumber} className="border-b align-top last:border-b-0">
-                          <td className="p-3 font-bold">{row.rowNumber}</td>
-                          <td className="p-3">
-                            <div className="font-bold">{row.student?.name || row.rawCells[0] || "—"}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">{row.student?.school || row.rawCells[1] || "—"}</div>
-                          </td>
-                          <td className="p-3">{courseName}</td>
-                          <td className="p-3">{row.student?.courseProgram || row.rawCells[4] || "—"}</td>
-                          <td className="p-3">{row.student?.studyType || row.rawCells[6] || "—"}</td>
-                          <td className="p-3">{row.student ? `${row.student.locationScope} - ${row.student.subSite}` : (row.rawCells[8] || row.rawCells[7] || "—")}</td>
-                          <td className="p-3 dir-ltr text-left">{row.student?.phone || normalizePhone(row.rawCells[12] || "") || "—"}</td>
-                          <td className="p-3">{row.student?.status || row.rawCells[9] || "—"}</td>
-                          <td className="p-3">
-                            {row.errors.length === 0 ? (
-                              <div className="space-y-2">
-                                <Badge variant="secondary">
-                                  <ClipboardCheck className="size-3" />
-                                  صالح
-                                </Badge>
-                                {row.warnings.map((warning, index) => (
-                                  <div key={index} className="text-xs leading-5 text-amber-600 dark:text-amber-300">{warning}</div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="space-y-1">
-                                {row.errors.map((error, index) => (
-                                  <div key={index} className="text-xs leading-5 text-destructive">• {error}</div>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="space-y-5">
+                {(["ready", "needsEdit", "duplicate", "unknownCourseOrLocation"] as PreviewCategory[]).map((category) => {
+                  const rows = groupedPreviewRows[category];
+                  if (rows.length === 0) return null;
+                  const copy = PREVIEW_CATEGORY_COPY[category];
+
+                  return (
+                    <div key={category} className="overflow-hidden rounded-2xl border bg-background/60">
+                      <div className="flex flex-col gap-2 border-b bg-muted/45 p-4 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="font-black">{copy.title}</div>
+                          <div className="mt-1 text-sm leading-6 text-muted-foreground">{copy.description}</div>
+                        </div>
+                        <Badge variant={category === "ready" ? "secondary" : "outline"}>{rows.length} سطر</Badge>
+                      </div>
+
+                      <div className="max-h-[420px] overflow-auto">
+                        <table className="w-full min-w-[980px] text-right text-sm">
+                          <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
+                            <tr className="border-b">
+                              <th className="p-3">السطر</th>
+                              <th className="p-3">الطالب</th>
+                              <th className="p-3">الدورة</th>
+                              <th className="p-3">البرنامج</th>
+                              <th className="p-3">الدراسة</th>
+                              <th className="p-3">الموقع</th>
+                              <th className="p-3">هاتف الطالب</th>
+                              <th className="p-3">الحالة</th>
+                              <th className="p-3">الفحص</th>
+                            </tr>
+                          </thead>
+                          <tbody>{rows.map(renderPreviewRow)}</tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm leading-6 text-muted-foreground">
+                  {importPolicy === "valid-only"
+                    ? "عند الضغط سيتم إرسال الأسطر الجاهزة فقط إلى الخادم."
+                    : "عند الضغط يجب أن تكون كل الأسطر سليمة، وإلا لن يبدأ الاستيراد."}
+                </div>
                 <Button type="button" disabled={!canImport} onClick={() => setConfirmOpen(true)}>
                   <PlusCircle className="ml-2 size-4" />
-                  إكمال الإضافة
+                  {importPolicy === "valid-only" ? "استيراد الصحيح فقط" : "إكمال الإضافة"}
                 </Button>
               </div>
             </section>
@@ -580,7 +731,9 @@ export function StudentBulkTextImportView() {
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الإضافة الجماعية</AlertDialogTitle>
             <AlertDialogDescription>
-              سيتم إضافة {summary.valid} طالب إلى سجل الطلاب. هل تريد إكمال الإضافة الآن؟
+              {importPolicy === "valid-only" && summary.blockingRows > 0
+                ? `سيتم إضافة ${summary.ready} طالب جاهز فقط، ولن يتم إرسال ${summary.blockingRows} سطر يحتاج مراجعة.`
+                : `سيتم إضافة ${summary.ready} طالب إلى سجل الطلاب. هل تريد إكمال الإضافة الآن؟`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
