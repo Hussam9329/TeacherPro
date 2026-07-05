@@ -1184,18 +1184,33 @@ function triggerAutoFixZeroOpportunities(): void {
   if (window.sessionStorage.getItem(ZERO_OPP_FIX_FLAG)) return;
   window.sessionStorage.setItem(ZERO_OPP_FIX_FLAG, '1');
 
-  // اطلبه بصمت في الخلفية. أي خطأ يُسجّل فقط في console بدون toast.
-  void fetch('/api/students/fix-zero-opportunities', {
+  // اطلب كلا الإصلاحين بالتوازي:
+  //  1) fix-zero-opportunities: يرفع الطلاب الذين فرصهم 0/0 إلى فرص الفصل النشط.
+  //  2) clamp-opportunities: يخفض الطلاب الذين فرصهم تتجاوز سقف الفصل النشط.
+  // كلاهما آمن: لا يلمس الطلاب الذين فرصهم صحيحة، ولا يلمس الدورات بدون فصل نشط.
+  const fixZeroPromise = fetch('/api/students/fix-zero-opportunities', {
     method: 'PATCH',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
   })
     .then((response) => response.json())
-    .then((payload: { fixedTotal?: number; message?: string } | null) => {
-      if (payload && typeof payload.fixedTotal === 'number' && payload.fixedTotal > 0) {
-        // أعد تحميل بيانات الطلاب المحلية إذا تم إصلاح أي طالب.
-        // نطلق حدث يلتقطه layout لإعادة تحميل courseChapters + section data.
-        console.info(`[auto-fix] تم إصلاح ${payload.fixedTotal} طالب بفرص 0/0 تلقائياً.`);
+    .catch(() => null);
+
+  const clampPromise = fetch('/api/students/clamp-opportunities', {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then((response) => response.json())
+    .catch(() => null);
+
+  Promise.all([fixZeroPromise, clampPromise])
+    .then(([fixZero, clamp]: readonly [any, any]) => {
+      const fixedZero = Number(fixZero?.fixedTotal || 0);
+      const fixedClamp = Number(clamp?.fixedTotal || 0);
+      const totalFixed = fixedZero + fixedClamp;
+      if (totalFixed > 0) {
+        console.info(`[auto-fix] تم ضبط ${totalFixed} طالب تلقائياً (تصفير: ${fixedZero}، تثبيت: ${fixedClamp}).`);
         window.dispatchEvent(new CustomEvent('teacherpro:students-updated'));
       }
     })

@@ -167,16 +167,70 @@ export async function POST(req: NextRequest) {
           );
           let updatedStudents = 0;
 
+          const activeChapterByCourseId = new Map<string, { chapterId: string; opportunities: number }>();
+          if (allStudentIds.length) {
+            const studentRowsForChapterCheck = await tx.student.findMany({
+              where: { id: { in: allStudentIds } },
+              select: { id: true, courseId: true },
+            });
+            const courseIdsForChapter = Array.from(new Set(studentRowsForChapterCheck.map((s) => s.courseId)));
+            if (courseIdsForChapter.length) {
+              const activeLinks = await tx.courseChapter.findMany({
+                where: { courseId: { in: courseIdsForChapter }, active: true, archived: false },
+                select: { courseId: true, chapterId: true },
+              });
+              const chapterIdsForActive = Array.from(new Set(activeLinks.map((l) => l.chapterId)));
+              const chaptersForActive = chapterIdsForActive.length
+                ? await tx.chapter.findMany({ where: { id: { in: chapterIdsForActive } }, select: { id: true, opportunities: true } })
+                : [];
+              const chapterOppById = new Map(chaptersForActive.map((c) => [c.id, Number(c.opportunities || 0)]));
+              for (const link of activeLinks) {
+                const opp = chapterOppById.get(link.chapterId) ?? 0;
+                activeChapterByCourseId.set(link.courseId, { chapterId: link.chapterId, opportunities: opp });
+              }
+            }
+          }
+
+          // Build a map of studentId -> courseId using the rows we already fetched
+          const courseIdByStudentId = new Map<string, string>();
+          // We re-fetch students that are in the update payload to get their courseId.
+          // (We already have existingStudents but it only had id selected.)
+          const studentIdList = students.map((s) => s.id).filter((id) => existingStudentIds.has(id));
+          if (studentIdList.length) {
+            const studentRowsForCourse = await tx.student.findMany({
+              where: { id: { in: studentIdList } },
+              select: { id: true, courseId: true },
+            });
+            for (const row of studentRowsForCourse) {
+              courseIdByStudentId.set(row.id, row.courseId);
+            }
+          }
+
           for (const student of students.filter((item) =>
             existingStudentIds.has(item.id),
           )) {
+            // Clamp opportunities to baseOpportunities of the active chapter
+            // for this student's course. This prevents the client from ever
+            // writing a value above the cap (e.g. due to a stale local cache
+            // or an outdated bulk operation from before a chapter change).
+            const studentCourseId = courseIdByStudentId.get(student.id);
+            const activeChapter = studentCourseId
+              ? activeChapterByCourseId.get(studentCourseId)
+              : undefined;
+            let finalOpportunities = student.opportunities;
+            if (activeChapter && activeChapter.opportunities > 0) {
+              finalOpportunities = Math.min(finalOpportunities, activeChapter.opportunities);
+            }
+            // Non-negative floor.
+            finalOpportunities = Math.max(0, Math.trunc(finalOpportunities));
+
             const data: {
               opportunities: number;
               status?: string;
               dismissalType?: string;
               dismissalReason?: string;
               dismissalNotes?: string;
-            } = { opportunities: student.opportunities };
+            } = { opportunities: finalOpportunities };
 
             if (student.status !== undefined) data.status = student.status;
             if (student.dismissalType !== undefined)

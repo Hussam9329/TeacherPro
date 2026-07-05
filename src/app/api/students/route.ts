@@ -657,8 +657,33 @@ export async function PUT(req: NextRequest) {
 
   if (data.createdAt !== undefined)
     data.createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
-  if (data.opportunities !== undefined)
+  if (data.opportunities !== undefined) {
     data.opportunities = Number(data.opportunities);
+    // Clamp opportunities to the active chapter's baseOpportunities for this
+    // student's course. This prevents the client from writing values above
+    // the cap (e.g. due to stale cache or a stale bulk operation that ran
+    // before a chapter change). The clamp applies whenever opportunities is
+    // explicitly being written, regardless of which course it is.
+    const courseIdForClamp = String(data.courseId || "").trim() || (await db.student.findUnique({ where: { id }, select: { courseId: true } }))?.courseId;
+    if (courseIdForClamp) {
+      const activeLink = await db.courseChapter.findFirst({
+        where: { courseId: courseIdForClamp, active: true, archived: false },
+        select: { chapterId: true },
+      });
+      if (activeLink) {
+        const chapter = await db.chapter.findUnique({
+          where: { id: activeLink.chapterId },
+          select: { opportunities: true },
+        });
+        const chapterOpp = Number(chapter?.opportunities || 0);
+        if (chapterOpp > 0) {
+          data.opportunities = Math.min(Math.max(0, Math.trunc(data.opportunities)), chapterOpp);
+          // Keep baseOpportunities aligned with the active chapter.
+          data.baseOpportunities = chapterOpp;
+        }
+      }
+    }
+  }
   if (data.baseOpportunities !== undefined)
     data.baseOpportunities = Number(data.baseOpportunities);
 
