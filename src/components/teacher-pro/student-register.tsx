@@ -30,8 +30,12 @@ import {
 } from "@/lib/format";
 import {
   COURSE_TERMS,
-  getAvailablePrograms, getAvailableStudyTypesForProgram,
-  getBaghdadSites, getProvinceOptions, getLocationScopes, getBaghdadMode,
+  getAvailablePrograms,
+  getAvailableStudyTypesForProgram,
+  getBaghdadSites,
+  getProvinceOptions,
+  getLocationScopes,
+  getBaghdadMode,
   OUT_OF_COUNTRY_LOCATION_SCOPE,
 } from "@/lib/course-config";
 import {
@@ -145,7 +149,6 @@ function emptyForm(): StudentRegisterForm {
   };
 }
 
-
 function FieldIcon({
   icon: Icon,
   className = "",
@@ -210,11 +213,19 @@ export function StudentRegisterView() {
     [courses],
   );
 
-
   const selectedCourse = useMemo(
     () => courses.find((c) => c.id === form.courseId),
     [courses, form.courseId],
   );
+
+  const selectedCourseActiveChapter = form.courseId
+    ? activeChapterForCourse(form.courseId)
+    : null;
+  const selectedCourseHasNoActiveChapter = Boolean(
+    form.courseId && !selectedCourseActiveChapter,
+  );
+  const selectedCourseOpportunityPreview =
+    selectedCourseActiveChapter?.opportunities ?? 0;
 
   const courseAvailablePrograms = useMemo(
     () => (selectedCourse ? getAvailablePrograms(selectedCourse) : []),
@@ -223,34 +234,53 @@ export function StudentRegisterView() {
 
   // Effective courseProgram: auto-select when only one option
   const effectiveCourseProgram = useMemo(
-    () => courseAvailablePrograms.length === 1 ? courseAvailablePrograms[0] : form.courseProgram,
+    () =>
+      courseAvailablePrograms.length === 1
+        ? courseAvailablePrograms[0]
+        : form.courseProgram,
     [courseAvailablePrograms, form.courseProgram],
   );
 
   const courseAvailableStudyTypes = useMemo(
-    () => (selectedCourse && effectiveCourseProgram
-      ? getAvailableStudyTypesForProgram(selectedCourse, effectiveCourseProgram)
-      : []),
+    () =>
+      selectedCourse && effectiveCourseProgram
+        ? getAvailableStudyTypesForProgram(
+            selectedCourse,
+            effectiveCourseProgram,
+          )
+        : [],
     [selectedCourse, effectiveCourseProgram],
   );
 
   const courseLocationScopes = useMemo(
-    () => (selectedCourse && form.studyType ? getLocationScopes(selectedCourse, form.studyType) : []),
+    () =>
+      selectedCourse && form.studyType
+        ? getLocationScopes(selectedCourse, form.studyType)
+        : [],
     [selectedCourse, form.studyType],
   );
 
   const courseBaghdadMode = useMemo(
-    () => (selectedCourse && form.studyType ? getBaghdadMode(selectedCourse, form.studyType) : undefined),
+    () =>
+      selectedCourse && form.studyType
+        ? getBaghdadMode(selectedCourse, form.studyType)
+        : undefined,
     [selectedCourse, form.studyType],
   );
 
   const courseBaghdadSites = useMemo(
-    () => (selectedCourse && form.studyType ? getBaghdadSites(selectedCourse, form.studyType) : []),
+    () =>
+      selectedCourse && form.studyType
+        ? getBaghdadSites(selectedCourse, form.studyType)
+        : [],
     [selectedCourse, form.studyType],
   );
 
   const courseProvinces = useMemo(
-    () => (selectedCourse && form.studyType ? getProvinceOptions(selectedCourse, form.studyType) : []),
+    () =>
+      selectedCourse && form.studyType
+        ? getProvinceOptions(selectedCourse, form.studyType)
+        : [],
     [selectedCourse, form.studyType],
   );
 
@@ -264,7 +294,15 @@ export function StudentRegisterView() {
     }
     if (form.locationScope === "محافظات") return courseProvinces;
     return [];
-  }, [selectedCourse, form.studyType, form.locationScope, isOutOfCountry, courseBaghdadMode, courseBaghdadSites, courseProvinces]);
+  }, [
+    selectedCourse,
+    form.studyType,
+    form.locationScope,
+    isOutOfCountry,
+    courseBaghdadMode,
+    courseBaghdadSites,
+    courseProvinces,
+  ]);
 
   // Effective baghdadMode: auto-set from course config
   const effectiveBaghdadMode = useMemo(
@@ -274,7 +312,10 @@ export function StudentRegisterView() {
 
   // Effective subSite: auto-resolve for عموم بغداد
   const effectiveSubSite = useMemo(
-    () => (form.locationScope === "بغداد" && courseBaghdadMode === "عموم بغداد") ? "عموم بغداد" : form.subSite,
+    () =>
+      form.locationScope === "بغداد" && courseBaghdadMode === "عموم بغداد"
+        ? "عموم بغداد"
+        : form.subSite,
     [form.locationScope, courseBaghdadMode, form.subSite],
   );
 
@@ -300,28 +341,42 @@ export function StudentRegisterView() {
 
   const gracePeriodDescription = useMemo(() => {
     if (accountingGraceDays <= 0) {
-      return `لا توجد فترة سماح، وسيبدأ احتساب نتائج الطالب من ${formattedGraceStart}`;
+      return `هذا الطالب سيحاسب من تاريخ ${formattedGraceStart} ولا توجد فترة سماح`;
     }
-    return `لن يُحاسَب الطالب على أي امتحان أو إخفاق من ${formattedGraceStart} إلى ${formattedGraceEnd}`;
+    return `هذا الطالب لن يحاسب من تاريخ ${formattedGraceStart} إلى تاريخ ${formattedGraceEnd}`;
   }, [formattedGraceStart, formattedGraceEnd, accountingGraceDays]);
 
   const duplicatePhoneStudent = useMemo(() => {
     const phoneKey = normalizePhoneForDuplicate(form.phone);
     if (!phoneKey) return null;
-    return students.find((student) => normalizePhoneForDuplicate(student.phone) === phoneKey) ?? null;
+    return (
+      students.find(
+        (student) => normalizePhoneForDuplicate(student.phone) === phoneKey,
+      ) ?? null
+    );
   }, [students, form.phone]);
 
   const duplicateTelegramStudent = useMemo(() => {
     const telegramKey = normalizeTelegramIdentifier(form.telegram);
     if (!telegramKey) return null;
-    return students.find((student) => normalizeTelegramIdentifier(student.telegram) === telegramKey) ?? null;
+    return (
+      students.find(
+        (student) =>
+          normalizeTelegramIdentifier(student.telegram) === telegramKey,
+      ) ?? null
+    );
   }, [students, form.telegram]);
 
-  const hasDuplicateContact = Boolean(duplicatePhoneStudent || duplicateTelegramStudent);
+  const hasDuplicateContact = Boolean(
+    duplicatePhoneStudent || duplicateTelegramStudent,
+  );
 
   useEffect(() => {
     if (!form.studyType) return;
-    if ((courseAvailableStudyTypes as readonly string[]).includes(form.studyType)) return;
+    if (
+      (courseAvailableStudyTypes as readonly string[]).includes(form.studyType)
+    )
+      return;
     queueMicrotask(() => {
       setForm((prev) => ({
         ...prev,
@@ -329,16 +384,12 @@ export function StudentRegisterView() {
         locationScope: "",
         baghdadMode: "",
         subSite: "",
-          }));
+      }));
     });
   }, [courseAvailableStudyTypes, form.studyType]);
 
   const formSteps = useMemo(
     () => [
-      {
-        label: "بيانات الطالب",
-        complete: Boolean(form.name.trim() && form.school.trim() && form.phone.trim() && form.parentPhone.trim()),
-      },
       {
         label: "الدورة والموقع",
         complete: Boolean(
@@ -348,16 +399,34 @@ export function StudentRegisterView() {
           (courseAvailableStudyTypes.length === 0 || form.studyType) &&
           (courseLocationScopes.length === 0 || form.locationScope) &&
           (!isOutOfCountry || Boolean(form.subSite.trim())) &&
-          (subSiteOptions.length === 0 || effectiveSubSite)
+          (subSiteOptions.length === 0 || effectiveSubSite),
+        ),
+      },
+      {
+        label: "بيانات الطالب",
+        complete: Boolean(
+          form.name.trim() &&
+          form.school.trim() &&
+          form.phone.trim() &&
+          form.parentPhone.trim(),
         ),
       },
       {
         label: "إعدادات التسجيل",
-        complete: Boolean(form.createdAt && isValidGraceDays(form.accountingGraceDays)),
+        complete: Boolean(
+          form.createdAt && isValidGraceDays(form.accountingGraceDays),
+        ),
       },
-
     ],
-    [form, courseAvailableStudyTypes, courseLocationScopes, subSiteOptions.length, effectiveCourseProgram, effectiveSubSite, isOutOfCountry],
+    [
+      form,
+      courseAvailableStudyTypes,
+      courseLocationScopes,
+      subSiteOptions.length,
+      effectiveCourseProgram,
+      effectiveSubSite,
+      isOutOfCountry,
+    ],
   );
   const hasDraftData = useMemo(
     () =>
@@ -397,7 +466,6 @@ export function StudentRegisterView() {
     setForm((prev) => ({ ...prev, [key]: toLatinDigits(value) }));
   };
 
-
   const updatePhoneForm = (key: "phone" | "parentPhone", value: string) => {
     setForm((prev) => ({ ...prev, [key]: sanitizePhoneInput(value) }));
   };
@@ -412,7 +480,7 @@ export function StudentRegisterView() {
       locationScope: "",
       baghdadMode: "",
       subSite: "",
-      }));
+    }));
   };
 
   const validateRequiredFields = () => {
@@ -453,7 +521,6 @@ export function StudentRegisterView() {
     if (!isOutOfCountry && subSiteOptions.length > 0 && !form.subSite) {
       return "يرجى اختيار الموقع الفرعي";
     }
-
 
     const missing = requiredChecks.find(([ok]) => !ok);
     if (missing) return missing[1];
@@ -500,7 +567,7 @@ export function StudentRegisterView() {
         return;
       }
 
-      const chapter = activeChapterForCourse(form.courseId);
+      const chapter = selectedCourseActiveChapter;
       const result = addStudent({
         name: form.name.trim(),
         school: form.school.trim(),
@@ -509,7 +576,9 @@ export function StudentRegisterView() {
         parentPhone: form.parentPhone.trim(),
         telegram: sanitizeTelegramInput(form.telegram),
         courseProgram: effectiveCourseProgram as any,
-        courseTerm: (effectiveCourseProgram === "كورسات" ? form.courseTerm : "") as any,
+        courseTerm: (effectiveCourseProgram === "كورسات"
+          ? form.courseTerm
+          : "") as any,
         studyType: form.studyType as any,
         locationScope: form.locationScope as any,
         baghdadMode: effectiveBaghdadMode as any,
@@ -563,8 +632,350 @@ export function StudentRegisterView() {
         </CardHeader>
 
         <CardContent className="p-4 md:p-6 lg:p-8">
-          <form onSubmit={handleSubmit} autoComplete="off" className="space-y-6">
+          <form
+            onSubmit={handleSubmit}
+            autoComplete="off"
+            className="space-y-6"
+          >
             <StepProgress steps={formSteps} />
+            <section className="surface-card p-5 md:p-6">
+              <SectionTitle
+                icon={BookOpen}
+                title="تفاصيل الدورة"
+                description="اختيار الدورة يحدد المواقع المتاحة تلقائياً."
+              />
+
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="reg-courseId"
+                    className="font-bold text-foreground"
+                  >
+                    الدورة <RequiredMark />
+                  </Label>
+                  <Select
+                    name="courseId"
+                    value={form.courseId}
+                    onValueChange={handleCourseChange}
+                    disabled={filteredCourses.length === 0}
+                  >
+                    <SelectTrigger
+                      id="reg-courseId"
+                      className={selectTriggerClass}
+                      aria-required="true"
+                    >
+                      <SelectValue
+                        placeholder={
+                          filteredCourses.length === 0
+                            ? "لا توجد دورات مسجلة"
+                            : "اختر الدورة..."
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredCourses.length === 0 ? (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">
+                          لا توجد دورات مسجلة
+                        </div>
+                      ) : (
+                        filteredCourses.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {form.courseId && (
+                <div
+                  className={`mt-5 rounded-2xl border p-4 text-sm leading-6 ${
+                    selectedCourseHasNoActiveChapter
+                      ? "border-destructive/50 bg-destructive/10 text-destructive"
+                      : "border-primary/20 bg-primary/5 text-foreground"
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertCircle
+                      className={`mt-0.5 h-4 w-4 shrink-0 ${
+                        selectedCourseHasNoActiveChapter
+                          ? "text-destructive"
+                          : "text-primary"
+                      }`}
+                    />
+                    <div className="space-y-1">
+                      <p className="font-black">
+                        {selectedCourseHasNoActiveChapter
+                          ? "هذه الدورة لا تحتوي على فصل نشط"
+                          : "الفصل النشط جاهز لهذه الدورة"}
+                      </p>
+                      <p>
+                        {selectedCourseHasNoActiveChapter
+                          ? "هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص."
+                          : `سيُسجل الطالب بعدد فرص ${selectedCourseOpportunityPreview} من الفصل النشط الحالي.`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Course Program ── */}
+              {form.courseId && courseAvailablePrograms.length > 1 && (
+                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-courseProgram"
+                      className="font-bold text-foreground"
+                    >
+                      نوع الدورة <RequiredMark />
+                    </Label>
+                    <Select
+                      name="courseProgram"
+                      value={form.courseProgram}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          courseProgram: v,
+                          courseTerm: v === "كورسات" ? prev.courseTerm : "",
+                          studyType: "",
+                          locationScope: "",
+                          baghdadMode: "",
+                          subSite: "",
+                        }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="reg-courseProgram"
+                        className={selectTriggerClass}
+                        aria-required="true"
+                      >
+                        <SelectValue placeholder="اختر نوع الدورة..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {courseAvailablePrograms.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Course Term (only if كورسات) ── */}
+              {effectiveCourseProgram === "كورسات" && (
+                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-courseTerm"
+                      className="font-bold text-foreground"
+                    >
+                      الكورس <RequiredMark />
+                    </Label>
+                    <Select
+                      name="courseTerm"
+                      value={form.courseTerm}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          courseTerm: v,
+                          studyType: "",
+                          locationScope: "",
+                          baghdadMode: "",
+                          subSite: "",
+                        }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="reg-courseTerm"
+                        className={selectTriggerClass}
+                        aria-required="true"
+                      >
+                        <SelectValue placeholder="اختر الكورس..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COURSE_TERMS.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Study Type ── */}
+              {form.courseId && courseAvailableStudyTypes.length > 0 && (
+                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-studyType"
+                      className="font-bold text-foreground"
+                    >
+                      نوع الدراسة <RequiredMark />
+                    </Label>
+                    <Select
+                      name="studyType"
+                      value={form.studyType}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          studyType: v,
+                          locationScope: "",
+                          baghdadMode: "",
+                          subSite: "",
+                        }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="reg-studyType"
+                        className={selectTriggerClass}
+                        aria-required="true"
+                      >
+                        <SelectValue placeholder="اختر نوع الدراسة..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {courseAvailableStudyTypes.map((st) => (
+                          <SelectItem key={st} value={st}>
+                            {st}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Location Scope ── */}
+              {form.studyType && courseLocationScopes.length > 0 && (
+                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-locationScope"
+                      className="font-bold text-foreground"
+                    >
+                      الموقع <RequiredMark />
+                    </Label>
+                    <Select
+                      name="locationScope"
+                      value={isOutOfCountry ? "" : form.locationScope}
+                      onValueChange={(v) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          locationScope: v,
+                          subSite: "",
+                        }))
+                      }
+                    >
+                      <SelectTrigger
+                        id="reg-locationScope"
+                        className={selectTriggerClass}
+                        aria-required="true"
+                      >
+                        <SelectValue placeholder="اختر الموقع..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {courseLocationScopes.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-2xl border border-dashed bg-muted/30 p-3 text-sm font-bold text-foreground transition hover:bg-muted/50">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-primary"
+                        checked={isOutOfCountry}
+                        onChange={(event) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            locationScope: event.target.checked
+                              ? OUT_OF_COUNTRY_LOCATION_SCOPE
+                              : "",
+                            baghdadMode: "",
+                            subSite: "",
+                          }))
+                        }
+                      />
+                      الطالب خارج القطر
+                    </label>
+                  </div>
+
+                  {/* ── Out of Country ── */}
+                  {isOutOfCountry && (
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="reg-outOfCountrySite"
+                        className="font-bold text-foreground"
+                      >
+                        الدولة <RequiredMark />
+                      </Label>
+                      <Input
+                        id="reg-outOfCountrySite"
+                        name="subSite"
+                        autoComplete="off"
+                        value={form.subSite}
+                        onChange={(e) => updateForm("subSite", e.target.value)}
+                        placeholder="مثلاً: تركيا"
+                        required
+                        className={fieldBaseClass}
+                      />
+                      <p className="text-xs leading-5 text-muted-foreground">
+                        خيار خارج القطر عام لكل الدورات ولا يحتاج تفعيله من
+                        إعدادات الدورة.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* ── Sub-Site ── */}
+                  {!isOutOfCountry && subSiteOptions.length > 0 && (
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="reg-subSite"
+                        className="font-bold text-foreground"
+                      >
+                        الموقع الفرعي <RequiredMark />
+                      </Label>
+                      <Select
+                        name="subSite"
+                        value={form.subSite}
+                        onValueChange={(v) => updateForm("subSite", v)}
+                      >
+                        <SelectTrigger
+                          id="reg-subSite"
+                          className={selectTriggerClass}
+                          aria-required="true"
+                        >
+                          <SelectValue placeholder="اختر الموقع الفرعي..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subSiteOptions.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── عموم بغداد auto-resolved info ── */}
+              {form.locationScope === "بغداد" &&
+                courseBaghdadMode === "عموم بغداد" && (
+                  <div className="mt-3 flex items-center gap-2 text-xs font-bold text-primary">
+                    <MapPin className="h-3.5 w-3.5" />
+                    تم تحديد الموقع تلقائياً: عموم بغداد
+                  </div>
+                )}
+            </section>
+
             <section className="surface-card p-5 md:p-6">
               <SectionTitle
                 icon={User}
@@ -697,7 +1108,8 @@ export function StudentRegisterView() {
                   </div>
                   {duplicateTelegramStudent && (
                     <p className="text-xs font-bold text-destructive">
-                      معرف التليكرام مستخدم للطالب: {duplicateTelegramStudent.name}
+                      معرف التليكرام مستخدم للطالب:{" "}
+                      {duplicateTelegramStudent.name}
                     </p>
                   )}
                 </div>
@@ -765,312 +1177,16 @@ export function StudentRegisterView() {
 
             <section className="surface-card p-5 md:p-6">
               <SectionTitle
-                icon={BookOpen}
-                title="تفاصيل الدورة"
-                description="اختيار الدورة يحدد المواقع المتاحة تلقائياً."
-              />
-
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="reg-courseId"
-                    className="font-bold text-foreground"
-                  >
-                    الدورة <RequiredMark />
-                  </Label>
-                  <Select
-                    name="courseId"
-                    value={form.courseId}
-                    onValueChange={handleCourseChange}
-                    disabled={filteredCourses.length === 0}
-                  >
-                    <SelectTrigger
-                      id="reg-courseId"
-                      className={selectTriggerClass}
-                      aria-required="true"
-                    >
-                      <SelectValue
-                        placeholder={
-                          filteredCourses.length === 0
-                            ? "لا توجد دورات مسجلة"
-                            : "اختر الدورة..."
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredCourses.length === 0 ? (
-                        <div className="px-3 py-2 text-sm text-muted-foreground">
-                          لا توجد دورات مسجلة
-                        </div>
-                      ) : (
-                        filteredCourses.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* ── Course Program ── */}
-              {form.courseId && courseAvailablePrograms.length > 1 && (
-                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-courseProgram"
-                      className="font-bold text-foreground"
-                    >
-                      نوع الدورة <RequiredMark />
-                    </Label>
-                    <Select
-                      name="courseProgram"
-                      value={form.courseProgram}
-                      onValueChange={(v) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          courseProgram: v,
-                          courseTerm: v === "كورسات" ? prev.courseTerm : "",
-                          studyType: "",
-                          locationScope: "",
-                          baghdadMode: "",
-                          subSite: "",
-                                              }))
-                      }
-                    >
-                      <SelectTrigger
-                        id="reg-courseProgram"
-                        className={selectTriggerClass}
-                        aria-required="true"
-                      >
-                        <SelectValue placeholder="اختر نوع الدورة..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {courseAvailablePrograms.map((p) => (
-                          <SelectItem key={p} value={p}>
-                            {p}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Course Term (only if كورسات) ── */}
-              {effectiveCourseProgram === "كورسات" && (
-                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-courseTerm"
-                      className="font-bold text-foreground"
-                    >
-                      الكورس <RequiredMark />
-                    </Label>
-                    <Select
-                      name="courseTerm"
-                      value={form.courseTerm}
-                      onValueChange={(v) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          courseTerm: v,
-                          studyType: "",
-                          locationScope: "",
-                          baghdadMode: "",
-                          subSite: "",
-                                              }))
-                      }
-                    >
-                      <SelectTrigger
-                        id="reg-courseTerm"
-                        className={selectTriggerClass}
-                        aria-required="true"
-                      >
-                        <SelectValue placeholder="اختر الكورس..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {COURSE_TERMS.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Study Type ── */}
-              {form.courseId && courseAvailableStudyTypes.length > 0 && (
-                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-studyType"
-                      className="font-bold text-foreground"
-                    >
-                      نوع الدراسة <RequiredMark />
-                    </Label>
-                    <Select
-                      name="studyType"
-                      value={form.studyType}
-                      onValueChange={(v) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          studyType: v,
-                          locationScope: "",
-                          baghdadMode: "",
-                          subSite: "",
-                                              }))
-                      }
-                    >
-                      <SelectTrigger
-                        id="reg-studyType"
-                        className={selectTriggerClass}
-                        aria-required="true"
-                      >
-                        <SelectValue placeholder="اختر نوع الدراسة..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {courseAvailableStudyTypes.map((st) => (
-                          <SelectItem key={st} value={st}>
-                            {st}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Location Scope ── */}
-              {form.studyType && courseLocationScopes.length > 0 && (
-                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="reg-locationScope"
-                      className="font-bold text-foreground"
-                    >
-                      الموقع <RequiredMark />
-                    </Label>
-                    <Select
-                      name="locationScope"
-                      value={isOutOfCountry ? "" : form.locationScope}
-                      onValueChange={(v) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          locationScope: v,
-                          subSite: "",
-                        }))
-                      }
-                    >
-                      <SelectTrigger
-                        id="reg-locationScope"
-                        className={selectTriggerClass}
-                        aria-required="true"
-                      >
-                        <SelectValue placeholder="اختر الموقع..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {courseLocationScopes.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-2xl border border-dashed bg-muted/30 p-3 text-sm font-bold text-foreground transition hover:bg-muted/50">
-                      <input
-                        type="checkbox"
-                        className="size-4 accent-primary"
-                        checked={isOutOfCountry}
-                        onChange={(event) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            locationScope: event.target.checked ? OUT_OF_COUNTRY_LOCATION_SCOPE : "",
-                            baghdadMode: "",
-                            subSite: "",
-                          }))
-                        }
-                      />
-                      الطالب خارج القطر
-                    </label>
-                  </div>
-
-                  {/* ── Out of Country ── */}
-                  {isOutOfCountry && (
-                    <div className="space-y-2">
-                      <Label htmlFor="reg-outOfCountrySite" className="font-bold text-foreground">
-                        الدولة <RequiredMark />
-                      </Label>
-                      <Input
-                        id="reg-outOfCountrySite"
-                        name="subSite"
-                        autoComplete="off"
-                        value={form.subSite}
-                        onChange={(e) => updateForm("subSite", e.target.value)}
-                        placeholder="مثلاً: تركيا"
-                        required
-                        className={fieldBaseClass}
-                      />
-                      <p className="text-xs leading-5 text-muted-foreground">
-                        خيار خارج القطر عام لكل الدورات ولا يحتاج تفعيله من إعدادات الدورة.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* ── Sub-Site ── */}
-                  {!isOutOfCountry && subSiteOptions.length > 0 && (
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="reg-subSite"
-                        className="font-bold text-foreground"
-                      >
-                        الموقع الفرعي <RequiredMark />
-                      </Label>
-                      <Select
-                        name="subSite"
-                        value={form.subSite}
-                        onValueChange={(v) => updateForm("subSite", v)}
-                      >
-                        <SelectTrigger
-                          id="reg-subSite"
-                          className={selectTriggerClass}
-                          aria-required="true"
-                        >
-                          <SelectValue placeholder="اختر الموقع الفرعي..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {subSiteOptions.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ── عموم بغداد auto-resolved info ── */}
-              {form.locationScope === "بغداد" && courseBaghdadMode === "عموم بغداد" && (
-                <div className="mt-3 flex items-center gap-2 text-xs font-bold text-primary">
-                  <MapPin className="h-3.5 w-3.5" />
-                  تم تحديد الموقع تلقائياً: عموم بغداد
-                </div>
-              )}
-            </section>
-
-            <section className="surface-card p-5 md:p-6">
-              <SectionTitle
                 icon={CalendarDays}
                 title="إعدادات التسجيل"
                 description="حدد تاريخ تسجيل الطالب وعدد أيام السماح التي لا يُحاسَب خلالها على الامتحانات أو الإخفاقات."
               />
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="reg-createdAt" className="font-bold text-foreground">
+                  <Label
+                    htmlFor="reg-createdAt"
+                    className="font-bold text-foreground"
+                  >
                     تاريخ تسجيل الطالب <RequiredMark />
                   </Label>
                   <DateInput
@@ -1082,19 +1198,30 @@ export function StudentRegisterView() {
                     className={fieldBaseClass}
                   />
                   <p className="text-xs leading-5 text-muted-foreground">
-                    بداية السماح: <span className="font-semibold text-foreground">{formattedGraceStart}</span>
+                    بداية السماح:{" "}
+                    <span className="font-semibold text-foreground">
+                      {formattedGraceStart}
+                    </span>
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="reg-accountingGraceDays" className="font-bold text-foreground">
+                  <Label
+                    htmlFor="reg-accountingGraceDays"
+                    className="font-bold text-foreground"
+                  >
                     فترة السماح بالأيام <RequiredMark />
                   </Label>
                   <Input
                     id="reg-accountingGraceDays"
                     name="accountingGraceDays"
                     value={form.accountingGraceDays}
-                    onChange={(e) => updateForm("accountingGraceDays", normalizeGraceDays(e.target.value))}
+                    onChange={(e) =>
+                      updateForm(
+                        "accountingGraceDays",
+                        normalizeGraceDays(e.target.value),
+                      )
+                    }
                     required
                     inputMode="numeric"
                     min={0}
@@ -1105,9 +1232,21 @@ export function StudentRegisterView() {
                     className={`${fieldBaseClass} text-left font-tabular`}
                   />
                   <p className="text-xs leading-5 text-muted-foreground">
-                    {accountingGraceDays > 0
-                      ? <>تبدأ فترة السماح تلقائياً من <span className="font-semibold text-foreground">{formattedGraceStart}</span> وتنتهي في <span className="font-semibold text-foreground">{formattedGraceEnd}</span> حسب عدد الأيام المدخل.</>
-                      : "لا توجد أيام سماح عند اختيار 0."}
+                    {accountingGraceDays > 0 ? (
+                      <>
+                        تبدأ فترة السماح تلقائياً من{" "}
+                        <span className="font-semibold text-foreground">
+                          {formattedGraceStart}
+                        </span>{" "}
+                        وتنتهي في{" "}
+                        <span className="font-semibold text-foreground">
+                          {formattedGraceEnd}
+                        </span>{" "}
+                        حسب عدد الأيام المدخل.
+                      </>
+                    ) : (
+                      "لا توجد أيام سماح عند اختيار 0."
+                    )}
                   </p>
                 </div>
               </div>
@@ -1115,16 +1254,23 @@ export function StudentRegisterView() {
               <div className="mt-5 flex items-start gap-2 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm leading-6 text-foreground">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span>
-                  {gracePeriodDescription}.
+                  مثال عملي:{" "}
+                  <span className="font-black">{gracePeriodDescription}.</span>
                 </span>
               </div>
             </section>
 
             <div className="flex flex-col gap-3 rounded-3xl border bg-muted/35 p-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-start gap-2 text-sm leading-6 text-muted-foreground">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <div
+                className={`flex items-start gap-2 text-sm leading-6 ${selectedCourseHasNoActiveChapter ? "font-bold text-destructive" : "text-muted-foreground"}`}
+              >
+                <AlertCircle
+                  className={`mt-0.5 h-4 w-4 shrink-0 ${selectedCourseHasNoActiveChapter ? "text-destructive" : "text-primary"}`}
+                />
                 <span>
-                  راجع بيانات الطالب والدورة قبل الحفظ.
+                  {selectedCourseHasNoActiveChapter
+                    ? "تنبيه قبل الحفظ: هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص."
+                    : "راجع بيانات الطالب والدورة قبل الحفظ."}
                 </span>
               </div>
               <Button
@@ -1140,7 +1286,6 @@ export function StudentRegisterView() {
           </form>
         </CardContent>
       </Card>
-
     </div>
   );
 }
