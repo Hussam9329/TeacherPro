@@ -2275,7 +2275,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               ) : null}
             </CardContent>
           </Card>
-          <div className="grid gap-3 md:grid-cols-5">
+          <div className="grid gap-3 md:grid-cols-6">
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">
@@ -2284,6 +2284,18 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 <b className="text-2xl">
                   {displayedCallStats.total}
                   {callStatsSuffix}
+                </b>
+              </CardContent>
+            </Card>
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">
+                  {callStatusFilter !== "all"
+                    ? `عدد ${callStatusFilterLabels[callStatusFilter]}`
+                    : "عدد الطلاب الكلي (كل الحالات)"}
+                </p>
+                <b className="text-2xl text-primary">
+                  {callRows.length}
                 </b>
               </CardContent>
             </Card>
