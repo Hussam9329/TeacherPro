@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
 import {
   opportunityStatsApi,
   studentApi,
   type OpportunityStatsResponse,
+  type OpportunityBulkTargetsResponse,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -82,8 +83,9 @@ export function OpportunitiesView() {
   const [databaseStats, setDatabaseStats] =
     useState<OpportunityStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
-  const [bulkScopeStudents, setBulkScopeStudents] = useState<Student[]>([]);
-  const [bulkScopeLoading, setBulkScopeLoading] = useState(false);
+  const [bulkTargetStats, setBulkTargetStats] =
+    useState<OpportunityBulkTargetsResponse | null>(null);
+  const [bulkTargetLoading, setBulkTargetLoading] = useState(false);
 
   // Action dialog
   const [actionDialog, setActionDialog] = useState<{
@@ -151,41 +153,6 @@ export function OpportunitiesView() {
 
   useEffect(() => {
     let cancelled = false;
-    setBulkScopeLoading(true);
-    studentApi
-      .listAll({
-        courseId: filterCourseId,
-        opportunityStatus: filterStatus,
-        opportunityCount: filterOpportunityCount,
-        q: debouncedSearch,
-      })
-      .then((result) => {
-        if (cancelled) return;
-        const allMatchingStudents = (result?.students ||
-          []) as unknown as Student[];
-        setBulkScopeStudents(allMatchingStudents);
-        if (allMatchingStudents.length) mergeStudentsCache(allMatchingStudents);
-      })
-      .catch(() => {
-        if (!cancelled) setBulkScopeStudents([]);
-      })
-      .finally(() => {
-        if (!cancelled) setBulkScopeLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    filterCourseId,
-    filterStatus,
-    filterOpportunityCount,
-    debouncedSearch,
-    refreshKey,
-    mergeStudentsCache,
-  ]);
-
-  useEffect(() => {
-    let cancelled = false;
     const timer = window.setTimeout(() => {
       setDatabaseStatsLoading(true);
       opportunityStatsApi
@@ -210,62 +177,67 @@ export function OpportunitiesView() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [filterCourseId, filterStatus, filterOpportunityCount, debouncedSearch, refreshKey]);
+  }, [
+    filterCourseId,
+    filterStatus,
+    filterOpportunityCount,
+    debouncedSearch,
+    refreshKey,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      setBulkTargetLoading(true);
+      opportunityStatsApi
+        .bulkTargets({
+          courseId: filterCourseId,
+          status: filterStatus,
+          opportunityCount: filterOpportunityCount,
+          q: debouncedSearch,
+          actionType: bulkActionDialog.type,
+          excludeDismissed: bulkExcludeDismissed,
+          excludeFullOpportunities: bulkExcludeFullOpportunities,
+        })
+        .then((result) => {
+          if (!cancelled) setBulkTargetStats(result);
+        })
+        .catch(() => {
+          if (!cancelled) setBulkTargetStats(null);
+        })
+        .finally(() => {
+          if (!cancelled) setBulkTargetLoading(false);
+        });
+    }, 120);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    filterCourseId,
+    filterStatus,
+    filterOpportunityCount,
+    debouncedSearch,
+    refreshKey,
+    bulkActionDialog.type,
+    bulkExcludeDismissed,
+    bulkExcludeFullOpportunities,
+  ]);
 
   const filtered = serverStudents;
   const totalPages = serverTotalPages;
   const paged = serverStudents;
 
-  const bulkEligibleStudents = useMemo(
-    () =>
-      bulkScopeStudents.filter((student) =>
-        Boolean(activeChapterForCourse(student.courseId)),
-      ),
-    [bulkScopeStudents, activeChapterForCourse],
-  );
-
-  const fullOpportunityLimitFor = useCallback((student: Student) => {
-    const base = Number(student.baseOpportunities || 0);
-    return base > 0 ? base : 3;
-  }, []);
-
-  const currentBulkTargets = useMemo(() => {
-    return bulkEligibleStudents.filter((student) => {
-      if (bulkActionDialog.type === "add") {
-        if (bulkExcludeDismissed && student.status === "مفصول") return false;
-        return true;
-      }
-      if (bulkExcludeFullOpportunities) {
-        return (
-          Number(student.opportunities || 0) < fullOpportunityLimitFor(student)
-        );
-      }
-      return true;
-    });
-  }, [
-    bulkEligibleStudents,
-    bulkActionDialog.type,
-    bulkExcludeDismissed,
-    bulkExcludeFullOpportunities,
-    fullOpportunityLimitFor,
-  ]);
-
-  const bulkSkippedNoActiveChapterCount =
-    bulkScopeStudents.length - bulkEligibleStudents.length;
-  const bulkExcludedDismissedCount =
-    bulkActionDialog.type === "add" && bulkExcludeDismissed
-      ? bulkEligibleStudents.filter((student) => student.status === "مفصول")
-          .length
-      : 0;
+  const bulkTargetCount = bulkTargetStats?.targetCount ?? 0;
+  const bulkSkippedNoActiveChapterCount = bulkTargetStats?.noActiveChapter ?? 0;
+  const bulkExcludedDismissedCount = bulkTargetStats?.excludedDismissed ?? 0;
   const bulkExcludedFullOpportunitiesCount =
-    bulkActionDialog.type === "deduct" && bulkExcludeFullOpportunities
-      ? bulkEligibleStudents.filter(
-          (student) =>
-            Number(student.opportunities || 0) >=
-            fullOpportunityLimitFor(student),
-        ).length
-      : 0;
-  const bulkSkippedCount = bulkScopeStudents.length - currentBulkTargets.length;
+    bulkTargetStats?.excludedFullOpportunities ?? 0;
+  const bulkSkippedCount = bulkTargetStats?.skipped ?? 0;
+  const bulkEligibleWithActiveChapterCount =
+    bulkTargetStats?.eligibleWithActiveChapter ?? 0;
+  const bulkTotalMatchingCount = bulkTargetStats?.totalMatching ?? 0;
 
   const activeCourseFilterName = filterCourseId
     ? courseName(filterCourseId)
@@ -290,8 +262,12 @@ export function OpportunitiesView() {
     return value ?? "—";
   };
   const statsTotal = databaseStatValue(databaseStats?.total);
-  const statsHasOpportunities = databaseStatValue(databaseStats?.hasOpportunities);
-  const statsNoOpportunities = databaseStatValue(databaseStats?.noOpportunities);
+  const statsHasOpportunities = databaseStatValue(
+    databaseStats?.hasOpportunities,
+  );
+  const statsNoOpportunities = databaseStatValue(
+    databaseStats?.noOpportunities,
+  );
   const statsDismissed = databaseStatValue(databaseStats?.dismissed);
   const statsSuffix = "";
 
@@ -473,8 +449,8 @@ export function OpportunitiesView() {
   });
 
   const handleBulkAction = runActionLocked(async () => {
-    if (!currentBulkTargets.length) {
-      toast.error("لا يوجد طلاب مؤهلون بعد تطبيق الاستثناءات الحالية");
+    if (!bulkTargetCount) {
+      toast.error("لا يوجد طلاب مؤهلون بعد تطبيق الفلاتر والاستثناءات الحالية");
       return;
     }
     if (!bulkReason.trim()) {
@@ -494,21 +470,38 @@ export function OpportunitiesView() {
     ]
       .filter(Boolean)
       .join(" - ");
-    const result = bulkAdjustOpportunities(
-      currentBulkTargets.map((student) => student.id),
-      bulkActionDialog.type === "deduct" ? -normalizedAmount : normalizedAmount,
-      scopeReason,
-      {
-        reactivateDismissedOnAdd:
-          bulkActionDialog.type === "add" && !bulkExcludeDismissed,
-      },
-    );
-    if (result.affected === 0) {
-      toast.error("لم يتم تطبيق العملية على أي طالب");
+
+    const result = await opportunityStatsApi.bulkAdjustByFilters({
+      courseId: filterCourseId,
+      status: filterStatus,
+      opportunityCount: filterOpportunityCount,
+      q: debouncedSearch,
+      actionType: bulkActionDialog.type,
+      amount: normalizedAmount,
+      reason: scopeReason,
+      excludeDismissed: bulkExcludeDismissed,
+      excludeFullOpportunities: bulkExcludeFullOpportunities,
+      reactivateDismissedOnAdd:
+        bulkActionDialog.type === "add" && !bulkExcludeDismissed,
+    });
+
+    if (!result.ok) {
+      toast.error(result.error || "تعذر تنفيذ عملية الفرص الجماعية");
       return;
     }
+
+    const affected = Number(
+      (result.data as { updatedStudents?: number } | undefined)
+        ?.updatedStudents || 0,
+    );
+    if (affected === 0) {
+      toast.error("لم يتم تطبيق العملية على أي طالب");
+      setRefreshKey((key) => key + 1);
+      return;
+    }
+
     toast.success(
-      `${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${result.affected} طالب${bulkSkippedCount ? `، وتم استثناء ${bulkSkippedCount}` : ""}`,
+      `${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${affected} طالب من كل المطابقين في قاعدة البيانات${bulkSkippedCount ? `، وتم استثناء ${bulkSkippedCount}` : ""}`,
     );
     setBulkActionDialog({ type: "add", open: false });
     setBulkReason("");
@@ -673,7 +666,9 @@ export function OpportunitiesView() {
             <p className="text-xs text-muted-foreground">
               سيطبق الإجراء على كل الطلاب المطابقين للفلاتر من قاعدة البيانات،
               وليس الصفحة الحالية فقط.{" "}
-              {bulkScopeLoading ? "جاري احتساب النطاق الكامل…" : ""}{" "}
+              {bulkTargetLoading
+                ? "جاري احتساب النطاق الكامل من قاعدة البيانات…"
+                : ""}{" "}
               {bulkSkippedNoActiveChapterCount > 0
                 ? `يوجد ${bulkSkippedNoActiveChapterCount} طالب بلا فصل نشط.`
                 : ""}
@@ -687,23 +682,27 @@ export function OpportunitiesView() {
           <div className="flex flex-wrap gap-2">
             <Button
               className="bg-emerald-600 text-white hover:bg-emerald-700"
-              disabled={bulkScopeLoading || bulkEligibleStudents.length === 0}
+              disabled={
+                bulkTargetLoading || bulkEligibleWithActiveChapterCount === 0
+              }
               onClick={() => {
                 setBulkExcludeDismissed(true);
                 setBulkActionDialog({ type: "add", open: true });
               }}
             >
-              إضافة للجميع الظاهرين
+              إضافة لكل المطابقين
             </Button>
             <Button
               variant="destructive"
-              disabled={bulkScopeLoading || bulkEligibleStudents.length === 0}
+              disabled={
+                bulkTargetLoading || bulkEligibleWithActiveChapterCount === 0
+              }
               onClick={() => {
                 setBulkExcludeFullOpportunities(true);
                 setBulkActionDialog({ type: "deduct", open: true });
               }}
             >
-              خصم من الجميع الظاهرين
+              خصم من كل المطابقين
             </Button>
           </div>
         </CardContent>
@@ -1122,20 +1121,24 @@ export function OpportunitiesView() {
           <DialogHeader>
             <DialogTitle>
               {bulkActionDialog.type === "add"
-                ? "إضافة فرص لجميع الطلاب الظاهرين"
-                : "خصم فرص من جميع الطلاب الظاهرين"}
+                ? "إضافة فرص لكل الطلاب المطابقين"
+                : "خصم فرص من كل الطلاب المطابقين"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-2xl border bg-muted/50 p-3 text-sm leading-6">
               <p className="font-bold">
-                سيتم تطبيق العملية على {currentBulkTargets.length} طالب بعد
-                الاستثناءات.
+                سيتم تطبيق العملية على {bulkTargetCount} طالب من كل قاعدة
+                البيانات بعد الفلاتر والاستثناءات، وليس الصفحة الحالية فقط.
               </p>
               <p className="text-xs text-muted-foreground">
                 الفلاتر: {activeCourseFilterName} • {activeStatusFilterName} •{" "}
                 {activeOpportunityFilterName}
                 {search.trim() ? ` • بحث: ${search.trim()}` : ""}
+              </p>
+              <p className="mt-1 text-xs font-semibold text-primary">
+                المطابقون قبل الاستثناءات: {bulkTotalMatchingCount} • لديهم فصل
+                نشط: {bulkEligibleWithActiveChapterCount}
               </p>
               {bulkActionDialog.type === "add" ? (
                 <div className="mt-3 rounded-xl border bg-background/70 p-3">
@@ -1244,17 +1247,15 @@ export function OpportunitiesView() {
             <Button
               onClick={handleBulkAction}
               disabled={
-                isApplyingAction ||
-                bulkScopeLoading ||
-                currentBulkTargets.length === 0
+                isApplyingAction || bulkTargetLoading || bulkTargetCount === 0
               }
               variant={
                 bulkActionDialog.type === "deduct" ? "destructive" : "default"
               }
             >
               {bulkActionDialog.type === "add"
-                ? "إضافة للجميع"
-                : "خصم من الجميع"}
+                ? "إضافة لكل المطابقين"
+                : "خصم من كل المطابقين"}
             </Button>
           </DialogFooter>
         </DialogContent>

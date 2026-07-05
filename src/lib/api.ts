@@ -487,6 +487,27 @@ export interface OpportunityStatsResponse {
   source: "database";
 }
 
+export interface OpportunityBulkTargetsResponse {
+  totalMatching: number;
+  eligibleWithActiveChapter: number;
+  noActiveChapter: number;
+  excludedDismissed: number;
+  excludedFullOpportunities: number;
+  skipped: number;
+  targetCount: number;
+  source: "database";
+}
+
+export interface OpportunityBulkAdjustResponse {
+  updatedStudents: number;
+  savedOpportunityLogs: number;
+  savedStudentNotes: number;
+  totalMatching: number;
+  eligibleWithActiveChapter: number;
+  skipped: number;
+  source: "database";
+}
+
 export interface GradeCoverageStatsResponse {
   withGrade: number;
   withoutGrade: number;
@@ -1029,6 +1050,52 @@ export const opportunityStatsApi = {
       `opportunities/stats${queryString ? `?${queryString}` : ""}`,
     );
   },
+  bulkTargets: (
+    query: {
+      courseId?: string;
+      status?: string;
+      opportunityCount?: string;
+      q?: string;
+      actionType?: "add" | "deduct";
+      excludeDismissed?: boolean;
+      excludeFullOpportunities?: boolean;
+    } = {},
+  ) => {
+    const queryString = buildQueryString({
+      courseId: query.courseId,
+      status: query.status,
+      opportunityCount: query.opportunityCount,
+      q: query.q,
+      actionType: query.actionType,
+      excludeDismissed:
+        query.excludeDismissed === undefined
+          ? undefined
+          : String(query.excludeDismissed),
+      excludeFullOpportunities:
+        query.excludeFullOpportunities === undefined
+          ? undefined
+          : String(query.excludeFullOpportunities),
+    });
+    return apiGet<OpportunityBulkTargetsResponse>(
+      `opportunities/bulk-targets${queryString ? `?${queryString}` : ""}`,
+    );
+  },
+  bulkAdjustByFilters: (payload: {
+    courseId?: string;
+    status?: string;
+    opportunityCount?: string;
+    q?: string;
+    actionType: "add" | "deduct";
+    amount: number;
+    reason: string;
+    excludeDismissed?: boolean;
+    excludeFullOpportunities?: boolean;
+    reactivateDismissedOnAdd?: boolean;
+  }) =>
+    apiPost("opportunities/bulk-adjust", {
+      mode: "filter",
+      ...payload,
+    }) as Promise<ApiResult & { data?: OpportunityBulkAdjustResponse }>,
 };
 
 export const callStatsApi = {

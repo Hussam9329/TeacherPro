@@ -108,6 +108,9 @@ type TelegramExamSubmission = {
   telegramUserId?: string;
   telegramUsername?: string;
   telegramChatId?: string;
+  matchType?: "code" | "telegram" | "phone" | "manual_review" | string;
+  matchSource?: string;
+  matchDetails?: string;
   sourceMessageIds?: string[];
   pages?: TelegramSubmissionPage[];
   pageCount: number;
@@ -199,6 +202,34 @@ function getSubmissionPagePreview(
   return "";
 }
 
+function botMatchLabel(matchType?: string) {
+  if (matchType === "code") return "مطابق بالكود";
+  if (matchType === "telegram") return "مطابق بالتليكرام";
+  if (matchType === "phone") return "مطابق بالهاتف";
+  return "يحتاج مراجعة يدوية";
+}
+
+function botMatchBadgeVariant(matchType?: string) {
+  if (matchType === "manual_review" || !matchType)
+    return "destructive" as const;
+  if (matchType === "phone") return "secondary" as const;
+  return "default" as const;
+}
+
+function botMatchDetails(submission?: TelegramExamSubmission | null) {
+  if (!submission) return "—";
+  return (
+    submission.matchDetails ||
+    (submission.matchType === "code"
+      ? "تم ربط المستلم اعتماداً على كود الطالب."
+      : submission.matchType === "telegram"
+        ? "تم ربط المستلم اعتماداً على معرف التليكرام."
+        : submission.matchType === "phone"
+          ? "تم ربط المستلم اعتماداً على رقم الهاتف."
+          : "يحتاج مراجعة يدوية قبل الاعتماد الكامل على هذا الربط.")
+  );
+}
+
 function TelegramPageImage({
   src,
   pageNumber,
@@ -281,9 +312,11 @@ export function ECorrectionView() {
   const [botSchemaWarning, setBotSchemaWarning] = useState("");
   const [botIntegrationConfig, setBotIntegrationConfig] =
     useState<BotIntegrationConfig>({});
-  const [correctionStats, setCorrectionStats] = useState<CorrectionStatsResponse | null>(null);
+  const [correctionStats, setCorrectionStats] =
+    useState<CorrectionStatsResponse | null>(null);
   const [correctionStatsLoading, setCorrectionStatsLoading] = useState(false);
-  const [botDatabaseStats, setBotDatabaseStats] = useState<BotSubmissionStatsResponse | null>(null);
+  const [botDatabaseStats, setBotDatabaseStats] =
+    useState<BotSubmissionStatsResponse | null>(null);
   const [botDatabaseStatsLoading, setBotDatabaseStatsLoading] = useState(false);
   const { locked: isAddingSheet, runLocked: runAddSheetLocked } =
     useActionLock();
@@ -331,7 +364,8 @@ export function ECorrectionView() {
         credentials: "same-origin",
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.error || "تعذر تحميل إحصائيات التصحيح");
+      if (!response.ok)
+        throw new Error(payload?.error || "تعذر تحميل إحصائيات التصحيح");
       setCorrectionStats(payload as CorrectionStatsResponse);
     } catch {
       setCorrectionStats(null);
@@ -348,7 +382,8 @@ export function ECorrectionView() {
         credentials: "same-origin",
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.error || "تعذر تحميل إحصائيات مستلمات البوت");
+      if (!response.ok)
+        throw new Error(payload?.error || "تعذر تحميل إحصائيات مستلمات البوت");
       setBotDatabaseStats(payload as BotSubmissionStatsResponse);
     } catch {
       setBotDatabaseStats(null);
@@ -795,7 +830,9 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Card>
               <CardContent className="p-4 text-center">
-                <p className="text-2xl font-bold">{botStatValue(botDatabaseStats?.total)}</p>
+                <p className="text-2xl font-bold">
+                  {botStatValue(botDatabaseStats?.total)}
+                </p>
                 <p className="text-xs text-muted-foreground">مستلم من البوت</p>
               </CardContent>
             </Card>
@@ -1097,6 +1134,11 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                           >
                             {submission.status}
                           </Badge>
+                          <Badge
+                            variant={botMatchBadgeVariant(submission.matchType)}
+                          >
+                            {botMatchLabel(submission.matchType)}
+                          </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
                           {submission.exam?.name ||
@@ -1124,6 +1166,9 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                           </span>
                           <span>
                             الاستلام: {formatDateTime(submission.receivedAt)}
+                          </span>
+                          <span>
+                            نوع الربط: {botMatchLabel(submission.matchType)}
                           </span>
                         </div>
                       </div>
@@ -1298,7 +1343,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
           </DialogHeader>
           <ScrollArea className="max-h-[68vh] pr-2">
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                 <div className="rounded-2xl border bg-muted/30 p-3">
                   <p className="text-xs text-muted-foreground">كود الطالب</p>
                   <p className="font-medium">
@@ -1318,6 +1363,23 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                       botSubmissionDialog?.telegramUsername ||
                       botSubmissionDialog?.telegramUserId ||
                       "—"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    نوع مطابقة الربط
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant={botMatchBadgeVariant(
+                        botSubmissionDialog?.matchType,
+                      )}
+                    >
+                      {botMatchLabel(botSubmissionDialog?.matchType)}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    {botMatchDetails(botSubmissionDialog)}
                   </p>
                 </div>
               </div>

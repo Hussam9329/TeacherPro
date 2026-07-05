@@ -7,6 +7,13 @@ import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withFollowupTables } from "@/lib/followup-schema";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
+import {
+  buildOpportunityFilters,
+  composeStudentWhere,
+  fullOpportunityLimitForStudent,
+  hasActiveChapterWhere,
+  normalizeBoolean,
+} from "@/lib/opportunity-filters-server";
 
 type StudentUpdatePayload = {
   id?: unknown;
@@ -127,15 +134,289 @@ function normalizeStudentNotes(value: unknown) {
     .filter((item) => item.id && item.studentId && item.text);
 }
 
+function normalizeText(value: unknown, max = 2000): string {
+  return String(value ?? "")
+    .trim()
+    .slice(0, max);
+}
+
+function normalizePositiveInt(value: unknown, fallback = 1): number {
+  const numeric = Number(value ?? fallback);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(1, Math.trunc(Math.abs(numeric)));
+}
+
+async function handleFilterBasedBulkAdjust(body: Record<string, unknown>) {
+  const actionType = body.actionType === "deduct" ? "deduct" : "add";
+  const amount = normalizePositiveInt(body.amount, 1);
+  const signedAmount = actionType === "deduct" ? -amount : amount;
+  const action = actionType === "deduct" ? "خصم" : "إضافة";
+  const reason = normalizeText(body.reason, 2000);
+  if (!reason) return validationError("يرجى إدخال سبب العملية الجماعية");
+
+  const excludeDismissed = normalizeBoolean(body.excludeDismissed, true);
+  const excludeFullOpportunities = normalizeBoolean(
+    body.excludeFullOpportunities,
+    true,
+  );
+  const reactivateDismissedOnAdd = normalizeBoolean(
+    body.reactivateDismissedOnAdd,
+    false,
+  );
+
+  const filters = buildOpportunityFilters({
+    courseId: normalizeText(body.courseId, 120),
+    status: normalizeText(body.status, 120),
+    opportunityCount: normalizeText(body.opportunityCount, 40),
+    q: normalizeText(body.q, 300),
+  });
+
+  const result = await withFollowupTables(
+    async () =>
+      db.$transaction(async (tx) => {
+        const totalMatching = await tx.student.count({
+          where: composeStudentWhere(filters),
+        });
+
+        const candidateRows = await tx.student.findMany({
+          where: composeStudentWhere([...filters, hasActiveChapterWhere()]),
+          select: {
+            id: true,
+            status: true,
+            opportunities: true,
+            baseOpportunities: true,
+            courseId: true,
+          },
+        });
+
+        const targetRows = candidateRows.filter((student) => {
+          if (
+            actionType === "add" &&
+            excludeDismissed &&
+            student.status === "مفصول"
+          ) {
+            return false;
+          }
+          if (actionType === "deduct" && excludeFullOpportunities) {
+            return (
+              Number(student.opportunities || 0) <
+              fullOpportunityLimitForStudent(student)
+            );
+          }
+          return true;
+        });
+
+        if (!targetRows.length) {
+          return {
+            updatedStudents: 0,
+            savedOpportunityLogs: 0,
+            savedStudentNotes: 0,
+            totalMatching,
+            eligibleWithActiveChapter: candidateRows.length,
+            skipped: Math.max(0, totalMatching),
+          };
+        }
+
+        const courseIds = Array.from(
+          new Set(targetRows.map((student) => student.courseId)),
+        );
+        const activeLinks = courseIds.length
+          ? await tx.courseChapter.findMany({
+              where: {
+                courseId: { in: courseIds },
+                active: true,
+                archived: false,
+              },
+              select: { courseId: true, chapterId: true },
+            })
+          : [];
+        const chapterIds = Array.from(
+          new Set(activeLinks.map((link) => link.chapterId)),
+        );
+        const chapters = chapterIds.length
+          ? await tx.chapter.findMany({
+              where: { id: { in: chapterIds } },
+              select: { id: true, opportunities: true },
+            })
+          : [];
+        const chapterById = new Map(
+          chapters.map((chapter) => [chapter.id, chapter]),
+        );
+        const activeChapterByCourseId = new Map(
+          activeLinks.map((link) => [
+            link.courseId,
+            {
+              chapterId: link.chapterId,
+              opportunities: Number(
+                chapterById.get(link.chapterId)?.opportunities || 0,
+              ),
+            },
+          ]),
+        );
+
+        const targetIds = targetRows.map((student) => student.id);
+        const finalChanceLogs = await tx.opportunityLog.findMany({
+          where: {
+            studentId: { in: targetIds },
+            OR: [
+              { action: "فرصة أخيرة بعد تعهد" },
+              { reason: { contains: "فرصة أخيرة", mode: "insensitive" } },
+            ],
+          },
+          select: { studentId: true },
+        });
+        const finalChanceStudentIds = new Set(
+          finalChanceLogs.map((log) => log.studentId),
+        );
+
+        const now = new Date();
+        let updatedStudents = 0;
+        const opportunityLogs: Array<{
+          studentId: string;
+          action: string;
+          amount: number;
+          reason: string;
+          date: Date;
+          chapterId: string | null;
+        }> = [];
+        const studentNotes: Array<{
+          studentId: string;
+          kind: string;
+          text: string;
+          date: Date;
+          sourceType?: string;
+          sourceId?: string;
+          dismissalKey?: string;
+          dismissalType?: string;
+          dismissalReason?: string;
+          dismissalDate?: Date;
+        }> = [];
+
+        for (const student of targetRows) {
+          const activeChapter = activeChapterByCourseId.get(student.courseId);
+          if (!activeChapter) continue;
+          const cap =
+            activeChapter.opportunities > 0
+              ? activeChapter.opportunities
+              : fullOpportunityLimitForStudent(student);
+          let nextOpportunities = Math.max(
+            0,
+            Number(student.opportunities || 0) + signedAmount,
+          );
+          if (signedAmount > 0 && cap > 0) {
+            nextOpportunities = Math.min(nextOpportunities, cap);
+          }
+
+          const data: {
+            opportunities: number;
+            status?: string;
+            dismissalType?: string;
+            dismissalReason?: string;
+            dismissalNotes?: string;
+          } = { opportunities: Math.trunc(nextOpportunities) };
+
+          if (
+            signedAmount < 0 &&
+            nextOpportunities === 0 &&
+            student.status === "نشط"
+          ) {
+            const dismissalType = finalChanceStudentIds.has(student.id)
+              ? "فصل نهائي"
+              : "فصل مؤقت";
+            const dismissalReason = finalChanceStudentIds.has(student.id)
+              ? "عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة"
+              : "انتهاء الفرص";
+            data.status = "مفصول";
+            data.dismissalType = dismissalType;
+            data.dismissalReason = dismissalReason;
+            data.dismissalNotes = "";
+            studentNotes.push({
+              studentId: student.id,
+              kind: "إجراء",
+              text: `فصل الطالب (${dismissalType}): ${dismissalReason}`,
+              date: now,
+              sourceType: "bulk-opportunity-adjust",
+              dismissalKey: `${student.id}-${now.toISOString()}`,
+              dismissalType,
+              dismissalReason,
+              dismissalDate: now,
+            });
+          } else if (
+            signedAmount > 0 &&
+            reactivateDismissedOnAdd &&
+            student.status === "مفصول" &&
+            nextOpportunities > 0
+          ) {
+            data.status = "نشط";
+            data.dismissalType = "";
+            data.dismissalReason = "";
+            data.dismissalNotes = "";
+            studentNotes.push({
+              studentId: student.id,
+              kind: "إجراء",
+              text: "إعادة تفعيل تلقائية بعد إضافة فرصة جماعية",
+              date: now,
+              sourceType: "bulk-opportunity-adjust",
+            });
+          }
+
+          const update = await tx.student.updateMany({
+            where: { id: student.id },
+            data,
+          });
+          updatedStudents += update.count;
+          opportunityLogs.push({
+            studentId: student.id,
+            action,
+            amount,
+            reason,
+            date: now,
+            chapterId: activeChapter.chapterId,
+          });
+        }
+
+        for (const group of chunks(opportunityLogs)) {
+          await tx.opportunityLog.createMany({ data: group });
+        }
+        for (const group of chunks(studentNotes)) {
+          await tx.studentNote.createMany({ data: group });
+        }
+
+        return {
+          updatedStudents,
+          savedOpportunityLogs: opportunityLogs.length,
+          savedStudentNotes: studentNotes.length,
+          totalMatching,
+          eligibleWithActiveChapter: candidateRows.length,
+          skipped: Math.max(0, totalMatching - updatedStudents),
+        };
+      }),
+    "BulkOpportunityAdjustByFilter",
+  );
+
+  return NextResponse.json({ ...result, source: "database" });
+}
+
 export async function POST(req: NextRequest) {
   const authError = await requirePermission(req, "opportunities.manage");
   if (authError) return authError;
 
-  const rateLimitError = await checkApiRateLimit(req, API_RATE_LIMITS.bulkOpportunities);
+  const rateLimitError = await checkApiRateLimit(
+    req,
+    API_RATE_LIMITS.bulkOpportunities,
+  );
   if (rateLimitError) return rateLimitError;
 
   try {
     const body = await req.json();
+    if (
+      body &&
+      typeof body === "object" &&
+      (body as Record<string, unknown>).mode === "filter"
+    ) {
+      return handleFilterBasedBulkAdjust(body as Record<string, unknown>);
+    }
+
     const students = normalizeStudentUpdates(body.students);
     const opportunityLogs = normalizeOpportunityLogs(body.opportunityLogs);
     const studentNotes = normalizeStudentNotes(body.studentNotes);
@@ -167,26 +448,48 @@ export async function POST(req: NextRequest) {
           );
           let updatedStudents = 0;
 
-          const activeChapterByCourseId = new Map<string, { chapterId: string; opportunities: number }>();
+          const activeChapterByCourseId = new Map<
+            string,
+            { chapterId: string; opportunities: number }
+          >();
           if (allStudentIds.length) {
             const studentRowsForChapterCheck = await tx.student.findMany({
               where: { id: { in: allStudentIds } },
               select: { id: true, courseId: true },
             });
-            const courseIdsForChapter = Array.from(new Set(studentRowsForChapterCheck.map((s) => s.courseId)));
+            const courseIdsForChapter = Array.from(
+              new Set(studentRowsForChapterCheck.map((s) => s.courseId)),
+            );
             if (courseIdsForChapter.length) {
               const activeLinks = await tx.courseChapter.findMany({
-                where: { courseId: { in: courseIdsForChapter }, active: true, archived: false },
+                where: {
+                  courseId: { in: courseIdsForChapter },
+                  active: true,
+                  archived: false,
+                },
                 select: { courseId: true, chapterId: true },
               });
-              const chapterIdsForActive = Array.from(new Set(activeLinks.map((l) => l.chapterId)));
+              const chapterIdsForActive = Array.from(
+                new Set(activeLinks.map((l) => l.chapterId)),
+              );
               const chaptersForActive = chapterIdsForActive.length
-                ? await tx.chapter.findMany({ where: { id: { in: chapterIdsForActive } }, select: { id: true, opportunities: true } })
+                ? await tx.chapter.findMany({
+                    where: { id: { in: chapterIdsForActive } },
+                    select: { id: true, opportunities: true },
+                  })
                 : [];
-              const chapterOppById = new Map(chaptersForActive.map((c) => [c.id, Number(c.opportunities || 0)]));
+              const chapterOppById = new Map(
+                chaptersForActive.map((c) => [
+                  c.id,
+                  Number(c.opportunities || 0),
+                ]),
+              );
               for (const link of activeLinks) {
                 const opp = chapterOppById.get(link.chapterId) ?? 0;
-                activeChapterByCourseId.set(link.courseId, { chapterId: link.chapterId, opportunities: opp });
+                activeChapterByCourseId.set(link.courseId, {
+                  chapterId: link.chapterId,
+                  opportunities: opp,
+                });
               }
             }
           }
@@ -195,7 +498,9 @@ export async function POST(req: NextRequest) {
           const courseIdByStudentId = new Map<string, string>();
           // We re-fetch students that are in the update payload to get their courseId.
           // (We already have existingStudents but it only had id selected.)
-          const studentIdList = students.map((s) => s.id).filter((id) => existingStudentIds.has(id));
+          const studentIdList = students
+            .map((s) => s.id)
+            .filter((id) => existingStudentIds.has(id));
           if (studentIdList.length) {
             const studentRowsForCourse = await tx.student.findMany({
               where: { id: { in: studentIdList } },
@@ -219,7 +524,10 @@ export async function POST(req: NextRequest) {
               : undefined;
             let finalOpportunities = student.opportunities;
             if (activeChapter && activeChapter.opportunities > 0) {
-              finalOpportunities = Math.min(finalOpportunities, activeChapter.opportunities);
+              finalOpportunities = Math.min(
+                finalOpportunities,
+                activeChapter.opportunities,
+              );
             }
             // Non-negative floor.
             finalOpportunities = Math.max(0, Math.trunc(finalOpportunities));
