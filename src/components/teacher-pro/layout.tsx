@@ -443,6 +443,20 @@ export function TeacherProLayout() {
     void loadSectionDataFromServer(currentSection);
   }, [currentSection, dbLoading, isAuthenticated, loadSectionDataFromServer]);
 
+  // عند إصلاح فرص الطلاب تلقائياً في الخلفية (triggerAutoFixZeroOpportunities)،
+  // أعِد تحميل بيانات الطلاب الحالية حتى تعكس الواجهة الفرص الجديدة فوراً.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const handler = () => {
+      // أعد تحميل بيانات القسم الحالي + courseChapters لضمان دقة activeChapterForCourse.
+      lazyLoadedSectionsRef.current.delete(currentSection);
+      void loadSectionDataFromServer(currentSection);
+      void loadFromServer();
+    };
+    window.addEventListener("teacherpro:students-updated", handler);
+    return () => window.removeEventListener("teacherpro:students-updated", handler);
+  }, [isAuthenticated, currentSection, loadSectionDataFromServer, loadFromServer]);
+
   useEffect(() => {
     if (!isAuthenticated) return;
     const timer = window.setInterval(() => {

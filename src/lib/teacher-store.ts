@@ -1165,6 +1165,52 @@ function repairAbsentDiscountAccountingIfNeeded(getState: () => TeacherState): v
   state.recalculateAcademicEffects(affectedStudentIds);
 }
 
+/**
+ * إصلاح تلقائي صامت للطلاب الذين فرصهم 0/0 رغم وجود فصل نشط لدورتهم.
+ * يُستدعى مرة واحدة لكل جلسة متصفح (sessionStorage) بعد نجاح loadFromServer.
+ *
+ * السبب: بعض الطلاب أُضيفوا قبل إصلاح lazy-load لـ courseChapters، فأُرسلت
+ * لهم فرص 0/0 صراحةً من النموذج واحترمها الخادم. هذا الإصلاح يمنحهم
+ * تلقائياً فرص الفصل النشط الحالي بدون تدخل المستخدم.
+ *
+ * الـ endpoint آمن: يتجاهل الطلاب الذين فرصهم صحيحة، ويتجاهل الدورات
+ * بدون فصل نشط. يعمل فقط إذا كان لدى المستخدم صلاحية students.edit،
+ * وإلا فشل بصمت (403) ولا يؤثر على باقي التطبيق.
+ */
+const ZERO_OPP_FIX_FLAG = 'teacherpro:zero-opp-auto-fix-v1';
+
+function triggerAutoFixZeroOpportunities(): void {
+  if (typeof window === 'undefined') return;
+  if (window.sessionStorage.getItem(ZERO_OPP_FIX_FLAG)) return;
+  window.sessionStorage.setItem(ZERO_OPP_FIX_FLAG, '1');
+
+  // اطلبه بصمت في الخلفية. أي خطأ يُسجّل فقط في console بدون toast.
+  void fetch('/api/students/fix-zero-opportunities', {
+    method: 'PATCH',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+  })
+    .then((response) => response.json())
+    .then((payload: { fixedTotal?: number; message?: string } | null) => {
+      if (payload && typeof payload.fixedTotal === 'number' && payload.fixedTotal > 0) {
+        // أعد تحميل بيانات الطلاب المحلية إذا تم إصلاح أي طالب.
+        // نطلق حدث يلتقطه layout لإعادة تحميل courseChapters + section data.
+        console.info(`[auto-fix] تم إصلاح ${payload.fixedTotal} طالب بفرص 0/0 تلقائياً.`);
+        window.dispatchEvent(new CustomEvent('teacherpro:students-updated'));
+      }
+    })
+    .catch((err) => {
+      // فشل صامت — لا نريد إزعاج المستخدم. سيتحقق المشرف يدوياً عند الحاجة.
+      console.warn('[auto-fix] فشل الإصلاح التلقائي لفرص الطلاب:', err);
+      // اسمح بإعادة المحاولة في الجلسة القادمة.
+      try {
+        window.sessionStorage.removeItem(ZERO_OPP_FIX_FLAG);
+      } catch {
+        // ignore
+      }
+    });
+}
+
 function gradeCausesDismissalGradeEffect(grade: Grade, exam: Exam): boolean {
   if (!gradeHasAcademicEffect(grade, exam)) return false;
   if (grade.status === 'غش') return true;
@@ -2153,6 +2199,10 @@ export const useTeacherStore = create<TeacherState>()(
           if (serverData.students && serverData.grades) {
             repairAbsentDiscountAccountingIfNeeded(get);
           }
+
+          // إصلاح تلقائي صامت لفرص الطلاب (0/0) مرة واحدة لكل جلسة متصفح.
+          // الـ endpoint نفسه يتجاهل الطلاب السليمين، فلا ضرر من استدعائه.
+          triggerAutoFixZeroOpportunities();
 
           // Note: we no longer auto-sync the admin user's role/permissions
           // on every load. That update required accounts.manage permission
