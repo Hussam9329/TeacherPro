@@ -43,6 +43,14 @@ function validateGraceDays(value: unknown): string | null {
   return null;
 }
 
+type CourseTransferPolicy = "reset" | "keep";
+
+function normalizeCourseTransferPolicy(
+  value: unknown,
+): CourseTransferPolicy | "" {
+  return value === "reset" || value === "keep" ? value : "";
+}
+
 const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
   // Primary/derived fields
   "code",
@@ -619,13 +627,30 @@ export async function PUT(req: NextRequest) {
   if (authError) return authError;
 
   const body = await req.json();
-  const { id, ...data } = body;
+  const { id, courseTransferPolicy: rawCourseTransferPolicy, ...data } = body;
   stripNonWritableStudentUpdateFields(data);
+  const courseTransferPolicy = normalizeCourseTransferPolicy(
+    rawCourseTransferPolicy,
+  );
   if (!id)
     return NextResponse.json(
       { error: "تعذر تحديد الطالب المطلوب" },
       { status: 400 },
     );
+  if (
+    rawCourseTransferPolicy !== undefined &&
+    rawCourseTransferPolicy !== null &&
+    rawCourseTransferPolicy !== "" &&
+    !courseTransferPolicy
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "سياسة نقل الطالب غير واضحة. اختر: اعتباره طالب جديد للدورة أو الإبقاء على فرصه كما هي.",
+      },
+      { status: 400 },
+    );
+  }
   if (data.name !== undefined) {
     const nameError = getRequiredTextError(
       String(data.name ?? ""),
@@ -728,7 +753,14 @@ export async function PUT(req: NextRequest) {
     // the cap (e.g. due to stale cache or a stale bulk operation that ran
     // before a chapter change). The clamp applies whenever opportunities is
     // explicitly being written, regardless of which course it is.
-    const courseIdForClamp = String(data.courseId || "").trim() || (await db.student.findUnique({ where: { id }, select: { courseId: true } }))?.courseId;
+    const courseIdForClamp =
+      String(data.courseId || "").trim() ||
+      (
+        await db.student.findUnique({
+          where: { id },
+          select: { courseId: true },
+        })
+      )?.courseId;
     if (courseIdForClamp) {
       const activeLink = await db.courseChapter.findFirst({
         where: { courseId: courseIdForClamp, active: true, archived: false },
@@ -741,7 +773,10 @@ export async function PUT(req: NextRequest) {
         });
         const chapterOpp = Number(chapter?.opportunities || 0);
         if (chapterOpp > 0) {
-          data.opportunities = Math.min(Math.max(0, Math.trunc(data.opportunities)), chapterOpp);
+          data.opportunities = Math.min(
+            Math.max(0, Math.trunc(data.opportunities)),
+            chapterOpp,
+          );
           // Keep baseOpportunities aligned with the active chapter.
           data.baseOpportunities = chapterOpp;
         }
@@ -830,6 +865,52 @@ export async function PUT(req: NextRequest) {
     }
   }
 
+  if (data.courseId !== undefined) {
+    const currentStudent = await db.student.findUnique({
+      where: { id },
+      select: { courseId: true, opportunities: true, baseOpportunities: true },
+    });
+    if (!currentStudent) {
+      return NextResponse.json(
+        {
+          error:
+            "تعذر العثور على الطالب المطلوب. حدّث الصفحة ثم حاول مرة أخرى.",
+        },
+        { status: 404 },
+      );
+    }
+
+    const targetCourseId = String(data.courseId ?? "").trim();
+    const courseChanged =
+      Boolean(targetCourseId) && targetCourseId !== currentStudent.courseId;
+
+    if (courseChanged && !courseTransferPolicy) {
+      return NextResponse.json(
+        {
+          error:
+            "نقل الطالب إلى دورة أخرى يحتاج قراراً واضحاً: هل تريد اعتباره طالباً جديداً بفرص الفصل النشط، أم الإبقاء على فرصه وسجله كما هي؟",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (courseChanged && courseTransferPolicy === "reset") {
+      const nextOpportunities = await getInitialOpportunities(
+        {},
+        { id: targetCourseId },
+      );
+      data.opportunities = nextOpportunities.opportunities;
+      data.baseOpportunities = nextOpportunities.baseOpportunities;
+    }
+
+    if (courseChanged && courseTransferPolicy === "keep") {
+      // Keep means a pure course/settings transfer. Do not let stale client
+      // values rewrite the student's current opportunity balance.
+      delete data.opportunities;
+      delete data.baseOpportunities;
+    }
+  }
+
   try {
     const student = await db.student.update({ where: { id }, data });
     return NextResponse.json({ student });
@@ -853,7 +934,6 @@ export async function DELETE(req: NextRequest) {
       { error: "تعذر تحديد الطالب المطلوب" },
       { status: 400 },
     );
-
   try {
     const impact = await getStudentDeleteImpact(id);
     if (!impact) {

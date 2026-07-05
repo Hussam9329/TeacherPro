@@ -112,6 +112,19 @@ export interface Student {
   accountingGraceDays: number;
 }
 
+export type CourseTransferPolicy = "reset" | "keep";
+
+export type StudentUpdatePayload = Partial<Omit<Student, "id" | "code">> & {
+  /**
+   * Required only when courseId changes from one course to another.
+   * - reset: treat the student as new in the target course and grant the
+   *   target course active chapter opportunities.
+   * - keep: move course/settings only and keep the student's current
+   *   opportunities/baseOpportunities untouched.
+   */
+  courseTransferPolicy?: CourseTransferPolicy;
+};
+
 function formatLinkedStudentCount(count: number): string {
   return `${count} طالب`;
 }
@@ -993,7 +1006,7 @@ interface TeacherState {
   };
   updateStudent: (
     id: string,
-    updates: Partial<Omit<Student, "id" | "code">>,
+    updates: StudentUpdatePayload,
   ) => { ok: boolean; message: string };
   deleteStudent: (id: string) => boolean;
   dismissStudent: (
@@ -1622,29 +1635,29 @@ function repairAbsentDiscountAccountingIfNeeded(
  * بدون فصل نشط. يعمل فقط إذا كان لدى المستخدم صلاحية students.edit،
  * وإلا فشل بصمت (403) ولا يؤثر على باقي التطبيق.
  */
-const ZERO_OPP_FIX_FLAG = 'teacherpro:zero-opp-auto-fix-v1';
+const ZERO_OPP_FIX_FLAG = "teacherpro:zero-opp-auto-fix-v1";
 
 function triggerAutoFixZeroOpportunities(): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
   if (window.sessionStorage.getItem(ZERO_OPP_FIX_FLAG)) return;
-  window.sessionStorage.setItem(ZERO_OPP_FIX_FLAG, '1');
+  window.sessionStorage.setItem(ZERO_OPP_FIX_FLAG, "1");
 
   // اطلب كلا الإصلاحين بالتوازي:
   //  1) fix-zero-opportunities: يرفع الطلاب الذين فرصهم 0/0 إلى فرص الفصل النشط.
   //  2) clamp-opportunities: يخفض الطلاب الذين فرصهم تتجاوز سقف الفصل النشط.
   // كلاهما آمن: لا يلمس الطلاب الذين فرصهم صحيحة، ولا يلمس الدورات بدون فصل نشط.
-  const fixZeroPromise = fetch('/api/students/fix-zero-opportunities', {
-    method: 'PATCH',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+  const fixZeroPromise = fetch("/api/students/fix-zero-opportunities", {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
   })
     .then((response) => response.json())
     .catch(() => null);
 
-  const clampPromise = fetch('/api/students/clamp-opportunities', {
-    method: 'PATCH',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
+  const clampPromise = fetch("/api/students/clamp-opportunities", {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
   })
     .then((response) => response.json())
     .catch(() => null);
@@ -1655,13 +1668,15 @@ function triggerAutoFixZeroOpportunities(): void {
       const fixedClamp = Number(clamp?.fixedTotal || 0);
       const totalFixed = fixedZero + fixedClamp;
       if (totalFixed > 0) {
-        console.info(`[auto-fix] تم ضبط ${totalFixed} طالب تلقائياً (تصفير: ${fixedZero}، تثبيت: ${fixedClamp}).`);
-        window.dispatchEvent(new CustomEvent('teacherpro:students-updated'));
+        console.info(
+          `[auto-fix] تم ضبط ${totalFixed} طالب تلقائياً (تصفير: ${fixedZero}، تثبيت: ${fixedClamp}).`,
+        );
+        window.dispatchEvent(new CustomEvent("teacherpro:students-updated"));
       }
     })
     .catch((err) => {
       // فشل صامت — لا نريد إزعاج المستخدم. سيتحقق المشرف يدوياً عند الحاجة.
-      console.warn('[auto-fix] فشل الإصلاح التلقائي لفرص الطلاب:', err);
+      console.warn("[auto-fix] فشل الإصلاح التلقائي لفرص الطلاب:", err);
       // اسمح بإعادة المحاولة في الجلسة القادمة.
       try {
         window.sessionStorage.removeItem(ZERO_OPP_FIX_FLAG);
@@ -4041,29 +4056,35 @@ export const useTeacherStore = create<TeacherState>()(
         return { ok: true, message: "تم تسجيل الطالب" };
       },
       updateStudent: (id, updates) => {
+        const { courseTransferPolicy, ...studentUpdates } = updates;
         const current = get().students.find((st) => st.id === id);
         if (!current) return { ok: false, message: "تعذر العثور على الطالب" };
         const merged = {
           ...current,
-          ...updates,
-          name: updates.name !== undefined ? updates.name.trim() : current.name,
+          ...studentUpdates,
+          name:
+            studentUpdates.name !== undefined
+              ? studentUpdates.name.trim()
+              : current.name,
           school:
-            updates.school !== undefined
-              ? updates.school.trim()
+            studentUpdates.school !== undefined
+              ? studentUpdates.school.trim()
               : current.school,
           phone:
-            updates.phone !== undefined ? updates.phone.trim() : current.phone,
+            studentUpdates.phone !== undefined
+              ? studentUpdates.phone.trim()
+              : current.phone,
           parentPhone:
-            updates.parentPhone !== undefined
-              ? updates.parentPhone.trim()
+            studentUpdates.parentPhone !== undefined
+              ? studentUpdates.parentPhone.trim()
               : current.parentPhone,
           telegram:
-            updates.telegram !== undefined
-              ? sanitizeTelegramInput(updates.telegram)
+            studentUpdates.telegram !== undefined
+              ? sanitizeTelegramInput(studentUpdates.telegram)
               : current.telegram,
           accountingGraceDays:
-            updates.accountingGraceDays !== undefined
-              ? normalizeGraceDaysValue(updates.accountingGraceDays)
+            studentUpdates.accountingGraceDays !== undefined
+              ? normalizeGraceDaysValue(studentUpdates.accountingGraceDays)
               : current.accountingGraceDays,
         };
         const duplicateMessage = getStudentDuplicateMessage(
@@ -4095,7 +4116,7 @@ export const useTeacherStore = create<TeacherState>()(
         );
         const apiUpdates: Record<string, unknown> = {};
         const includeIfProvided = <K extends keyof typeof merged>(key: K) => {
-          if (Object.prototype.hasOwnProperty.call(updates, key)) {
+          if (Object.prototype.hasOwnProperty.call(studentUpdates, key)) {
             apiUpdates[key] = merged[key];
           }
         };
@@ -4125,13 +4146,15 @@ export const useTeacherStore = create<TeacherState>()(
         includeIfProvided("opportunities");
         includeIfProvided("baseOpportunities");
         includeIfProvided("accountingGraceDays");
+        if (courseTransferPolicy)
+          apiUpdates.courseTransferPolicy = courseTransferPolicy;
         syncToServer(get, () => studentApi.update(id, apiUpdates), {
           description: "تعديل بيانات طالب",
           rollback: () => set({ students: previousStudents }),
         });
         if (
-          updates.accountingGraceDays !== undefined ||
-          updates.createdAt !== undefined
+          studentUpdates.accountingGraceDays !== undefined ||
+          studentUpdates.createdAt !== undefined
         ) {
           get().recalculateAcademicEffects(id);
         }

@@ -185,6 +185,19 @@ function normalizeGradeScoreInput(value: string, fullMark: number) {
   return normalized;
 }
 
+function formatGradeEntryTimestamp(value?: string | Date | null): string {
+  if (!value) return "غير معروف";
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return "غير معروف";
+  return date.toLocaleString("ar-IQ", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function GradeEntryView() {
   const {
     exams,
@@ -691,6 +704,7 @@ export function GradeEntryView() {
     const student = studentById.get(studentId);
     const grade = getGrade(studentId);
     if (!student) return false;
+    if (student.status === "مؤرشف") return false;
     if (student.status !== "مفصول") return true;
     return Boolean(
       selectedExam &&
@@ -831,32 +845,45 @@ export function GradeEntryView() {
 
     return entryStudentsSource
       .filter((student) => {
-        if (!selectedExam.courseIds.includes(student.courseId)) return false;
-        if (filterCourseId && student.courseId !== filterCourseId) return false;
-        if (!isExamOnOrAfterStudentRegistration(student, selectedExam))
-          return false;
-        if (!activeChapterCourseIds.has(student.courseId)) return false;
-        if (!studentMatchesExamMainSites(student, selectedMainSites))
-          return false;
-        if (
-          !studentMatchesListFilters(student, {
-            courseProgram: filterCourseProgram,
-            courseTerm: filterCourseTerm,
-            studyType: filterStudyType,
-            location: filterLocation,
-          })
-        )
-          return false;
-        if (
-          normalizedSearch &&
-          !(studentSearchTextById.get(student.id) || "").includes(
-            normalizedSearch,
+        const grade = gradeByStudentId.get(student.id);
+        const hasSavedGradeForExam = Boolean(grade);
+        const matchesSearch = normalizedSearch
+          ? (studentSearchTextById.get(student.id) || "").includes(
+              normalizedSearch,
+            )
+          : true;
+
+        if (normalizedSearch && !matchesSearch) return false;
+
+        // عند البحث: إذا كان للطالب درجة محفوظة لهذا الامتحان، اعرضه حتى لو
+        // تغيرت دورته/موقعه أو لم يعد ضمن الفصل النشط. هذا يحمي السجل من
+        // الاختفاء ويجعل البحث يجد أي طالب درجته موجودة.
+        const forceShowSavedGradeSearchResult = Boolean(
+          normalizedSearch && hasSavedGradeForExam && matchesSearch,
+        );
+
+        if (!forceShowSavedGradeSearchResult) {
+          if (student.status === "مؤرشف") return false;
+          if (!selectedExam.courseIds.includes(student.courseId)) return false;
+          if (filterCourseId && student.courseId !== filterCourseId) return false;
+          if (!isExamOnOrAfterStudentRegistration(student, selectedExam))
+            return false;
+          if (!activeChapterCourseIds.has(student.courseId)) return false;
+          if (!studentMatchesExamMainSites(student, selectedMainSites))
+            return false;
+          if (
+            !studentMatchesListFilters(student, {
+              courseProgram: filterCourseProgram,
+              courseTerm: filterCourseTerm,
+              studyType: filterStudyType,
+              location: filterLocation,
+            })
           )
-        )
-          return false;
+            return false;
+        }
+
         const hasLeave = leaveByStudentId.has(student.id);
         const hasGrace = isExamWithinStudentGracePeriod(student, selectedExam);
-        const grade = gradeByStudentId.get(student.id);
         const entered = !hasLeave && isGradeEntered(grade, selectedExam);
         if (filterStatus === "ضمن السماح" && !hasGrace) return false;
         if (filterStatus === "غير مسجل" && (entered || hasLeave)) return false;
@@ -1633,8 +1660,8 @@ export function GradeEntryView() {
       {selectedExam && (
         <Card>
           <CardHeader className="gap-3">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div className="w-full space-y-2 lg:max-w-sm">
+            <div className="flex flex-col gap-3 lg:flex-row-reverse lg:items-end lg:justify-between">
+              <div className="w-full space-y-2 text-right lg:max-w-sm">
                 <Label htmlFor="grade-entry-search">
                   بحث الطالب داخل الإدخال
                 </Label>
@@ -1649,8 +1676,8 @@ export function GradeEntryView() {
                   ورقة إدخال الدرجة - {examStudents.length} طالب
                 </CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  البحث هنا داخل إطار إدخال الدرجات. اضغط Tab من البحث للانتقال
-                  لأول خانة درجة، ثم Tab للتنقل بين درجات الطلاب.
+                  البحث هنا يجد الطالب حتى لو تغيرت دورته ما دامت درجته محفوظة
+                  لهذا الامتحان، ويعرض وقت إدخال الدرجة في السجل.
                 </p>
               </div>
             </div>
@@ -1795,6 +1822,38 @@ export function GradeEntryView() {
                         <p className="text-xs text-muted-foreground">
                           {student.code} - {courseName(student.courseId)}
                         </p>
+                        {grade && (
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                            <Badge variant="outline" className="text-[10px]">
+                              الدرجة موجودة
+                            </Badge>
+                            <span>
+                              وقت الإدخال: {formatGradeEntryTimestamp(grade.createdAt)}
+                            </span>
+                            {grade.updatedAt &&
+                              grade.createdAt &&
+                              String(grade.updatedAt) !== String(grade.createdAt) && (
+                                <span>
+                                  آخر تعديل: {formatGradeEntryTimestamp(grade.updatedAt)}
+                                </span>
+                              )}
+                          </div>
+                        )}
+                        {normalizedSearch &&
+                          grade &&
+                          (!selectedExam.courseIds.includes(student.courseId) ||
+                            !activeChapterCourseIds.has(student.courseId) ||
+                            !studentMatchesExamMainSites(
+                              student,
+                              splitSelection(selectedExam.mainSite),
+                            ) ||
+                            student.status === "مؤرشف") && (
+                            <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
+                              ظهر هذا الطالب لأن له درجة محفوظة لهذا الامتحان،
+                              حتى لو لم يعد مطابقاً للدورة أو الموقع أو الفصل
+                              الحالي.
+                            </p>
+                          )}
                         {leave && (
                           <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-300">
                             الطالب مجاز لهذا الامتحان ولا يمكن إدخال درجة له

@@ -79,31 +79,48 @@ export async function GET(req: NextRequest) {
       new Set(courseChapters.map((link) => link.courseId)),
     );
 
-    if (activeCourseIds.length === 0) {
-      return NextResponse.json({
-        exam,
-        students: [],
-        grades: [],
-        studentLeaves: [],
-        opportunityLogs: [],
-        courseChapters,
-        source: "database",
-      });
-    }
-
     const selectedMainSites = splitSelection(exam.mainSite);
+    // اجلب درجات الامتحان أولاً حتى تضم ورقة الإدخال أي طالب لديه درجة
+    // محفوظة لهذا الامتحان، حتى لو تغيرت دورته/موقعه لاحقاً. هذا يمنع
+    // حالة أن يبحث المستخدم عن طالب درجته موجودة ولا يظهر لأن بياناته
+    // الحالية لم تعد تطابق فلاتر الامتحان.
+    const grades = await db.grade.findMany({
+      where: { examId },
+      orderBy: { updatedAt: "desc" },
+    });
+    const gradedStudentIds = Array.from(
+      new Set(grades.map((grade) => grade.studentId).filter(Boolean)),
+    );
     // Normalize exam for the date-comparison helpers (which expect date strings,
     // not Date objects returned by Prisma).
     const examForHelpers = {
       ...exam,
-      date: exam.date instanceof Date ? exam.date.toISOString() : exam.date ? String(exam.date) : null,
-      scheduledActivateAt: exam.scheduledActivateAt instanceof Date ? exam.scheduledActivateAt.toISOString() : exam.scheduledActivateAt ?? null,
-      scheduledDeactivateAt: exam.scheduledDeactivateAt instanceof Date ? exam.scheduledDeactivateAt.toISOString() : exam.scheduledDeactivateAt ?? null,
+      date:
+        exam.date instanceof Date
+          ? exam.date.toISOString()
+          : exam.date
+            ? String(exam.date)
+            : null,
+      scheduledActivateAt:
+        exam.scheduledActivateAt instanceof Date
+          ? exam.scheduledActivateAt.toISOString()
+          : (exam.scheduledActivateAt ?? null),
+      scheduledDeactivateAt:
+        exam.scheduledDeactivateAt instanceof Date
+          ? exam.scheduledDeactivateAt.toISOString()
+          : (exam.scheduledDeactivateAt ?? null),
     };
     const possibleStudentsRaw = await db.student.findMany({
       where: {
-        courseId: { in: activeCourseIds },
-        status: { not: ARCHIVED_STUDENT_STATUS },
+        OR: [
+          {
+            courseId: { in: activeCourseIds },
+            status: { not: ARCHIVED_STUDENT_STATUS },
+          },
+          ...(gradedStudentIds.length
+            ? [{ id: { in: gradedStudentIds } }]
+            : []),
+        ],
       },
       orderBy: { name: "asc" },
     });
@@ -120,14 +137,17 @@ export async function GET(req: NextRequest) {
             : null,
     }));
 
+    const gradedStudentIdSet = new Set(gradedStudentIds);
     const students = possibleStudents.filter(
       (student) =>
-        isExamOnOrAfterStudentRegistration(student, examForHelpers) &&
-        studentMatchesExamMainSites(student, selectedMainSites),
+        gradedStudentIdSet.has(student.id) ||
+        (isExamOnOrAfterStudentRegistration(student, examForHelpers) &&
+          studentMatchesExamMainSites(student, selectedMainSites)),
     );
     const studentIds = students.map((student) => student.id);
 
-    const examDateRaw = exam.date instanceof Date ? exam.date : new Date(String(exam.date));
+    const examDateRaw =
+      exam.date instanceof Date ? exam.date : new Date(String(exam.date));
     // Start of the exam day in UTC. This is the lower bound for dateTo overlap.
     const examDate = new Date(
       Date.UTC(
@@ -139,8 +159,7 @@ export async function GET(req: NextRequest) {
     // Exclusive end = start of the next UTC day.
     const nextExamDate = dayAfter(examDate);
 
-    const [grades, studentLeaves, opportunityLogs] = await Promise.all([
-      db.grade.findMany({ where: { examId }, orderBy: { updatedAt: "desc" } }),
+    const [studentLeaves, opportunityLogs] = await Promise.all([
       studentIds.length
         ? db.studentLeave.findMany({
             where: {

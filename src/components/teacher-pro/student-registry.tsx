@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useTeacherStore, type Student } from "@/lib/teacher-store";
+import {
+  useTeacherStore,
+  type CourseTransferPolicy,
+  type Student,
+} from "@/lib/teacher-store";
 import {
   studentApi,
   studentStatsApi,
@@ -20,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +72,7 @@ import {
 } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
 import {
+  AlertTriangle,
   CalendarDays,
   GraduationCap,
   MapPin,
@@ -479,6 +485,11 @@ export function StudentRegistryView() {
     id: string;
     form: StudentEditForm;
   }>({ open: false, id: "", form: emptyEditForm });
+  const [editOriginalStudent, setEditOriginalStudent] =
+    useState<Student | null>(null);
+  const [courseTransferPolicy, setCourseTransferPolicy] = useState<
+    CourseTransferPolicy | ""
+  >("");
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     id: "",
@@ -667,6 +678,19 @@ export function StudentRegistryView() {
     [courses, editDialog.form.courseId],
   );
 
+  const editCourseChanged = Boolean(
+    editOriginalStudent &&
+    editDialog.form.courseId &&
+    editDialog.form.courseId !== editOriginalStudent.courseId,
+  );
+
+  const editTargetActiveChapter = editDialog.form.courseId
+    ? activeChapterForCourse(editDialog.form.courseId)
+    : null;
+  const editTargetOpportunities = Number(
+    editTargetActiveChapter?.opportunities || 0,
+  );
+
   const editAvailablePrograms = useMemo(
     () => (editSelectedCourse ? getAvailablePrograms(editSelectedCourse) : []),
     [editSelectedCourse],
@@ -830,6 +854,8 @@ export function StudentRegistryView() {
   ]);
 
   const openEditDialog = (student: Student) => {
+    setEditOriginalStudent(student);
+    setCourseTransferPolicy("");
     setEditDialog({
       open: true,
       id: student.id,
@@ -877,6 +903,10 @@ export function StudentRegistryView() {
 
     const missing = requiredChecks.find(([ok]) => !ok);
     if (missing) return missing[1];
+
+    if (editCourseChanged && !courseTransferPolicy) {
+      return "عند نقل الطالب إلى دورة أخرى يجب اختيار طريقة التعامل مع الفرص";
+    }
 
     // Course settings-based validation
     if (editAvailablePrograms.length > 1 && !form.courseProgram) {
@@ -945,7 +975,19 @@ export function StudentRegistryView() {
     }
 
     const form = editDialog.form;
+    const transferUpdates = editCourseChanged
+      ? {
+          courseTransferPolicy: courseTransferPolicy as CourseTransferPolicy,
+          ...(courseTransferPolicy === "reset"
+            ? {
+                opportunities: editTargetOpportunities,
+                baseOpportunities: editTargetOpportunities,
+              }
+            : {}),
+        }
+      : {};
     const result = updateStudent(editDialog.id, {
+      ...transferUpdates,
       name: form.name.trim(),
       school: form.school.trim(),
       gender: form.gender,
@@ -979,6 +1021,8 @@ export function StudentRegistryView() {
       return;
     }
     setEditDialog({ open: false, id: "", form: emptyEditForm });
+    setEditOriginalStudent(null);
+    setCourseTransferPolicy("");
     setServerRefreshKey((value) => value + 1);
     toast.success("تم تعديل بيانات الطالب", {
       description: "تم تحديث جميع حقول الطالب بنجاح",
@@ -1874,7 +1918,13 @@ export function StudentRegistryView() {
 
       <Dialog
         open={editDialog.open}
-        onOpenChange={(o) => setEditDialog((prev) => ({ ...prev, open: o }))}
+        onOpenChange={(open) => {
+          setEditDialog((prev) => ({ ...prev, open }));
+          if (!open) {
+            setEditOriginalStudent(null);
+            setCourseTransferPolicy("");
+          }
+        }}
       >
         <DialogContent
           dir="rtl"
@@ -2101,7 +2151,8 @@ export function StudentRegistryView() {
                       <Select
                         name="courseId"
                         value={editDialog.form.courseId}
-                        onValueChange={(v) =>
+                        onValueChange={(v) => {
+                          setCourseTransferPolicy("");
                           setEditDialog((prev) => ({
                             ...prev,
                             form: {
@@ -2114,8 +2165,8 @@ export function StudentRegistryView() {
                               baghdadMode: "",
                               subSite: "",
                             },
-                          }))
-                        }
+                          }));
+                        }}
                         disabled={editFilteredCourses.length === 0}
                       >
                         <SelectTrigger
@@ -2145,6 +2196,77 @@ export function StudentRegistryView() {
                         </SelectContent>
                       </Select>
                     </div>
+
+                    {editCourseChanged && editOriginalStudent && (
+                      <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-500/50 dark:bg-amber-950/20 dark:text-amber-100">
+                        <div className="mb-3 flex items-start gap-2">
+                          <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+                          <div>
+                            <p className="font-black">
+                              تم تغيير دورة الطالب — اختر سياسة نقل الفرص قبل
+                              الحفظ
+                            </p>
+                            <p className="mt-1 text-xs leading-6 opacity-90">
+                              الدورة السابقة:{" "}
+                              {courseName(editOriginalStudent.courseId)}، رصيد
+                              الطالب الحالي: {editOriginalStudent.opportunities}{" "}
+                              / {editOriginalStudent.baseOpportunities}. الدورة
+                              الجديدة:{" "}
+                              {editDialog.form.courseId
+                                ? courseName(editDialog.form.courseId)
+                                : "—"}
+                              .
+                            </p>
+                          </div>
+                        </div>
+
+                        <RadioGroup
+                          value={courseTransferPolicy}
+                          onValueChange={(value) =>
+                            setCourseTransferPolicy(
+                              value as CourseTransferPolicy,
+                            )
+                          }
+                          className="grid gap-3 md:grid-cols-2"
+                        >
+                          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-background/80 p-3 text-foreground shadow-sm transition hover:border-primary/50">
+                            <RadioGroupItem value="reset" className="mt-1" />
+                            <span>
+                              <span className="block font-bold">
+                                اعتباره طالب جديد للدورة بفرص كاملة
+                              </span>
+                              <span className="mt-1 block text-xs leading-6 text-muted-foreground">
+                                سيتم ضبط فرصه إلى {editTargetOpportunities} /{" "}
+                                {editTargetOpportunities}
+                                حسب الفصل النشط للدورة الجديدة. سجلاته القديمة
+                                تبقى محفوظة.
+                              </span>
+                            </span>
+                          </label>
+
+                          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-background/80 p-3 text-foreground shadow-sm transition hover:border-primary/50">
+                            <RadioGroupItem value="keep" className="mt-1" />
+                            <span>
+                              <span className="block font-bold">
+                                الإبقاء على نفس فرصه وبياناته كما هي
+                              </span>
+                              <span className="mt-1 block text-xs leading-6 text-muted-foreground">
+                                سيتم تغيير الدورة والخيارات التابعة فقط، بدون
+                                تعديل الفرص أو رصيد الفصل الحالي.
+                              </span>
+                            </span>
+                          </label>
+                        </RadioGroup>
+
+                        {courseTransferPolicy === "reset" &&
+                          !editTargetActiveChapter && (
+                            <p className="mt-3 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
+                              تنبيه: الدورة الجديدة لا تحتوي على فصل نشط، لذلك
+                              سيصبح رصيد الطالب 0 / 0 إذا اعتبرته طالباً جديداً.
+                            </p>
+                          )}
+                      </div>
+                    )}
 
                     {editDialog.form.courseId &&
                       editAvailablePrograms.length > 1 && (
