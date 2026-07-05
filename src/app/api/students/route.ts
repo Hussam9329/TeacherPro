@@ -2,7 +2,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission } from "@/lib/server-auth";
+import {
+  requirePermission,
+  requirePermissionPrincipal,
+} from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import { getPhoneValidationError, sanitizePhoneInput } from "@/lib/format";
@@ -14,6 +17,11 @@ import {
 import { getRequiredTextError } from "@/lib/validation";
 import { normalizeArabicText } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
+import {
+  ARCHIVED_STUDENT_STATUS,
+  buildStudentArchiveSummary,
+  getStudentDeleteImpact,
+} from "@/lib/student-delete-impact";
 import {
   validateStudentCourseChoices,
   resolveSubSite,
@@ -176,12 +184,21 @@ function looksLikeTelegramIdentifierQuery(rawQuery: string): boolean {
   );
 }
 
-function buildExactIdentifierSearchWhere(rawQuery: string): Prisma.StudentWhereInput {
-  const telegramQuery = sanitizeTelegramInput(rawQuery).replace(/\s+/g, "").toLowerCase();
+function buildExactIdentifierSearchWhere(
+  rawQuery: string,
+): Prisma.StudentWhereInput {
+  const telegramQuery = sanitizeTelegramInput(rawQuery)
+    .replace(/\s+/g, "")
+    .toLowerCase();
   const codeQuery = rawQuery.trim();
   const or: Prisma.StudentWhereInput[] = [
     { telegramKey: { equals: telegramQuery, mode: "insensitive" } },
-    { telegram: { equals: sanitizeTelegramInput(rawQuery), mode: "insensitive" } },
+    {
+      telegram: {
+        equals: sanitizeTelegramInput(rawQuery),
+        mode: "insensitive",
+      },
+    },
   ];
 
   if (!rawQuery.trim().startsWith("@")) {
@@ -191,12 +208,21 @@ function buildExactIdentifierSearchWhere(rawQuery: string): Prisma.StudentWhereI
   return { OR: or };
 }
 
-function buildPrefixIdentifierSearchWhere(rawQuery: string): Prisma.StudentWhereInput {
-  const telegramQuery = sanitizeTelegramInput(rawQuery).replace(/\s+/g, "").toLowerCase();
+function buildPrefixIdentifierSearchWhere(
+  rawQuery: string,
+): Prisma.StudentWhereInput {
+  const telegramQuery = sanitizeTelegramInput(rawQuery)
+    .replace(/\s+/g, "")
+    .toLowerCase();
   const codeQuery = rawQuery.trim();
   const or: Prisma.StudentWhereInput[] = [
     { telegramKey: { startsWith: telegramQuery, mode: "insensitive" } },
-    { telegram: { startsWith: sanitizeTelegramInput(rawQuery), mode: "insensitive" } },
+    {
+      telegram: {
+        startsWith: sanitizeTelegramInput(rawQuery),
+        mode: "insensitive",
+      },
+    },
   ];
 
   if (!rawQuery.trim().startsWith("@")) {
@@ -206,10 +232,14 @@ function buildPrefixIdentifierSearchWhere(rawQuery: string): Prisma.StudentWhere
   return { OR: or };
 }
 
-function buildRegularStudentSearchWhere(rawQuery: string): Prisma.StudentWhereInput {
+function buildRegularStudentSearchWhere(
+  rawQuery: string,
+): Prisma.StudentWhereInput {
   const normalizedQuery = normalizeArabicText(rawQuery);
   const numericQuery = sanitizePhoneInput(rawQuery);
-  const telegramQuery = sanitizeTelegramInput(rawQuery).replace(/\s+/g, "").toLowerCase();
+  const telegramQuery = sanitizeTelegramInput(rawQuery)
+    .replace(/\s+/g, "")
+    .toLowerCase();
 
   const or: Prisma.StudentWhereInput[] = [
     { name: { contains: rawQuery, mode: "insensitive" } },
@@ -220,7 +250,12 @@ function buildRegularStudentSearchWhere(rawQuery: string): Prisma.StudentWhereIn
   if (telegramQuery) {
     or.push(
       { telegramKey: { startsWith: telegramQuery, mode: "insensitive" } },
-      { telegram: { startsWith: sanitizeTelegramInput(rawQuery), mode: "insensitive" } },
+      {
+        telegram: {
+          startsWith: sanitizeTelegramInput(rawQuery),
+          mode: "insensitive",
+        },
+      },
     );
   }
 
@@ -251,7 +286,13 @@ function buildStudentFilterWhere(
   const and: Prisma.StudentWhereInput[] = [];
 
   const status = normalizeListFilter(searchParams.get("status"));
-  if (status) and.push({ status });
+  if (status) {
+    and.push({ status });
+  } else {
+    // الطلاب المؤرشفون محفوظون للسجلات والتقارير، لكن لا يظهرون في القوائم اليومية
+    // إلا عند اختيار فلتر "مؤرشف" صراحةً.
+    and.push({ status: { not: ARCHIVED_STUDENT_STATUS } });
+  }
 
   const courseId = normalizeListFilter(searchParams.get("courseId"));
   if (courseId) and.push({ courseId });
@@ -277,18 +318,27 @@ function buildStudentFilterWhere(
 
   // Database-side filters used by إدارة الفرص. Keep them under explicit
   // names so normal student status filtering remains the literal Arabic value.
-  const opportunityStatus = normalizeListFilter(searchParams.get("opportunityStatus"));
+  const opportunityStatus = normalizeListFilter(
+    searchParams.get("opportunityStatus"),
+  );
   if (opportunityStatus === "active") and.push({ status: "نشط" });
   else if (opportunityStatus === "dismissed") and.push({ status: "مفصول" });
-  else if (opportunityStatus === "has-opportunities") and.push({ status: "نشط", opportunities: { gt: 0 } });
-  else if (opportunityStatus === "no-opportunities") and.push({ status: "نشط", opportunities: 0 });
-  else if (opportunityStatus === "temporary-dismissal") and.push({ status: "مفصول", dismissalType: "فصل مؤقت" });
-  else if (opportunityStatus === "final-dismissal") and.push({ status: "مفصول", dismissalType: "فصل نهائي" });
+  else if (opportunityStatus === "has-opportunities")
+    and.push({ status: "نشط", opportunities: { gt: 0 } });
+  else if (opportunityStatus === "no-opportunities")
+    and.push({ status: "نشط", opportunities: 0 });
+  else if (opportunityStatus === "temporary-dismissal")
+    and.push({ status: "مفصول", dismissalType: "فصل مؤقت" });
+  else if (opportunityStatus === "final-dismissal")
+    and.push({ status: "مفصول", dismissalType: "فصل نهائي" });
 
-  const opportunityCount = normalizeListFilter(searchParams.get("opportunityCount"));
+  const opportunityCount = normalizeListFilter(
+    searchParams.get("opportunityCount"),
+  );
   if (opportunityCount !== "") {
     const count = Number(opportunityCount);
-    if (Number.isFinite(count) && count >= 0) and.push({ opportunities: Math.trunc(count) });
+    if (Number.isFinite(count) && count >= 0)
+      and.push({ opportunities: Math.trunc(count) });
   }
 
   return and;
@@ -327,9 +377,10 @@ export async function GET(req: NextRequest) {
 
       // If the complete identifier/code exists, return only it. This prevents
       // showing the correct result followed by unrelated prefix/partial matches.
-      searchWhere = exactCount > 0
-        ? exactSearchWhere
-        : buildPrefixIdentifierSearchWhere(rawQuery);
+      searchWhere =
+        exactCount > 0
+          ? exactSearchWhere
+          : buildPrefixIdentifierSearchWhere(rawQuery);
     } else {
       searchWhere = buildRegularStudentSearchWhere(rawQuery);
     }
@@ -616,15 +667,22 @@ export async function PUT(req: NextRequest) {
       where: { id },
       select: { name: true, phone: true, telegram: true },
     });
-    const { nameKey: updateNameKey, phoneKey: updatePhoneKey, telegramKey: updateTelegramKey } = getStudentUniqueKeys({
+    const {
+      nameKey: updateNameKey,
+      phoneKey: updatePhoneKey,
+      telegramKey: updateTelegramKey,
+    } = getStudentUniqueKeys({
       name: data.name ?? current?.name,
       phone: data.phone ?? current?.phone,
       telegram: data.telegram ?? current?.telegram,
     });
     const updateDuplicateConditions: Record<string, string>[] = [];
-    if (updateNameKey) updateDuplicateConditions.push({ nameKey: updateNameKey });
-    if (updatePhoneKey) updateDuplicateConditions.push({ phoneKey: updatePhoneKey });
-    if (updateTelegramKey) updateDuplicateConditions.push({ telegramKey: updateTelegramKey });
+    if (updateNameKey)
+      updateDuplicateConditions.push({ nameKey: updateNameKey });
+    if (updatePhoneKey)
+      updateDuplicateConditions.push({ phoneKey: updatePhoneKey });
+    if (updateTelegramKey)
+      updateDuplicateConditions.push({ telegramKey: updateTelegramKey });
     const duplicateSource = updateDuplicateConditions.length
       ? await db.student.findMany({
           where: { OR: updateDuplicateConditions },
@@ -775,8 +833,12 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const authError = await requirePermission(req, "students.delete");
-  if (authError) return authError;
+  const principalOrError = await requirePermissionPrincipal(
+    req,
+    "students.delete",
+  );
+  if (principalOrError instanceof NextResponse) return principalOrError;
+  const principal = principalOrError;
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
@@ -785,9 +847,67 @@ export async function DELETE(req: NextRequest) {
       { error: "تعذر تحديد الطالب المطلوب" },
       { status: 400 },
     );
+
   try {
-    await db.student.delete({ where: { id } });
-    return NextResponse.json({ ok: true });
+    const impact = await getStudentDeleteImpact(id);
+    if (!impact) {
+      return NextResponse.json(
+        { error: "تعذر العثور على الطالب المطلوب" },
+        { status: 404 },
+      );
+    }
+
+    if (impact.student.status === ARCHIVED_STUDENT_STATUS) {
+      return NextResponse.json({ ok: true, archived: true, impact });
+    }
+
+    const relationSummary = buildStudentArchiveSummary(impact.counts);
+    const archiveText = `أرشفة الطالب بدلاً من الحذف النهائي. السبب: حماية البيانات المرتبطة (${relationSummary}). الحالة السابقة: ${impact.student.status || "غير محددة"}.`;
+
+    const [student] = await db.$transaction([
+      db.student.update({
+        where: { id },
+        data: {
+          status: ARCHIVED_STUDENT_STATUS,
+          dismissalReason: "أرشفة إدارية",
+          dismissalNotes: archiveText,
+        },
+      }),
+      db.studentNote.create({
+        data: {
+          studentId: id,
+          kind: "أرشفة",
+          text: archiveText,
+          sourceType: "student-archive",
+          sourceId: id,
+        },
+      }),
+      db.auditLog.create({
+        data: {
+          module: "سجل الطلاب",
+          action: "أرشفة طالب بدل الحذف",
+          details: `${impact.student.name} - ${impact.student.code} - ${relationSummary}`,
+          userId: principal.id,
+          userName: principal.name,
+        },
+      }),
+    ]);
+
+    return NextResponse.json({
+      ok: true,
+      archived: true,
+      student,
+      impact: {
+        ...impact,
+        counts: {
+          ...impact.counts,
+          notes: impact.counts.notes + 1,
+        },
+        totalRelations: impact.totalRelations + 1,
+        hasRelations: true,
+      },
+      message: "تمت أرشفة الطالب بدل الحذف النهائي حفاظاً على سجلاته.",
+    });
   } catch (error) {
     return getPrismaStudentErrorResponse(error);
   }

@@ -2,7 +2,11 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
-import { studentApi, studentStatsApi } from "@/lib/api";
+import {
+  studentApi,
+  studentStatsApi,
+  type StudentDeleteImpactResponse,
+} from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,6 +122,30 @@ const studentExportColumns: ExportColumn<any>[] = [
 ];
 
 type RegistryViewMode = "cards" | "table";
+
+const ARCHIVED_STUDENT_STATUS = "مؤرشف";
+
+const studentDeleteImpactLabels: Array<
+  [keyof StudentDeleteImpactResponse["counts"], string]
+> = [
+  ["grades", "درجات"],
+  ["leaves", "إجازات"],
+  ["calls", "مكالمات"],
+  ["notes", "ملاحظات"],
+  ["opportunityLogs", "سجلات فرص"],
+  ["correctionSheets", "أوراق تصحيح"],
+  ["telegramSubmissions", "مستلمات بوت"],
+];
+
+function formatStudentDeleteImpact(
+  impact: StudentDeleteImpactResponse | null,
+): string[] {
+  if (!impact) return [];
+  return studentDeleteImpactLabels
+    .map(([key, label]) => [Number(impact.counts?.[key] || 0), label] as const)
+    .filter(([count]) => count > 0)
+    .map(([count, label]) => `${label}: ${count}`);
+}
 
 type StudentEditForm = {
   name: string;
@@ -390,14 +418,20 @@ export function StudentRegistryView() {
 
   // عند تغيير فلتر سابق، يتم تنظيف أي فلتر تابع صار غير متاح.
   useEffect(() => {
-    if (filterCourseProgram && !availableProgramsForFilter.includes(filterCourseProgram as any)) {
+    if (
+      filterCourseProgram &&
+      !availableProgramsForFilter.includes(filterCourseProgram as any)
+    ) {
       setFilterCourseProgram("");
       return;
     }
     if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
       setFilterCourseTerm("");
     }
-    if (filterStudyType && !availableStudyTypesForFilter.includes(filterStudyType as any)) {
+    if (
+      filterStudyType &&
+      !availableStudyTypesForFilter.includes(filterStudyType as any)
+    ) {
       setFilterStudyType("");
     }
   }, [
@@ -450,6 +484,9 @@ export function StudentRegistryView() {
     id: "",
     studentName: "",
   });
+  const [deleteImpact, setDeleteImpact] =
+    useState<StudentDeleteImpactResponse | null>(null);
+  const [deleteImpactLoading, setDeleteImpactLoading] = useState(false);
   const { locked: isSavingEdit, runLocked: runSaveEditLocked } =
     useActionLock();
   const { locked: isDeletingStudent, runLocked: runDeleteStudentLocked } =
@@ -477,9 +514,12 @@ export function StudentRegistryView() {
         studyType: filterStudyType,
       });
 
-    fetch(`/api/students/filter-options${params.size ? `?${params.toString()}` : ""}`, {
-      credentials: "same-origin",
-    })
+    fetch(
+      `/api/students/filter-options${params.size ? `?${params.toString()}` : ""}`,
+      {
+        credentials: "same-origin",
+      },
+    )
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (Array.isArray(data?.locationOptions)) {
@@ -490,7 +530,9 @@ export function StudentRegistryView() {
           const scopes: string[] = Array.from(
             new Set(
               data.locations
-                .map((l: { scope?: string; value?: string }) => l.value || l.scope)
+                .map(
+                  (l: { scope?: string; value?: string }) => l.value || l.scope,
+                )
                 .filter(Boolean),
             ),
           ) as string[];
@@ -945,17 +987,32 @@ export function StudentRegistryView() {
 
   const openDeleteDialog = (student: Student) => {
     setDeleteDialog({ open: true, id: student.id, studentName: student.name });
+    setDeleteImpact(null);
+    setDeleteImpactLoading(true);
+    studentApi
+      .deleteImpact(student.id)
+      .then((result) => setDeleteImpact(result))
+      .catch(() => setDeleteImpact(null))
+      .finally(() => setDeleteImpactLoading(false));
   };
 
   const handleDeleteConfirm = runDeleteStudentLocked(async () => {
     const ok = deleteStudent(deleteDialog.id);
     if (ok) {
+      setServerStudents((prev) =>
+        prev ? prev.filter((student) => student.id !== deleteDialog.id) : prev,
+      );
+      setServerTotalCount((value) => Math.max(0, value - 1));
       setServerRefreshKey((value) => value + 1);
-      toast.success("تم حذف الطالب");
+      toast.success("تمت أرشفة الطالب بدل الحذف النهائي", {
+        description:
+          "بقيت درجاته وإجازاته ومكالماته وفرصه وملاحظاته وأوراق تصحيحه محفوظة.",
+      });
     } else {
-      toast.error("تعذر حذف الطالب");
+      toast.error("تعذر أرشفة الطالب");
     }
     setDeleteDialog({ open: false, id: "", studentName: "" });
+    setDeleteImpact(null);
   });
 
   const localFiltered = useMemo(() => {
@@ -976,6 +1033,7 @@ export function StudentRegistryView() {
       )
         return false;
       if (filterStatus && s.status !== filterStatus) return false;
+      if (!filterStatus && s.status === ARCHIVED_STUDENT_STATUS) return false;
       if (filterCourseId && s.courseId !== filterCourseId) return false;
       if (
         !studentMatchesListFilters(s, {
@@ -1033,8 +1091,31 @@ export function StudentRegistryView() {
   };
 
   const handleReactivate = (studentId: string) => {
+    const student = students.find((item) => item.id === studentId);
     reactivateStudent(studentId);
-    toast.success("تم إعادة تفعيل الطالب");
+    setServerStudents((prev) => {
+      if (!prev) return prev;
+      const next = prev.map((item) =>
+        item.id === studentId
+          ? ({
+              ...item,
+              status: "نشط",
+              dismissalType: "",
+              dismissalReason: "",
+              dismissalNotes: "",
+            } as Student)
+          : item,
+      );
+      return filterStatus && filterStatus !== "نشط"
+        ? next.filter((item) => item.id !== studentId)
+        : next;
+    });
+    setServerRefreshKey((value) => value + 1);
+    toast.success(
+      student?.status === ARCHIVED_STUDENT_STATUS
+        ? "تمت استعادة الطالب من الأرشيف"
+        : "تم إعادة تفعيل الطالب",
+    );
   };
 
   // Export rows: use current filtered results (server or local).
@@ -1267,6 +1348,7 @@ export function StudentRegistryView() {
                   <SelectItem value="all">كل الحالات</SelectItem>
                   <SelectItem value="نشط">نشط</SelectItem>
                   <SelectItem value="مفصول">مفصول</SelectItem>
+                  <SelectItem value="مؤرشف">مؤرشف</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1470,7 +1552,11 @@ export function StudentRegistryView() {
                   </div>
                   <Badge
                     variant={
-                      student.status === "نشط" ? "default" : "destructive"
+                      student.status === "نشط"
+                        ? "default"
+                        : student.status === ARCHIVED_STUDENT_STATUS
+                          ? "secondary"
+                          : "destructive"
                     }
                   >
                     {student.status}
@@ -1621,17 +1707,21 @@ export function StudentRegistryView() {
                       className="min-h-11 text-xs"
                       onClick={() => handleReactivate(student.id)}
                     >
-                      إعادة تفعيل
+                      {student.status === ARCHIVED_STUDENT_STATUS
+                        ? "استعادة"
+                        : "إعادة تفعيل"}
                     </Button>
                   )}
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="min-h-11 text-xs"
-                    onClick={() => openDeleteDialog(student)}
-                  >
-                    حذف
-                  </Button>
+                  {student.status !== ARCHIVED_STUDENT_STATUS && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11 border-destructive/40 text-xs text-destructive hover:bg-destructive/10"
+                      onClick={() => openDeleteDialog(student)}
+                    >
+                      أرشفة
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -1693,7 +1783,11 @@ export function StudentRegistryView() {
                   <td className="p-3">
                     <Badge
                       variant={
-                        student.status === "نشط" ? "default" : "destructive"
+                        student.status === "نشط"
+                          ? "default"
+                          : student.status === ARCHIVED_STUDENT_STATUS
+                            ? "secondary"
+                            : "destructive"
                       }
                     >
                       {student.status}
@@ -1730,16 +1824,21 @@ export function StudentRegistryView() {
                           size="sm"
                           onClick={() => handleReactivate(student.id)}
                         >
-                          تفعيل
+                          {student.status === ARCHIVED_STUDENT_STATUS
+                            ? "استعادة"
+                            : "تفعيل"}
                         </Button>
                       )}
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => openDeleteDialog(student)}
-                      >
-                        حذف
-                      </Button>
+                      {student.status !== ARCHIVED_STUDENT_STATUS && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                          onClick={() => openDeleteDialog(student)}
+                        >
+                          أرشفة
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -2366,20 +2465,56 @@ export function StudentRegistryView() {
       >
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-            <AlertDialogDescription>
-              هل تريد حذف الطالب &quot;{deleteDialog.studentName}&quot;؟ سيتم
-              حذف درجاته وحركاته التابعة أيضاً.
+            <AlertDialogTitle>أرشفة الطالب بدل الحذف النهائي</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-right leading-relaxed">
+                <p>
+                  لن يتم حذف الطالب &quot;{deleteDialog.studentName}&quot;
+                  نهائياً. سيتم أرشفته وإخفاؤه من القوائم اليومية فقط، مع إبقاء
+                  سجلاته وتقاريره محفوظة ويمكن استعادته لاحقاً.
+                </p>
+                <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-destructive">
+                  الحذف النهائي معطّل لحماية الدرجات والإجازات والمكالمات
+                  والملاحظات وسجلات الفرص وأوراق التصحيح من الضياع أو ظهور حالات
+                  “طالب محذوف”.
+                </div>
+                <div className="rounded-2xl border bg-muted/40 p-3 text-foreground">
+                  <div className="mb-2 font-bold">
+                    فحص العلاقات من قاعدة البيانات
+                  </div>
+                  {deleteImpactLoading ? (
+                    <div className="text-muted-foreground">
+                      جاري فحص بيانات الطالب المرتبطة...
+                    </div>
+                  ) : formatStudentDeleteImpact(deleteImpact).length > 0 ? (
+                    <ul className="list-inside list-disc space-y-1">
+                      {formatStudentDeleteImpact(deleteImpact).map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : deleteImpact ? (
+                    <div className="text-muted-foreground">
+                      لا توجد علاقات مسجلة، ومع ذلك سيتم استخدام الأرشفة كسلوك
+                      آمن.
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground">
+                      تعذر عرض تفاصيل العلاقات حالياً، لكن الأرشفة ستبقى آمنة
+                      لأنها لا تحذف السجلات.
+                    </div>
+                  )}
+                </div>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
-              disabled={isDeletingStudent}
+              disabled={isDeletingStudent || deleteImpactLoading}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeletingStudent ? "جاري الحذف..." : "حذف"}
+              {isDeletingStudent ? "جاري الأرشفة..." : "أرشفة الطالب"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

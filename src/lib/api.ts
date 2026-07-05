@@ -173,7 +173,11 @@ async function apiPut(
           transient: isTransientHttpStatus(res.status),
         };
       }
-      return { ok: true };
+      const contentType = res.headers.get("content-type") || "";
+      const responseData = contentType.includes("application/json")
+        ? await res.json().catch(() => null)
+        : null;
+      return { ok: true, data: responseData };
     } catch (e) {
       const msg = toUserFriendlyError(
         e instanceof Error ? e.message : "Network error",
@@ -230,7 +234,11 @@ async function apiDelete(
           transient: isTransientHttpStatus(res.status),
         };
       }
-      return { ok: true };
+      const contentType = res.headers.get("content-type") || "";
+      const responseData = contentType.includes("application/json")
+        ? await res.json().catch(() => null)
+        : null;
+      return { ok: true, data: responseData };
     } catch (e) {
       const msg = toUserFriendlyError(
         e instanceof Error ? e.message : "Network error",
@@ -447,7 +455,26 @@ export interface StudentStatsResponse {
   total: number;
   active: number;
   dismissed: number;
+  archived?: number;
   noActiveChapter: number;
+  source: "database";
+}
+
+export interface StudentDeleteImpactResponse {
+  student: { id: string; name: string; code: string; status: string };
+  counts: {
+    grades: number;
+    leaves: number;
+    calls: number;
+    notes: number;
+    opportunityLogs: number;
+    correctionSheets: number;
+    telegramSubmissions: number;
+  };
+  totalRelations: number;
+  hasRelations: boolean;
+  archiveRecommended: boolean;
+  blockingReasons: string[];
   source: "database";
 }
 
@@ -797,6 +824,10 @@ export const studentApi = {
   },
   bulkAdd: (students: Array<Record<string, unknown>>) =>
     apiPost("students/bulk", { students }),
+  deleteImpact: (id: string) =>
+    apiGet<StudentDeleteImpactResponse>(
+      `students/delete-impact?id=${encodeURIComponent(id)}`,
+    ),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("students", { id, ...updates }),
   remove: (id: string) => apiDelete("students", id),

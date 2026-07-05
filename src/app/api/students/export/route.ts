@@ -1,29 +1,30 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from 'next/server';
-import type { Prisma } from '@prisma/client';
-import { requirePermission } from '@/lib/server-auth';
-import { db } from '@/lib/db';
-import { normalizeArabicText } from '@/lib/route-helpers';
-import { sanitizePhoneInput } from '@/lib/format';
-import { sanitizeTelegramInput } from '@/lib/student-utils';
-import { normalizeListFilter } from '@/lib/all-filter';
-
+import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
+import { requirePermission } from "@/lib/server-auth";
+import { db } from "@/lib/db";
+import { normalizeArabicText } from "@/lib/route-helpers";
+import { sanitizePhoneInput } from "@/lib/format";
+import { sanitizeTelegramInput } from "@/lib/student-utils";
+import { normalizeListFilter } from "@/lib/all-filter";
 
 function buildLocationWhere(location: string): Prisma.StudentWhereInput | null {
   const normalized = normalizeArabicText(location);
   if (!normalized) return null;
 
-  if (normalized === normalizeArabicText('بغداد')) return { locationScope: 'بغداد' };
-  if (normalized === normalizeArabicText('خارج القطر')) return { locationScope: 'خارج القطر' };
+  if (normalized === normalizeArabicText("بغداد"))
+    return { locationScope: "بغداد" };
+  if (normalized === normalizeArabicText("خارج القطر"))
+    return { locationScope: "خارج القطر" };
 
   return {
     OR: [
-      { subSite: { equals: location, mode: 'insensitive' } },
-      { mainSite: { equals: location, mode: 'insensitive' } },
-      { subSite: { contains: location, mode: 'insensitive' } },
-      { mainSite: { contains: location, mode: 'insensitive' } },
+      { subSite: { equals: location, mode: "insensitive" } },
+      { mainSite: { equals: location, mode: "insensitive" } },
+      { subSite: { contains: location, mode: "insensitive" } },
+      { mainSite: { contains: location, mode: "insensitive" } },
     ],
   };
 }
@@ -33,32 +34,36 @@ function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
   if (!q) return null;
   const normalizedQuery = normalizeArabicText(q);
   const numericQuery = sanitizePhoneInput(q);
-  const telegramQuery = sanitizeTelegramInput(q).replace(/\s+/g, '').toLowerCase();
+  const telegramQuery = sanitizeTelegramInput(q)
+    .replace(/\s+/g, "")
+    .toLowerCase();
   const or: Prisma.StudentWhereInput[] = [
-    { name: { contains: q, mode: 'insensitive' } },
-    { nameKey: { contains: normalizedQuery, mode: 'insensitive' } },
-    { code: { startsWith: q, mode: 'insensitive' } },
-    { school: { contains: q, mode: 'insensitive' } },
+    { name: { contains: q, mode: "insensitive" } },
+    { nameKey: { contains: normalizedQuery, mode: "insensitive" } },
+    { code: { startsWith: q, mode: "insensitive" } },
+    { school: { contains: q, mode: "insensitive" } },
   ];
 
   if (telegramQuery) {
     or.push(
-      { telegramKey: { startsWith: telegramQuery, mode: 'insensitive' } },
-      { telegram: { startsWith: sanitizeTelegramInput(q), mode: 'insensitive' } },
+      { telegramKey: { startsWith: telegramQuery, mode: "insensitive" } },
+      {
+        telegram: { startsWith: sanitizeTelegramInput(q), mode: "insensitive" },
+      },
     );
   }
 
   if (numericQuery) {
     or.push(
-      { phone: { startsWith: numericQuery, mode: 'insensitive' } },
-      { phoneKey: { startsWith: numericQuery, mode: 'insensitive' } },
-      { parentPhone: { startsWith: numericQuery, mode: 'insensitive' } },
+      { phone: { startsWith: numericQuery, mode: "insensitive" } },
+      { phoneKey: { startsWith: numericQuery, mode: "insensitive" } },
+      { parentPhone: { startsWith: numericQuery, mode: "insensitive" } },
     );
     if (numericQuery.length >= 7) {
       or.push(
-        { phone: { contains: numericQuery, mode: 'insensitive' } },
-        { phoneKey: { contains: numericQuery, mode: 'insensitive' } },
-        { parentPhone: { contains: numericQuery, mode: 'insensitive' } },
+        { phone: { contains: numericQuery, mode: "insensitive" } },
+        { phoneKey: { contains: numericQuery, mode: "insensitive" } },
+        { parentPhone: { contains: numericQuery, mode: "insensitive" } },
       );
     }
   }
@@ -66,20 +71,25 @@ function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
   return { OR: or };
 }
 
-function buildStudentExportWhere(searchParams: URLSearchParams): Prisma.StudentWhereInput {
+function buildStudentExportWhere(
+  searchParams: URLSearchParams,
+): Prisma.StudentWhereInput {
   const and: Prisma.StudentWhereInput[] = [];
-  const q = String(searchParams.get('q') || '').trim();
-  const courseId = normalizeListFilter(searchParams.get('courseId'));
-  const status = normalizeListFilter(searchParams.get('status'));
-  const courseProgram = normalizeListFilter(searchParams.get('courseProgram'));
-  const courseTerm = normalizeListFilter(searchParams.get('courseTerm'));
-  const studyType = normalizeListFilter(searchParams.get('studyType'));
-  const location = normalizeListFilter(searchParams.get('location') || searchParams.get('locationScope'));
+  const q = String(searchParams.get("q") || "").trim();
+  const courseId = normalizeListFilter(searchParams.get("courseId"));
+  const status = normalizeListFilter(searchParams.get("status"));
+  const courseProgram = normalizeListFilter(searchParams.get("courseProgram"));
+  const courseTerm = normalizeListFilter(searchParams.get("courseTerm"));
+  const studyType = normalizeListFilter(searchParams.get("studyType"));
+  const location = normalizeListFilter(
+    searchParams.get("location") || searchParams.get("locationScope"),
+  );
 
   if (courseId) and.push({ courseId });
   if (status) and.push({ status });
+  else and.push({ status: { not: "مؤرشف" } });
   if (courseProgram) and.push({ courseProgram });
-  if (courseProgram === 'كورسات' && courseTerm) and.push({ courseTerm });
+  if (courseProgram === "كورسات" && courseTerm) and.push({ courseTerm });
   if (studyType) and.push({ studyType });
 
   const locationWhere = location ? buildLocationWhere(location) : null;
@@ -92,7 +102,7 @@ function buildStudentExportWhere(searchParams: URLSearchParams): Prisma.StudentW
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, 'students.view');
+  const authError = await requirePermission(req, "students.view");
   if (authError) return authError;
 
   try {
@@ -102,16 +112,21 @@ export async function GET(req: NextRequest) {
       db.student.count({ where }),
       db.student.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: { course: true },
       }),
     ]);
 
-    return NextResponse.json({ students, total: students.length, totalCount, capped: false });
+    return NextResponse.json({
+      students,
+      total: students.length,
+      totalCount,
+      capped: false,
+    });
   } catch (error) {
-    console.error('[API] /api/students/export error:', error);
+    console.error("[API] /api/students/export error:", error);
     return NextResponse.json(
-      { error: 'تعذر تصدير بيانات الطلاب حالياً.' },
+      { error: "تعذر تصدير بيانات الطلاب حالياً." },
       { status: 500 },
     );
   }

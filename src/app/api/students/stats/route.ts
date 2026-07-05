@@ -18,25 +18,36 @@ export async function GET(req: NextRequest) {
     });
     const activeCourseIds = activeCourseLinks.map((link) => link.courseId);
 
-    const [total, active, dismissed, noActiveChapter] = await Promise.all([
-      db.student.count(),
-      db.student.count({ where: { status: "نشط" } }),
-      db.student.count({ where: { status: "مفصول" } }),
-      db.student.count({
-        where: activeCourseIds.length
-          ? { courseId: { notIn: activeCourseIds } }
-          : {},
-      }),
-    ]);
+    const visibleStudentsWhere = { status: { not: "مؤرشف" } };
+
+    const [total, active, dismissed, archived, noActiveChapter] =
+      await Promise.all([
+        db.student.count({ where: visibleStudentsWhere }),
+        db.student.count({ where: { status: "نشط" } }),
+        db.student.count({ where: { status: "مفصول" } }),
+        db.student.count({ where: { status: "مؤرشف" } }),
+        db.student.count({
+          where: {
+            ...visibleStudentsWhere,
+            ...(activeCourseIds.length
+              ? { courseId: { notIn: activeCourseIds } }
+              : {}),
+          },
+        }),
+      ]);
 
     return NextResponse.json({
       total,
       active,
       dismissed,
+      archived,
       noActiveChapter,
       source: "database" as const,
     });
   } catch (error) {
-    return routeErrorResponse(error, "تعذر تحميل إحصائيات الطلاب من قاعدة البيانات حالياً.");
+    return routeErrorResponse(
+      error,
+      "تعذر تحميل إحصائيات الطلاب من قاعدة البيانات حالياً.",
+    );
   }
 }

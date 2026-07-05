@@ -10,7 +10,9 @@ import { sanitizeTelegramInput } from "@/lib/student-utils";
 import { normalizeArabicText, routeErrorResponse } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
 
-function composeWhere(parts: Prisma.StudentWhereInput[]): Prisma.StudentWhereInput {
+function composeWhere(
+  parts: Prisma.StudentWhereInput[],
+): Prisma.StudentWhereInput {
   return parts.length > 0 ? { AND: parts } : {};
 }
 
@@ -19,7 +21,9 @@ function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
   if (!query) return null;
   const normalized = normalizeArabicText(query);
   const numeric = sanitizePhoneInput(query);
-  const telegram = sanitizeTelegramInput(query).replace(/\s+/g, "").toLowerCase();
+  const telegram = sanitizeTelegramInput(query)
+    .replace(/\s+/g, "")
+    .toLowerCase();
   const or: Prisma.StudentWhereInput[] = [
     { name: { contains: query, mode: "insensitive" } },
     { code: { startsWith: query, mode: "insensitive" } },
@@ -30,11 +34,17 @@ function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
     { dismissalReason: { contains: query, mode: "insensitive" } },
     { dismissalNotes: { contains: query, mode: "insensitive" } },
   ];
-  if (normalized) or.push({ nameKey: { contains: normalized, mode: "insensitive" } });
+  if (normalized)
+    or.push({ nameKey: { contains: normalized, mode: "insensitive" } });
   if (telegram) {
     or.push(
       { telegramKey: { startsWith: telegram, mode: "insensitive" } },
-      { telegram: { startsWith: sanitizeTelegramInput(query), mode: "insensitive" } },
+      {
+        telegram: {
+          startsWith: sanitizeTelegramInput(query),
+          mode: "insensitive",
+        },
+      },
     );
   }
   if (numeric) {
@@ -54,25 +64,35 @@ function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
   return { OR: or };
 }
 
-function buildOpportunityFilters(searchParams: URLSearchParams): Prisma.StudentWhereInput[] {
+function buildOpportunityFilters(
+  searchParams: URLSearchParams,
+): Prisma.StudentWhereInput[] {
   const and: Prisma.StudentWhereInput[] = [];
   const courseId = normalizeListFilter(searchParams.get("courseId"));
   const status = normalizeListFilter(searchParams.get("status"));
-  const opportunityCount = normalizeListFilter(searchParams.get("opportunityCount"));
+  const opportunityCount = normalizeListFilter(
+    searchParams.get("opportunityCount"),
+  );
   const query = String(searchParams.get("q") || "").trim();
 
   if (courseId) and.push({ courseId });
 
   if (status === "active") and.push({ status: "نشط" });
   else if (status === "dismissed") and.push({ status: "مفصول" });
-  else if (status === "has-opportunities") and.push({ status: "نشط", opportunities: { gt: 0 } });
-  else if (status === "no-opportunities") and.push({ status: "نشط", opportunities: 0 });
-  else if (status === "temporary-dismissal") and.push({ status: "مفصول", dismissalType: "فصل مؤقت" });
-  else if (status === "final-dismissal") and.push({ status: "مفصول", dismissalType: "فصل نهائي" });
+  else if (status === "has-opportunities")
+    and.push({ status: "نشط", opportunities: { gt: 0 } });
+  else if (status === "no-opportunities")
+    and.push({ status: "نشط", opportunities: 0 });
+  else if (status === "temporary-dismissal")
+    and.push({ status: "مفصول", dismissalType: "فصل مؤقت" });
+  else if (status === "final-dismissal")
+    and.push({ status: "مفصول", dismissalType: "فصل نهائي" });
+  else and.push({ status: { not: "مؤرشف" } });
 
   if (opportunityCount !== "") {
     const numericCount = Number(opportunityCount);
-    if (Number.isFinite(numericCount)) and.push({ opportunities: Math.trunc(numericCount) });
+    if (Number.isFinite(numericCount))
+      and.push({ opportunities: Math.trunc(numericCount) });
   }
 
   const searchWhere = buildSearchWhere(query);
@@ -90,13 +110,28 @@ export async function GET(req: NextRequest) {
     const filters = buildOpportunityFilters(searchParams);
     const baseWhere = composeWhere(filters);
 
-    const [total, hasOpportunities, noOpportunities, dismissed, active] = await Promise.all([
-      db.student.count({ where: baseWhere }),
-      db.student.count({ where: composeWhere([...filters, { status: "نشط", opportunities: { gt: 0 } }]) }),
-      db.student.count({ where: composeWhere([...filters, { status: "نشط", opportunities: 0 }]) }),
-      db.student.count({ where: composeWhere([...filters, { status: "مفصول" }]) }),
-      db.student.count({ where: composeWhere([...filters, { status: "نشط" }]) }),
-    ]);
+    const [total, hasOpportunities, noOpportunities, dismissed, active] =
+      await Promise.all([
+        db.student.count({ where: baseWhere }),
+        db.student.count({
+          where: composeWhere([
+            ...filters,
+            { status: "نشط", opportunities: { gt: 0 } },
+          ]),
+        }),
+        db.student.count({
+          where: composeWhere([
+            ...filters,
+            { status: "نشط", opportunities: 0 },
+          ]),
+        }),
+        db.student.count({
+          where: composeWhere([...filters, { status: "مفصول" }]),
+        }),
+        db.student.count({
+          where: composeWhere([...filters, { status: "نشط" }]),
+        }),
+      ]);
 
     return NextResponse.json({
       total,
@@ -107,6 +142,9 @@ export async function GET(req: NextRequest) {
       source: "database",
     });
   } catch (error) {
-    return routeErrorResponse(error, "تعذر تحميل إحصائيات الفرص من قاعدة البيانات حالياً.");
+    return routeErrorResponse(
+      error,
+      "تعذر تحميل إحصائيات الفرص من قاعدة البيانات حالياً.",
+    );
   }
 }
