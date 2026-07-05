@@ -200,10 +200,16 @@ export function ExamRecordsView() {
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [databaseExamStats, setDatabaseExamStats] = useState<Record<string, ExamRecordStat>>({});
   const [databaseExamStatsLoading, setDatabaseExamStatsLoading] = useState(false);
-  const [deleteDialog, setDeleteDialog] = useState({
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    id: string;
+    name: string;
+    gradeCount: number | null;
+  }>({
     open: false,
     id: "",
     name: "",
+    gradeCount: null,
   });
   const [editDialog, setEditDialog] = useState<FullExamEditState>(() =>
     emptyEditState(),
