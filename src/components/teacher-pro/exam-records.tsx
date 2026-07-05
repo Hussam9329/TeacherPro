@@ -992,8 +992,8 @@ export function ExamRecordsView() {
                   <div className="mt-2 flex flex-wrap gap-1">
                     <Badge>{exam.type}</Badge>
                     <Badge variant="outline">{getExamStatus(exam)}</Badge>
-                    <Badge variant={entryAvailability.available ? "secondary" : "destructive"}>
-                      متاح للإدخال: {entryAvailability.answer}
+                    <Badge variant={getEntryAvailability(exam).available ? "secondary" : "destructive"}>
+                      متاح للإدخال: {getEntryAvailability(exam).answer}
                     </Badge>
                   </div>
                 </div>
