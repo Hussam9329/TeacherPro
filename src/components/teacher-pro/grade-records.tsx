@@ -135,6 +135,7 @@ export function GradeRecordsView() {
     classification,
     mergeStudentsCache,
     mergeGradesCache,
+    setSection,
   } = useTeacherStore();
 
   const [search, setSearch] = useState("");
@@ -441,14 +442,20 @@ export function GradeRecordsView() {
   );
 
   useEffect(() => {
-    if (filterCourseProgram && !availableProgramsForFilter.includes(filterCourseProgram as any)) {
+    if (
+      filterCourseProgram &&
+      !availableProgramsForFilter.includes(filterCourseProgram as any)
+    ) {
       setFilterCourseProgram("");
       return;
     }
     if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
       setFilterCourseTerm("");
     }
-    if (filterStudyType && !availableStudyTypesForFilter.includes(filterStudyType as any)) {
+    if (
+      filterStudyType &&
+      !availableStudyTypesForFilter.includes(filterStudyType as any)
+    ) {
       setFilterStudyType("");
     }
   }, [
@@ -501,6 +508,8 @@ export function GradeRecordsView() {
     });
     return map;
   }, [exams, serverGrades]);
+  const selectedFilteredExam = filterExamId ? examById.get(filterExamId) : null;
+
   const nameLetterOptions = useMemo(
     () => [
       "ا",
@@ -801,6 +810,22 @@ export function GradeRecordsView() {
       <Card>
         <CardContent className="p-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
+            <div className="space-y-1 2xl:col-span-2">
+              <Label htmlFor="grade-records-search" className="text-xs">
+                بحث الطالب
+              </Label>
+              <Input
+                id="grade-records-search"
+                name="search"
+                data-teacherpro-search="true"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="اسم / كود / تليكرام / امتحان"
+              />
+            </div>
             <div className="space-y-1">
               <Label htmlFor="grade-records-course" className="text-xs">
                 الدورة
@@ -970,22 +995,6 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1 2xl:col-span-2">
-              <Label htmlFor="grade-records-search" className="text-xs">
-                بحث
-              </Label>
-              <Input
-                id="grade-records-search"
-                name="search"
-                data-teacherpro-search="true"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="اسم / كود / تليكرام / امتحان"
-              />
-            </div>
             <div className="space-y-1">
               <Label htmlFor="grade-records-view" className="text-xs">
                 طريقة العرض
@@ -1015,6 +1024,28 @@ export function GradeRecordsView() {
                 description="تقرير سجل الدرجات حسب الفلاتر الحالية"
               />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-right">
+              <h3 className="text-sm font-black">ورقة إدخال الدرجة</h3>
+              <p className="mt-1 text-xs leading-6 text-muted-foreground">
+                {selectedFilteredExam
+                  ? `الامتحان المحدد: ${selectedFilteredExam.name}. الورقة تبقى متاحة من تسجيل الدرجات وتعرض الطلاب من قاعدة البيانات حسب هذا الامتحان.`
+                  : "اختر امتحاناً من الفلتر حتى تعرف الورقة التي تريد إدخال درجاتها."}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSection("grade-entry")}
+            >
+              فتح تسجيل الدرجات
+            </Button>
           </div>
         </CardContent>
       </Card>

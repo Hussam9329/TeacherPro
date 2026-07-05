@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import {
+  requireAnyPermission,
   requirePermission,
   requirePermissionPrincipal,
 } from "@/lib/server-auth";
@@ -354,7 +355,12 @@ function composeStudentWhere(
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, "students.view");
+  const authError = await requireAnyPermission(req, [
+    "students.view",
+    "grades.add",
+    "grades.view",
+    "grades.edit",
+  ]);
   if (authError) return authError;
 
   const searchParams = new URL(req.url).searchParams;

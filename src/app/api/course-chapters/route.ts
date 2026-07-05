@@ -64,7 +64,7 @@ function normalizeArchiveText(value: unknown): string {
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requireAnyPermission(req, ['chapters.view', 'courses.view']);
+  const authError = await requireAnyPermission(req, ['chapters.view', 'courses.view', 'grades.add', 'grades.view']);
   if (authError) return authError;
 
   try {

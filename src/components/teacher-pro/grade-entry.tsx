@@ -7,8 +7,15 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
-import { gradeApi, studentApi } from "@/lib/api";
+import {
+  useTeacherStore,
+  type CourseChapter,
+  type Grade,
+  type OpportunityLog,
+  type Student,
+  type StudentLeave,
+} from "@/lib/teacher-store";
+import { gradeEntrySheetApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,10 +55,7 @@ import {
   upsertGradeEntryMissingNote,
 } from "@/lib/grade-entry-notes";
 import { useActionLock } from "@/hooks/use-action-lock";
-import {
-  STUDENT_FILTER_COURSE_TERMS,
-  studentMatchesListFilters,
-} from "@/lib/student-list-filters";
+import { studentMatchesListFilters } from "@/lib/student-list-filters";
 import {
   hasActiveChapterLink,
   isExamAvailableForEntry,
@@ -227,6 +231,17 @@ export function GradeEntryView() {
   const [reactivationWarningsAccepted, setReactivationWarningsAccepted] =
     useState<Record<string, boolean>>({});
   const [clockTick, setClockTick] = useState(0);
+  const [entrySheetStudents, setEntrySheetStudents] = useState<Student[]>([]);
+  const [entrySheetGrades, setEntrySheetGrades] = useState<Grade[]>([]);
+  const [entrySheetLeaves, setEntrySheetLeaves] = useState<StudentLeave[]>([]);
+  const [entrySheetOpportunityLogs, setEntrySheetOpportunityLogs] = useState<
+    OpportunityLog[]
+  >([]);
+  const [entrySheetCourseChapters, setEntrySheetCourseChapters] = useState<
+    CourseChapter[]
+  >([]);
+  const [entrySheetLoading, setEntrySheetLoading] = useState(false);
+  const [entrySheetError, setEntrySheetError] = useState<string | null>(null);
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const missingStudentsNoteLoadedRef = useRef("");
   const {
@@ -263,59 +278,73 @@ export function GradeEntryView() {
 
   useEffect(() => {
     const selectedExam = exams.find((exam) => exam.id === selectedExamId);
-    if (!selectedExam) return;
+    if (!selectedExam) {
+      setEntrySheetStudents([]);
+      setEntrySheetGrades([]);
+      setEntrySheetLeaves([]);
+      setEntrySheetOpportunityLogs([]);
+      setEntrySheetCourseChapters([]);
+      setEntrySheetError(null);
+      setEntrySheetLoading(false);
+      return;
+    }
 
     let cancelled = false;
-    const courseIds = selectedExam.courseIds.join(",");
+    setEntrySheetLoading(true);
+    setEntrySheetError(null);
 
-    studentApi
-      .listAll({
-        courseIds,
-        courseId: filterCourseId || undefined,
-        courseProgram: filterCourseProgram || undefined,
-        courseTerm:
-          filterCourseProgram === "كورسات" && filterCourseTerm
-            ? filterCourseTerm
-            : undefined,
-        studyType: filterStudyType || undefined,
-      })
-      .then((result) => {
-        if (!cancelled) {
-          mergeStudentsCache((result?.students || []) as unknown as Student[]);
-        }
-      })
-      .catch(() => {
-        // لا نعرض خطأ مزعج هنا؛ الصفحة تبقى تعمل على الكاش المحلي إن وجد.
-      });
-
-    gradeApi
-      .listAll({ examId: selectedExam.id })
+    gradeEntrySheetApi
+      .get(selectedExam.id)
       .then((result) => {
         if (cancelled) return;
-        const loadedGrades = result?.grades || [];
-        mergeGradesCache(loadedGrades as unknown as Grade[]);
-        const relatedStudents = loadedGrades
-          .map((grade) => (grade as Record<string, unknown>).student)
-          .filter(Boolean) as unknown as Student[];
-        if (relatedStudents.length) mergeStudentsCache(relatedStudents);
+        if (!result) {
+          setEntrySheetStudents([]);
+          setEntrySheetGrades([]);
+          setEntrySheetLeaves([]);
+          setEntrySheetOpportunityLogs([]);
+          setEntrySheetCourseChapters([]);
+          setEntrySheetError(
+            "تعذر تحميل ورقة إدخال الدرجات من قاعدة البيانات. حدّث الصفحة أو تحقق من صلاحية الحساب.",
+          );
+          return;
+        }
+
+        const loadedStudents = (result.students || []) as unknown as Student[];
+        const loadedGrades = (result.grades || []) as unknown as Grade[];
+        const loadedLeaves = (result.studentLeaves ||
+          []) as unknown as StudentLeave[];
+        const loadedOpportunityLogs = (result.opportunityLogs ||
+          []) as unknown as OpportunityLog[];
+        const loadedCourseChapters = (result.courseChapters ||
+          []) as unknown as CourseChapter[];
+
+        setEntrySheetStudents(loadedStudents);
+        setEntrySheetGrades(loadedGrades);
+        setEntrySheetLeaves(loadedLeaves);
+        setEntrySheetOpportunityLogs(loadedOpportunityLogs);
+        setEntrySheetCourseChapters(loadedCourseChapters);
+        mergeStudentsCache(loadedStudents);
+        mergeGradesCache(loadedGrades);
       })
       .catch(() => {
-        // الكاش المحلي والـ outbox يمنعان خسارة العمل عند فشل الاتصال المؤقت.
+        if (cancelled) return;
+        setEntrySheetStudents([]);
+        setEntrySheetGrades([]);
+        setEntrySheetLeaves([]);
+        setEntrySheetOpportunityLogs([]);
+        setEntrySheetCourseChapters([]);
+        setEntrySheetError(
+          "تعذر تحميل ورقة إدخال الدرجات من قاعدة البيانات. حدّث الصفحة أو تحقق من صلاحية الحساب.",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setEntrySheetLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [
-    selectedExamId,
-    exams,
-    filterCourseId,
-    filterCourseProgram,
-    filterCourseTerm,
-    filterStudyType,
-    mergeStudentsCache,
-    mergeGradesCache,
-  ]);
+  }, [selectedExamId, exams, mergeStudentsCache, mergeGradesCache]);
 
   const availableProgramsForFilter = useMemo(
     () =>
@@ -355,14 +384,20 @@ export function GradeEntryView() {
   );
 
   useEffect(() => {
-    if (filterCourseProgram && !availableProgramsForFilter.includes(filterCourseProgram as any)) {
+    if (
+      filterCourseProgram &&
+      !availableProgramsForFilter.includes(filterCourseProgram as any)
+    ) {
       setFilterCourseProgram("");
       return;
     }
     if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
       setFilterCourseTerm("");
     }
-    if (filterStudyType && !availableStudyTypesForFilter.includes(filterStudyType as any)) {
+    if (
+      filterStudyType &&
+      !availableStudyTypesForFilter.includes(filterStudyType as any)
+    ) {
       setFilterStudyType("");
     }
     if (filterLocation && !locationFilterOptions.includes(filterLocation)) {
@@ -417,6 +452,47 @@ export function GradeEntryView() {
   const selectedExamEntryNotes = selectedExamId
     ? entryNotesByExam[selectedExamId] || ""
     : "";
+
+  const entryStudentsSource = useMemo(
+    () => (selectedExam ? entrySheetStudents : students),
+    [selectedExam, entrySheetStudents, students],
+  );
+
+  const entryGradesSource = useMemo(() => {
+    if (!selectedExamId) return grades;
+    const byKey = new Map<string, Grade>();
+    for (const grade of entrySheetGrades) {
+      byKey.set(`${grade.studentId}:${grade.examId}`, grade);
+    }
+    for (const grade of grades) {
+      if (grade.examId === selectedExamId) {
+        byKey.set(`${grade.studentId}:${grade.examId}`, grade);
+      }
+    }
+    return Array.from(byKey.values());
+  }, [entrySheetGrades, grades, selectedExamId]);
+
+  const entryLeavesSource = useMemo(
+    () => (selectedExam ? entrySheetLeaves : studentLeaves),
+    [selectedExam, entrySheetLeaves, studentLeaves],
+  );
+
+  const entryOpportunityLogsSource = useMemo(() => {
+    if (!selectedExamId) return opportunityLogs;
+    const byId = new Map<string, OpportunityLog>();
+    for (const log of entrySheetOpportunityLogs) byId.set(log.id, log);
+    for (const log of opportunityLogs) {
+      if (log.examId === selectedExamId || log.action === "إعادة تفعيل") {
+        byId.set(log.id, log);
+      }
+    }
+    return Array.from(byId.values());
+  }, [entrySheetOpportunityLogs, opportunityLogs, selectedExamId]);
+
+  const entryCourseChaptersSource = useMemo(
+    () => (selectedExam ? entrySheetCourseChapters : courseChapters),
+    [selectedExam, entrySheetCourseChapters, courseChapters],
+  );
 
   useEffect(() => {
     const savedNote = selectedExam
@@ -487,31 +563,31 @@ export function GradeEntryView() {
   }, [filteredActiveExams, selectedExamId]);
   const normalizedSearch = useMemo(() => normalizeForSearch(search), [search]);
   const studentById = useMemo(
-    () => new Map(students.map((student) => [student.id, student])),
-    [students],
+    () => new Map(entryStudentsSource.map((student) => [student.id, student])),
+    [entryStudentsSource],
   );
   const activeChapterCourseIds = useMemo(
     () =>
       new Set(
-        courseChapters
+        entryCourseChaptersSource
           .filter((link) => link.active && !link.archived)
           .map((link) => link.courseId),
       ),
-    [courseChapters],
+    [entryCourseChaptersSource],
   );
   const gradeByStudentId = useMemo(() => {
     const map = new Map<string, (typeof grades)[number]>();
     if (!selectedExamId) return map;
-    for (const grade of grades) {
+    for (const grade of entryGradesSource) {
       if (grade.examId === selectedExamId) map.set(grade.studentId, grade);
     }
     return map;
-  }, [grades, selectedExamId]);
+  }, [entryGradesSource, selectedExamId]);
   const leaveByStudentId = useMemo(() => {
     const map = new Map<string, (typeof studentLeaves)[number]>();
     if (!selectedExam) return map;
     const examDate = String(selectedExam.date || "").slice(0, 10);
-    for (const leave of studentLeaves) {
+    for (const leave of entryLeavesSource) {
       if ((leave.leaveType || "exam") === "period") {
         const from = String(leave.dateFrom || leave.date || "").slice(0, 10);
         const to = String(
@@ -525,11 +601,11 @@ export function GradeEntryView() {
       }
     }
     return map;
-  }, [selectedExam, studentLeaves]);
+  }, [selectedExam, entryLeavesSource]);
   const automaticEffectStudentIds = useMemo(() => {
     const set = new Set<string>();
     if (!selectedExamId) return set;
-    for (const log of opportunityLogs) {
+    for (const log of entryOpportunityLogsSource) {
       if (
         log.examId === selectedExamId &&
         (log.action === "خصم تلقائي" ||
@@ -540,17 +616,17 @@ export function GradeEntryView() {
       }
     }
     return set;
-  }, [opportunityLogs, selectedExamId]);
+  }, [entryOpportunityLogsSource, selectedExamId]);
   const manuallyReactivatedStudentIds = useMemo(() => {
     const set = new Set<string>();
-    for (const log of opportunityLogs) {
+    for (const log of entryOpportunityLogsSource) {
       if (log.action === "إعادة تفعيل") set.add(log.studentId);
     }
     return set;
-  }, [opportunityLogs]);
+  }, [entryOpportunityLogsSource]);
   const studentSearchTextById = useMemo(() => {
     const map = new Map<string, string>();
-    for (const student of students) {
+    for (const student of entryStudentsSource) {
       map.set(
         student.id,
         normalizeForSearch(
@@ -569,7 +645,7 @@ export function GradeEntryView() {
       );
     }
     return map;
-  }, [students]);
+  }, [entryStudentsSource]);
 
   const getGrade = (studentId: string) => gradeByStudentId.get(studentId);
 
@@ -753,7 +829,7 @@ export function GradeEntryView() {
     if (!selectedExam) return [];
     const selectedMainSites = splitSelection(selectedExam.mainSite);
 
-    return students
+    return entryStudentsSource
       .filter((student) => {
         if (!selectedExam.courseIds.includes(student.courseId)) return false;
         if (filterCourseId && student.courseId !== filterCourseId) return false;
@@ -795,7 +871,7 @@ export function GradeEntryView() {
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
   }, [
     selectedExam,
-    students,
+    entryStudentsSource,
     gradeByStudentId,
     leaveByStudentId,
     activeChapterCourseIds,
@@ -883,9 +959,12 @@ export function GradeEntryView() {
   const missingChapterCourses = useMemo(() => {
     if (!selectedExam) return [];
     return selectedExam.courseIds
-      .filter((courseId) => !hasActiveChapterLink(courseChapters, courseId))
+      .filter(
+        (courseId) =>
+          !hasActiveChapterLink(entryCourseChaptersSource, courseId),
+      )
       .map((courseId) => courseName(courseId));
-  }, [selectedExam, courseChapters, courseName]);
+  }, [selectedExam, entryCourseChaptersSource, courseName]);
 
   const saveGrade = async (
     studentId: string,
@@ -979,6 +1058,9 @@ export function GradeEntryView() {
         if (existing) {
           const deleted = deleteGrade(existing.id);
           if (deleted) {
+            setEntrySheetGrades((current) =>
+              current.filter((grade) => grade.id !== existing.id),
+            );
             setDrafts((prev) => {
               const next = { ...prev };
               delete next[studentId];
@@ -1029,7 +1111,7 @@ export function GradeEntryView() {
     if (!selectedExam) return [];
     const selectedMainSites = splitSelection(selectedExam.mainSite);
 
-    return students
+    return entryStudentsSource
       .filter((student) => {
         if (!selectedExam.courseIds.includes(student.courseId)) return false;
         if (filterCourseId && student.courseId !== filterCourseId) return false;
@@ -1047,7 +1129,7 @@ export function GradeEntryView() {
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
   }, [
     selectedExam,
-    students,
+    entryStudentsSource,
     activeChapterCourseIds,
     leaveByStudentId,
     gradeByStudentId,
@@ -1057,12 +1139,12 @@ export function GradeEntryView() {
   const absentGradesForSelectedExam = useMemo(
     () =>
       selectedExam
-        ? grades.filter(
+        ? entryGradesSource.filter(
             (grade) =>
               grade.examId === selectedExam.id && grade.status === "غائب",
           )
         : [],
-    [selectedExam, grades],
+    [selectedExam, entryGradesSource],
   );
 
   const handleClearAbsentGrades = runClearAbsentGradesLocked(async () => {
@@ -1091,6 +1173,12 @@ export function GradeEntryView() {
     const removedCount = clearAbsentGradesForExam(selectedExam.id);
 
     if (removedCount > 0) {
+      setEntrySheetGrades((current) =>
+        current.filter(
+          (grade) =>
+            grade.examId !== selectedExam.id || grade.status !== "غائب",
+        ),
+      );
       setDrafts((prev) => {
         const next = { ...prev };
         affectedStudentIds.forEach((studentId) => {
@@ -1529,19 +1617,23 @@ export function GradeEntryView() {
         </Card>
       )}
 
+      {!selectedExam && (
+        <Card>
+          <CardHeader>
+            <CardTitle>ورقة إدخال الدرجة</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="empty-state">
+              اختر الامتحان من الأعلى حتى تظهر ورقة إدخال الدرجات هنا مباشرة.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {selectedExam && (
         <Card>
           <CardHeader className="gap-3">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <CardTitle>
-                  إدخال الدرجات - {examStudents.length} طالب
-                </CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  البحث هنا داخل إطار إدخال الدرجات. اضغط Tab من البحث للانتقال
-                  لأول خانة درجة، ثم Tab للتنقل بين درجات الطلاب.
-                </p>
-              </div>
               <div className="w-full space-y-2 lg:max-w-sm">
                 <Label htmlFor="grade-entry-search">
                   بحث الطالب داخل الإدخال
@@ -1552,9 +1644,28 @@ export function GradeEntryView() {
                   onForwardTab={focusFirstGradeInput}
                 />
               </div>
+              <div className="text-right">
+                <CardTitle>
+                  ورقة إدخال الدرجة - {examStudents.length} طالب
+                </CardTitle>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  البحث هنا داخل إطار إدخال الدرجات. اضغط Tab من البحث للانتقال
+                  لأول خانة درجة، ثم Tab للتنقل بين درجات الطلاب.
+                </p>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
+            {entrySheetLoading && (
+              <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
+                جاري تحميل ورقة إدخال الدرجات من قاعدة البيانات...
+              </div>
+            )}
+            {entrySheetError && (
+              <div className="mb-4 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
+                {entrySheetError}
+              </div>
+            )}
             {examStudents.length > 0 && (
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
                 <span>
@@ -1614,7 +1725,11 @@ export function GradeEntryView() {
             <div className="space-y-2">
               {examStudents.length === 0 ? (
                 <p className="empty-state">
-                  لا يوجد طلاب مطابقون للفلاتر أو للدورات المربوطة بفصل نشط.
+                  {entrySheetLoading
+                    ? "جاري تجهيز ورقة إدخال الدرجة..."
+                    : entrySheetError
+                      ? "تعذر تحميل الطلاب من قاعدة البيانات لهذا الامتحان."
+                      : "لا يوجد طلاب مطابقون للفلاتر أو للدورات المربوطة بفصل نشط."}
                 </p>
               ) : (
                 visibleExamStudents.map((student) => {

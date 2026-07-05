@@ -588,6 +588,16 @@ export interface GradeListResponse {
   hasMore: boolean;
 }
 
+export interface GradeEntrySheetResponse {
+  exam: Record<string, unknown>;
+  students: Array<Record<string, unknown>>;
+  grades: Array<Record<string, unknown>>;
+  studentLeaves: Array<Record<string, unknown>>;
+  opportunityLogs: Array<Record<string, unknown>>;
+  courseChapters: Array<Record<string, unknown>>;
+  source: "database";
+}
+
 interface PaginatedApiEnvelope extends Record<string, unknown> {
   total?: number;
   totalCount?: number;
@@ -843,6 +853,13 @@ export const examApi = {
 };
 
 // ─── Grade API ────────────────────────────────────────────────────────────────
+
+export const gradeEntrySheetApi = {
+  get: (examId: string) =>
+    apiGet<GradeEntrySheetResponse>(
+      `grades/entry-sheet?examId=${encodeURIComponent(examId)}`,
+    ),
+};
 
 export const gradeApi = {
   list: async (
