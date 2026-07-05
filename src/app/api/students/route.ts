@@ -424,34 +424,30 @@ export async function GET(req: NextRequest) {
   });
 }
 
+type InitialOpportunitiesResult = {
+  opportunities: number;
+  baseOpportunities: number;
+  hasActiveChapter: boolean;
+  warning?: string;
+};
+
 /**
- * عند إضافة طالب جديد، تحقق من الفصل النشط المرتبط بدورته.
- * إذا كان هناك فصل نشط، امنح الطالب نفس فرص زملائه (baseOpportunities).
- *
- * ملاحظة هامة: نحترم قيم body فقط إذا كانت أكبر من صفر. السبب هو أن
- * النموذج في العميل قد يرسل `opportunities: 0` عندما لا يكون
- * courseChapters محمّلاً محلياً (lazy-load)، وهذا لا يعني أن المستخدم
- * يريد فعلاً منح الطالب 0 فرصة. لذلك نتحقق دائماً من الفصل النشط
- * ونستخدم فرصه كقيمة افتراضية.
+ * السيرفر هو صاحب القرار النهائي لفرص الطالب عند التسجيل.
+ * لا نعتمد نهائياً على opportunities/baseOpportunities القادمة من العميل،
+ * لأن أي طلب API مباشر قد يرسل قيماً غير صحيحة. عند وجود فصل نشط للدورة
+ * نستخدم فرص الفصل فقط، وعند غياب الفصل النشط نسجل الطالب بفرص صفر مع
+ * تحذير إداري واضح في استجابة الخادم.
  */
 async function getInitialOpportunities(
-  body: Record<string, unknown>,
-  course: { id: string } | null,
-): Promise<{ opportunities: number; baseOpportunities: number }> {
-  const bodyOpp = Number(body.opportunities ?? 0);
-  const bodyBaseOpp = Number(body.baseOpportunities ?? body.opportunities ?? 0);
-
-  // إذا حدد المستخدم قيمة موجبة صراحةً، احترمها
-  if (bodyOpp > 0 || bodyBaseOpp > 0) {
-    return {
-      opportunities: bodyOpp,
-      baseOpportunities: bodyBaseOpp,
-    };
-  }
-
-  // ابحث عن فصل نشط مرتبط بدورة هذا الطالب
+  course: { id: string; name?: string | null } | null,
+): Promise<InitialOpportunitiesResult> {
   if (!course) {
-    return { opportunities: 0, baseOpportunities: 0 };
+    return {
+      opportunities: 0,
+      baseOpportunities: 0,
+      hasActiveChapter: false,
+      warning: "الدورة المحددة غير موجودة، لذلك لا يمكن احتساب فرص الطالب.",
+    };
   }
 
   const activeCourseChapter = await db.courseChapter.findFirst({
@@ -460,7 +456,12 @@ async function getInitialOpportunities(
   });
 
   if (!activeCourseChapter) {
-    return { opportunities: 0, baseOpportunities: 0 };
+    return {
+      opportunities: 0,
+      baseOpportunities: 0,
+      hasActiveChapter: false,
+      warning: "هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص.",
+    };
   }
 
   const chapter = await db.chapter.findUnique({
@@ -468,8 +469,12 @@ async function getInitialOpportunities(
     select: { opportunities: true },
   });
 
-  const opp = Number(chapter?.opportunities || 0);
-  return { opportunities: opp, baseOpportunities: opp };
+  const opp = Math.max(0, Math.trunc(Number(chapter?.opportunities || 0)));
+  return {
+    opportunities: opp,
+    baseOpportunities: opp,
+    hasActiveChapter: true,
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -583,6 +588,13 @@ export async function POST(req: NextRequest) {
     String(body.subSite ?? ""),
   );
 
+  const initialOpportunitiesResult = await getInitialOpportunities(course);
+  const opportunitiesWarning = initialOpportunitiesResult.warning;
+  const initialOpportunities = {
+    opportunities: initialOpportunitiesResult.opportunities,
+    baseOpportunities: initialOpportunitiesResult.baseOpportunities,
+  };
+
   try {
     const student = await db.student.create({
       data: {
@@ -608,15 +620,20 @@ export async function POST(req: NextRequest) {
           ? String(body.dismissalNotes)
           : null,
         createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
-        // إذا لم يتم تحديد فرص صراحة، تحقق من الفصل النشط المرتبط بالدورة
-        // لمنح الطالب الجديد نفس فرص زملائه تلقائياً.
-        ...(await getInitialOpportunities(body, course)),
+        // السيرفر يحسب الفرص حصراً من الفصل النشط، ولا يثق بأي قيمة مرسلة من العميل.
+        ...initialOpportunities,
         accountingGraceDays: normalizeGraceDays(body.accountingGraceDays),
         courseId: body.courseId,
         ...uniqueKeys,
       },
     });
-    return NextResponse.json({ student }, { status: 201 });
+    return NextResponse.json(
+      {
+        student,
+        opportunitiesWarning,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     return getPrismaStudentErrorResponse(error);
   }
@@ -895,10 +912,9 @@ export async function PUT(req: NextRequest) {
     }
 
     if (courseChanged && courseTransferPolicy === "reset") {
-      const nextOpportunities = await getInitialOpportunities(
-        {},
-        { id: targetCourseId },
-      );
+      const nextOpportunities = await getInitialOpportunities({
+        id: targetCourseId,
+      });
       data.opportunities = nextOpportunities.opportunities;
       data.baseOpportunities = nextOpportunities.baseOpportunities;
     }

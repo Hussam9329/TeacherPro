@@ -275,6 +275,24 @@ model TelegramExamSubmission {
   @@index([receivedAt])
 }
 
+model StudentLeaveGradeBackup {
+  id                         String   @id @default(cuid())
+  leaveId                    String
+  studentId                  String
+  examId                     String
+  status                     String
+  score                      Int?
+  notes                      String?
+  academicAccountingChecked  Boolean  @default(false)
+  gradeCreatedAt             DateTime?
+  gradeUpdatedAt             DateTime?
+  createdAt                  DateTime @default(now())
+
+  @@unique([leaveId, studentId, examId])
+  @@index([leaveId])
+  @@index([studentId, examId])
+}
+
 model Role {
   id          String    @id @default(cuid())
   name        String

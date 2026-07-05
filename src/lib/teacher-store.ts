@@ -5220,11 +5220,6 @@ export const useTeacherStore = create<TeacherState>()(
             "إزالة درجة بسبب الإجازة",
             `${get().studentName(leave.studentId)} - ${examName} - الدرجة المحذوفة: ${formatGradeScore(grade, exam, "—")} لأن الطالب أصبح مجازًا`,
           );
-          syncToServer(
-            get,
-            () => gradeApi.remove(grade.id, grade.studentId, grade.examId),
-            { description: "حذف درجة بسبب إجازة" },
-          );
         });
         syncToServer(get, () =>
           studentNoteApi.add(
@@ -5262,6 +5257,7 @@ export const useTeacherStore = create<TeacherState>()(
           opportunityLogs: stateBefore.opportunityLogs,
           studentLeaves: stateBefore.studentLeaves,
           studentNotes: stateBefore.studentNotes,
+          grades: stateBefore.grades,
         };
         const actionNote: StudentNote | null = deletedLeave
           ? {
@@ -5288,6 +5284,34 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(get, () => studentLeaveApi.remove(id), {
           description: "حذف إجازة",
           rollback: () => set(previousState),
+          onSuccess: (result) => {
+            const resultData = (result as ApiResult | undefined)?.data as
+              | { restoredGrades?: unknown }
+              | undefined;
+            const restoredGradesValue = Array.isArray(resultData?.restoredGrades)
+              ? (resultData!.restoredGrades as Array<Record<string, unknown>>)
+              : [];
+            if (!restoredGradesValue.length) return;
+            const restoredGrades = restoredGradesValue.map((grade) =>
+              normalizeGradeRecord(grade),
+            );
+            set((s) => {
+              const restoredKeySet = new Set(
+                restoredGrades.map(
+                  (grade) => `${grade.studentId}:${grade.examId}`,
+                ),
+              );
+              return {
+                grades: [
+                  ...restoredGrades,
+                  ...s.grades.filter(
+                    (grade) =>
+                      !restoredKeySet.has(`${grade.studentId}:${grade.examId}`),
+                  ),
+                ],
+              };
+            });
+          },
         });
         if (deletedLeave)
           get().recalculateAcademicEffects(deletedLeave.studentId);

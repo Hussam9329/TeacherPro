@@ -12,6 +12,7 @@ import {
   validationError,
 } from "@/lib/route-helpers";
 import { ensureExamSchema } from "@/lib/exam-schema";
+import { ensureFollowupTables } from "@/lib/followup-schema";
 import { normalizeListFilter } from "@/lib/all-filter";
 
 async function validateGradePayload(body: Record<string, unknown>) {
@@ -26,7 +27,7 @@ async function validateGradePayload(body: Record<string, unknown>) {
   const [exam, student] = await Promise.all([
     db.exam.findUnique({
       where: { id: String(body.examId) },
-      select: { fullMark: true, courseIds: true },
+      select: { id: true, date: true, fullMark: true, courseIds: true },
     }),
     db.student.findUnique({
       where: { id: String(body.studentId) },
@@ -46,6 +47,9 @@ async function validateGradePayload(body: Record<string, unknown>) {
   if (courseIds.length > 0 && !courseIds.includes(student.courseId)) {
     return "الطالب ليس ضمن دورات هذا الامتحان";
   }
+
+  const leaveMessage = await getGradeBlockedByLeaveMessage(student.id, exam);
+  if (leaveMessage) return leaveMessage;
 
   if (body.status === "درجة") {
     const score = Number(body.score);
@@ -189,6 +193,57 @@ const databaseComputedGradeFilters = new Set<GradeStatusFilter>([
 
 function dateKey(value: unknown): string {
   return String(value || "").slice(0, 10);
+}
+
+function startOfUtcDay(value: Date | string | null | undefined): Date | null {
+  const key = dateKey(value);
+  if (!key) return null;
+  const date = new Date(`${key}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+function endOfUtcDayExclusive(
+  value: Date | string | null | undefined,
+): Date | null {
+  const start = startOfUtcDay(value);
+  if (!start) return null;
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return end;
+}
+
+function buildStudentLeaveWhereForExam(
+  studentId: string,
+  exam: { id: string; date?: Date | string | null },
+): Prisma.StudentLeaveWhereInput {
+  const examDayStart = startOfUtcDay(exam.date);
+  const examDayEnd = endOfUtcDayExclusive(exam.date);
+  const periodWhere: Prisma.StudentLeaveWhereInput[] = [];
+
+  if (examDayStart && examDayEnd) {
+    periodWhere.push({
+      leaveType: "period",
+      dateFrom: { lt: examDayEnd },
+      dateTo: { gte: examDayStart },
+    });
+  }
+
+  return {
+    studentId,
+    OR: [{ examId: exam.id }, ...periodWhere],
+  };
+}
+
+async function getGradeBlockedByLeaveMessage(
+  studentId: string,
+  exam: { id: string; date?: Date | string | null },
+): Promise<string | null> {
+  const leave = await db.studentLeave.findFirst({
+    where: buildStudentLeaveWhereForExam(studentId, exam),
+    select: { id: true, leaveType: true, reason: true },
+  });
+  if (!leave) return null;
+  return "لا يمكن إدخال درجة لطالب مجاز.";
 }
 
 function isGradeEnteredForServer(
@@ -455,6 +510,7 @@ export async function POST(req: NextRequest) {
 
   try {
     await ensureExamSchema();
+    await ensureFollowupTables();
 
     const body = await req.json();
     const validationMessage = await validateGradePayload(body);
@@ -504,6 +560,7 @@ export async function PUT(req: NextRequest) {
 
   try {
     await ensureExamSchema();
+    await ensureFollowupTables();
 
     const body = await req.json();
     const { id, ...data } = body;
@@ -564,6 +621,12 @@ export async function PUT(req: NextRequest) {
         }
       }
     }
+
+    const leaveMessage = await getGradeBlockedByLeaveMessage(
+      targetGrade.studentId,
+      targetGrade.exam,
+    );
+    if (leaveMessage) return validationError(leaveMessage);
 
     const grade = await db.grade.update({
       where: { id: targetGrade.id },

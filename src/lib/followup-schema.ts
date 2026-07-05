@@ -1,5 +1,5 @@
-import { db } from '@/lib/db';
-import { isMissingDatabaseObjectError } from '@/lib/route-helpers';
+import { db } from "@/lib/db";
+import { isMissingDatabaseObjectError } from "@/lib/route-helpers";
 
 const FOLLOWUP_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS "StudentLeave" (
@@ -44,6 +44,20 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
     "dismissalDate" TIMESTAMP(3),
     CONSTRAINT "StudentNote_pkey" PRIMARY KEY ("id")
   )`,
+  `CREATE TABLE IF NOT EXISTS "StudentLeaveGradeBackup" (
+    "id" TEXT NOT NULL,
+    "leaveId" TEXT NOT NULL,
+    "studentId" TEXT NOT NULL,
+    "examId" TEXT NOT NULL,
+    "status" TEXT NOT NULL,
+    "score" INTEGER,
+    "notes" TEXT,
+    "academicAccountingChecked" BOOLEAN NOT NULL DEFAULT false,
+    "gradeCreatedAt" TIMESTAMP(3),
+    "gradeUpdatedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "StudentLeaveGradeBackup_pkey" PRIMARY KEY ("id")
+  )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "StudentLeave_studentId_examId_key" ON "StudentLeave"("studentId", "examId")`,
   `CREATE INDEX IF NOT EXISTS "StudentLeave_studentId_idx" ON "StudentLeave"("studentId")`,
   `CREATE INDEX IF NOT EXISTS "StudentLeave_examId_idx" ON "StudentLeave"("examId")`,
@@ -55,6 +69,9 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
   `UPDATE "StudentLeave" SET "leaveType" = COALESCE(NULLIF("leaveType", ''), 'exam'), "dateFrom" = COALESCE("dateFrom", "date"), "dateTo" = COALESCE("dateTo", "date")`,
   `CREATE INDEX IF NOT EXISTS "StudentLeave_dateFrom_idx" ON "StudentLeave"("dateFrom")`,
   `CREATE INDEX IF NOT EXISTS "StudentLeave_dateTo_idx" ON "StudentLeave"("dateTo")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "StudentLeaveGradeBackup_leaveId_studentId_examId_key" ON "StudentLeaveGradeBackup"("leaveId", "studentId", "examId")`,
+  `CREATE INDEX IF NOT EXISTS "StudentLeaveGradeBackup_leaveId_idx" ON "StudentLeaveGradeBackup"("leaveId")`,
+  `CREATE INDEX IF NOT EXISTS "StudentLeaveGradeBackup_studentId_examId_idx" ON "StudentLeaveGradeBackup"("studentId", "examId")`,
   `ALTER TABLE "StudentCall" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE "StudentCall" ALTER COLUMN "examId" DROP NOT NULL`,
   `UPDATE "StudentCall" SET "status" = CASE WHEN "completed" THEN 'تم الاتصال' ELSE 'لم يرد' END WHERE COALESCE("status", '') = ''`,
@@ -89,6 +106,15 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentNote_studentId_fkey') THEN
       ALTER TABLE "StudentNote" ADD CONSTRAINT "StudentNote_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "Student"("id") ON DELETE CASCADE ON UPDATE CASCADE;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentLeaveGradeBackup_leaveId_fkey') THEN
+      ALTER TABLE "StudentLeaveGradeBackup" ADD CONSTRAINT "StudentLeaveGradeBackup_leaveId_fkey" FOREIGN KEY ("leaveId") REFERENCES "StudentLeave"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentLeaveGradeBackup_studentId_fkey') THEN
+      ALTER TABLE "StudentLeaveGradeBackup" ADD CONSTRAINT "StudentLeaveGradeBackup_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "Student"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentLeaveGradeBackup_examId_fkey') THEN
+      ALTER TABLE "StudentLeaveGradeBackup" ADD CONSTRAINT "StudentLeaveGradeBackup_examId_fkey" FOREIGN KEY ("examId") REFERENCES "Exam"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
   END $$`,
 ] as const;
 
@@ -114,14 +140,20 @@ export async function ensureFollowupTables(): Promise<void> {
   await ensureFollowupTablesPromise;
 }
 
-export async function withFollowupTables<T>(operation: () => Promise<T>, label: string): Promise<T> {
+export async function withFollowupTables<T>(
+  operation: () => Promise<T>,
+  label: string,
+): Promise<T> {
   try {
     await ensureFollowupTables();
     return await operation();
   } catch (error) {
     if (!isMissingDatabaseObjectError(error)) throw error;
 
-    console.warn(`[API] ${label} table/column is unavailable. Creating follow-up tables and retrying.`, error);
+    console.warn(
+      `[API] ${label} table/column is unavailable. Creating follow-up tables and retrying.`,
+      error,
+    );
     await ensureFollowupTables();
     return operation();
   }
