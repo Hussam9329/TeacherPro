@@ -187,15 +187,23 @@ function normalizeGradeScoreInput(value: string, fullMark: number) {
 
 function formatGradeEntryTimestamp(value?: string | Date | null): string {
   if (!value) return "غير معروف";
+  // حوّل القيمة إلى كائن Date أولاً.
   const date = value instanceof Date ? value : new Date(value);
   if (!Number.isFinite(date.getTime())) return "غير معروف";
-  return date.toLocaleString("ar-IQ", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  // احسب وقت بغداد بإضافة فرق التوقيت (+3 ساعات) إلى UTC، ثم استخدم
+  // en-GB لتنسيق التاريخ والوقت بالإنكليزية بدل ar-IQ الذي يعطي
+  // أرقاماً عربية ومحررات سياق RTL.
+  // التحويل اليدوي يضمن أن الناتج دائماً بتوقيت بغداد بصرف النظر
+  // عن منطقة زمن المتصفح.
+  const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
+  const baghdad = new Date(date.getTime() + BAGHDAD_OFFSET_MS);
+  const y = baghdad.getUTCFullYear();
+  const m = String(baghdad.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(baghdad.getUTCDate()).padStart(2, "0");
+  const hh = String(baghdad.getUTCHours()).padStart(2, "0");
+  const mm = String(baghdad.getUTCMinutes()).padStart(2, "0");
+  // صيغة: 2026-07-05 03:00 ( Baghdad )
+  return `${y}-${m}-${d} ${hh}:${mm}`;
 }
 
 export function GradeEntryView() {
@@ -1058,9 +1066,15 @@ export function GradeEntryView() {
     });
     setSavingRows((prev) => ({ ...prev, [studentId]: false }));
     setEditableRows((prev) => ({ ...prev, [studentId]: false }));
+    // اعرض وقت الحفظ بتوقيت بغداد بصيغة إنكليزية (HH:MM) لتطابق صيغة
+    // formatGradeEntryTimestamp المستخدمة في عرض وقت الإدخال.
+    const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
+    const baghdadNow = new Date(Date.now() + BAGHDAD_OFFSET_MS);
+    const hh = String(baghdadNow.getUTCHours()).padStart(2, "0");
+    const mm = String(baghdadNow.getUTCMinutes()).padStart(2, "0");
     setSavedRows((prev) => ({
       ...prev,
-      [studentId]: `تم حفظها ${new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`,
+      [studentId]: `تم حفظها ${hh}:${mm}`,
     }));
     if (!options.silent)
       showGradeEntryNotice(
