@@ -138,9 +138,16 @@ export async function GET(req: NextRequest) {
     const success = accountableGrades.filter(
       (grade) => grade.status === "درجة" && grade.score !== null && Number(grade.score) >= Number(grade.exam.passMark || 0),
     ).length;
-    const failed = accountableGrades.filter(
-      (grade) => grade.status === "درجة" && grade.score !== null && Number(grade.score) < Number(grade.exam.passMark || 0),
-    ).length;
+    const failed = accountableGrades.filter((grade) => {
+      if (grade.status !== "درجة" || grade.score === null) return false;
+      const score = Number(grade.score);
+      const passMark = Number(grade.exam.passMark || 0);
+      const discountMark = Number(grade.exam.discountMark || 0);
+      if (!Number.isFinite(score)) return false;
+      return grade.exam.noDiscount
+        ? score < passMark
+        : score > discountMark && score < passMark;
+    }).length;
     const graceGrades = grades.filter((grade) => isExamWithinStudentGracePeriod(student, grade.exam)).length;
     const noDiscountGrades = grades.filter(
       (grade) => !isExamWithinStudentGracePeriod(student, grade.exam) && grade.exam.noDiscount,

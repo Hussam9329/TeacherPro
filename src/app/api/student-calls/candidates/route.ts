@@ -9,7 +9,14 @@ import { normalizeListFilter } from "@/lib/all-filter";
 import { withFollowupTables } from "@/lib/followup-schema";
 
 type CallStatusFilter =
-  "all" | "absent" | "discounted" | "failed" | "cheating" | "passed" | "full";
+  | "all"
+  | "absent"
+  | "discounted"
+  | "failed"
+  | "academic-accounting"
+  | "cheating"
+  | "passed"
+  | "full";
 
 type DbStudentLite = {
   id: string;
@@ -96,8 +103,11 @@ function gradeMatchesStatusFilter(
       return score !== null && !exam.noDiscount && score <= discountMark;
     case "failed":
       if (score === null) return false;
-      if (exam.noDiscount) return score >= 1 && score < passMark;
-      return score >= 1 && score <= discountMark;
+      if (exam.noDiscount) return score < passMark;
+      return score > discountMark && score < passMark;
+    case "academic-accounting":
+      if (score === null || exam.noDiscount) return false;
+      return score > discountMark && score < passMark;
     default:
       return true;
   }
@@ -115,7 +125,7 @@ function gradeCategory(
     if (Number.isFinite(score)) {
       if (!exam.noDiscount && score <= Number(exam.discountMark || 0))
         return "مخصوم المخصومين خصم";
-      if (score < Number(exam.passMark || 0)) return "راسب الراسبين";
+      if (score < Number(exam.passMark || 0)) return "راسب غير مخصوم الراسبين غير المخصومين";
       if (score === Number(exam.fullMark || 0)) return "درجة كاملة فل مارك";
       return "ناجح الناجحين";
     }

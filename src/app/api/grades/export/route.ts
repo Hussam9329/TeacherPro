@@ -102,13 +102,15 @@ function buildGradeExportWhere(
 
 type GradeStatusFilter =
   | "all"
-  | "full-mark"
+  | "excused"
   | "grace-period"
   | "absent"
+  | "cheating"
   | "discounted"
   | "failed"
   | "academic-accounting"
-  | "cheating"
+  | "passed"
+  | "full-mark"
   | "has-grade";
 
 type GradeWithRelations = Prisma.GradeGetPayload<{
@@ -116,11 +118,13 @@ type GradeWithRelations = Prisma.GradeGetPayload<{
 }>;
 
 const databaseComputedGradeFilters = new Set<GradeStatusFilter>([
-  "full-mark",
+  "excused",
   "grace-period",
   "discounted",
   "failed",
   "academic-accounting",
+  "passed",
+  "full-mark",
   "has-grade",
 ]);
 
@@ -254,12 +258,14 @@ function gradeMatchesExportStatusFilter(
   ].includes(kind);
 
   switch (filter) {
-    case "full-mark":
-      return !isNoAccountingKind && score !== null && score === fullMark;
+    case "excused":
+      return kind === "excused";
     case "grace-period":
       return kind === "grace" || kind === "before-registration";
     case "absent":
       return !isNoAccountingKind && grade.status === "غائب";
+    case "cheating":
+      return !isNoAccountingKind && grade.status === "غش";
     case "discounted":
       return (
         !isNoAccountingKind &&
@@ -268,20 +274,21 @@ function gradeMatchesExportStatusFilter(
         score <= discountMark
       );
     case "failed":
-      return !isNoAccountingKind && score !== null && score < passMark;
-    case "academic-accounting":
       return (
         !isNoAccountingKind &&
-        (kind === "academic-accounting" ||
-          (score !== null &&
-            !grade.exam.noDiscount &&
-            score > discountMark &&
-            score < passMark))
+        score !== null &&
+        (grade.exam.noDiscount
+          ? score < passMark
+          : score > discountMark && score < passMark)
       );
-    case "cheating":
-      return !isNoAccountingKind && grade.status === "غش";
+    case "academic-accounting":
+      return !isNoAccountingKind && kind === "academic-accounting";
+    case "passed":
+      return !isNoAccountingKind && score !== null && score >= passMark;
+    case "full-mark":
+      return !isNoAccountingKind && score !== null && score === fullMark;
     case "has-grade":
-      return score !== null;
+      return score !== null || grade.status === "غائب" || grade.status === "غش";
     default:
       return true;
   }
@@ -293,13 +300,15 @@ function normalizeGradeStatusFilter(
   const raw = normalizeListFilter(searchParams.get("statusFilter"));
   const allowed: GradeStatusFilter[] = [
     "all",
-    "full-mark",
+    "excused",
     "grace-period",
     "absent",
+    "cheating",
     "discounted",
     "failed",
     "academic-accounting",
-    "cheating",
+    "passed",
+    "full-mark",
     "has-grade",
   ];
   return allowed.includes(raw as GradeStatusFilter)

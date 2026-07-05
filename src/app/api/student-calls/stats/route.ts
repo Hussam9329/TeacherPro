@@ -9,7 +9,14 @@ import { normalizeListFilter } from "@/lib/all-filter";
 import { withFollowupTables } from "@/lib/followup-schema";
 
 type CallStatusFilter =
-  "all" | "absent" | "discounted" | "failed" | "cheating" | "passed" | "full";
+  | "all"
+  | "absent"
+  | "discounted"
+  | "failed"
+  | "academic-accounting"
+  | "cheating"
+  | "passed"
+  | "full";
 
 type ContactStatus = "" | "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
 
@@ -120,8 +127,11 @@ function gradeMatchesStatusFilter(
       return score !== null && !exam.noDiscount && score <= discountMark;
     case "failed":
       if (score === null) return false;
-      if (exam.noDiscount) return score >= 1 && score < passMark;
-      return score >= 1 && score <= discountMark;
+      if (exam.noDiscount) return score < passMark;
+      return score > discountMark && score < passMark;
+    case "academic-accounting":
+      if (score === null || exam.noDiscount) return false;
+      return score > discountMark && score < passMark;
     default:
       return true;
   }
@@ -147,7 +157,7 @@ function searchableValues(
   const labelByCategory: Record<string, string> = {
     absent: "غائب الغائبين",
     discounted: "مخصوم المخصومين خصم",
-    failed: "راسب الراسبين",
+    failed: "راسب غير مخصوم الراسبين غير المخصومين",
     full: "درجة كاملة فل مارك",
     passed: "ناجح الناجحين",
     cheating: "غش طلاب الغش",

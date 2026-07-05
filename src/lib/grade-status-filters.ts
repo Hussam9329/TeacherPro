@@ -1,23 +1,27 @@
 export type GradeStatusFilter =
   | "all"
-  | "full-mark"
+  | "excused"
   | "grace-period"
   | "absent"
+  | "cheating"
   | "discounted"
   | "failed"
   | "academic-accounting"
-  | "cheating"
+  | "passed"
+  | "full-mark"
   | "has-grade";
 
 export const gradeStatusFilterLabels: Record<GradeStatusFilter, string> = {
   all: "كل حالات الدرجة",
-  "full-mark": "الدرجة الكاملة",
-  "grace-period": "طلاب فترة السماح",
-  absent: "الطلاب الغائبين",
-  discounted: "الطلاب المخصومين",
-  failed: "الطلاب الراسبين",
-  "academic-accounting": "طلاب المحاسبة",
+  excused: "الطلاب المجازون",
+  "grace-period": "ضمن السماح",
+  absent: "الطلاب الغائبون",
   cheating: "طلاب الغش",
+  discounted: "الطلاب المخصومون",
+  failed: "الراسبون غير المخصومين",
+  "academic-accounting": "طلاب المحاسبة",
+  passed: "الطلاب الناجحون",
+  "full-mark": "الدرجة الكاملة",
   "has-grade": "الطلاب الذين لديهم درجة",
 };
 
@@ -32,6 +36,17 @@ function numericScore(grade: {
   if (grade.status !== "درجة") return null;
   const score = Number(grade.score);
   return Number.isFinite(score) ? score : null;
+}
+
+function isFailedNotDiscounted(
+  score: number | null,
+  exam: { passMark?: unknown; discountMark?: unknown; noDiscount?: boolean },
+): boolean {
+  if (score === null) return false;
+  const passMark = Number(exam.passMark || 0);
+  const discountMark = Number(exam.discountMark || 0);
+  if (exam.noDiscount) return score < passMark;
+  return score > discountMark && score < passMark;
 }
 
 export function gradeMatchesStatusFilter(
@@ -55,29 +70,26 @@ export function gradeMatchesStatusFilter(
   const isNoAccountingKind = ["grace", "before-registration", "excused"].includes(kind);
 
   switch (filter) {
-    case "full-mark":
-      return !isNoAccountingKind && score !== null && score === fullMark;
+    case "excused":
+      return kind === "excused";
     case "grace-period":
       return kind === "grace" || kind === "before-registration";
     case "absent":
       return !isNoAccountingKind && grade.status === "غائب";
+    case "cheating":
+      return !isNoAccountingKind && grade.status === "غش";
     case "discounted":
       return !isNoAccountingKind && score !== null && !exam.noDiscount && score <= discountMark;
     case "failed":
-      return !isNoAccountingKind && score !== null && score < passMark;
+      return !isNoAccountingKind && isFailedNotDiscounted(score, exam);
     case "academic-accounting":
-      return (
-        !isNoAccountingKind &&
-        (kind === "academic-accounting" ||
-          (score !== null &&
-            !exam.noDiscount &&
-            score > discountMark &&
-            score < passMark))
-      );
-    case "cheating":
-      return !isNoAccountingKind && grade.status === "غش";
+      return !isNoAccountingKind && kind === "academic-accounting";
+    case "passed":
+      return !isNoAccountingKind && score !== null && score >= passMark;
+    case "full-mark":
+      return !isNoAccountingKind && score !== null && score === fullMark;
     case "has-grade":
-      return score !== null;
+      return score !== null || grade.status === "غائب" || grade.status === "غش";
     default:
       return true;
   }

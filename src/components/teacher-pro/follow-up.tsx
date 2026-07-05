@@ -130,7 +130,7 @@ type LeaveMode = "exam" | "period";
 const callCategoryLabels: Record<CallCategory, string> = {
   absent: "غائب",
   discounted: "مخصوم",
-  failed: "راسب",
+  failed: "راسب غير مخصوم",
   "low-pass": "ناجح بدرجة منخفضة",
   full: "درجة كاملة",
   passed: "ناجح",
@@ -141,7 +141,7 @@ const callStatusFilterLabels: Record<CallStatusFilter, string> = {
   all: "كل الحالات",
   absent: "الغائبين",
   discounted: "المخصومين",
-  failed: "الراسبين",
+  failed: "الراسبين غير المخصومين",
   cheating: "طلاب الغش",
   passed: "الطلاب الناجحين",
   full: "الدرجات الكاملة",
@@ -317,10 +317,10 @@ function callGradeMatchesStatusFilter(
       return score !== null && !exam.noDiscount && score <= discountMark;
     case "failed":
       if (score === null) return false;
-      if (exam.noDiscount) return score >= 1 && score < passMark;
-      return score >= 1 && score <= discountMark;
+      if (exam.noDiscount) return score < passMark;
+      return score > discountMark && score < passMark;
     case "academic-accounting":
-      // محاسبة رسوب: درجة بين الخصم والنجوب (خصم < درجة < نجوب)
+      // محاسبة رسوب: درجة بين الخصم والنجاح (خصم < درجة < نجاح)
       if (score === null) return false;
       if (exam.noDiscount) return false;
       return score > discountMark && score < passMark;
@@ -856,7 +856,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           return {
             category: "failed",
             label: callCategoryLabels.failed,
-            reason: `راسب: ${score}/${exam.fullMark}`,
+            reason: `راسب غير مخصوم: ${score}/${exam.fullMark}`,
           };
         }
         if (score === exam.fullMark) {
