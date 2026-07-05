@@ -15,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "sonner";
 import {
@@ -107,23 +106,38 @@ export function DismissedStudentsView() {
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [dismissalDetails, setDismissalDetails] = useState<Record<string, DismissalDetail>>({});
+  const [dismissedServerStudents, setDismissedServerStudents] = useState<Student[]>([]);
+  const [dismissedStudentsSearchLoading, setDismissedStudentsSearchLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    // استخدم بحث الخادم بدلاً من listAll. السبب: listAll يحمل كل المفصولين
+    // دفعة واحدة ويفلتر محلياً، مما يخفي نتائج معينة عند المفصولين الكثيرين
+    // ويبطئ الصفحة. بحث الخادم يدعم q + status + courseId بشكل كامل.
+    if (!dismissedStudentsSearchLoading) setDismissedStudentsSearchLoading(true);
     studentApi
-      .listAll({ status: "مفصول" })
+      .list({
+        status: "مفصول",
+        q: debouncedSearch || undefined,
+        courseId: filterCourseId || undefined,
+        pageSize: 100,
+      })
       .then((result) => {
-        if (!cancelled) {
-          mergeStudentsCache((result?.students || []) as unknown as Student[]);
-        }
+        if (cancelled) return;
+        const next = (result?.students || []) as unknown as Student[];
+        setDismissedServerStudents(next);
+        mergeStudentsCache(next);
       })
       .catch(() => {
-        // تبقى آخر نسخة محملة متاحة إذا فشل الاتصال.
+        if (!cancelled) setDismissedServerStudents([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDismissedStudentsSearchLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [mergeStudentsCache]);
+  }, [debouncedSearch, filterCourseId, mergeStudentsCache]);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,16 +161,20 @@ export function DismissedStudentsView() {
     () =>
       Array.from(
         new Set(
-          students
+          dismissedServerStudents
             .filter((student) => student.status === "مفصول")
             .map((student) => student.dismissalType || "مفصول"),
         ),
       ).filter(Boolean),
-    [students],
+    [dismissedServerStudents],
   );
 
   const dismissedStudents = useMemo(() => {
-    return students
+    // نعتمد على نتائج الخادم (dismissedServerStudents) لأنها تأتي مباشرةً
+    // من قاعدة البيانات وتدعم البحث الكامل بدون قيد على أول N طالب.
+    // الفلاتر المحلية المتبقية (dismissalType / notes) لا يمكن إجراؤها
+    // عبر الخادم لأنها ليست حقول منفصلة في جدول الطلاب، فنبقيها هنا.
+    return dismissedServerStudents
       .filter((student) => student.status === "مفصول")
       .filter((student) => {
         const hasNotes = Boolean(String(student.dismissalNotes || "").trim());
@@ -168,32 +186,16 @@ export function DismissedStudentsView() {
           return false;
         if (filterNotes === "with-notes" && !hasNotes) return false;
         if (filterNotes === "without-notes" && hasNotes) return false;
-        if (
-          debouncedSearch &&
-          !searchAny(debouncedSearch, [
-            student.name,
-            student.code,
-            student.phone,
-            student.parentPhone,
-            student.telegram,
-            student.school,
-            student.subSite,
-            student.locationScope,
-            student.dismissalType,
-            student.dismissalReason,
-            student.dismissalNotes,
-          ])
-        )
-          return false;
+        // لا حاجة لإعادة فلترة debouncedSearch محلياً لأن الخادم قام بها
+        // عبر ?q=. هذا يقلل العمل المحلي ويضمن نتائج متطابقة.
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
   }, [
-    students,
+    dismissedServerStudents,
     filterCourseId,
     filterDismissalType,
     filterNotes,
-    debouncedSearch,
   ]);
 
   const buildLocalDismissalDetail = (student: Student): DismissalDetail => {

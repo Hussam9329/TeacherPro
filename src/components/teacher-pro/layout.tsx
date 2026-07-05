@@ -397,12 +397,22 @@ export function TeacherProLayout() {
 
   useEffect(() => {
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      const detail = (event as CustomEvent<{ message?: string; transient?: boolean }>).detail;
+      // الأخطاء العابرة المؤجلة في outbox لا تعرض كخطأ على الإطلاق في
+      // صفحة تسجيل الدرجات. السبب: المستخدم يدخل عشرات الدرجات بسرعة،
+      // وأي خطأ شبكي مؤقت كان يطلع إشعار خطأ يخليه يفكر الصفحة "فصلت"
+      // ويفرض رفرش. الدرجات محفوظة محلياً وستُزامن تلقائياً، فلا داعي للتنبيه.
+      if (detail?.transient && currentSection === "grade-entry") {
+        return;
+      }
       const message = detail?.message || "تعذر حفظ التغيير في الخادم وتم الاحتفاظ به محلياً";
       if (currentSection === "grade-entry") {
         window.dispatchEvent(new CustomEvent("teacherpro:grade-entry-sync-error", { detail: { message } }));
         return;
       }
+      // خارج صفحة تسجيل الدرجات، نخفي الأخطاء العابرة تماماً أيضاً لأنها
+      // تُعاد محاولتها تلقائياً. نُظهر فقط الأخطاء غير العابرة (4xx دائمة).
+      if (detail?.transient) return;
       toast.error(message);
     };
     window.addEventListener("teacherpro:server-sync-error", handler);

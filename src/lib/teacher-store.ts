@@ -1654,16 +1654,30 @@ function getSyncErrorMessage(error: unknown): string {
 
 function notifySyncFailure(_getState: () => TeacherState, description: string, error: unknown): void {
   const message = getSyncErrorMessage(error);
-  console.warn('[Store] Server sync failed:', description, error);
+  // لا نسجل كتحذير إلا للأخطاء غير العابرة. الأخطاء العابرة (شبكة، 5xx، 429)
+  // تُطوى في outbox وتُعاد محاولتها تلقائياً، فلا داعي لإزعاج المستخدم ولا
+  // لطباعتها بصوت عالٍ — هذا كان يخلي المستخدم يفكر الصفحة "تفصل".
+  if (!isTransientSyncFailure(error)) {
+    console.warn('[Store] Server sync failed:', description, error);
+  }
   if (typeof window !== 'undefined') {
     const now = Date.now();
     const transient = isTransientSyncFailure(error);
+    // الأخطاء العابرة: نرفع الفاصل إلى 60 ثانية بدلاً من 15 ثانية. السبب:
+    // المستخدم يدخل عشرات الدرجات بسرعة، وأي خطأ شبكي مؤقت كان يطلع toast
+    // كل 15 ثانية ويوحي بأن الصفحة معطلة، بينما الدرجات محفوظة محلياً وستُزامن.
+    // لذلك نكتم الأخطاء العابرة قدر الإمكان ونظهر فقط تكراراً نادراً جداً.
     const noticeKey = transient ? '__transient_sync__' : `${description}:${message}`;
-    const minGapMs = transient ? 15000 : 4000;
+    const minGapMs = transient ? 60000 : 4000;
     if (now - (syncFailureNoticeTimestamps.get(noticeKey) || 0) < minGapMs) return;
     syncFailureNoticeTimestamps.set(noticeKey, now);
+    // للأخطاء العابرة، نرسل الحدث لكن برسالة أكثر هدوءاً حتى لا يظن المستخدم
+    // أن شيئاً خطيراً حصل. الدرجات محفوظة محلياً وستُزامن تلقائياً.
+    const displayMessage = transient
+      ? (description ? `${description}: تم تأجيل المزامنة، ستُعاد تلقائياً.` : 'تم تأجيل المزامنة، ستُعاد تلقائياً.')
+      : (description ? `${description}: ${message}` : message);
     window.dispatchEvent(new CustomEvent('teacherpro:server-sync-error', {
-      detail: { message: description ? `${description}: ${message}` : message },
+      detail: { message: displayMessage, transient },
     }));
   }
 }
@@ -3032,7 +3046,14 @@ export const useTeacherStore = create<TeacherState>()(
         set((s) => ({ grades: existing ? s.grades.map((g) => g.id === existing.id ? grade : g) : [...s.grades, grade] }));
         get().logAction('الدرجات', existing ? 'تعديل درجة' : 'إدخال درجة', `${get().studentName(grade.studentId)} - ${stateBefore.exams.find((e) => e.id === grade.examId)?.name || ''}`);
         queueGradeSaves(get, [grade]);
-        get().recalculateAcademicEffects(grade.studentId);
+        // أجّل recalculateAcademicEffects إلى microtask تالي لتفادي إعادة
+        // الحساب المتزامن الثقيل أثناء إدخال عدة درجات بسرعة. هذا يحافظ
+        // على استجابة الصفحة (UI) ولا يعرض رسائل "فصل" خاطئة، بينما
+        // تتم المزامنة الفعلية للدرجة عبر grade outbox فوراً.
+        const studentIdForRecalc = grade.studentId;
+        void Promise.resolve().then(() => {
+          get().recalculateAcademicEffects(studentIdForRecalc);
+        });
       },
       updateGrade: (id, updates) => {
         const stateBefore = get();
