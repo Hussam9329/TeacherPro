@@ -2295,7 +2295,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     : "عدد الطلاب الكلي (كل الحالات)"}
                 </p>
                 <b className="text-2xl text-primary">
-                  {callRows.length}
+                  {callStatusFilter === "all"
+                    ? displayedCallStats.total
+                    : callRows.length}
+                  {callStatsSuffix}
                 </b>
               </CardContent>
             </Card>
