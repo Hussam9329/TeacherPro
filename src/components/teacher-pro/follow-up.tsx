@@ -445,22 +445,49 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [globalSearch, setGlobalSearch] = useState("");
   const debouncedGlobalSearch = useDebouncedValue(globalSearch, 180);
 
+  // نتائج البحث من الخادم للطالب المعروض في منتقي الإجازات.
+  // نستخدم بحث الخادم بدلاً من الكاش المحلي لأن الكاش قد لا يحوي
+  // إلا أول 200 طالب، مما يخفي الطلاب القدامى أو الإضافيين عن المستخدم.
+  const [leavePickerStudents, setLeavePickerStudents] = useState<Student[]>([]);
+  const [leavePickerLoading, setLeavePickerLoading] = useState(false);
+
+  useEffect(() => {
+    if (view !== "leaves") return;
+    let cancelled = false;
+    setLeavePickerLoading(true);
+    studentApi
+      .list({ q: debouncedGlobalSearch, pageSize: 30 })
+      .then((result) => {
+        if (cancelled) return;
+        const next = (result?.students || []) as unknown as Student[];
+        setLeavePickerStudents(next);
+        mergeStudentsCache(next);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLeavePickerStudents([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLeavePickerLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, debouncedGlobalSearch, mergeStudentsCache]);
+
   useEffect(() => {
     if (view !== "leaves") return;
     let cancelled = false;
 
-    // حمّل المفصولين بشكل صريح (صفحة التعهدات تعتمد عليهم)
-    // + حمّل الطلاب العاديين للبحث
-    Promise.all([
-      studentApi.list({ status: "مفصول", pageSize: 200 }),
-      studentApi.list({ pageSize: 200 }),
-    ])
-      .then(([dismissedResult, allResult]) => {
+    // حمّل المفصولين بشكل صريح حتى تظهرهم قائمة التعهدات لاحقاً.
+    // لا نعتمد على هذا المصدر لمنتقي الإجازات — استخدام البحث من الخادم
+    // يضمن ظهور أي طالب بغض النظر عن ترتيبه الزمني.
+    studentApi
+      .list({ status: "مفصول", pageSize: 200 })
+      .then((dismissedResult) => {
         if (cancelled) return;
-        const all = [
-          ...(dismissedResult?.students || []),
-          ...(allResult?.students || []),
-        ];
+        const all = dismissedResult?.students || [];
         mergeStudentsCache(all as unknown as Student[]);
       })
       .catch(() => {
@@ -470,7 +497,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return () => {
       cancelled = true;
     };
-  }, [view, debouncedGlobalSearch, mergeStudentsCache]);
+  }, [view, mergeStudentsCache]);
 
   const [leaveStudentId, setLeaveStudentId] = useState("");
   const [leaveMode, setLeaveMode] = useState<LeaveMode>("exam");
@@ -672,28 +699,30 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }, [view, students.length, studentNotes.length]);
 
   const filteredStudents = useMemo(() => {
-    const query = globalSearch;
-    return students
-      .filter(
-        (student) =>
-          !query ||
-          searchAny(query, [
-            student.name,
-            student.code,
-            student.phone,
-            student.parentPhone,
-            student.telegram,
-            student.school,
-            student.subSite,
-            student.studyType,
-          ]),
+    // نتائج منتقي الإجازات تأتي مباشرة من الخادم (leavePickerStudents).
+    // هذا يضمن ظهور أي طالب بغض النظر عن ترتيبه في الكاش المحلي.
+    // نطبّق فلترة محلية إضافية بسيطة بالاستعلام نفسه لتسريع الكتابة.
+    const query = globalSearch.trim().toLowerCase();
+    if (!query) return leavePickerStudents.slice(0, 30);
+    return leavePickerStudents
+      .filter((student) =>
+        searchAny(globalSearch, [
+          student.name,
+          student.code,
+          student.phone,
+          student.parentPhone,
+          student.telegram,
+          student.school,
+          student.subSite,
+          student.studyType,
+        ]),
       )
-      .slice(0, 20);
-  }, [students, globalSearch]);
+      .slice(0, 30);
+  }, [leavePickerStudents, globalSearch]);
 
-  const selectedLeaveStudent = students.find(
-    (student) => student.id === leaveStudentId,
-  );
+  const selectedLeaveStudent =
+    students.find((student) => student.id === leaveStudentId) ||
+    leavePickerStudents.find((student) => student.id === leaveStudentId);
   const selectedProfileStudent =
     students.find((student) => student.id === profileStudentId) || null;
   const selectedCallCourse =
@@ -1489,6 +1518,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           placeholder="اسم / كود / هاتف / مدرسة"
         />
         <div className="max-h-44 space-y-1 overflow-y-auto rounded-2xl border bg-muted/30 p-2">
+          {leavePickerLoading && filteredStudents.length === 0 && (
+            <p className="px-2 py-3 text-xs text-muted-foreground">جاري البحث…</p>
+          )}
+          {!leavePickerLoading && filteredStudents.length === 0 && (
+            <p className="px-2 py-3 text-xs text-muted-foreground">
+              لا توجد نتائج مطابقة
+            </p>
+          )}
           {filteredStudents.map((student) => (
             <button
               key={student.id}
