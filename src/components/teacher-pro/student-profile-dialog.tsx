@@ -14,7 +14,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { formatAppDate } from "@/lib/format";
 import { formatGradeScore, isExamWithinStudentGracePeriod } from "@/lib/exam-utils";
-import { studentProfileStatsApi, type StudentProfileStatsResponse } from "@/lib/api";
+import {
+  gradeApi,
+  studentProfileStatsApi,
+  type StudentProfileStatsResponse,
+} from "@/lib/api";
 import { ArrowRightIcon } from "lucide-react";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "actions";
@@ -142,12 +146,24 @@ export function StudentProfileDialog({
   const [tab, setTab] = useState<StudentFileTab>("details");
   const [databaseStats, setDatabaseStats] = useState<StudentProfileStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
+  const [databaseGrades, setDatabaseGrades] = useState<Grade[]>([]);
+  const [databaseGradesLoading, setDatabaseGradesLoading] = useState(false);
+  const [databaseGradesError, setDatabaseGradesError] = useState<string | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
 
-  const studentGrades = useMemo(
+  const localStudentGrades = useMemo(
     () => (student ? grades.filter((grade) => grade.studentId === student.id) : []),
     [grades, student],
   );
+
+  const studentGrades = useMemo(() => {
+    const byId = new Map<string, Grade>();
+    for (const grade of localStudentGrades) byId.set(grade.id, grade);
+    for (const grade of databaseGrades) byId.set(grade.id, grade);
+    return Array.from(byId.values()).sort((a, b) =>
+      String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")),
+    );
+  }, [localStudentGrades, databaseGrades]);
 
   const studentOpportunities = useMemo(
     () => (student ? opportunityLogs.filter((log) => log.studentId === student.id) : []),
@@ -296,6 +312,43 @@ export function StudentProfileDialog({
     };
   }, [open, student?.id]);
 
+  useEffect(() => {
+    if (!open || !student?.id) {
+      setDatabaseGrades([]);
+      setDatabaseGradesLoading(false);
+      setDatabaseGradesError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setDatabaseGradesLoading(true);
+    setDatabaseGradesError(null);
+
+    gradeApi
+      .listAll({ studentId: student.id, pageSize: 500 })
+      .then((result) => {
+        if (cancelled) return;
+        if (!result) {
+          setDatabaseGrades([]);
+          setDatabaseGradesError("تعذر تحميل درجات الطالب من الخادم حالياً.");
+          return;
+        }
+        setDatabaseGrades((result.grades || []) as unknown as Grade[]);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDatabaseGrades([]);
+        setDatabaseGradesError("تعذر تحميل درجات الطالب من الخادم حالياً.");
+      })
+      .finally(() => {
+        if (!cancelled) setDatabaseGradesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, student?.id]);
+
   if (!open || !student) return null;
 
   const activeChapter = activeChapterForCourse(student.courseId);
@@ -318,6 +371,14 @@ export function StudentProfileDialog({
   const examCount = profileStatValue(databaseStats?.exams);
   const deductedCount = profileStatValue(databaseStats?.deductedMovements);
   const addedCount = profileStatValue(databaseStats?.addedMovements);
+
+  const gradesEmptyMessage = databaseGradesLoading
+    ? "جاري تحميل درجات الطالب من الخادم…"
+    : databaseGradesError
+      ? databaseGradesError
+      : databaseStats && databaseStats.grades > 0 && studentGrades.length === 0
+        ? "توجد درجات محفوظة في قاعدة البيانات لكن تعذر عرضها الآن. حدّث الصفحة أو أعد فتح الملف."
+        : "لا توجد درجات لهذا الطالب";
 
   const cards: { id: StudentFileTab; label: string; value: string | number; hint: string }[] = [
     { id: "grades", label: "الدرجات", value: profileStatValue(databaseStats?.grades), hint: "عرض درجات الطالب" },
@@ -434,7 +495,7 @@ export function StudentProfileDialog({
               <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
                 <h4 className="mb-4 text-base font-black sm:text-lg">درجات الطالب</h4>
                 <div className="space-y-2">
-                  {studentGrades.length === 0 ? <p className="empty-state py-8">لا توجد درجات لهذا الطالب</p> : studentGrades.map((grade) => {
+                  {studentGrades.length === 0 ? <p className="empty-state py-8">{gradesEmptyMessage}</p> : studentGrades.map((grade) => {
                     const exam = exams.find((item) => item.id === grade.examId);
                     const withinGrace = Boolean(exam && isExamWithinStudentGracePeriod(student, exam));
                     const withoutDiscount = Boolean(exam?.noDiscount);
@@ -463,7 +524,7 @@ export function StudentProfileDialog({
               <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
                 <h4 className="mb-4 text-base font-black sm:text-lg">امتحانات الطالب</h4>
                 <div className="grid gap-3 lg:grid-cols-2">
-                  {studentGrades.length === 0 ? <p className="empty-state py-8 lg:col-span-2">لا توجد امتحانات مسجلة لهذا الطالب</p> : studentGrades.map((grade) => {
+                  {studentGrades.length === 0 ? <p className="empty-state py-8 lg:col-span-2">{gradesEmptyMessage}</p> : studentGrades.map((grade) => {
                     const exam = exams.find((item) => item.id === grade.examId);
                     if (!exam) return null;
                     const withinGrace = isExamWithinStudentGracePeriod(student, exam);
