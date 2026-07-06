@@ -33,6 +33,7 @@ import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
+import { StudentProfileDialog } from "./student-profile-dialog";
 
 const opportunityExportColumns: ExportColumn<any>[] = [
   { key: "student", label: "الطالب", value: (s) => s.name || "" },
@@ -58,7 +59,12 @@ export function OpportunitiesView() {
     students,
     courses,
     exams,
+    grades,
     opportunityLogs,
+    studentLeaves,
+    studentCalls,
+    studentNotes,
+    logs,
     adjustOpportunities,
     bulkAdjustOpportunities,
     resetOpportunities,
@@ -306,6 +312,63 @@ export function OpportunitiesView() {
       { deducted: 0, added: 0, examLinked: 0 },
     );
   }, [selectedDetailsLogs]);
+
+  const [profileStudentId, setProfileStudentId] = useState("");
+
+  const selectedProfileStudent = useMemo(
+    () =>
+      students.find((student) => student.id === profileStudentId) ||
+      serverStudents.find((student) => student.id === profileStudentId) ||
+      null,
+    [students, serverStudents, profileStudentId],
+  );
+
+  const phoneForWhatsApp = (phone?: string) => {
+    const digits = String(phone || "").replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.startsWith("964")) return digits;
+    if (digits.startsWith("0")) return `964${digits.slice(1)}`;
+    return digits;
+  };
+
+  const whatsappLink = (phone: string) => {
+    const digits = phoneForWhatsApp(phone);
+    return digits ? `https://wa.me/${digits}` : "#";
+  };
+
+  const telegramLink = (telegram: string) => {
+    const username = String(telegram || "").trim().replace(/^@+/, "");
+    return username ? `https://t.me/${encodeURIComponent(username)}` : "#";
+  };
+
+  const graceEndDate = (student: Student): string => {
+    const start = new Date(
+      `${String(student.createdAt || "").slice(0, 10)}T00:00:00`,
+    );
+    const days = Number(student.accountingGraceDays || 0);
+    if (!Number.isFinite(start.getTime()) || days <= 0)
+      return formatAppDate(
+        student.createdAt,
+        String(student.createdAt || "").slice(0, 10) || "-",
+      );
+    const end = new Date(start);
+    end.setDate(end.getDate() + days - 1);
+    return formatAppDate(end);
+  };
+
+  const isStudentCurrentlyInGrace = (student: Student): boolean => {
+    const days = Number(student.accountingGraceDays || 0);
+    if (days <= 0) return false;
+    const start = new Date(
+      `${String(student.createdAt || "").slice(0, 10)}T00:00:00`,
+    );
+    const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00`);
+    const endExclusive = new Date(start);
+    endExclusive.setDate(endExclusive.getDate() + days);
+    return (
+      Number.isFinite(start.getTime()) && today >= start && today < endExclusive
+    );
+  };
 
   const cleanOpportunityReason = (reason: string | null | undefined) => {
     const text = String(reason || "")
@@ -843,6 +906,14 @@ export function OpportunitiesView() {
                     {/* Actions */}
                     <div className="flex flex-wrap gap-1 lg:justify-end">
                       <Button
+                        variant="default"
+                        size="sm"
+                        className="text-xs font-bold"
+                        onClick={() => setProfileStudentId(student.id)}
+                      >
+                        ملف الطالب
+                      </Button>
+                      <Button
                         variant="outline"
                         size="sm"
                         className="text-xs"
@@ -1111,6 +1182,28 @@ export function OpportunitiesView() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+
+      <StudentProfileDialog
+        student={selectedProfileStudent}
+        open={Boolean(profileStudentId && selectedProfileStudent)}
+        onOpenChange={(open) => {
+          if (!open) setProfileStudentId("");
+        }}
+        exams={exams}
+        grades={grades}
+        opportunityLogs={opportunityLogs}
+        studentLeaves={studentLeaves}
+        studentCalls={studentCalls}
+        studentNotes={studentNotes}
+        logs={logs}
+        courseName={courseName}
+        activeChapterForCourse={activeChapterForCourse}
+        whatsappLink={whatsappLink}
+        telegramLink={telegramLink}
+        isStudentCurrentlyInGrace={isStudentCurrentlyInGrace}
+        graceEndDate={graceEndDate}
+      />
 
       <Dialog
         open={bulkActionDialog.open}
