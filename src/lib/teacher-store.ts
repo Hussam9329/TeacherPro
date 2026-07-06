@@ -1625,34 +1625,31 @@ function repairAbsentDiscountAccountingIfNeeded(
 }
 
 /**
- * إصلاح تلقائي صامت للطلاب الذين فرصهم 0/0 رغم وجود فصل نشط لدورتهم.
- * يُستدعى مرة واحدة لكل جلسة متصفح (sessionStorage) بعد نجاح loadFromServer.
- *
- * السبب: بعض الطلاب أُضيفوا قبل إصلاح lazy-load لـ courseChapters، فأُرسلت
- * لهم فرص 0/0 صراحةً من النموذج واحترمها الخادم. هذا الإصلاح يمنحهم
- * تلقائياً فرص الفصل النشط الحالي بدون تدخل المستخدم.
- *
- * الـ endpoint آمن: يتجاهل الطلاب الذين فرصهم صحيحة، ويتجاهل الدورات
- * بدون فصل نشط. يعمل فقط إذا كان لدى المستخدم صلاحية students.edit،
- * وإلا فشل بصمت (403) ولا يؤثر على باقي التطبيق.
+ * إصلاح أكاديمي شامل صامت بعد تحديثات القواعد.
+ * يعمل مرة واحدة لكل نسخة باتش في المتصفح، والـ endpoint نفسه آمن وقابل للتكرار:
+ * يحذف سجلات الخصم/الفصل التلقائية القديمة ويعيد احتسابها حسب القواعد الحالية.
  */
-const ZERO_OPP_FIX_FLAG = "teacherpro:zero-opp-auto-fix-v1";
+const ACADEMIC_REPAIR_FLAG = "teacherpro:academic-repair-v8-20260706";
 
 function triggerAutoFixZeroOpportunities(): void {
   if (typeof window === "undefined") return;
-  if (window.sessionStorage.getItem(ZERO_OPP_FIX_FLAG)) return;
-  window.sessionStorage.setItem(ZERO_OPP_FIX_FLAG, "1");
+  if (window.localStorage.getItem(ACADEMIC_REPAIR_FLAG)) return;
+  window.localStorage.setItem(ACADEMIC_REPAIR_FLAG, "1");
 
-  // اطلب كلا الإصلاحين بالتوازي:
-  //  1) fix-zero-opportunities: يرفع الطلاب الذين فرصهم 0/0 إلى فرص الفصل النشط.
-  //  2) clamp-opportunities: يخفض الطلاب الذين فرصهم تتجاوز سقف الفصل النشط.
-  // كلاهما آمن: لا يلمس الطلاب الذين فرصهم صحيحة، ولا يلمس الدورات بدون فصل نشط.
+  const runRepair = fetch("/api/students/academic-repair", {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+  })
+    .then((response) => (response.ok ? response.json() : null))
+    .catch(() => null);
+
   const fixZeroPromise = fetch("/api/students/fix-zero-opportunities", {
     method: "PATCH",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
   })
-    .then((response) => response.json())
+    .then((response) => (response.ok ? response.json() : null))
     .catch(() => null);
 
   const clampPromise = fetch("/api/students/clamp-opportunities", {
@@ -1660,27 +1657,26 @@ function triggerAutoFixZeroOpportunities(): void {
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
   })
-    .then((response) => response.json())
+    .then((response) => (response.ok ? response.json() : null))
     .catch(() => null);
 
-  Promise.all([fixZeroPromise, clampPromise])
-    .then(([fixZero, clamp]: readonly [any, any]) => {
+  Promise.all([runRepair, fixZeroPromise, clampPromise])
+    .then(([repair, fixZero, clamp]: readonly [any, any, any]) => {
+      const recalculated = Number(repair?.recalculatedStudents || 0);
       const fixedZero = Number(fixZero?.fixedTotal || 0);
       const fixedClamp = Number(clamp?.fixedTotal || 0);
-      const totalFixed = fixedZero + fixedClamp;
-      if (totalFixed > 0) {
+      const totalTouched = recalculated + fixedZero + fixedClamp;
+      if (totalTouched > 0) {
         console.info(
-          `[auto-fix] تم ضبط ${totalFixed} طالب تلقائياً (تصفير: ${fixedZero}، تثبيت: ${fixedClamp}).`,
+          `[auto-repair] تم فحص/تصحيح ${totalTouched} طالب تلقائياً (إعادة احتساب: ${recalculated}، تصفير: ${fixedZero}، تثبيت: ${fixedClamp}).`,
         );
         window.dispatchEvent(new CustomEvent("teacherpro:students-updated"));
       }
     })
     .catch((err) => {
-      // فشل صامت — لا نريد إزعاج المستخدم. سيتحقق المشرف يدوياً عند الحاجة.
-      console.warn("[auto-fix] فشل الإصلاح التلقائي لفرص الطلاب:", err);
-      // اسمح بإعادة المحاولة في الجلسة القادمة.
+      console.warn("[auto-repair] فشل الإصلاح الأكاديمي التلقائي:", err);
       try {
-        window.sessionStorage.removeItem(ZERO_OPP_FIX_FLAG);
+        window.localStorage.removeItem(ACADEMIC_REPAIR_FLAG);
       } catch {
         // ignore
       }
@@ -2728,8 +2724,8 @@ export const useTeacherStore = create<TeacherState>()(
             repairAbsentDiscountAccountingIfNeeded(get);
           }
 
-          // إصلاح تلقائي صامت لفرص الطلاب (0/0) مرة واحدة لكل جلسة متصفح.
-          // الـ endpoint نفسه يتجاهل الطلاب السليمين، فلا ضرر من استدعائه.
+          // إصلاح أكاديمي شامل صامت بعد تحديثات القواعد.
+          // يعيد احتساب الطلاب المتأثرين بقواعد قديمة بدون تكرار خصومات.
           triggerAutoFixZeroOpportunities();
 
           // Note: we no longer auto-sync the admin user's role/permissions

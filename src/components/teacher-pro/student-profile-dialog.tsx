@@ -15,10 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { formatAppDate } from "@/lib/format";
 import { formatGradeScore, isExamWithinStudentGracePeriod } from "@/lib/exam-utils";
 import {
-  gradeApi,
+  studentProfileLogApi,
   studentProfileStatsApi,
   type StudentProfileStatsResponse,
 } from "@/lib/api";
+import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib/grade-classification";
 import { ArrowRightIcon } from "lucide-react";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "actions";
@@ -125,6 +126,120 @@ function systemLogMatchesStudent(log: LogEntry, student: Student) {
   return candidates.some((value) => haystack.includes(value));
 }
 
+function mergeById<T extends { id: string }>(localItems: T[], databaseItems: T[]): T[] {
+  const byId = new Map<string, T>();
+  for (const item of localItems) byId.set(item.id, item);
+  for (const item of databaseItems) byId.set(item.id, item);
+  return Array.from(byId.values());
+}
+
+function examPenaltyText(exam?: Exam): string {
+  if (!exam || exam.noDiscount) return "0";
+  if (exam.type === "فاينل") return "فصل/تصفير الفرص حسب القاعدة";
+  const penalty = Number(exam.opportunitiesPenalty || 0);
+  return Number.isFinite(penalty) && penalty > 0 ? String(Math.trunc(penalty)) : "1";
+}
+
+function gradeImpactLabel(kind: GradeClassificationKind, grade: Grade, exam?: Exam): string {
+  if (!exam) return "تعذر تحديد قاعدة الامتحان لأن الامتحان محذوف.";
+  if (kind === "excused") return "لم يتم الخصم: الطالب لديه إجازة تغطي هذا الامتحان.";
+  if (kind === "before-registration") return "لم يتم الخصم: الامتحان قبل تاريخ تسجيل الطالب.";
+  if (kind === "grace-period") return "لم يتم الخصم: الامتحان ضمن فترة السماح المحاسبية للطالب.";
+  if (kind === "no-discount-protected") return "لم يتم الخصم: هذا الامتحان مضبوط كـ بدون خصم.";
+  if (kind === "missing") return "لا توجد محاسبة لأن الدرجة غير مكتملة.";
+  if (kind === "cheating") return "غش: أول حالة تفصل مؤقتاً وتصفّر الفرص، والتكرار يفصل نهائياً.";
+  if (kind === "absent-dismissal") return "غائب: يعامل كفصل مؤقت لأنه غياب في امتحان فاينل.";
+  if (kind === "absent-deducted") return `غائب: تم احتسابه كغياب مخصوم، مقدار الخصم ${examPenaltyText(exam)} فرصة.`;
+  if (kind === "discounted") return `درجة ضمن الخصم: تم خصم ${examPenaltyText(exam)} فرصة.`;
+  if (kind === "dismissal") return "درجة فصل/صفر: يعامل كفصل مؤقت ويستهلك الفرص المتبقية.";
+  if (kind === "academic-accounting") return "راسب غير مخصوم: محسوب أكاديمياً بدون خصم فرص مباشر.";
+  if (kind === "failed") return "راسب بدون خصم فرص مباشر.";
+  if (kind === "passed" || kind === "full-mark") return "ناجح: لا يوجد خصم.";
+  return grade.status === "غائب" ? "غائب: راجع سجل الفرص لمعرفة هل تم الخصم." : "لا يوجد أثر فرص مباشر.";
+}
+
+function relatedOpportunityLogsForGrade(
+  grade: Grade,
+  exam: Exam | undefined,
+  opportunityLogs: OpportunityLog[],
+): OpportunityLog[] {
+  return opportunityLogs.filter((log) => {
+    if (log.examId !== grade.examId) return false;
+    const reason = String(log.reason || "");
+    if (log.id.includes(grade.id)) return true;
+    if (exam?.name && reason.includes(exam.name)) return true;
+    if (grade.status === "غائب" && reason.includes("غياب")) return true;
+    if (grade.status === "غش" && reason.includes("غش")) return true;
+    if (grade.status === "درجة" && (reason.includes("درجة") || reason.includes("انتهاء الفرص"))) return true;
+    return false;
+  });
+}
+
+function gradeLogDetailsWithAccounting(
+  grade: Grade,
+  student: Student,
+  exam: Exam | undefined,
+  leaves: StudentLeave[],
+  opportunityLogs: OpportunityLog[],
+) {
+  const base = gradeLogDetails(grade, exam);
+  if (!exam) return base;
+  const kind = classifyGradeAcademicImpact(grade, exam, { student, leaves });
+  const relatedLogs = relatedOpportunityLogsForGrade(grade, exam, opportunityLogs);
+  const logSummary = relatedLogs.length
+    ? ` | سجل الفرص المرتبط: ${relatedLogs
+        .map((log) => `${log.action}${log.amount ? ` ${log.amount}` : ""}`)
+        .join("، ")}`
+    : " | لا يوجد سجل خصم مرتبط بهذا الامتحان";
+  return `${base} | الأثر الأكاديمي: ${gradeImpactLabel(kind, grade, exam)}${logSummary}`;
+}
+
+type OpportunityTraceRow = {
+  log: OpportunityLog;
+  before: number;
+  after: number;
+  deltaText: string;
+  details: string;
+};
+
+function buildOpportunityTraceRows(
+  logs: OpportunityLog[],
+  baseOpportunities: number,
+): OpportunityTraceRow[] {
+  let balance = Math.max(0, Math.trunc(Number(baseOpportunities || 0)));
+  return [...logs]
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.id || "").localeCompare(String(b.id || "")))
+    .map((log) => {
+      const before = balance;
+      const amount = Math.max(0, Math.trunc(Number(log.amount || 0)));
+      const action = String(log.action || "");
+      let deltaText = "بدون تغيير مباشر";
+
+      if (action === "إضافة" || action.includes("إعادة تفعيل")) {
+        balance += amount;
+        deltaText = `+${amount}`;
+      } else if (action === "خصم" || action === "خصم تلقائي") {
+        balance = Math.max(0, balance - amount);
+        deltaText = `-${amount}`;
+      } else if (action === "إعادة تعيين") {
+        balance = Math.max(0, Math.trunc(Number(baseOpportunities || 0)));
+        deltaText = "إعادة تعيين للرصيد الأساسي";
+      } else if (action.includes("فرصة أخيرة")) {
+        balance = amount || 1;
+        deltaText = `تثبيت فرصة أخيرة: ${balance}`;
+      }
+
+      const after = balance;
+      return {
+        log,
+        before,
+        after,
+        deltaText,
+        details: `${log.reason || "—"} | الرصيد قبل: ${before} | التغيير: ${deltaText} | الرصيد بعد: ${after}`,
+      };
+    });
+}
+
 export function StudentProfileDialog({
   student,
   open,
@@ -147,6 +262,11 @@ export function StudentProfileDialog({
   const [databaseStats, setDatabaseStats] = useState<StudentProfileStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
   const [databaseGrades, setDatabaseGrades] = useState<Grade[]>([]);
+  const [databaseOpportunityLogs, setDatabaseOpportunityLogs] = useState<OpportunityLog[]>([]);
+  const [databaseStudentLeaves, setDatabaseStudentLeaves] = useState<StudentLeave[]>([]);
+  const [databaseStudentCalls, setDatabaseStudentCalls] = useState<StudentCall[]>([]);
+  const [databaseStudentNotes, setDatabaseStudentNotes] = useState<StudentNote[]>([]);
+  const [databaseLogs, setDatabaseLogs] = useState<LogEntry[]>([]);
   const [databaseGradesLoading, setDatabaseGradesLoading] = useState(false);
   const [databaseGradesError, setDatabaseGradesError] = useState<string | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -165,30 +285,63 @@ export function StudentProfileDialog({
     );
   }, [localStudentGrades, databaseGrades]);
 
-  const studentOpportunities = useMemo(
-    () => (student ? opportunityLogs.filter((log) => log.studentId === student.id) : []),
-    [opportunityLogs, student],
-  );
+  const studentOpportunities = useMemo(() => {
+    if (!student) return [];
+    return mergeById(
+      opportunityLogs.filter((log) => log.studentId === student.id),
+      databaseOpportunityLogs,
+    ).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  }, [opportunityLogs, databaseOpportunityLogs, student]);
 
-  const studentLeavesForProfile = useMemo(
-    () => (student ? studentLeaves.filter((leave) => leave.studentId === student.id) : []),
-    [studentLeaves, student],
-  );
+  const studentLeavesForProfile = useMemo(() => {
+    if (!student) return [];
+    return mergeById(
+      studentLeaves.filter((leave) => leave.studentId === student.id),
+      databaseStudentLeaves,
+    ).sort((a, b) => String(b.date || b.dateFrom || "").localeCompare(String(a.date || a.dateFrom || "")));
+  }, [studentLeaves, databaseStudentLeaves, student]);
 
-  const studentCallsForProfile = useMemo(
-    () => (student ? studentCalls.filter((call) => call.studentId === student.id) : []),
-    [studentCalls, student],
-  );
+  const studentCallsForProfile = useMemo(() => {
+    if (!student) return [];
+    return mergeById(
+      studentCalls.filter((call) => call.studentId === student.id),
+      databaseStudentCalls,
+    ).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  }, [studentCalls, databaseStudentCalls, student]);
 
-  const allStudentNotes = useMemo(
-    () => (student ? studentNotes.filter((note) => note.studentId === student.id) : []),
-    [studentNotes, student],
-  );
+  const allStudentNotes = useMemo(() => {
+    if (!student) return [];
+    return mergeById(
+      studentNotes.filter((note) => note.studentId === student.id),
+      databaseStudentNotes,
+    ).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  }, [studentNotes, databaseStudentNotes, student]);
+
+  const profileSystemLogs = useMemo(() => {
+    if (!student) return [];
+    return mergeById(
+      logs.filter((log) => systemLogMatchesStudent(log, student)),
+      databaseLogs,
+    ).sort((a, b) => String(b.time || "").localeCompare(String(a.time || "")));
+  }, [logs, databaseLogs, student]);
 
   const studentActionNotes = useMemo(
     () => allStudentNotes.filter((note) => note.kind === "إجراء"),
     [allStudentNotes],
   );
+
+  const opportunityTraceRows = useMemo(() => {
+    const base = Number(
+      databaseStats?.baseOpportunities ?? student?.baseOpportunities ?? 0,
+    );
+    return buildOpportunityTraceRows(studentOpportunities, base);
+  }, [studentOpportunities, databaseStats?.baseOpportunities, student?.baseOpportunities]);
+
+  const opportunityTraceByLogId = useMemo(() => {
+    const map = new Map<string, OpportunityTraceRow>();
+    opportunityTraceRows.forEach((row) => map.set(row.log.id, row));
+    return map;
+  }, [opportunityTraceRows]);
 
   const studentActions = useMemo<StudentActionRow[]>(() => {
     if (!student) return [];
@@ -199,15 +352,18 @@ export function StudentProfileDialog({
       details: note.text,
       tone: note.text.includes("فصل") ? "danger" as const : note.text.includes("إعادة تفعيل") ? "success" as const : "secondary" as const,
     }));
-    const opportunityRows = studentOpportunities.map((log) => ({
-      id: `opp-${log.id}`,
-      date: log.date,
-      title: `${log.action}${log.amount ? ` ${log.amount}` : ""}`,
-      details: log.reason || "—",
-      tone: opportunityActionTone(log.action),
-    }));
+    const opportunityRows = studentOpportunities.map((log) => {
+      const trace = opportunityTraceByLogId.get(log.id);
+      return {
+        id: `opp-${log.id}`,
+        date: log.date,
+        title: `${log.action}${log.amount ? ` ${log.amount}` : ""}`,
+        details: trace?.details || log.reason || "—",
+        tone: opportunityActionTone(log.action),
+      };
+    });
     return [...noteRows, ...opportunityRows].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  }, [student, studentActionNotes, studentOpportunities]);
+  }, [student, studentActionNotes, studentOpportunities, opportunityTraceByLogId]);
 
   const fullStudentLog = useMemo<StudentLogRow[]>(() => {
     if (!student) return [];
@@ -226,17 +382,20 @@ export function StudentProfileDialog({
         date: grade.updatedAt || grade.createdAt,
         source: "الدرجات",
         title: grade.status === "درجة" ? "درجة محفوظة" : grade.status,
-        details: gradeLogDetails(grade, examById.get(grade.examId)),
+        details: gradeLogDetailsWithAccounting(grade, student, examById.get(grade.examId), studentLeavesForProfile, studentOpportunities),
         tone: grade.status === "درجة" ? "default" as const : grade.status === "غائب" ? "danger" as const : "secondary" as const,
       })),
-      ...studentOpportunities.map((log) => ({
-        id: `opp-${log.id}`,
-        date: log.date,
-        source: "الفرص",
-        title: `${log.action}${log.amount ? ` ${log.amount}` : ""}`,
-        details: log.reason || "—",
-        tone: opportunityActionTone(log.action),
-      })),
+      ...studentOpportunities.map((log) => {
+        const trace = opportunityTraceByLogId.get(log.id);
+        return {
+          id: `opp-${log.id}`,
+          date: log.date,
+          source: "الفرص",
+          title: `${log.action}${log.amount ? ` ${log.amount}` : ""}`,
+          details: trace?.details || log.reason || "—",
+          tone: opportunityActionTone(log.action),
+        };
+      }),
       ...studentLeavesForProfile.map((leave) => ({
         id: `leave-${leave.id}`,
         date: leave.date || leave.dateFrom,
@@ -266,7 +425,7 @@ export function StudentProfileDialog({
           tone: note.kind === "تعهد ولي الأمر" ? "success" as const : note.kind === "إجراء" ? "secondary" as const : "info" as const,
         };
       }),
-      ...logs.filter((log) => systemLogMatchesStudent(log, student)).map((log) => ({
+      ...profileSystemLogs.map((log) => ({
         id: `sys-${log.id}`,
         date: log.time,
         source: log.module || "النظام",
@@ -279,7 +438,7 @@ export function StudentProfileDialog({
     return rows
       .filter((row) => row.date || row.details)
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  }, [student, exams, studentGrades, studentOpportunities, studentLeavesForProfile, studentCallsForProfile, allStudentNotes, logs, courseName]);
+  }, [student, exams, studentGrades, studentOpportunities, studentLeavesForProfile, studentCallsForProfile, allStudentNotes, profileSystemLogs, courseName, opportunityTraceByLogId]);
 
   useEffect(() => {
     if (!open) return;
@@ -315,6 +474,11 @@ export function StudentProfileDialog({
   useEffect(() => {
     if (!open || !student?.id) {
       setDatabaseGrades([]);
+      setDatabaseOpportunityLogs([]);
+      setDatabaseStudentLeaves([]);
+      setDatabaseStudentCalls([]);
+      setDatabaseStudentNotes([]);
+      setDatabaseLogs([]);
       setDatabaseGradesLoading(false);
       setDatabaseGradesError(null);
       return;
@@ -324,21 +488,36 @@ export function StudentProfileDialog({
     setDatabaseGradesLoading(true);
     setDatabaseGradesError(null);
 
-    gradeApi
-      .listAll({ studentId: student.id, pageSize: 500 })
+    studentProfileLogApi
+      .get(student.id)
       .then((result) => {
         if (cancelled) return;
         if (!result) {
           setDatabaseGrades([]);
-          setDatabaseGradesError("تعذر تحميل درجات الطالب من الخادم حالياً.");
+          setDatabaseOpportunityLogs([]);
+          setDatabaseStudentLeaves([]);
+          setDatabaseStudentCalls([]);
+          setDatabaseStudentNotes([]);
+          setDatabaseLogs([]);
+          setDatabaseGradesError("تعذر تحميل لوغ الطالب الكامل من الخادم حالياً.");
           return;
         }
         setDatabaseGrades((result.grades || []) as unknown as Grade[]);
+        setDatabaseOpportunityLogs((result.opportunityLogs || []) as unknown as OpportunityLog[]);
+        setDatabaseStudentLeaves((result.studentLeaves || []) as unknown as StudentLeave[]);
+        setDatabaseStudentCalls((result.studentCalls || []) as unknown as StudentCall[]);
+        setDatabaseStudentNotes((result.studentNotes || []) as unknown as StudentNote[]);
+        setDatabaseLogs((result.logs || []) as unknown as LogEntry[]);
       })
       .catch(() => {
         if (cancelled) return;
         setDatabaseGrades([]);
-        setDatabaseGradesError("تعذر تحميل درجات الطالب من الخادم حالياً.");
+        setDatabaseOpportunityLogs([]);
+        setDatabaseStudentLeaves([]);
+        setDatabaseStudentCalls([]);
+        setDatabaseStudentNotes([]);
+        setDatabaseLogs([]);
+        setDatabaseGradesError("تعذر تحميل لوغ الطالب الكامل من الخادم حالياً.");
       })
       .finally(() => {
         if (!cancelled) setDatabaseGradesLoading(false);
@@ -546,8 +725,8 @@ export function StudentProfileDialog({
                 <h4 className="mb-4 text-base font-black sm:text-lg">سجل الفرص</h4>
                 <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3"><div className="rounded-2xl bg-primary/10 p-3 text-center"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-xs text-muted-foreground">الفرص الحالية</p></div><div className="rounded-2xl bg-red-500/10 p-3 text-center"><p className="text-xl font-black text-red-600 sm:text-2xl">{deductedCount}</p><p className="text-xs text-muted-foreground">حركات خصم</p></div><div className="rounded-2xl bg-emerald-500/10 p-3 text-center"><p className="text-xl font-black text-emerald-600 sm:text-2xl">{addedCount}</p><p className="text-xs text-muted-foreground">حركات إضافة/تعديل</p></div></div>
                 <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                  {studentOpportunities.length === 0 ? <p className="empty-state py-8">لا توجد حركات فرص</p> : studentOpportunities.map((row) => (
-                    <div key={row.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center"><span>{formatAppDate(row.date)}</span><Badge className="w-fit" variant={row.action === "خصم" || row.action === "خصم تلقائي" ? "destructive" : "default"}>{row.action} {row.amount}</Badge><span className="break-words text-muted-foreground">{row.reason}</span></div>
+                  {opportunityTraceRows.length === 0 ? <p className="empty-state py-8">لا توجد حركات فرص</p> : [...opportunityTraceRows].reverse().map((row) => (
+                    <div key={row.log.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center"><span>{formatAppDate(row.log.date)}</span><Badge className="w-fit" variant={row.log.action === "خصم" || row.log.action === "خصم تلقائي" ? "destructive" : "default"}>{row.log.action} {row.log.amount}</Badge><span className="break-words text-muted-foreground">{row.details}</span></div>
                   ))}
                 </div>
               </div>

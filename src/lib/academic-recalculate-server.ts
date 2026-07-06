@@ -225,6 +225,82 @@ function automaticOpportunityLogWhere(studentIds: string[]): Prisma.OpportunityL
   };
 }
 
+function chunks<T>(items: T[], size = 200): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    result.push(items.slice(index, index + size));
+  }
+  return result;
+}
+
+async function repairAcademicBaselinesForStudents(
+  client: PrismaClientLike,
+  studentIds: string[],
+): Promise<number> {
+  if (studentIds.length === 0) return 0;
+
+  const students = await client.student.findMany({
+    where: { id: { in: studentIds }, status: { not: "مؤرشف" } },
+    select: { id: true, courseId: true, baseOpportunities: true },
+  });
+  if (students.length === 0) return 0;
+
+  const courseIds = uniqueIds(students.map((student) => student.courseId));
+  const activeLinks = await client.courseChapter.findMany({
+    where: { courseId: { in: courseIds }, active: true, archived: false },
+    select: { courseId: true, chapterId: true },
+  });
+  if (activeLinks.length === 0) return 0;
+
+  const chapterIds = uniqueIds(activeLinks.map((link) => link.chapterId));
+  const chapters = await client.chapter.findMany({
+    where: { id: { in: chapterIds } },
+    select: { id: true, opportunities: true },
+  });
+  const chapterOppById = new Map<string, number>(
+    chapters.map((chapter) => [
+      String(chapter.id),
+      Number(chapter.opportunities || 0),
+    ]),
+  );
+  const baselineByCourseId = new Map<string, number>(
+    activeLinks.map((link) => {
+      const chapterOpportunities = Number(
+        chapterOppById.get(String(link.chapterId)) ?? 0,
+      );
+      return [
+        String(link.courseId),
+        Math.max(0, Math.trunc(chapterOpportunities)),
+      ];
+    }),
+  );
+
+  let fixed = 0;
+  const updateIdsByBaseline = new Map<number, string[]>();
+  for (const student of students) {
+    const courseId = String(student.courseId || "");
+    const studentId = String(student.id || "");
+    if (!studentId || !baselineByCourseId.has(courseId)) continue;
+    const expectedBase = baselineByCourseId.get(courseId) ?? 0;
+    if (Number(student.baseOpportunities || 0) === expectedBase) continue;
+    const ids = updateIdsByBaseline.get(expectedBase) || [];
+    ids.push(studentId);
+    updateIdsByBaseline.set(expectedBase, ids);
+  }
+
+  for (const [baseOpportunities, ids] of updateIdsByBaseline.entries()) {
+    for (const group of chunks(ids, 500)) {
+      const update = await client.student.updateMany({
+        where: { id: { in: group } },
+        data: { baseOpportunities },
+      });
+      fixed += update.count;
+    }
+  }
+
+  return fixed;
+}
+
 async function loadAcademicStateForStudents(
   client: PrismaClientLike,
   studentIds: string[],
@@ -424,6 +500,7 @@ export async function recalculateStudentsAcademicState(
   }
 
   const client = options.tx || db;
+  await repairAcademicBaselinesForStudents(client, studentIds);
   const state = await loadAcademicStateForStudents(client, studentIds);
   const recalculableStudentIds = state.students
     .filter((student) => student.status !== "مؤرشف")
@@ -489,4 +566,43 @@ export async function recalculateStudentsForExam(
     ],
     { tx: options.tx },
   );
+}
+
+
+export async function recalculateAllStudentsAcademicState(
+  options: { batchSize?: number } = {},
+): Promise<{
+  ok: true;
+  totalStudents: number;
+  recalculatedStudents: number;
+  automaticOpportunityLogs: number;
+  batches: number;
+}> {
+  const batchSize = Math.min(500, Math.max(25, Math.trunc(Number(options.batchSize || 200))));
+  const students = await db.student.findMany({
+    where: { status: { not: "مؤرشف" } },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const studentIds: string[] = students
+    .map((student) => String(student.id || ""))
+    .filter((id): id is string => Boolean(id));
+  let recalculatedStudents = 0;
+  let automaticOpportunityLogs = 0;
+  let batches = 0;
+
+  for (const group of chunks(studentIds, batchSize)) {
+    batches += 1;
+    const result = await recalculateStudentsAcademicState(group);
+    recalculatedStudents += result.students.length;
+    automaticOpportunityLogs += result.automaticOpportunityLogs.length;
+  }
+
+  return {
+    ok: true,
+    totalStudents: studentIds.length,
+    recalculatedStudents,
+    automaticOpportunityLogs,
+    batches,
+  };
 }

@@ -566,6 +566,29 @@ export interface StudentProfileStatsResponse {
   generatedAt?: string;
 }
 
+export interface StudentProfileLogResponse {
+  studentId: string;
+  grades: Array<Record<string, unknown>>;
+  opportunityLogs: Array<Record<string, unknown>>;
+  studentLeaves: Array<Record<string, unknown>>;
+  studentCalls: Array<Record<string, unknown>>;
+  studentNotes: Array<Record<string, unknown>>;
+  logs: Array<Record<string, unknown>>;
+  source: "database";
+  generatedAt?: string;
+}
+
+export interface AcademicRepairResponse {
+  ok: true;
+  totalStudents: number;
+  recalculatedStudents: number;
+  automaticOpportunityLogs: number;
+  batches: number;
+  message: string;
+  source: "database";
+  generatedAt?: string;
+}
+
 export interface CallStatsQuery {
   courseId?: string;
   examId?: string;
@@ -1029,6 +1052,19 @@ export const studentProfileStatsApi = {
       `students/profile-stats${queryString ? `?${queryString}` : ""}`,
     );
   },
+};
+
+export const studentProfileLogApi = {
+  get: (studentId: string) => {
+    const queryString = buildQueryString({ studentId });
+    return apiGet<StudentProfileLogResponse>(
+      `students/profile-log${queryString ? `?${queryString}` : ""}`,
+    );
+  },
+};
+
+export const academicRepairApi = {
+  run: () => apiPost("students/academic-repair", {}) as Promise<ApiResult & { data?: AcademicRepairResponse }>,
 };
 
 export const opportunityStatsApi = {
