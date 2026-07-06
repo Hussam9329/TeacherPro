@@ -35,11 +35,17 @@ async function validateGradePayload(body: Record<string, unknown>) {
     }),
     db.student.findUnique({
       where: { id: String(body.studentId) },
-      select: { id: true, courseId: true },
+      select: { id: true, courseId: true, status: true, dismissalType: true },
     }),
   ]);
   if (!exam) return "الامتحان غير موجود";
   if (!student) return "الطالب غير موجود";
+
+  // منع إدخال درجة لطالب مفصول — لا يجوز محاسبته أكاديمياً بعد الفصل.
+  // العميل مسؤول عن تقديم زر "إعادة تفعيل" قبل السماح بإدخال درجات جديدة.
+  if (student.status === "مفصول") {
+    return "الطالب مفصول ولا يمكن إدخال درجات له. أعد تفعيل الطالب أولاً.";
+  }
 
   let courseIds: string[] = [];
   try {
