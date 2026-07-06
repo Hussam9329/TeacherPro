@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   type Exam,
   type Grade,
@@ -270,6 +271,11 @@ export function StudentProfileDialog({
   const [databaseGradesLoading, setDatabaseGradesLoading] = useState(false);
   const [databaseGradesError, setDatabaseGradesError] = useState<string | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const localStudentGrades = useMemo(
     () => (student ? grades.filter((grade) => grade.studentId === student.id) : []),
@@ -528,7 +534,7 @@ export function StudentProfileDialog({
     };
   }, [open, student?.id]);
 
-  if (!open || !student) return null;
+  if (!open || !student || !isMounted) return null;
 
   const activeChapter = activeChapterForCourse(student.courseId);
   const profileStatValue = (value: number | undefined) => {
@@ -569,11 +575,13 @@ export function StudentProfileDialog({
     { id: "grades", label: "بدون خصم", value: noDiscountGradeCount, hint: "درجات امتحانات لا تحاسب الطالب" },
   ];
 
-  return (
+  const profileContent = (
     <section
       dir="rtl"
-      className="fixed inset-0 z-[80] flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground"
+      className="fixed inset-0 z-[999] flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden bg-background text-foreground"
       aria-labelledby="student-profile-title"
+      role="dialog"
+      aria-modal="true"
     >
       <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background">
         <div className="sticky top-0 z-30 shrink-0 border-b bg-background/95 p-4 text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-6">
@@ -590,14 +598,24 @@ export function StudentProfileDialog({
               <p className="break-words text-xs leading-6 text-muted-foreground sm:text-sm">
                 {student.school || "بدون مدرسة"} - شاشة ملف الطالب
               </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="inline-flex w-fit min-h-10 items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 shadow-sm transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
+                className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-2 text-sm font-black text-primary shadow-sm transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/30"
                 aria-label="الرجوع من ملف الطالب"
               >
                 <ArrowRightIcon className="size-4" />
                 رجوع
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="inline-flex min-h-10 items-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 shadow-sm transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
+                aria-label="إغلاق ملف الطالب"
+              >
+                إغلاق
               </button>
             </div>
           </div>
@@ -771,4 +789,6 @@ export function StudentProfileDialog({
       </div>
     </section>
   );
+
+  return createPortal(profileContent, document.body);
 }
