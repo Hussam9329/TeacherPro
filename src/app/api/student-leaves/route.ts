@@ -15,6 +15,10 @@ import {
   ensureFollowupTables,
   withFollowupTables,
 } from "@/lib/followup-schema";
+import {
+  recalculateStudentsAcademicState,
+  type AcademicServerRecalculationResult,
+} from "@/lib/academic-recalculate-server";
 
 function readListPagination(
   req: NextRequest,
@@ -74,9 +78,92 @@ function normalizeLeavePayload(body: Record<string, unknown>) {
   };
 }
 
+type NormalizedLeavePayload = ReturnType<typeof normalizeLeavePayload>;
+
+type StudentLeaveRecord = {
+  id: string;
+  studentId: string;
+  examId: string | null;
+  leaveType: string;
+  reason: string;
+  studyType: string;
+  date: Date;
+  dateFrom: Date | null;
+  dateTo: Date | null;
+  notes: string;
+};
+
+function normalizeStoredLeave(leave: StudentLeaveRecord): NormalizedLeavePayload {
+  return normalizeLeavePayload({
+    studentId: leave.studentId,
+    examId: leave.examId || "",
+    leaveType: leave.leaveType,
+    reason: leave.reason,
+    studyType: leave.studyType,
+    date: leave.date,
+    dateFrom: leave.dateFrom || leave.date,
+    dateTo: leave.dateTo || leave.dateFrom || leave.date,
+    notes: leave.notes,
+  });
+}
+
+function mergeLeavePayload(
+  existing: StudentLeaveRecord,
+  body: Record<string, unknown>,
+): NormalizedLeavePayload {
+  const requestedLeaveType =
+    body.leaveType !== undefined ? body.leaveType : existing.leaveType;
+  const leaveType = requestedLeaveType === "period" ? "period" : "exam";
+  const fallbackDate = existing.date;
+  const fallbackDateFrom = existing.dateFrom || existing.date;
+  const fallbackDateTo = existing.dateTo || existing.dateFrom || existing.date;
+
+  return normalizeLeavePayload({
+    studentId: body.studentId !== undefined ? body.studentId : existing.studentId,
+    examId:
+      leaveType === "exam"
+        ? body.examId !== undefined
+          ? body.examId
+          : existing.examId || ""
+        : null,
+    leaveType,
+    reason: body.reason !== undefined ? body.reason : existing.reason,
+    studyType:
+      body.studyType !== undefined ? body.studyType : existing.studyType,
+    date: body.date !== undefined ? body.date : fallbackDate,
+    dateFrom:
+      body.dateFrom !== undefined || body.leaveType !== undefined
+        ? body.dateFrom ?? body.date ?? fallbackDateFrom
+        : fallbackDateFrom,
+    dateTo:
+      body.dateTo !== undefined || body.leaveType !== undefined
+        ? body.dateTo ?? body.dateFrom ?? body.date ?? fallbackDateTo
+        : fallbackDateTo,
+    notes: body.notes !== undefined ? body.notes : existing.notes,
+  });
+}
+
+function validateLeavePayload(data: NormalizedLeavePayload) {
+  const studentError = requireText(data.studentId, "الطالب");
+  if (studentError) return studentError;
+  if (data.leaveType === "exam") {
+    const examError = requireText(String(data.examId || ""), "الامتحان");
+    if (examError) return examError;
+  }
+  const reasonError = requireText(data.reason, "سبب الإجازة");
+  if (reasonError) return reasonError;
+  return null;
+}
+
+function uniqueIds(values: Array<string | null | undefined>): string[] {
+  return Array.from(
+    new Set(values.map((value) => String(value || "").trim()).filter(Boolean)),
+  );
+}
+
 async function getAffectedExamIds(
   tx: Prisma.TransactionClient,
-  data: ReturnType<typeof normalizeLeavePayload>,
+  data: NormalizedLeavePayload,
 ): Promise<string[]> {
   if (data.leaveType === "exam") return data.examId ? [data.examId] : [];
   const exams = await tx.exam.findMany({
@@ -227,6 +314,55 @@ async function restoreGradesForLeave(
   return restoredGrades;
 }
 
+
+type LeaveCreateResult = {
+  leave: unknown;
+  backedUpGrades: number;
+  restoredGrades: RestoredGrade[];
+  academicRecalculation: AcademicServerRecalculationResult;
+};
+
+type LeaveUpdateResult = {
+  studentLeave: unknown;
+  backedUpGrades: number;
+  restoredGrades: RestoredGrade[];
+  restoredGradeCount: number;
+  affectedBefore: string[];
+  affectedAfter: string[];
+  academicRecalculation: AcademicServerRecalculationResult;
+};
+
+type LeaveDeleteResult = {
+  restoredGrades: RestoredGrade[];
+  academicRecalculation: AcademicServerRecalculationResult;
+};
+
+async function removeDuplicateExamLeavesBeforeSave(
+  tx: Prisma.TransactionClient,
+  leaveId: string | null,
+  data: NormalizedLeavePayload,
+): Promise<RestoredGrade[]> {
+  if (data.leaveType !== "exam" || !data.examId) return [];
+  const duplicates = await tx.studentLeave.findMany({
+    where: {
+      studentId: data.studentId,
+      examId: data.examId,
+      ...(leaveId ? { id: { not: leaveId } } : {}),
+    },
+    select: { id: true },
+  });
+  const restoredGrades: RestoredGrade[] = [];
+  for (const duplicate of duplicates) {
+    restoredGrades.push(...(await restoreGradesForLeave(tx, duplicate.id)));
+  }
+  if (duplicates.length) {
+    await tx.studentLeave.deleteMany({
+      where: { id: { in: duplicates.map((duplicate) => duplicate.id) } },
+    });
+  }
+  return restoredGrades;
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "follow-up.view");
   if (authError) return authError;
@@ -271,32 +407,18 @@ export async function POST(req: NextRequest) {
     await ensureFollowupTables();
     const body = await req.json();
     const data = normalizeLeavePayload(body);
-    const studentError = requireText(data.studentId, "الطالب");
-    if (studentError) return validationError(studentError);
-    if (data.leaveType === "exam") {
-      const examError = requireText(String(data.examId || ""), "الامتحان");
-      if (examError) return validationError(examError);
-    }
-    const reasonError = requireText(data.reason, "سبب الإجازة");
-    if (reasonError) return validationError(reasonError);
+    const payloadError = validateLeavePayload(data);
+    if (payloadError) return validationError(payloadError);
 
-    const result = await withFollowupTables(
+    const result = await withFollowupTables<LeaveCreateResult>(
       () =>
         db.$transaction(async (tx) => {
           const affectedExamIds = await getAffectedExamIds(tx, data);
-          // Never trust client-provided IDs on create. The server owns primary keys.
-          if (data.leaveType === "exam" && data.examId) {
-            const existingLeaves = await tx.studentLeave.findMany({
-              where: { studentId: data.studentId, examId: data.examId },
-              select: { id: true },
-            });
-            for (const existingLeave of existingLeaves) {
-              await restoreGradesForLeave(tx, existingLeave.id);
-            }
-            await tx.studentLeave.deleteMany({
-              where: { studentId: data.studentId, examId: data.examId },
-            });
-          }
+          const restoredGrades = await removeDuplicateExamLeavesBeforeSave(
+            tx,
+            null,
+            data,
+          );
           const savedLeave = await tx.studentLeave.create({
             data,
             include: {
@@ -319,13 +441,28 @@ export async function POST(req: NextRequest) {
               },
             });
           }
-          return { leave: savedLeave, backedUpGrades };
+          const academicRecalculation = await recalculateStudentsAcademicState(
+            [data.studentId, ...restoredGrades.map((grade) => grade.studentId)],
+            { tx },
+          );
+          return {
+            leave: savedLeave,
+            backedUpGrades,
+            restoredGrades,
+            academicRecalculation,
+          };
         }),
       "StudentLeave",
     );
 
     return NextResponse.json(
-      { studentLeave: result.leave, backedUpGrades: result.backedUpGrades },
+      {
+        studentLeave: result.leave,
+        backedUpGrades: result.backedUpGrades,
+        restoredGrades: result.restoredGrades,
+        restoredGradeCount: result.restoredGrades.length,
+        academicRecalculation: result.academicRecalculation,
+      },
       { status: 201 },
     );
   } catch (error) {
@@ -342,33 +479,90 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const id = String(body.id || "").trim();
     if (!id) return validationError("تعذر تحديد الإجازة المطلوبة");
-    const normalized = normalizeLeavePayload(body);
-    const data: Record<string, unknown> = {};
-    if (body.studentId !== undefined) data.studentId = normalized.studentId;
-    if (body.examId !== undefined || body.leaveType !== undefined)
-      data.examId = normalized.examId;
-    if (body.leaveType !== undefined) data.leaveType = normalized.leaveType;
-    if (body.reason !== undefined) data.reason = normalized.reason;
-    if (body.studyType !== undefined) data.studyType = normalized.studyType;
-    if (body.date !== undefined) data.date = normalized.date;
-    if (body.dateFrom !== undefined || body.leaveType !== undefined)
-      data.dateFrom = normalized.dateFrom;
-    if (body.dateTo !== undefined || body.leaveType !== undefined)
-      data.dateTo = normalized.dateTo;
-    if (body.notes !== undefined) data.notes = normalized.notes;
-    const studentLeave = await withFollowupTables(
+
+    const result = await withFollowupTables<LeaveUpdateResult>(
       () =>
-        db.studentLeave.update({
-          where: { id },
-          data,
-          include: {
-            student: true,
-            exam: true,
-          },
+        db.$transaction(async (tx) => {
+          const existingLeave = await tx.studentLeave.findUnique({
+            where: { id },
+            include: {
+              student: true,
+              exam: true,
+            },
+          });
+          if (!existingLeave) throw new Error("الإجازة المطلوبة غير موجودة");
+
+          const previousData = normalizeStoredLeave(existingLeave);
+          const nextData = mergeLeavePayload(existingLeave, body);
+          const payloadError = validateLeavePayload(nextData);
+          if (payloadError) throw new Error(payloadError);
+
+          const restoredGrades = await restoreGradesForLeave(tx, id);
+          const duplicateRestoredGrades = await removeDuplicateExamLeavesBeforeSave(
+            tx,
+            id,
+            nextData,
+          );
+          const affectedBefore = await getAffectedExamIds(tx, previousData);
+          const affectedAfter = await getAffectedExamIds(tx, nextData);
+
+          const studentLeave = await tx.studentLeave.update({
+            where: { id },
+            data: {
+              studentId: nextData.studentId,
+              examId: nextData.examId,
+              leaveType: nextData.leaveType,
+              reason: nextData.reason,
+              studyType: nextData.studyType,
+              date: nextData.date,
+              dateFrom: nextData.dateFrom,
+              dateTo: nextData.dateTo,
+              notes: nextData.notes,
+            },
+            include: {
+              student: true,
+              exam: true,
+            },
+          });
+
+          const backedUpGrades = await backupGradesForLeave(
+            tx,
+            id,
+            nextData.studentId,
+            affectedAfter,
+          );
+          if (affectedAfter.length) {
+            await tx.grade.deleteMany({
+              where: {
+                studentId: nextData.studentId,
+                examId: { in: affectedAfter },
+              },
+            });
+          }
+
+          const academicRecalculation = await recalculateStudentsAcademicState(
+            uniqueIds([
+              previousData.studentId,
+              nextData.studentId,
+              ...restoredGrades.map((grade) => grade.studentId),
+              ...duplicateRestoredGrades.map((grade) => grade.studentId),
+            ]),
+            { tx },
+          );
+
+          return {
+            studentLeave,
+            backedUpGrades,
+            restoredGrades: [...restoredGrades, ...duplicateRestoredGrades],
+            restoredGradeCount: restoredGrades.length + duplicateRestoredGrades.length,
+            affectedBefore,
+            affectedAfter,
+            academicRecalculation,
+          };
         }),
       "StudentLeave",
     );
-    return NextResponse.json({ studentLeave });
+    return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, "تعذر تحديث الإجازة حالياً.");
   }
@@ -382,12 +576,24 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) return validationError("تعذر تحديد الإجازة المطلوبة");
-    const result = await withFollowupTables(
+    const result = await withFollowupTables<LeaveDeleteResult>(
       () =>
         db.$transaction(async (tx) => {
+          const existingLeave = await tx.studentLeave.findUnique({
+            where: { id },
+            select: { studentId: true },
+          });
+          if (!existingLeave) throw new Error("الإجازة المطلوبة غير موجودة");
           const restoredGrades = await restoreGradesForLeave(tx, id);
           await tx.studentLeave.delete({ where: { id } });
-          return { restoredGrades };
+          const academicRecalculation = await recalculateStudentsAcademicState(
+            uniqueIds([
+              existingLeave.studentId,
+              ...restoredGrades.map((grade) => grade.studentId),
+            ]),
+            { tx },
+          );
+          return { restoredGrades, academicRecalculation };
         }),
       "StudentLeave",
     );
@@ -395,6 +601,7 @@ export async function DELETE(req: NextRequest) {
       ok: true,
       restoredGrades: result.restoredGrades,
       restoredGradeCount: result.restoredGrades.length,
+      academicRecalculation: result.academicRecalculation,
     });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حذف الإجازة حالياً.");
