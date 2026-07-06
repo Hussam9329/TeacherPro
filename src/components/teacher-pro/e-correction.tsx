@@ -95,6 +95,7 @@ type BotSubmissionStatsResponse = {
   pending: number;
   inReview: number;
   done: number;
+  manualReview?: number;
   totalPages: number;
   source: "database";
   generatedAt?: string;
@@ -399,6 +400,16 @@ export function ECorrectionView() {
   }, []);
 
   const updateBotSubmissionStatus = async (id: string, status: string) => {
+    const targetSubmission = botSubmissions.find((item) => item.id === id);
+    const requiresManualConfirmation =
+      status === "مكتمل" && targetSubmission?.matchType === "manual_review";
+    if (requiresManualConfirmation) {
+      const confirmed = window.confirm(
+        "هذا المستلم مربوط كمراجعة يدوية، هل تأكدت من الطالب والامتحان وتريد اعتماده كمكتمل؟",
+      );
+      if (!confirmed) return;
+    }
+
     const previous = botSubmissions;
     setBotSubmissions((items) =>
       items.map((item) => (item.id === id ? { ...item, status } : item)),
@@ -409,7 +420,11 @@ export function ECorrectionView() {
       const response = await fetch("/api/telegram-exam-submissions", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
+        body: JSON.stringify({
+          id,
+          status,
+          ...(requiresManualConfirmation ? { confirmManualReview: true } : {}),
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
@@ -827,7 +842,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
 
         {/* Telegram Bot Submissions Tab */}
         <TabsContent value="bot-submissions" className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             <Card>
               <CardContent className="p-4 text-center">
                 <p className="text-2xl font-bold">
@@ -858,6 +873,14 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                   {botStatValue(botDatabaseStats?.done)}
                 </p>
                 <p className="text-xs text-muted-foreground">مكتمل</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+                  {botStatValue(botDatabaseStats?.manualReview)}
+                </p>
+                <p className="text-xs text-muted-foreground">مراجعة يدوية</p>
               </CardContent>
             </Card>
             <Card>

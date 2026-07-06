@@ -16,6 +16,14 @@ import {
 } from "@/lib/telegram-submission-schema";
 import { sanitizePhoneInput } from "@/lib/format";
 import { sanitizeTelegramInput } from "@/lib/student-utils";
+import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import {
+  AcademicGradeWritebackError,
+  hasAcademicGradeWritebackPayload,
+  readAcademicGradeWritebackScore,
+  readAcademicGradeWritebackStatus,
+  syncAcademicGradeWriteback,
+} from "@/lib/academic-grade-writeback-server";
 
 type IncomingPage = {
   [key: string]: unknown;
@@ -396,6 +404,14 @@ function normalizeSubmission(item: Record<string, unknown>) {
   };
 }
 
+function isManualReviewMatch(value: unknown): boolean {
+  return String(value || "").trim() === "manual_review";
+}
+
+function isTruthyConfirmation(value: unknown): boolean {
+  return value === true || value === "true" || value === "1" || value === 1;
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "correction.view");
   if (authError) return authError;
@@ -516,74 +532,98 @@ export async function POST(req: NextRequest) {
       body as Record<string, unknown>,
       student,
     );
+    const requestedSubmissionStatus =
+      textValue(body.status, 120) || "بانتظار التصحيح";
+    const submissionStatus =
+      requestedSubmissionStatus === "مكتمل" &&
+      isManualReviewMatch(matchInfo.matchType)
+        ? "بانتظار التصحيح"
+        : requestedSubmissionStatus;
 
-    const grade = await db.grade.upsert({
-      where: { studentId_examId: { studentId, examId } },
-      update: {
-        status: "درجة",
-        updatedAt: new Date(),
-      },
-      create: {
+    const result = await db.$transaction(async (tx) => {
+      const gradeWriteback = await syncAcademicGradeWriteback({
+        tx,
         studentId,
         examId,
         status: "درجة",
         score: null,
+        sourceLabel: "مستلم بوت التليغرام",
         notes: "تم استلام التسليم من بوت التليغرام وينتظر التصحيح الإلكتروني.",
-      },
-    });
+        allowBlankGrade: true,
+        preserveExistingScoreWhenBlank: true,
+        blockOnLeave: false,
+      });
+      if (!gradeWriteback) {
+        throw new AcademicGradeWritebackError(
+          "تعذر إنشاء درجة انتظار مرتبطة بمستلم البوت.",
+        );
+      }
+      const grade = gradeWriteback.grade;
 
-    const submission = await db.telegramExamSubmission.upsert({
-      where: { studentId_examId: { studentId, examId } },
-      update: {
-        gradeId: grade.id,
-        telegramUserId: textValue(body.telegramUserId, 80),
-        telegramUsername: textValue(body.telegramUsername, 120),
-        telegramChatId: textValue(body.telegramChatId, 80),
-        matchType: matchInfo.matchType,
-        matchSource: matchInfo.matchSource,
-        matchDetails: matchInfo.matchDetails,
-        sourceMessageIds: safeJsonStringify(sourceMessageIds),
-        pages: safeJsonStringify(pages),
-        pageCount:
-          pages.length ||
-          Math.max(0, Math.trunc(numberValue(body.pageCount, 0))),
-        status: textValue(body.status, 120) || "بانتظار التصحيح",
-        notes: textValue(body.notes, 4000),
-        submittedAt,
-        receivedAt: new Date(),
-      },
-      create: {
-        studentId,
-        examId,
-        gradeId: grade.id,
-        telegramUserId: textValue(body.telegramUserId, 80),
-        telegramUsername: textValue(body.telegramUsername, 120),
-        telegramChatId: textValue(body.telegramChatId, 80),
-        matchType: matchInfo.matchType,
-        matchSource: matchInfo.matchSource,
-        matchDetails: matchInfo.matchDetails,
-        sourceMessageIds: safeJsonStringify(sourceMessageIds),
-        pages: safeJsonStringify(pages),
-        pageCount:
-          pages.length ||
-          Math.max(0, Math.trunc(numberValue(body.pageCount, 0))),
-        status: textValue(body.status, 120) || "بانتظار التصحيح",
-        notes: textValue(body.notes, 4000),
-        submittedAt,
-      },
-      include: { student: true, exam: true },
+      const submission = await tx.telegramExamSubmission.upsert({
+        where: { studentId_examId: { studentId, examId } },
+        update: {
+          gradeId: grade.id,
+          telegramUserId: textValue(body.telegramUserId, 80),
+          telegramUsername: textValue(body.telegramUsername, 120),
+          telegramChatId: textValue(body.telegramChatId, 80),
+          matchType: matchInfo.matchType,
+          matchSource: matchInfo.matchSource,
+          matchDetails: matchInfo.matchDetails,
+          sourceMessageIds: safeJsonStringify(sourceMessageIds),
+          pages: safeJsonStringify(pages),
+          pageCount:
+            pages.length ||
+            Math.max(0, Math.trunc(numberValue(body.pageCount, 0))),
+          status: submissionStatus,
+          notes: textValue(body.notes, 4000),
+          submittedAt,
+          receivedAt: new Date(),
+        },
+        create: {
+          studentId,
+          examId,
+          gradeId: grade.id,
+          telegramUserId: textValue(body.telegramUserId, 80),
+          telegramUsername: textValue(body.telegramUsername, 120),
+          telegramChatId: textValue(body.telegramChatId, 80),
+          matchType: matchInfo.matchType,
+          matchSource: matchInfo.matchSource,
+          matchDetails: matchInfo.matchDetails,
+          sourceMessageIds: safeJsonStringify(sourceMessageIds),
+          pages: safeJsonStringify(pages),
+          pageCount:
+            pages.length ||
+            Math.max(0, Math.trunc(numberValue(body.pageCount, 0))),
+          status: submissionStatus,
+          notes: textValue(body.notes, 4000),
+          submittedAt,
+        },
+        include: { student: true, exam: true },
+      });
+
+      return {
+        submission,
+        grade,
+        academicRecalculation: gradeWriteback?.academicRecalculation || null,
+      };
     });
 
     return NextResponse.json(
       {
         ok: true,
         submission: normalizeSubmission(
-          submission as unknown as Record<string, unknown>,
+          result.submission as unknown as Record<string, unknown>,
         ),
+        grade: result.grade,
+        academicRecalculation: result.academicRecalculation,
       },
       { status: 201 },
     );
   } catch (error) {
+    if (error instanceof AcademicGradeWritebackError) {
+      return validationError(error.message, error.status);
+    }
     return routeErrorResponse(error, "تعذر استقبال تسليم البوت حالياً.");
   }
 }
@@ -606,22 +646,100 @@ export async function PUT(req: NextRequest) {
     const id = textValue(body.id, 120);
     if (!id) return validationError("تعذر تحديد مستلم البوت المطلوب.");
 
-    const data: Record<string, string> = {};
-    if (body.status !== undefined)
-      data.status = textValue(body.status, 120) || "بانتظار التصحيح";
-    if (body.notes !== undefined) data.notes = textValue(body.notes, 4000);
-
-    const submission = await db.telegramExamSubmission.update({
+    const current = await db.telegramExamSubmission.findUnique({
       where: { id },
-      data,
-      include: { student: true, exam: true },
+      select: {
+        id: true,
+        studentId: true,
+        examId: true,
+        gradeId: true,
+        matchType: true,
+        status: true,
+      },
     });
+    if (!current)
+      return validationError("مستلم البوت غير موجود أو تم حذفه.", 404);
+
+    const nextStatus =
+      body.status !== undefined
+        ? textValue(body.status, 120) || "بانتظار التصحيح"
+        : current.status;
+    if (
+      nextStatus === "مكتمل" &&
+      isManualReviewMatch(current.matchType) &&
+      !isTruthyConfirmation(body.confirmManualReview)
+    ) {
+      return validationError(
+        "هذا المستلم يحتاج مراجعة يدوية قبل اعتماده كمكتمل. أكد المراجعة اليدوية ثم أعد المحاولة.",
+      );
+    }
+
+    const result = await db.$transaction(async (tx) => {
+      const data: Record<string, string> = {};
+      if (body.status !== undefined) data.status = nextStatus;
+      if (body.notes !== undefined) data.notes = textValue(body.notes, 4000);
+
+      const gradeWriteback = hasAcademicGradeWritebackPayload(
+        body as Record<string, unknown>,
+      )
+        ? await syncAcademicGradeWriteback({
+            tx,
+            studentId: current.studentId,
+            examId: current.examId,
+            status: readAcademicGradeWritebackStatus(
+              body as Record<string, unknown>,
+              "درجة",
+            ),
+            score: readAcademicGradeWritebackScore(
+              body as Record<string, unknown>,
+            ),
+            notes:
+              textValue(body.gradeNotes ?? body.grade_notes, 1000) ||
+              `تم اعتماد الدرجة من مستلم بوت التليغرام (${nextStatus}).`,
+            academicAccountingChecked:
+              body.academicAccountingChecked ??
+              body.academic_accounting_checked,
+            sourceLabel: "مستلم بوت التليغرام",
+            allowBlankGrade: false,
+            blockOnLeave: true,
+          })
+        : null;
+
+      const academicRecalculation =
+        gradeWriteback?.academicRecalculation ||
+        (nextStatus === "مكتمل"
+          ? await recalculateStudentsAcademicState([current.studentId], { tx })
+          : null);
+
+      const submission = await tx.telegramExamSubmission.update({
+        where: { id },
+        data: {
+          ...data,
+          ...(gradeWriteback?.grade
+            ? { gradeId: gradeWriteback.grade.id }
+            : {}),
+        },
+        include: { student: true, exam: true },
+      });
+
+      return {
+        submission,
+        grade: gradeWriteback?.grade || null,
+        academicRecalculation,
+      };
+    });
+
     return NextResponse.json({
       submission: normalizeSubmission(
-        submission as unknown as Record<string, unknown>,
+        result.submission as unknown as Record<string, unknown>,
       ),
+      grade: result.grade,
+      academicRecalculation: result.academicRecalculation,
     });
   } catch (error) {
+    if (error instanceof AcademicGradeWritebackError) {
+      return validationError(error.message, error.status);
+    }
     return routeErrorResponse(error, "تعذر تحديث مستلم البوت حالياً.");
   }
 }
