@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { parseBaghdadDateTime } from '@/lib/baghdad-time';
 import { ensureExamSchema } from '@/lib/exam-schema';
+import { recalculateStudentsForExam } from '@/lib/academic-recalculate-server';
 
 function parseCourseIds(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -25,6 +26,54 @@ function parseCourseIds(value: unknown): string[] {
 
 function parseBoolean(value: unknown): boolean {
   return value === true || value === 'true' || value === '1' || value === 1;
+}
+
+function canonicalDateTime(value: unknown): string {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isFinite(date.getTime()) ? date.toISOString() : String(value);
+}
+
+function canonicalCourseIds(value: unknown): string {
+  return JSON.stringify(parseCourseIds(value).sort());
+}
+
+function academicExamSnapshot(exam: {
+  name?: unknown;
+  type?: unknown;
+  courseIds?: unknown;
+  date?: unknown;
+  fullMark?: unknown;
+  passMark?: unknown;
+  discountMark?: unknown;
+  opportunitiesPenalty?: unknown;
+  dismissalGrade?: unknown;
+  noDiscount?: unknown;
+  active?: unknown;
+  scheduledActivateAt?: unknown;
+  scheduledDeactivateAt?: unknown;
+}): Record<string, string> {
+  return {
+    name: String(exam.name ?? ''),
+    type: String(exam.type ?? ''),
+    courseIds: canonicalCourseIds(exam.courseIds),
+    date: canonicalDateTime(exam.date),
+    fullMark: String(Number(exam.fullMark ?? 0)),
+    passMark: String(Number(exam.passMark ?? 0)),
+    discountMark: String(Number(exam.discountMark ?? 0)),
+    opportunitiesPenalty: String(exam.opportunitiesPenalty ?? ''),
+    dismissalGrade: exam.dismissalGrade === null || exam.dismissalGrade === undefined ? '' : String(Number(exam.dismissalGrade)),
+    noDiscount: String(parseBoolean(exam.noDiscount)),
+    active: String(parseBoolean(exam.active)),
+    scheduledActivateAt: canonicalDateTime(exam.scheduledActivateAt),
+    scheduledDeactivateAt: canonicalDateTime(exam.scheduledDeactivateAt),
+  };
+}
+
+function hasAcademicExamChange(before: unknown, after: unknown): boolean {
+  const beforeSnapshot = academicExamSnapshot(before as Record<string, unknown>);
+  const afterSnapshot = academicExamSnapshot(after as Record<string, unknown>);
+  return Object.keys(beforeSnapshot).some((key) => beforeSnapshot[key] !== afterSnapshot[key]);
 }
 
 
@@ -183,8 +232,14 @@ export async function PUT(req: NextRequest) {
       data.dismissalGrade = null;
     }
 
-    const exam = await db.exam.update({ where: { id }, data });
-    return NextResponse.json({ exam });
+    const result = await db.$transaction(async (tx) => {
+      const exam = await tx.exam.update({ where: { id }, data });
+      const academicRecalculation = hasAcademicExamChange(existingExam, exam)
+        ? await recalculateStudentsForExam(exam.id, { tx })
+        : null;
+      return { exam, academicRecalculation };
+    });
+    return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث الامتحان حالياً.');
   }

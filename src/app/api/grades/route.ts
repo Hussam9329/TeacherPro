@@ -14,6 +14,7 @@ import {
 import { ensureExamSchema } from "@/lib/exam-schema";
 import { ensureFollowupTables } from "@/lib/followup-schema";
 import { normalizeListFilter } from "@/lib/all-filter";
+import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 
 async function validateGradePayload(body: Record<string, unknown>) {
   const studentError = requireText(body.studentId, "الطالب");
@@ -528,36 +529,43 @@ export async function POST(req: NextRequest) {
       body.academicAccountingChecked === undefined
         ? undefined
         : Boolean(body.academicAccountingChecked);
-    const grade = await db.grade.upsert({
-      where: {
-        studentId_examId: { studentId: body.studentId, examId: body.examId },
-      },
-      update: {
-        status: body.status,
-        score:
-          body.score === null || body.score === undefined
-            ? null
-            : Number(body.score),
-        notes: body.notes,
-        ...(checked !== undefined
-          ? { academicAccountingChecked: checked }
-          : {}),
-      },
-      create: {
-        // Never trust client-provided IDs on create. Offline/client IDs stay local only;
-        // the server reconciles records by the unique studentId + examId pair.
-        studentId: body.studentId,
-        examId: body.examId,
-        status: body.status,
-        score:
-          body.score === null || body.score === undefined
-            ? null
-            : Number(body.score),
-        notes: body.notes,
-        academicAccountingChecked: Boolean(body.academicAccountingChecked),
-      },
+    const result = await db.$transaction(async (tx) => {
+      const grade = await tx.grade.upsert({
+        where: {
+          studentId_examId: { studentId: body.studentId, examId: body.examId },
+        },
+        update: {
+          status: body.status,
+          score:
+            body.score === null || body.score === undefined
+              ? null
+              : Number(body.score),
+          notes: body.notes,
+          ...(checked !== undefined
+            ? { academicAccountingChecked: checked }
+            : {}),
+        },
+        create: {
+          // Never trust client-provided IDs on create. Offline/client IDs stay local only;
+          // the server reconciles records by the unique studentId + examId pair.
+          studentId: body.studentId,
+          examId: body.examId,
+          status: body.status,
+          score:
+            body.score === null || body.score === undefined
+              ? null
+              : Number(body.score),
+          notes: body.notes,
+          academicAccountingChecked: Boolean(body.academicAccountingChecked),
+        },
+      });
+      const academicRecalculation = await recalculateStudentsAcademicState(
+        [grade.studentId],
+        { tx },
+      );
+      return { grade, academicRecalculation };
     });
-    return NextResponse.json({ grade }, { status: 201 });
+    return NextResponse.json(result, { status: 201 });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حفظ الدرجة حالياً.");
   }
@@ -637,11 +645,18 @@ export async function PUT(req: NextRequest) {
     );
     if (leaveMessage) return validationError(leaveMessage);
 
-    const grade = await db.grade.update({
-      where: { id: targetGrade.id },
-      data,
+    const result = await db.$transaction(async (tx) => {
+      const grade = await tx.grade.update({
+        where: { id: targetGrade.id },
+        data,
+      });
+      const academicRecalculation = await recalculateStudentsAcademicState(
+        [grade.studentId],
+        { tx },
+      );
+      return { grade, academicRecalculation };
     });
-    return NextResponse.json({ grade });
+    return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, "تعذر تحديث الدرجة حالياً.");
   }
@@ -660,36 +675,86 @@ export async function DELETE(req: NextRequest) {
     const status = searchParams.get("status");
 
     if (examId && status === "غائب" && !studentId && !id) {
-      const targetGrades = await db.grade.findMany({
-        where: { examId, status: "غائب" },
-        select: { id: true, studentId: true },
-      });
-      if (targetGrades.length === 0) {
-        return NextResponse.json({ ok: true, deleted: 0, studentIds: [] });
-      }
-      const deletedAbsences = await db.grade.deleteMany({
-        where: { examId, status: "غائب" },
-      });
-      return NextResponse.json({
-        ok: true,
-        deleted: deletedAbsences.count,
-        studentIds: Array.from(
+      const result = await db.$transaction(async (tx) => {
+        const targetGrades = await tx.grade.findMany({
+          where: { examId, status: "غائب" },
+          select: { id: true, studentId: true },
+        });
+        const studentIds = Array.from(
           new Set(targetGrades.map((grade) => grade.studentId)),
-        ),
+        );
+        if (targetGrades.length === 0) {
+          return {
+            ok: true,
+            deleted: 0,
+            studentIds: [],
+            academicRecalculation: null,
+          };
+        }
+        const deletedAbsences = await tx.grade.deleteMany({
+          where: { examId, status: "غائب" },
+        });
+        const academicRecalculation = await recalculateStudentsAcademicState(
+          studentIds,
+          { tx },
+        );
+        return {
+          ok: true,
+          deleted: deletedAbsences.count,
+          studentIds,
+          academicRecalculation,
+        };
       });
+      return NextResponse.json(result);
     }
 
     if (id) {
-      const deletedById = await db.grade.deleteMany({ where: { id } });
-      if (deletedById.count > 0 || !studentId || !examId) {
-        return NextResponse.json({ ok: true, deleted: deletedById.count });
+      const result = await db.$transaction(async (tx) => {
+        const targetGrade = await tx.grade.findUnique({
+          where: { id },
+          select: { id: true, studentId: true },
+        });
+        const deletedById = await tx.grade.deleteMany({ where: { id } });
+        const academicRecalculation =
+          targetGrade && deletedById.count > 0
+            ? await recalculateStudentsAcademicState([targetGrade.studentId], {
+                tx,
+              })
+            : null;
+        return {
+          ok: true,
+          deleted: deletedById.count,
+          studentIds: targetGrade ? [targetGrade.studentId] : [],
+          academicRecalculation,
+        };
+      });
+      if (result.deleted > 0 || !studentId || !examId) {
+        return NextResponse.json(result);
       }
     }
     if (studentId && examId) {
-      const deletedByPair = await db.grade.deleteMany({
-        where: { studentId, examId },
+      const result = await db.$transaction(async (tx) => {
+        const targetGrade = await tx.grade.findUnique({
+          where: { studentId_examId: { studentId, examId } },
+          select: { id: true, studentId: true },
+        });
+        const deletedByPair = await tx.grade.deleteMany({
+          where: { studentId, examId },
+        });
+        const academicRecalculation =
+          targetGrade && deletedByPair.count > 0
+            ? await recalculateStudentsAcademicState([targetGrade.studentId], {
+                tx,
+              })
+            : null;
+        return {
+          ok: true,
+          deleted: deletedByPair.count,
+          studentIds: targetGrade ? [targetGrade.studentId] : [],
+          academicRecalculation,
+        };
       });
-      return NextResponse.json({ ok: true, deleted: deletedByPair.count });
+      return NextResponse.json(result);
     }
     return validationError("تعذر تحديد الدرجة المطلوبة");
   } catch (error) {
