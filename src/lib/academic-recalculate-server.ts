@@ -457,12 +457,36 @@ export async function recalculateStudentsForExam(
     };
   }
   const client = options.tx || db;
-  const grades = await client.grade.findMany({
-    where: { examId: trimmedExamId },
-    select: { studentId: true },
-  });
+  const [grades, leaves, correctionSheets, telegramSubmissions, opportunityLogs] = await Promise.all([
+    client.grade.findMany({
+      where: { examId: trimmedExamId },
+      select: { studentId: true },
+    }),
+    client.studentLeave.findMany({
+      where: { examId: trimmedExamId },
+      select: { studentId: true },
+    }),
+    client.correctionSheet.findMany({
+      where: { examId: trimmedExamId },
+      select: { studentId: true },
+    }),
+    client.telegramExamSubmission.findMany({
+      where: { examId: trimmedExamId },
+      select: { studentId: true },
+    }),
+    client.opportunityLog.findMany({
+      where: { examId: trimmedExamId },
+      select: { studentId: true },
+    }),
+  ]);
   return recalculateStudentsAcademicState(
-    grades.map((grade) => grade.studentId),
+    [
+      ...grades.map((grade) => grade.studentId),
+      ...leaves.map((leave) => leave.studentId),
+      ...correctionSheets.map((sheet) => sheet.studentId),
+      ...telegramSubmissions.map((submission) => submission.studentId),
+      ...opportunityLogs.map((log) => log.studentId),
+    ],
     { tx: options.tx },
   );
 }

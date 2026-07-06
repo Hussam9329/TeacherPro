@@ -17,6 +17,7 @@ import {
   readAcademicGradeWritebackStatus,
   syncAcademicGradeWriteback,
 } from "@/lib/academic-grade-writeback-server";
+import { writeRequestAuditLog } from "@/lib/audit-log-server";
 
 function validateCorrectionSheetPayload(body: Record<string, unknown>) {
   const studentError = requireText(body.studentId, "الطالب");
@@ -146,6 +147,14 @@ export async function POST(req: NextRequest) {
         academicRecalculation: gradeWriteback?.academicRecalculation || null,
       };
     });
+    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "إضافة ورقة تصحيح وربط الدرجة", {
+      correctionSheetId: result.correctionSheet.id,
+      studentId: result.correctionSheet.studentId,
+      examId: result.correctionSheet.examId,
+      gradeId: result.grade?.id,
+      wroteGrade: Boolean(result.grade),
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+    });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     if (error instanceof AcademicGradeWritebackError) {
@@ -206,6 +215,14 @@ export async function PUT(req: NextRequest) {
         academicRecalculation: gradeWriteback?.academicRecalculation || null,
       };
     });
+    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "تحديث ورقة تصحيح وربط الدرجة", {
+      correctionSheetId: result.correctionSheet.id,
+      studentId: result.correctionSheet.studentId,
+      examId: result.correctionSheet.examId,
+      gradeId: result.grade?.id,
+      wroteGrade: Boolean(result.grade),
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+    });
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AcademicGradeWritebackError) {
@@ -223,7 +240,16 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) return validationError("تعذر تحديد ورقة التصحيح المطلوبة");
-    await db.correctionSheet.delete({ where: { id } });
+    const deleted = await db.correctionSheet.delete({
+      where: { id },
+      select: { id: true, studentId: true, examId: true, status: true },
+    });
+    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "حذف ورقة تصحيح", {
+      correctionSheetId: deleted.id,
+      studentId: deleted.studentId,
+      examId: deleted.examId,
+      status: deleted.status,
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حذف ورقة التصحيح حالياً.");

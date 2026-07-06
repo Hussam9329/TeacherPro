@@ -17,6 +17,7 @@ import { normalizeListFilter } from "@/lib/all-filter";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { gradeMatchesStatusFilterUnified } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
+import { writeRequestAuditLog } from "@/lib/audit-log-server";
 
 async function validateGradePayload(body: Record<string, unknown>) {
   const studentError = requireText(body.studentId, "الطالب");
@@ -521,6 +522,14 @@ export async function POST(req: NextRequest) {
       );
       return { grade, academicRecalculation };
     });
+    await writeRequestAuditLog(req, "الدرجات", "حفظ درجة وإعادة احتساب الطالب", {
+      gradeId: result.grade.id,
+      studentId: result.grade.studentId,
+      examId: result.grade.examId,
+      status: result.grade.status,
+      score: result.grade.score,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+    });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حفظ الدرجة حالياً.");
@@ -612,6 +621,14 @@ export async function PUT(req: NextRequest) {
       );
       return { grade, academicRecalculation };
     });
+    await writeRequestAuditLog(req, "الدرجات", "تعديل درجة وإعادة احتساب الطالب", {
+      gradeId: result.grade.id,
+      studentId: result.grade.studentId,
+      examId: result.grade.examId,
+      status: result.grade.status,
+      score: result.grade.score,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+    });
     return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, "تعذر تحديث الدرجة حالياً.");
@@ -661,6 +678,12 @@ export async function DELETE(req: NextRequest) {
           academicRecalculation,
         };
       });
+      await writeRequestAuditLog(req, "الدرجات", "حذف غيابات امتحان وإعادة احتساب الطلاب", {
+        examId,
+        status,
+        deleted: result.deleted,
+        affectedStudents: result.studentIds?.length || 0,
+      });
       return NextResponse.json(result);
     }
 
@@ -685,6 +708,12 @@ export async function DELETE(req: NextRequest) {
         };
       });
       if (result.deleted > 0 || !studentId || !examId) {
+        await writeRequestAuditLog(req, "الدرجات", "حذف درجة وإعادة احتساب الطالب", {
+          gradeId: id,
+          deleted: result.deleted,
+          affectedStudents: result.studentIds?.length || 0,
+          studentIds: result.studentIds,
+        });
         return NextResponse.json(result);
       }
     }
@@ -709,6 +738,13 @@ export async function DELETE(req: NextRequest) {
           studentIds: targetGrade ? [targetGrade.studentId] : [],
           academicRecalculation,
         };
+      });
+      await writeRequestAuditLog(req, "الدرجات", "حذف درجة وإعادة احتساب الطالب", {
+        studentId,
+        examId,
+        deleted: result.deleted,
+        affectedStudents: result.studentIds?.length || 0,
+        studentIds: result.studentIds,
       });
       return NextResponse.json(result);
     }

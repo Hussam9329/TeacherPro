@@ -8,6 +8,7 @@ import { requireText, routeErrorResponse, validationError } from '@/lib/route-he
 import { parseBaghdadDateTime } from '@/lib/baghdad-time';
 import { ensureExamSchema } from '@/lib/exam-schema';
 import { recalculateStudentsForExam } from '@/lib/academic-recalculate-server';
+import { writeRequestAuditLog } from '@/lib/audit-log-server';
 
 function parseCourseIds(value: unknown): string[] {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -239,6 +240,12 @@ export async function PUT(req: NextRequest) {
         : null;
       return { exam, academicRecalculation };
     });
+    await writeRequestAuditLog(req, 'الامتحانات', 'تعديل امتحان وإعادة احتساب المتأثرين', {
+      examId: result.exam.id,
+      examName: result.exam.name,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+      academicChange: Boolean(result.academicRecalculation),
+    });
     return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث الامتحان حالياً.');
@@ -265,12 +272,19 @@ export async function DELETE(req: NextRequest) {
       return validationError(`لا يمكن حذف الامتحان "${exam.name}" لأن عليه ${gradeCount} سجل درجات. عطّل الامتحان بدلاً من حذفه.`);
     }
 
-    await db.$transaction(async (tx) => {
-      await tx.correctionSheet.deleteMany({ where: { examId: id } });
-      await tx.opportunityLog.deleteMany({ where: { examId: id } });
+    const deleted = await db.$transaction(async (tx) => {
+      const correctionSheets = await tx.correctionSheet.deleteMany({ where: { examId: id } });
+      const opportunityLogs = await tx.opportunityLog.deleteMany({ where: { examId: id } });
       await tx.exam.delete({ where: { id } });
+      return { correctionSheets: correctionSheets.count, opportunityLogs: opportunityLogs.count };
     });
-    return NextResponse.json({ ok: true });
+    await writeRequestAuditLog(req, 'الامتحانات', 'حذف امتحان بدون درجات وتنظيف السجلات التابعة', {
+      examId: id,
+      examName: exam.name,
+      deletedCorrectionSheets: deleted.correctionSheets,
+      deletedOpportunityLogs: deleted.opportunityLogs,
+    });
+    return NextResponse.json({ ok: true, ...deleted });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حذف الامتحان وسجلاته التابعة حالياً.');
   }

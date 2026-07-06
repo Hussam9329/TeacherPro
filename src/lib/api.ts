@@ -1179,7 +1179,10 @@ export const opportunityLogApi = {
     opportunityLogs?: Array<Record<string, unknown>>;
     studentNotes?: Array<Record<string, unknown>>;
   }) => apiPost("opportunities/bulk-adjust", payload),
-  remove: (id: string) => apiDelete("opportunity-logs", id),
+  remove: (id: string, options: { confirmImpact?: boolean } = {}) =>
+    apiDelete("opportunity-logs", id, {
+      confirmImpact: options.confirmImpact ? "1" : undefined,
+    }),
 };
 
 // ─── Follow-up API ───────────────────────────────────────────────────────────

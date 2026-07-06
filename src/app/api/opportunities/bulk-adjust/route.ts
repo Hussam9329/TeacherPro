@@ -15,6 +15,7 @@ import {
   normalizeBoolean,
 } from "@/lib/opportunity-filters-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { writeRequestAuditLog } from "@/lib/audit-log-server";
 
 type StudentUpdatePayload = {
   id?: unknown;
@@ -147,7 +148,7 @@ function normalizePositiveInt(value: unknown, fallback = 1): number {
   return Math.max(1, Math.trunc(Math.abs(numeric)));
 }
 
-async function handleFilterBasedBulkAdjust(body: Record<string, unknown>) {
+async function handleFilterBasedBulkAdjust(req: NextRequest, body: Record<string, unknown>) {
   const actionType = body.actionType === "deduct" ? "deduct" : "add";
   const amount = normalizePositiveInt(body.amount, 1);
   const signedAmount = actionType === "deduct" ? -amount : amount;
@@ -333,6 +334,20 @@ async function handleFilterBasedBulkAdjust(body: Record<string, unknown>) {
     "BulkOpportunityAdjustByFilter",
   );
 
+  await writeRequestAuditLog(req, "إدارة الفرص", actionType === "deduct" ? "خصم فرص جماعي وإعادة احتساب" : "إضافة فرص جماعية وإعادة احتساب", {
+    actionType,
+    amount,
+    reason,
+    totalMatching: result.totalMatching,
+    eligibleWithActiveChapter: result.eligibleWithActiveChapter,
+    updatedStudents: result.updatedStudents,
+    savedOpportunityLogs: result.savedOpportunityLogs,
+    skipped: result.skipped,
+    excludeDismissed,
+    excludeFullOpportunities,
+    reactivateDismissedOnAdd,
+  });
+
   return NextResponse.json({ ...result, source: "database" });
 }
 
@@ -353,7 +368,7 @@ export async function POST(req: NextRequest) {
       typeof body === "object" &&
       (body as Record<string, unknown>).mode === "filter"
     ) {
-      return handleFilterBasedBulkAdjust(body as Record<string, unknown>);
+      return handleFilterBasedBulkAdjust(req, body as Record<string, unknown>);
     }
 
     const students = normalizeStudentUpdates(body.students);
@@ -547,6 +562,14 @@ export async function POST(req: NextRequest) {
       "BulkOpportunityAdjust",
     );
 
+    await writeRequestAuditLog(req, "إدارة الفرص", "حفظ تحديث فرص جماعي وإعادة احتساب", {
+      updatedStudents: result.updatedStudents,
+      savedOpportunityLogs: result.savedOpportunityLogs,
+      savedStudentNotes: result.savedStudentNotes,
+      skippedMissingStudents: result.skippedMissingStudents,
+      skippedArchivedStudents: result.skippedArchivedStudents,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+    });
     return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, "تعذر حفظ تحديث الفرص الجماعي حالياً.");

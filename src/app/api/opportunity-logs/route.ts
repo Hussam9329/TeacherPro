@@ -5,6 +5,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { forbiddenResponse, getAuthPrincipal, requirePermission, unauthorizedResponse, type AuthPrincipal } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { recalculateStudentsAcademicState } from '@/lib/academic-recalculate-server';
+import { confirmationRequiredResponse, isConfirmed, writeAuditLog } from '@/lib/audit-log-server';
 
 function hasPermission(principal: AuthPrincipal, permission: string): boolean {
   return principal.isAdmin || principal.permissions.includes(permission);
@@ -110,15 +112,69 @@ export async function DELETE(req: NextRequest) {
     const principal = await getAuthPrincipal(req);
     if (!principal) return unauthorizedResponse();
 
-    const existingLog = await db.opportunityLog.findUnique({ where: { id } });
+    const existingLog = await db.opportunityLog.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        studentId: true,
+        examId: true,
+        action: true,
+        amount: true,
+        reason: true,
+        date: true,
+        chapterId: true,
+        student: { select: { name: true, code: true } },
+      },
+    });
+    if (!existingLog) return NextResponse.json({ ok: true, notFound: true });
+
     if (!hasPermission(principal, 'opportunities.manage')) {
-      if (!existingLog || !isAutomaticOpportunityPayload(existingLog) || !canManageAutomaticAcademicEffects(principal)) {
+      if (!isAutomaticOpportunityPayload(existingLog) || !canManageAutomaticAcademicEffects(principal)) {
         return forbiddenResponse();
       }
     }
 
-    await db.opportunityLog.deleteMany({ where: { id } });
-    return NextResponse.json({ ok: true });
+    const isImpactfulLog = ['خصم', 'إضافة', 'إعادة تعيين', 'إعادة تفعيل', 'خصم تلقائي', 'فصل تلقائي'].includes(String(existingLog.action || ''))
+      || Number(existingLog.amount || 0) > 0
+      || isAutomaticOpportunityPayload(existingLog);
+    if (isImpactfulLog && !isConfirmed(searchParams.get('confirmImpact'))) {
+      return confirmationRequiredResponse(
+        'حذف حركة الفرص قد يغير حالة الطالب وفرصه. أكد العملية ليتم الحذف وإعادة الاحتساب.',
+        {
+          student: existingLog.student?.name || existingLog.studentId,
+          code: existingLog.student?.code,
+          action: existingLog.action,
+          amount: existingLog.amount,
+          reason: existingLog.reason,
+          examId: existingLog.examId,
+        },
+      );
+    }
+
+    const result = await db.$transaction(async (tx) => {
+      const deleted = await tx.opportunityLog.deleteMany({ where: { id } });
+      const academicRecalculation = deleted.count > 0
+        ? await recalculateStudentsAcademicState([existingLog.studentId], { tx })
+        : null;
+      await writeAuditLog(
+        principal,
+        'إدارة الفرص',
+        'حذف حركة فرص وإعادة احتساب الطالب',
+        {
+          studentId: existingLog.studentId,
+          studentName: existingLog.student?.name,
+          studentCode: existingLog.student?.code,
+          action: existingLog.action,
+          amount: existingLog.amount,
+          reason: existingLog.reason,
+          examId: existingLog.examId,
+          deleted: deleted.count,
+        },
+        { tx },
+      );
+      return { ok: true, deleted: deleted.count, studentIds: [existingLog.studentId], academicRecalculation };
+    });
+    return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حذف حركة الفرص حالياً.');
   }

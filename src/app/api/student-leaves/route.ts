@@ -19,6 +19,7 @@ import {
   recalculateStudentsAcademicState,
   type AcademicServerRecalculationResult,
 } from "@/lib/academic-recalculate-server";
+import { writeRequestAuditLog } from "@/lib/audit-log-server";
 
 function readListPagination(
   req: NextRequest,
@@ -315,15 +316,17 @@ async function restoreGradesForLeave(
 }
 
 
+type StudentLeaveWithRelations = StudentLeaveRecord & { student?: unknown; exam?: unknown };
+
 type LeaveCreateResult = {
-  leave: unknown;
+  leave: StudentLeaveWithRelations;
   backedUpGrades: number;
   restoredGrades: RestoredGrade[];
   academicRecalculation: AcademicServerRecalculationResult;
 };
 
 type LeaveUpdateResult = {
-  studentLeave: unknown;
+  studentLeave: StudentLeaveWithRelations;
   backedUpGrades: number;
   restoredGrades: RestoredGrade[];
   restoredGradeCount: number;
@@ -455,6 +458,15 @@ export async function POST(req: NextRequest) {
       "StudentLeave",
     );
 
+    await writeRequestAuditLog(req, "المتابعة", "تسجيل إجازة وإعادة احتساب الطالب", {
+      leaveId: result.leave.id,
+      studentId: result.leave.studentId,
+      examId: result.leave.examId,
+      leaveType: result.leave.leaveType,
+      backedUpGrades: result.backedUpGrades,
+      restoredGradeCount: result.restoredGrades.length,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+    });
     return NextResponse.json(
       {
         studentLeave: result.leave,
@@ -562,6 +574,17 @@ export async function PUT(req: NextRequest) {
         }),
       "StudentLeave",
     );
+    await writeRequestAuditLog(req, "المتابعة", "تعديل إجازة وإعادة احتساب الطالب", {
+      leaveId: result.studentLeave.id,
+      studentId: result.studentLeave.studentId,
+      examId: result.studentLeave.examId,
+      leaveType: result.studentLeave.leaveType,
+      backedUpGrades: result.backedUpGrades,
+      restoredGradeCount: result.restoredGradeCount,
+      affectedBefore: result.affectedBefore,
+      affectedAfter: result.affectedAfter,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+    });
     return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, "تعذر تحديث الإجازة حالياً.");
@@ -597,6 +620,12 @@ export async function DELETE(req: NextRequest) {
         }),
       "StudentLeave",
     );
+    await writeRequestAuditLog(req, "المتابعة", "حذف إجازة واسترجاع الدرجات وإعادة الاحتساب", {
+      leaveId: id,
+      restoredGradeCount: result.restoredGrades.length,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+      studentIds: result.academicRecalculation?.studentIds || [],
+    });
     return NextResponse.json({
       ok: true,
       restoredGrades: result.restoredGrades,

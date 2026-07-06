@@ -4035,7 +4035,7 @@ export const useTeacherStore = create<TeacherState>()(
         relatedOpportunityLogs
           .filter(isAcademicallyManagedOpportunityLog)
           .forEach((log) =>
-            syncToServer(get, () => opportunityLogApi.remove(log.id), {
+            syncToServer(get, () => opportunityLogApi.remove(log.id, { confirmImpact: true }), {
               description: "حذف إجراء أكاديمي مرتبط بامتحان محذوف",
             }),
           );
@@ -4332,7 +4332,7 @@ export const useTeacherStore = create<TeacherState>()(
               ),
           )
           .forEach((oldLog) =>
-            syncToServer(get, () => opportunityLogApi.remove(oldLog.id), {
+            syncToServer(get, () => opportunityLogApi.remove(oldLog.id, { confirmImpact: true }), {
               description: "حذف إجراء أكاديمي ملغى",
             }),
           );

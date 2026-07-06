@@ -24,6 +24,7 @@ import {
   readAcademicGradeWritebackStatus,
   syncAcademicGradeWriteback,
 } from "@/lib/academic-grade-writeback-server";
+import { writeRequestAuditLog, writeSystemAuditLog } from "@/lib/audit-log-server";
 
 type IncomingPage = {
   [key: string]: unknown;
@@ -609,6 +610,17 @@ export async function POST(req: NextRequest) {
       };
     });
 
+    await writeSystemAuditLog("التصحيح الإلكتروني", "استلام مستلم تليكرام وربطه بدرجة", {
+      submissionId: result.submission.id,
+      studentId: result.submission.studentId,
+      examId: result.submission.examId,
+      gradeId: result.grade.id,
+      matchType: result.submission.matchType,
+      status: result.submission.status,
+      pageCount: result.submission.pageCount,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+    }, { userName: "Telegram Bot" });
+
     return NextResponse.json(
       {
         ok: true,
@@ -729,6 +741,16 @@ export async function PUT(req: NextRequest) {
       };
     });
 
+    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "تحديث مستلم تليكرام وربط الدرجة", {
+      submissionId: result.submission.id,
+      studentId: result.submission.studentId,
+      examId: result.submission.examId,
+      gradeId: result.grade?.id,
+      wroteGrade: Boolean(result.grade),
+      status: result.submission.status,
+      matchType: result.submission.matchType,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+    });
     return NextResponse.json({
       submission: normalizeSubmission(
         result.submission as unknown as Record<string, unknown>,
@@ -761,7 +783,25 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = textValue(searchParams.get("id"), 120);
     if (!id) return validationError("تعذر تحديد مستلم البوت المطلوب.");
-    await db.telegramExamSubmission.delete({ where: { id } });
+    const deleted = await db.telegramExamSubmission.delete({
+      where: { id },
+      select: {
+        id: true,
+        studentId: true,
+        examId: true,
+        gradeId: true,
+        status: true,
+        matchType: true,
+      },
+    });
+    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "حذف مستلم تليكرام", {
+      submissionId: deleted.id,
+      studentId: deleted.studentId,
+      examId: deleted.examId,
+      gradeId: deleted.gradeId,
+      status: deleted.status,
+      matchType: deleted.matchType,
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حذف مستلم البوت حالياً.");
