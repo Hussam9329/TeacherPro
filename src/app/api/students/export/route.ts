@@ -9,6 +9,7 @@ import { normalizeArabicText } from "@/lib/route-helpers";
 import { sanitizePhoneInput } from "@/lib/format";
 import { sanitizeTelegramInput } from "@/lib/student-utils";
 import { normalizeListFilter } from "@/lib/all-filter";
+import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 
 function buildLocationWhere(location: string): Prisma.StudentWhereInput | null {
   const normalized = normalizeArabicText(location);
@@ -87,7 +88,7 @@ function buildStudentExportWhere(
 
   if (courseId) and.push({ courseId });
   if (status) and.push({ status });
-  else and.push({ status: { not: "مؤرشف" } });
+  else and.push({ status: { not: STUDENT_STATUS_ARCHIVED } });
   if (courseProgram) and.push({ courseProgram });
   if (courseProgram === "كورسات" && courseTerm) and.push({ courseTerm });
   if (studyType) and.push({ studyType });

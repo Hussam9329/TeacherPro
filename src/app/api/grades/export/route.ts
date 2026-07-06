@@ -7,6 +7,11 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { normalizeArabicText } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
+import {
+  classifyGradeAcademicImpact,
+  gradeMatchesStatusFilterUnified,
+} from "@/lib/grade-classification";
+import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 
 function buildGradeSearchWhere(
   rawQuery: string,
@@ -78,7 +83,9 @@ function buildGradeExportWhere(
   if (studentId) and.push({ studentId });
   if (status) and.push({ status });
 
-  const studentAnd: Prisma.StudentWhereInput[] = [];
+  const studentAnd: Prisma.StudentWhereInput[] = [
+    { status: { not: STUDENT_STATUS_ARCHIVED } },
+  ];
   if (courseId) studentAnd.push({ courseId });
   if (courseProgram) studentAnd.push({ courseProgram });
   if (courseProgram === "كورسات" && courseTerm) studentAnd.push({ courseTerm });
@@ -199,99 +206,20 @@ function leaveAppliesToExam(
 }
 
 function exportClassificationKind(grade: GradeWithRelations): string {
-  const student = grade.student;
-  const exam = grade.exam;
-  if (student.studentLeaves.some((leave) => leaveAppliesToExam(leave, exam)))
-    return "excused";
-  if (!isGradeEnteredForExport(grade, exam)) return "missing";
-  if (isExamWithinGracePeriod(student, exam)) return "grace";
-  if (isExamBeforeStudentRegistration(student, exam)) return "grace";
-  if (grade.status === "غش") return "cheat";
-  if (exam.noDiscount) {
-    if (
-      grade.status === "درجة" &&
-      Number(grade.score || 0) >= Number(exam.passMark || 0)
-    )
-      return "pass";
-    return "no-discount";
-  }
-  if (grade.status === "غائب")
-    return exam.type === "فاينل" ? "dismissal" : "deducted";
-  const score = Number(grade.score) || 0;
-  if (exam.type === "فاينل") {
-    if (
-      score === 0 ||
-      (exam.dismissalGrade !== null && score <= Number(exam.dismissalGrade))
-    )
-      return "dismissal";
-    if (score >= Number(exam.passMark || 0)) return "pass";
-    return "fail";
-  }
-  if (score >= Number(exam.passMark || 0)) return "pass";
-  if (
-    score > Number(exam.discountMark || 0) &&
-    score < Number(exam.passMark || 0)
-  )
-    return "academic-accounting";
-  return "deducted";
+  return classifyGradeAcademicImpact(grade, grade.exam, {
+    student: grade.student,
+    leaves: grade.student.studentLeaves,
+  });
 }
 
 function gradeMatchesExportStatusFilter(
   filter: GradeStatusFilter,
   grade: GradeWithRelations,
 ): boolean {
-  if (!isGradeEnteredForExport(grade, grade.exam)) return false;
-  if (!filter || filter === "all") return true;
-
-  const score =
-    grade.status === "درجة" && grade.score !== null
-      ? Number(grade.score)
-      : null;
-  const fullMark = Number(grade.exam.fullMark || 0);
-  const passMark = Number(grade.exam.passMark || 0);
-  const discountMark = Number(grade.exam.discountMark || 0);
-  const kind = exportClassificationKind(grade);
-  const isNoAccountingKind = [
-    "grace",
-    "before-registration",
-    "excused",
-  ].includes(kind);
-
-  switch (filter) {
-    case "excused":
-      return kind === "excused";
-    case "grace-period":
-      return kind === "grace" || kind === "before-registration";
-    case "absent":
-      return !isNoAccountingKind && grade.status === "غائب";
-    case "cheating":
-      return !isNoAccountingKind && grade.status === "غش";
-    case "discounted":
-      return (
-        !isNoAccountingKind &&
-        score !== null &&
-        !grade.exam.noDiscount &&
-        score <= discountMark
-      );
-    case "failed":
-      return (
-        !isNoAccountingKind &&
-        score !== null &&
-        (grade.exam.noDiscount
-          ? score < passMark
-          : score > discountMark && score < passMark)
-      );
-    case "academic-accounting":
-      return !isNoAccountingKind && kind === "academic-accounting";
-    case "passed":
-      return !isNoAccountingKind && score !== null && score >= passMark;
-    case "full-mark":
-      return !isNoAccountingKind && score !== null && score === fullMark;
-    case "has-grade":
-      return score !== null || grade.status === "غائب" || grade.status === "غش";
-    default:
-      return true;
-  }
+  return gradeMatchesStatusFilterUnified(filter, grade, grade.exam, {
+    student: grade.student,
+    leaves: grade.student.studentLeaves,
+  });
 }
 
 function normalizeGradeStatusFilter(

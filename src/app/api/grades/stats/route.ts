@@ -7,27 +7,13 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { normalizeArabicText, routeErrorResponse } from "@/lib/route-helpers";
-
-function parseCourseIds(value: string | null | undefined): string[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
-  } catch {
-    return [];
-  }
-}
-
-function splitSelection(value?: string | null): string[] {
-  return String(value || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function dateKey(value: unknown): string {
-  return String(value || "").slice(0, 10);
-}
+import { parseCourseIds, isGradeEnteredUnified } from "@/lib/grade-classification";
+import { mergeStudentWhere, studentScopeWhere } from "@/lib/student-scope";
+import {
+  isExamOnOrAfterStudentRegistration,
+  splitSelection,
+  studentMatchesExamMainSites,
+} from "@/lib/exam-utils";
 
 function firstArabicLetter(value: unknown): string {
   const text = String(value || "").trim();
@@ -51,65 +37,6 @@ function includesSearch(query: string, values: unknown[]): boolean {
       .toLowerCase()
       .includes(needle),
   );
-}
-
-function normalizeExamSiteValue(value?: string | null): string {
-  const raw = normalizeArabicText(String(value || "").trim());
-  if (!raw || raw === normalizeArabicText("الكل")) return raw || "";
-  if (
-    ["اونلاين", "الكتروني", "إلكتروني"].map(normalizeArabicText).includes(raw)
-  )
-    return normalizeArabicText("أونلاين");
-  return raw;
-}
-
-function studentMatchesExamMainSites(
-  student: {
-    mainSite?: string | null;
-    subSite?: string | null;
-    locationScope?: string | null;
-  },
-  selectedMainSites: string[],
-): boolean {
-  const normalizedSelection = selectedMainSites
-    .map(normalizeExamSiteValue)
-    .filter(Boolean);
-  if (
-    normalizedSelection.length === 0 ||
-    normalizedSelection.includes(normalizeExamSiteValue("الكل"))
-  )
-    return true;
-  const values = new Set(
-    [student.mainSite, student.subSite, student.locationScope]
-      .map(normalizeExamSiteValue)
-      .filter(Boolean),
-  );
-  return normalizedSelection.some((site) => values.has(site));
-}
-
-function isExamOnOrAfterStudentRegistration(
-  student: { createdAt?: Date | string | null },
-  exam: { date?: Date | string | null },
-): boolean {
-  const registeredAt = dateKey(student.createdAt);
-  const examDate = dateKey(exam.date);
-  if (!registeredAt || !examDate) return true;
-  return examDate >= registeredAt;
-}
-
-function isGradeEntered(
-  grade: { status?: string | null; score?: number | null },
-  exam: { fullMark?: number | null },
-): boolean {
-  if (grade.status === "درجة") {
-    const score = Number(grade.score);
-    return (
-      Number.isFinite(score) &&
-      score >= 0 &&
-      score <= Number(exam.fullMark || 0)
-    );
-  }
-  return grade.status === "غائب" || grade.status === "غش";
 }
 
 function buildStudentSearchValues(
@@ -140,6 +67,12 @@ function buildStudentSearchValues(
   ];
 }
 
+function normalizeDateLike(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : null;
+  return String(value);
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "grades.view");
   if (authError) return authError;
@@ -161,22 +94,22 @@ export async function GET(req: NextRequest) {
       ? await db.exam.findUnique({ where: { id: examId } })
       : null;
 
-    const studentWhere: Prisma.StudentWhereInput = {};
+    const studentWhereParts: Prisma.StudentWhereInput[] = [studentScopeWhere("visible")];
     if (selectedExam) {
       const examCourseIds = parseCourseIds(selectedExam.courseIds);
-      if (courseId) studentWhere.courseId = courseId;
+      if (courseId) studentWhereParts.push({ courseId });
       else if (examCourseIds.length > 0)
-        studentWhere.courseId = { in: examCourseIds };
+        studentWhereParts.push({ courseId: { in: examCourseIds } });
     } else if (courseId) {
-      studentWhere.courseId = courseId;
+      studentWhereParts.push({ courseId });
     }
-    if (courseProgram) studentWhere.courseProgram = courseProgram;
+    if (courseProgram) studentWhereParts.push({ courseProgram });
     if (courseProgram === "كورسات" && courseTerm)
-      studentWhere.courseTerm = courseTerm;
-    if (studyType) studentWhere.studyType = studyType;
+      studentWhereParts.push({ courseTerm });
+    if (studyType) studentWhereParts.push({ studyType });
 
     const students = await db.student.findMany({
-      where: studentWhere,
+      where: mergeStudentWhere(...studentWhereParts),
       select: {
         id: true,
         name: true,
@@ -199,15 +132,22 @@ export async function GET(req: NextRequest) {
     const selectedMainSites = selectedExam
       ? splitSelection(selectedExam.mainSite)
       : [];
+    const selectedExamForHelpers = selectedExam
+      ? { ...selectedExam, date: normalizeDateLike(selectedExam.date) }
+      : null;
     const scopedStudents = students.filter((student) => {
-      if (selectedExam) {
+      if (selectedExam && selectedExamForHelpers) {
         const examCourseIds = parseCourseIds(selectedExam.courseIds);
         if (
           examCourseIds.length > 0 &&
           !examCourseIds.includes(student.courseId)
         )
           return false;
-        if (!isExamOnOrAfterStudentRegistration(student, selectedExam))
+        const studentForHelpers = {
+          ...student,
+          createdAt: normalizeDateLike(student.createdAt),
+        };
+        if (!isExamOnOrAfterStudentRegistration(studentForHelpers, selectedExamForHelpers))
           return false;
         if (!studentMatchesExamMainSites(student, selectedMainSites))
           return false;
@@ -249,7 +189,7 @@ export async function GET(req: NextRequest) {
 
     const enteredStudentIds = new Set<string>();
     grades.forEach((grade) => {
-      if (isGradeEntered(grade, grade.exam))
+      if (isGradeEnteredUnified(grade, grade.exam))
         enteredStudentIds.add(grade.studentId);
     });
 

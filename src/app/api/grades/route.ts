@@ -15,6 +15,8 @@ import { ensureExamSchema } from "@/lib/exam-schema";
 import { ensureFollowupTables } from "@/lib/followup-schema";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { gradeMatchesStatusFilterUnified } from "@/lib/grade-classification";
+import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 
 async function validateGradePayload(body: Record<string, unknown>) {
   const studentError = requireText(body.studentId, "الطالب");
@@ -146,7 +148,9 @@ function buildGradeWhere(
   if (studentId) and.push({ studentId });
   if (status) and.push({ status });
 
-  const studentAnd: Prisma.StudentWhereInput[] = [];
+  const studentAnd: Prisma.StudentWhereInput[] = [
+    { status: { not: STUDENT_STATUS_ARCHIVED } },
+  ];
   if (courseId) studentAnd.push({ courseId });
   if (courseProgram) studentAnd.push({ courseProgram });
   if (courseProgram === "كورسات" && courseTerm) studentAnd.push({ courseTerm });
@@ -362,58 +366,10 @@ function gradeMatchesServerStatusFilter(
   filter: GradeStatusFilter,
   grade: GradeWithRelations,
 ): boolean {
-  if (!isGradeEnteredForServer(grade, grade.exam)) return false;
-  if (!filter || filter === "all") return true;
-
-  const score =
-    grade.status === "درجة" && grade.score !== null
-      ? Number(grade.score)
-      : null;
-  const fullMark = Number(grade.exam.fullMark || 0);
-  const passMark = Number(grade.exam.passMark || 0);
-  const discountMark = Number(grade.exam.discountMark || 0);
-  const kind = serverClassificationKind(grade);
-  const isNoAccountingKind = [
-    "grace",
-    "before-registration",
-    "excused",
-  ].includes(kind);
-
-  switch (filter) {
-    case "excused":
-      return kind === "excused";
-    case "grace-period":
-      return kind === "grace" || kind === "before-registration";
-    case "absent":
-      return !isNoAccountingKind && grade.status === "غائب";
-    case "cheating":
-      return !isNoAccountingKind && grade.status === "غش";
-    case "discounted":
-      return (
-        !isNoAccountingKind &&
-        score !== null &&
-        !grade.exam.noDiscount &&
-        score <= discountMark
-      );
-    case "failed":
-      return (
-        !isNoAccountingKind &&
-        score !== null &&
-        (grade.exam.noDiscount
-          ? score < passMark
-          : score > discountMark && score < passMark)
-      );
-    case "academic-accounting":
-      return !isNoAccountingKind && kind === "academic-accounting";
-    case "passed":
-      return !isNoAccountingKind && score !== null && score >= passMark;
-    case "full-mark":
-      return !isNoAccountingKind && score !== null && score === fullMark;
-    case "has-grade":
-      return score !== null || grade.status === "غائب" || grade.status === "غش";
-    default:
-      return true;
-  }
+  return gradeMatchesStatusFilterUnified(filter, grade, grade.exam, {
+    student: grade.student,
+    leaves: grade.student.studentLeaves,
+  });
 }
 
 function normalizeGradeStatusFilter(
