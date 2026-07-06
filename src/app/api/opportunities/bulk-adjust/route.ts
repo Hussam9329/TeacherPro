@@ -14,6 +14,7 @@ import {
   hasActiveChapterWhere,
   normalizeBoolean,
 } from "@/lib/opportunity-filters-server";
+import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 
 type StudentUpdatePayload = {
   id?: unknown;
@@ -190,10 +191,13 @@ async function handleFilterBasedBulkAdjust(body: Record<string, unknown>) {
         });
 
         const targetRows = candidateRows.filter((student) => {
+          if (excludeDismissed && student.status === "مفصول") {
+            return false;
+          }
           if (
             actionType === "add" &&
-            excludeDismissed &&
-            student.status === "مفصول"
+            student.status === "مفصول" &&
+            !reactivateDismissedOnAdd
           ) {
             return false;
           }
@@ -254,23 +258,7 @@ async function handleFilterBasedBulkAdjust(body: Record<string, unknown>) {
           ]),
         );
 
-        const targetIds = targetRows.map((student) => student.id);
-        const finalChanceLogs = await tx.opportunityLog.findMany({
-          where: {
-            studentId: { in: targetIds },
-            OR: [
-              { action: "فرصة أخيرة بعد تعهد" },
-              { reason: { contains: "فرصة أخيرة", mode: "insensitive" } },
-            ],
-          },
-          select: { studentId: true },
-        });
-        const finalChanceStudentIds = new Set(
-          finalChanceLogs.map((log) => log.studentId),
-        );
-
         const now = new Date();
-        let updatedStudents = 0;
         const opportunityLogs: Array<{
           studentId: string;
           action: string;
@@ -292,79 +280,11 @@ async function handleFilterBasedBulkAdjust(body: Record<string, unknown>) {
           dismissalDate?: Date;
         }> = [];
 
+        const appliedStudentIds: string[] = [];
         for (const student of targetRows) {
           const activeChapter = activeChapterByCourseId.get(student.courseId);
           if (!activeChapter) continue;
-          const cap =
-            activeChapter.opportunities > 0
-              ? activeChapter.opportunities
-              : fullOpportunityLimitForStudent(student);
-          let nextOpportunities = Math.max(
-            0,
-            Number(student.opportunities || 0) + signedAmount,
-          );
-          if (signedAmount > 0 && cap > 0) {
-            nextOpportunities = Math.min(nextOpportunities, cap);
-          }
-
-          const data: {
-            opportunities: number;
-            status?: string;
-            dismissalType?: string;
-            dismissalReason?: string;
-            dismissalNotes?: string;
-          } = { opportunities: Math.trunc(nextOpportunities) };
-
-          if (
-            signedAmount < 0 &&
-            nextOpportunities === 0 &&
-            student.status === "نشط"
-          ) {
-            const dismissalType = finalChanceStudentIds.has(student.id)
-              ? "فصل نهائي"
-              : "فصل مؤقت";
-            const dismissalReason = finalChanceStudentIds.has(student.id)
-              ? "عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة"
-              : "انتهاء الفرص";
-            data.status = "مفصول";
-            data.dismissalType = dismissalType;
-            data.dismissalReason = dismissalReason;
-            data.dismissalNotes = "";
-            studentNotes.push({
-              studentId: student.id,
-              kind: "إجراء",
-              text: `فصل الطالب (${dismissalType}): ${dismissalReason}`,
-              date: now,
-              sourceType: "bulk-opportunity-adjust",
-              dismissalKey: `${student.id}-${now.toISOString()}`,
-              dismissalType,
-              dismissalReason,
-              dismissalDate: now,
-            });
-          } else if (
-            signedAmount > 0 &&
-            reactivateDismissedOnAdd &&
-            student.status === "مفصول" &&
-            nextOpportunities > 0
-          ) {
-            data.status = "نشط";
-            data.dismissalType = "";
-            data.dismissalReason = "";
-            data.dismissalNotes = "";
-            studentNotes.push({
-              studentId: student.id,
-              kind: "إجراء",
-              text: "إعادة تفعيل تلقائية بعد إضافة فرصة جماعية",
-              date: now,
-              sourceType: "bulk-opportunity-adjust",
-            });
-          }
-
-          const update = await tx.student.updateMany({
-            where: { id: student.id },
-            data,
-          });
-          updatedStudents += update.count;
+          appliedStudentIds.push(student.id);
           opportunityLogs.push({
             studentId: student.id,
             action,
@@ -373,6 +293,19 @@ async function handleFilterBasedBulkAdjust(body: Record<string, unknown>) {
             date: now,
             chapterId: activeChapter.chapterId,
           });
+          if (
+            signedAmount > 0 &&
+            reactivateDismissedOnAdd &&
+            student.status === "مفصول"
+          ) {
+            studentNotes.push({
+              studentId: student.id,
+              kind: "إجراء",
+              text: "إعادة تفعيل بعد إضافة فرصة جماعية موثقة بسجل يدوي",
+              date: now,
+              sourceType: "bulk-opportunity-adjust",
+            });
+          }
         }
 
         for (const group of chunks(opportunityLogs)) {
@@ -382,13 +315,19 @@ async function handleFilterBasedBulkAdjust(body: Record<string, unknown>) {
           await tx.studentNote.createMany({ data: group });
         }
 
+        const academicRecalculation = appliedStudentIds.length
+          ? await recalculateStudentsAcademicState(appliedStudentIds, { tx })
+          : null;
+        const updatedStudents = academicRecalculation?.students.length || 0;
+
         return {
           updatedStudents,
           savedOpportunityLogs: opportunityLogs.length,
           savedStudentNotes: studentNotes.length,
           totalMatching,
           eligibleWithActiveChapter: candidateRows.length,
-          skipped: Math.max(0, totalMatching - updatedStudents),
+          skipped: Math.max(0, totalMatching - appliedStudentIds.length),
+          academicRecalculation,
         };
       }),
     "BulkOpportunityAdjustByFilter",
@@ -440,11 +379,16 @@ export async function POST(req: NextRequest) {
           const existingStudents = allStudentIds.length
             ? await tx.student.findMany({
                 where: { id: { in: allStudentIds } },
-                select: { id: true },
+                select: { id: true, status: true },
               })
             : [];
           const existingStudentIds = new Set(
             existingStudents.map((student) => student.id),
+          );
+          const modifiableStudentIds = new Set(
+            existingStudents
+              .filter((student) => student.status !== "مؤرشف")
+              .map((student) => student.id),
           );
           let updatedStudents = 0;
 
@@ -452,9 +396,10 @@ export async function POST(req: NextRequest) {
             string,
             { chapterId: string; opportunities: number }
           >();
-          if (allStudentIds.length) {
+          const allModifiableStudentIds = Array.from(modifiableStudentIds);
+          if (allModifiableStudentIds.length) {
             const studentRowsForChapterCheck = await tx.student.findMany({
-              where: { id: { in: allStudentIds } },
+              where: { id: { in: allModifiableStudentIds } },
               select: { id: true, courseId: true },
             });
             const courseIdsForChapter = Array.from(
@@ -500,7 +445,7 @@ export async function POST(req: NextRequest) {
           // (We already have existingStudents but it only had id selected.)
           const studentIdList = students
             .map((s) => s.id)
-            .filter((id) => existingStudentIds.has(id));
+            .filter((id) => modifiableStudentIds.has(id));
           if (studentIdList.length) {
             const studentRowsForCourse = await tx.student.findMany({
               where: { id: { in: studentIdList } },
@@ -512,7 +457,7 @@ export async function POST(req: NextRequest) {
           }
 
           for (const student of students.filter((item) =>
-            existingStudentIds.has(item.id),
+            modifiableStudentIds.has(item.id),
           )) {
             // Clamp opportunities to baseOpportunities of the active chapter
             // for this student's course. This prevents the client from ever
@@ -556,7 +501,7 @@ export async function POST(req: NextRequest) {
           }
 
           const safeOpportunityLogs = opportunityLogs.filter((log) =>
-            existingStudentIds.has(log.studentId),
+            modifiableStudentIds.has(log.studentId),
           );
           for (const group of chunks(safeOpportunityLogs)) {
             await tx.opportunityLog.createMany({
@@ -566,7 +511,7 @@ export async function POST(req: NextRequest) {
           }
 
           const safeStudentNotes = studentNotes.filter((note) =>
-            existingStudentIds.has(note.studentId),
+            modifiableStudentIds.has(note.studentId),
           );
           for (const group of chunks(safeStudentNotes)) {
             await tx.studentNote.createMany({
@@ -575,12 +520,28 @@ export async function POST(req: NextRequest) {
             });
           }
 
+          const recalculationIds = Array.from(
+            new Set(
+              [
+                ...students.map((student) => student.id),
+                ...safeOpportunityLogs.map((log) => log.studentId),
+                ...safeStudentNotes.map((note) => note.studentId),
+              ].filter((id) => modifiableStudentIds.has(id)),
+            ),
+          );
+          const academicRecalculation = recalculationIds.length
+            ? await recalculateStudentsAcademicState(recalculationIds, { tx })
+            : null;
+
           return {
             updatedStudents,
             savedOpportunityLogs: safeOpportunityLogs.length,
             savedStudentNotes: safeStudentNotes.length,
             skippedMissingStudents:
               allStudentIds.length - existingStudentIds.size,
+            skippedArchivedStudents:
+              existingStudentIds.size - modifiableStudentIds.size,
+            academicRecalculation,
           };
         }),
       "BulkOpportunityAdjust",

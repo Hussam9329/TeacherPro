@@ -1017,13 +1017,14 @@ export function recalculateAcademicState(
     if (manualDismissal && !hasAcademicEventAfterManualDismissal)
       return student;
 
+    const opportunityCap = Number(
+      student.baseOpportunities || activeChapter?.opportunities || 0,
+    );
     opportunities = Math.max(0, opportunities);
-    if (
-      opportunities === 0 &&
-      Number(student.baseOpportunities || activeChapter?.opportunities || 0) >
-        0 &&
-      !dismissalType
-    ) {
+    if (opportunityCap > 0) {
+      opportunities = Math.min(opportunities, opportunityCap);
+    }
+    if (opportunities === 0 && opportunityCap > 0 && !dismissalType) {
       setDismissal(
         hasFinalChancePledge ? "فصل نهائي" : "فصل مؤقت",
         hasFinalChancePledge

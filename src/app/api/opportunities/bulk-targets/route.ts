@@ -67,8 +67,7 @@ export async function GET(req: NextRequest) {
         }),
       ]);
 
-    const excludedDismissed =
-      actionType === "add" && excludeDismissed ? dismissedInEligibleBase : 0;
+    const excludedDismissed = excludeDismissed ? dismissedInEligibleBase : 0;
     const excludedFullOpportunities =
       actionType === "deduct" && excludeFullOpportunities
         ? rows.filter(
@@ -78,11 +77,7 @@ export async function GET(req: NextRequest) {
           ).length
         : 0;
     const targetCount = rows.filter((student) => {
-      if (
-        actionType === "add" &&
-        excludeDismissed &&
-        student.status === "مفصول"
-      ) {
+      if (excludeDismissed && student.status === "مفصول") {
         return false;
       }
       if (actionType === "deduct" && excludeFullOpportunities) {

@@ -463,9 +463,10 @@ export function OpportunitiesView() {
       `الحالة: ${activeStatusFilterName}`,
       `عدد الفرص: ${activeOpportunityFilterName}`,
       search.trim() ? `البحث: ${search.trim()}` : "",
-      bulkActionDialog.type === "add"
-        ? `عدا المفصولين: ${bulkExcludeDismissed ? "نعم" : "لا"}`
-        : `عدا أصحاب الفرص الكاملة: ${bulkExcludeFullOpportunities ? "نعم" : "لا"}`,
+      `عدا المفصولين: ${bulkExcludeDismissed ? "نعم" : "لا"}`,
+      bulkActionDialog.type === "deduct"
+        ? `عدا أصحاب الفرص الكاملة: ${bulkExcludeFullOpportunities ? "نعم" : "لا"}`
+        : "",
       `السبب: ${bulkReason.trim()}`,
     ]
       .filter(Boolean)
@@ -1165,10 +1166,28 @@ export function OpportunitiesView() {
                   </label>
                 </div>
               ) : (
-                <div className="mt-3 rounded-xl border bg-background/70 p-3">
-                  <p className="mb-2 text-xs font-black text-foreground">
+                <div className="mt-3 space-y-3 rounded-xl border bg-background/70 p-3">
+                  <p className="text-xs font-black text-foreground">
                     العدا / Except
                   </p>
+                  <label
+                    htmlFor="bulk-exclude-dismissed-deduct"
+                    className="flex cursor-pointer items-start gap-2 text-xs leading-5 text-muted-foreground"
+                  >
+                    <Checkbox
+                      id="bulk-exclude-dismissed-deduct"
+                      checked={bulkExcludeDismissed}
+                      onCheckedChange={(checked) =>
+                        setBulkExcludeDismissed(checked === true)
+                      }
+                      className="mt-0.5"
+                    />
+                    <span>
+                      عدا المفصولين: إذا بقيت محددة لا يتم خصم فرص من طالب
+                      مفصول مسبقاً حتى لا تتداخل حالة الفصل القديمة مع الإجراء
+                      الجماعي.
+                    </span>
+                  </label>
                   <label
                     htmlFor="bulk-exclude-full-opportunities"
                     className="flex cursor-pointer items-start gap-2 text-xs leading-5 text-muted-foreground"

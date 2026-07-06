@@ -6,6 +6,7 @@ import { requireAnyPermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
+import { recalculateStudentsAcademicState } from '@/lib/academic-recalculate-server';
 
 function readListPagination(req: NextRequest, fallbackPageSize = 100, maxPageSize = 500) {
   const searchParams = new URL(req.url).searchParams;
@@ -148,6 +149,11 @@ export async function PUT(req: NextRequest) {
     const result = await db.$transaction(async (tx) => {
       const courseChapter = await tx.courseChapter.update({ where: { id: String(id) }, data: updateData });
       let affectedStudents = 0;
+      let opportunityStudents = 0;
+      let baseOnlyStudents = 0;
+      let skippedArchived = 0;
+      let skippedDismissed = 0;
+      let academicRecalculation: Awaited<ReturnType<typeof recalculateStudentsAcademicState>> | null = null;
 
       if (syncStudentOpportunities) {
         const courseId = String(body.courseId || courseChapter.courseId || '').trim();
@@ -155,34 +161,80 @@ export async function PUT(req: NextRequest) {
           throw new Error('تعذر تحديد دورة الفصل لتحديث فرص الطلاب');
         }
 
+        const courseStudents = await tx.student.findMany({
+          where: { courseId },
+          select: { id: true, status: true },
+        });
+        const nonArchivedStudents = courseStudents.filter((student) => student.status !== 'مؤرشف');
+        const activeStudentIds = nonArchivedStudents
+          .filter((student) => student.status !== 'مفصول')
+          .map((student) => student.id);
+        const dismissedStudentIds = nonArchivedStudents
+          .filter((student) => student.status === 'مفصول')
+          .map((student) => student.id);
+        skippedArchived = courseStudents.length - nonArchivedStudents.length;
+        skippedDismissed = dismissedStudentIds.length;
+
         if (courseChapter.active) {
           const baseOpportunities = normalizeOpportunityValue(body.chapterOpportunities);
-          const baseUpdate = await tx.student.updateMany({
-            where: { courseId },
-            data: { opportunities: baseOpportunities, baseOpportunities },
-          });
-          affectedStudents = baseUpdate.count;
+          if (activeStudentIds.length) {
+            const baseUpdate = await tx.student.updateMany({
+              where: { id: { in: activeStudentIds }, courseId },
+              data: { opportunities: baseOpportunities, baseOpportunities },
+            });
+            opportunityStudents = baseUpdate.count;
+          }
+          if (dismissedStudentIds.length) {
+            const dismissedBaseUpdate = await tx.student.updateMany({
+              where: { id: { in: dismissedStudentIds }, courseId },
+              data: { baseOpportunities },
+            });
+            baseOnlyStudents = dismissedBaseUpdate.count;
+          }
 
           const archiveEntries = parseArchiveEntries(courseChapter.archive);
+          const activeStudentIdSet = new Set(activeStudentIds);
+          const dismissedStudentIdSet = new Set(dismissedStudentIds);
           for (const entry of archiveEntries) {
-            await tx.student.updateMany({
-              where: { id: entry.studentId, courseId },
-              data: {
-                opportunities: entry.opportunities,
-                baseOpportunities,
-              },
-            });
+            if (activeStudentIdSet.has(entry.studentId)) {
+              await tx.student.updateMany({
+                where: { id: entry.studentId, courseId, status: { not: 'مؤرشف' } },
+                data: {
+                  opportunities: entry.opportunities,
+                  baseOpportunities,
+                },
+              });
+            } else if (dismissedStudentIdSet.has(entry.studentId)) {
+              await tx.student.updateMany({
+                where: { id: entry.studentId, courseId, status: { not: 'مؤرشف' } },
+                data: { baseOpportunities },
+              });
+            }
           }
+
+          if (activeStudentIds.length) {
+            academicRecalculation = await recalculateStudentsAcademicState(activeStudentIds, { tx });
+          }
+          affectedStudents = opportunityStudents + baseOnlyStudents;
         } else {
           const resetUpdate = await tx.student.updateMany({
-            where: { courseId },
+            where: { courseId, status: { not: 'مؤرشف' } },
             data: { opportunities: 0, baseOpportunities: 0 },
           });
           affectedStudents = resetUpdate.count;
+          opportunityStudents = resetUpdate.count;
         }
       }
 
-      return { courseChapter, affectedStudents };
+      return {
+        courseChapter,
+        affectedStudents,
+        opportunityStudents,
+        baseOnlyStudents,
+        skippedArchived,
+        skippedDismissed,
+        academicRecalculation,
+      };
     });
 
     return NextResponse.json(result);
