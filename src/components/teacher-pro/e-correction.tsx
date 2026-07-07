@@ -184,7 +184,6 @@ function getSubmissionPagePreview(
 ) {
   // استخدم فقط رابط R2 المباشر (url). ممنوع أخذ الصور من Telegram مباشرة.
   // البوت يرفع الصور إلى R2 عند الاستلام، ويخزن الرابط العام في حقل url.
-  // لو ما في رابط R2، الصورة غير متوفرة (البوت ما رفعها أو فشل الرفع).
   const r2Url = firstPageString(page, [
     "url",
     "fileUrl",
@@ -194,8 +193,14 @@ function getSubmissionPagePreview(
     "r2Url",
     "r2_url",
   ]);
-  if (r2Url) return r2Url;
-  // لا fallback لـ Telegram — الصور تخدم من R2 فقط.
+  if (r2Url) {
+    // استبدل الـ r2.dev domain القديم بـ submissions.teacher-pro.net
+    // لأن البوت خزّن الروابط بالـ domain القديم قبل تفعيل الـ custom domain.
+    return r2Url.replace(
+      "pub-a1f32d464ddf476785c5a6cca57bdba8.r2.dev",
+      "submissions.teacher-pro.net",
+    );
+  }
   return "";
 }
 
