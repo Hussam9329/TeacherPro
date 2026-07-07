@@ -2339,28 +2339,55 @@ async function flushPendingGradeSaves(
   try {
     const chunk = pending.slice(0, 25);
     const flushed: PendingGradeSave[] = [];
-    let lastFailure: ApiResult | null = null;
+    // الدرجات اللي فشلت بـ 400 (permanent) — لازم تنحذف من الـ outbox
+    // لأنها ما راح تنجح أبداً (مثلاً: طالب مفصول).
+    const permanentlyFailed: PendingGradeSave[] = [];
+    let lastTransientFailure: ApiResult | null = null;
 
     for (const item of chunk) {
       const result = await gradeApi.add(gradeSaveForApi(item));
       if (!result.ok) {
-        lastFailure = result;
-        break;
+        if (result.transient) {
+          // خطأ عابر (شبكة/5xx/429) — أعد المحاولة لاحقاً
+          lastTransientFailure = result;
+          break;
+        } else {
+          // خطأ دائم (400/403/404) — احذف الدرجة من الـ outbox لأنها
+          // ما راح تنجح أبداً. مثلاً: "الطالب مفصول ولا يمكن إدخال درجات له"
+          permanentlyFailed.push(item);
+          continue;
+        }
       }
       flushed.push(item);
     }
 
     if (flushed.length > 0) removeFlushedPendingGradeSaves(flushed);
+    if (permanentlyFailed.length > 0) {
+      removeFlushedPendingGradeSaves(permanentlyFailed);
+      // أظهر toast مرة وحدة لإعلام المستخدم
+      if (typeof window !== 'undefined') {
+        const names = permanentlyFailed
+          .map((p) => {
+            const st = getState().students.find((s) => s.id === p.studentId);
+            return st?.name || p.studentId;
+          })
+          .slice(0, 3);
+        console.warn(
+          '[grade-outbox] تم حذف درجات مؤجلة فشلت بشكل دائم (طالب مفصول أو غيره):',
+          names.join('، ') + (permanentlyFailed.length > 3 ? ` (+${permanentlyFailed.length - 3})` : ''),
+        );
+      }
+    }
 
     const remaining = readPendingGradeSaves();
-    if (!lastFailure) {
+    if (!lastTransientFailure) {
       if (remaining.length > 0) schedulePendingGradeFlush(getState, 300);
       return;
     }
 
-    notifyPendingGradeSyncIssue(getState, lastFailure);
+    notifyPendingGradeSyncIssue(getState, lastTransientFailure);
     if (remaining.length > 0)
-      schedulePendingGradeFlush(getState, lastFailure.transient ? 5000 : 15000);
+      schedulePendingGradeFlush(getState, 5000);
   } finally {
     pendingGradeFlushInFlight = false;
   }
