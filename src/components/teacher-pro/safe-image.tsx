@@ -158,7 +158,10 @@ export function SafeImage({
           ref={imgRef}
           src={inView ? src : undefined}
           alt={alt}
-          loading={lazy ? "lazy" : "eager"}
+          // لا نستخدم loading="lazy" لأن IntersectionObserver يدوي يتعامل
+          // مع الـ lazy loading. استخدام الاثنين معاً يسبب تحذير
+          // 'Images loaded lazily and replaced with placeholders' في Edge.
+          loading="eager"
           onLoad={handleImgLoad}
           onError={handleImgError}
           className={`w-full rounded-xl border object-contain bg-muted/30 transition-opacity duration-300 ${
