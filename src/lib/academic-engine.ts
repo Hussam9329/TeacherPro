@@ -662,6 +662,15 @@ export function recalculateAcademicState(
       : null;
     const studentGrades = state.grades
       .filter((grade) => grade.studentId === student.id)
+      .filter((grade) => {
+        // اعتبر بس درجات الامتحانات اللي تنتمي لدورة الطالب الحالية.
+        // هذا يمنع درجات دورة قديمة من التأثير على فرص الطالب بعد نقله
+        // لدورة جديدة (خصوصاً عند اختيار "اعتباره طالب جديد").
+        const exam = examsById.get(grade.examId);
+        if (!exam) return false;
+        const examCourseIds = exam.courseIds || [];
+        return examCourseIds.includes(student.courseId);
+      })
       .sort((a, b) =>
         String(a.createdAt || "").localeCompare(String(b.createdAt || "")),
       );

@@ -312,10 +312,57 @@ function firstBodyValue(
   max = 200,
 ): string {
   for (const key of keys) {
-    const value = textValue(body[key], max);
+    const raw = body[key];
+    if (raw && typeof raw === "object") continue;
+    const value = textValue(raw, max);
     if (value) return value;
   }
   return "";
+}
+
+
+function nestedBodyValue(
+  body: Record<string, unknown>,
+  objectKeys: string[],
+  valueKeys: string[],
+  max = 200,
+): string {
+  for (const objectKey of objectKeys) {
+    const candidate = body[objectKey];
+    if (!candidate || typeof candidate !== "object") continue;
+    const record = candidate as Record<string, unknown>;
+    for (const valueKey of valueKeys) {
+      const value = textValue(record[valueKey], max);
+      if (value) return value;
+    }
+  }
+  return "";
+}
+
+function readIncomingTelegramUserId(body: Record<string, unknown>): string {
+  return firstBodyValue(
+    body,
+    ["telegramUserId", "telegram_user_id", "telegramId", "telegram_id"],
+    80,
+  ) || nestedBodyValue(body, ["telegram", "telegramData", "telegram_data"], ["id", "userId", "user_id"], 80);
+}
+
+function readIncomingTelegramUsername(body: Record<string, unknown>): string {
+  return sanitizeTelegramInput(
+    firstBodyValue(
+      body,
+      ["telegramUsername", "telegram_username", "telegram", "username"],
+      120,
+    ) || nestedBodyValue(body, ["telegram", "telegramData", "telegram_data"], ["username", "userName", "user_name"], 120),
+  );
+}
+
+function readIncomingTelegramChatId(body: Record<string, unknown>): string {
+  return firstBodyValue(
+    body,
+    ["telegramChatId", "telegram_chat_id", "chatId", "chat_id"],
+    80,
+  ) || nestedBodyValue(body, ["telegram", "telegramData", "telegram_data"], ["chatId", "chat_id"], 80);
 }
 
 function normalizeTelegramForMatch(value: unknown): string {
@@ -350,11 +397,7 @@ function resolveSubmissionMatchInfo(
   }
 
   const incomingTelegram = normalizeTelegramForMatch(
-    firstBodyValue(
-      body,
-      ["telegramUsername", "telegram_username", "telegram", "username"],
-      200,
-    ) || firstBodyValue(body, ["telegramUserId", "telegram_user_id"], 120),
+    readIncomingTelegramUserId(body) || readIncomingTelegramUsername(body),
   );
   const studentTelegram = normalizeTelegramForMatch(
     student.telegram || student.telegramKey || "",
@@ -527,6 +570,21 @@ export async function POST(req: NextRequest) {
     const sourceMessageIds = readStringArray(
       body.sourceMessageIds || body.messageIds || body.message_ids,
     );
+    const derivedSourceMessageIds =
+      sourceMessageIds.length > 0
+        ? sourceMessageIds
+        : pages
+            .map((page) => String(page.messageId || "").trim())
+            .filter(Boolean);
+    const incomingTelegramUserId = readIncomingTelegramUserId(
+      body as Record<string, unknown>,
+    );
+    const incomingTelegramUsername = readIncomingTelegramUsername(
+      body as Record<string, unknown>,
+    );
+    const incomingTelegramChatId = readIncomingTelegramChatId(
+      body as Record<string, unknown>,
+    );
     const submittedAt = parseDateValue(body.submittedAt) || new Date();
 
     const matchInfo = resolveSubmissionMatchInfo(
@@ -565,13 +623,13 @@ export async function POST(req: NextRequest) {
         where: { studentId_examId: { studentId, examId } },
         update: {
           gradeId: grade.id,
-          telegramUserId: textValue(body.telegramUserId, 80),
-          telegramUsername: textValue(body.telegramUsername, 120),
-          telegramChatId: textValue(body.telegramChatId, 80),
+          telegramUserId: incomingTelegramUserId,
+          telegramUsername: incomingTelegramUsername,
+          telegramChatId: incomingTelegramChatId,
           matchType: matchInfo.matchType,
           matchSource: matchInfo.matchSource,
           matchDetails: matchInfo.matchDetails,
-          sourceMessageIds: safeJsonStringify(sourceMessageIds),
+          sourceMessageIds: safeJsonStringify(derivedSourceMessageIds),
           pages: safeJsonStringify(pages),
           pageCount:
             pages.length ||
@@ -585,13 +643,13 @@ export async function POST(req: NextRequest) {
           studentId,
           examId,
           gradeId: grade.id,
-          telegramUserId: textValue(body.telegramUserId, 80),
-          telegramUsername: textValue(body.telegramUsername, 120),
-          telegramChatId: textValue(body.telegramChatId, 80),
+          telegramUserId: incomingTelegramUserId,
+          telegramUsername: incomingTelegramUsername,
+          telegramChatId: incomingTelegramChatId,
           matchType: matchInfo.matchType,
           matchSource: matchInfo.matchSource,
           matchDetails: matchInfo.matchDetails,
-          sourceMessageIds: safeJsonStringify(sourceMessageIds),
+          sourceMessageIds: safeJsonStringify(derivedSourceMessageIds),
           pages: safeJsonStringify(pages),
           pageCount:
             pages.length ||

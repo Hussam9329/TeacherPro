@@ -44,6 +44,7 @@ export interface AcademicExam {
   active: boolean;
   scheduledActivateAt?: string | null;
   scheduledDeactivateAt?: string | null;
+  courseIds?: string[]; // الامتحانات قد تكون مرتبطة بأكثر من دورة
 }
 
 export interface AcademicGrade {

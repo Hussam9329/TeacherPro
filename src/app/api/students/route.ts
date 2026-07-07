@@ -952,6 +952,14 @@ export async function PUT(req: NextRequest) {
       });
       data.opportunities = nextOpportunities.opportunities;
       data.baseOpportunities = nextOpportunities.baseOpportunities;
+      // امسح حالة الفصل القديمة حتى يبدأ الطالب كصفحة بيضاء في الدورة الجديدة.
+      data.status = "نشط";
+      data.dismissalType = "";
+      data.dismissalReason = "";
+      data.dismissalNotes = "";
+      // امسح كل سجلات الفرص القديمة (يدوية + تلقائية) حتى ما يعيد المحرك
+      // احتسابها ويخصم من رصيد الطالب الجديد. هذا هو جوهر "اعتباره طالب جديد".
+      await db.opportunityLog.deleteMany({ where: { studentId: id } });
     }
 
     if (needsTransferPolicy && courseTransferPolicy === "keep") {

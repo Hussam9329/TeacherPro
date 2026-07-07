@@ -89,7 +89,16 @@ function mapExam(exam: {
   active: boolean;
   scheduledActivateAt: Date | null;
   scheduledDeactivateAt: Date | null;
+  courseIds?: string;
 }): AcademicExam {
+  let parsedCourseIds: string[] = [];
+  try {
+    const parsed = JSON.parse(exam.courseIds || "[]");
+    if (Array.isArray(parsed)) parsedCourseIds = parsed.map(String).filter(Boolean);
+  } catch {
+    // دعم نسخ قديمة خزنتها كقائمة مفصولة بفواصل.
+    parsedCourseIds = String(exam.courseIds || "").split(",").map((s) => s.trim()).filter(Boolean);
+  }
   return {
     id: exam.id,
     name: exam.name,
@@ -104,6 +113,7 @@ function mapExam(exam: {
     active: Boolean(exam.active),
     scheduledActivateAt: exam.scheduledActivateAt ? dateString(exam.scheduledActivateAt) : null,
     scheduledDeactivateAt: exam.scheduledDeactivateAt ? dateString(exam.scheduledDeactivateAt) : null,
+    courseIds: parsedCourseIds,
   };
 }
 
@@ -357,6 +367,7 @@ async function loadAcademicStateForStudents(
         active: true,
         scheduledActivateAt: true,
         scheduledDeactivateAt: true,
+        courseIds: true,
       },
     }),
     client.courseChapter.findMany({
