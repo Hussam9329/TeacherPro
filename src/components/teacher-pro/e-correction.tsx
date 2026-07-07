@@ -182,29 +182,20 @@ function getSubmissionPagePreview(
   page: TelegramSubmissionPage,
   submissionId?: string,
 ) {
-  // دائماً استخدم /api/telegram-file عندما يكون fileId متوفراً، حتى لو كان
-  // هناك url مباشر. السبب: الـ url المباشر قد يكون R2 (يرجع 403 إذا الـ
-  // bucket مو public) أو Telegram API (بطيء/timeout). الـ proxy endpoint
-  // يخدم الصورة من الخادم مع cache-control طويل ويرفعها لـ R2 بشكل غير
-  // متزامن للتسريع المستقبلي.
-  const fileId = getSubmissionPageFileId(page);
-  if (fileId) {
-    const params = new URLSearchParams({ fileId });
-    if (submissionId) params.set("submissionId", submissionId);
-    return `/api/telegram-file?${params.toString()}`;
-  }
-  // لو ما في fileId، استخدم url المباشر كـ fallback.
-  const directUrl = firstPageString(page, [
+  // استخدم فقط رابط R2 المباشر (url). ممنوع أخذ الصور من Telegram مباشرة.
+  // البوت يرفع الصور إلى R2 عند الاستلام، ويخزن الرابط العام في حقل url.
+  // لو ما في رابط R2، الصورة غير متوفرة (البوت ما رفعها أو فشل الرفع).
+  const r2Url = firstPageString(page, [
     "url",
     "fileUrl",
     "file_url",
     "publicUrl",
     "public_url",
+    "r2Url",
+    "r2_url",
   ]);
-  if (directUrl) return directUrl;
-  // Fallback to dataUrl for older records that existed before the dataUrl ban.
-  const legacyDataUrl = firstPageString(page, ["dataUrl", "data_url"]);
-  if (legacyDataUrl) return legacyDataUrl;
+  if (r2Url) return r2Url;
+  // لا fallback لـ Telegram — الصور تخدم من R2 فقط.
   return "";
 }
 
