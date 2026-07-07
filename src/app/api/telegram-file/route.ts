@@ -161,29 +161,23 @@ export async function GET(req: NextRequest) {
     const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
     const buffer = Buffer.from(await imageRes.arrayBuffer());
 
-    // إذا كان R2 مُهيأ، ارفع الصورة إلى R2 وأعد توجيه المستخدم للرابط العام.
-    // هذا يخفف الضغط على Telegram ويمنع ERR_CONNECTION_TIMED_OUT في المستقبل.
+    // ارفع الصورة إلى R2 بشكل غير متزامن (لتسريع الوصول المستقبلي)، لكن
+    // لا نعمل redirect لـ R2 لأن الـ bucket قد لا يكون public. بدلاً من ذلك
+    // نخدم الصورة مباشرة من هنا مع cache-control طويل.
     if (isR2Configured()) {
       const ext = filePath.match(/\.(\w+)$/)?.[1] || 'jpg';
       const key = r2KeyForTelegramFile(fileId, ext);
-      const publicUrl = await uploadToR2(key, buffer, contentType);
-      if (publicUrl) {
-        // أعد التوجيه إلى R2 (302) — المتصفح يحمّل الصورة من CDN سريع.
-        return NextResponse.redirect(publicUrl, {
-          status: 302,
-          headers: { 'Cache-Control': 'public, max-age=86400' },
-        });
-      }
-      // لو فشل الرفع، نكمل بالـ streaming المباشر (fallback).
+      // رفع غير متزامن — لا ننتظر النتيجة (لا نريد تأخير الاستجابة).
+      void uploadToR2(key, buffer, contentType).catch(() => {});
     }
 
-    // Fallback: streaming مباشر من Telegram (السلوك القديم).
+    // خدم الصورة مباشرة من الخادم مع cache-control طويل (24 ساعة).
     return new NextResponse(buffer, {
       status: 200,
       headers: {
         'Content-Type': contentType,
         'Content-Length': String(buffer.length),
-        'Cache-Control': 'private, max-age=3600',
+        'Cache-Control': 'public, max-age=86400',
       },
     });
   } catch (error) {
