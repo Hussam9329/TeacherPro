@@ -22,6 +22,7 @@ import {
 } from "@/lib/api";
 import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib/grade-classification";
 import { ArrowRightIcon } from "lucide-react";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "actions";
 
@@ -259,6 +260,7 @@ export function StudentProfileDialog({
   isStudentCurrentlyInGrace,
   graceEndDate,
 }: StudentProfileDialogProps) {
+  const syncKey = useTeacherProSyncKey();
   const [tab, setTab] = useState<StudentFileTab>("details");
   const [databaseStats, setDatabaseStats] = useState<StudentProfileStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
@@ -475,7 +477,7 @@ export function StudentProfileDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, student?.id]);
+  }, [open, student?.id, syncKey]);
 
   useEffect(() => {
     if (!open || !student?.id) {
@@ -532,7 +534,7 @@ export function StudentProfileDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, student?.id]);
+  }, [open, student?.id, syncKey]);
 
   if (!open || !student || !isMounted) return null;
 

@@ -16,6 +16,7 @@ import {
   type StudentLeave,
 } from "@/lib/teacher-store";
 import { gradeEntrySheetApi } from "@/lib/api";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -207,6 +208,7 @@ function formatGradeEntryTimestamp(value?: string | Date | null): string {
 }
 
 export function GradeEntryView() {
+  const syncKey = useTeacherProSyncKey();
   const {
     exams,
     students,
@@ -365,7 +367,7 @@ export function GradeEntryView() {
     return () => {
       cancelled = true;
     };
-  }, [selectedExamId, exams, mergeStudentsCache, mergeGradesCache]);
+  }, [selectedExamId, exams, mergeStudentsCache, mergeGradesCache, syncKey]);
 
   const availableProgramsForFilter = useMemo(
     () =>

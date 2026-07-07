@@ -578,6 +578,16 @@ export interface StudentProfileLogResponse {
   generatedAt?: string;
 }
 
+export interface SyncVersionResponse {
+  ok: true;
+  version: string;
+  latestAt: string | null;
+  counts: Record<string, number>;
+  maxDates: Record<string, string>;
+  source: "database";
+  generatedAt: string;
+}
+
 export interface AcademicRepairResponse {
   ok: true;
   totalStudents: number;
@@ -1065,6 +1075,10 @@ export const studentProfileLogApi = {
 
 export const academicRepairApi = {
   run: () => apiPost("students/academic-repair", {}) as Promise<ApiResult & { data?: AcademicRepairResponse }>,
+};
+
+export const syncVersionApi = {
+  get: () => apiGet<SyncVersionResponse>("sync/version"),
 };
 
 export const opportunityStatsApi = {

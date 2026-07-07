@@ -1,4 +1,5 @@
 "use client";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Exam } from "@/lib/teacher-store";
@@ -179,6 +180,7 @@ function emptyEditState(): FullExamEditState {
 }
 
 export function ExamRecordsView() {
+  const syncKey = useTeacherProSyncKey();
   const {
     exams,
     grades,
@@ -291,7 +293,7 @@ export function ExamRecordsView() {
     return () => {
       cancelled = true;
     };
-  }, [filteredExamIdsKey]);
+  }, [filteredExamIdsKey, syncKey]);
 
   const examStatValue = (examId: string, key: keyof ExamRecordStat) => {
     const stat = databaseExamStats[examId];

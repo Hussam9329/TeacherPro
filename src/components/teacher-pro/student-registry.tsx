@@ -1,4 +1,5 @@
 "use client";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -459,6 +460,7 @@ export function StudentRegistryView() {
     null,
   );
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
+  const syncKey = useTeacherProSyncKey();
   const [activeStudentsTotal, setActiveStudentsTotal] = useState<number | null>(
     null,
   );
@@ -562,6 +564,7 @@ export function StudentRegistryView() {
     filterCourseProgram,
     filterCourseTerm,
     filterStudyType,
+    syncKey,
   ]);
 
   useEffect(() => {
@@ -634,6 +637,7 @@ export function StudentRegistryView() {
     page,
     pageSize,
     serverRefreshKey,
+    syncKey,
     mergeStudentsCache,
   ]);
 
@@ -660,7 +664,7 @@ export function StudentRegistryView() {
     return () => {
       cancelled = true;
     };
-  }, [serverRefreshKey]);
+  }, [serverRefreshKey, syncKey]);
 
   useEffect(() => {
     if (filterCourseProgram !== "كورسات" && filterCourseTerm) {

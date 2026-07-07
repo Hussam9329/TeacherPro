@@ -1,4 +1,5 @@
 "use client";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -418,6 +419,7 @@ function buildDismissalKey(parts: {
 }
 
 function FollowUpViewBase({ view }: { view: FollowView }) {
+  const syncKey = useTeacherProSyncKey();
   const {
     courses,
     students,
@@ -670,6 +672,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     callStatusFilter,
     callGeneralSearch,
     callFilterSearch,
+    syncKey,
   ]);
 
   useEffect(() => {
@@ -696,7 +699,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return () => {
       cancelled = true;
     };
-  }, [view, students.length, studentNotes.length]);
+  }, [view, students.length, studentNotes.length, syncKey]);
 
   const filteredStudents = useMemo(() => {
     // نتائج منتقي الإجازات تأتي مباشرة من الخادم (leavePickerStudents).

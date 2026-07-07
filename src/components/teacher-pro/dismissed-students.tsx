@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type OpportunityLog, type Student } from "@/lib/teacher-store";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { studentApi } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,7 @@ function formatDismissalGrade(detail: DismissalDetail | null): string {
 }
 
 export function DismissedStudentsView() {
+  const syncKey = useTeacherProSyncKey();
   const {
     students,
     courses,
@@ -145,7 +147,7 @@ export function DismissedStudentsView() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, filterCourseId, mergeStudentsCache]);
+  }, [debouncedSearch, filterCourseId, mergeStudentsCache, syncKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -163,7 +165,7 @@ export function DismissedStudentsView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [syncKey]);
 
   const dismissedTypes = useMemo(
     () =>

@@ -17,6 +17,7 @@ import {
   UserX,
 } from "lucide-react";
 import { EmptyState, StatCard } from "./ui-kit";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 type DashboardAlert = {
   id: string;
@@ -78,6 +79,7 @@ function formatStatsTime(value?: string) {
 
 export function DashboardView() {
   const { setSection } = useTeacherStore();
+  const syncKey = useTeacherProSyncKey();
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -110,7 +112,7 @@ export function DashboardView() {
     };
   }, []);
 
-  useEffect(() => loadStats(), [loadStats]);
+  useEffect(() => loadStats(), [loadStats, syncKey]);
 
   const kpiCards = [
     {

@@ -1,4 +1,5 @@
 "use client";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ function formatDateTime(value: string) {
 }
 
 export function MissingStudentsNotesView() {
+  const syncKey = useTeacherProSyncKey();
   const { exams, setSection } = useTeacherStore();
   const [notes, setNotes] = useState<GradeEntryMissingNote[]>([]);
   const [search, setSearch] = useState("");
@@ -71,7 +73,7 @@ export function MissingStudentsNotesView() {
       window.removeEventListener(GRADE_ENTRY_MISSING_NOTES_EVENT, refreshNotes);
       window.removeEventListener("storage", refreshNotes);
     };
-  }, []);
+  }, [syncKey]);
 
   const normalizedSearch = useMemo(() => normalizeForSearch(search), [search]);
   const filteredNotes = useMemo(() => {

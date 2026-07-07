@@ -1,4 +1,5 @@
 "use client";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
@@ -164,6 +165,7 @@ export function GradeRecordsView() {
   const [gradeCoverageStatsLoading, setGradeCoverageStatsLoading] =
     useState(false);
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
+  const syncKey = useTeacherProSyncKey();
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     id: "",
@@ -269,6 +271,7 @@ export function GradeRecordsView() {
     page,
     pageSize,
     serverRefreshKey,
+    syncKey,
     mergeGradesCache,
     mergeStudentsCache,
   ]);
@@ -311,6 +314,7 @@ export function GradeRecordsView() {
     filterCourseTerm,
     filterStudyType,
     serverRefreshKey,
+    syncKey,
   ]);
 
   const isAcademicAccountingRow = (gradeId: string) => {

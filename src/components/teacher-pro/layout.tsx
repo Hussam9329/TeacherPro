@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
+import { syncVersionApi } from "@/lib/api";
+import { emitTeacherProDataChanged, subscribeTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import {
   LayoutDashboard,
   BookOpen,
@@ -453,19 +455,91 @@ export function TeacherProLayout() {
     void loadSectionDataFromServer(currentSection);
   }, [currentSection, dbLoading, isAuthenticated, loadSectionDataFromServer]);
 
-  // عند إصلاح فرص الطلاب تلقائياً في الخلفية (triggerAutoFixZeroOpportunities)،
-  // أعِد تحميل بيانات الطلاب الحالية حتى تعكس الواجهة الفرص الجديدة فوراً.
+  // أي تعديل ناجح في أي مكان يطلق إشارة sync عامة.
+  // نعيد تحميل القسم الحالي فقط حتى تبقى الواجهة فورية بدون تحميل كل الجداول الثقيلة.
+  const syncRefreshTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const lastServerSyncVersionRef = useRef<string>("");
+
   useEffect(() => {
     if (!isAuthenticated) return;
-    const handler = () => {
-      // أعد تحميل بيانات القسم الحالي + courseChapters لضمان دقة activeChapterForCourse.
+
+    const refreshCurrentSection = (detail?: { source?: string; scopes?: string[] }) => {
       lazyLoadedSectionsRef.current.delete(currentSection);
-      void loadSectionDataFromServer(currentSection);
-      void loadFromServer();
+      if (syncRefreshTimerRef.current) window.clearTimeout(syncRefreshTimerRef.current);
+      syncRefreshTimerRef.current = window.setTimeout(() => {
+        void loadSectionDataFromServer(currentSection);
+        const cameFromAnotherContext = detail?.source && detail.source !== "local-mutation";
+        const touchesCore = !detail?.scopes || detail.scopes.includes("all") || detail.scopes.includes("core");
+        if (cameFromAnotherContext && touchesCore) {
+          void loadFromServer();
+        }
+      }, 120) as unknown as ReturnType<typeof window.setTimeout>;
     };
-    window.addEventListener("teacherpro:students-updated", handler);
-    return () => window.removeEventListener("teacherpro:students-updated", handler);
+
+    const unsubscribe = subscribeTeacherProDataChanged(refreshCurrentSection);
+    const handleLegacyStudentsUpdated = () =>
+      refreshCurrentSection({
+        source: "manual",
+        scopes: ["students", "opportunities", "all"],
+      });
+    window.addEventListener("teacherpro:students-updated", handleLegacyStudentsUpdated);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("teacherpro:students-updated", handleLegacyStudentsUpdated);
+      if (syncRefreshTimerRef.current) window.clearTimeout(syncRefreshTimerRef.current);
+    };
   }, [isAuthenticated, currentSection, loadSectionDataFromServer, loadFromServer]);
+
+  // كشف تغييرات التبويبات الأخرى أو مستخدم آخر بفحص خفيف جداً للإصدار.
+  // لا يحمل الطلاب/الدرجات؛ فقط بصمة counts وآخر timestamps، ثم يطلق sync عند الاختلاف.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let stopped = false;
+    let inFlight = false;
+
+    const checkServerVersion = async (force = false) => {
+      if (stopped || inFlight) return;
+      if (!force && typeof document !== "undefined" && document.hidden) return;
+      inFlight = true;
+      try {
+        const result = await syncVersionApi.get();
+        const version = result?.version || "";
+        if (!version) return;
+        if (!lastServerSyncVersionRef.current) {
+          lastServerSyncVersionRef.current = version;
+          return;
+        }
+        if (version !== lastServerSyncVersionRef.current) {
+          lastServerSyncVersionRef.current = version;
+          emitTeacherProDataChanged({
+            source: "server-version",
+            reason: "تغيير جديد في قاعدة البيانات",
+            scopes: "all",
+            version,
+          });
+        }
+      } catch {
+        // فشل فحص الإصدار لا يزعج المستخدم؛ فحص sync وقائي فقط.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void checkServerVersion(true);
+    const interval = window.setInterval(() => void checkServerVersion(false), 5000);
+    const onWake = () => void checkServerVersion(true);
+    window.addEventListener("focus", onWake);
+    window.addEventListener("online", onWake);
+    document.addEventListener("visibilitychange", onWake);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onWake);
+      window.removeEventListener("online", onWake);
+      document.removeEventListener("visibilitychange", onWake);
+    };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isAuthenticated) return;

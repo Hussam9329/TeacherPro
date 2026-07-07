@@ -1,4 +1,6 @@
 "use client";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore } from "@/lib/teacher-store";
@@ -250,6 +252,7 @@ function TelegramPageImage({
 }
 
 export function ECorrectionView() {
+  const syncKey = useTeacherProSyncKey();
   const {
     correctionSheets,
     students,
@@ -375,7 +378,7 @@ export function ECorrectionView() {
     loadBotSubmissions();
     loadCorrectionStats();
     loadBotDatabaseStats();
-  }, []);
+  }, [syncKey]);
 
   const updateBotSubmissionStatus = async (id: string, status: string) => {
     const targetSubmission = botSubmissions.find((item) => item.id === id);
@@ -414,6 +417,11 @@ export function ECorrectionView() {
       if (botSubmissionDialog?.id === id)
         setBotSubmissionDialog(nextSubmission);
       await loadBotDatabaseStats();
+      emitTeacherProDataChanged({
+        source: "local-mutation",
+        reason: "تحديث حالة مستلم البوت",
+        scopes: ["correction", "grades", "all"],
+      });
       toast.success("تم تحديث حالة مستلم البوت");
     } catch (error) {
       setBotSubmissions(previous);

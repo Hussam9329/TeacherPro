@@ -1,4 +1,5 @@
 "use client";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
@@ -85,6 +86,7 @@ export function OpportunitiesView() {
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const syncKey = useTeacherProSyncKey();
   const [detailsStudentId, setDetailsStudentId] = useState("");
   const [databaseStats, setDatabaseStats] =
     useState<OpportunityStatsResponse | null>(null);
@@ -154,6 +156,7 @@ export function OpportunitiesView() {
     filterOpportunityCount,
     debouncedSearch,
     refreshKey,
+    syncKey,
     mergeStudentsCache,
   ]);
 
@@ -189,6 +192,7 @@ export function OpportunitiesView() {
     filterOpportunityCount,
     debouncedSearch,
     refreshKey,
+    syncKey,
   ]);
 
   useEffect(() => {
@@ -229,6 +233,7 @@ export function OpportunitiesView() {
     bulkActionDialog.type,
     bulkExcludeDismissed,
     bulkExcludeFullOpportunities,
+    syncKey,
   ]);
 
   const filtered = serverStudents;

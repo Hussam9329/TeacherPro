@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Course, type Student } from "@/lib/teacher-store";
 import { studentApi } from "@/lib/api";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -232,6 +234,7 @@ function getPreviewCategory(row: PreviewRow): PreviewCategory {
 }
 
 export function StudentBulkTextImportView() {
+  const syncKey = useTeacherProSyncKey();
   const { students, courses, loadFromServer, mergeStudentsCache } = useTeacherStore();
   const [rawText, setRawText] = useState("");
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
@@ -255,7 +258,7 @@ export function StudentBulkTextImportView() {
     return () => {
       cancelled = true;
     };
-  }, [mergeStudentsCache]);
+  }, [mergeStudentsCache, syncKey]);
 
   const groupedPreviewRows = useMemo(() => {
     const groups: Record<PreviewCategory, PreviewRow[]> = {
@@ -495,6 +498,11 @@ export function StudentBulkTextImportView() {
     }
 
     await loadFromServer();
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason: "إضافة جماعية للطلاب",
+      scopes: ["students", "opportunities", "dashboard", "all"],
+    });
     toast.success("تمت الإضافة الجماعية", { description: `تمت إضافة ${studentsToImport.length} طالب إلى سجل الطلاب` });
     setRawText("");
     setPreviewRows([]);

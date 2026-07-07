@@ -49,6 +49,7 @@ import {
 import { toBaghdadDateTimeLocal } from "./baghdad-time";
 import { formatAppDate, toLatinDigits } from "./format";
 import { recalculateAcademicState } from "./academic-engine";
+import { emitTeacherProDataChanged } from "./teacherpro-sync";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -2111,6 +2112,7 @@ function syncToServer(
     description?: string;
     rollback?: () => void;
     onSuccess?: (result: unknown) => void;
+    notify?: boolean;
   } = {},
 ): void {
   void Promise.resolve()
@@ -2120,6 +2122,13 @@ function syncToServer(
         throw result;
       }
       options.onSuccess?.(result);
+      if (options.notify !== false) {
+        emitTeacherProDataChanged({
+          source: "local-mutation",
+          reason: options.description || "تحديث بيانات",
+          scopes: "all",
+        });
+      }
     })
     .catch((error) => {
       // إذا كان الطلب مؤجلاً في outbox (queued)، لا نعرض خطأ ولا نرجع الحالة.
@@ -3149,8 +3158,10 @@ export const useTeacherStore = create<TeacherState>()(
         // نبقيها محلية للـ UI feedback فقط.
         if (isServerOnlyLogEntry(module, action)) return;
 
-        syncToServer(get, () =>
-          logApi.add({ ...log, userName: user, userId: currentUser.id }),
+        syncToServer(
+          get,
+          () => logApi.add({ ...log, userName: user, userId: currentUser.id }),
+          { notify: false },
         );
       },
 

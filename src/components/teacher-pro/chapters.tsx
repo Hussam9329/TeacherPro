@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useTeacherStore } from "@/lib/teacher-store";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -208,6 +209,11 @@ export function ChaptersView() {
         toast.success(payload.message || `تم إصلاح ${payload.fixedTotal} طالب.`);
         // أعد تحميل بيانات الطلاب في الصفحات الأخرى عبر تحديث بسيط
         window.dispatchEvent(new CustomEvent("teacherpro:students-updated"));
+        emitTeacherProDataChanged({
+          source: "local-mutation",
+          reason: "إصلاح فرص الطلاب",
+          scopes: ["students", "opportunities", "all"],
+        });
       } else {
         toast.info(payload.message || "لا يوجد طلاب يحتاجون إصلاحاً.");
       }
