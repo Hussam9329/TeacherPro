@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { examMatchesAcademicFilters } from "@/lib/filter-sequence";
+import { ExamImageViewer } from "./safe-image";
 
 type TelegramSubmissionPage = {
   [key: string]: unknown;
@@ -238,35 +239,12 @@ function TelegramPageImage({
   src: string;
   pageNumber: number;
 }) {
-  const [failed, setFailed] = useState(false);
-
-  if (failed) {
-    return (
-      <div className="rounded-xl border border-dashed bg-muted/30 p-4 text-xs text-muted-foreground space-y-2">
-        <p>تعذرت معاينة هذه الصفحة داخل TeacherPro.</p>
-        <p>
-          تأكد من ضبط <span dir="ltr">TEACHERPRO_BOT_TOKEN</span> أو{" "}
-          <span dir="ltr">TELEGRAM_BOT_TOKEN</span> في السيرفر إذا كان المصدر
-          Telegram fileId.
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => window.open(src, "_blank", "noopener,noreferrer")}
-        >
-          فتح الرابط في نافذة جديدة
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <img
+    <ExamImageViewer
       src={src}
       alt={`صفحة ${pageNumber}`}
+      pageNumber={pageNumber}
       className="w-full max-h-[520px] rounded-xl border object-contain bg-muted/30"
-      onError={() => setFailed(true)}
     />
   );
 }
