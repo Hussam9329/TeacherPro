@@ -17,6 +17,14 @@ import {
 } from "@/components/ui/select";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "sonner";
+import { StatCard } from "./ui-kit";
+import {
+  Users,
+  Clock,
+  Ban,
+  FileText,
+  HandHeart,
+} from "lucide-react";
 import {
   CustomFilterPresets,
   type FilterPresetValues,
@@ -197,6 +205,26 @@ export function DismissedStudentsView() {
     filterDismissalType,
     filterNotes,
   ]);
+
+  // إحصائيات مباشرة من قائمة المفصولين المعروضة حالياً
+  const dismissedStats = useMemo(() => {
+    const total = dismissedStudents.length;
+    const temporary = dismissedStudents.filter(
+      (s) => (s.dismissalType || "") === "فصل مؤقت",
+    ).length;
+    const final = dismissedStudents.filter(
+      (s) => (s.dismissalType || "") === "فصل نهائي",
+    ).length;
+    const withNotes = dismissedStudents.filter(
+      (s) => Boolean(String(s.dismissalNotes || "").trim()),
+    ).length;
+    const withPledge = dismissedStudents.filter((s) =>
+      studentNotes.some(
+        (n) => n.studentId === s.id && n.kind === "تعهد ولي الأمر",
+      ),
+    ).length;
+    return { total, temporary, final, withNotes, withPledge };
+  }, [dismissedStudents, studentNotes]);
 
   const buildLocalDismissalDetail = (student: Student): DismissalDetail => {
     const type = student.dismissalType || "مفصول";
@@ -383,6 +411,45 @@ export function DismissedStudentsView() {
 
   return (
     <div className="space-y-4">
+      {/* كروت الإحصائيات المباشرة */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatCard
+          label="إجمالي المفصولين"
+          value={dismissedStats.total}
+          icon={Users}
+          tone="danger"
+          hint="حسب الفلاتر الحالية"
+        />
+        <StatCard
+          label="فصل مؤقت"
+          value={dismissedStats.temporary}
+          icon={Clock}
+          tone="warning"
+          hint="قابلون لإعادة التفعيل"
+        />
+        <StatCard
+          label="فصل نهائي"
+          value={dismissedStats.final}
+          icon={Ban}
+          tone="danger"
+          hint="فصل دائم"
+        />
+        <StatCard
+          label="بملاحظات"
+          value={dismissedStats.withNotes}
+          icon={FileText}
+          tone="info"
+          hint="لديهم ملاحظات إدارية"
+        />
+        <StatCard
+          label="بتعهد"
+          value={dismissedStats.withPledge}
+          icon={HandHeart}
+          tone="primary"
+          hint="تعهد ولي الأمر"
+        />
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>الطلاب المفصولون</CardTitle>
