@@ -27,6 +27,7 @@ import {
   validateStudentCourseChoices,
   resolveSubSite,
 } from "@/lib/course-config";
+import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -929,7 +930,22 @@ export async function PUT(req: NextRequest) {
 
   try {
     const student = await db.student.update({ where: { id }, data });
-    return NextResponse.json({ student });
+
+    // أعِد حساب الحالة الأكاديمية للطالب بعد أي تعديل. هذا يضمن أن الفرص
+    // وحالة الفصل تبقى متزامنة مع قاعدة البيانات حتى لو كان العميل يرسل
+    // قيماً قديمة أو لو تغيرت إعدادات الدورة/الفصل بشكل غير مباشر.
+    // إعادة الحساب idempotent — لو ما تغير شي، ما تكتب شي.
+    let academicRecalculation: Awaited<
+      ReturnType<typeof recalculateStudentsAcademicState>
+    > | null = null;
+    try {
+      academicRecalculation = await recalculateStudentsAcademicState([id]);
+    } catch (recalcError) {
+      // لا نُفشل التحديث بالكامل إذا فشلت إعادة الحساب — نكتفي بتسجيل الخطأ.
+      console.warn("[students PUT] recalculation failed for", id, recalcError);
+    }
+
+    return NextResponse.json({ student, academicRecalculation });
   } catch (error) {
     return getPrismaStudentErrorResponse(error);
   }
