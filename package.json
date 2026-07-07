@@ -16,6 +16,7 @@
     "db:baseline:existing": "prisma migrate resolve --applied 20260605000000_course_builder_availability && prisma migrate resolve --applied 20260608000000_study_types_by_program && prisma migrate resolve --applied 20260608010000_remove_financial_attendance && prisma migrate resolve --applied 20260608050000_academic_opportunity_accounting && prisma migrate resolve --applied 20260608193000_dismissal_notes_followup_filters"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1080.0",
     "@prisma/client": "^6.11.1",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",

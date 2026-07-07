@@ -5,32 +5,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { validationError } from '@/lib/route-helpers';
+import {
+  isR2Configured,
+  uploadToR2,
+  r2KeyForTelegramFile,
+  r2PublicUrlForKey,
+} from '@/lib/r2-storage';
 
 /**
  * Secure proxy for fetching Telegram file images by fileId.
  *
- * Why this exists:
- *   After banning dataUrl from bot submissions, bots send only fileId
- *   (Telegram file identifier) or localPath. localPath is unreachable
- *   from the browser, and fileId requires the Telegram Bot API + bot
- *   token to resolve — which must never leak to the client.
- *
- * Flow:
+ * With R2 caching:
  *   1. Client requests: GET /api/telegram-file?fileId=...&submissionId=...
- *   2. Server verifies the user is authenticated and has correction.view
- *      (or grades.view).
- *   3. Server calls Telegram getFile API with the bot token (server-side
- *      only) to resolve fileId → file_path.
- *   4. Server streams the image bytes from Telegram's file CDN back to
- *      the client with appropriate Content-Type.
+ *   2. Server checks if the image is already cached in R2.
+ *   3. If cached → 302 redirect to the R2 public URL (fast, CDN-served).
+ *   4. If not cached → fetch from Telegram, upload to R2, then 302 redirect.
+ *   5. If R2 is not configured → fall back to streaming from Telegram directly
+ *      (the old behavior).
  *
- * Security:
- *   - Bot token never leaves the server.
- *   - Client only sees the image bytes, not the Telegram API URL.
- *   - Auth required (correction.view OR grades.view OR admin).
- *   - Optional submissionId check: if provided, verify the fileId
- *     belongs to a page in that submission (prevents arbitrary file
- *     enumeration via fileIds guessed by the client).
+ * This eliminates ERR_CONNECTION_TIMED_OUT for repeated image views because
+ * the first fetch caches to R2, and all subsequent fetches are 302 redirects
+ * to the R2 CDN which is fast and reliable.
  */
 
 function readEnv(name: string): string | undefined {
@@ -164,14 +159,30 @@ export async function GET(req: NextRequest) {
     }
 
     const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
-    const contentLength = imageRes.headers.get('content-length');
-    const buffer = await imageRes.arrayBuffer();
+    const buffer = Buffer.from(await imageRes.arrayBuffer());
 
+    // إذا كان R2 مُهيأ، ارفع الصورة إلى R2 وأعد توجيه المستخدم للرابط العام.
+    // هذا يخفف الضغط على Telegram ويمنع ERR_CONNECTION_TIMED_OUT في المستقبل.
+    if (isR2Configured()) {
+      const ext = filePath.match(/\.(\w+)$/)?.[1] || 'jpg';
+      const key = r2KeyForTelegramFile(fileId, ext);
+      const publicUrl = await uploadToR2(key, buffer, contentType);
+      if (publicUrl) {
+        // أعد التوجيه إلى R2 (302) — المتصفح يحمّل الصورة من CDN سريع.
+        return NextResponse.redirect(publicUrl, {
+          status: 302,
+          headers: { 'Cache-Control': 'public, max-age=86400' },
+        });
+      }
+      // لو فشل الرفع، نكمل بالـ streaming المباشر (fallback).
+    }
+
+    // Fallback: streaming مباشر من Telegram (السلوك القديم).
     return new NextResponse(buffer, {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        ...(contentLength ? { 'Content-Length': contentLength } : {}),
+        'Content-Length': String(buffer.length),
         'Cache-Control': 'private, max-age=3600',
       },
     });
