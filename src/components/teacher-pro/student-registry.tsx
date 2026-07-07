@@ -704,6 +704,23 @@ export function StudentRegistryView() {
     [editAvailablePrograms, editDialog.form.courseProgram],
   );
 
+  // كشف تغيير نوع الدراسة أو نوع الدورة — نعاملهما بنفس سياسة نقل الطالب
+  // المستخدمة عند تغيير الدورة: إما اعتباره طالباً جديداً (reset) أو الإبقاء
+  // على فرصه (keep). السبب: تغيير نوع الدراسة/الدورة قد يعني أن الطالب بدأ
+  // مساراً جديداً، فيحق للمستخدم اختيار ما إذا كانت الفرص تُعاد ضبطها.
+  const editStudyTypeChanged = Boolean(
+    editOriginalStudent &&
+    editDialog.form.studyType &&
+    editDialog.form.studyType !== editOriginalStudent.studyType,
+  );
+  const editCourseProgramChanged = Boolean(
+    editOriginalStudent &&
+    editEffectiveCourseProgram &&
+    editEffectiveCourseProgram !== editOriginalStudent.courseProgram,
+  );
+  const editNeedsTransferPolicy =
+    editCourseChanged || editStudyTypeChanged || editCourseProgramChanged;
+
   const editAvailableStudyTypes = useMemo(
     () =>
       editSelectedCourse && editEffectiveCourseProgram
@@ -904,8 +921,8 @@ export function StudentRegistryView() {
     const missing = requiredChecks.find(([ok]) => !ok);
     if (missing) return missing[1];
 
-    if (editCourseChanged && !courseTransferPolicy) {
-      return "عند نقل الطالب إلى دورة أخرى يجب اختيار طريقة التعامل مع الفرص";
+    if (editNeedsTransferPolicy && !courseTransferPolicy) {
+      return "عند نقل الطالب إلى دورة أخرى أو تغيير نوع الدراسة/الدورة يجب اختيار طريقة التعامل مع الفرص";
     }
 
     // Course settings-based validation
@@ -975,7 +992,7 @@ export function StudentRegistryView() {
     }
 
     const form = editDialog.form;
-    const transferUpdates = editCourseChanged
+    const transferUpdates = editNeedsTransferPolicy
       ? {
           courseTransferPolicy: courseTransferPolicy as CourseTransferPolicy,
           ...(courseTransferPolicy === "reset"
@@ -2197,25 +2214,40 @@ export function StudentRegistryView() {
                       </Select>
                     </div>
 
-                    {editCourseChanged && editOriginalStudent && (
+                    {editNeedsTransferPolicy && editOriginalStudent && (
                       <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-500/50 dark:bg-amber-950/20 dark:text-amber-100">
                         <div className="mb-3 flex items-start gap-2">
                           <AlertTriangle className="mt-0.5 size-5 shrink-0" />
                           <div>
                             <p className="font-black">
-                              تم تغيير دورة الطالب — اختر سياسة نقل الفرص قبل
-                              الحفظ
+                              {editCourseChanged
+                                ? "تم تغيير دورة الطالب — اختر سياسة نقل الفرص قبل الحفظ"
+                                : editStudyTypeChanged
+                                  ? "تم تغيير نوع الدراسة — اختر سياسة التعامل مع الفرص قبل الحفظ"
+                                  : "تم تغيير نوع الدورة — اختر سياسة التعامل مع الفرص قبل الحفظ"}
                             </p>
                             <p className="mt-1 text-xs leading-6 opacity-90">
-                              الدورة السابقة:{" "}
-                              {courseName(editOriginalStudent.courseId)}، رصيد
-                              الطالب الحالي: {editOriginalStudent.opportunities}{" "}
-                              / {editOriginalStudent.baseOpportunities}. الدورة
-                              الجديدة:{" "}
-                              {editDialog.form.courseId
-                                ? courseName(editDialog.form.courseId)
-                                : "—"}
-                              .
+                              رصيد الطالب الحالي: {editOriginalStudent.opportunities}{" "}
+                              / {editOriginalStudent.baseOpportunities}.
+                              {editCourseChanged && (
+                                <>
+                                  {" "}الدورة الجديدة:{" "}
+                                  {editDialog.form.courseId
+                                    ? courseName(editDialog.form.courseId)
+                                    : "—"}
+                                  .
+                                </>
+                              )}
+                              {editStudyTypeChanged && (
+                                <>
+                                  {" "}نوع الدراسة الجديد: {editDialog.form.studyType}.
+                                </>
+                              )}
+                              {editCourseProgramChanged && (
+                                <>
+                                  {" "}نوع الدورة الجديد: {editEffectiveCourseProgram}.
+                                </>
+                              )}
                             </p>
                           </div>
                         </div>

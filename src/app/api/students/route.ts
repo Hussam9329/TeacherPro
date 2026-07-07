@@ -883,10 +883,24 @@ export async function PUT(req: NextRequest) {
     }
   }
 
-  if (data.courseId !== undefined) {
+  // كشف تغيير الدورة، نوع الدراسة، أو نوع الدورة. كل واحدة من هذي التغييرات
+  // تستوجب قراراً واضحاً من المستخدم: هل يريد اعتبار الطالب جديداً (reset)
+  // أو الإبقاء على فرصه (keep)؟
+  const fieldsRequiringTransferPolicy =
+    data.courseId !== undefined ||
+    data.studyType !== undefined ||
+    data.courseProgram !== undefined;
+
+  if (fieldsRequiringTransferPolicy) {
     const currentStudent = await db.student.findUnique({
       where: { id },
-      select: { courseId: true, opportunities: true, baseOpportunities: true },
+      select: {
+        courseId: true,
+        opportunities: true,
+        baseOpportunities: true,
+        studyType: true,
+        courseProgram: true,
+      },
     });
     if (!currentStudent) {
       return NextResponse.json(
@@ -900,28 +914,48 @@ export async function PUT(req: NextRequest) {
 
     const targetCourseId = String(data.courseId ?? "").trim();
     const courseChanged =
-      Boolean(targetCourseId) && targetCourseId !== currentStudent.courseId;
+      data.courseId !== undefined &&
+      Boolean(targetCourseId) &&
+      targetCourseId !== currentStudent.courseId;
 
-    if (courseChanged && !courseTransferPolicy) {
+    const studyTypeChanged =
+      data.studyType !== undefined &&
+      Boolean(data.studyType) &&
+      String(data.studyType) !== String(currentStudent.studyType ?? "");
+
+    const courseProgramChanged =
+      data.courseProgram !== undefined &&
+      Boolean(data.courseProgram) &&
+      String(data.courseProgram) !== String(currentStudent.courseProgram ?? "");
+
+    const needsTransferPolicy =
+      courseChanged || studyTypeChanged || courseProgramChanged;
+
+    if (needsTransferPolicy && !courseTransferPolicy) {
+      const reasons: string[] = [];
+      if (courseChanged) reasons.push("الدورة");
+      if (studyTypeChanged) reasons.push("نوع الدراسة");
+      if (courseProgramChanged) reasons.push("نوع الدورة");
       return NextResponse.json(
         {
-          error:
-            "نقل الطالب إلى دورة أخرى يحتاج قراراً واضحاً: هل تريد اعتباره طالباً جديداً بفرص الفصل النشط، أم الإبقاء على فرصه وسجله كما هي؟",
+          error: `تغيير ${reasons.join("، ")} يحتاج قراراً واضحاً: هل تريد اعتباره طالباً جديداً بفرص الفصل النشط، أم الإبقاء على فرصه وسجله كما هي؟`,
         },
         { status: 400 },
       );
     }
 
-    if (courseChanged && courseTransferPolicy === "reset") {
+    if (needsTransferPolicy && courseTransferPolicy === "reset") {
+      // استخدم الدورة المستهدفة (سواء كانت موجودة أو جديدة) لاحتساب الفرص.
+      const courseForOpp = targetCourseId || currentStudent.courseId;
       const nextOpportunities = await getInitialOpportunities({
-        id: targetCourseId,
+        id: courseForOpp,
       });
       data.opportunities = nextOpportunities.opportunities;
       data.baseOpportunities = nextOpportunities.baseOpportunities;
     }
 
-    if (courseChanged && courseTransferPolicy === "keep") {
-      // Keep means a pure course/settings transfer. Do not let stale client
+    if (needsTransferPolicy && courseTransferPolicy === "keep") {
+      // Keep means a pure settings transfer. Do not let stale client
       // values rewrite the student's current opportunity balance.
       delete data.opportunities;
       delete data.baseOpportunities;
