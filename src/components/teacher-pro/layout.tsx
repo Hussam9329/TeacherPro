@@ -703,7 +703,7 @@ export function TeacherProLayout() {
   }
 
   return (
-    <div className="app-bg flex h-dvh min-h-dvh overflow-hidden bg-background" dir="rtl">
+    <div className="app-bg flex h-dvh overflow-hidden bg-background" dir="rtl">
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
@@ -1003,7 +1003,7 @@ export function TeacherProLayout() {
         </div>
       </aside>
 
-      <main className="flex min-h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="sticky top-0 z-30 border-b border-border/70 bg-background/75 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65">
           <div className="flex items-center justify-between gap-2 px-3 py-2 md:px-6 md:py-3">
             <div className="flex items-center gap-2 md:gap-3">
@@ -1055,7 +1055,7 @@ export function TeacherProLayout() {
           </div>
         )}
 
-        <div className="app-scrollbar page-enter flex-1 overflow-y-auto overscroll-contain p-3 md:p-6 xl:p-8">
+        <div className="app-scrollbar flex-1 overflow-y-auto overscroll-contain p-3 md:p-6 xl:p-8">
           <div className="content-container space-y-4 md:space-y-6" data-teacherpro-active-content="true" data-teacherpro-section={currentSection}>
             {dbLoading && <LoadingState />}
             {isAdmin || canAccess(currentSection) ? (

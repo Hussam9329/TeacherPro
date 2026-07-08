@@ -1728,18 +1728,19 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return (
       <div
         key={row.id}
-        className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.1fr_1.45fr_1fr_190px_auto] xl:items-start"
+        className="rounded-2xl border bg-card/80 p-4 text-sm shadow-sm"
       >
-        <div>
+        {/* ====== القسم العلوي: معلومات الطالب ====== */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
           <div className="flex flex-wrap items-center gap-2">
-            <b>{row.student.name}</b>
+            <b className="text-base">{row.student.name}</b>
             <Badge variant="outline">{row.student.code}</Badge>
             <Badge
               variant={
                 row.student.status === "نشط" ? "secondary" : "destructive"
               }
             >
-              حالة الطالب: {row.student.status}
+              {row.student.status}
             </Badge>
             <span
               className={`inline-flex items-center gap-1 rounded-lg px-3 py-1 text-sm font-black ${
@@ -1755,48 +1756,91 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               الفرص: {studentOpportunityText(row.student)}
             </span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {courseName(row.student.courseId)} - {row.student.studyType || "—"}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            الدرجات المعروضة: <b>{displayedGradeItems.length}</b> من{" "}
-            <b>{row.items.length}</b>
-          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => openProfile(row.student.id)}
+            >
+              ملف الطالب
+            </Button>
+          </div>
         </div>
-        <div className="space-y-2">
-          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3">
-            <p className="text-xs text-muted-foreground">
-              آخر امتحان / محور المتابعة الحالي
-            </p>
-            <div className="mt-1 flex flex-wrap items-center gap-2">
-              <b>{item?.exam?.name || "—"}</b>
-              <Badge
-                variant={
-                  item?.category === "absent" ||
-                  item?.category === "discounted" ||
-                  item?.category === "failed" ||
-                  item?.category === "cheating"
-                    ? "destructive"
-                    : "secondary"
+
+        {/* ====== القسم الأوسط: 3 أعمدة ====== */}
+        <div className="mt-3 grid gap-4 lg:grid-cols-3">
+          {/* العمود 1: الامتحان المحور + التواصل */}
+          <div className="space-y-3">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+              <p className="mb-1 text-xs font-bold text-muted-foreground">
+                محور المتابعة
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <b>{item?.exam?.name || "—"}</b>
+                <Badge
+                  variant={
+                    item?.category === "absent" ||
+                    item?.category === "discounted" ||
+                    item?.category === "failed" ||
+                    item?.category === "cheating"
+                      ? "destructive"
+                      : "secondary"
+                  }
+                >
+                  {item?.label || "—"}
+                </Badge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {item ? formatAppDate(item.exam.date) : "—"} - الدرجة:{" "}
+                <span className="font-bold text-foreground">{focusValue}</span>
+              </p>
+              {item?.category !== "absent" && item?.reason ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {item?.reason || ""}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                إجراء التواصل
+              </Label>
+              <Select
+                value={contactStatusSelectValue(contactStatus)}
+                disabled={!row.focusItem}
+                onValueChange={(value) =>
+                  saveCallStatus(row, contactStatusFromSelectValue(value))
                 }
               >
-                {item?.label || "—"}
-              </Badge>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {contactStatusOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div
+                className={`rounded-xl border px-3 py-2 text-xs font-bold ${contactStatusClasses(contactStatus)}`}
+              >
+                {contactStatus || "بدون إجراء"}
+              </div>
+              {call?.completedAt ? (
+                <p className="text-xs text-muted-foreground">
+                  آخر تواصل: {formatAppDate(call.completedAt)}
+                </p>
+              ) : null}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {item ? formatAppDate(item.exam.date) : "—"} - الدرجة:{" "}
-              <span className="font-bold text-foreground">{focusValue}</span>
-            </p>
-            {item?.category !== "absent" ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {item?.reason || ""}
-              </p>
-            ) : null}
           </div>
+
+          {/* العمود 2: الدرجات */}
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-bold text-muted-foreground">
-                درجات الطالب
+                درجات الطالب ({row.items.length})
               </p>
               <div className="flex flex-wrap gap-1">
                 {(
@@ -1823,75 +1867,43 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               </div>
             </div>
             {displayedGradeItems.length === 0 ? (
-              <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+              <p className="rounded-xl border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
                 لا توجد درجات محفوظة لهذا الطالب ضمن امتحانات هذه الدورة.
               </p>
             ) : (
-              <div className="grid gap-2 md:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {displayedGradeItems.map((gradeItem) =>
                   renderCallGradeChip(row, gradeItem),
                 )}
               </div>
             )}
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {renderPhoneLink("رقم الطالب", row.student.phone)}
-          {renderPhoneLink("رقم ولي الأمر", row.student.parentPhone)}
-          {renderTelegramLink(row.student.telegram)}
-        </div>
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">
-            إجراء التواصل للامتحان المحور
-          </Label>
-          <Select
-            value={contactStatusSelectValue(contactStatus)}
-            disabled={!row.focusItem}
-            onValueChange={(value) =>
-              saveCallStatus(row, contactStatusFromSelectValue(value))
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {contactStatusOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div
-            className={`rounded-xl border px-3 py-2 text-xs font-bold ${contactStatusClasses(contactStatus)}`}
-          >
-            {contactStatus || "بدون إجراء"}
+
+          {/* العمود 3: التواصل + الملاحظات */}
+          <div className="space-y-3">
+            <div>
+              <p className="mb-1 text-xs font-bold text-muted-foreground">
+                أرقام التواصل
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {renderPhoneLink("الطالب", row.student.phone)}
+                {renderPhoneLink("ولي الأمر", row.student.parentPhone)}
+                {renderTelegramLink(row.student.telegram)}
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">
+                ملاحظات المكالمات
+              </Label>
+              <textarea
+                className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                defaultValue={callStudentNote?.notes || ""}
+                onBlur={(event) => saveCallStudentNote(row, event.target.value)}
+                placeholder="ملاحظة ثابتة تظهر لهذا الطالب داخل المكالمات"
+              />
+            </div>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">
-              ملاحظات الطالب في المكالمات
-            </Label>
-            <textarea
-              className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              defaultValue={callStudentNote?.notes || ""}
-              onBlur={(event) => saveCallStudentNote(row, event.target.value)}
-              placeholder="ملاحظة ثابتة تظهر لهذا الطالب داخل المكالمات"
-            />
-          </div>
-          {call?.completedAt ? (
-            <p className="text-xs text-muted-foreground">
-              آخر تواصل: {formatAppDate(call.completedAt)}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex items-center justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => openProfile(row.student.id)}
-          >
-            ملف الطالب
-          </Button>
         </div>
       </div>
     );
