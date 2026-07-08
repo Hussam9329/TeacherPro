@@ -123,6 +123,35 @@ assert(
     callsRoute.includes('racedExisting'),
   'حفظ المكالمات يتحمل تعارض الطلبات المتزامنة بدون خطأ للمستخدم',
 );
+assert(
+  candidates.includes('badges: callBadgesForGrade') &&
+    candidates.includes('غائب وتم الخصم') &&
+    candidates.includes('غائب بدون خصم: فترة سماح') &&
+    candidates.includes('غائب بدون خصم: إجازة') &&
+    candidates.includes('غائب بدون خصم: الامتحان بدون خصم'),
+  'API المكالمات يرجع Badges واضحة تشرح هل الغياب خُصم أو حُمي من الخصم وسبب الحماية',
+);
+assert(
+  candidates.includes('filter === "discounted"') &&
+    candidates.includes('isDeductedImpact(impactKind)') &&
+    stats.includes('filter === "discounted"') &&
+    stats.includes('isDeductedImpact(impactKind)'),
+  'فلتر المخصومين يعتمد على الأثر الأكاديمي الحقيقي ويشمل الغياب المخصوم لا الدرجات فقط',
+);
+assert(
+  candidates.includes('filter === "absent"') &&
+    candidates.includes('hasAbsentStatus(grade)') &&
+    stats.includes('filter === "absent"') &&
+    stats.includes('hasAbsentStatus(grade)'),
+  'فلتر الغائبين يعتمد على حالة الغياب الفعلية مع ترك الـ Badges تشرح الخصم أو الحماية',
+);
+assert(
+  followUp.includes('renderCallImpactBadges') &&
+    followUp.includes('callBadgeToneClass') &&
+    followUp.includes('غائب وتم الخصم') === false,
+  'الواجهة تعرض Badges القادمة من قاعدة البيانات ولا تعيد تصنيع منطق الخصم محلياً',
+);
+
 
 if (process.exitCode) {
   console.error('\nفشل اختبار سلامة تبويبة المكالمات. راجع الرسائل أعلاه.');

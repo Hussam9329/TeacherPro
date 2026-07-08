@@ -59,6 +59,8 @@ type CallCategory =
 type CallStatusFilter =
   "all" | "absent" | "discounted" | "failed" | "cheating" | "passed" | "full";
 type CallGradeDisplayMode = "latest" | "latest-two" | "all";
+type CallBadgeTone = "deducted" | "warning" | "safe" | "success" | "neutral";
+type CallBadgeInfo = { label: string; tone: CallBadgeTone; detail?: string };
 type PledgeTypeFilter = "all" | "temporary" | "final";
 type PledgeStatusFilter = "all" | "pledged" | "pending" | "reactivated";
 type ContactStatus = "" | "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
@@ -69,8 +71,10 @@ type CallGradeItem = {
   exam: Exam;
   grade: Grade;
   category: CallCategory;
+  impactKind?: string;
   label: string;
   reason: string;
+  badges?: CallBadgeInfo[];
   sortTime: number;
 };
 
@@ -211,6 +215,15 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
     key: "gradeStatus",
     label: "حالة الدرجة",
     value: ({ row }) => row.focusItem?.label || "",
+  },
+  {
+    key: "deductionImpact",
+    label: "أثر الخصم",
+    value: ({ row }) =>
+      (row.focusItem?.badges || [])
+        .map((badge) => badge.label)
+        .filter(Boolean)
+        .join("، "),
   },
   {
     key: "grade",
@@ -1424,6 +1437,37 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     );
   };
 
+  const callBadgeToneClass = (tone: CallBadgeTone) => {
+    if (tone === "deducted")
+      return "border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200";
+    if (tone === "warning")
+      return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100";
+    if (tone === "safe")
+      return "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100";
+    if (tone === "success")
+      return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100";
+    return "border-border bg-muted/40 text-muted-foreground";
+  };
+
+  const renderCallImpactBadges = (item?: CallGradeItem | null) => {
+    const badges = item?.badges || [];
+    if (!badges.length) return null;
+    return (
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {badges.map((badge, index) => (
+          <Badge
+            key={`${badge.label}-${index}`}
+            variant="outline"
+            title={badge.detail || badge.label}
+            className={`max-w-full whitespace-normal text-start leading-5 ${callBadgeToneClass(badge.tone)}`}
+          >
+            {badge.label}
+          </Badge>
+        ))}
+      </div>
+    );
+  };
+
   const renderTelegramLink = (telegram?: string) => {
     const normalizedTelegram = normalizeTelegramIdentifier(telegram || "");
     if (!normalizedTelegram) {
@@ -1474,6 +1518,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             {item?.label || "—"}
           </Badge>
         </div>
+        {renderCallImpactBadges(item)}
         <p className="mt-1 text-muted-foreground">
           {item ? formatAppDate(item.exam.date) : "—"} - الدرجة:{" "}
           <span className="font-bold text-foreground">{value}</span>
@@ -1619,6 +1664,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   {item?.label || "—"}
                 </Badge>
               </div>
+              {renderCallImpactBadges(item)}
               <p className="mt-1 text-xs text-muted-foreground">
                 {item ? formatAppDate(item.exam.date) : "—"} - الدرجة:{" "}
                 <span className="font-bold text-foreground">{focusValue}</span>

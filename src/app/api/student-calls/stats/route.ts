@@ -9,6 +9,7 @@ import { normalizeListFilter } from "@/lib/all-filter";
 import { withFollowupTables } from "@/lib/followup-schema";
 import {
   classifyGradeAcademicImpact,
+  type GradeClassificationKind,
   gradeKindForCalls,
   parseCourseIds,
 } from "@/lib/grade-classification";
@@ -115,15 +116,38 @@ function normalizeContactStatus(
   return call.completed ? "تم الاتصال" : "";
 }
 
+function hasAbsentStatus(grade: Pick<DbGradeLite, "status"> | undefined): boolean {
+  return grade?.status === "غائب";
+}
+
+function isDeductedImpact(kind: GradeClassificationKind): boolean {
+  return (
+    kind === "absent-deducted" ||
+    kind === "absent-dismissal" ||
+    kind === "discounted" ||
+    kind === "dismissal" ||
+    kind === "cheating"
+  );
+}
+
+function classifyCallImpact(
+  grade: DbGradeLite | undefined,
+  exam: DbExamLite,
+  student?: DbStudentLite,
+  leaves: DbLeaveLite[] = [],
+): GradeClassificationKind {
+  return classifyGradeAcademicImpact(grade, exam, { student, leaves });
+}
+
 function callGradeKind(
   grade: DbGradeLite | undefined,
   exam: DbExamLite,
   student?: DbStudentLite,
   leaves: DbLeaveLite[] = [],
 ) {
-  return gradeKindForCalls(
-    classifyGradeAcademicImpact(grade, exam, { student, leaves }),
-  );
+  const impactKind = classifyCallImpact(grade, exam, student, leaves);
+  if (hasAbsentStatus(grade)) return "absent";
+  return gradeKindForCalls(impactKind);
 }
 
 function gradeCategory(
@@ -143,11 +167,15 @@ function gradeMatchesStatusFilter(
   leaves: DbLeaveLite[] = [],
 ): boolean {
   if (!grade) return false;
-  const kind = callGradeKind(grade, exam, student, leaves);
-  if (kind === "missing" || kind === "protected") return false;
-  if (filter === "all") return true;
+  const impactKind = classifyCallImpact(grade, exam, student, leaves);
+  const kind = hasAbsentStatus(grade) ? "absent" : gradeKindForCalls(impactKind);
+  if (filter === "all") return hasAbsentStatus(grade) || (kind !== "missing" && kind !== "protected");
+  if (filter === "absent") return hasAbsentStatus(grade);
+  if (filter === "discounted") return isDeductedImpact(impactKind);
   if (filter === "passed") return kind === "passed" || kind === "full";
-  if (filter === "failed") return kind === "failed" || kind === "academic-accounting";
+  if (filter === "failed") {
+    return !hasAbsentStatus(grade) && !isDeductedImpact(impactKind) && (kind === "failed" || kind === "academic-accounting");
+  }
   return kind === filter;
 }
 
