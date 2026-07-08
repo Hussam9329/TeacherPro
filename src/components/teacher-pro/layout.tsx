@@ -585,6 +585,21 @@ export function TeacherProLayout() {
     return () => window.removeEventListener("popstate", applyUrlSection);
   }, [canAccess, setSection, visibleMenuItems]);
 
+  // إصلاح حرج: عند فتح الرابط في تبويبة جديدة، persist middleware يحمّل
+  // currentSection القديم من localStorage قبل أي شي. هذا useEffect يشتغل
+  // فوراً عند mount (قبل visibleMenuItems) ويضبط القسم من URL مباشرةً
+  // متجاوزاً القيمة المخزّنة.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const urlSection = readSectionFromLocation();
+    if (urlSection) {
+      // تجاوز guard "نفس القسم" في setSection عن طريق استدعاء set مباشرة.
+      // هذا ضروري لأن persist قد يكون حمّل نفس القسم من localStorage.
+      useTeacherStore.setState({ currentSection: urlSection });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const currentSectionVisible = useMemo(
     () => visibleMenuItems.some((item) => item.id === currentSection),
     [visibleMenuItems, currentSection],
