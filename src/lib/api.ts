@@ -1,3 +1,5 @@
+import { inferTeacherProScopesFromEndpoint } from "./teacherpro-sync";
+
 /**
  * TeacherPro — API Service Layer
  * Handles all communication between the Zustand store and the backend API routes (Prisma/PostgreSQL).
@@ -60,6 +62,7 @@ export interface ApiResult {
   transient?: boolean;
   queued?: boolean;
   data?: unknown;
+  syncScopes?: string[];
 }
 
 function isTransientHttpStatus(status: number): boolean {
@@ -121,7 +124,7 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
       const responseData = contentType.includes("application/json")
         ? await res.json().catch(() => null)
         : null;
-      return { ok: true, data: responseData };
+      return { ok: true, data: responseData, syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`) };
     } catch (e) {
       const msg = toUserFriendlyError(
         e instanceof Error ? e.message : "Network error",
@@ -140,7 +143,7 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
         method: "POST",
         payload: data,
       });
-      return { ...result, queued: true };
+      return { ...result, queued: true, syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`) };
     } catch {
       // mutation-outbox not available (SSR); return as-is.
     }
@@ -177,7 +180,7 @@ async function apiPut(
       const responseData = contentType.includes("application/json")
         ? await res.json().catch(() => null)
         : null;
-      return { ok: true, data: responseData };
+      return { ok: true, data: responseData, syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`) };
     } catch (e) {
       const msg = toUserFriendlyError(
         e instanceof Error ? e.message : "Network error",
@@ -194,7 +197,7 @@ async function apiPut(
         method: "PUT",
         payload: data,
       });
-      return { ...result, queued: true };
+      return { ...result, queued: true, syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`) };
     } catch {
       // SSR; return as-is.
     }
@@ -238,7 +241,7 @@ async function apiDelete(
       const responseData = contentType.includes("application/json")
         ? await res.json().catch(() => null)
         : null;
-      return { ok: true, data: responseData };
+      return { ok: true, data: responseData, syncScopes: inferTeacherProScopesFromEndpoint(fullEndpoint) };
     } catch (e) {
       const msg = toUserFriendlyError(
         e instanceof Error ? e.message : "Network error",
@@ -254,7 +257,7 @@ async function apiDelete(
         endpoint: fullEndpoint,
         method: "DELETE",
       });
-      return { ...result, queued: true };
+      return { ...result, queued: true, syncScopes: inferTeacherProScopesFromEndpoint(fullEndpoint) };
     } catch {
       // SSR; return as-is.
     }

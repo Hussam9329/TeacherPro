@@ -460,7 +460,7 @@ export function StudentRegistryView() {
     null,
   );
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["students", "courses", "opportunities", "grades", "follow-up", "dashboard"]);
   const [activeStudentsTotal, setActiveStudentsTotal] = useState<number | null>(
     null,
   );

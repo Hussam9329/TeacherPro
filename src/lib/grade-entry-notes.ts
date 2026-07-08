@@ -1,3 +1,5 @@
+import { emitTeacherProDataChanged } from "./teacherpro-sync";
+
 /**
  * Grade-entry missing-students notes.
  *
@@ -27,6 +29,16 @@ export const GRADE_ENTRY_MISSING_NOTES_EVENT =
   'teacherpro:grade-entry-missing-notes-updated';
 const LEGACY_GRADE_ENTRY_NOTES_STORAGE_KEY = 'teacherpro-grade-entry-notes-v1';
 const OUTBOX_STORAGE_KEY = 'teacherpro-grade-entry-missing-notes-outbox-v1';
+
+const GRADE_ENTRY_NOTE_SYNC_SCOPES = ['grade-entry-notes', 'grades', 'exams'] as const;
+
+function emitGradeEntryMissingNotesSync(reason: string): void {
+  emitTeacherProDataChanged({
+    source: 'local-mutation',
+    reason,
+    scopes: [...GRADE_ENTRY_NOTE_SYNC_SCOPES],
+  });
+}
 
 type OutboxItem = {
   id: string;
@@ -150,6 +162,7 @@ async function flushOutbox() {
   const items = readOutbox();
   if (items.length === 0) return;
   flushInFlight = true;
+  let flushed = 0;
   try {
     for (const item of items) {
       try {
@@ -166,10 +179,14 @@ async function flushOutbox() {
         });
         if (res.ok) {
           removeFromOutbox(item.examId);
+          flushed += 1;
         }
       } catch {
         // Network still failing; keep in outbox for next attempt.
       }
+    }
+    if (flushed > 0) {
+      emitGradeEntryMissingNotesSync(`تمت مزامنة ${flushed} ملاحظة طلاب ناقصين مؤجلة`);
     }
   } finally {
     flushInFlight = false;
@@ -263,6 +280,7 @@ export async function upsertGradeEntryMissingNote(input: {
       }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    emitGradeEntryMissingNotesSync(text ? 'تحديث ملاحظة الطلاب الناقصين' : 'حذف ملاحظة الطلاب الناقصين');
   } catch {
     if (text) {
       pushToOutbox({
@@ -284,10 +302,13 @@ export async function deleteGradeEntryMissingNote(examId: string): Promise<void>
   }
   removeFromOutbox(normalizedExamId);
   try {
-    await fetch(
+    const res = await fetch(
       `/api/grade-entry-missing-notes?examId=${encodeURIComponent(normalizedExamId)}`,
       { method: 'DELETE', credentials: 'same-origin' },
     );
+    if (res.ok) {
+      emitGradeEntryMissingNotesSync('حذف ملاحظة الطلاب الناقصين');
+    }
   } catch {
     // Best-effort; the local cache is already updated.
   }

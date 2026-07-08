@@ -252,7 +252,7 @@ function TelegramPageImage({
 }
 
 export function ECorrectionView() {
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["correction", "students", "exams", "grades", "dashboard"]);
   const {
     correctionSheets,
     students,
@@ -420,7 +420,7 @@ export function ECorrectionView() {
       emitTeacherProDataChanged({
         source: "local-mutation",
         reason: "تحديث حالة مستلم البوت",
-        scopes: ["correction", "grades", "all"],
+        scopes: ["correction", "grades", "students", "dashboard", "logs"],
       });
       toast.success("تم تحديث حالة مستلم البوت");
     } catch (error) {

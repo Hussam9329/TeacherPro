@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import { syncVersionApi } from "@/lib/api";
-import { emitTeacherProDataChanged, subscribeTeacherProDataChanged } from "@/lib/teacherpro-sync";
+import { emitTeacherProDataChanged, subscribeTeacherProDataChanged, type TeacherProDataChangedDetail } from "@/lib/teacherpro-sync";
 import {
   LayoutDashboard,
   BookOpen,
@@ -119,6 +119,37 @@ const familyItemIds = new Set<SectionId>(
   menuFamilies.flatMap((family) => family.itemIds),
 );
 const sectionIds = new Set<SectionId>(menuItems.map((item) => item.id));
+
+const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
+  dashboard: ["dashboard", "students", "grades", "opportunities", "exams", "correction"],
+  "missing-students-notes": ["grade-entry-notes", "grades", "exams"],
+  courses: ["courses", "students", "exams", "dashboard"],
+  chapters: ["chapters", "courses", "students", "opportunities", "dashboard"],
+  "student-register": ["students", "courses", "opportunities", "dashboard"],
+  "student-registry": ["students", "courses", "opportunities", "grades", "follow-up", "dashboard"],
+  "student-bulk-import": ["students", "courses", "opportunities", "bulk-import", "dashboard"],
+  "dismissed-students": ["students", "grades", "opportunities", "dismissed", "dashboard"],
+  "exam-new": ["exams", "courses", "grades", "dashboard"],
+  "grade-entry": ["grades", "students", "exams", "opportunities", "grade-entry-notes", "dashboard"],
+  "exam-records": ["exams", "courses", "grades", "students", "correction", "grade-entry-notes", "dashboard"],
+  "grade-records": ["grades", "students", "exams", "opportunities", "dashboard"],
+  opportunities: ["opportunities", "opportunity-logs", "students", "grades", "dashboard"],
+  "e-correction": ["correction", "students", "exams", "grades", "dashboard"],
+  "follow-up": ["follow-up", "students", "grades", "opportunities", "dashboard"],
+  "follow-up-calls": ["follow-up", "students", "dashboard"],
+  "follow-up-leaves": ["follow-up", "students", "grades", "opportunities", "dashboard"],
+  "follow-up-pledges": ["follow-up", "students", "opportunities", "dashboard"],
+  accounts: ["accounts", "logs"],
+  logs: ["logs", "opportunity-logs"],
+  "admin-log-reset": ["logs", "opportunity-logs", "opportunities", "dashboard"],
+};
+
+function detailMatchesSection(detail: Pick<TeacherProDataChangedDetail, "scopes"> | undefined, section: SectionId): boolean {
+  if (!detail?.scopes || detail.scopes.length === 0) return true;
+  if (detail.scopes.includes("all")) return true;
+  const sectionScopes = SECTION_SYNC_SCOPES[section] || [];
+  return detail.scopes.some((scope) => sectionScopes.includes(scope));
+}
 
 function sectionHref(section: SectionId) {
   return `/?section=${encodeURIComponent(section)}`;
@@ -465,7 +496,8 @@ export function TeacherProLayout() {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const refreshCurrentSection = (detail?: { source?: string; scopes?: string[] }) => {
+    const refreshCurrentSection = (detail?: TeacherProDataChangedDetail | { source?: string; scopes?: string[] }) => {
+      if (!detailMatchesSection(detail, currentSection)) return;
       lazyLoadedSectionsRef.current.delete(currentSection);
       if (syncRefreshTimerRef.current) window.clearTimeout(syncRefreshTimerRef.current);
       syncRefreshTimerRef.current = window.setTimeout(() => {
@@ -482,7 +514,7 @@ export function TeacherProLayout() {
     const handleLegacyStudentsUpdated = () =>
       refreshCurrentSection({
         source: "manual",
-        scopes: ["students", "opportunities", "all"],
+        scopes: ["students", "opportunities", "dashboard"],
       });
     window.addEventListener("teacherpro:students-updated", handleLegacyStudentsUpdated);
     return () => {
@@ -971,7 +1003,7 @@ export function TeacherProLayout() {
         </div>
       </aside>
 
-      <main className="flex h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="flex min-h-dvh min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="sticky top-0 z-30 border-b border-border/70 bg-background/75 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65">
           <div className="flex items-center justify-between gap-2 px-3 py-2 md:px-6 md:py-3">
             <div className="flex items-center gap-2 md:gap-3">

@@ -419,7 +419,7 @@ function buildDismissalKey(parts: {
 }
 
 function FollowUpViewBase({ view }: { view: FollowView }) {
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["follow-up", "students", "grades", "opportunities", "dashboard"]);
   const {
     courses,
     students,
@@ -1741,16 +1741,19 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             >
               حالة الطالب: {row.student.status}
             </Badge>
-            <Badge
-              variant={
+            <span
+              className={`inline-flex items-center gap-1 rounded-lg px-3 py-1 text-sm font-black ${
                 activeChapterForCourse(row.student.courseId)
-                  ? "outline"
-                  : "secondary"
-              }
-              className="text-[10px] font-bold"
+                  ? Number(row.student.opportunities || 0) === 0
+                    ? "bg-red-500/15 text-red-600 dark:text-red-400"
+                    : Number(row.student.opportunities || 0) <= 1
+                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                  : "bg-muted text-muted-foreground"
+              }`}
             >
               الفرص: {studentOpportunityText(row.student)}
-            </Badge>
+            </span>
           </div>
           <p className="text-xs text-muted-foreground">
             {courseName(row.student.courseId)} - {row.student.studyType || "—"}

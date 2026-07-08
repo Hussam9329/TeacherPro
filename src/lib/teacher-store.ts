@@ -49,7 +49,7 @@ import {
 import { toBaghdadDateTimeLocal } from "./baghdad-time";
 import { formatAppDate, toLatinDigits } from "./format";
 import { recalculateAcademicState } from "./academic-engine";
-import { emitTeacherProDataChanged } from "./teacherpro-sync";
+import { emitTeacherProDataChanged, emitTeacherProLogsChangedDebounced } from "./teacherpro-sync";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1673,6 +1673,11 @@ function triggerAutoFixZeroOpportunities(): void {
           `[auto-repair] تم فحص/تصحيح ${totalTouched} طالب تلقائياً (إعادة احتساب: ${recalculated}، تصفير: ${fixedZero}، تثبيت: ${fixedClamp}).`,
         );
         window.dispatchEvent(new CustomEvent("teacherpro:students-updated"));
+        emitTeacherProDataChanged({
+          source: "local-mutation",
+          reason: "إصلاح أكاديمي تلقائي",
+          scopes: ["students", "grades", "opportunities", "opportunity-logs", "dashboard", "dismissed"],
+        });
       }
     })
     .catch((err) => {
@@ -2114,6 +2119,7 @@ function syncToServer(
     rollback?: () => void;
     onSuccess?: (result: unknown) => void;
     notify?: boolean;
+    scopes?: string | string[];
   } = {},
 ): void {
   void Promise.resolve()
@@ -2124,10 +2130,14 @@ function syncToServer(
       }
       options.onSuccess?.(result);
       if (options.notify !== false) {
+        const resultScopes =
+          result && typeof result === "object" && Array.isArray((result as ApiResult).syncScopes)
+            ? (result as ApiResult).syncScopes
+            : undefined;
         emitTeacherProDataChanged({
           source: "local-mutation",
           reason: options.description || "تحديث بيانات",
-          scopes: "all",
+          scopes: options.scopes || resultScopes || "all",
         });
       }
     })
@@ -2371,7 +2381,14 @@ async function flushPendingGradeSaves(
       flushed.push(item);
     }
 
-    if (flushed.length > 0) removeFlushedPendingGradeSaves(flushed);
+    if (flushed.length > 0) {
+      removeFlushedPendingGradeSaves(flushed);
+      emitTeacherProDataChanged({
+        source: "local-mutation",
+        reason: `مزامنة ${flushed.length} درجة مؤجلة`,
+        scopes: ["grades", "students", "opportunities", "dashboard"],
+      });
+    }
     if (permanentlyFailed.length > 0) {
       removeFlushedPendingGradeSaves(permanentlyFailed);
       // أظهر toast مرة وحدة لإعلام المستخدم
@@ -3162,7 +3179,10 @@ export const useTeacherStore = create<TeacherState>()(
         syncToServer(
           get,
           () => logApi.add({ ...log, userName: user, userId: currentUser.id }),
-          { notify: false },
+          {
+            notify: false,
+            onSuccess: () => emitTeacherProLogsChangedDebounced("تحديث السجلات"),
+          },
         );
       },
 
@@ -3192,6 +3212,11 @@ export const useTeacherStore = create<TeacherState>()(
             (log) => !shouldClearOpportunityLogLocally(log, options),
           ),
         }));
+        emitTeacherProDataChanged({
+          source: "local-mutation",
+          reason: "تصفير السجلات",
+          scopes: ["logs", "opportunity-logs", "opportunities", "dashboard"],
+        });
         return {
           ok: true,
           message:
@@ -3212,6 +3237,11 @@ export const useTeacherStore = create<TeacherState>()(
           };
         }
         await get().loadFromServer();
+        emitTeacherProDataChanged({
+          source: "local-mutation",
+          reason: "استعادة آخر تصفير للسجلات",
+          scopes: ["logs", "opportunity-logs", "opportunities", "dashboard"],
+        });
         return {
           ok: true,
           message: "تمت استعادة آخر عملية تصفير للسجلات بنجاح",

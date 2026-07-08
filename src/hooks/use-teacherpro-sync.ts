@@ -12,7 +12,9 @@ function matchesScope(
 ): boolean {
   if (!scopes || scopes.length === 0) return true;
   if (!detail.scopes || detail.scopes.length === 0) return true;
-  return detail.scopes.some((scope) => scopes.includes(scope) || scopes.includes("all"));
+  const listenerScopes = new Set(scopes);
+  if (listenerScopes.has("all")) return true;
+  return detail.scopes.some((scope) => scope === "all" || listenerScopes.has(scope));
 }
 
 export function useTeacherProSyncKey(scopes?: string | string[]): number {

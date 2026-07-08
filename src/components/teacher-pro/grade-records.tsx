@@ -165,7 +165,7 @@ export function GradeRecordsView() {
   const [gradeCoverageStatsLoading, setGradeCoverageStatsLoading] =
     useState(false);
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["grades", "students", "exams", "opportunities", "dashboard"]);
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     id: "",

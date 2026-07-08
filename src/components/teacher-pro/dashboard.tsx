@@ -79,7 +79,7 @@ function formatStatsTime(value?: string) {
 
 export function DashboardView() {
   const { setSection } = useTeacherStore();
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams", "correction"]);
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);

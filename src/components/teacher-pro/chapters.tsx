@@ -212,7 +212,7 @@ export function ChaptersView() {
         emitTeacherProDataChanged({
           source: "local-mutation",
           reason: "إصلاح فرص الطلاب",
-          scopes: ["students", "opportunities", "all"],
+          scopes: ["students", "opportunities", "dashboard", "logs"],
         });
       } else {
         toast.info(payload.message || "لا يوجد طلاب يحتاجون إصلاحاً.");

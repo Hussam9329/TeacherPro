@@ -95,7 +95,7 @@ function formatDismissalGrade(detail: DismissalDetail | null): string {
 }
 
 export function DismissedStudentsView() {
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "dismissed", "dashboard"]);
   const {
     students,
     courses,

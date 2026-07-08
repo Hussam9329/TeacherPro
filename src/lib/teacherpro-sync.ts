@@ -21,6 +21,63 @@ export interface TeacherProDataChangedDetail {
 
 type SyncListener = (detail: TeacherProDataChangedDetail) => void;
 
+export type TeacherProSyncScope =
+  | "all"
+  | "core"
+  | "dashboard"
+  | "courses"
+  | "chapters"
+  | "students"
+  | "dismissed"
+  | "exams"
+  | "grades"
+  | "opportunities"
+  | "opportunity-logs"
+  | "follow-up"
+  | "correction"
+  | "accounts"
+  | "logs"
+  | "grade-entry-notes"
+  | "bulk-import";
+
+const LOG_SYNC_DEBOUNCE_MS = 1200;
+let logsSyncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function inferTeacherProScopesFromEndpoint(endpoint: string): TeacherProSyncScope[] {
+  const path = String(endpoint || "").toLowerCase();
+  const scopes = new Set<TeacherProSyncScope>();
+  const add = (items: TeacherProSyncScope[]) => items.forEach((item) => scopes.add(item));
+
+  if (path.includes("grade-entry-missing-notes")) add(["grade-entry-notes", "grades", "exams"]);
+  else if (path.includes("grades")) add(["grades", "students", "opportunities", "dashboard"]);
+  else if (path.includes("students")) add(["students", "grades", "opportunities", "dismissed", "dashboard"]);
+  else if (path.includes("opportunity-logs")) add(["opportunities", "opportunity-logs", "students", "dashboard"]);
+  else if (path.includes("exams")) add(["exams", "grades", "students", "dashboard", "grade-entry-notes"]);
+  else if (path.includes("courses")) add(["courses", "students", "exams", "dashboard"]);
+  else if (path.includes("chapters")) add(["chapters", "courses", "students", "opportunities", "dashboard"]);
+  else if (path.includes("student-leaves") || path.includes("student-calls") || path.includes("student-notes")) add(["follow-up", "students", "grades", "opportunities", "dashboard"]);
+  else if (path.includes("correction-sheets") || path.includes("telegram-exam-submissions")) add(["correction", "students", "exams", "grades", "dashboard"]);
+  else if (path.includes("users") || path.includes("roles")) add(["accounts", "logs"]);
+  else if (path.includes("logs")) add(["logs"]);
+
+  if (scopes.size === 0) add(["all"]);
+  if (!path.includes("sync/version") && !scopes.has("all")) scopes.add("logs");
+  return Array.from(scopes);
+}
+
+export function emitTeacherProLogsChangedDebounced(reason = "تحديث السجلات"): void {
+  if (!canUseWindow()) return;
+  if (logsSyncDebounceTimer) clearTimeout(logsSyncDebounceTimer);
+  logsSyncDebounceTimer = setTimeout(() => {
+    logsSyncDebounceTimer = null;
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason,
+      scopes: "logs",
+    });
+  }, LOG_SYNC_DEBOUNCE_MS);
+}
+
 
 let broadcastChannel: BroadcastChannel | null = null;
 let lastSeenEventId = "";

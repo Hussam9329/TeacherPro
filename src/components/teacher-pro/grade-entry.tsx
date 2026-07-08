@@ -208,7 +208,7 @@ function formatGradeEntryTimestamp(value?: string | Date | null): string {
 }
 
 export function GradeEntryView() {
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["grades", "students", "exams", "opportunities", "grade-entry-notes", "dashboard"]);
   const {
     exams,
     students,

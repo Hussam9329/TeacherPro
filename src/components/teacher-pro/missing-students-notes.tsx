@@ -45,7 +45,7 @@ function formatDateTime(value: string) {
 }
 
 export function MissingStudentsNotesView() {
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["grade-entry-notes", "grades", "exams"]);
   const { exams, setSection } = useTeacherStore();
   const [notes, setNotes] = useState<GradeEntryMissingNote[]>([]);
   const [search, setSearch] = useState("");

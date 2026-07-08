@@ -1,3 +1,5 @@
+import { emitTeacherProDataChanged, inferTeacherProScopesFromEndpoint } from "./teacherpro-sync";
+
 /**
  * Generic client-side outbox for any server mutation that may fail due to
  * transient network issues. Mirrors the grades-specific outbox pattern but
@@ -79,7 +81,14 @@ export async function enqueueMutation(input: {
       credentials: 'same-origin',
       body: payload !== undefined ? JSON.stringify(payload) : undefined,
     });
-    if (res.ok) return { ok: true };
+    if (res.ok) {
+      emitTeacherProDataChanged({
+        source: 'local-mutation',
+        reason: description || `outbox-immediate:${method} ${endpoint}`,
+        scopes: inferTeacherProScopesFromEndpoint(endpoint),
+      });
+      return { ok: true };
+    }
     // 4xx (except 408/429) → permanent failure, don't queue.
     if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
       return { ok: false };
@@ -132,6 +141,7 @@ export async function flushOutbox(): Promise<number> {
 
   flushInFlight = true;
   let flushed = 0;
+  const touchedScopes = new Set<string>();
   try {
     const remaining: QueuedMutation[] = [];
     for (const item of items) {
@@ -148,6 +158,7 @@ export async function flushOutbox(): Promise<number> {
         });
         if (res.ok) {
           flushed += 1;
+          inferTeacherProScopesFromEndpoint(item.endpoint).forEach((scope) => touchedScopes.add(scope));
           continue;
         }
         // 4xx (except 408/429) → permanent failure, drop.
@@ -170,6 +181,13 @@ export async function flushOutbox(): Promise<number> {
       }
     }
     writeOutbox(remaining);
+    if (flushed > 0) {
+      emitTeacherProDataChanged({
+        source: 'local-mutation',
+        reason: `تمت مزامنة ${flushed} تعديل مؤجل`,
+        scopes: Array.from(touchedScopes),
+      });
+    }
   } finally {
     flushInFlight = false;
   }

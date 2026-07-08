@@ -180,7 +180,7 @@ function emptyEditState(): FullExamEditState {
 }
 
 export function ExamRecordsView() {
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["exams", "courses", "grades", "students", "correction", "grade-entry-notes", "dashboard"]);
   const {
     exams,
     grades,

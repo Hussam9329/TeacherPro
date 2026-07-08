@@ -260,7 +260,7 @@ export function StudentProfileDialog({
   isStudentCurrentlyInGrace,
   graceEndDate,
 }: StudentProfileDialogProps) {
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "opportunity-logs", "follow-up", "correction", "logs", "grade-entry-notes"]);
   const [tab, setTab] = useState<StudentFileTab>("details");
   const [databaseStats, setDatabaseStats] = useState<StudentProfileStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);

@@ -86,7 +86,7 @@ export function OpportunitiesView() {
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["opportunities", "opportunity-logs", "students", "grades", "dashboard"]);
   const [detailsStudentId, setDetailsStudentId] = useState("");
   const [databaseStats, setDatabaseStats] =
     useState<OpportunityStatsResponse | null>(null);

@@ -234,7 +234,7 @@ function getPreviewCategory(row: PreviewRow): PreviewCategory {
 }
 
 export function StudentBulkTextImportView() {
-  const syncKey = useTeacherProSyncKey();
+  const syncKey = useTeacherProSyncKey(["students", "courses", "opportunities", "dashboard", "bulk-import"]);
   const { students, courses, loadFromServer, mergeStudentsCache } = useTeacherStore();
   const [rawText, setRawText] = useState("");
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
@@ -501,7 +501,7 @@ export function StudentBulkTextImportView() {
     emitTeacherProDataChanged({
       source: "local-mutation",
       reason: "إضافة جماعية للطلاب",
-      scopes: ["students", "opportunities", "dashboard", "all"],
+      scopes: ["students", "opportunities", "dashboard", "bulk-import", "logs"],
     });
     toast.success("تمت الإضافة الجماعية", { description: `تمت إضافة ${studentsToImport.length} طالب إلى سجل الطلاب` });
     setRawText("");
