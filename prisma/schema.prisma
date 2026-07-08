@@ -211,6 +211,7 @@ model StudentCall {
   student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam        Exam?     @relation(fields: [examId], references: [id], onDelete: Cascade)
 
+  @@unique([studentId, examId, category])
   @@index([studentId])
   @@index([examId])
   @@index([createdAt])

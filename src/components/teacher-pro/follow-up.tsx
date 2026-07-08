@@ -509,11 +509,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
     setCallCourseExamsLoading(true);
     callCourseExamsApi
-      .get(callCourseId)
+      .get(callCourseId, { signal: controller.signal, quietAbort: true })
       .then((result) => {
-        if (cancelled) return;
+        if (cancelled || controller.signal.aborted) return;
         const nextExams = (result?.exams || []) as unknown as Exam[];
         setCallCourseExamsFromDb(nextExams);
         if (callExamId && !nextExams.some((exam) => exam.id === callExamId)) {
@@ -521,16 +522,17 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && !controller.signal.aborted) {
           setCallCourseExamsFromDb([]);
           toast.error("تعذر تحميل امتحانات المكالمات من قاعدة البيانات.");
         }
       })
       .finally(() => {
-        if (!cancelled) setCallCourseExamsLoading(false);
+        if (!cancelled && !controller.signal.aborted) setCallCourseExamsLoading(false);
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [view, callCourseId, callExamId]);
 
@@ -543,20 +545,24 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
     setCallLoading(true);
 
     callCandidatesApi
-      .get({
-        courseId: callCourseId,
-        examId: callExamId,
-        statusFilter: callStatusFilter,
-        q: debouncedCallGeneralSearch,
-        filterQ: debouncedCallFilterSearch,
-        page: callGradePage,
-        pageSize: CALL_PAGE_SIZE,
-      })
+      .get(
+        {
+          courseId: callCourseId,
+          examId: callExamId,
+          statusFilter: callStatusFilter,
+          q: debouncedCallGeneralSearch,
+          filterQ: debouncedCallFilterSearch,
+          page: callGradePage,
+          pageSize: CALL_PAGE_SIZE,
+        },
+        { signal: controller.signal, quietAbort: true },
+      )
       .then((result) => {
-        if (cancelled || !result) return;
+        if (cancelled || controller.signal.aborted || !result) return;
         setCallRowsFromDb((result.rows || []) as unknown as CallStudentRow[]);
         setCallPageStudentCalls(
           (result.studentCalls || []) as unknown as StudentCall[],
@@ -571,7 +577,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         });
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && !controller.signal.aborted) {
           setCallRowsFromDb([]);
           setCallPageStudentCalls([]);
           setCallServerPageInfo({
@@ -583,11 +589,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         }
       })
       .finally(() => {
-        if (!cancelled) setCallLoading(false);
+        if (!cancelled && !controller.signal.aborted) setCallLoading(false);
       });
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [
     view,
@@ -608,29 +615,34 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     }
 
     let cancelled = false;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setCallDatabaseStatsLoading(true);
       callStatsApi
-        .get({
-          courseId: callCourseId,
-          examId: callExamId,
-          statusFilter: callStatusFilter,
-          q: debouncedCallGeneralSearch,
-          filterQ: debouncedCallFilterSearch,
-        })
+        .get(
+          {
+            courseId: callCourseId,
+            examId: callExamId,
+            statusFilter: callStatusFilter,
+            q: debouncedCallGeneralSearch,
+            filterQ: debouncedCallFilterSearch,
+          },
+          { signal: controller.signal, quietAbort: true },
+        )
         .then((result) => {
-          if (!cancelled) setCallDatabaseStats(result);
+          if (!cancelled && !controller.signal.aborted) setCallDatabaseStats(result);
         })
         .catch(() => {
-          if (!cancelled) setCallDatabaseStats(null);
+          if (!cancelled && !controller.signal.aborted) setCallDatabaseStats(null);
         })
         .finally(() => {
-          if (!cancelled) setCallDatabaseStatsLoading(false);
+          if (!cancelled && !controller.signal.aborted) setCallDatabaseStatsLoading(false);
         });
     }, 180);
 
     return () => {
       cancelled = true;
+      controller.abort();
       window.clearTimeout(timer);
     };
   }, [
@@ -1483,6 +1495,45 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     );
   };
 
+  const renderCallLoadingSkeleton = () => (
+    <div className="space-y-3" aria-live="polite" aria-busy="true">
+      {[0, 1, 2].map((index) => (
+        <div
+          key={index}
+          className="rounded-2xl border bg-card/80 p-4 text-sm shadow-sm"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="h-5 w-36 animate-pulse rounded-full bg-muted" />
+              <span className="h-6 w-20 animate-pulse rounded-full bg-muted" />
+              <span className="h-6 w-24 animate-pulse rounded-full bg-muted" />
+            </div>
+            <span className="h-8 w-24 animate-pulse rounded-xl bg-muted" />
+          </div>
+          <div className="mt-3 grid gap-4 lg:grid-cols-3">
+            <div className="space-y-3 rounded-xl border border-primary/10 bg-primary/5 p-3">
+              <span className="block h-4 w-24 animate-pulse rounded-full bg-muted" />
+              <span className="block h-5 w-44 animate-pulse rounded-full bg-muted" />
+              <span className="block h-4 w-32 animate-pulse rounded-full bg-muted" />
+            </div>
+            <div className="space-y-2">
+              <span className="block h-4 w-28 animate-pulse rounded-full bg-muted" />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <span className="h-20 animate-pulse rounded-2xl bg-muted" />
+                <span className="h-20 animate-pulse rounded-2xl bg-muted" />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <span className="block h-4 w-28 animate-pulse rounded-full bg-muted" />
+              <span className="block h-20 animate-pulse rounded-xl bg-muted" />
+              <span className="block h-8 w-28 animate-pulse rounded-full bg-muted" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   const renderCallRow = (row: CallStudentRow) => {
     const item = row.focusItem;
     const call = callLogForRow(row);
@@ -2121,9 +2172,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   الطلاب. مصدر الامتحانات هنا قاعدة البيانات مباشرة، وليس الكاش المحلي.
                 </p>
               ) : callLoading ? (
-                <p className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
-                  جاري تحميل طلاب ودرجات هذه الدورة...
-                </p>
+                <div className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+                    <span>جاري تحميل طلاب ودرجات هذه الدورة من قاعدة البيانات...</span>
+                  </div>
+                </div>
               ) : null}
             </CardContent>
           </Card>
@@ -2207,6 +2261,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 <p className="empty-state py-8">
                   اختر الدورة ثم الامتحان لعرض الطلاب.
                 </p>
+              ) : callLoading ? (
+                renderCallLoadingSkeleton()
               ) : visibleCallRows.length === 0 ? (
                 <p className="empty-state py-8">
                   لا يوجد طلاب مطابقون للدورة والامتحان والفلاتر الحالية.

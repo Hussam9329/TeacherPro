@@ -265,6 +265,7 @@ export function StudentProfileDialog({
   const [databaseStats, setDatabaseStats] = useState<StudentProfileStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
   const [databaseGrades, setDatabaseGrades] = useState<Grade[]>([]);
+  const [databaseExams, setDatabaseExams] = useState<Exam[]>([]);
   const [databaseOpportunityLogs, setDatabaseOpportunityLogs] = useState<OpportunityLog[]>([]);
   const [databaseStudentLeaves, setDatabaseStudentLeaves] = useState<StudentLeave[]>([]);
   const [databaseStudentCalls, setDatabaseStudentCalls] = useState<StudentCall[]>([]);
@@ -278,6 +279,11 @@ export function StudentProfileDialog({
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const profileExams = useMemo(
+    () => mergeById(exams, databaseExams),
+    [exams, databaseExams],
+  );
 
   const localStudentGrades = useMemo(
     () => (student ? grades.filter((grade) => grade.studentId === student.id) : []),
@@ -375,7 +381,7 @@ export function StudentProfileDialog({
 
   const fullStudentLog = useMemo<StudentLogRow[]>(() => {
     if (!student) return [];
-    const examById = new Map(exams.map((exam) => [exam.id, exam]));
+    const examById = new Map(profileExams.map((exam) => [exam.id, exam]));
     const rows: StudentLogRow[] = [
       {
         id: `student-created-${student.id}`,
@@ -446,7 +452,7 @@ export function StudentProfileDialog({
     return rows
       .filter((row) => row.date || row.details)
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-  }, [student, exams, studentGrades, studentOpportunities, studentLeavesForProfile, studentCallsForProfile, allStudentNotes, profileSystemLogs, courseName, opportunityTraceByLogId]);
+  }, [student, profileExams, studentGrades, studentOpportunities, studentLeavesForProfile, studentCallsForProfile, allStudentNotes, profileSystemLogs, courseName, opportunityTraceByLogId]);
 
   useEffect(() => {
     if (!open) return;
@@ -482,6 +488,7 @@ export function StudentProfileDialog({
   useEffect(() => {
     if (!open || !student?.id) {
       setDatabaseGrades([]);
+      setDatabaseExams([]);
       setDatabaseOpportunityLogs([]);
       setDatabaseStudentLeaves([]);
       setDatabaseStudentCalls([]);
@@ -502,6 +509,7 @@ export function StudentProfileDialog({
         if (cancelled) return;
         if (!result) {
           setDatabaseGrades([]);
+          setDatabaseExams([]);
           setDatabaseOpportunityLogs([]);
           setDatabaseStudentLeaves([]);
           setDatabaseStudentCalls([]);
@@ -511,6 +519,7 @@ export function StudentProfileDialog({
           return;
         }
         setDatabaseGrades((result.grades || []) as unknown as Grade[]);
+        setDatabaseExams((result.exams || []) as unknown as Exam[]);
         setDatabaseOpportunityLogs((result.opportunityLogs || []) as unknown as OpportunityLog[]);
         setDatabaseStudentLeaves((result.studentLeaves || []) as unknown as StudentLeave[]);
         setDatabaseStudentCalls((result.studentCalls || []) as unknown as StudentCall[]);
@@ -520,6 +529,7 @@ export function StudentProfileDialog({
       .catch(() => {
         if (cancelled) return;
         setDatabaseGrades([]);
+        setDatabaseExams([]);
         setDatabaseOpportunityLogs([]);
         setDatabaseStudentLeaves([]);
         setDatabaseStudentCalls([]);
@@ -695,7 +705,7 @@ export function StudentProfileDialog({
                 <h4 className="mb-4 text-base font-black sm:text-lg">درجات الطالب</h4>
                 <div className="space-y-2">
                   {studentGrades.length === 0 ? <p className="empty-state py-8">{gradesEmptyMessage}</p> : studentGrades.map((grade) => {
-                    const exam = exams.find((item) => item.id === grade.examId);
+                    const exam = profileExams.find((item) => item.id === grade.examId);
                     const withinGrace = Boolean(exam && isExamWithinStudentGracePeriod(student, exam));
                     const withoutDiscount = Boolean(exam?.noDiscount);
                     return (
@@ -724,7 +734,7 @@ export function StudentProfileDialog({
                 <h4 className="mb-4 text-base font-black sm:text-lg">امتحانات الطالب</h4>
                 <div className="grid gap-3 lg:grid-cols-2">
                   {studentGrades.length === 0 ? <p className="empty-state py-8 lg:col-span-2">{gradesEmptyMessage}</p> : studentGrades.map((grade) => {
-                    const exam = exams.find((item) => item.id === grade.examId);
+                    const exam = profileExams.find((item) => item.id === grade.examId);
                     if (!exam) return null;
                     const withinGrace = isExamWithinStudentGracePeriod(student, exam);
                     const withoutDiscount = Boolean(exam.noDiscount);

@@ -7,6 +7,10 @@ const files = {
   callsRoute: 'src/app/api/student-calls/route.ts',
   api: 'src/lib/api.ts',
   classification: 'src/lib/grade-classification.ts',
+  prisma: 'prisma/schema.prisma',
+  callUniqueMigration: 'prisma/migrations/20260708162000_student_call_unique_key/migration.sql',
+  profileLog: 'src/app/api/students/profile-log/route.ts',
+  profileDialog: 'src/components/teacher-pro/student-profile-dialog.tsx',
 };
 
 const read = (file) => fs.readFileSync(file, 'utf8');
@@ -25,6 +29,10 @@ const stats = read(files.stats);
 const callsRoute = read(files.callsRoute);
 const api = read(files.api);
 const classification = read(files.classification);
+const prisma = read(files.prisma);
+const callUniqueMigration = read(files.callUniqueMigration);
+const profileLog = read(files.profileLog);
+const profileDialog = read(files.profileDialog);
 
 assert(
   followUp.includes('const callRows = callRowsFromDb;'),
@@ -75,6 +83,45 @@ assert(
 assert(
   !followUp.includes('whatsapp://send'),
   'لا توجد روابط whatsapp:// داخل تبويبة المكالمات',
+);
+
+
+assert(
+  prisma.includes('@@unique([studentId, examId, category])') &&
+    callUniqueMigration.includes('StudentCall_studentId_examId_category_key'),
+  'قاعدة البيانات تملك قيد Unique حقيقي للمكالمات حسب الطالب/الامتحان/السبب',
+);
+assert(
+  callUniqueMigration.includes('COALESCE("examId",') &&
+    callUniqueMigration.includes('StudentCall_studentId_examId_category_coalesced_key'),
+  'قيد Unique يغطي أيضاً ملاحظات المكالمات ذات examId الفارغ',
+);
+assert(
+  api.includes('ApiGetOptions') &&
+    api.includes('signal: options.signal') &&
+    followUp.includes('new AbortController()') &&
+    followUp.includes('controller.abort()') &&
+    followUp.includes('quietAbort: true'),
+  'طلبات بحث/تحميل تبويبة المكالمات تُلغى فعلياً عبر AbortController عند تغيير الفلتر أو البحث',
+);
+assert(
+  followUp.includes('renderCallLoadingSkeleton') &&
+    followUp.includes('aria-busy="true"') &&
+    followUp.includes('animate-pulse'),
+  'حالة التحميل داخل كروت المكالمات صارت Skeleton واضحة بدل رسالة نصية فقط',
+);
+assert(
+  profileLog.includes('const exams = examIds.length') &&
+    profileLog.includes('exams,') &&
+    profileDialog.includes('databaseExams') &&
+    profileDialog.includes('profileExams'),
+  'ملف الطالب المفتوح من المكالمات يجلب امتحانات سجل الطالب من قاعدة البيانات حتى لا يعتمد على كاش الامتحانات العام',
+);
+assert(
+  callsRoute.includes('isUniqueConstraintError') &&
+    callsRoute.includes('A second tab/request created the same logical call') &&
+    callsRoute.includes('racedExisting'),
+  'حفظ المكالمات يتحمل تعارض الطلبات المتزامنة بدون خطأ للمستخدم',
 );
 
 if (process.exitCode) {

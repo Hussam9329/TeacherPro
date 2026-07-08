@@ -58,6 +58,15 @@ function normalizeCallPayload(body: Record<string, unknown>) {
   };
 }
 
+function isUniqueConstraintError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "P2002",
+  );
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "follow-up.view");
   if (authError) return authError;
@@ -124,9 +133,34 @@ export async function POST(req: NextRequest) {
           }
 
           const { createdAt: _createdAt, ...updateData } = data;
-          const studentCall = existing
-            ? await tx.studentCall.update({ where: { id: existing.id }, data: updateData })
-            : await tx.studentCall.create({ data });
+          let studentCall;
+          if (existing) {
+            studentCall = await tx.studentCall.update({
+              where: { id: existing.id },
+              data: updateData,
+            });
+          } else {
+            try {
+              studentCall = await tx.studentCall.create({ data });
+            } catch (createError) {
+              if (!isUniqueConstraintError(createError)) throw createError;
+              // A second tab/request created the same logical call between findFirst and create.
+              // Re-read and update the winning row instead of returning an error to the user.
+              const racedExisting = await tx.studentCall.findFirst({
+                where: {
+                  studentId: data.studentId,
+                  examId: data.examId,
+                  category: data.category,
+                },
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              });
+              if (!racedExisting) throw createError;
+              studentCall = await tx.studentCall.update({
+                where: { id: racedExisting.id },
+                data: updateData,
+              });
+            }
+          }
 
           // Best-effort cleanup of older duplicates for the same logical call.
           await tx.studentCall.deleteMany({

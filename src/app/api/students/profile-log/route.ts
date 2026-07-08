@@ -87,9 +87,15 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+    const examIds = Array.from(new Set(grades.map((grade) => grade.examId).filter(Boolean)));
+    const exams = examIds.length
+      ? await db.exam.findMany({ where: { id: { in: examIds } } })
+      : [];
+
     return NextResponse.json({
       studentId,
       grades,
+      exams,
       opportunityLogs,
       studentLeaves,
       studentCalls,

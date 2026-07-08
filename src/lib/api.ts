@@ -294,14 +294,30 @@ interface ApiGetResponse<T> {
   status: number;
   data: T | null;
   error?: string;
+  aborted?: boolean;
+}
+
+type ApiGetOptions = {
+  signal?: AbortSignal;
+  quietAbort?: boolean;
+};
+
+function isAbortError(error: unknown): boolean {
+  return (
+    error instanceof DOMException && error.name === "AbortError"
+  ) || (error instanceof Error && error.name === "AbortError");
 }
 
 async function apiGetResponse<T>(
   endpoint: string,
   quietStatuses: number[] = [],
+  options: ApiGetOptions = {},
 ): Promise<ApiGetResponse<T>> {
   try {
-    const res = await fetch(`/api/${endpoint}`, { credentials: "same-origin" });
+    const res = await fetch(`/api/${endpoint}`, {
+      credentials: "same-origin",
+      signal: options.signal,
+    });
     if (!res.ok) {
       const error = await readApiError(res, "تعذر تحميل البيانات");
       if (!quietStatuses.includes(res.status)) {
@@ -312,6 +328,12 @@ async function apiGetResponse<T>(
     const json = await res.json();
     return { ok: true, status: res.status, data: json as T };
   } catch (e) {
+    if (isAbortError(e)) {
+      if (!options.quietAbort) {
+        console.debug(`[API] GET /api/${endpoint} aborted`);
+      }
+      return { ok: false, status: 0, data: null, aborted: true };
+    }
     console.warn(`[API] GET /api/${endpoint} error:`, e);
     return {
       ok: false,
@@ -324,8 +346,8 @@ async function apiGetResponse<T>(
   }
 }
 
-async function apiGet<T>(endpoint: string): Promise<T | null> {
-  const result = await apiGetResponse<T>(endpoint);
+async function apiGet<T>(endpoint: string, options: ApiGetOptions = {}): Promise<T | null> {
+  const result = await apiGetResponse<T>(endpoint, [], options);
   return result.ok ? result.data : null;
 }
 
@@ -596,6 +618,7 @@ export interface StudentProfileStatsResponse {
 export interface StudentProfileLogResponse {
   studentId: string;
   grades: Array<Record<string, unknown>>;
+  exams?: Array<Record<string, unknown>>;
   opportunityLogs: Array<Record<string, unknown>>;
   studentLeaves: Array<Record<string, unknown>>;
   studentCalls: Array<Record<string, unknown>>;
@@ -1193,16 +1216,17 @@ export const opportunityStatsApi = {
 };
 
 export const callCourseExamsApi = {
-  get: (courseId?: string) => {
+  get: (courseId?: string, options: ApiGetOptions = {}) => {
     const queryString = buildQueryString({ courseId });
     return apiGet<CallCourseExamsResponse>(
       `student-calls/course-exams${queryString ? `?${queryString}` : ""}`,
+      options,
     );
   },
 };
 
 export const callStatsApi = {
-  get: (query: CallStatsQuery = {}) => {
+  get: (query: CallStatsQuery = {}, options: ApiGetOptions = {}) => {
     const queryString = buildQueryString({
       courseId: query.courseId,
       examId: query.examId,
@@ -1212,12 +1236,13 @@ export const callStatsApi = {
     });
     return apiGet<CallStatsResponse>(
       `student-calls/stats${queryString ? `?${queryString}` : ""}`,
+      options,
     );
   },
 };
 
 export const callCandidatesApi = {
-  get: (query: CallCandidatesQuery = {}) => {
+  get: (query: CallCandidatesQuery = {}, options: ApiGetOptions = {}) => {
     const queryString = buildQueryString({
       courseId: query.courseId,
       examId: query.examId,
@@ -1229,6 +1254,7 @@ export const callCandidatesApi = {
     });
     return apiGet<CallCandidatesResponse>(
       `student-calls/candidates${queryString ? `?${queryString}` : ""}`,
+      options,
     );
   },
   listAll: async (
