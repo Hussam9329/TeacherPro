@@ -649,14 +649,21 @@ export interface CallCandidatesQuery extends CallStatsQuery {
 }
 
 export interface CallCandidatesResponse {
+  rows?: Array<Record<string, unknown>>;
   students: Array<Record<string, unknown>>;
   grades: Array<Record<string, unknown>>;
+  exams?: Array<Record<string, unknown>>;
   studentCalls: Array<Record<string, unknown>>;
   totalCount: number;
   page: number;
   pageSize: number;
   totalPages: number;
   hasMore: boolean;
+  source: "database";
+}
+
+export interface CallCourseExamsResponse {
+  exams: Array<Record<string, unknown>>;
   source: "database";
 }
 
@@ -1185,6 +1192,15 @@ export const opportunityStatsApi = {
     }) as Promise<ApiResult & { data?: OpportunityBulkAdjustResponse }>,
 };
 
+export const callCourseExamsApi = {
+  get: (courseId?: string) => {
+    const queryString = buildQueryString({ courseId });
+    return apiGet<CallCourseExamsResponse>(
+      `student-calls/course-exams${queryString ? `?${queryString}` : ""}`,
+    );
+  },
+};
+
 export const callStatsApi = {
   get: (query: CallStatsQuery = {}) => {
     const queryString = buildQueryString({
@@ -1222,6 +1238,8 @@ export const callCandidatesApi = {
     const collectedStudents: Array<Record<string, unknown>> = [];
     const collectedGrades: Array<Record<string, unknown>> = [];
     const collectedCalls: Array<Record<string, unknown>> = [];
+    const collectedRows: Array<Record<string, unknown>> = [];
+    const collectedExams = new Map<string, Record<string, unknown>>();
     let page = 1;
     let totalCount = 0;
     let totalPages = 1;
@@ -1234,13 +1252,20 @@ export const callCandidatesApi = {
       collectedStudents.push(...(result.students || []));
       collectedGrades.push(...(result.grades || []));
       collectedCalls.push(...(result.studentCalls || []));
+      collectedRows.push(...(result.rows || []));
+      (result.exams || []).forEach((exam) => {
+        const id = String(exam.id || "");
+        if (id && !collectedExams.has(id)) collectedExams.set(id, exam);
+      });
       if (!result.hasMore || page >= totalPages) break;
       page += 1;
     }
 
     return {
+      rows: collectedRows,
       students: collectedStudents,
       grades: collectedGrades,
+      exams: Array.from(collectedExams.values()),
       studentCalls: collectedCalls,
       totalCount,
       page: 1,
@@ -1293,6 +1318,7 @@ export const studentCallApi = {
       "studentCalls",
     ),
   add: (call: Record<string, unknown>) => apiPost("student-calls", call),
+  upsert: (call: Record<string, unknown>) => apiPost("student-calls", call),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-calls", { id, ...updates }),
   remove: (id: string) => apiDelete("student-calls", id),

@@ -87,12 +87,62 @@ export async function POST(req: NextRequest) {
     const data = normalizeCallPayload(body);
     const studentError = requireText(data.studentId, "الطالب");
     if (studentError) return validationError(studentError);
-    // Never trust client-provided IDs on create. The server owns primary keys.
-    const studentCall = await withFollowupTables(
-      () => db.studentCall.create({ data }),
+    const categoryError = requireText(data.category, "نوع المكالمة");
+    if (categoryError) return validationError(categoryError);
+
+    // Upsert by the logical call key, not by client-provided IDs.
+    // This prevents duplicate call rows when the user changes status quickly or retries after a network failure.
+    const result = await withFollowupTables(
+      () =>
+        db.$transaction(async (tx) => {
+          const existing = await tx.studentCall.findFirst({
+            where: {
+              studentId: data.studentId,
+              examId: data.examId,
+              category: data.category,
+            },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          });
+
+          if (data.category === "call-student-note" && !data.notes.trim()) {
+            if (existing) {
+              await tx.studentCall.delete({ where: { id: existing.id } });
+              await tx.studentCall.deleteMany({
+                where: {
+                  studentId: data.studentId,
+                  examId: data.examId,
+                  category: data.category,
+                  id: { not: existing.id },
+                },
+              });
+            }
+            return { studentCall: null, deleted: true };
+          }
+
+          if (!data.status && data.category !== "call-student-note" && !existing) {
+            return { studentCall: null, deleted: false };
+          }
+
+          const { createdAt: _createdAt, ...updateData } = data;
+          const studentCall = existing
+            ? await tx.studentCall.update({ where: { id: existing.id }, data: updateData })
+            : await tx.studentCall.create({ data });
+
+          // Best-effort cleanup of older duplicates for the same logical call.
+          await tx.studentCall.deleteMany({
+            where: {
+              studentId: data.studentId,
+              examId: data.examId,
+              category: data.category,
+              id: { not: studentCall.id },
+            },
+          });
+
+          return { studentCall, deleted: false };
+        }),
       "StudentCall",
     );
-    return NextResponse.json({ studentCall }, { status: 201 });
+    return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, "تعذر حفظ المكالمة حالياً.");
   }

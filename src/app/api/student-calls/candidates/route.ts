@@ -14,7 +14,7 @@ import {
 } from "@/lib/grade-classification";
 import { studentCourseScopeWhere } from "@/lib/student-scope";
 
-type CallStatusFilter =
+export type CallStatusFilter =
   | "all"
   | "absent"
   | "discounted"
@@ -24,18 +24,42 @@ type CallStatusFilter =
   | "passed"
   | "full";
 
+type CallKind =
+  | "absent"
+  | "discounted"
+  | "failed"
+  | "academic-accounting"
+  | "full"
+  | "passed"
+  | "cheating"
+  | "protected"
+  | "missing";
+
 type DbStudentLite = {
   id: string;
   name: string;
-  code: string;
   school: string;
+  gender: string;
   phone: string | null;
   parentPhone: string | null;
   telegram: string | null;
-  status: string;
+  courseProgram: string | null;
+  courseTerm: string | null;
   studyType: string | null;
-  createdAt: Date;
+  locationScope: string | null;
+  baghdadMode: string | null;
+  mainSite: string | null;
+  subSite: string | null;
+  code: string;
+  status: string;
+  dismissalType: string | null;
+  dismissalReason: string | null;
+  dismissalNotes: string | null;
+  opportunities: number;
+  baseOpportunities: number;
   accountingGraceDays: number;
+  createdAt: Date;
+  courseId: string;
 };
 
 type DbGradeLite = {
@@ -56,11 +80,16 @@ type DbExamLite = {
   type: string;
   date: Date;
   courseIds: string;
+  mainSite: string | null;
   fullMark: number;
   passMark: number;
   discountMark: number;
+  opportunitiesPenalty: string;
   dismissalGrade: number | null;
   noDiscount: boolean;
+  active: boolean;
+  scheduledActivateAt: Date | null;
+  scheduledDeactivateAt: Date | null;
 };
 
 type DbLeaveLite = {
@@ -73,6 +102,22 @@ type DbLeaveLite = {
 };
 
 const CALL_STUDENT_NOTE_CATEGORY = "call-student-note";
+const NON_DISPLAY_CALL_KINDS = new Set<CallKind>(["missing", "protected"]);
+
+function emptyResponse(page: number, pageSize: number) {
+  return NextResponse.json({
+    rows: [],
+    students: [],
+    grades: [],
+    studentCalls: [],
+    totalCount: 0,
+    page,
+    pageSize,
+    totalPages: 1,
+    hasMore: false,
+    source: "database",
+  });
+}
 
 function parsePositiveInt(
   value: string | null,
@@ -85,7 +130,9 @@ function parsePositiveInt(
 }
 
 function startOfUtcDay(value: Date): Date {
-  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  return new Date(
+    Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()),
+  );
 }
 
 function dayAfter(value: Date): Date {
@@ -94,46 +141,69 @@ function dayAfter(value: Date): Date {
   return next;
 }
 
-function callGradeKind(
+function dayKey(value: Date | string | null | undefined): string {
+  if (!value) return "";
+  return String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
+}
+
+function examIncludesCourse(exam: Pick<DbExamLite, "courseIds">, courseId: string) {
+  const ids = parseCourseIds(exam.courseIds);
+  return ids.length === 0 || ids.includes(courseId);
+}
+
+function toClientExam(exam: DbExamLite) {
+  return {
+    ...exam,
+    courseIds: parseCourseIds(exam.courseIds),
+  };
+}
+
+function callKindForGrade(
   grade: DbGradeLite | undefined,
   exam: DbExamLite,
   student?: DbStudentLite,
   leaves: DbLeaveLite[] = [],
-) {
+): CallKind {
   return gradeKindForCalls(
     classifyGradeAcademicImpact(grade, exam, { student, leaves }),
   );
 }
 
-function gradeMatchesStatusFilter(
-  filter: CallStatusFilter,
-  grade: DbGradeLite | undefined,
-  exam: DbExamLite,
-  student?: DbStudentLite,
-  leaves: DbLeaveLite[] = [],
-): boolean {
-  if (filter === "all") return true;
-  if (!grade) return false;
-  const kind = callGradeKind(grade, exam, student, leaves);
-  if (filter === "full") return kind === "full";
-  return kind === filter;
+function callLabel(kind: CallKind): string {
+  if (kind === "absent") return "غائب";
+  if (kind === "cheating") return "غش";
+  if (kind === "discounted") return "مخصوم";
+  if (kind === "academic-accounting") return "محاسبة";
+  if (kind === "failed") return "راسب غير مخصوم";
+  if (kind === "full") return "درجة كاملة";
+  if (kind === "passed") return "ناجح";
+  if (kind === "missing") return "غير مدخل";
+  return "محمي من المحاسبة";
 }
 
-function gradeCategory(
-  grade: DbGradeLite | undefined,
-  exam: DbExamLite,
-  student?: DbStudentLite,
-  leaves: DbLeaveLite[] = [],
-): string {
-  const kind = callGradeKind(grade, exam, student, leaves);
-  if (kind === "absent") return "غائب الغائبين";
-  if (kind === "cheating") return "غش طلاب الغش";
-  if (kind === "discounted") return "مخصوم المخصومين خصم";
-  if (kind === "failed") return "راسب غير مخصوم الراسبين غير المخصومين";
-  if (kind === "full") return "درجة كاملة فل مارك";
-  if (kind === "passed") return "ناجح الناجحين";
-  if (kind === "protected") return "معفى محمي لا يدخل بالمحاسبة";
-  return grade ? "درجة مسجلة" : "";
+function callReason(kind: CallKind, grade: DbGradeLite, exam: DbExamLite): string {
+  const scoreText =
+    grade.status === "درجة" && grade.score !== null
+      ? `${grade.score}/${exam.fullMark}`
+      : grade.status;
+  if (kind === "absent") return "غائب عن الامتحان";
+  if (kind === "cheating") return "مسجل بحالة غش";
+  if (kind === "discounted") return `ضمن درجة الخصم: ${scoreText}`;
+  if (kind === "academic-accounting") return `طالب محاسبة بين الخصم والنجاح: ${scoreText}`;
+  if (kind === "failed") return `راسب غير مخصوم: ${scoreText}`;
+  if (kind === "full") return `درجة كاملة: ${scoreText}`;
+  if (kind === "passed") return `ناجح: ${scoreText}`;
+  if (kind === "protected") return `لا يدخل في متابعة المكالمات: ${scoreText}`;
+  return scoreText;
+}
+
+function gradeMatchesStatusFilter(
+  filter: CallStatusFilter,
+  kind: CallKind,
+): boolean {
+  if (filter === "all") return !NON_DISPLAY_CALL_KINDS.has(kind);
+  if (filter === "passed") return kind === "passed" || kind === "full";
+  return kind === filter;
 }
 
 function includesSearch(query: string, values: Array<unknown>): boolean {
@@ -146,12 +216,13 @@ function includesSearch(query: string, values: Array<unknown>): boolean {
   );
 }
 
-function searchableValues(
-  student: DbStudentLite,
-  grade: DbGradeLite | undefined,
-  exam: DbExamLite,
-  leaves: DbLeaveLite[],
-) {
+function searchableValues(args: {
+  student: DbStudentLite;
+  grade: DbGradeLite;
+  exam: DbExamLite;
+  kind: CallKind;
+}) {
+  const { student, grade, exam, kind } = args;
   return [
     student.name,
     student.code,
@@ -162,12 +233,50 @@ function searchableValues(
     student.status,
     student.studyType,
     exam.name,
-    exam.date?.toISOString?.().slice(0, 10),
-    grade?.status,
-    grade?.notes,
-    grade?.score,
-    gradeCategory(grade, exam, student, leaves),
+    dayKey(exam.date),
+    grade.status,
+    grade.notes,
+    grade.score,
+    callLabel(kind),
+    callReason(kind, grade, exam),
   ];
+}
+
+function leavesForExam(
+  leavesByStudentId: Map<string, DbLeaveLite[]>,
+  studentId: string,
+  exam: DbExamLite,
+): DbLeaveLite[] {
+  const examDay = dayKey(exam.date);
+  return (leavesByStudentId.get(studentId) || []).filter((leave) => {
+    if ((leave.leaveType || "exam") === "period") {
+      const from = dayKey(leave.dateFrom || leave.date);
+      const to = dayKey(leave.dateTo || leave.dateFrom || leave.date);
+      return Boolean(examDay && from && to && examDay >= from && examDay <= to);
+    }
+    return leave.examId === exam.id;
+  });
+}
+
+function buildGradeItem(args: {
+  grade: DbGradeLite;
+  exam: DbExamLite;
+  student: DbStudentLite;
+  leaves: DbLeaveLite[];
+}) {
+  const { grade, exam, student, leaves } = args;
+  const kind = callKindForGrade(grade, exam, student, leaves);
+  return {
+    id: `grade:${grade.id}`,
+    callKey: `grade:${grade.id}`,
+    exam: toClientExam(exam),
+    grade,
+    category: kind,
+    label: callLabel(kind),
+    reason: callReason(kind, grade, exam),
+    // آخر امتحانين يجب أن يكونا حسب تاريخ الامتحان نفسه، لا حسب وقت تعديل الدرجة.
+    sortTime: new Date(exam.date).getTime() || 0,
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -186,19 +295,7 @@ export async function GET(req: NextRequest) {
     const page = parsePositiveInt(searchParams.get("page"), 1, 1_000_000);
     const pageSize = parsePositiveInt(searchParams.get("pageSize"), 120, 200);
 
-    if (!courseId || !examId) {
-      return NextResponse.json({
-        students: [],
-        grades: [],
-        studentCalls: [],
-        totalCount: 0,
-        page,
-        pageSize,
-        totalPages: 1,
-        hasMore: false,
-        source: "database",
-      });
-    }
+    if (!courseId || !examId) return emptyResponse(page, pageSize);
 
     const exam = await db.exam.findUnique({
       where: { id: examId },
@@ -208,32 +305,97 @@ export async function GET(req: NextRequest) {
         type: true,
         date: true,
         courseIds: true,
+        mainSite: true,
         fullMark: true,
         passMark: true,
         discountMark: true,
+        opportunitiesPenalty: true,
         dismissalGrade: true,
         noDiscount: true,
+        active: true,
+        scheduledActivateAt: true,
+        scheduledDeactivateAt: true,
       },
     });
-    if (!exam) {
+    if (!exam || !examIncludesCourse(exam, courseId)) return emptyResponse(page, pageSize);
+
+    const courseExams = ((await db.exam.findMany({
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        date: true,
+        courseIds: true,
+        mainSite: true,
+        fullMark: true,
+        passMark: true,
+        discountMark: true,
+        opportunitiesPenalty: true,
+        dismissalGrade: true,
+        noDiscount: true,
+        active: true,
+        scheduledActivateAt: true,
+        scheduledDeactivateAt: true,
+      },
+      orderBy: [{ date: "desc" }, { name: "asc" }],
+    })) as DbExamLite[]).filter((item) => examIncludesCourse(item, courseId));
+    const courseExamById = new Map(courseExams.map((item) => [item.id, item]));
+    const courseExamIds = courseExams.map((item) => item.id);
+
+    const selectedGrades = (await db.grade.findMany({
+      where: {
+        examId,
+        student: { is: studentCourseScopeWhere(courseId, "followup") },
+      },
+      orderBy: [{ student: { name: "asc" } }, { updatedAt: "desc" }],
+      select: {
+        id: true,
+        studentId: true,
+        examId: true,
+        status: true,
+        score: true,
+        notes: true,
+        academicAccountingChecked: true,
+        createdAt: true,
+        updatedAt: true,
+        student: {
+          select: {
+            id: true,
+            name: true,
+            school: true,
+            gender: true,
+            phone: true,
+            parentPhone: true,
+            telegram: true,
+            courseProgram: true,
+            courseTerm: true,
+            studyType: true,
+            locationScope: true,
+            baghdadMode: true,
+            mainSite: true,
+            subSite: true,
+            code: true,
+            status: true,
+            dismissalType: true,
+            dismissalReason: true,
+            dismissalNotes: true,
+            opportunities: true,
+            baseOpportunities: true,
+            accountingGraceDays: true,
+            createdAt: true,
+            courseId: true,
+          },
+        },
+      },
+    })) as Array<DbGradeLite & { student: DbStudentLite }>;
+
+    if (selectedGrades.length === 0) {
       return NextResponse.json({
+        rows: [],
         students: [],
         grades: [],
         studentCalls: [],
-        totalCount: 0,
-        page,
-        pageSize,
-        totalPages: 1,
-        hasMore: false,
-        source: "database",
-      });
-    }
-    const examCourseIds = parseCourseIds(exam.courseIds);
-    if (examCourseIds.length > 0 && !examCourseIds.includes(courseId)) {
-      return NextResponse.json({
-        students: [],
-        grades: [],
-        studentCalls: [],
+        exams: courseExams.map(toClientExam),
         totalCount: 0,
         page,
         pageSize,
@@ -243,136 +405,159 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    const candidateStudentIds = selectedGrades.map((grade) => grade.studentId);
     const examDayStart = startOfUtcDay(exam.date);
     const examDayEnd = dayAfter(exam.date);
-
-    const [students, grades, leaves] = await Promise.all([
-      db.student.findMany({
-        where: studentCourseScopeWhere(courseId, "followup"),
-        orderBy: [{ name: "asc" }, { createdAt: "desc" }],
-        select: {
-          id: true,
-          name: true,
-          school: true,
-          gender: true,
-          phone: true,
-          parentPhone: true,
-          telegram: true,
-          courseProgram: true,
-          courseTerm: true,
-          studyType: true,
-          locationScope: true,
-          baghdadMode: true,
-          mainSite: true,
-          subSite: true,
-          code: true,
-          status: true,
-          dismissalType: true,
-          dismissalReason: true,
-          dismissalNotes: true,
-          opportunities: true,
-          baseOpportunities: true,
-          accountingGraceDays: true,
-          createdAt: true,
-          courseId: true,
-        },
-      }),
-      db.grade.findMany({
-        where: {
-          examId,
-          student: { is: studentCourseScopeWhere(courseId, "followup") },
-        },
-        select: {
-          id: true,
-          studentId: true,
-          examId: true,
-          status: true,
-          score: true,
-          notes: true,
-          academicAccountingChecked: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      }),
-      db.studentLeave.findMany({
-        where: {
-          student: { is: studentCourseScopeWhere(courseId, "followup") },
-          OR: [
-            { examId },
-            {
-              leaveType: "period",
-              dateFrom: { lt: examDayEnd },
-              dateTo: { gte: examDayStart },
-            },
-          ],
-        },
-        select: {
-          studentId: true,
-          examId: true,
-          leaveType: true,
-          date: true,
-          dateFrom: true,
-          dateTo: true,
-        },
-      }),
-    ]);
-
-    const gradeByStudentId = new Map<string, DbGradeLite>();
-    grades.forEach((grade) => gradeByStudentId.set(grade.studentId, grade));
-
-    const leavesByStudentId = new Map<string, DbLeaveLite[]>();
-    leaves.forEach((leave) => {
-      const current = leavesByStudentId.get(leave.studentId) || [];
-      current.push(leave);
-      leavesByStudentId.set(leave.studentId, current);
+    const selectedLeaves = await db.studentLeave.findMany({
+      where: {
+        studentId: { in: candidateStudentIds },
+        OR: [
+          { examId },
+          {
+            leaveType: "period",
+            dateFrom: { lt: examDayEnd },
+            dateTo: { gte: examDayStart },
+          },
+        ],
+      },
+      select: {
+        studentId: true,
+        examId: true,
+        leaveType: true,
+        date: true,
+        dateFrom: true,
+        dateTo: true,
+      },
+    });
+    const selectedLeavesByStudentId = new Map<string, DbLeaveLite[]>();
+    selectedLeaves.forEach((leave) => {
+      const list = selectedLeavesByStudentId.get(leave.studentId) || [];
+      list.push(leave);
+      selectedLeavesByStudentId.set(leave.studentId, list);
     });
 
-    const matchingStudents = students.filter((student) => {
-      const grade = gradeByStudentId.get(student.id);
-      const studentLeaves = leavesByStudentId.get(student.id) || [];
-      if (!gradeMatchesStatusFilter(statusFilter, grade, exam, student, studentLeaves)) return false;
-      if (
-        generalSearch &&
-        !includesSearch(generalSearch, searchableValues(student, grade, exam, studentLeaves))
-      )
-        return false;
-      if (
-        filterSearch &&
-        !includesSearch(filterSearch, searchableValues(student, grade, exam, studentLeaves))
-      )
-        return false;
-      return true;
+    const matching = selectedGrades.flatMap((grade) => {
+      const student = grade.student as DbStudentLite;
+      if (!student || student.status === "مؤرشف") return [];
+      const leaves = leavesForExam(selectedLeavesByStudentId, student.id, exam);
+      const kind = callKindForGrade(grade, exam, student, leaves);
+      if (!gradeMatchesStatusFilter(statusFilter, kind)) return [];
+      const values = searchableValues({ student, grade, exam, kind });
+      if (generalSearch && !includesSearch(generalSearch, values)) return [];
+      if (filterSearch && !includesSearch(filterSearch, values)) return [];
+      return [{ student, grade, kind }];
     });
 
-    const totalCount = matchingStudents.length;
+    const sortedMatching = matching.sort((a, b) => {
+      const aTime = new Date(exam.date).getTime() || 0;
+      const bTime = new Date(exam.date).getTime() || 0;
+      return bTime - aTime || a.student.name.localeCompare(b.student.name, "ar");
+    });
+
+    const totalCount = sortedMatching.length;
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-    const pagedStudents = matchingStudents.slice(
-      (page - 1) * pageSize,
-      page * pageSize,
-    );
-    const pagedStudentIds = pagedStudents.map((student) => student.id);
-    const pagedStudentIdSet = new Set(pagedStudentIds);
-    const pagedGrades = grades.filter((grade) =>
-      pagedStudentIdSet.has(grade.studentId),
-    );
+    const paged = sortedMatching.slice((page - 1) * pageSize, page * pageSize);
+    const pagedStudentIds = paged.map((item) => item.student.id);
 
-    const studentCalls = pagedStudentIds.length
+    const [recentGrades, relevantLeaves, studentCalls] = (pagedStudentIds.length
       ? await withFollowupTables(
           () =>
-            db.studentCall.findMany({
-              where: {
-                studentId: { in: pagedStudentIds },
-                OR: [{ examId }, { category: CALL_STUDENT_NOTE_CATEGORY }],
-              },
-              orderBy: { createdAt: "desc" },
-            }),
+            Promise.all([
+              db.grade.findMany({
+                where: {
+                  studentId: { in: pagedStudentIds },
+                  examId: { in: courseExamIds },
+                },
+                select: {
+                  id: true,
+                  studentId: true,
+                  examId: true,
+                  status: true,
+                  score: true,
+                  notes: true,
+                  academicAccountingChecked: true,
+                  createdAt: true,
+                  updatedAt: true,
+                },
+              }),
+              db.studentLeave.findMany({
+                where: {
+                  studentId: { in: pagedStudentIds },
+                  OR: [
+                    { examId: { in: courseExamIds } },
+                    { leaveType: "period" },
+                  ],
+                },
+                select: {
+                  studentId: true,
+                  examId: true,
+                  leaveType: true,
+                  date: true,
+                  dateFrom: true,
+                  dateTo: true,
+                },
+              }),
+              db.studentCall.findMany({
+                where: {
+                  studentId: { in: pagedStudentIds },
+                  OR: [
+                    { examId: { in: courseExamIds } },
+                    { category: CALL_STUDENT_NOTE_CATEGORY },
+                  ],
+                },
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              }),
+            ]),
           "StudentCallCandidates",
         )
-      : [];
+      : [[], [], []]) as [DbGradeLite[], DbLeaveLite[], unknown[]];
+
+    const leavesByStudentId = new Map<string, DbLeaveLite[]>();
+    relevantLeaves.forEach((leave) => {
+      const list = leavesByStudentId.get(leave.studentId) || [];
+      list.push(leave);
+      leavesByStudentId.set(leave.studentId, list);
+    });
+
+    const gradesByStudentId = new Map<string, DbGradeLite[]>();
+    recentGrades.forEach((grade) => {
+      const list = gradesByStudentId.get(grade.studentId) || [];
+      list.push(grade);
+      gradesByStudentId.set(grade.studentId, list);
+    });
+
+    const rows = paged.map(({ student, grade }) => {
+      const items = (gradesByStudentId.get(student.id) || [])
+        .flatMap((itemGrade) => {
+          const itemExam = courseExamById.get(itemGrade.examId);
+          if (!itemExam) return [];
+          const leaves = leavesForExam(leavesByStudentId, student.id, itemExam);
+          return [buildGradeItem({ grade: itemGrade, exam: itemExam, student, leaves })];
+        })
+        .sort((a, b) => b.sortTime - a.sortTime || a.exam.name.localeCompare(b.exam.name, "ar"));
+
+      const focusItem =
+        items.find((item) => item.grade.id === grade.id || item.exam.id === examId) ||
+        buildGradeItem({
+          grade,
+          exam,
+          student,
+          leaves: leavesForExam(selectedLeavesByStudentId, student.id, exam),
+        });
+
+      return {
+        id: `student:${student.id}`,
+        student,
+        items,
+        focusItem,
+      };
+    });
 
     return NextResponse.json({
-      students: pagedStudents,
-      grades: pagedGrades,
+      rows,
+      students: rows.map((row) => row.student),
+      grades: rows.flatMap((row) => row.items.map((item) => item.grade)),
+      exams: courseExams.map(toClientExam),
       studentCalls,
       totalCount,
       page,

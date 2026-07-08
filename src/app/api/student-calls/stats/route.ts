@@ -115,7 +115,7 @@ function gradeCategory(
   exam: DbExamLite,
   student?: DbStudentLite,
   leaves: DbLeaveLite[] = [],
-): "absent" | "discounted" | "failed" | "full" | "passed" | "cheating" | "protected" | "missing" {
+): "absent" | "discounted" | "failed" | "academic-accounting" | "full" | "passed" | "cheating" | "protected" | "missing" {
   return callGradeKind(grade, exam, student, leaves);
 }
 
@@ -126,10 +126,11 @@ function gradeMatchesStatusFilter(
   student?: DbStudentLite,
   leaves: DbLeaveLite[] = [],
 ): boolean {
-  if (filter === "all") return true;
   if (!grade) return false;
   const kind = callGradeKind(grade, exam, student, leaves);
-  if (filter === "full") return kind === "full";
+  if (kind === "missing" || kind === "protected") return false;
+  if (filter === "all") return true;
+  if (filter === "passed") return kind === "passed" || kind === "full";
   return kind === filter;
 }
 
@@ -155,6 +156,7 @@ function searchableValues(
     absent: "غائب الغائبين",
     discounted: "مخصوم المخصومين خصم",
     failed: "راسب غير مخصوم الراسبين غير المخصومين",
+    "academic-accounting": "محاسبة طلاب المحاسبة",
     full: "درجة كاملة فل مارك",
     passed: "ناجح الناجحين",
     cheating: "غش طلاب الغش",

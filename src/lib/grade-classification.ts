@@ -226,11 +226,12 @@ export function gradeMatchesStatusFilterUnified(
   }
 }
 
-export function gradeKindForCalls(kind: GradeClassificationKind): "absent" | "discounted" | "failed" | "full" | "passed" | "cheating" | "protected" | "missing" {
+export function gradeKindForCalls(kind: GradeClassificationKind): "absent" | "discounted" | "failed" | "academic-accounting" | "full" | "passed" | "cheating" | "protected" | "missing" {
   if (kind === "cheating") return "cheating";
   if (kind === "absent-deducted" || kind === "absent-dismissal") return "absent";
   if (kind === "discounted" || kind === "dismissal") return "discounted";
-  if (kind === "academic-accounting" || kind === "failed" || kind === "no-discount-protected") return "failed";
+  if (kind === "academic-accounting") return "academic-accounting";
+  if (kind === "failed" || kind === "no-discount-protected") return "failed";
   if (kind === "full-mark") return "full";
   if (kind === "passed") return "passed";
   if (kind === "missing") return "missing";
