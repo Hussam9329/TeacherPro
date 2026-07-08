@@ -326,7 +326,9 @@ export function TeacherProLayout() {
 
   useEffect(() => {
     const urlSection = readSectionFromLocation();
-    if (urlSection && urlSection !== currentSection) return;
+    // إذا كان URL يحتوي على section محدد، اضبطه دائماً — هذا يضمن أن
+    // فتح الرابط في تبويبة جديدة يفتح القسم الصحيح، وليس القسم الافتراضي.
+    if (urlSection) return;
     if (typeof window !== "undefined" && sectionIds.has(currentSection)) {
       const nextUrl = new URL(window.location.href);
       nextUrl.searchParams.set("section", currentSection);
