@@ -49,7 +49,10 @@ import {
 import { toBaghdadDateTimeLocal } from "./baghdad-time";
 import { formatAppDate, toLatinDigits } from "./format";
 import { recalculateAcademicState } from "./academic-engine";
-import { emitTeacherProDataChanged, emitTeacherProLogsChangedDebounced } from "./teacherpro-sync";
+import {
+  emitTeacherProDataChanged,
+  emitTeacherProLogsChangedDebounced,
+} from "./teacherpro-sync";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1676,7 +1679,14 @@ function triggerAutoFixZeroOpportunities(): void {
         emitTeacherProDataChanged({
           source: "local-mutation",
           reason: "إصلاح أكاديمي تلقائي",
-          scopes: ["students", "grades", "opportunities", "opportunity-logs", "dashboard", "dismissed"],
+          scopes: [
+            "students",
+            "grades",
+            "opportunities",
+            "opportunity-logs",
+            "dashboard",
+            "dismissed",
+          ],
         });
       }
     })
@@ -2131,7 +2141,9 @@ function syncToServer(
       options.onSuccess?.(result);
       if (options.notify !== false) {
         const resultScopes =
-          result && typeof result === "object" && Array.isArray((result as ApiResult).syncScopes)
+          result &&
+          typeof result === "object" &&
+          Array.isArray((result as ApiResult).syncScopes)
             ? (result as ApiResult).syncScopes
             : undefined;
         emitTeacherProDataChanged({
@@ -2392,7 +2404,7 @@ async function flushPendingGradeSaves(
     if (permanentlyFailed.length > 0) {
       removeFlushedPendingGradeSaves(permanentlyFailed);
       // أظهر toast مرة وحدة لإعلام المستخدم
-      if (typeof window !== 'undefined') {
+      if (typeof window !== "undefined") {
         const names = permanentlyFailed
           .map((p) => {
             const st = getState().students.find((s) => s.id === p.studentId);
@@ -2400,8 +2412,11 @@ async function flushPendingGradeSaves(
           })
           .slice(0, 3);
         console.warn(
-          '[grade-outbox] تم حذف درجات مؤجلة فشلت بشكل دائم (طالب مفصول أو غيره):',
-          names.join('، ') + (permanentlyFailed.length > 3 ? ` (+${permanentlyFailed.length - 3})` : ''),
+          "[grade-outbox] تم حذف درجات مؤجلة فشلت بشكل دائم (طالب مفصول أو غيره):",
+          names.join("، ") +
+            (permanentlyFailed.length > 3
+              ? ` (+${permanentlyFailed.length - 3})`
+              : ""),
         );
       }
     }
@@ -2413,8 +2428,7 @@ async function flushPendingGradeSaves(
     }
 
     notifyPendingGradeSyncIssue(getState, lastTransientFailure);
-    if (remaining.length > 0)
-      schedulePendingGradeFlush(getState, 5000);
+    if (remaining.length > 0) schedulePendingGradeFlush(getState, 5000);
   } finally {
     pendingGradeFlushInFlight = false;
   }
@@ -3181,7 +3195,8 @@ export const useTeacherStore = create<TeacherState>()(
           () => logApi.add({ ...log, userName: user, userId: currentUser.id }),
           {
             notify: false,
-            onSuccess: () => emitTeacherProLogsChangedDebounced("تحديث السجلات"),
+            onSuccess: () =>
+              emitTeacherProLogsChangedDebounced("تحديث السجلات"),
           },
         );
       },
@@ -3404,12 +3419,23 @@ export const useTeacherStore = create<TeacherState>()(
           );
           return false;
         }
-        // Delete related courseChapters from DB
-        get()
-          .courseChapters.filter((cc) => cc.chapterId === id)
-          .forEach((cc) =>
-            syncToServer(get, () => courseChapterApi.remove(cc.id)),
+        const linkedCourseChapters = get().courseChapters.filter(
+          (cc) => cc.chapterId === id,
+        );
+        const linkedOpportunityLogs = get().opportunityLogs.filter(
+          (log) => log.chapterId === id,
+        );
+        if (
+          linkedCourseChapters.length > 0 ||
+          linkedOpportunityLogs.length > 0
+        ) {
+          get().logAction(
+            "الفصول والفرص",
+            "منع حذف فصل له تأثير عالمي",
+            `${chapter.name} - روابط: ${linkedCourseChapters.length} - سجلات فرص: ${linkedOpportunityLogs.length}`,
           );
+          return false;
+        }
         set((s) => ({
           chapters: s.chapters.filter((ch) => ch.id !== id),
           courseChapters: s.courseChapters.filter((cc) => cc.chapterId !== id),
@@ -4021,14 +4047,6 @@ export const useTeacherStore = create<TeacherState>()(
       toggleExam: (id) => {
         const stateBefore = get();
         const exam = stateBefore.exams.find((e) => e.id === id);
-        const affectedStudentIds = Array.from(
-          new Set(
-            stateBefore.grades
-              .filter((grade) => grade.examId === id)
-              .map((grade) => grade.studentId)
-              .filter(Boolean),
-          ),
-        );
         set((s) => ({
           exams: s.exams.map((e) =>
             e.id === id ? { ...e, active: !e.active } : e,
@@ -4039,9 +4057,10 @@ export const useTeacherStore = create<TeacherState>()(
           exam?.active ? "تعطيل امتحان" : "تفعيل امتحان",
           exam?.name || id,
         );
+        // active يعني الظهور للإدخال/التصحيح فقط، وليس إدخال أو إخراج الامتحان
+        // من الحساب الأكاديمي. لذلك لا نعيد احتساب الطلاب هنا حتى لا تنتج
+        // آثار عالمية أو رجفة واجهة من زر إظهار/إخفاء بسيط.
         syncToServer(get, () => examApi.update(id, { active: !exam?.active }));
-        if (affectedStudentIds.length > 0)
-          get().recalculateAcademicEffects(affectedStudentIds);
       },
       deleteExam: (id) => {
         const state = get();
@@ -4071,6 +4090,20 @@ export const useTeacherStore = create<TeacherState>()(
         const relatedCalls = state.studentCalls.filter(
           (call) => call.examId === id,
         );
+        const relatedTotal =
+          relatedOpportunityLogs.length +
+          relatedCorrectionSheets.length +
+          relatedLeaves.length +
+          relatedCalls.length;
+        if (relatedTotal > 0) {
+          get().logAction(
+            "الامتحانات",
+            "منع حذف امتحان له سجلات تابعة",
+            `${exam.name} - فرص: ${relatedOpportunityLogs.length} - تصحيح: ${relatedCorrectionSheets.length} - إجازات: ${relatedLeaves.length} - مكالمات: ${relatedCalls.length}`,
+          );
+          return false;
+        }
+
         const affectedStudentIds = Array.from(
           new Set(
             [
@@ -4100,9 +4133,13 @@ export const useTeacherStore = create<TeacherState>()(
         relatedOpportunityLogs
           .filter(isAcademicallyManagedOpportunityLog)
           .forEach((log) =>
-            syncToServer(get, () => opportunityLogApi.remove(log.id, { confirmImpact: true }), {
-              description: "حذف إجراء أكاديمي مرتبط بامتحان محذوف",
-            }),
+            syncToServer(
+              get,
+              () => opportunityLogApi.remove(log.id, { confirmImpact: true }),
+              {
+                description: "حذف إجراء أكاديمي مرتبط بامتحان محذوف",
+              },
+            ),
           );
         relatedCorrectionSheets.forEach((sheet) =>
           syncToServer(get, () => correctionSheetApi.remove(sheet.id)),
@@ -4397,9 +4434,14 @@ export const useTeacherStore = create<TeacherState>()(
               ),
           )
           .forEach((oldLog) =>
-            syncToServer(get, () => opportunityLogApi.remove(oldLog.id, { confirmImpact: true }), {
-              description: "حذف إجراء أكاديمي ملغى",
-            }),
+            syncToServer(
+              get,
+              () =>
+                opportunityLogApi.remove(oldLog.id, { confirmImpact: true }),
+              {
+                description: "حذف إجراء أكاديمي ملغى",
+              },
+            ),
           );
         nextAutomaticLogs
           .filter((nextLog) => {
@@ -4876,9 +4918,10 @@ export const useTeacherStore = create<TeacherState>()(
           rollback: () => set(previousState),
           onSuccess: (result) => {
             const resultData = (result as ApiResult | undefined)?.data as
-              | { restoredGrades?: unknown }
-              | undefined;
-            const restoredGradesValue = Array.isArray(resultData?.restoredGrades)
+              { restoredGrades?: unknown } | undefined;
+            const restoredGradesValue = Array.isArray(
+              resultData?.restoredGrades,
+            )
               ? (resultData!.restoredGrades as Array<Record<string, unknown>>)
               : [];
             if (!restoredGradesValue.length) return;

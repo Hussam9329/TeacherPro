@@ -491,7 +491,7 @@ button[data-slot="button"][class*="text-destructive"] svg {
 
 /*
   صفوف إدخال الدرجات ارتفاعها يتغير حسب الحالة/الملاحظات/حجم الشاشة.
-  استخدام content-visibility:auto مع contain-intrinsic-size ثابت كان يسبب رجفة
+  استخدام automatic content visibility مع contain-intrinsic-size ثابت كان يسبب رجفة
   أثناء السكرول لأن المتصفح يقدر ارتفاع الصف ثم يعيد قياسه عند ظهوره.
   نخلي العزل خفيف بدون إخفاء المحتوى حتى يبقى ارتفاع القائمة ثابتاً.
 */

@@ -16,6 +16,11 @@ import {
 } from "@/lib/opportunity-filters-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
+import {
+  globalImpactConfirmationResponse,
+  isConfirmedImpact,
+  riskyBulkOpportunityTargetCount,
+} from "@/lib/global-side-effects-safety";
 
 type StudentUpdatePayload = {
   id?: unknown;
@@ -115,7 +120,9 @@ function normalizeOpportunityLogs(value: unknown) {
       reason: item.reason ? String(item.reason) : null,
       date: normalizeDate(item.date),
       chapterId: item.chapterId ? String(item.chapterId) : null,
-      chapterNameSnapshot: item.chapterNameSnapshot ? String(item.chapterNameSnapshot) : null,
+      chapterNameSnapshot: item.chapterNameSnapshot
+        ? String(item.chapterNameSnapshot)
+        : null,
     }))
     .filter((item) => item.id && item.studentId && item.action);
 }
@@ -150,7 +157,10 @@ function normalizePositiveInt(value: unknown, fallback = 1): number {
   return Math.max(1, Math.trunc(Math.abs(numeric)));
 }
 
-async function handleFilterBasedBulkAdjust(req: NextRequest, body: Record<string, unknown>) {
+async function handleFilterBasedBulkAdjust(
+  req: NextRequest,
+  body: Record<string, unknown>,
+) {
   const actionType = body.actionType === "deduct" ? "deduct" : "add";
   const amount = normalizePositiveInt(body.amount, 1);
   const signedAmount = actionType === "deduct" ? -amount : amount;
@@ -221,6 +231,20 @@ async function handleFilterBasedBulkAdjust(req: NextRequest, body: Record<string
             totalMatching,
             eligibleWithActiveChapter: candidateRows.length,
             skipped: Math.max(0, totalMatching),
+            targetCount: 0,
+            requiresConfirmation: false,
+          };
+        }
+
+        const targetCount = targetRows.length;
+        const confirmed = isConfirmedImpact(body.confirmImpact);
+        if (riskyBulkOpportunityTargetCount(targetCount) && !confirmed) {
+          return {
+            confirmationRequired: true,
+            totalMatching,
+            eligibleWithActiveChapter: candidateRows.length,
+            targetCount,
+            skipped: Math.max(0, totalMatching - targetCount),
           };
         }
 
@@ -257,7 +281,8 @@ async function handleFilterBasedBulkAdjust(req: NextRequest, body: Record<string
               opportunities: Number(
                 chapterById.get(link.chapterId)?.opportunities || 0,
               ),
-              chapterNameSnapshot: chapterById.get(link.chapterId)?.name || null,
+              chapterNameSnapshot:
+                chapterById.get(link.chapterId)?.name || null,
             },
           ]),
         );
@@ -333,25 +358,51 @@ async function handleFilterBasedBulkAdjust(req: NextRequest, body: Record<string
           totalMatching,
           eligibleWithActiveChapter: candidateRows.length,
           skipped: Math.max(0, totalMatching - appliedStudentIds.length),
+          targetCount,
+          requiresConfirmation: riskyBulkOpportunityTargetCount(targetCount),
           academicRecalculation,
         };
       }),
     "BulkOpportunityAdjustByFilter",
   );
 
-  await writeRequestAuditLog(req, "إدارة الفرص", actionType === "deduct" ? "خصم فرص جماعي وإعادة احتساب" : "إضافة فرص جماعية وإعادة احتساب", {
-    actionType,
-    amount,
-    reason,
-    totalMatching: result.totalMatching,
-    eligibleWithActiveChapter: result.eligibleWithActiveChapter,
-    updatedStudents: result.updatedStudents,
-    savedOpportunityLogs: result.savedOpportunityLogs,
-    skipped: result.skipped,
-    excludeDismissed,
-    excludeFullOpportunities,
-    reactivateDismissedOnAdd,
-  });
+  if ("confirmationRequired" in result && result.confirmationRequired) {
+    return globalImpactConfirmationResponse(
+      `عملية الفرص الجماعية ستؤثر على ${result.targetCount} طالب. راجع المعاينة ثم أكد العملية من الواجهة.`,
+      {
+        actionType,
+        amount,
+        reason,
+        totalMatching: result.totalMatching,
+        eligibleWithActiveChapter: result.eligibleWithActiveChapter,
+        targetCount: result.targetCount,
+        skipped: result.skipped,
+      },
+    );
+  }
+
+  await writeRequestAuditLog(
+    req,
+    "إدارة الفرص",
+    actionType === "deduct"
+      ? "خصم فرص جماعي وإعادة احتساب"
+      : "إضافة فرص جماعية وإعادة احتساب",
+    {
+      actionType,
+      amount,
+      reason,
+      totalMatching: result.totalMatching,
+      eligibleWithActiveChapter: result.eligibleWithActiveChapter,
+      targetCount: result.targetCount,
+      updatedStudents: result.updatedStudents,
+      savedOpportunityLogs: result.savedOpportunityLogs,
+      skipped: result.skipped,
+      excludeDismissed,
+      excludeFullOpportunities,
+      reactivateDismissedOnAdd,
+      confirmedImpact: isConfirmedImpact(body.confirmImpact),
+    },
+  );
 
   return NextResponse.json({ ...result, source: "database" });
 }
@@ -414,7 +465,11 @@ export async function POST(req: NextRequest) {
 
           const activeChapterByCourseId = new Map<
             string,
-            { chapterId: string; opportunities: number; chapterNameSnapshot?: string | null }
+            {
+              chapterId: string;
+              opportunities: number;
+              chapterNameSnapshot?: string | null;
+            }
           >();
           const allModifiableStudentIds = Array.from(modifiableStudentIds);
           if (allModifiableStudentIds.length) {
@@ -454,7 +509,10 @@ export async function POST(req: NextRequest) {
                 activeChapterByCourseId.set(link.courseId, {
                   chapterId: link.chapterId,
                   opportunities: opp,
-                  chapterNameSnapshot: chaptersForActive.find((chapter) => chapter.id === link.chapterId)?.name || null,
+                  chapterNameSnapshot:
+                    chaptersForActive.find(
+                      (chapter) => chapter.id === link.chapterId,
+                    )?.name || null,
                 });
               }
             }
@@ -524,26 +582,55 @@ export async function POST(req: NextRequest) {
           const safeOpportunityLogs = opportunityLogs.filter((log) =>
             modifiableStudentIds.has(log.studentId),
           );
-          const safeExamIds = Array.from(new Set(safeOpportunityLogs.map((log) => log.examId).filter(Boolean) as string[]));
+          const safeExamIds = Array.from(
+            new Set(
+              safeOpportunityLogs
+                .map((log) => log.examId)
+                .filter(Boolean) as string[],
+            ),
+          );
           const validExamIds = new Set(
             safeExamIds.length
-              ? (await tx.exam.findMany({ where: { id: { in: safeExamIds } }, select: { id: true } })).map((exam) => exam.id)
+              ? (
+                  await tx.exam.findMany({
+                    where: { id: { in: safeExamIds } },
+                    select: { id: true },
+                  })
+                ).map((exam) => exam.id)
               : [],
           );
-          const safeChapterIds = Array.from(new Set(safeOpportunityLogs.map((log) => log.chapterId).filter(Boolean) as string[]));
+          const safeChapterIds = Array.from(
+            new Set(
+              safeOpportunityLogs
+                .map((log) => log.chapterId)
+                .filter(Boolean) as string[],
+            ),
+          );
           const chapterNameById = new Map(
             safeChapterIds.length
-              ? (await tx.chapter.findMany({ where: { id: { in: safeChapterIds } }, select: { id: true, name: true } })).map((chapter) => [chapter.id, chapter.name])
+              ? (
+                  await tx.chapter.findMany({
+                    where: { id: { in: safeChapterIds } },
+                    select: { id: true, name: true },
+                  })
+                ).map((chapter) => [chapter.id, chapter.name])
               : [],
           );
-          const relationalSafeOpportunityLogs = safeOpportunityLogs.map((log) => ({
-            ...log,
-            examId: log.examId && validExamIds.has(log.examId) ? log.examId : null,
-            chapterId: log.chapterId && chapterNameById.has(log.chapterId) ? log.chapterId : null,
-            chapterNameSnapshot: log.chapterId && chapterNameById.has(log.chapterId)
-              ? chapterNameById.get(log.chapterId) || null
-              : log.chapterNameSnapshot || null,
-          }));
+          const relationalSafeOpportunityLogs = safeOpportunityLogs.map(
+            (log) => ({
+              ...log,
+              examId:
+                log.examId && validExamIds.has(log.examId) ? log.examId : null,
+              chapterId:
+                log.chapterId && chapterNameById.has(log.chapterId)
+                  ? log.chapterId
+                  : null,
+              chapterNameSnapshot:
+                log.chapterId && chapterNameById.has(log.chapterId)
+                  ? chapterNameById.get(log.chapterId) || null
+                  : log.chapterNameSnapshot || null,
+            }),
+          );
           for (const group of chunks(relationalSafeOpportunityLogs)) {
             await tx.opportunityLog.createMany({
               data: group,
@@ -588,14 +675,20 @@ export async function POST(req: NextRequest) {
       "BulkOpportunityAdjust",
     );
 
-    await writeRequestAuditLog(req, "إدارة الفرص", "حفظ تحديث فرص جماعي وإعادة احتساب", {
-      updatedStudents: result.updatedStudents,
-      savedOpportunityLogs: result.savedOpportunityLogs,
-      savedStudentNotes: result.savedStudentNotes,
-      skippedMissingStudents: result.skippedMissingStudents,
-      skippedArchivedStudents: result.skippedArchivedStudents,
-      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
-    });
+    await writeRequestAuditLog(
+      req,
+      "إدارة الفرص",
+      "حفظ تحديث فرص جماعي وإعادة احتساب",
+      {
+        updatedStudents: result.updatedStudents,
+        savedOpportunityLogs: result.savedOpportunityLogs,
+        savedStudentNotes: result.savedStudentNotes,
+        skippedMissingStudents: result.skippedMissingStudents,
+        skippedArchivedStudents: result.skippedArchivedStudents,
+        recalculatedStudents:
+          result.academicRecalculation?.students?.length || 0,
+      },
+    );
     return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, "تعذر حفظ تحديث الفرص الجماعي حالياً.");

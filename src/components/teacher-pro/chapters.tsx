@@ -43,6 +43,7 @@ export function ChaptersView() {
     chapters,
     courseChapters,
     courses,
+    opportunityLogs,
     addChapter,
     updateChapter,
     deleteChapter,
@@ -110,10 +111,31 @@ export function ChaptersView() {
     setDeleteChapterDialog({ open: true, id, chName });
   };
   const handleDeleteChapterConfirm = runDeleteChapterLocked(async () => {
+    const activeLinks = courseChapters.filter(
+      (cc) => cc.chapterId === deleteChapterDialog.id && cc.active,
+    ).length;
+    const linkedCourseChapters = courseChapters.filter(
+      (cc) => cc.chapterId === deleteChapterDialog.id,
+    ).length;
+    const linkedOpportunityLogs = opportunityLogs.filter(
+      (log) => log.chapterId === deleteChapterDialog.id,
+    ).length;
+
+    if (activeLinks > 0) {
+      toast.error("لا يمكن حذف فصل فعال حالياً. ألغِ تفعيله أولاً.");
+      return;
+    }
+    if (linkedCourseChapters > 0 || linkedOpportunityLogs > 0) {
+      toast.error(
+        `لا يمكن حذف الفصل لأنه مرتبط بـ ${linkedCourseChapters} ربط دورة و ${linkedOpportunityLogs} سجل فرص. احذف الروابط أو راجع الأثر قبل الحذف.`,
+      );
+      return;
+    }
+
     const ok = deleteChapter(deleteChapterDialog.id);
     ok
       ? toast.success("تم حذف الفصل")
-      : toast.error("لا يمكن حذف فصل فعال حالياً");
+      : toast.error("لا يمكن حذف الفصل لأنه مرتبط بسجلات لها أثر عالمي");
     setDeleteChapterDialog({ open: false, id: "", chName: "" });
   });
 
@@ -206,7 +228,9 @@ export function ChaptersView() {
         return;
       }
       if (payload?.fixedTotal > 0) {
-        toast.success(payload.message || `تم إصلاح ${payload.fixedTotal} طالب.`);
+        toast.success(
+          payload.message || `تم إصلاح ${payload.fixedTotal} طالب.`,
+        );
         // أعد تحميل بيانات الطلاب في الصفحات الأخرى عبر تحديث بسيط
         window.dispatchEvent(new CustomEvent("teacherpro:students-updated"));
         emitTeacherProDataChanged({
@@ -235,9 +259,12 @@ export function ChaptersView() {
           <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/10 p-3 space-y-2">
             <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
               <strong>إصلاح فرص الطلاب:</strong> إذا لاحظت أن بعض الطلاب فرصهم
-              <code className="mx-1 px-1 rounded bg-amber-100 dark:bg-amber-900/40">0/0</code>
-              رغم أن الفصل مفعّل لدورتهم، اضغط الزر أدناه لمنحهم فرص الفصل النشط تلقائياً.
-              يبحث الإصلاح عن كل طالب فرصه الأساسية صفر في دورة بها فصل نشط ويمنحه نفس فرص زملائه.
+              <code className="mx-1 px-1 rounded bg-amber-100 dark:bg-amber-900/40">
+                0/0
+              </code>
+              رغم أن الفصل مفعّل لدورتهم، اضغط الزر أدناه لمنحهم فرص الفصل النشط
+              تلقائياً. يبحث الإصلاح عن كل طالب فرصه الأساسية صفر في دورة بها
+              فصل نشط ويمنحه نفس فرص زملائه.
             </p>
             <Button
               type="button"
@@ -338,7 +365,11 @@ export function ChaptersView() {
             <form onSubmit={handleAttachChapter} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="chapter-course">اختر الدورة</Label>
-                <Select name="courseId" value={courseId} onValueChange={setCourseId}>
+                <Select
+                  name="courseId"
+                  value={courseId}
+                  onValueChange={setCourseId}
+                >
                   <SelectTrigger id="chapter-course">
                     <SelectValue placeholder="اختر الدورة" />
                   </SelectTrigger>
@@ -353,7 +384,11 @@ export function ChaptersView() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="chapter-id">اختر الفصل المنهجي لإضافته</Label>
-                <Select name="chapterId" value={chapterId} onValueChange={setChapterId}>
+                <Select
+                  name="chapterId"
+                  value={chapterId}
+                  onValueChange={setChapterId}
+                >
                   <SelectTrigger id="chapter-id">
                     <SelectValue placeholder="اختر الفصل" />
                   </SelectTrigger>
@@ -397,7 +432,7 @@ export function ChaptersView() {
                     <div className="flex items-center justify-between mb-3">
                       <p className="font-bold">{course.name}</p>
                       <Badge variant="secondary">
-                        {course.availablePrograms?.join('، ') || '—'}
+                        {course.availablePrograms?.join("، ") || "—"}
                       </Badge>
                     </div>
                     {linked.length === 0 ? (

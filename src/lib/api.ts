@@ -124,7 +124,11 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
       const responseData = contentType.includes("application/json")
         ? await res.json().catch(() => null)
         : null;
-      return { ok: true, data: responseData, syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`) };
+      return {
+        ok: true,
+        data: responseData,
+        syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
+      };
     } catch (e) {
       const msg = toUserFriendlyError(
         e instanceof Error ? e.message : "Network error",
@@ -143,7 +147,11 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
         method: "POST",
         payload: data,
       });
-      return { ...result, queued: true, syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`) };
+      return {
+        ...result,
+        queued: true,
+        syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
+      };
     } catch {
       // mutation-outbox not available (SSR); return as-is.
     }
@@ -180,7 +188,11 @@ async function apiPut(
       const responseData = contentType.includes("application/json")
         ? await res.json().catch(() => null)
         : null;
-      return { ok: true, data: responseData, syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`) };
+      return {
+        ok: true,
+        data: responseData,
+        syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
+      };
     } catch (e) {
       const msg = toUserFriendlyError(
         e instanceof Error ? e.message : "Network error",
@@ -197,7 +209,11 @@ async function apiPut(
         method: "PUT",
         payload: data,
       });
-      return { ...result, queued: true, syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`) };
+      return {
+        ...result,
+        queued: true,
+        syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
+      };
     } catch {
       // SSR; return as-is.
     }
@@ -241,7 +257,11 @@ async function apiDelete(
       const responseData = contentType.includes("application/json")
         ? await res.json().catch(() => null)
         : null;
-      return { ok: true, data: responseData, syncScopes: inferTeacherProScopesFromEndpoint(fullEndpoint) };
+      return {
+        ok: true,
+        data: responseData,
+        syncScopes: inferTeacherProScopesFromEndpoint(fullEndpoint),
+      };
     } catch (e) {
       const msg = toUserFriendlyError(
         e instanceof Error ? e.message : "Network error",
@@ -257,7 +277,11 @@ async function apiDelete(
         endpoint: fullEndpoint,
         method: "DELETE",
       });
-      return { ...result, queued: true, syncScopes: inferTeacherProScopesFromEndpoint(fullEndpoint) };
+      return {
+        ...result,
+        queued: true,
+        syncScopes: inferTeacherProScopesFromEndpoint(fullEndpoint),
+      };
     } catch {
       // SSR; return as-is.
     }
@@ -805,7 +829,10 @@ export const chapterApi = {
     apiPost("chapters", chapter),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("chapters", { id, ...updates }),
-  remove: (id: string) => apiDelete("chapters", id),
+  remove: (id: string, options: { confirmImpact?: boolean } = {}) =>
+    apiDelete("chapters", id, {
+      confirmImpact: options.confirmImpact ? "1" : undefined,
+    }),
 };
 
 // ─── CourseChapter API ────────────────────────────────────────────────────────
@@ -906,7 +933,10 @@ export const examApi = {
   add: (exam: Record<string, unknown>) => apiPost("exams", exam),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("exams", { id, ...updates }),
-  remove: (id: string) => apiDelete("exams", id),
+  remove: (id: string, options: { confirmImpact?: boolean } = {}) =>
+    apiDelete("exams", id, {
+      confirmImpact: options.confirmImpact ? "1" : undefined,
+    }),
 };
 
 // ─── Grade API ────────────────────────────────────────────────────────────────
@@ -1077,7 +1107,10 @@ export const studentProfileLogApi = {
 };
 
 export const academicRepairApi = {
-  run: () => apiPost("students/academic-repair", {}) as Promise<ApiResult & { data?: AcademicRepairResponse }>,
+  run: () =>
+    apiPost("students/academic-repair", {}) as Promise<
+      ApiResult & { data?: AcademicRepairResponse }
+    >,
 };
 
 export const syncVersionApi = {
@@ -1144,6 +1177,7 @@ export const opportunityStatsApi = {
     excludeDismissed?: boolean;
     excludeFullOpportunities?: boolean;
     reactivateDismissedOnAdd?: boolean;
+    confirmImpact?: boolean;
   }) =>
     apiPost("opportunities/bulk-adjust", {
       mode: "filter",

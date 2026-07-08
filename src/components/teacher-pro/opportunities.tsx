@@ -86,7 +86,13 @@ export function OpportunitiesView() {
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const syncKey = useTeacherProSyncKey(["opportunities", "opportunity-logs", "students", "grades", "dashboard"]);
+  const syncKey = useTeacherProSyncKey([
+    "opportunities",
+    "opportunity-logs",
+    "students",
+    "grades",
+    "dashboard",
+  ]);
   const [detailsStudentId, setDetailsStudentId] = useState("");
   const [databaseStats, setDatabaseStats] =
     useState<OpportunityStatsResponse | null>(null);
@@ -342,7 +348,9 @@ export function OpportunitiesView() {
   };
 
   const telegramLink = (telegram: string) => {
-    const username = String(telegram || "").trim().replace(/^@+/, "");
+    const username = String(telegram || "")
+      .trim()
+      .replace(/^@+/, "");
     return username ? `https://t.me/${encodeURIComponent(username)}` : "#";
   };
 
@@ -552,6 +560,9 @@ export function OpportunitiesView() {
       excludeFullOpportunities: bulkExcludeFullOpportunities,
       reactivateDismissedOnAdd:
         bulkActionDialog.type === "add" && !bulkExcludeDismissed,
+      // الواجهة تعرض معاينة العدد والاستثناءات قبل تنفيذ العملية؛
+      // نرسل التأكيد للخادم حتى لا تفشل العمليات الكبيرة بعد موافقة المستخدم.
+      confirmImpact: true,
     });
 
     if (!result.ok) {
@@ -1174,7 +1185,10 @@ export function OpportunitiesView() {
                           </span>
                         </div>
                         <span className="text-xs text-muted-foreground">
-                          الفصل: {log.chapterNameSnapshot || log.chapterId || "غير محدد"}
+                          الفصل:{" "}
+                          {log.chapterNameSnapshot ||
+                            log.chapterId ||
+                            "غير محدد"}
                         </span>
                       </div>
                       {renderOpportunityReason(log)}
@@ -1187,7 +1201,6 @@ export function OpportunitiesView() {
           ) : null}
         </DialogContent>
       </Dialog>
-
 
       <StudentProfileDialog
         student={selectedProfileStudent}
@@ -1281,8 +1294,8 @@ export function OpportunitiesView() {
                       className="mt-0.5"
                     />
                     <span>
-                      عدا المفصولين: إذا بقيت محددة لا يتم خصم فرص من طالب
-                      مفصول مسبقاً حتى لا تتداخل حالة الفصل القديمة مع الإجراء
+                      عدا المفصولين: إذا بقيت محددة لا يتم خصم فرص من طالب مفصول
+                      مسبقاً حتى لا تتداخل حالة الفصل القديمة مع الإجراء
                       الجماعي.
                     </span>
                   </label>
