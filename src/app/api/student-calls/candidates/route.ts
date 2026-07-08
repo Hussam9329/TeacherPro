@@ -19,7 +19,6 @@ export type CallStatusFilter =
   | "absent"
   | "discounted"
   | "failed"
-  | "academic-accounting"
   | "cheating"
   | "passed"
   | "full";
@@ -104,6 +103,24 @@ type DbLeaveLite = {
 const CALL_STUDENT_NOTE_CATEGORY = "call-student-note";
 const NON_DISPLAY_CALL_KINDS = new Set<CallKind>(["missing", "protected"]);
 
+function normalizeCallStatusFilter(value: string | null): CallStatusFilter {
+  const normalized = normalizeListFilter(value);
+  // لم يعد "طلاب المحاسبة" فلتر مستقل في تبويبة المكالمات.
+  // أي رابط/كاش قديم يطلبه يُعامل كـ "راسب غير مخصوم" حتى لا تظهر نتائج فارغة.
+  if (normalized === "academic-accounting") return "failed";
+  if (
+    normalized === "absent" ||
+    normalized === "discounted" ||
+    normalized === "failed" ||
+    normalized === "cheating" ||
+    normalized === "passed" ||
+    normalized === "full"
+  ) {
+    return normalized;
+  }
+  return "all";
+}
+
 function emptyResponse(page: number, pageSize: number) {
   return NextResponse.json({
     rows: [],
@@ -173,8 +190,7 @@ function callLabel(kind: CallKind): string {
   if (kind === "absent") return "غائب";
   if (kind === "cheating") return "غش";
   if (kind === "discounted") return "مخصوم";
-  if (kind === "academic-accounting") return "محاسبة";
-  if (kind === "failed") return "راسب غير مخصوم";
+  if (kind === "academic-accounting" || kind === "failed") return "راسب غير مخصوم";
   if (kind === "full") return "درجة كاملة";
   if (kind === "passed") return "ناجح";
   if (kind === "missing") return "غير مدخل";
@@ -189,8 +205,7 @@ function callReason(kind: CallKind, grade: DbGradeLite, exam: DbExamLite): strin
   if (kind === "absent") return "غائب عن الامتحان";
   if (kind === "cheating") return "مسجل بحالة غش";
   if (kind === "discounted") return `ضمن درجة الخصم: ${scoreText}`;
-  if (kind === "academic-accounting") return `طالب محاسبة بين الخصم والنجاح: ${scoreText}`;
-  if (kind === "failed") return `راسب غير مخصوم: ${scoreText}`;
+  if (kind === "academic-accounting" || kind === "failed") return `راسب غير مخصوم: ${scoreText}`;
   if (kind === "full") return `درجة كاملة: ${scoreText}`;
   if (kind === "passed") return `ناجح: ${scoreText}`;
   if (kind === "protected") return `لا يدخل في متابعة المكالمات: ${scoreText}`;
@@ -203,6 +218,7 @@ function gradeMatchesStatusFilter(
 ): boolean {
   if (filter === "all") return !NON_DISPLAY_CALL_KINDS.has(kind);
   if (filter === "passed") return kind === "passed" || kind === "full";
+  if (filter === "failed") return kind === "failed" || kind === "academic-accounting";
   return kind === filter;
 }
 
@@ -287,9 +303,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const courseId = normalizeListFilter(searchParams.get("courseId"));
     const examId = normalizeListFilter(searchParams.get("examId"));
-    const statusFilter = (normalizeListFilter(
-      searchParams.get("statusFilter"),
-    ) || "all") as CallStatusFilter;
+    const statusFilter = normalizeCallStatusFilter(searchParams.get("statusFilter"));
     const generalSearch = String(searchParams.get("q") || "").trim();
     const filterSearch = String(searchParams.get("filterQ") || "").trim();
     const page = parsePositiveInt(searchParams.get("page"), 1, 1_000_000);

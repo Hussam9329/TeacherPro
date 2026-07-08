@@ -59,8 +59,14 @@ assert(
   'آخر امتحان/آخر امتحانين يعتمد على تاريخ الامتحان لا updatedAt',
 );
 assert(
-  classification.includes('"academic-accounting"') && stats.includes('kind === "passed" || kind === "full"'),
-  'فلتر طلاب المحاسبة والناجحين موحد بين stats والقائمة',
+  !followUp.includes('طلاب المحاسبة') && !followUp.includes('"academic-accounting";'),
+  'خيار طلاب المحاسبة محذوف من فلاتر تبويبة المكالمات',
+);
+assert(
+  candidates.includes('filter === "failed"') &&
+    candidates.includes('kind === "failed" || kind === "academic-accounting"') &&
+    stats.includes('kind === "failed" || kind === "academic-accounting"'),
+  'فلتر الراسبين غير المخصومين يشمل طلاب المحاسبة ويستثني المخصومين',
 );
 assert(
   followUp.includes('https://wa.me/') || followUp.includes('whatsappLink(phone || "")'),

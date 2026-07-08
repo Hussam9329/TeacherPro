@@ -19,7 +19,6 @@ type CallStatusFilter =
   | "absent"
   | "discounted"
   | "failed"
-  | "academic-accounting"
   | "cheating"
   | "passed"
   | "full";
@@ -79,6 +78,23 @@ const zeroStats = {
   source: "database" as const,
 };
 
+function normalizeCallStatusFilter(value: string | null): CallStatusFilter {
+  const normalized = normalizeListFilter(value);
+  // توافق مع روابط/تبويبات قديمة: المحاسبة صارت ضمن الراسبين غير المخصومين.
+  if (normalized === "academic-accounting") return "failed";
+  if (
+    normalized === "absent" ||
+    normalized === "discounted" ||
+    normalized === "failed" ||
+    normalized === "cheating" ||
+    normalized === "passed" ||
+    normalized === "full"
+  ) {
+    return normalized;
+  }
+  return "all";
+}
+
 function startOfUtcDay(value: Date): Date {
   return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
 }
@@ -131,6 +147,7 @@ function gradeMatchesStatusFilter(
   if (kind === "missing" || kind === "protected") return false;
   if (filter === "all") return true;
   if (filter === "passed") return kind === "passed" || kind === "full";
+  if (filter === "failed") return kind === "failed" || kind === "academic-accounting";
   return kind === filter;
 }
 
@@ -156,7 +173,7 @@ function searchableValues(
     absent: "غائب الغائبين",
     discounted: "مخصوم المخصومين خصم",
     failed: "راسب غير مخصوم الراسبين غير المخصومين",
-    "academic-accounting": "محاسبة طلاب المحاسبة",
+    "academic-accounting": "راسب غير مخصوم الراسبين غير المخصومين",
     full: "درجة كاملة فل مارك",
     passed: "ناجح الناجحين",
     cheating: "غش طلاب الغش",
@@ -189,9 +206,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const courseId = normalizeListFilter(searchParams.get("courseId"));
     const examId = normalizeListFilter(searchParams.get("examId"));
-    const statusFilter = (normalizeListFilter(
-      searchParams.get("statusFilter"),
-    ) || "all") as CallStatusFilter;
+    const statusFilter = normalizeCallStatusFilter(searchParams.get("statusFilter"));
     const generalSearch = String(searchParams.get("q") || "").trim();
     const filterSearch = String(searchParams.get("filterQ") || "").trim();
 

@@ -57,7 +57,7 @@ type CallCategory =
   | "protected"
   | "missing";
 type CallStatusFilter =
-  "all" | "absent" | "discounted" | "failed" | "cheating" | "passed" | "full" | "academic-accounting";
+  "all" | "absent" | "discounted" | "failed" | "cheating" | "passed" | "full";
 type CallGradeDisplayMode = "latest" | "latest-two" | "all";
 type PledgeTypeFilter = "all" | "temporary" | "final";
 type PledgeStatusFilter = "all" | "pledged" | "pending" | "reactivated";
@@ -138,7 +138,7 @@ const callCategoryLabels: Record<CallCategory, string> = {
   absent: "غائب",
   discounted: "مخصوم",
   failed: "راسب غير مخصوم",
-  "academic-accounting": "محاسبة",
+  "academic-accounting": "راسب غير مخصوم",
   "low-pass": "ناجح بدرجة منخفضة",
   full: "درجة كاملة",
   passed: "ناجح",
@@ -155,7 +155,6 @@ const callStatusFilterLabels: Record<CallStatusFilter, string> = {
   cheating: "طلاب الغش",
   passed: "الطلاب الناجحين",
   full: "الدرجات الكاملة",
-  "academic-accounting": "طلاب المحاسبة",
 };
 
 const callStatusFilterOptions = Object.keys(
