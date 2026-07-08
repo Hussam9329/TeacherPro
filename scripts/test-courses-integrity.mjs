@@ -79,6 +79,14 @@ assert(
   'صفحة الدورات تملك بحث وفلاتر للحالة وإمكانية الحذف',
 );
 assert(
+  coursesView.includes('حالة الدورة') && coursesView.includes('حماية الحذف') && coursesView.includes('courseStatusFilterLabels') && coursesView.includes('courseDeleteFilterLabels'),
+  'فلاتر حالة الدورات واضحة ومفصولة بين حالة التسجيل وحماية الحذف',
+);
+assert(
+  coursesView.includes('تصفير الفلاتر') && coursesView.includes('filteredStats') && !coursesView.includes('كل الحذف'),
+  'صفحة الدورات تعرض ملخص النتائج المفلترة وتمنع عبارات فلاتر مربكة',
+);
+assert(
   coursesView.includes('إجمالي الدورات') && coursesView.includes('نشطة للتسجيل') && coursesView.includes('آمنة للحذف'),
   'صفحة الدورات تعرض إحصائيات عامة واضحة',
 );

@@ -18,6 +18,13 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
@@ -50,6 +57,18 @@ type CourseOverviewRow = NonNullable<CourseOverviewResponse["rows"]>[number] & {
 
 type CourseStatusFilter = "all" | "active" | "inactive";
 type CourseDeleteFilter = "all" | "deletable" | "blocked";
+
+const courseStatusFilterLabels: Record<CourseStatusFilter, string> = {
+  all: "كل الدورات",
+  active: "نشطة للتسجيل",
+  inactive: "موقوفة عن التسجيل",
+};
+
+const courseDeleteFilterLabels: Record<CourseDeleteFilter, string> = {
+  all: "كل حالات الحذف",
+  deletable: "قابلة للحذف",
+  blocked: "محمية من الحذف",
+};
 
 function emptyCourseForm(): CourseFormState {
   return {
@@ -776,6 +795,16 @@ export function CoursesView() {
     });
   }, [debouncedSearchText, deleteFilter, rows, statusFilter]);
 
+  const filteredStats = useMemo(() => ({
+    total: filteredRows.length,
+    active: filteredRows.filter((row) => row.course.active).length,
+    inactive: filteredRows.filter((row) => !row.course.active).length,
+    deletable: filteredRows.filter((row) => row.deleteSafety.canDelete).length,
+    blocked: filteredRows.filter((row) => !row.deleteSafety.canDelete).length,
+  }), [filteredRows]);
+
+  const hasActiveFilters = Boolean(debouncedSearchText.trim()) || statusFilter !== "all" || deleteFilter !== "all";
+
   // ─── Create course handler ─────────────────────────────────────────────────
   const handleCreate = runAddCourseLocked(async () => {
     const validationMessage = validateCourseForm(createForm);
@@ -1096,35 +1125,72 @@ export function CoursesView() {
             <CardTitle>قائمة الدورات</CardTitle>
             <Badge variant="outline">{filteredRows.length} من {rows.length}</Badge>
           </div>
-          <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+          <div className="grid gap-3 lg:grid-cols-[1fr_220px_230px]">
             <Input
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               placeholder="بحث باسم الدورة، النوع، الموقع، الفصل أو سبب منع الحذف..."
               autoComplete="off"
             />
-            <div className="flex flex-wrap gap-2">
-              {([
-                ["all", "كل الحالات"],
-                ["active", "نشطة"],
-                ["inactive", "موقوفة"],
-              ] as [CourseStatusFilter, string][]).map(([value, label]) => (
-                <Button key={value} variant={statusFilter === value ? "default" : "outline"} size="sm" onClick={() => setStatusFilter(value)}>
-                  {label}
-                </Button>
-              ))}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">حالة الدورة</Label>
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => setStatusFilter(value as CourseStatusFilter)}
+              >
+                <SelectTrigger className="h-10 rounded-2xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(courseStatusFilterLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {([
-                ["all", "كل الحذف"],
-                ["deletable", "آمنة للحذف"],
-                ["blocked", "محميّة"],
-              ] as [CourseDeleteFilter, string][]).map(([value, label]) => (
-                <Button key={value} variant={deleteFilter === value ? "default" : "outline"} size="sm" onClick={() => setDeleteFilter(value)}>
-                  {label}
-                </Button>
-              ))}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">حماية الحذف</Label>
+              <Select
+                value={deleteFilter}
+                onValueChange={(value) => setDeleteFilter(value as CourseDeleteFilter)}
+              >
+                <SelectTrigger className="h-10 rounded-2xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(courseDeleteFilterLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+          <div className="rounded-2xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">المعروض: {filteredStats.total}</Badge>
+              <Badge variant="secondary">نشطة: {filteredStats.active}</Badge>
+              <Badge variant="secondary">موقوفة: {filteredStats.inactive}</Badge>
+              <Badge variant="outline">قابلة للحذف: {filteredStats.deletable}</Badge>
+              <Badge variant="outline">محمية: {filteredStats.blocked}</Badge>
+              {hasActiveFilters ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 rounded-full px-3 text-[11px]"
+                  onClick={() => {
+                    setSearchText("");
+                    setStatusFilter("all");
+                    setDeleteFilter("all");
+                  }}
+                >
+                  تصفير الفلاتر
+                </Button>
+              ) : null}
+            </div>
+            <p className="mt-2 leading-6">
+              {courseStatusFilterLabels[statusFilter]} — {courseDeleteFilterLabels[deleteFilter]}. هذه الفلاتر للعرض فقط ولا تغيّر حالة أي دورة.
+            </p>
           </div>
         </CardHeader>
         <CardContent>
