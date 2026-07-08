@@ -1741,6 +1741,16 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             >
               حالة الطالب: {row.student.status}
             </Badge>
+            <Badge
+              variant={
+                activeChapterForCourse(row.student.courseId)
+                  ? "outline"
+                  : "secondary"
+              }
+              className="text-[10px] font-bold"
+            >
+              الفرص: {studentOpportunityText(row.student)}
+            </Badge>
           </div>
           <p className="text-xs text-muted-foreground">
             {courseName(row.student.courseId)} - {row.student.studyType || "—"}
