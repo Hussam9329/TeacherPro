@@ -20,6 +20,7 @@ model Course {
 
   students  Student[]
   chapters  CourseChapter[]
+  examCourses ExamCourse[]
 }
 
 
@@ -28,6 +29,7 @@ model Chapter {
   name          String
   opportunities Int             @default(0)
   courseLinks   CourseChapter[]
+  opportunityLogs OpportunityLog[]
 }
 
 model CourseChapter {
@@ -82,6 +84,7 @@ model Student {
   studentNotes    StudentNote[]
   correctionSheets CorrectionSheet[]
   telegramExamSubmissions TelegramExamSubmission[]
+  studentLeaveGradeBackups StudentLeaveGradeBackup[]
 
   @@index([courseId])
   @@index([status])
@@ -112,9 +115,23 @@ model Exam {
   studentLeaves      StudentLeave[]
   studentCalls       StudentCall[]
   telegramExamSubmissions TelegramExamSubmission[]
+  gradeEntryMissingNote GradeEntryMissingNote?
+  examCourses ExamCourse[]
+  studentLeaveGradeBackups StudentLeaveGradeBackup[]
 
   @@index([type])
   @@index([date])
+}
+
+model ExamCourse {
+  id       String @id @default(cuid())
+  examId   String
+  courseId String
+  exam     Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@unique([examId, courseId])
+  @@index([courseId])
 }
 
 model Grade {
@@ -143,13 +160,16 @@ model OpportunityLog {
   reason    String?
   date      DateTime @default(now())
   chapterId String?
+  chapterNameSnapshot String?
   studentId String
   examId    String?
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam      Exam?    @relation(fields: [examId], references: [id], onDelete: SetNull)
+  chapter   Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
 
   @@index([studentId])
   @@index([date])
+  @@index([chapterId])
 }
 
 model StudentLeave {
@@ -166,6 +186,7 @@ model StudentLeave {
   createdAt DateTime  @default(now())
   student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam      Exam?     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  gradeBackups StudentLeaveGradeBackup[]
 
   @@unique([studentId, examId])
   @@index([studentId])
@@ -226,6 +247,7 @@ model GradeEntryMissingNote {
   userName  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
 
   @@index([updatedAt])
 }
@@ -290,6 +312,9 @@ model StudentLeaveGradeBackup {
   gradeCreatedAt             DateTime?
   gradeUpdatedAt             DateTime?
   createdAt                  DateTime @default(now())
+  leave                      StudentLeave @relation(fields: [leaveId], references: [id], onDelete: Cascade)
+  student                    Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam                       Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
 
   @@unique([leaveId, studentId, examId])
   @@index([leaveId])

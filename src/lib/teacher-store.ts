@@ -291,6 +291,7 @@ export interface OpportunityLog {
   reason: string;
   date: string;
   chapterId: string;
+  chapterNameSnapshot?: string;
 }
 
 export type StudentLeaveType = "exam" | "period";

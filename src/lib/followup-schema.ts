@@ -89,6 +89,10 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "StudentNote_sourceType_idx" ON "StudentNote"("sourceType")`,
   `CREATE INDEX IF NOT EXISTS "StudentNote_sourceId_idx" ON "StudentNote"("sourceId")`,
   `CREATE INDEX IF NOT EXISTS "StudentNote_dismissalKey_idx" ON "StudentNote"("dismissalKey")`,
+  `DELETE FROM "StudentLeaveGradeBackup" backup
+    WHERE NOT EXISTS (SELECT 1 FROM "StudentLeave" leave WHERE leave."id" = backup."leaveId")
+       OR NOT EXISTS (SELECT 1 FROM "Student" student WHERE student."id" = backup."studentId")
+       OR NOT EXISTS (SELECT 1 FROM "Exam" exam WHERE exam."id" = backup."examId")`,
   `DO $$
   BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentLeave_studentId_fkey') THEN

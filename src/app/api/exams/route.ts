@@ -7,23 +7,9 @@ import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { parseBaghdadDateTime } from '@/lib/baghdad-time';
 import { ensureExamSchema } from '@/lib/exam-schema';
+import { canonicalCourseIds, parseCourseIds, syncExamCourseLinks } from '@/lib/exam-course-links';
 import { recalculateStudentsForExam } from '@/lib/academic-recalculate-server';
 import { writeRequestAuditLog } from '@/lib/audit-log-server';
-
-function parseCourseIds(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(String).filter(Boolean);
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return [];
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
-    } catch {
-      return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
-    }
-  }
-  return [];
-}
 
 function parseBoolean(value: unknown): boolean {
   return value === true || value === 'true' || value === '1' || value === 1;
@@ -33,10 +19,6 @@ function canonicalDateTime(value: unknown): string {
   if (!value) return '';
   const date = value instanceof Date ? value : new Date(String(value));
   return Number.isFinite(date.getTime()) ? date.toISOString() : String(value);
-}
-
-function canonicalCourseIds(value: unknown): string {
-  return JSON.stringify(parseCourseIds(value).sort());
 }
 
 function academicExamSnapshot(exam: {
@@ -153,8 +135,9 @@ export async function POST(req: NextRequest) {
       return validationError(`لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourseNames.join('، ')}`);
     }
     const noDiscount = parseBoolean(body.noDiscount);
-    const exam = await db.exam.create({
-      data: {
+    const exam = await db.$transaction(async (tx) => {
+      const createdExam = await tx.exam.create({
+        data: {
         name: String(body.name ?? '').trim(),
         type: body.type,
         courseIds: JSON.stringify(parsedCourseIds),
@@ -169,7 +152,10 @@ export async function POST(req: NextRequest) {
         active: body.active ?? true,
         scheduledActivateAt: body.scheduledActivateAt ? parseBaghdadDateTime(String(body.scheduledActivateAt)) : null,
         scheduledDeactivateAt: body.scheduledDeactivateAt ? parseBaghdadDateTime(String(body.scheduledDeactivateAt)) : null,
-      },
+        },
+      });
+      await syncExamCourseLinks(tx, createdExam.id, parsedCourseIds);
+      return createdExam;
     });
     return NextResponse.json({ exam }, { status: 201 });
   } catch (error) {
@@ -235,6 +221,7 @@ export async function PUT(req: NextRequest) {
 
     const result = await db.$transaction(async (tx) => {
       const exam = await tx.exam.update({ where: { id }, data });
+      await syncExamCourseLinks(tx, exam.id, exam.courseIds);
       const academicRecalculation = hasAcademicExamChange(existingExam, exam)
         ? await recalculateStudentsForExam(exam.id, { tx })
         : null;
@@ -274,6 +261,7 @@ export async function DELETE(req: NextRequest) {
 
     const deleted = await db.$transaction(async (tx) => {
       const correctionSheets = await tx.correctionSheet.deleteMany({ where: { examId: id } });
+      await tx.examCourse.deleteMany({ where: { examId: id } });
       const opportunityLogs = await tx.opportunityLog.deleteMany({ where: { examId: id } });
       await tx.exam.delete({ where: { id } });
       return { correctionSheets: correctionSheets.count, opportunityLogs: opportunityLogs.count };

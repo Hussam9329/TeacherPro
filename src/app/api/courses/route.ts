@@ -23,17 +23,7 @@ import {
   OUT_OF_COUNTRY_LOCATION_SCOPE,
 } from '@/lib/course-config';
 import { IRAQI_PROVINCES, normalizeIraqiProvinceName } from '@/lib/iraq';
-
-function parseCourseIds(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map(String);
-  if (typeof value !== 'string') return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch {
-    return [];
-  }
-}
+import { ensureExamCourseLinksSchema, parseCourseIds } from '@/lib/exam-course-links';
 
 function formatLinkedStudentCount(count: number): string {
   return `${count} طالب`;
@@ -291,6 +281,14 @@ export async function PUT(req: NextRequest) {
       if (usageBlockMessage) return validationError(usageBlockMessage, 409);
     }
 
+    const configTouched = data.availablePrograms !== undefined
+      || data.availableStudyTypes !== undefined
+      || data.studyTypesByProgram !== undefined
+      || data.locationConfig !== undefined;
+    const affectedSnapshotStudents = configTouched
+      ? await db.student.count({ where: { courseId: id } })
+      : 0;
+
     if (data.studyTypesByProgram !== undefined) data.studyTypesByProgram = stringifyJson(data.studyTypesByProgram);
     if (data.availablePrograms !== undefined) data.availablePrograms = stringifyJson(data.availablePrograms);
     if (data.studyTypesByProgram !== undefined || data.availableStudyTypes !== undefined || data.availablePrograms !== undefined) {
@@ -303,7 +301,18 @@ export async function PUT(req: NextRequest) {
     if (data.locationConfig !== undefined) data.locationConfig = stringifyJson(data.locationConfig);
 
     const course = await db.course.update({ where: { id }, data });
-    return NextResponse.json({ course });
+    return NextResponse.json({
+      course,
+      studentConfigImpact: configTouched
+        ? {
+            affectedStudents: affectedSnapshotStudents,
+            autoSynced: false,
+            message: affectedSnapshotStudents > 0
+              ? 'تم تحديث إعدادات الدورة فقط. بيانات الطلاب المسجلين تبقى Snapshot ولا تتغير تلقائياً حتى لا يتغير تصنيف طالب قديم بدون قصد.'
+              : 'لا يوجد طلاب حاليون متأثرون بإعدادات هذه الدورة.',
+          }
+        : null,
+    });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث الدورة حالياً.');
   }
@@ -329,7 +338,12 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const relatedExam = (await db.exam.findMany({
+    await ensureExamCourseLinksSchema();
+    const relatedExamLink = await db.examCourse.findFirst({
+      where: { courseId: id },
+      include: { exam: { select: { id: true, name: true } } },
+    });
+    const relatedExam = relatedExamLink?.exam || (await db.exam.findMany({
       select: { id: true, name: true, courseIds: true },
     })).find((exam) => parseCourseIds(exam.courseIds).includes(id));
     if (relatedExam) {

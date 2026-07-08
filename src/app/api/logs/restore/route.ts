@@ -103,6 +103,11 @@ export async function POST(req: NextRequest) {
       ? new Set((await db.exam.findMany({ where: { id: { in: opportunityExamIds } }, select: { id: true } })).map((exam) => exam.id))
       : new Set<string>();
 
+    const opportunityChapterIds = [...new Set(opportunityLogs.map((log) => textOrNull(log.chapterId)).filter(Boolean) as string[])];
+    const chapterNameById = opportunityChapterIds.length
+      ? new Map((await db.chapter.findMany({ where: { id: { in: opportunityChapterIds } }, select: { id: true, name: true } })).map((chapter) => [chapter.id, chapter.name]))
+      : new Map<string, string>();
+
     const auditData: Prisma.AuditLogCreateManyInput[] = auditLogs.map((log) => {
       const userId = textOrNull(log.userId);
       return {
@@ -127,7 +132,10 @@ export async function POST(req: NextRequest) {
           amount: numberOrZero(log.amount),
           reason: textOrNull(log.reason),
           date: safeDate(log.date),
-          chapterId: textOrNull(log.chapterId),
+          chapterId: textOrNull(log.chapterId) && chapterNameById.has(String(textOrNull(log.chapterId))) ? textOrNull(log.chapterId) : null,
+          chapterNameSnapshot: textOrNull(log.chapterId) && chapterNameById.has(String(textOrNull(log.chapterId)))
+            ? chapterNameById.get(String(textOrNull(log.chapterId))) || null
+            : textOrNull(log.chapterNameSnapshot),
           studentId,
           examId: examId && existingExams.has(examId) ? examId : null,
         };

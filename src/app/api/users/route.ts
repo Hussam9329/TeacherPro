@@ -95,16 +95,18 @@ function validateSensitiveUserChanges(principal: AuthPrincipal, payload: Record<
   return null;
 }
 
-async function validateRoleAssignment(principal: AuthPrincipal, roleId: unknown) {
-  if (isOwner(principal) || !roleId) return null;
+async function readAssignableRole(principal: AuthPrincipal, roleId: unknown) {
+  const id = String(roleId ?? '').trim();
+  if (!id) return { role: null, error: validationError('الدور مطلوب') };
   const role = await db.role.findUnique({
-    where: { id: String(roleId) },
-    select: { permissions: true },
+    where: { id },
+    select: { id: true, name: true, permissions: true },
   });
-  if (role && includesSensitivePermission(role.permissions)) {
-    return forbiddenSecurity('لا يمكن تعيين دور يحتوي صلاحيات حساسة إلا من حساب admin الرئيسي.');
+  if (!role) return { role: null, error: validationError('الدور غير موجود أو تم حذفه.', 404) };
+  if (!isOwner(principal) && includesSensitivePermission(role.permissions)) {
+    return { role: null, error: forbiddenSecurity('لا يمكن تعيين دور يحتوي صلاحيات حساسة إلا من حساب admin الرئيسي.') };
   }
-  return null;
+  return { role, error: null };
 }
 
 function readPasswordInput(body: Record<string, unknown>): string {
@@ -165,8 +167,9 @@ export async function POST(req: NextRequest) {
     if (validationMessage) return validationError(validationMessage);
     const securityError = validateSensitiveUserChanges(principal, body);
     if (securityError) return securityError;
-    const roleAssignmentError = await validateRoleAssignment(principal, body.roleId);
-    if (roleAssignmentError) return roleAssignmentError;
+    const roleAssignment = await readAssignableRole(principal, body.roleId);
+    if (roleAssignment.error) return roleAssignment.error;
+    const assignedRole = roleAssignment.role;
 
     const password = readPasswordInput(body);
     if (!password) return validationError('يرجى إدخال رمز المرور');
@@ -176,8 +179,8 @@ export async function POST(req: NextRequest) {
         username: String(body.username ?? '').trim(),
         name: String(body.name ?? '').trim(),
         passwordHash: await normalizePasswordForStorage(password),
-        role: body.role,
-        roleId: body.roleId,
+        role: assignedRole?.name || '',
+        roleId: assignedRole?.id || null,
         permissions: normalizePermissions(body.permissions),
         active: body.active ?? true,
       },
@@ -213,11 +216,11 @@ export async function PUT(req: NextRequest) {
     if (!existingUser) return validationError('المستخدم غير موجود', 404);
     const securityError = validateSensitiveUserChanges(principal, { id, ...data }, existingUser);
     if (securityError) return securityError;
-    const roleIdChanged = data.roleId !== undefined && !sameOptionalString(data.roleId, existingUser.roleId);
-    const roleAssignmentError = roleIdChanged ? await validateRoleAssignment(principal, data.roleId) : null;
-    if (roleAssignmentError) return roleAssignmentError;
+    const roleAssignment = data.roleId !== undefined ? await readAssignableRole(principal, data.roleId) : { role: null, error: null };
+    if (roleAssignment.error) return roleAssignment.error;
 
     const updateData: Record<string, unknown> = { ...data };
+    delete updateData.role;
     if (isPrimaryAdminUser(existingUser)) {
       delete updateData.username;
       delete updateData.roleId;
@@ -237,6 +240,10 @@ export async function PUT(req: NextRequest) {
       const usernameError = requireText(updateData.username, 'اسم المستخدم');
       if (usernameError) return validationError(usernameError);
       updateData.username = String(updateData.username ?? '').trim();
+    }
+    if (!isPrimaryAdminUser(existingUser) && roleAssignment.role) {
+      updateData.roleId = roleAssignment.role.id;
+      updateData.role = roleAssignment.role.name;
     }
     if (updateData.permissions !== undefined) updateData.permissions = normalizePermissions(updateData.permissions);
 

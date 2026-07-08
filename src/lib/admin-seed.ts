@@ -102,6 +102,11 @@ export async function ensureInitialAdminSeed(): Promise<void> {
     },
   });
 
+  await db.appUser.updateMany({
+    where: { roleId: DEFAULT_ADMIN_ROLE_ID },
+    data: { role: DEFAULT_ADMIN_ROLE_NAME },
+  });
+
   const defaultAdminPassword = getDefaultAdminPassword();
 
   // Fresh database: create the admin user.

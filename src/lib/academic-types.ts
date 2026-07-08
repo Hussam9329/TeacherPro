@@ -66,6 +66,7 @@ export interface AcademicOpportunityLog {
   reason: string;
   date: string;
   chapterId: string;
+  chapterNameSnapshot?: string;
 }
 
 export interface AcademicStudentLeave {

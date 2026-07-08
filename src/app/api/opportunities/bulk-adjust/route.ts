@@ -35,6 +35,7 @@ type OpportunityLogPayload = {
   reason?: unknown;
   date?: unknown;
   chapterId?: unknown;
+  chapterNameSnapshot?: unknown;
 };
 
 type StudentNotePayload = {
@@ -114,6 +115,7 @@ function normalizeOpportunityLogs(value: unknown) {
       reason: item.reason ? String(item.reason) : null,
       date: normalizeDate(item.date),
       chapterId: item.chapterId ? String(item.chapterId) : null,
+      chapterNameSnapshot: item.chapterNameSnapshot ? String(item.chapterNameSnapshot) : null,
     }))
     .filter((item) => item.id && item.studentId && item.action);
 }
@@ -241,7 +243,7 @@ async function handleFilterBasedBulkAdjust(req: NextRequest, body: Record<string
         const chapters = chapterIds.length
           ? await tx.chapter.findMany({
               where: { id: { in: chapterIds } },
-              select: { id: true, opportunities: true },
+              select: { id: true, name: true, opportunities: true },
             })
           : [];
         const chapterById = new Map(
@@ -255,6 +257,7 @@ async function handleFilterBasedBulkAdjust(req: NextRequest, body: Record<string
               opportunities: Number(
                 chapterById.get(link.chapterId)?.opportunities || 0,
               ),
+              chapterNameSnapshot: chapterById.get(link.chapterId)?.name || null,
             },
           ]),
         );
@@ -267,6 +270,7 @@ async function handleFilterBasedBulkAdjust(req: NextRequest, body: Record<string
           reason: string;
           date: Date;
           chapterId: string | null;
+          chapterNameSnapshot?: string | null;
         }> = [];
         const studentNotes: Array<{
           studentId: string;
@@ -293,6 +297,7 @@ async function handleFilterBasedBulkAdjust(req: NextRequest, body: Record<string
             reason,
             date: now,
             chapterId: activeChapter.chapterId,
+            chapterNameSnapshot: activeChapter.chapterNameSnapshot || null,
           });
           if (
             signedAmount > 0 &&
@@ -409,7 +414,7 @@ export async function POST(req: NextRequest) {
 
           const activeChapterByCourseId = new Map<
             string,
-            { chapterId: string; opportunities: number }
+            { chapterId: string; opportunities: number; chapterNameSnapshot?: string | null }
           >();
           const allModifiableStudentIds = Array.from(modifiableStudentIds);
           if (allModifiableStudentIds.length) {
@@ -435,7 +440,7 @@ export async function POST(req: NextRequest) {
               const chaptersForActive = chapterIdsForActive.length
                 ? await tx.chapter.findMany({
                     where: { id: { in: chapterIdsForActive } },
-                    select: { id: true, opportunities: true },
+                    select: { id: true, name: true, opportunities: true },
                   })
                 : [];
               const chapterOppById = new Map(
@@ -449,6 +454,7 @@ export async function POST(req: NextRequest) {
                 activeChapterByCourseId.set(link.courseId, {
                   chapterId: link.chapterId,
                   opportunities: opp,
+                  chapterNameSnapshot: chaptersForActive.find((chapter) => chapter.id === link.chapterId)?.name || null,
                 });
               }
             }
@@ -518,7 +524,27 @@ export async function POST(req: NextRequest) {
           const safeOpportunityLogs = opportunityLogs.filter((log) =>
             modifiableStudentIds.has(log.studentId),
           );
-          for (const group of chunks(safeOpportunityLogs)) {
+          const safeExamIds = Array.from(new Set(safeOpportunityLogs.map((log) => log.examId).filter(Boolean) as string[]));
+          const validExamIds = new Set(
+            safeExamIds.length
+              ? (await tx.exam.findMany({ where: { id: { in: safeExamIds } }, select: { id: true } })).map((exam) => exam.id)
+              : [],
+          );
+          const safeChapterIds = Array.from(new Set(safeOpportunityLogs.map((log) => log.chapterId).filter(Boolean) as string[]));
+          const chapterNameById = new Map(
+            safeChapterIds.length
+              ? (await tx.chapter.findMany({ where: { id: { in: safeChapterIds } }, select: { id: true, name: true } })).map((chapter) => [chapter.id, chapter.name])
+              : [],
+          );
+          const relationalSafeOpportunityLogs = safeOpportunityLogs.map((log) => ({
+            ...log,
+            examId: log.examId && validExamIds.has(log.examId) ? log.examId : null,
+            chapterId: log.chapterId && chapterNameById.has(log.chapterId) ? log.chapterId : null,
+            chapterNameSnapshot: log.chapterId && chapterNameById.has(log.chapterId)
+              ? chapterNameById.get(log.chapterId) || null
+              : log.chapterNameSnapshot || null,
+          }));
+          for (const group of chunks(relationalSafeOpportunityLogs)) {
             await tx.opportunityLog.createMany({
               data: group,
               skipDuplicates: true,
@@ -539,7 +565,7 @@ export async function POST(req: NextRequest) {
             new Set(
               [
                 ...students.map((student) => student.id),
-                ...safeOpportunityLogs.map((log) => log.studentId),
+                ...relationalSafeOpportunityLogs.map((log) => log.studentId),
                 ...safeStudentNotes.map((note) => note.studentId),
               ].filter((id) => modifiableStudentIds.has(id)),
             ),

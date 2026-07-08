@@ -16,6 +16,16 @@ const STATEMENTS = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "GradeEntryMissingNote_examId_key" ON "GradeEntryMissingNote"("examId")`,
   `CREATE INDEX IF NOT EXISTS "GradeEntryMissingNote_updatedAt_idx" ON "GradeEntryMissingNote"("updatedAt")`,
+  `DELETE FROM "GradeEntryMissingNote" note WHERE NOT EXISTS (SELECT 1 FROM "Exam" exam WHERE exam."id" = note."examId")`,
+  `DO $$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'GradeEntryMissingNote_examId_fkey') THEN
+      ALTER TABLE "GradeEntryMissingNote"
+        ADD CONSTRAINT "GradeEntryMissingNote_examId_fkey"
+        FOREIGN KEY ("examId") REFERENCES "Exam"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+  END $$`,
 ] as const;
 
 let ensurePromise: Promise<void> | null = null;
@@ -49,4 +59,4 @@ export async function withGradeEntryMissingNoteSchema<T>(
 }
 
 export const gradeEntryMissingNoteSchemaMessage =
-  'جدول ملاحظات الطلاب الغير موجودين غير جاهز بعد. سيُنشأ تلقائياً عند أول محاولة حفظ.';
+  'جدول ملاحظات الطلاب الغير موجودين غير جاهز بعد أو يحتاج تنظيف علاقات قديمة. سيُصلح تلقائياً عند أول محاولة استخدام.';

@@ -43,7 +43,10 @@ export async function GET(req: NextRequest) {
 
   try {
     const notes = await withGradeEntryMissingNoteSchema(async () =>
-      db.gradeEntryMissingNote.findMany({ orderBy: { updatedAt: 'desc' }, take: 500 }),
+      db.gradeEntryMissingNote.findMany({
+        orderBy: { updatedAt: 'desc' },
+        take: 500,
+      }),
     );
     return NextResponse.json({ notes: notes.map(normalize) });
   } catch (error) {
@@ -72,8 +75,14 @@ export async function POST(req: NextRequest) {
     if (!examId) return validationError('examId مطلوب');
     if (!text) return validationError('نص الملاحظة مطلوب');
 
-    const examName = String(body?.examName ?? '').trim().slice(0, 200);
-    const examDate = String(body?.examDate ?? '').trim().slice(0, 30);
+    const exam = await db.exam.findUnique({
+      where: { id: examId },
+      select: { id: true, name: true, date: true },
+    });
+    if (!exam) return validationError('لا يمكن حفظ ملاحظة على امتحان محذوف أو غير موجود.', 404);
+
+    const examName = (String(body?.examName ?? '').trim() || exam.name).slice(0, 200);
+    const examDate = (String(body?.examDate ?? '').trim() || exam.date.toISOString()).slice(0, 30);
     const note = await withGradeEntryMissingNoteSchema(() =>
       db.gradeEntryMissingNote.upsert({
         where: { examId },

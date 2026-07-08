@@ -1174,7 +1174,7 @@ export function OpportunitiesView() {
                           </span>
                         </div>
                         <span className="text-xs text-muted-foreground">
-                          الفصل: {log.chapterId || "غير محدد"}
+                          الفصل: {log.chapterNameSnapshot || log.chapterId || "غير محدد"}
                         </span>
                       </div>
                       {renderOpportunityReason(log)}

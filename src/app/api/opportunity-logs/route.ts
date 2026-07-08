@@ -86,14 +86,28 @@ export async function POST(req: NextRequest) {
     const amount = Number(body.amount || 0);
     const allowsZeroAmount = action === 'فصل تلقائي' || action === 'إعادة تفعيل';
     if (!Number.isFinite(amount) || amount < 0 || (amount === 0 && !allowsZeroAmount)) return validationError('عدد الفرص يجب أن يكون رقماً أكبر من صفر');
+    const studentId = String(body.studentId);
+    const examId = body.examId ? String(body.examId) : null;
+    const chapterId = body.chapterId ? String(body.chapterId) : null;
+
+    const [student, exam, chapter] = await Promise.all([
+      db.student.findUnique({ where: { id: studentId }, select: { id: true } }),
+      examId ? db.exam.findUnique({ where: { id: examId }, select: { id: true } }) : Promise.resolve(null),
+      chapterId ? db.chapter.findUnique({ where: { id: chapterId }, select: { id: true, name: true } }) : Promise.resolve(null),
+    ]);
+    if (!student) return validationError('الطالب غير موجود أو تم حذفه.', 404);
+    if (examId && !exam) return validationError('الامتحان غير موجود أو تم حذفه.', 404);
+    if (chapterId && !chapter) return validationError('الفصل غير موجود أو تم حذفه.', 404);
+
     const data = {
       action,
       amount,
       reason: body.reason ? String(body.reason) : null,
       date: body.date ? new Date(body.date) : new Date(),
-      chapterId: body.chapterId ? String(body.chapterId) : null,
-      studentId: String(body.studentId),
-      examId: body.examId ? String(body.examId) : null,
+      chapterId,
+      chapterNameSnapshot: chapter?.name || null,
+      studentId,
+      examId,
     };
     // Never trust client-provided IDs on create. The server owns primary keys.
     const log = await db.opportunityLog.create({ data });

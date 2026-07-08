@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { isMissingDatabaseObjectError } from '@/lib/route-helpers';
+import { ensureExamCourseLinksSchema } from '@/lib/exam-course-links';
 
 const EXAM_SCHEMA_STATEMENTS = [
   `ALTER TABLE "Exam" ADD COLUMN IF NOT EXISTS "noDiscount" BOOLEAN NOT NULL DEFAULT false`,
@@ -18,6 +19,7 @@ export async function ensureExamSchema(): Promise<void> {
       for (const statement of EXAM_SCHEMA_STATEMENTS) {
         await db.$executeRawUnsafe(statement);
       }
+      await ensureExamCourseLinksSchema();
     })().catch((error) => {
       ensureExamSchemaPromise = null;
       throw error;

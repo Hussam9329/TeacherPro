@@ -792,6 +792,7 @@ export function recalculateAcademicState(
         reason: `تلقائي: ${reason}`,
         date: exam.date || todayISO(),
         chapterId: activeChapter?.id || activeCourseChapter?.chapterId || "",
+        chapterNameSnapshot: activeChapter?.name || "",
       });
     };
 

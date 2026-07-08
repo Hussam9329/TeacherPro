@@ -146,6 +146,7 @@ function mapOpportunityLog(log: {
   reason: string | null;
   date: Date;
   chapterId: string | null;
+  chapterNameSnapshot?: string | null;
 }): AcademicOpportunityLog {
   return {
     id: log.id,
@@ -156,6 +157,7 @@ function mapOpportunityLog(log: {
     reason: nullableText(log.reason),
     date: dateString(log.date),
     chapterId: nullableText(log.chapterId),
+    chapterNameSnapshot: nullableText(log.chapterNameSnapshot),
   };
 }
 
@@ -393,6 +395,7 @@ async function loadAcademicStateForStudents(
         reason: true,
         date: true,
         chapterId: true,
+        chapterNameSnapshot: true,
       },
       orderBy: { date: "asc" },
     }),
@@ -481,6 +484,7 @@ async function persistAcademicRecalculation(
         reason: log.reason || null,
         date: log.date ? new Date(log.date) : new Date(),
         chapterId: log.chapterId || null,
+        chapterNameSnapshot: log.chapterNameSnapshot || null,
       })),
       skipDuplicates: true,
     });

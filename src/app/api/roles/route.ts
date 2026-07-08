@@ -120,12 +120,16 @@ export async function PUT(req: NextRequest) {
     }
     if (data.permissions !== undefined) data.permissions = normalizePermissions(data.permissions);
     const role = await db.role.update({ where: { id }, data });
+    const syncedUsers = data.name !== undefined
+      ? await db.appUser.updateMany({ where: { roleId: role.id }, data: { role: role.name } })
+      : { count: 0 };
     await writeSecurityAudit(principal, 'تعديل دور', {
       roleId: role.id,
       before: roleBeforeUpdate,
       after: role,
+      syncedUsers: syncedUsers.count,
     });
-    return NextResponse.json({ role });
+    return NextResponse.json({ role, syncedUsers: syncedUsers.count });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث الدور حالياً.');
   }
@@ -141,7 +145,12 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد الدور المطلوب');
     const role = await db.role.findUnique({ where: { id } });
-    if (role?.isDefault) return validationError('لا يمكن حذف دور افتراضي', 403);
+    if (!role) return validationError('الدور غير موجود', 404);
+    if (role.isDefault) return validationError('لا يمكن حذف دور افتراضي', 403);
+    const assignedUsers = await db.appUser.count({ where: { roleId: id } });
+    if (assignedUsers > 0) {
+      return validationError(`لا يمكن حذف هذا الدور لأنه مستخدم من ${assignedUsers} حساب/حسابات. انقل المستخدمين إلى دور آخر أولاً.`, 409);
+    }
     const securityError = validateRoleSecurity(principal, { id }, role || undefined);
     if (securityError) return securityError;
     await db.role.delete({ where: { id } });
