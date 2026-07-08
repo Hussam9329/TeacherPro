@@ -51,6 +51,19 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    // تأكد من وجود الأعمدة/الجداول الجديدة (chapterNameSnapshot, ExamCourse)
+    // قبل الاستعلام. هذا self-healing يمنع خطأ 500 عند عدم تشغيل migration.
+    await db.$executeRawUnsafe(`ALTER TABLE "OpportunityLog" ADD COLUMN IF NOT EXISTS "chapterNameSnapshot" TEXT`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "OpportunityLog_chapterId_idx" ON "OpportunityLog"("chapterId")`);
+    await db.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "ExamCourse" (
+      "id" TEXT NOT NULL,
+      "examId" TEXT NOT NULL,
+      "courseId" TEXT NOT NULL,
+      CONSTRAINT "ExamCourse_pkey" PRIMARY KEY ("id")
+    )`);
+    await db.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ExamCourse_examId_courseId_key" ON "ExamCourse"("examId", "courseId")`);
+    await db.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ExamCourse_courseId_idx" ON "ExamCourse"("courseId")`);
+
     const { parsePagination } = await import('@/lib/pagination');
     const { page, limit, skip } = parsePagination(req);
     const [opportunityLogs, totalCount] = await Promise.all([
