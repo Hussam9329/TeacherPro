@@ -9,6 +9,7 @@ import { normalizeListFilter } from "@/lib/all-filter";
 import { withFollowupTables } from "@/lib/followup-schema";
 import {
   classifyGradeAcademicImpact,
+  type GradeClassificationKind,
   gradeKindForCalls,
   parseCourseIds,
 } from "@/lib/grade-classification";
@@ -175,15 +176,39 @@ function toClientExam(exam: DbExamLite) {
   };
 }
 
+function hasAbsentStatus(grade: Pick<DbGradeLite, "status"> | undefined): boolean {
+  return grade?.status === "غائب";
+}
+
+function isDeductedImpact(kind: GradeClassificationKind): boolean {
+  return (
+    kind === "absent-deducted" ||
+    kind === "absent-dismissal" ||
+    kind === "discounted" ||
+    kind === "dismissal" ||
+    kind === "cheating"
+  );
+}
+
+function classifyCallImpact(
+  grade: DbGradeLite | undefined,
+  exam: DbExamLite,
+  student?: DbStudentLite,
+  leaves: DbLeaveLite[] = [],
+): GradeClassificationKind {
+  return classifyGradeAcademicImpact(grade, exam, { student, leaves });
+}
+
 function callKindForGrade(
   grade: DbGradeLite | undefined,
   exam: DbExamLite,
   student?: DbStudentLite,
   leaves: DbLeaveLite[] = [],
 ): CallKind {
-  return gradeKindForCalls(
-    classifyGradeAcademicImpact(grade, exam, { student, leaves }),
-  );
+  const impactKind = classifyCallImpact(grade, exam, student, leaves);
+  // الغياب يبقى غياباً في فلاتر المكالمات حتى لو كان محمياً من الخصم؛ الـ Badges تشرح سبب الخصم/الحماية.
+  if (hasAbsentStatus(grade)) return "absent";
+  return gradeKindForCalls(impactKind);
 }
 
 function callLabel(kind: CallKind): string {
@@ -212,13 +237,120 @@ function callReason(kind: CallKind, grade: DbGradeLite, exam: DbExamLite): strin
   return scoreText;
 }
 
+type CallBadgeTone = "deducted" | "warning" | "safe" | "success" | "neutral";
+type CallBadgeInfo = { label: string; tone: CallBadgeTone; detail?: string };
+
+function callBadgesForGrade(args: {
+  grade: DbGradeLite;
+  exam: DbExamLite;
+  impactKind: GradeClassificationKind;
+}): CallBadgeInfo[] {
+  const { grade, exam, impactKind } = args;
+  if (hasAbsentStatus(grade)) {
+    if (impactKind === "absent-dismissal") {
+      return [
+        {
+          label: "غائب وتم الخصم/الفصل",
+          tone: "deducted",
+          detail: "غياب عن امتحان فاينل أو امتحان يؤدي إلى فصل حسب قواعد الامتحان.",
+        },
+      ];
+    }
+    if (impactKind === "absent-deducted") {
+      return [
+        {
+          label: "غائب وتم الخصم",
+          tone: "deducted",
+          detail: "الطالب غائب وهذا الامتحان يدخل في الخصم الأكاديمي.",
+        },
+      ];
+    }
+    if (impactKind === "grace-period" || impactKind === "before-registration") {
+      return [
+        {
+          label: "غائب بدون خصم: فترة سماح",
+          tone: "safe",
+          detail: "الطالب داخل فترة السماح أو الامتحان قبل تاريخ تسجيله.",
+        },
+      ];
+    }
+    if (impactKind === "excused") {
+      return [
+        {
+          label: "غائب بدون خصم: إجازة",
+          tone: "safe",
+          detail: "توجد إجازة أو عذر معتمد يغطي تاريخ هذا الامتحان.",
+        },
+      ];
+    }
+    if (impactKind === "no-discount-protected" || exam.noDiscount) {
+      return [
+        {
+          label: "غائب بدون خصم: الامتحان بدون خصم",
+          tone: "safe",
+          detail: "إعدادات الامتحان تمنع خصم الفرص لهذا الامتحان.",
+        },
+      ];
+    }
+    return [
+      {
+        label: "غائب يحتاج مراجعة أثر الخصم",
+        tone: "warning",
+        detail: "حالة الغياب واضحة، لكن أثر الخصم غير محسوم من قواعد التصنيف.",
+      },
+    ];
+  }
+
+  if (isDeductedImpact(impactKind)) {
+    return [
+      {
+        label: impactKind === "cheating" ? "مخصوم بسبب الغش" : "مخصوم بسبب الدرجة",
+        tone: "deducted",
+        detail: "هذه الدرجة تدخل ضمن حالات الخصم أو الفصل الأكاديمي.",
+      },
+    ];
+  }
+  if (impactKind === "academic-accounting" || impactKind === "failed") {
+    return [
+      {
+        label: "راسب غير مخصوم",
+        tone: "warning",
+        detail: "الطالب راسب أو ضمن المحاسبة لكنه لم يفقد فرصة بسبب هذه الدرجة.",
+      },
+    ];
+  }
+  if (impactKind === "passed" || impactKind === "full-mark") {
+    return [
+      {
+        label: impactKind === "full-mark" ? "درجة كاملة" : "ناجح",
+        tone: "success",
+      },
+    ];
+  }
+  if (impactKind === "excused" || impactKind === "grace-period" || impactKind === "before-registration" || impactKind === "no-discount-protected") {
+    return [
+      {
+        label: "محمي من الخصم",
+        tone: "safe",
+      },
+    ];
+  }
+  return [];
+}
+
 function gradeMatchesStatusFilter(
   filter: CallStatusFilter,
   kind: CallKind,
+  impactKind: GradeClassificationKind,
+  grade?: DbGradeLite,
 ): boolean {
-  if (filter === "all") return !NON_DISPLAY_CALL_KINDS.has(kind);
+  if (filter === "all") return hasAbsentStatus(grade) || !NON_DISPLAY_CALL_KINDS.has(kind);
+  if (filter === "absent") return hasAbsentStatus(grade);
+  if (filter === "discounted") return isDeductedImpact(impactKind);
   if (filter === "passed") return kind === "passed" || kind === "full";
-  if (filter === "failed") return kind === "failed" || kind === "academic-accounting";
+  if (filter === "failed") {
+    return !hasAbsentStatus(grade) && !isDeductedImpact(impactKind) && (kind === "failed" || kind === "academic-accounting");
+  }
   return kind === filter;
 }
 
@@ -281,15 +413,18 @@ function buildGradeItem(args: {
   leaves: DbLeaveLite[];
 }) {
   const { grade, exam, student, leaves } = args;
-  const kind = callKindForGrade(grade, exam, student, leaves);
+  const impactKind = classifyCallImpact(grade, exam, student, leaves);
+  const kind = hasAbsentStatus(grade) ? "absent" : gradeKindForCalls(impactKind);
   return {
     id: `grade:${grade.id}`,
     callKey: `grade:${grade.id}`,
     exam: toClientExam(exam),
     grade,
     category: kind,
+    impactKind,
     label: callLabel(kind),
     reason: callReason(kind, grade, exam),
+    badges: callBadgesForGrade({ grade, exam, impactKind }),
     // آخر امتحانين يجب أن يكونا حسب تاريخ الامتحان نفسه، لا حسب وقت تعديل الدرجة.
     sortTime: new Date(exam.date).getTime() || 0,
   };
@@ -454,8 +589,9 @@ export async function GET(req: NextRequest) {
       const student = grade.student as DbStudentLite;
       if (!student || student.status === "مؤرشف") return [];
       const leaves = leavesForExam(selectedLeavesByStudentId, student.id, exam);
-      const kind = callKindForGrade(grade, exam, student, leaves);
-      if (!gradeMatchesStatusFilter(statusFilter, kind)) return [];
+      const impactKind = classifyCallImpact(grade, exam, student, leaves);
+      const kind = hasAbsentStatus(grade) ? "absent" : gradeKindForCalls(impactKind);
+      if (!gradeMatchesStatusFilter(statusFilter, kind, impactKind, grade)) return [];
       const values = searchableValues({ student, grade, exam, kind });
       if (generalSearch && !includesSearch(generalSearch, values)) return [];
       if (filterSearch && !includesSearch(filterSearch, values)) return [];
