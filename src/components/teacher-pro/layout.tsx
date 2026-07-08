@@ -144,11 +144,130 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   "admin-log-reset": ["logs", "opportunity-logs", "opportunities", "dashboard"],
 };
 
-function detailMatchesSection(detail: Pick<TeacherProDataChangedDetail, "scopes"> | undefined, section: SectionId): boolean {
+function detailMatchesSection(
+  detail: Pick<TeacherProDataChangedDetail, "scopes"> | undefined,
+  section: SectionId,
+): boolean {
   if (!detail?.scopes || detail.scopes.length === 0) return true;
   if (detail.scopes.includes("all")) return true;
   const sectionScopes = SECTION_SYNC_SCOPES[section] || [];
   return detail.scopes.some((scope) => sectionScopes.includes(scope));
+}
+
+type SyncVersionSnapshot = {
+  version: string;
+  counts: Record<string, number>;
+  maxDates: Record<string, string>;
+};
+
+const SYNC_VERSION_SCOPE_MAP: Record<string, string[]> = {
+  courses: ["courses", "students", "exams", "dashboard"],
+  chapters: ["chapters", "courses", "students", "opportunities", "dashboard"],
+  courseChapters: [
+    "chapters",
+    "courses",
+    "students",
+    "opportunities",
+    "dashboard",
+  ],
+  students: [
+    "students",
+    "grades",
+    "opportunities",
+    "dismissed",
+    "follow-up",
+    "dashboard",
+  ],
+  exams: [
+    "exams",
+    "grades",
+    "students",
+    "correction",
+    "grade-entry-notes",
+    "dashboard",
+  ],
+  grades: ["grades", "students", "opportunities", "dashboard"],
+  opportunityLogs: ["opportunities", "opportunity-logs", "students", "dashboard"],
+  studentLeaves: ["follow-up", "students", "grades", "opportunities", "dashboard"],
+  studentCalls: ["follow-up", "students", "dashboard"],
+  studentNotes: ["follow-up", "students", "opportunities", "dashboard"],
+  correctionSheets: ["correction", "students", "exams", "grades", "dashboard"],
+  telegramSubmissions: ["correction", "students", "exams", "grades", "dashboard"],
+  users: ["accounts"],
+  roles: ["accounts"],
+  auditLogs: ["logs"],
+  missingNotes: ["grade-entry-notes", "grades", "exams"],
+};
+
+function normalizeSyncVersionSnapshot(result: unknown): SyncVersionSnapshot | null {
+  const data = result as {
+    version?: unknown;
+    counts?: unknown;
+    maxDates?: unknown;
+  } | null;
+  const version = typeof data?.version === "string" ? data.version : "";
+  if (!version) return null;
+
+  const countsInput =
+    data?.counts && typeof data.counts === "object"
+      ? (data.counts as Record<string, unknown>)
+      : {};
+  const maxDatesInput =
+    data?.maxDates && typeof data.maxDates === "object"
+      ? (data.maxDates as Record<string, unknown>)
+      : {};
+
+  const counts: Record<string, number> = {};
+  const maxDates: Record<string, string> = {};
+
+  Object.entries(countsInput).forEach(([key, value]) => {
+    const numberValue = Number(value);
+    counts[key] = Number.isFinite(numberValue) ? numberValue : 0;
+  });
+  Object.entries(maxDatesInput).forEach(([key, value]) => {
+    maxDates[key] = value ? String(value) : "";
+  });
+
+  return { version, counts, maxDates };
+}
+
+function inferChangedSyncScopes(
+  previous: SyncVersionSnapshot | null,
+  next: SyncVersionSnapshot,
+): string[] {
+  if (!previous || previous.version === next.version) return [];
+  const scopes = new Set<string>();
+
+  const addScopesForKey = (key: string) => {
+    const mapped = SYNC_VERSION_SCOPE_MAP[key];
+    if (!mapped) {
+      scopes.add("all");
+      return;
+    }
+    mapped.forEach((scope) => scopes.add(scope));
+  };
+
+  const countKeys = new Set([
+    ...Object.keys(previous.counts),
+    ...Object.keys(next.counts),
+  ]);
+  countKeys.forEach((key) => {
+    if ((previous.counts[key] || 0) !== (next.counts[key] || 0)) {
+      addScopesForKey(key);
+    }
+  });
+
+  const maxDateKeys = new Set([
+    ...Object.keys(previous.maxDates),
+    ...Object.keys(next.maxDates),
+  ]);
+  maxDateKeys.forEach((key) => {
+    if ((previous.maxDates[key] || "") !== (next.maxDates[key] || "")) {
+      addScopesForKey(key);
+    }
+  });
+
+  return scopes.size > 0 ? Array.from(scopes) : ["all"];
 }
 
 function sectionHref(section: SectionId) {
@@ -490,24 +609,53 @@ export function TeacherProLayout() {
 
   // أي تعديل ناجح في أي مكان يطلق إشارة sync عامة.
   // نعيد تحميل القسم الحالي فقط حتى تبقى الواجهة فورية بدون تحميل كل الجداول الثقيلة.
-  const syncRefreshTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const lastServerSyncVersionRef = useRef<string>("");
+  const syncRefreshTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(
+    null,
+  );
+  const mainScrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollIdleTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(
+    null,
+  );
+  const isUserScrollingRef = useRef(false);
+  const lastServerSyncSnapshotRef = useRef<SyncVersionSnapshot | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const refreshCurrentSection = (detail?: TeacherProDataChangedDetail | { source?: string; scopes?: string[] }) => {
+    const refreshCurrentSection = (
+      detail?: TeacherProDataChangedDetail | {
+        source?: string;
+        scopes?: string[];
+      },
+    ) => {
       if (!detailMatchesSection(detail, currentSection)) return;
+
+      // لا نعيد تحميل القسم العام لنفس التاب بعد كل تعديل محلي: الصفحة نفسها
+      // أو الـ store يحدثان الحالة فوراً. إعادة التحميل هنا كانت تتزامن مع
+      // useTeacherProSyncKey داخل الصفحة وتسبب refetch مزدوج ورجفة أثناء السكرول.
+      if (detail?.source === "local-mutation") return;
+
       lazyLoadedSectionsRef.current.delete(currentSection);
-      if (syncRefreshTimerRef.current) window.clearTimeout(syncRefreshTimerRef.current);
+      if (syncRefreshTimerRef.current) {
+        window.clearTimeout(syncRefreshTimerRef.current);
+      }
+      const refreshDelay = isUserScrollingRef.current ? 420 : 160;
       syncRefreshTimerRef.current = window.setTimeout(() => {
+        if (isUserScrollingRef.current) {
+          refreshCurrentSection(detail);
+          return;
+        }
         void loadSectionDataFromServer(currentSection);
-        const cameFromAnotherContext = detail?.source && detail.source !== "local-mutation";
-        const touchesCore = !detail?.scopes || detail.scopes.includes("all") || detail.scopes.includes("core");
+        const cameFromAnotherContext =
+          detail?.source && detail.source !== "local-mutation";
+        const touchesCore =
+          !detail?.scopes ||
+          detail.scopes.includes("all") ||
+          detail.scopes.includes("core");
         if (cameFromAnotherContext && touchesCore) {
           void loadFromServer();
         }
-      }, 120) as unknown as ReturnType<typeof window.setTimeout>;
+      }, refreshDelay) as unknown as ReturnType<typeof window.setTimeout>;
     };
 
     const unsubscribe = subscribeTeacherProDataChanged(refreshCurrentSection);
@@ -516,13 +664,43 @@ export function TeacherProLayout() {
         source: "manual",
         scopes: ["students", "opportunities", "dashboard"],
       });
-    window.addEventListener("teacherpro:students-updated", handleLegacyStudentsUpdated);
+    window.addEventListener(
+      "teacherpro:students-updated",
+      handleLegacyStudentsUpdated,
+    );
     return () => {
       unsubscribe();
-      window.removeEventListener("teacherpro:students-updated", handleLegacyStudentsUpdated);
-      if (syncRefreshTimerRef.current) window.clearTimeout(syncRefreshTimerRef.current);
+      window.removeEventListener(
+        "teacherpro:students-updated",
+        handleLegacyStudentsUpdated,
+      );
+      if (syncRefreshTimerRef.current) {
+        window.clearTimeout(syncRefreshTimerRef.current);
+      }
     };
   }, [isAuthenticated, currentSection, loadSectionDataFromServer, loadFromServer]);
+
+  useEffect(() => {
+    const scroller = mainScrollRef.current;
+    if (!scroller) return;
+    const onScroll = () => {
+      isUserScrollingRef.current = true;
+      if (scrollIdleTimerRef.current) {
+        window.clearTimeout(scrollIdleTimerRef.current);
+      }
+      scrollIdleTimerRef.current = window.setTimeout(() => {
+        isUserScrollingRef.current = false;
+      }, 180) as unknown as ReturnType<typeof window.setTimeout>;
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      if (scrollIdleTimerRef.current) {
+        window.clearTimeout(scrollIdleTimerRef.current);
+      }
+      isUserScrollingRef.current = false;
+    };
+  }, []);
 
   // كشف تغييرات التبويبات الأخرى أو مستخدم آخر بفحص خفيف جداً للإصدار.
   // لا يحمل الطلاب/الدرجات؛ فقط بصمة counts وآخر timestamps، ثم يطلق sync عند الاختلاف.
@@ -537,19 +715,24 @@ export function TeacherProLayout() {
       inFlight = true;
       try {
         const result = await syncVersionApi.get();
-        const version = result?.version || "";
-        if (!version) return;
-        if (!lastServerSyncVersionRef.current) {
-          lastServerSyncVersionRef.current = version;
+        const snapshot = normalizeSyncVersionSnapshot(result);
+        if (!snapshot) return;
+        const previousSnapshot = lastServerSyncSnapshotRef.current;
+        if (!previousSnapshot) {
+          lastServerSyncSnapshotRef.current = snapshot;
           return;
         }
-        if (version !== lastServerSyncVersionRef.current) {
-          lastServerSyncVersionRef.current = version;
+        if (snapshot.version !== previousSnapshot.version) {
+          const changedScopes = inferChangedSyncScopes(
+            previousSnapshot,
+            snapshot,
+          );
+          lastServerSyncSnapshotRef.current = snapshot;
           emitTeacherProDataChanged({
             source: "server-version",
             reason: "تغيير جديد في قاعدة البيانات",
-            scopes: "all",
-            version,
+            scopes: changedScopes,
+            version: snapshot.version,
           });
         }
       } catch {
@@ -1055,7 +1238,10 @@ export function TeacherProLayout() {
           </div>
         )}
 
-        <div className="app-scrollbar flex-1 overflow-y-auto overscroll-contain p-3 md:p-6 xl:p-8">
+        <div
+          ref={mainScrollRef}
+          className="app-scrollbar flex-1 overflow-y-auto overscroll-contain p-3 md:p-6 xl:p-8"
+        >
           <div className="content-container space-y-4 md:space-y-6" data-teacherpro-active-content="true" data-teacherpro-section={currentSection}>
             {dbLoading && <LoadingState />}
             {isAdmin || canAccess(currentSection) ? (

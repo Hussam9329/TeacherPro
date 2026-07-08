@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import {
   subscribeTeacherProDataChanged,
   type TeacherProDataChangedDetail,
@@ -25,15 +25,32 @@ export function useTeacherProSyncKey(scopes?: string | string[]): number {
   }, [Array.isArray(scopes) ? scopes.join("|") : scopes]);
 
   const [key, setKey] = useState(0);
+  const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
-  useEffect(
-    () =>
-      subscribeTeacherProDataChanged((detail) => {
-        if (!matchesScope(detail, normalizedScopes)) return;
-        setKey((value) => value + 1);
-      }),
-    [normalizedScopes],
-  );
+  useEffect(() => {
+    const flush = () => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        startTransition(() => {
+          setKey((value) => value + 1);
+        });
+      }, 120) as unknown as ReturnType<typeof window.setTimeout>;
+    };
+
+    const unsubscribe = subscribeTeacherProDataChanged((detail) => {
+      if (!matchesScope(detail, normalizedScopes)) return;
+      flush();
+    });
+
+    return () => {
+      unsubscribe();
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [normalizedScopes]);
 
   return key;
 }

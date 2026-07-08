@@ -489,10 +489,15 @@ button[data-slot="button"][class*="text-destructive"] svg {
 }
 
 
-/* عزل الصفوف الثقيلة حتى لا يعيد المتصفح قياس كل القائمة عند كل نقرة أو بحث */
+/*
+  صفوف إدخال الدرجات ارتفاعها يتغير حسب الحالة/الملاحظات/حجم الشاشة.
+  استخدام content-visibility:auto مع contain-intrinsic-size ثابت كان يسبب رجفة
+  أثناء السكرول لأن المتصفح يقدر ارتفاع الصف ثم يعيد قياسه عند ظهوره.
+  نخلي العزل خفيف بدون إخفاء المحتوى حتى يبقى ارتفاع القائمة ثابتاً.
+*/
 .teacherpro-heavy-row {
-  content-visibility: auto;
-  contain-intrinsic-size: 92px;
+  content-visibility: visible;
+  contain: layout paint style;
 }
 
 /* ─── تحسينات الهاتف ─────────────────────────────────────────────────── */
@@ -587,7 +592,7 @@ button[data-slot="button"][class*="text-destructive"] svg {
 @media (max-width: 1024px) {
   .app-scrollbar {
     -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
+    scroll-behavior: auto;
   }
 
   /* الـ sidebar أسرع في الإغلاق */
