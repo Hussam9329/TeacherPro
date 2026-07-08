@@ -690,6 +690,50 @@ export interface CallCourseExamsResponse {
   source: "database";
 }
 
+export interface CourseOverviewRow {
+  id: string;
+  course: Record<string, unknown>;
+  counts: {
+    students: number;
+    activeStudents: number;
+    dismissedStudents: number;
+    archivedStudents: number;
+    exams: number;
+    activeExams: number;
+    inactiveExams: number;
+    courseChapters: number;
+    activeChapters: number;
+    archivedCourseChapters: number;
+  };
+  usage: {
+    programs: Record<string, number>;
+    studyTypes: Record<string, number>;
+    locations: Record<string, number>;
+  };
+  activeChapter: { id: string; name: string; opportunities: number } | null;
+  deleteSafety: {
+    canDelete: boolean;
+    blockers: string[];
+    recommendedAction: string;
+  };
+  configWarnings: string[];
+  examSamples?: string[];
+}
+
+export interface CourseOverviewResponse {
+  rows: CourseOverviewRow[];
+  total: number;
+  stats: {
+    total: number;
+    active: number;
+    inactive: number;
+    withStudents: number;
+    deletable: number;
+  };
+  source: "database";
+  generatedAt?: string;
+}
+
 export interface GradeListResponse {
   grades: Array<Record<string, unknown>>;
   totalCount: number;
@@ -846,6 +890,9 @@ export async function loadAllFromServer(): Promise<ServerData | null> {
 // ─── Course API ───────────────────────────────────────────────────────────────
 
 export const courseApi = {
+  list: () => apiGetAllPages<Pick<ServerData, "courses">>("courses", "courses"),
+  overview: (options: ApiGetOptions = {}) =>
+    apiGet<CourseOverviewResponse>("courses/overview", options),
   add: (course: Record<string, unknown>) => apiPost("courses", course),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("courses", { id, ...updates }),

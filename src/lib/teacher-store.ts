@@ -2815,6 +2815,22 @@ export const useTeacherStore = create<TeacherState>()(
         const nextState: Partial<TeacherState> = {};
 
         try {
+          if (section === "courses") {
+            const data = await courseApi.list();
+            if (data?.courses) {
+              const serverCourses = data.courses.map((c: Record<string, unknown>) => ({
+                ...c,
+                createdAt: c.createdAt ? String(c.createdAt).slice(0, 10) : todayISO(),
+                active: c.active !== undefined ? Boolean(c.active) : true,
+                availablePrograms: parseJsonArray<string>(c.availablePrograms),
+                availableStudyTypes: getAvailableStudyTypes(c),
+                studyTypesByProgram: getStudyTypesByProgram(c),
+                locationConfig: parseJsonRecord<CourseLocationConfig>(c.locationConfig, {}),
+              })) as Course[];
+              nextState.courses = mergeDefaultCourses(serverCourses);
+            }
+          }
+
           if (
             [
               "courses",

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Course } from "@/lib/teacher-store";
+import { courseApi, type CourseOverviewResponse } from "@/lib/api";
 import {
   COURSE_PROGRAMS, STUDY_TYPES, LOCATION_SCOPES, BAGHDAD_MODES,
   type CourseProgram, type StudyType, type LocationScope, type BaghdadMode,
@@ -26,6 +27,9 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { BookOpen, Settings, MapPin, GraduationCap, Monitor, Building } from "lucide-react";
 import { EmptyState } from "./ui-kit";
 import { formatAppDate } from "@/lib/format";
@@ -39,6 +43,13 @@ type CourseFormState = {
   studyTypesByProgram: StudyTypesByProgram;
   locationConfig: CourseLocationConfig;
 };
+
+type CourseOverviewRow = NonNullable<CourseOverviewResponse["rows"]>[number] & {
+  course: Course;
+};
+
+type CourseStatusFilter = "all" | "active" | "inactive";
+type CourseDeleteFilter = "all" | "deletable" | "blocked";
 
 function emptyCourseForm(): CourseFormState {
   return {
@@ -609,8 +620,81 @@ function CourseBuilderForm({
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
+function normalizeCourseFromApi(course: Record<string, unknown>): Course {
+  return {
+    id: String(course.id || ""),
+    name: String(course.name || ""),
+    createdAt: course.createdAt ? String(course.createdAt).slice(0, 10) : "",
+    active: course.active !== undefined ? Boolean(course.active) : true,
+    availablePrograms: getAvailablePrograms(course) as CourseProgram[],
+    availableStudyTypes: getAvailableStudyTypes(course) as StudyType[],
+    studyTypesByProgram: getStudyTypesByProgram(course),
+    locationConfig: normalizeCourseLocationConfig(
+      JSON.parse(JSON.stringify(getCourseLocationConfig(course))),
+      getAvailableStudyTypes(course) as StudyType[],
+    ),
+  };
+}
+
+function normalizeOverviewRows(rows: CourseOverviewResponse["rows"] = []): CourseOverviewRow[] {
+  return rows.map((row) => ({
+    ...row,
+    course: normalizeCourseFromApi(row.course),
+  })) as CourseOverviewRow[];
+}
+
+function courseFormToPayload(form: CourseFormState) {
+  return {
+    name: form.name.trim(),
+    active: true,
+    availablePrograms: form.availablePrograms,
+    availableStudyTypes: form.availableStudyTypes,
+    studyTypesByProgram: form.studyTypesByProgram,
+    locationConfig: normalizeCourseLocationConfig(
+      form.locationConfig,
+      form.availableStudyTypes,
+    ),
+  };
+}
+
+function courseToForm(course: Course): CourseFormState {
+  const studyTypes = getAvailableStudyTypes(course) as StudyType[];
+  return {
+    name: course.name,
+    availablePrograms: getAvailablePrograms(course) as CourseProgram[],
+    availableStudyTypes: studyTypes,
+    studyTypesByProgram: getStudyTypesByProgram(course),
+    locationConfig: normalizeCourseLocationConfig(
+      JSON.parse(JSON.stringify(getCourseLocationConfig(course))),
+      studyTypes,
+    ),
+  };
+}
+
+function topUsageItems(record: Record<string, number>, limit = 4): string[] {
+  return Object.entries(record || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([label, count]) => `${label}: ${count}`);
+}
+
+function courseDeleteBadge(row: CourseOverviewRow) {
+  return row.deleteSafety.canDelete ? "آمنة للحذف" : "الحذف محمي";
+}
+
 export function CoursesView() {
-  const { courses, addCourse, updateCourse, toggleCourse, deleteCourse } = useTeacherStore();
+  const { loadSectionDataFromServer } = useTeacherStore();
+  const syncKey = useTeacherProSyncKey(["courses", "chapters", "students", "exams"]);
+
+  const [rows, setRows] = useState<CourseOverviewRow[]>([]);
+  const [stats, setStats] = useState<CourseOverviewResponse["stats"] | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const debouncedSearchText = useDebouncedValue(searchText, 250);
+  const [statusFilter, setStatusFilter] = useState<CourseStatusFilter>("all");
+  const [deleteFilter, setDeleteFilter] = useState<CourseDeleteFilter>("all");
 
   // Create form
   const [createForm, setCreateForm] = useState<CourseFormState>(emptyCourseForm);
@@ -620,20 +704,77 @@ export function CoursesView() {
     open: boolean;
     courseId: string;
     form: CourseFormState;
-  }>({ open: false, courseId: "", form: emptyCourseForm() });
+    row: CourseOverviewRow | null;
+  }>({ open: false, courseId: "", form: emptyCourseForm(), row: null });
 
   // Delete dialog
-  const [deleteDialog, setDeleteDialog] = useState({
-    open: false,
-    id: "",
-    courseName: "",
-    confirmText: "",
-  });
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    id: string;
+    courseName: string;
+    confirmText: string;
+    row: CourseOverviewRow | null;
+  }>({ open: false, id: "", courseName: "", confirmText: "", row: null });
 
   // Action locks
   const { locked: isAddingCourse, runLocked: runAddCourseLocked } = useActionLock();
   const { locked: isSavingCourse, runLocked: runSaveCourseLocked } = useActionLock();
   const { locked: isDeletingCourse, runLocked: runDeleteCourseLocked } = useActionLock();
+  const { locked: isTogglingCourse, runLocked: runToggleCourseLocked } = useActionLock();
+
+  const refreshOverview = useCallback(async (signal?: AbortSignal) => {
+    setIsLoading(true);
+    setLoadError("");
+    const data = await courseApi.overview({ signal, quietAbort: true });
+    if (!data) {
+      if (!signal?.aborted) {
+        setLoadError("تعذر تحميل ملخص الدورات من قاعدة البيانات.");
+        setIsLoading(false);
+      }
+      return;
+    }
+    if (signal?.aborted) return;
+    setRows(normalizeOverviewRows(data.rows));
+    setStats(data.stats);
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void refreshOverview(controller.signal);
+    return () => controller.abort();
+  }, [refreshOverview, syncKey]);
+
+  const syncCoursesAfterMutation = useCallback(async (reason: string) => {
+    await refreshOverview();
+    void loadSectionDataFromServer("courses");
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason,
+      scopes: ["courses", "students", "exams", "dashboard"],
+    });
+  }, [loadSectionDataFromServer, refreshOverview]);
+
+  const filteredRows = useMemo(() => {
+    const q = debouncedSearchText.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (statusFilter === "active" && !row.course.active) return false;
+      if (statusFilter === "inactive" && row.course.active) return false;
+      if (deleteFilter === "deletable" && !row.deleteSafety.canDelete) return false;
+      if (deleteFilter === "blocked" && row.deleteSafety.canDelete) return false;
+      if (!q) return true;
+      const haystack = [
+        row.course.name,
+        ...row.course.availablePrograms,
+        ...row.course.availableStudyTypes,
+        buildLocationSummary(row.course),
+        row.activeChapter?.name || "",
+        ...row.deleteSafety.blockers,
+        ...row.configWarnings,
+      ].join(" ").toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [debouncedSearchText, deleteFilter, rows, statusFilter]);
 
   // ─── Create course handler ─────────────────────────────────────────────────
   const handleCreate = runAddCourseLocked(async () => {
@@ -642,32 +783,25 @@ export function CoursesView() {
       toast.error(validationMessage);
       return;
     }
-    addCourse({
-      name: createForm.name.trim(),
-      availablePrograms: createForm.availablePrograms,
-      availableStudyTypes: createForm.availableStudyTypes,
-      studyTypesByProgram: createForm.studyTypesByProgram,
-      locationConfig: normalizeCourseLocationConfig(createForm.locationConfig, createForm.availableStudyTypes),
-    });
+    const payload = courseFormToPayload(createForm);
+    const result = await courseApi.add(payload as unknown as Record<string, unknown>);
+    if (!result.ok) {
+      toast.error(result.error || "تعذر إضافة الدورة");
+      return;
+    }
     setCreateForm(emptyCourseForm());
-    toast.success("تمت إضافة الدورة");
+    setShowCreateForm(false);
+    toast.success("تمت إضافة الدورة من قاعدة البيانات");
+    await syncCoursesAfterMutation("إضافة دورة");
   });
 
   // ─── Edit handlers ─────────────────────────────────────────────────────────
-  const openEditDialog = (course: Course) => {
+  const openEditDialog = (row: CourseOverviewRow) => {
     setEditDialog({
       open: true,
-      courseId: course.id,
-      form: {
-        name: course.name,
-        availablePrograms: getAvailablePrograms(course),
-        availableStudyTypes: getAvailableStudyTypes(course),
-        studyTypesByProgram: getStudyTypesByProgram(course),
-        locationConfig: normalizeCourseLocationConfig(
-          JSON.parse(JSON.stringify(getCourseLocationConfig(course))),
-          getAvailableStudyTypes(course),
-        ),
-      },
+      courseId: row.course.id,
+      form: courseToForm(row.course),
+      row,
     });
   };
 
@@ -677,165 +811,347 @@ export function CoursesView() {
       toast.error(validationMessage);
       return;
     }
-    const result = updateCourse(editDialog.courseId, {
-      name: editDialog.form.name.trim(),
-      availablePrograms: editDialog.form.availablePrograms,
-      availableStudyTypes: editDialog.form.availableStudyTypes,
-      studyTypesByProgram: editDialog.form.studyTypesByProgram,
-      locationConfig: normalizeCourseLocationConfig(editDialog.form.locationConfig, editDialog.form.availableStudyTypes),
-    });
+    const payload = courseFormToPayload(editDialog.form);
+    const result = await courseApi.update(
+      editDialog.courseId,
+      payload as unknown as Record<string, unknown>,
+    );
     if (!result.ok) {
-      toast.error(result.message);
+      toast.error(result.error || "تعذر تعديل الدورة");
       return;
     }
-    setEditDialog({ open: false, courseId: "", form: emptyCourseForm() });
-    toast.success("تم تعديل الدورة");
+    const impact = (result.data as { studentConfigImpact?: { affectedStudents?: number; message?: string } } | null)?.studentConfigImpact;
+    setEditDialog({ open: false, courseId: "", form: emptyCourseForm(), row: null });
+    toast.success(
+      impact?.message || "تم تعديل الدورة بعد تأكيد قاعدة البيانات",
+    );
+    await syncCoursesAfterMutation("تعديل دورة");
   });
 
   // ─── Delete handler ────────────────────────────────────────────────────────
-  const openDeleteDialog = (id: string, courseName: string) => {
-    setDeleteDialog({ open: true, id, courseName, confirmText: "" });
+  const openDeleteDialog = (row: CourseOverviewRow) => {
+    setDeleteDialog({
+      open: true,
+      id: row.course.id,
+      courseName: row.course.name,
+      confirmText: "",
+      row,
+    });
   };
 
   const handleDeleteConfirm = runDeleteCourseLocked(async () => {
-    const result = deleteCourse(deleteDialog.id);
-    if (result.ok) {
-      toast.success("تم حذف الدورة");
-    } else {
-      toast.error(result.message);
+    if (!deleteDialog.row?.deleteSafety.canDelete) {
+      toast.error("لا يمكن حذف هذه الدورة لأنها مرتبطة ببيانات. استخدم التعطيل بدل الحذف.");
+      return;
     }
-    setDeleteDialog({ open: false, id: "", courseName: "", confirmText: "" });
+    const result = await courseApi.remove(deleteDialog.id);
+    if (!result.ok) {
+      toast.error(result.error || "تعذر حذف الدورة");
+      return;
+    }
+    toast.success("تم حذف الدورة بعد تأكيد قاعدة البيانات");
+    setDeleteDialog({ open: false, id: "", courseName: "", confirmText: "", row: null });
+    await syncCoursesAfterMutation("حذف دورة");
   });
 
   // ─── Toggle handler ────────────────────────────────────────────────────────
-  const handleToggle = (course: Course) => {
-    toggleCourse(course.id);
-    toast.success(course.active ? "تم تعطيل الدورة" : "تم تفعيل الدورة");
+  const handleToggle = runToggleCourseLocked(async (row: CourseOverviewRow) => {
+    const nextActive = !row.course.active;
+    const result = await courseApi.update(row.course.id, { active: nextActive });
+    if (!result.ok) {
+      toast.error(result.error || "تعذر تغيير حالة الدورة");
+      return;
+    }
+    toast.success(nextActive ? "تم تفعيل الدورة للاختيارات الجديدة" : "تم إيقاف الدورة عن التسجيل والاختيارات الجديدة");
+    await syncCoursesAfterMutation(nextActive ? "تفعيل دورة" : "تعطيل دورة");
+  });
+
+  const renderStats = () => (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="rounded-2xl border bg-card/80 p-4 shadow-sm">
+        <p className="text-xs text-muted-foreground">إجمالي الدورات</p>
+        <p className="mt-1 text-2xl font-black">{stats?.total ?? rows.length}</p>
+      </div>
+      <div className="rounded-2xl border bg-emerald-500/5 p-4 shadow-sm">
+        <p className="text-xs text-muted-foreground">نشطة للتسجيل</p>
+        <p className="mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">{stats?.active ?? 0}</p>
+      </div>
+      <div className="rounded-2xl border bg-amber-500/5 p-4 shadow-sm">
+        <p className="text-xs text-muted-foreground">موقوفة عن الاختيارات</p>
+        <p className="mt-1 text-2xl font-black text-amber-600 dark:text-amber-400">{stats?.inactive ?? 0}</p>
+      </div>
+      <div className="rounded-2xl border bg-primary/5 p-4 shadow-sm">
+        <p className="text-xs text-muted-foreground">عليها طلاب</p>
+        <p className="mt-1 text-2xl font-black text-primary">{stats?.withStudents ?? 0}</p>
+      </div>
+      <div className="rounded-2xl border bg-muted/30 p-4 shadow-sm">
+        <p className="text-xs text-muted-foreground">آمنة للحذف</p>
+        <p className="mt-1 text-2xl font-black">{stats?.deletable ?? 0}</p>
+      </div>
+    </div>
+  );
+
+  const renderLoadingSkeleton = () => (
+    <div className="grid gap-4 xl:grid-cols-2">
+      {[0, 1, 2, 3].map((index) => (
+        <div key={index} className="rounded-3xl border bg-card/80 p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-3 border-b pb-4">
+            <div className="space-y-2">
+              <span className="block h-5 w-44 animate-pulse rounded-full bg-muted" />
+              <span className="block h-4 w-28 animate-pulse rounded-full bg-muted" />
+            </div>
+            <span className="h-7 w-24 animate-pulse rounded-full bg-muted" />
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <span className="h-20 animate-pulse rounded-2xl bg-muted" />
+            <span className="h-20 animate-pulse rounded-2xl bg-muted" />
+            <span className="h-20 animate-pulse rounded-2xl bg-muted" />
+          </div>
+          <span className="mt-4 block h-14 animate-pulse rounded-2xl bg-muted" />
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderCourseCard = (row: CourseOverviewRow) => {
+    const programs = getAvailablePrograms(row.course);
+    const studyTypesByProgram = getStudyTypesByProgram(row.course);
+    const locationSummary = buildLocationSummary(row.course);
+    const studyTypeUsage = topUsageItems(row.usage.studyTypes);
+    const locationUsage = topUsageItems(row.usage.locations);
+    return (
+      <div
+        key={row.id}
+        className="rounded-3xl border bg-card/90 p-5 shadow-sm transition-colors hover:border-primary/25"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <b className="text-lg leading-tight">{row.course.name}</b>
+              <Badge variant={row.course.active ? "default" : "secondary"}>
+                {row.course.active ? "نشطة للتسجيل" : "موقوفة عن الاختيارات"}
+              </Badge>
+              <Badge variant={row.deleteSafety.canDelete ? "outline" : "destructive"}>
+                {courseDeleteBadge(row)}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              أنشئت: {formatAppDate(row.course.createdAt)} — البيانات من قاعدة البيانات مباشرة
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" onClick={() => openEditDialog(row)}>
+              تعديل
+            </Button>
+            <Button
+              variant={row.course.active ? "outline" : "default"}
+              size="sm"
+              disabled={isTogglingCourse}
+              onClick={() => void handleToggle(row)}
+            >
+              {row.course.active ? "إيقاف الاختيارات" : "تفعيل الاختيارات"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">الطلاب</p>
+            <p className="text-xl font-black">{row.counts.students}</p>
+            <p className="text-[11px] text-muted-foreground">
+              نشط {row.counts.activeStudents} / مفصول {row.counts.dismissedStudents} / مؤرشف {row.counts.archivedStudents}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">الامتحانات</p>
+            <p className="text-xl font-black">{row.counts.exams}</p>
+            <p className="text-[11px] text-muted-foreground">
+              فعالة {row.counts.activeExams} / معطلة {row.counts.inactiveExams}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">الفصول</p>
+            <p className="text-xl font-black">{row.counts.courseChapters}</p>
+            <p className="text-[11px] text-muted-foreground">
+              النشط: {row.activeChapter ? `${row.activeChapter.name} (${row.activeChapter.opportunities} فرص)` : "لا يوجد"}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] text-muted-foreground">الحذف</p>
+            <p className="text-sm font-black">{row.deleteSafety.canDelete ? "مسموح" : "مرفوض"}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {row.deleteSafety.blockers.length ? row.deleteSafety.blockers.join("، ") : "لا توجد روابط مانعة"}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+          <div className="space-y-3 rounded-2xl border bg-muted/15 p-4">
+            <p className="text-xs font-bold text-muted-foreground">إعدادات التسجيل</p>
+            <div className="flex flex-wrap gap-1.5">
+              {programs.map((program) => (
+                <Badge key={program} variant="outline" className="whitespace-normal leading-5 text-start">
+                  <GraduationCap className="ml-1 size-3" />
+                  {program}: {(studyTypesByProgram[program] || []).join("، ") || "بدون نوع دراسة"}
+                </Badge>
+              ))}
+            </div>
+            {locationSummary ? (
+              <div className="flex items-start gap-2 rounded-xl border bg-background/70 p-3 text-xs text-muted-foreground">
+                <MapPin className="mt-0.5 size-4 shrink-0" />
+                <span className="leading-6">{locationSummary}</span>
+              </div>
+            ) : (
+              <p className="rounded-xl border border-dashed bg-background/70 p-3 text-xs text-muted-foreground">
+                لا توجد إعدادات مواقع مكتملة لهذه الدورة.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-3 rounded-2xl border bg-muted/15 p-4">
+            <p className="text-xs font-bold text-muted-foreground">الأثر الحالي</p>
+            {studyTypeUsage.length > 0 ? (
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p className="font-bold text-foreground">استخدام أنواع الدراسة</p>
+                {studyTypeUsage.map((item) => <p key={item}>{item}</p>)}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">لا يوجد طلاب مرتبطون بهذه الإعدادات حالياً.</p>
+            )}
+            {locationUsage.length > 0 ? (
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p className="font-bold text-foreground">أكثر المواقع استخداماً</p>
+                {locationUsage.map((item) => <p key={item}>{item}</p>)}
+              </div>
+            ) : null}
+            {row.configWarnings.length > 0 ? (
+              <div className="space-y-1 rounded-xl border border-amber-200/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100">
+                {row.configWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+          <p className="max-w-2xl text-xs leading-6 text-muted-foreground">
+            {row.deleteSafety.recommendedAction} التعطيل يوقف الدورة عن التسجيل والاختيارات الجديدة فقط ولا يغيّر بيانات الطلاب الحاليين.
+          </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => openDeleteDialog(row)}
+            className="text-destructive hover:text-destructive"
+          >
+            حذف نهائي
+          </Button>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-      {/* ─── Create Course Form ──────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BookOpen className="size-5 text-primary" />
-            إضافة دورة جديدة
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <CourseBuilderForm
-            form={createForm}
-            setForm={setCreateForm}
-            onSubmit={handleCreate}
-            submitLabel="حفظ الدورة"
-            submitDisabled={isAddingCourse}
-          />
-        </CardContent>
-      </Card>
-
-      {/* ─── Course List ─────────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>قائمة الدورات</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3 max-h-[700px] overflow-y-auto">
-            {courses.length === 0 ? (
-              <EmptyState
-                icon={BookOpen}
-                title="لا توجد دورات بعد"
-                description="أضف أول دورة من النموذج المجاور لتظهر هنا وتبدأ ربط الطلاب والمواقع."
-              />
-            ) : (
-              courses.map((course) => {
-                const programs = getAvailablePrograms(course);
-                const studyTypes = getAvailableStudyTypes(course);
-                const studyTypesByProgram = getStudyTypesByProgram(course);
-                const locationSummary = buildLocationSummary(course);
-
-                return (
-                  <div
-                    key={course.id}
-                    className="rounded-2xl border bg-card/80 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg space-y-3"
-                  >
-                    {/* Header row */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-sm leading-6">{course.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatAppDate(course.createdAt)}
-                        </p>
-                      </div>
-                      <Badge variant={course.active ? "default" : "secondary"}>
-                        {course.active ? "فعالة" : "معطلة"}
-                      </Badge>
-                    </div>
-
-                    {/* Program & Study Type badges */}
-                    {(programs.length > 0 || studyTypes.length > 0) && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {programs.map((p) => (
-                          <Badge key={p} variant="outline" className="text-xs">
-                            <GraduationCap className="size-3 ml-1" />
-                            {p}: {(studyTypesByProgram[p] || []).join("، ") || "بدون نوع دراسة"}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Location summary */}
-                    {locationSummary && (
-                      <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                        <MapPin className="size-3.5 mt-0.5 shrink-0" />
-                        <span className="leading-5">{locationSummary}</span>
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="space-y-2 pt-1">
-                      <div className="flex gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => openEditDialog(course)}
-                        >
-                          تعديل
-                        </Button>
-                        <Button
-                          variant={course.active ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => handleToggle(course)}
-                        >
-                          {course.active ? "تعطيل الدورة" : "تفعيل الدورة"}
-                        </Button>
-                      </div>
-                      <div className="border-t pt-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openDeleteDialog(course.id, course.name)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          حذف نهائي
-                        </Button>
-                        <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-                          استخدم التعطيل لإيقاف الدورة مؤقتاً. الحذف مخصص للدورات غير المرتبطة فقط.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
+    <div className="space-y-6">
+      <div className="rounded-3xl border bg-card/90 p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <BookOpen className="size-5 text-primary" />
+              <h2 className="text-xl font-black">إدارة الدورات</h2>
+            </div>
+            <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
+              هذه الصفحة تقرأ الدورات وأثرها من قاعدة البيانات مباشرة: الطلاب، الامتحانات، الفصول، وإمكانية الحذف. أي تعديل لا يظهر كنجاح إلا بعد موافقة الخادم.
+            </p>
           </div>
+          <Button onClick={() => setShowCreateForm((value) => !value)}>
+            {showCreateForm ? "إخفاء نموذج الإضافة" : "إضافة دورة جديدة"}
+          </Button>
+        </div>
+      </div>
+
+      {renderStats()}
+
+      {showCreateForm ? (
+        <Card className="rounded-3xl border-primary/20 shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="size-5 text-primary" />
+              إضافة دورة جديدة
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CourseBuilderForm
+              form={createForm}
+              setForm={setCreateForm}
+              onSubmit={handleCreate}
+              submitLabel="حفظ الدورة من قاعدة البيانات"
+              submitDisabled={isAddingCourse}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card className="rounded-3xl shadow-sm">
+        <CardHeader className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>قائمة الدورات</CardTitle>
+            <Badge variant="outline">{filteredRows.length} من {rows.length}</Badge>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+            <Input
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="بحث باسم الدورة، النوع، الموقع، الفصل أو سبب منع الحذف..."
+              autoComplete="off"
+            />
+            <div className="flex flex-wrap gap-2">
+              {([
+                ["all", "كل الحالات"],
+                ["active", "نشطة"],
+                ["inactive", "موقوفة"],
+              ] as [CourseStatusFilter, string][]).map(([value, label]) => (
+                <Button key={value} variant={statusFilter === value ? "default" : "outline"} size="sm" onClick={() => setStatusFilter(value)}>
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {([
+                ["all", "كل الحذف"],
+                ["deletable", "آمنة للحذف"],
+                ["blocked", "محميّة"],
+              ] as [CourseDeleteFilter, string][]).map(([value, label]) => (
+                <Button key={value} variant={deleteFilter === value ? "default" : "outline"} size="sm" onClick={() => setDeleteFilter(value)}>
+                  {label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadError ? (
+            <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive">
+              {loadError}
+            </div>
+          ) : isLoading ? (
+            renderLoadingSkeleton()
+          ) : filteredRows.length === 0 ? (
+            <EmptyState
+              icon={BookOpen}
+              title="لا توجد دورات مطابقة"
+              description="غيّر البحث أو الفلاتر، أو أضف دورة جديدة من زر الإضافة أعلاه."
+            />
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {filteredRows.map(renderCourseCard)}
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* ─── Edit Course Dialog ──────────────────────────────────────────── */}
       <Dialog
         open={editDialog.open}
-        onOpenChange={(o) => setEditDialog(prev => ({ ...prev, open: o }))}
+        onOpenChange={(open) => setEditDialog((prev) => ({ ...prev, open }))}
       >
         <DialogContent
           dir="rtl"
@@ -846,8 +1162,15 @@ export function CoursesView() {
               <div className="mx-auto w-full max-w-6xl space-y-2 pl-10">
                 <DialogTitle className="text-2xl font-black">تعديل الدورة</DialogTitle>
                 <DialogDescription>
-                  شاشة كاملة لتعديل إعدادات الدورة والمواقع وأنواع الدراسة بدون ازدحام. لا يمكنك إزالة خيارات يستخدمها طلاب مسجلون.
+                  الحفظ يتم من الخادم أولاً. إذا كان التعديل يحذف خياراً يستخدمه طلاب مسجلون، سيتم رفضه برسالة واضحة حتى لا يتغير تصنيف طالب قديم بدون قصد.
                 </DialogDescription>
+                {editDialog.row ? (
+                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
+                    <div className="rounded-xl border bg-muted/30 p-3">الطلاب: {editDialog.row.counts.students}</div>
+                    <div className="rounded-xl border bg-muted/30 p-3">الامتحانات: {editDialog.row.counts.exams}</div>
+                    <div className="rounded-xl border bg-muted/30 p-3">الفصل النشط: {editDialog.row.activeChapter?.name || "لا يوجد"}</div>
+                  </div>
+                ) : null}
               </div>
             </DialogHeader>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-8 md:py-6">
@@ -855,13 +1178,13 @@ export function CoursesView() {
                 <CourseBuilderForm
                   form={editDialog.form}
                   setForm={(action) =>
-                    setEditDialog(prev => ({
+                    setEditDialog((prev) => ({
                       ...prev,
                       form: typeof action === "function" ? action(prev.form) : action,
                     }))
                   }
                   onSubmit={handleEditSave}
-                  submitLabel="حفظ التعديلات"
+                  submitLabel="حفظ التعديلات بعد فحص الخادم"
                   submitDisabled={isSavingCourse}
                 />
               </div>
@@ -873,10 +1196,10 @@ export function CoursesView() {
       {/* ─── Delete Course AlertDialog ───────────────────────────────────── */}
       <AlertDialog
         open={deleteDialog.open}
-        onOpenChange={(o) => setDeleteDialog(prev => ({
+        onOpenChange={(open) => setDeleteDialog((prev) => ({
           ...prev,
-          open: o,
-          confirmText: o ? prev.confirmText : "",
+          open,
+          confirmText: open ? prev.confirmText : "",
         }))}
       >
         <AlertDialogContent dir="rtl">
@@ -885,19 +1208,28 @@ export function CoursesView() {
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-right leading-7">
                 <p>
-                  التعطيل هو الخيار الطبيعي إذا تريد إيقاف الدورة عن التسجيل بدون المساس بالبيانات المرتبطة.
+                  الحذف لا يعتمد على كاش الصفحة. يتم السماح به فقط إذا أكدت قاعدة البيانات أن الدورة غير مرتبطة بطلاب أو امتحانات.
                 </p>
-                <p className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-destructive">
-                  الحذف إجراء نهائي ومتاح فقط للدورات غير المرتبطة بطلاب أو امتحانات.
-                </p>
+                {deleteDialog.row ? (
+                  <div className={`rounded-xl border p-3 ${deleteDialog.row.deleteSafety.canDelete ? "bg-muted/40" : "border-destructive/25 bg-destructive/10 text-destructive"}`}>
+                    <p className="font-bold">{deleteDialog.row.deleteSafety.canDelete ? "هذه الدورة آمنة للحذف" : "لا يمكن حذف هذه الدورة حالياً"}</p>
+                    <p className="text-sm">
+                      {deleteDialog.row.deleteSafety.blockers.length
+                        ? deleteDialog.row.deleteSafety.blockers.join("، ")
+                        : "لا توجد روابط مانعة حسب آخر فحص من قاعدة البيانات."}
+                    </p>
+                    <p className="text-sm">{deleteDialog.row.deleteSafety.recommendedAction}</p>
+                  </div>
+                ) : null}
                 <div className="space-y-2">
                   <Label htmlFor="deleteCourseConfirm">اكتب اسم الدورة لتأكيد الحذف النهائي:</Label>
                   <Input
                     id="deleteCourseConfirm"
                     value={deleteDialog.confirmText}
-                    onChange={(event) => setDeleteDialog(prev => ({ ...prev, confirmText: event.target.value }))}
+                    onChange={(event) => setDeleteDialog((prev) => ({ ...prev, confirmText: event.target.value }))}
                     placeholder={deleteDialog.courseName}
                     autoComplete="off"
+                    disabled={!deleteDialog.row?.deleteSafety.canDelete}
                   />
                 </div>
               </div>
@@ -907,7 +1239,11 @@ export function CoursesView() {
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
-              disabled={isDeletingCourse || deleteDialog.confirmText.trim() !== deleteDialog.courseName.trim()}
+              disabled={
+                isDeletingCourse ||
+                !deleteDialog.row?.deleteSafety.canDelete ||
+                deleteDialog.confirmText.trim() !== deleteDialog.courseName.trim()
+              }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeletingCourse ? "جاري الحذف..." : "حذف نهائي"}
