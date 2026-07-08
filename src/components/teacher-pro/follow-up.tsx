@@ -1490,7 +1490,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const renderCallGradeChip = (row: CallStudentRow, item: CallGradeItem) => {
-    const isFocus = row.focusItem && item.id === row.focusItem.id;
     const call = callLogForGrade(row.student, item);
     const value =
       item.category === "absent"
@@ -1499,42 +1498,49 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return (
       <div
         key={item.id}
-        className={`rounded-2xl border px-3 py-2 text-xs ${isFocus ? "border-primary bg-primary/10" : "bg-muted/35"}`}
+        className="rounded-2xl border bg-muted/25 px-3 py-3 text-xs"
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <b>{item?.exam?.name || "—"}</b>
-          {isFocus ? <Badge>آخر/محور المتابعة</Badge> : null}
-          <Badge
-            variant={
-              item.category === "absent" ||
-              item.category === "discounted" ||
-              item.category === "failed" ||
-              item.category === "academic-accounting" ||
-              item.category === "cheating"
-                ? "destructive"
-                : "secondary"
-            }
-          >
-            {item?.label || "—"}
-          </Badge>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <b>{item?.exam?.name || "—"}</b>
+              <Badge
+                variant={
+                  item.category === "absent" ||
+                  item.category === "discounted" ||
+                  item.category === "failed" ||
+                  item.category === "academic-accounting" ||
+                  item.category === "cheating"
+                    ? "destructive"
+                    : "secondary"
+                }
+              >
+                {item?.label || "—"}
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {item ? formatAppDate(item.exam.date) : "—"}
+            </p>
+          </div>
+          <div className="rounded-xl bg-background px-3 py-2 text-center shadow-sm">
+            <p className="text-[10px] text-muted-foreground">الدرجة</p>
+            <p className="text-base font-black text-foreground">{value}</p>
+          </div>
         </div>
         {renderCallImpactBadges(item)}
-        <p className="mt-1 text-muted-foreground">
-          {item ? formatAppDate(item.exam.date) : "—"} - الدرجة:{" "}
-          <span className="font-bold text-foreground">{value}</span>
-        </p>
-        {item?.category !== "absent" ? (
-          <p className="mt-1 text-muted-foreground">{item?.reason || ""}</p>
+        {item?.category !== "absent" && item?.reason ? (
+          <p className="mt-2 line-clamp-3 text-muted-foreground">{item.reason}</p>
         ) : null}
         {call ? (
-          <p className="mt-1 text-muted-foreground">
-            التواصل: {callStatusForLog(call) || "بدون إجراء"}
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            إجراء التواصل: {callStatusForLog(call) || "بدون إجراء"}
           </p>
         ) : null}
         {item.grade.notes ? (
-          <p className="mt-1 rounded-xl border border-amber-200/70 bg-amber-50 px-2 py-1 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100">
-            {item.grade.notes}
-          </p>
+          <div className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50/90 px-2.5 py-2 text-[11px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100">
+            <span className="mb-1 block font-bold">ملاحظة الدرجة</span>
+            <span className="line-clamp-4">{item.grade.notes}</span>
+          </div>
         ) : null}
       </div>
     );
@@ -1593,6 +1599,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       ? callNoteDrafts[row.student.id]
       : callStudentNote?.notes || "";
     const displayedGradeItems = visibleCallGradeItems(row.items, displayMode);
+    const historyGradeItems = displayedGradeItems.filter(
+      (gradeItem) => gradeItem.id !== row.focusItem?.id,
+    );
     const focusValue = item
       ? item.category === "absent"
         ? "غائب"
@@ -1601,198 +1610,224 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return (
       <div
         key={row.id}
-        className="rounded-2xl border bg-card/80 p-4 text-sm shadow-sm"
+        className="rounded-3xl border bg-card/90 p-4 text-sm shadow-sm transition-colors hover:border-primary/25"
       >
-        {/* ====== القسم العلوي: معلومات الطالب ====== */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <b className="text-base">{row.student.name}</b>
-            <Badge variant="outline">{row.student.code}</Badge>
-            <Badge
-              variant={
-                row.student.status === "نشط" ? "secondary" : "destructive"
-              }
-            >
-              {row.student.status}
-            </Badge>
-            <span
-              className={`inline-flex items-center gap-1 rounded-lg px-3 py-1 text-sm font-black ${
-                Number(row.student.baseOpportunities || 0) <= 0
-                  ? "bg-muted text-muted-foreground"
-                  : Number(row.student.opportunities || 0) === 0
-                    ? "bg-red-500/15 text-red-600 dark:text-red-400"
-                    : Number(row.student.opportunities || 0) <= 1
-                      ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                      : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-              }`}
-            >
-              الفرص: {studentOpportunityText(row.student)}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => openProfile(row.student.id)}
-            >
-              ملف الطالب
-            </Button>
-          </div>
-        </div>
-
-        {/* ====== القسم الأوسط: 3 أعمدة ====== */}
-        <div className="mt-3 grid gap-4 lg:grid-cols-3">
-          {/* العمود 1: الامتحان المحور + التواصل */}
-          <div className="space-y-3">
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
-              <p className="mb-1 text-xs font-bold text-muted-foreground">
-                محور المتابعة
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <b>{item?.exam?.name || "—"}</b>
-                <Badge
-                  variant={
-                    item?.category === "absent" ||
-                    item?.category === "discounted" ||
-                    item?.category === "failed" ||
-                    item?.category === "academic-accounting" ||
-                    item?.category === "cheating"
-                      ? "destructive"
-                      : "secondary"
-                  }
-                >
-                  {item?.label || "—"}
-                </Badge>
-              </div>
-              {renderCallImpactBadges(item)}
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  {item ? formatAppDate(item.exam.date) : "—"}
-                </span>
-                <span
-                  className={`inline-flex items-center rounded-lg px-3 py-1 text-base font-black ${
-                    !item
-                      ? "bg-muted text-muted-foreground"
-                      : item.category === "absent"
-                        ? "bg-red-500/15 text-red-600 dark:text-red-400"
-                        : item.category === "discounted" || item.category === "failed"
-                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                          : item.category === "cheating"
-                            ? "bg-red-500/15 text-red-600 dark:text-red-400"
-                            : item.category === "passed" || item.category === "full"
-                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                              : "bg-primary/10 text-primary"
-                  }`}
-                >
-                  {focusValue}
-                </span>
-              </div>
-              {item?.category !== "absent" && item?.reason ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {item?.reason || ""}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                إجراء التواصل
-              </Label>
-              <Select
-                value={contactStatusSelectValue(contactStatus)}
-                disabled={!row.focusItem || Boolean(callSavingKeys[statusSavingKey])}
-                onValueChange={(value) =>
-                  void saveCallStatus(row, contactStatusFromSelectValue(value))
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <b className="text-lg leading-tight">{row.student.name}</b>
+              <Badge variant="outline">{row.student.code}</Badge>
+              <Badge
+                variant={
+                  row.student.status === "نشط" ? "secondary" : "destructive"
                 }
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {contactStatusOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div
-                className={`rounded-xl border px-3 py-2 text-xs font-bold ${contactStatusClasses(contactStatus)}`}
+                {row.student.status}
+              </Badge>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-black ${
+                  Number(row.student.baseOpportunities || 0) <= 0
+                    ? "bg-muted text-muted-foreground"
+                    : Number(row.student.opportunities || 0) === 0
+                      ? "bg-red-500/15 text-red-600 dark:text-red-400"
+                      : Number(row.student.opportunities || 0) <= 1
+                        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                        : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                }`}
               >
-                {callSavingKeys[statusSavingKey]
-                  ? "جاري الحفظ..."
-                  : contactStatus || "بدون إجراء"}
+                الفرص: {studentOpportunityText(row.student)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {row.items.length} امتحان/امتحانات مرتبطة بهذه الدورة
+              </span>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="rounded-full"
+            onClick={() => openProfile(row.student.id)}
+          >
+            ملف الطالب
+          </Button>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.15fr_0.95fr]">
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-muted-foreground">
+                    محور المتابعة
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <b className="text-base">{item?.exam?.name || "—"}</b>
+                    <Badge
+                      variant={
+                        item?.category === "absent" ||
+                        item?.category === "discounted" ||
+                        item?.category === "failed" ||
+                        item?.category === "academic-accounting" ||
+                        item?.category === "cheating"
+                          ? "destructive"
+                          : "secondary"
+                      }
+                    >
+                      {item?.label || "—"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {item ? formatAppDate(item.exam.date) : "—"}
+                  </p>
+                  {item?.category !== "absent" && item?.reason ? (
+                    <p className="max-w-2xl text-xs leading-6 text-muted-foreground">
+                      {item.reason}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="min-w-[132px] rounded-2xl border bg-background px-4 py-3 text-center shadow-sm">
+                  <p className="text-[11px] font-bold text-muted-foreground">
+                    الدرجة الحالية
+                  </p>
+                  <p
+                    className={`mt-1 text-3xl font-black tracking-tight ${
+                      !item
+                        ? "text-muted-foreground"
+                        : item.category === "absent"
+                          ? "text-red-600 dark:text-red-400"
+                          : item.category === "discounted" || item.category === "failed"
+                            ? "text-amber-600 dark:text-amber-400"
+                            : item.category === "cheating"
+                              ? "text-red-600 dark:text-red-400"
+                              : item.category === "passed" || item.category === "full"
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-primary"
+                    }`}
+                  >
+                    {focusValue}
+                  </p>
+                </div>
               </div>
-              {call?.completedAt ? (
-                <p className="text-xs text-muted-foreground">
-                  آخر تواصل: {formatAppDate(call.completedAt)}
+              {renderCallImpactBadges(item)}
+            </div>
+
+            <div className="rounded-2xl border bg-muted/20 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-bold text-muted-foreground">
+                    سجل الامتحانات
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    لعرض امتحانات الطالب بدون تكرار محور المتابعة أعلاه
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {(
+                    Object.keys(
+                      callGradeDisplayModeLabels,
+                    ) as CallGradeDisplayMode[]
+                  ).map((mode) => (
+                    <Button
+                      key={mode}
+                      type="button"
+                      size="sm"
+                      variant={displayMode === mode ? "default" : "outline"}
+                      className="h-8 rounded-full px-3 text-[11px]"
+                      onClick={() =>
+                        setCallGradeDisplayModes((current) => ({
+                          ...current,
+                          [row.student.id]: mode,
+                        }))
+                      }
+                    >
+                      {callGradeDisplayModeLabels[mode]}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {displayedGradeItems.length === 0 ? (
+                <p className="mt-3 rounded-xl border border-dashed bg-background/70 p-3 text-xs text-muted-foreground">
+                  لا توجد درجات محفوظة لهذا الطالب ضمن امتحانات هذه الدورة.
                 </p>
-              ) : null}
+              ) : historyGradeItems.length === 0 ? (
+                <p className="mt-3 rounded-xl border border-dashed bg-background/70 p-3 text-xs text-muted-foreground">
+                  لا توجد امتحانات إضافية لعرضها غير محور المتابعة الحالي.
+                </p>
+              ) : (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {historyGradeItems.map((gradeItem) =>
+                    renderCallGradeChip(row, gradeItem),
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* العمود 2: الدرجات */}
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-bold text-muted-foreground">
-                درجات الطالب ({row.items.length})
+          <div className="space-y-4">
+            <div className="rounded-2xl border bg-muted/15 p-4">
+              <p className="mb-3 text-xs font-bold text-muted-foreground">
+                التواصل والإجراء
               </p>
-              <div className="flex flex-wrap gap-1">
-                {(
-                  Object.keys(
-                    callGradeDisplayModeLabels,
-                  ) as CallGradeDisplayMode[]
-                ).map((mode) => (
-                  <Button
-                    key={mode}
-                    type="button"
-                    size="sm"
-                    variant={displayMode === mode ? "default" : "outline"}
-                    className="h-7 rounded-full px-2 text-[11px]"
-                    onClick={() =>
-                      setCallGradeDisplayModes((current) => ({
-                        ...current,
-                        [row.student.id]: mode,
-                      }))
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {renderPhoneLink("الطالب", row.student.phone)}
+                  {renderPhoneLink("ولي الأمر", row.student.parentPhone)}
+                  {renderTelegramLink(row.student.telegram)}
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">
+                    إجراء التواصل
+                  </Label>
+                  <Select
+                    value={contactStatusSelectValue(contactStatus)}
+                    disabled={!row.focusItem || Boolean(callSavingKeys[statusSavingKey])}
+                    onValueChange={(value) =>
+                      void saveCallStatus(row, contactStatusFromSelectValue(value))
                     }
                   >
-                    {callGradeDisplayModeLabels[mode]}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            {displayedGradeItems.length === 0 ? (
-              <p className="rounded-xl border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
-                لا توجد درجات محفوظة لهذا الطالب ضمن امتحانات هذه الدورة.
-              </p>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {displayedGradeItems.map((gradeItem) =>
-                  renderCallGradeChip(row, gradeItem),
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* العمود 3: التواصل + الملاحظات */}
-          <div className="space-y-3">
-            <div>
-              <p className="mb-1 text-xs font-bold text-muted-foreground">
-                أرقام التواصل
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {renderPhoneLink("الطالب", row.student.phone)}
-                {renderPhoneLink("ولي الأمر", row.student.parentPhone)}
-                {renderTelegramLink(row.student.telegram)}
+                    <SelectTrigger className="h-11 rounded-2xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {contactStatusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div
+                    className={`rounded-2xl border px-3 py-2 text-xs font-bold ${contactStatusClasses(contactStatus)}`}
+                  >
+                    {callSavingKeys[statusSavingKey]
+                      ? "جاري حفظ إجراء التواصل..."
+                      : contactStatus || "بدون إجراء"}
+                  </div>
+                  {call?.completedAt ? (
+                    <p className="text-xs text-muted-foreground">
+                      آخر تواصل: {formatAppDate(call.completedAt)}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">
-                ملاحظات المكالمات
-              </Label>
+            <div className="rounded-2xl border bg-muted/15 p-4">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <Label className="text-xs font-bold text-muted-foreground">
+                  ملاحظات المكالمات
+                </Label>
+                <span className="text-[11px] text-muted-foreground">
+                  ملاحظة ثابتة لهذا الطالب داخل تبويبة المكالمات
+                </span>
+              </div>
               <textarea
-                className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-h-28 w-full rounded-2xl border border-input bg-background px-3 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={noteValue}
                 onChange={(event) =>
                   setCallNoteDrafts((current) => ({
@@ -1801,9 +1836,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   }))
                 }
                 onBlur={(event) => void saveCallStudentNote(row, event.target.value)}
-                placeholder="ملاحظة ثابتة تظهر لهذا الطالب داخل المكالمات"
+                placeholder="دوّن ملاحظة مختصرة وواضحة تخص تواصل هذا الطالب أو ولي أمره"
               />
-              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>
                   {callSavingKeys[noteSavingKey]
                     ? "جاري حفظ الملاحظة..."
@@ -1815,7 +1850,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-7 rounded-full px-3 text-[11px]"
+                  className="h-8 rounded-full px-3 text-[11px]"
                   disabled={Boolean(callSavingKeys[noteSavingKey])}
                   onClick={() => void saveCallStudentNote(row, noteValue)}
                 >
