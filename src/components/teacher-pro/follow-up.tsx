@@ -1665,10 +1665,28 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </Badge>
               </div>
               {renderCallImpactBadges(item)}
-              <p className="mt-1 text-xs text-muted-foreground">
-                {item ? formatAppDate(item.exam.date) : "—"} - الدرجة:{" "}
-                <span className="font-bold text-foreground">{focusValue}</span>
-              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {item ? formatAppDate(item.exam.date) : "—"}
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-lg px-3 py-1 text-base font-black ${
+                    !item
+                      ? "bg-muted text-muted-foreground"
+                      : item.category === "absent"
+                        ? "bg-red-500/15 text-red-600 dark:text-red-400"
+                        : item.category === "discounted" || item.category === "failed"
+                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                          : item.category === "cheating"
+                            ? "bg-red-500/15 text-red-600 dark:text-red-400"
+                            : item.category === "passed" || item.category === "full"
+                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                              : "bg-primary/10 text-primary"
+                  }`}
+                >
+                  {focusValue}
+                </span>
+              </div>
               {item?.category !== "absent" && item?.reason ? (
                 <p className="mt-1 text-xs text-muted-foreground">
                   {item?.reason || ""}
