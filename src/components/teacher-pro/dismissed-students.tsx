@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type OpportunityLog, type Student } from "@/lib/teacher-store";
 import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { studentApi } from "@/lib/api";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ import {
 
 type ViewMode = "cards" | "table";
 type NotesFilter = "all" | "with-notes" | "without-notes";
+type PledgeFilter = "all" | "with-pledge" | "without-pledge";
 
 type DismissalDetail = {
   studentId: string;
@@ -94,6 +96,14 @@ function formatDismissalGrade(detail: DismissalDetail | null): string {
   return grade.status || "درجة غير محددة";
 }
 
+function serverActionData(result: { data?: unknown }) {
+  return (result.data || {}) as {
+    student?: Student;
+    opportunityLogs?: OpportunityLog[];
+    studentNotes?: unknown[];
+  };
+}
+
 export function DismissedStudentsView() {
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "dismissed", "dashboard"]);
   const {
@@ -104,68 +114,106 @@ export function DismissedStudentsView() {
     opportunityLogs,
     studentNotes,
     courseName,
-    reactivateStudent,
-    updateStudent,
     mergeStudentsCache,
   } = useTeacherStore();
+
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 180);
   const [filterCourseId, setFilterCourseId] = useState("");
   const [filterDismissalType, setFilterDismissalType] = useState("");
   const [filterNotes, setFilterNotes] = useState<NotesFilter>("all");
+  const [filterPledge, setFilterPledge] = useState<PledgeFilter>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [dismissalDetails, setDismissalDetails] = useState<Record<string, DismissalDetail>>({});
   const [dismissedServerStudents, setDismissedServerStudents] = useState<Student[]>([]);
   const [dismissedStudentsSearchLoading, setDismissedStudentsSearchLoading] = useState(false);
+  const [dismissalDetailsLoading, setDismissalDetailsLoading] = useState(false);
+  const [listError, setListError] = useState("");
+  const [detailsError, setDetailsError] = useState("");
+  const [savingNoteIds, setSavingNoteIds] = useState<Record<string, boolean>>({});
+  const [reactivatingIds, setReactivatingIds] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    let cancelled = false;
-    // استخدم بحث الخادم بدلاً من listAll. السبب: listAll يحمل كل المفصولين
-    // دفعة واحدة ويفلتر محلياً، مما يخفي نتائج معينة عند المفصولين الكثيرين
-    // ويبطئ الصفحة. بحث الخادم يدعم q + status + courseId بشكل كامل.
-    if (!dismissedStudentsSearchLoading) setDismissedStudentsSearchLoading(true);
+    const controller = new AbortController();
+    setDismissedStudentsSearchLoading(true);
+    setListError("");
     studentApi
-      .list({
-        status: "مفصول",
-        q: debouncedSearch || undefined,
-        courseId: filterCourseId || undefined,
-        pageSize: 100,
-      })
+      .list(
+        {
+          status: "مفصول",
+          q: debouncedSearch || undefined,
+          courseId: filterCourseId || undefined,
+          pageSize: 100,
+          page: 1,
+        },
+        { signal: controller.signal, quietAbort: true },
+      )
       .then((result) => {
-        if (cancelled) return;
-        const next = (result?.students || []) as unknown as Student[];
+        if (controller.signal.aborted) return;
+        if (!result) {
+          setDismissedServerStudents([]);
+          setListError("تعذر تحميل المفصولين من قاعدة البيانات. لا توجد إجراءات حساسة متاحة حتى يرجع الاتصال.");
+          return;
+        }
+        const next = (result.students || []) as unknown as Student[];
         setDismissedServerStudents(next);
         mergeStudentsCache(next);
       })
       .catch(() => {
-        if (!cancelled) setDismissedServerStudents([]);
+        if (!controller.signal.aborted) {
+          setDismissedServerStudents([]);
+          setListError("تعذر تحميل المفصولين من قاعدة البيانات. لا توجد إجراءات حساسة متاحة حتى يرجع الاتصال.");
+        }
       })
       .finally(() => {
-        if (!cancelled) setDismissedStudentsSearchLoading(false);
+        if (!controller.signal.aborted) setDismissedStudentsSearchLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [debouncedSearch, filterCourseId, mergeStudentsCache, syncKey]);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/dismissed-students/details", { credentials: "same-origin" })
+    const ids = dismissedServerStudents.map((student) => student.id).filter(Boolean);
+    if (ids.length === 0) {
+      setDismissalDetails({});
+      setDismissalDetailsLoading(false);
+      setDetailsError("");
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams({ ids: ids.join(",") });
+    setDismissalDetailsLoading(true);
+    setDetailsError("");
+
+    fetch(`/api/dismissed-students/details?${params.toString()}`, {
+      credentials: "same-origin",
+      signal: controller.signal,
+    })
       .then((response) => (response.ok ? response.json() : null))
       .then((payload: { details?: DismissalDetail[] } | null) => {
-        if (cancelled || !payload?.details) return;
+        if (controller.signal.aborted) return;
+        if (!payload?.details) {
+          setDismissalDetails({});
+          setDetailsError("تعذر تحميل تفاصيل الفصل من قاعدة البيانات.");
+          return;
+        }
         setDismissalDetails(
           Object.fromEntries(payload.details.map((detail) => [detail.studentId, detail])),
         );
       })
-      .catch(() => {
-        // عند فشل الاتصال نستخدم السياق المتاح محلياً بدون تعطيل الصفحة.
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        console.warn("[DismissedStudentsView] details load failed", error);
+        setDismissalDetails({});
+        setDetailsError("تعذر تحميل تفاصيل الفصل من قاعدة البيانات.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDismissalDetailsLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [syncKey]);
+
+    return () => controller.abort();
+  }, [dismissedServerStudents]);
 
   const dismissedTypes = useMemo(
     () =>
@@ -173,60 +221,11 @@ export function DismissedStudentsView() {
         new Set(
           dismissedServerStudents
             .filter((student) => student.status === "مفصول")
-            .map((student) => student.dismissalType || "مفصول"),
+            .map((student) => dismissalDetails[student.id]?.type || student.dismissalType || "مفصول"),
         ),
       ).filter(Boolean),
-    [dismissedServerStudents],
+    [dismissedServerStudents, dismissalDetails],
   );
-
-  const dismissedStudents = useMemo(() => {
-    // نعتمد على نتائج الخادم (dismissedServerStudents) لأنها تأتي مباشرةً
-    // من قاعدة البيانات وتدعم البحث الكامل بدون قيد على أول N طالب.
-    // الفلاتر المحلية المتبقية (dismissalType / notes) لا يمكن إجراؤها
-    // عبر الخادم لأنها ليست حقول منفصلة في جدول الطلاب، فنبقيها هنا.
-    return dismissedServerStudents
-      .filter((student) => student.status === "مفصول")
-      .filter((student) => {
-        const hasNotes = Boolean(String(student.dismissalNotes || "").trim());
-        if (filterCourseId && student.courseId !== filterCourseId) return false;
-        if (
-          filterDismissalType &&
-          (student.dismissalType || "مفصول") !== filterDismissalType
-        )
-          return false;
-        if (filterNotes === "with-notes" && !hasNotes) return false;
-        if (filterNotes === "without-notes" && hasNotes) return false;
-        // لا حاجة لإعادة فلترة debouncedSearch محلياً لأن الخادم قام بها
-        // عبر ?q=. هذا يقلل العمل المحلي ويضمن نتائج متطابقة.
-        return true;
-      })
-      .sort((a, b) => a.name.localeCompare(b.name, "ar"));
-  }, [
-    dismissedServerStudents,
-    filterCourseId,
-    filterDismissalType,
-    filterNotes,
-  ]);
-
-  // إحصائيات مباشرة من قائمة المفصولين المعروضة حالياً
-  const dismissedStats = useMemo(() => {
-    const total = dismissedStudents.length;
-    const temporary = dismissedStudents.filter(
-      (s) => (s.dismissalType || "") === "فصل مؤقت",
-    ).length;
-    const final = dismissedStudents.filter(
-      (s) => (s.dismissalType || "") === "فصل نهائي",
-    ).length;
-    const withNotes = dismissedStudents.filter(
-      (s) => Boolean(String(s.dismissalNotes || "").trim()),
-    ).length;
-    const withPledge = dismissedStudents.filter((s) =>
-      studentNotes.some(
-        (n) => n.studentId === s.id && n.kind === "تعهد ولي الأمر",
-      ),
-    ).length;
-    return { total, temporary, final, withNotes, withPledge };
-  }, [dismissedStudents, studentNotes]);
 
   const buildLocalDismissalDetail = (student: Student): DismissalDetail => {
     const type = student.dismissalType || "مفصول";
@@ -300,23 +299,115 @@ export function DismissedStudentsView() {
   const dismissalDetailForStudent = (student: Student) =>
     dismissalDetails[student.id] || buildLocalDismissalDetail(student);
 
-  const handleReactivate = (student: Student) => {
-    const detail = dismissalDetailForStudent(student);
-    if (!detail.hasPledge) {
+  const dismissedStudents = useMemo(() => {
+    return dismissedServerStudents
+      .filter((student) => student.status === "مفصول")
+      .filter((student) => {
+        const detail = dismissalDetails[student.id];
+        const hasNotes = Boolean(String(detail?.notes ?? student.dismissalNotes ?? "").trim());
+        const hasPledge = Boolean(detail?.hasPledge);
+        const type = detail?.type || student.dismissalType || "مفصول";
+
+        if (filterCourseId && student.courseId !== filterCourseId) return false;
+        if (filterDismissalType && type !== filterDismissalType) return false;
+        if (filterNotes === "with-notes" && !hasNotes) return false;
+        if (filterNotes === "without-notes" && hasNotes) return false;
+        if (filterPledge === "with-pledge" && !hasPledge) return false;
+        if (filterPledge === "without-pledge" && hasPledge) return false;
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+  }, [
+    dismissedServerStudents,
+    dismissalDetails,
+    filterCourseId,
+    filterDismissalType,
+    filterNotes,
+    filterPledge,
+  ]);
+
+  const dismissedStats = useMemo(() => {
+    const total = dismissedStudents.length;
+    const temporary = dismissedStudents.filter(
+      (s) => (dismissalDetails[s.id]?.type || s.dismissalType || "") === "فصل مؤقت",
+    ).length;
+    const final = dismissedStudents.filter(
+      (s) => (dismissalDetails[s.id]?.type || s.dismissalType || "") === "فصل نهائي",
+    ).length;
+    const withNotes = dismissedStudents.filter((s) =>
+      Boolean(String(dismissalDetails[s.id]?.notes ?? s.dismissalNotes ?? "").trim()),
+    ).length;
+    const withPledge = dismissedStudents.filter((s) => Boolean(dismissalDetails[s.id]?.hasPledge)).length;
+    return { total, temporary, final, withNotes, withPledge };
+  }, [dismissedStudents, dismissalDetails]);
+
+  const canRunSensitiveActions = !listError && !detailsError && !dismissedStudentsSearchLoading && !dismissalDetailsLoading;
+
+  const updateDismissedStudentLocally = (student: Student) => {
+    mergeStudentsCache([student]);
+    setDismissedServerStudents((current) =>
+      student.status === "مفصول"
+        ? current.map((item) => (item.id === student.id ? student : item))
+        : current.filter((item) => item.id !== student.id),
+    );
+  };
+
+  const handleReactivate = async (student: Student) => {
+    if (!canRunSensitiveActions) {
+      toast.error("انتظر تحميل المفصولين وتفاصيل الفصل من قاعدة البيانات قبل تنفيذ إعادة التفعيل.");
+      return;
+    }
+
+    const serverDetail = dismissalDetails[student.id];
+    if (!serverDetail) {
+      toast.error("تفاصيل الفصل غير محملة من قاعدة البيانات لهذا الطالب. حدّث الصفحة ثم حاول مرة أخرى.");
+      return;
+    }
+
+    if (!serverDetail.hasPledge) {
       const ok = window.confirm(
-        `لم يتم تسجيل تعهد لهذا الفصل.\n\nالطالب: ${student.name}\nنوع الفصل: ${detail.type || "مفصول"}\nالسبب: ${detail.reason || "لا يوجد سبب مسجل"}\n\nهل تريد إعادة التفعيل رغم عدم وجود تعهد؟`,
+        `لم يتم تسجيل تعهد لهذا الفصل.\n\nالطالب: ${student.name}\nنوع الفصل: ${serverDetail.type || "مفصول"}\nالسبب: ${serverDetail.reason || "لا يوجد سبب مسجل"}\n\nهل تريد إعادة التفعيل رغم عدم وجود تعهد؟`,
       );
       if (!ok) return;
-      toast.warning("تمت إعادة التفعيل بدون تعهد مسجل لهذا الفصل");
+      toast.warning("سيتم تنفيذ إعادة التفعيل بدون تعهد مسجل لهذا الفصل بعد موافقة الخادم.");
     }
-    reactivateStudent(student.id);
-    toast.success("تمت إعادة تفعيل الطالب");
+
+    setReactivatingIds((current) => ({ ...current, [student.id]: true }));
+    const result = await studentApi.statusAction({
+      action: "reactivate",
+      studentId: student.id,
+    });
+    setReactivatingIds((current) => ({ ...current, [student.id]: false }));
+
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر إعادة تفعيل الطالب من الخادم.");
+      return;
+    }
+
+    const payload = serverActionData(result);
+    if (payload.student) updateDismissedStudentLocally(payload.student);
+    else setDismissedServerStudents((current) => current.filter((item) => item.id !== student.id));
+
+    setDismissalDetails((current) => {
+      const next = { ...current };
+      delete next[student.id];
+      return next;
+    });
+    emitTeacherProDataChanged({ source: "local-mutation", reason: "dismissed-students-reactivate", scopes: ["students", "opportunities", "dismissed", "dashboard"] });
+    toast.success("تمت إعادة تفعيل الطالب من قاعدة البيانات");
   };
 
   const renderDismissalContext = (student: Student) => {
     const detail = dismissalDetailForStudent(student);
+    const fromDatabase = Boolean(dismissalDetails[student.id]);
     return (
       <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-3 text-sm">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Badge variant={fromDatabase ? "secondary" : "outline"}>
+            {fromDatabase ? "تفاصيل الفصل من قاعدة البيانات" : "تفاصيل محلية مؤقتة"}
+          </Badge>
+          {detail.dismissalDate ? <Badge variant="outline">تاريخ الفصل: {detail.dismissalDate}</Badge> : null}
+        </div>
         <div className="grid gap-3 md:grid-cols-2">
           <div>
             <p className="text-xs font-semibold text-muted-foreground">سبب الفصل</p>
@@ -359,13 +450,49 @@ export function DismissedStudentsView() {
     );
   };
 
-  const handleSaveNote = (studentId: string) => {
-    const student = students.find((item) => item.id === studentId);
-    if (!student) return;
-    const nextNote = noteDrafts[studentId] ?? student.dismissalNotes ?? "";
-    const result = updateStudent(studentId, { dismissalNotes: nextNote });
-    if (result.ok) toast.success("تم حفظ ملاحظات الفصل");
-    else toast.error(result.message);
+  const handleSaveNote = async (studentId: string) => {
+    if (!canRunSensitiveActions) {
+      toast.error("انتظر تحميل بيانات المفصولين من الخادم قبل حفظ الملاحظة.");
+      return;
+    }
+
+    const student = dismissedServerStudents.find((item) => item.id === studentId);
+    if (!student) {
+      toast.error("تعذر العثور على الطالب ضمن نتائج المفصولين الحالية.");
+      return;
+    }
+
+    const nextNote = noteDrafts[studentId] ?? dismissalDetails[studentId]?.notes ?? student.dismissalNotes ?? "";
+    setSavingNoteIds((current) => ({ ...current, [studentId]: true }));
+    const result = await studentApi.update(studentId, { dismissalNotes: nextNote });
+    setSavingNoteIds((current) => ({ ...current, [studentId]: false }));
+
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر حفظ ملاحظات الفصل من الخادم.");
+      return;
+    }
+
+    const payload = (result.data || {}) as { student?: Student };
+    if (payload.student) updateDismissedStudentLocally(payload.student);
+    else {
+      setDismissedServerStudents((current) =>
+        current.map((item) => (item.id === studentId ? { ...item, dismissalNotes: nextNote } : item)),
+      );
+    }
+    setDismissalDetails((current) => ({
+      ...current,
+      [studentId]: {
+        ...(current[studentId] || buildLocalDismissalDetail(student)),
+        notes: nextNote,
+      },
+    }));
+    setNoteDrafts((current) => {
+      const next = { ...current };
+      delete next[studentId];
+      return next;
+    });
+    emitTeacherProDataChanged({ source: "local-mutation", reason: "dismissed-students-note", scopes: ["students", "dismissed", "dashboard"] });
+    toast.success("تم حفظ ملاحظات الفصل من قاعدة البيانات");
   };
 
   const applyPreset = (values: FilterPresetValues) => {
@@ -373,6 +500,7 @@ export function DismissedStudentsView() {
     setFilterCourseId(String(values.courseId || ""));
     setFilterDismissalType(String(values.dismissalType || ""));
     setFilterNotes((values.notesFilter as NotesFilter) || "all");
+    setFilterPledge((values.pledgeFilter as PledgeFilter) || "all");
     setViewMode((values.viewMode as ViewMode) || "cards");
   };
 
@@ -381,11 +509,13 @@ export function DismissedStudentsView() {
     setFilterCourseId("");
     setFilterDismissalType("");
     setFilterNotes("all");
+    setFilterPledge("all");
     setViewMode("cards");
   };
 
-  const renderNotesEditor = (student: (typeof students)[number]) => {
-    const value = noteDrafts[student.id] ?? student.dismissalNotes ?? "";
+  const renderNotesEditor = (student: Student) => {
+    const value = noteDrafts[student.id] ?? dismissalDetails[student.id]?.notes ?? student.dismissalNotes ?? "";
+    const saving = Boolean(savingNoteIds[student.id]);
     return (
       <div className="space-y-2">
         <Label className="text-xs">ملاحظات الفصل</Label>
@@ -399,21 +529,44 @@ export function DismissedStudentsView() {
           }
           placeholder="اكتب ملاحظات خاصة بهذا الطالب المفصول..."
           className="min-h-20 w-full rounded-2xl border bg-background/70 px-3 py-2 text-sm shadow-xs outline-none focus:border-primary"
+          disabled={!canRunSensitiveActions || saving}
         />
         <Button
           size="sm"
           variant="outline"
-          onClick={() => handleSaveNote(student.id)}
+          onClick={() => void handleSaveNote(student.id)}
+          disabled={!canRunSensitiveActions || saving}
         >
-          حفظ الملاحظات
+          {saving ? "جاري الحفظ..." : "حفظ الملاحظات"}
         </Button>
+      </div>
+    );
+  };
+
+  const renderStatusBanner = () => {
+    if (dismissedStudentsSearchLoading || dismissalDetailsLoading) {
+      return (
+        <div className="rounded-2xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          جاري تحميل المفصولين وتفاصيل الفصل من قاعدة البيانات...
+        </div>
+      );
+    }
+    if (listError || detailsError) {
+      return (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {listError || detailsError}
+        </div>
+      );
+    }
+    return (
+      <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+        بيانات المفصولين وتفاصيل الفصل محملة من قاعدة البيانات، والإجراءات الحساسة لا تُنفّذ إلا بعد موافقة الخادم.
       </div>
     );
   };
 
   return (
     <div className="space-y-4">
-      {/* كروت الإحصائيات المباشرة */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard
           label="إجمالي المفصولين"
@@ -452,12 +605,14 @@ export function DismissedStudentsView() {
         />
       </div>
 
+      {renderStatusBanner()}
+
       <Card>
         <CardHeader>
           <CardTitle>الطلاب المفصولون</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
             <div className="space-y-1">
               <Label htmlFor="dismissed-course" className="text-xs">
                 الدورة
@@ -522,6 +677,24 @@ export function DismissedStudentsView() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="dismissed-pledge" className="text-xs">
+                التعهد
+              </Label>
+              <Select
+                value={filterPledge}
+                onValueChange={(value) => setFilterPledge(value as PledgeFilter)}
+              >
+                <SelectTrigger id="dismissed-pledge">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل التعهدات</SelectItem>
+                  <SelectItem value="with-pledge">بتعهد مسجل</SelectItem>
+                  <SelectItem value="without-pledge">بدون تعهد</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1 md:col-span-2">
               <Label htmlFor="dismissed-search" className="text-xs">
                 بحث ذكي
@@ -560,6 +733,7 @@ export function DismissedStudentsView() {
               courseId: filterCourseId,
               dismissalType: filterDismissalType,
               notesFilter: filterNotes,
+              pledgeFilter: filterPledge,
               viewMode,
             }}
             onApply={applyPreset}
@@ -570,42 +744,51 @@ export function DismissedStudentsView() {
 
       {viewMode === "cards" ? (
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-          {dismissedStudents.map((student) => (
-            <Card key={student.id}>
-              <CardContent className="space-y-3 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-bold">{student.name}</h3>
-                      <Badge variant="destructive">
-                        {student.dismissalType || "مفصول"}
-                      </Badge>
+          {dismissedStudents.map((student) => {
+            const reactivating = Boolean(reactivatingIds[student.id]);
+            return (
+              <Card key={student.id}>
+                <CardContent className="space-y-3 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-bold">{student.name}</h3>
+                        <Badge variant="destructive">
+                          {dismissalDetails[student.id]?.type || student.dismissalType || "مفصول"}
+                        </Badge>
+                        {dismissalDetails[student.id]?.hasPledge ? (
+                          <Badge variant="outline">تعهد مسجل</Badge>
+                        ) : (
+                          <Badge variant="secondary">بدون تعهد</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {student.code} - {courseName(student.courseId)} -{" "}
+                        {student.subSite || student.locationScope || "بدون موقع"}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {student.code} - {courseName(student.courseId)} -{" "}
-                      {student.subSite || student.locationScope || "بدون موقع"}
-                    </p>
+                    <Button
+                      size="sm"
+                      onClick={() => void handleReactivate(student)}
+                      disabled={!canRunSensitiveActions || reactivating}
+                    >
+                      {reactivating ? "جاري التفعيل..." : "إعادة تفعيل"}
+                    </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    onClick={() => handleReactivate(student)}
-                  >
-                    إعادة تفعيل
-                  </Button>
-                </div>
-                {renderDismissalContext(student)}
-                {renderNotesEditor(student)}
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span>الهاتف: {student.phone || "—"}</span>
-                  <span>ولي الأمر: {student.parentPhone || "—"}</span>
-                  <span>التليكرام: {student.telegram || "—"}</span>
-                  <span>
-                    الفرص: {student.opportunities}/{student.baseOpportunities}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  {renderDismissalContext(student)}
+                  {renderNotesEditor(student)}
+                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <span>الهاتف: {student.phone || "—"}</span>
+                    <span>ولي الأمر: {student.parentPhone || "—"}</span>
+                    <span>التليكرام: {student.telegram || "—"}</span>
+                    <span>
+                      الفرص: {student.opportunities}/{student.baseOpportunities}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <div className="table-wrap">
@@ -624,60 +807,57 @@ export function DismissedStudentsView() {
               </tr>
             </thead>
             <tbody>
-              {dismissedStudents.map((student) => (
-                <tr key={student.id} className="border-t align-top">
-                  <td className="p-3 font-medium">{student.name}</td>
-                  <td className="p-3">{student.code}</td>
-                  <td className="p-3">{courseName(student.courseId)}</td>
-                  <td className="p-3">
-                    <Badge variant="destructive">
-                      {student.dismissalType || "مفصول"}
-                    </Badge>
-                  </td>
-                  <td className="p-3 min-w-80">
-                    {(() => {
-                      const detail = dismissalDetailForStudent(student);
-                      return (
-                        <div className="space-y-1 text-xs">
-                          <p className="font-semibold text-destructive">{detail.reason || student.dismissalReason || "لا يوجد سبب مسجل"}</p>
-                          <p>الامتحان: {detail.examName || "—"}</p>
-                          <p>آخر درجة: {formatDismissalGrade(detail)}</p>
-                        </div>
-                      );
-                    })()}
-                  </td>
-                  <td className="p-3 min-w-56">
-                    {(() => {
-                      const detail = dismissalDetailForStudent(student);
-                      return detail.hasPledge ? (
+              {dismissedStudents.map((student) => {
+                const detail = dismissalDetailForStudent(student);
+                const reactivating = Boolean(reactivatingIds[student.id]);
+                return (
+                  <tr key={student.id} className="border-t align-top">
+                    <td className="p-3 font-medium">{student.name}</td>
+                    <td className="p-3">{student.code}</td>
+                    <td className="p-3">{courseName(student.courseId)}</td>
+                    <td className="p-3">
+                      <Badge variant="destructive">
+                        {detail.type || student.dismissalType || "مفصول"}
+                      </Badge>
+                    </td>
+                    <td className="p-3 min-w-80">
+                      <div className="space-y-1 text-xs">
+                        <p className="font-semibold text-destructive">{detail.reason || student.dismissalReason || "لا يوجد سبب مسجل"}</p>
+                        <p>الامتحان: {detail.examName || "—"}</p>
+                        <p>آخر درجة: {formatDismissalGrade(detail)}</p>
+                      </div>
+                    </td>
+                    <td className="p-3 min-w-56">
+                      {detail.hasPledge ? (
                         <Badge variant="outline">تعهد مسجل{detail.pledgeDate ? ` - ${detail.pledgeDate}` : ""}</Badge>
                       ) : (
                         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-200">
                           لم يتم تسجيل تعهد لهذا الفصل.
                         </div>
-                      );
-                    })()}
-                  </td>
-                  <td className="p-3 min-w-72">{renderNotesEditor(student)}</td>
-                  <td className="p-3">
-                    {student.opportunities}/{student.baseOpportunities}
-                  </td>
-                  <td className="p-3">
-                    <Button
-                      size="sm"
-                      onClick={() => handleReactivate(student)}
-                    >
-                      إعادة تفعيل
-                    </Button>
-                  </td>
-                </tr>
-              ))}
+                      )}
+                    </td>
+                    <td className="p-3 min-w-72">{renderNotesEditor(student)}</td>
+                    <td className="p-3">
+                      {student.opportunities}/{student.baseOpportunities}
+                    </td>
+                    <td className="p-3">
+                      <Button
+                        size="sm"
+                        onClick={() => void handleReactivate(student)}
+                        disabled={!canRunSensitiveActions || reactivating}
+                      >
+                        {reactivating ? "جاري التفعيل..." : "إعادة تفعيل"}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
-      {dismissedStudents.length === 0 && (
+      {dismissedStudents.length === 0 && !dismissedStudentsSearchLoading && (
         <p className="empty-state">لا يوجد طلاب مفصولون حسب الفلترة الحالية.</p>
       )}
     </div>
