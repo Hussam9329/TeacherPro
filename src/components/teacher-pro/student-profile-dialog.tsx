@@ -24,7 +24,7 @@ import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib
 import { ArrowRightIcon } from "lucide-react";
 import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
-type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "actions";
+type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "timeline";
 
 type StudentProfileDialogProps = {
   student: Student | null;
@@ -568,6 +568,13 @@ export function StudentProfileDialog({
   const examCount = profileStatValue(databaseStats?.exams);
   const deductedCount = profileStatValue(databaseStats?.deductedMovements);
   const addedCount = profileStatValue(databaseStats?.addedMovements);
+  const callsCount = profileStatValue(databaseStats?.calls);
+  const leavesCount = profileStatValue(databaseStats?.leaves);
+  const pledgesCount = profileStatValue(databaseStats?.pledges);
+  const notesCount = profileStatValue(databaseStats?.notes);
+  const dismissalsCount = profileStatValue(databaseStats?.dismissals);
+  const reactivationsCount = profileStatValue(databaseStats?.reactivations);
+  const timelineCount = profileStatValue(databaseStats?.timeline);
 
   const gradesEmptyMessage = databaseGradesLoading
     ? "جاري تحميل درجات الطالب من الخادم…"
@@ -579,10 +586,15 @@ export function StudentProfileDialog({
 
   const cards: { id: StudentFileTab; label: string; value: string | number; hint: string }[] = [
     { id: "grades", label: "الدرجات", value: profileStatValue(databaseStats?.grades), hint: "عرض درجات الطالب" },
+    { id: "details", label: "الغيابات", value: absentCount, hint: "غيابات مؤثرة أكاديمياً" },
+    { id: "opportunities", label: "الخصومات/الفرص", value: opportunityText, hint: "الفرص والخصومات" },
+    { id: "followup", label: "المكالمات", value: callsCount, hint: "متابعة واتصالات" },
+    { id: "followup", label: "الإجازات", value: leavesCount, hint: "إجازات امتحان/فترة" },
+    { id: "followup", label: "التعهدات", value: pledgesCount, hint: "تعهدات ولي الأمر" },
+    { id: "actions", label: "فصل/إعادة تفعيل", value: `${dismissalsCount}/${reactivationsCount}`, hint: "مسار حالة الطالب" },
+    { id: "actions", label: "الملاحظات", value: notesCount, hint: "ملاحظات وإجراءات" },
+    { id: "timeline", label: "السجل الزمني", value: timelineCount, hint: "كل حركة مرتبطة بالطالب" },
     { id: "exams", label: "الامتحانات", value: examCount, hint: "عدد الامتحانات" },
-    { id: "opportunities", label: "الفرص", value: opportunityText, hint: "المتبقي / الأساسي" },
-    { id: "actions", label: "الإجراءات", value: profileStatValue(databaseStats?.actions), hint: "حذف/فصل/إعادة تفعيل" },
-    { id: "details", label: "التفاصيل والغيابات", value: absentCount, hint: "عدد الغيابات المحتسبة" },
     { id: "grades", label: "ضمن السماح", value: graceGradeCount, hint: "درجات محفوظة بدون خصم" },
     { id: "grades", label: "بدون خصم", value: noDiscountGradeCount, hint: "درجات امتحانات لا تحاسب الطالب" },
   ];
@@ -762,6 +774,81 @@ export function StudentProfileDialog({
               </div>
             )}
 
+            {tab === "followup" && (
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
+                  <h4 className="mb-4 text-base font-black sm:text-lg">مكالمات الطالب</h4>
+                  <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                    {studentCallsForProfile.length === 0 ? <p className="empty-state py-8">لا توجد مكالمات لهذا الطالب</p> : studentCallsForProfile.map((call) => {
+                      const exam = profileExams.find((item) => item.id === call.examId);
+                      return (
+                        <div key={call.id} className="rounded-2xl bg-muted/55 p-3 text-sm">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <Badge variant={call.completed ? "default" : "secondary"}>{call.status || (call.completed ? "تم الاتصال" : "لم يرد")}</Badge>
+                            <span className="text-xs text-muted-foreground">{formatAppDate(call.completedAt || call.createdAt)}</span>
+                          </div>
+                          <p className="mt-2 break-words font-bold">{exam?.name || "بدون امتحان مرتبط"}</p>
+                          <p className="mt-1 break-words text-xs text-muted-foreground">{callLogDetails(call, exam)}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
+                  <h4 className="mb-4 text-base font-black sm:text-lg">إجازات الطالب</h4>
+                  <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                    {studentLeavesForProfile.length === 0 ? <p className="empty-state py-8">لا توجد إجازات لهذا الطالب</p> : studentLeavesForProfile.map((leave) => {
+                      const exam = profileExams.find((item) => item.id === leave.examId);
+                      return (
+                        <div key={leave.id} className="rounded-2xl bg-muted/55 p-3 text-sm">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <Badge variant="outline">{(leave.leaveType || "exam") === "period" ? "إجازة فترة" : "إجازة امتحان"}</Badge>
+                            <span className="text-xs text-muted-foreground">{formatAppDate(leave.date || leave.dateFrom)}</span>
+                          </div>
+                          <p className="mt-2 break-words font-bold">{exam?.name || "بدون امتحان مرتبط"}</p>
+                          <p className="mt-1 break-words text-xs text-muted-foreground">{leaveLogDetails(leave, exam)}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
+                  <h4 className="mb-4 text-base font-black sm:text-lg">تعهدات ولي الأمر</h4>
+                  <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                    {allStudentNotes.filter((note) => note.kind === "تعهد ولي الأمر").length === 0 ? <p className="empty-state py-8">لا توجد تعهدات لهذا الطالب</p> : allStudentNotes.filter((note) => note.kind === "تعهد ولي الأمر").map((note) => (
+                      <div key={note.id} className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <Badge variant="outline">تعهد</Badge>
+                          <span className="text-xs text-muted-foreground">{formatAppDate(note.date)}</span>
+                        </div>
+                        <p className="mt-2 break-words">{note.text}</p>
+                        {(note.dismissalType || note.dismissalReason) && (
+                          <p className="mt-2 break-words text-xs text-muted-foreground">مرتبط بالفصل: {note.dismissalType || "فصل"} - {note.dismissalReason || "بدون سبب"}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
+                  <h4 className="mb-4 text-base font-black sm:text-lg">ملاحظات الطالب</h4>
+                  <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                    {allStudentNotes.length === 0 ? <p className="empty-state py-8">لا توجد ملاحظات لهذا الطالب</p> : allStudentNotes.map((note) => (
+                      <div key={note.id} className="rounded-2xl bg-muted/55 p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <Badge variant={note.kind === "إجراء" ? "secondary" : "outline"}>{note.kind || "ملاحظة"}</Badge>
+                          <span className="text-xs text-muted-foreground">{formatAppDate(note.date)}</span>
+                        </div>
+                        <p className="mt-2 break-words">{note.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {tab === "actions" && (
               <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
                 <h4 className="mb-4 text-base font-black sm:text-lg">إجراءات ملف الطالب</h4>
@@ -777,6 +864,7 @@ export function StudentProfileDialog({
               </div>
             )}
 
+            {tab === "timeline" && (
             <div className="rounded-2xl border bg-card/90 p-4 shadow-sm sm:rounded-3xl sm:p-5">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -796,6 +884,8 @@ export function StudentProfileDialog({
                 ))}
               </div>
             </div>
+
+            )}
           </div>
         </div>
       </div>

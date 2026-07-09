@@ -28,7 +28,9 @@
     "test:dismissed-students": "node scripts/test-dismissed-students-integrity.mjs",
     "test:dismissed-students-integrity": "node scripts/test-dismissed-students-integrity.mjs",
     "test:exam-new": "node scripts/test-exam-new-integrity.mjs",
-    "test:exam-new-integrity": "node scripts/test-exam-new-integrity.mjs"
+    "test:exam-new-integrity": "node scripts/test-exam-new-integrity.mjs",
+    "test:grade-entry": "node scripts/test-grade-entry-integrity.mjs",
+    "test:grade-entry-integrity": "node scripts/test-grade-entry-integrity.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1080.0",

@@ -614,6 +614,7 @@ export interface StudentProfileStatsResponse {
   grades: number;
   exams: number;
   absent: number;
+  absences?: number;
   success: number;
   failed: number;
   graceGrades: number;
@@ -622,7 +623,15 @@ export interface StudentProfileStatsResponse {
   baseOpportunities: number;
   hasActiveChapter: boolean;
   deductedMovements: number;
+  deductions?: number;
   addedMovements: number;
+  calls?: number;
+  leaves?: number;
+  pledges?: number;
+  notes?: number;
+  dismissals?: number;
+  reactivations?: number;
+  timeline?: number;
   actions: number;
   source: "database";
   generatedAt?: string;
@@ -1165,9 +1174,10 @@ export const examApi = {
 // ─── Grade API ────────────────────────────────────────────────────────────────
 
 export const gradeEntrySheetApi = {
-  get: (examId: string) =>
+  get: (examId: string, options: ApiGetOptions = {}) =>
     apiGet<GradeEntrySheetResponse>(
       `grades/entry-sheet?examId=${encodeURIComponent(examId)}`,
+      options,
     ),
 };
 
@@ -1249,7 +1259,15 @@ export const gradeApi = {
           transient: isTransientHttpStatus(res.status),
         };
       }
-      return { ok: true };
+      const contentType = res.headers.get("content-type") || "";
+      const responseData = contentType.includes("application/json")
+        ? await res.json().catch(() => null)
+        : null;
+      return {
+        ok: true,
+        data: responseData,
+        syncScopes: inferTeacherProScopesFromEndpoint(`/api/grades?${params.toString()}`),
+      };
     } catch (e) {
       const msg = toUserFriendlyError(
         e instanceof Error ? e.message : "Network error",

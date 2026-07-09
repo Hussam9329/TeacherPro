@@ -81,7 +81,16 @@ export async function GET(req: NextRequest) {
     const studentId = String(searchParams.get("studentId") || "").trim();
     if (!studentId) return validationError("studentId مطلوب");
 
-    const [student, grades, opportunityLogs, actionNotes] = await Promise.all([
+    const [
+      student,
+      grades,
+      opportunityLogs,
+      actionNotes,
+      callsCount,
+      leavesCount,
+      pledgesCount,
+      notesCount,
+    ] = await Promise.all([
       db.student.findUnique({
         where: { id: studentId },
         select: {
@@ -119,6 +128,10 @@ export async function GET(req: NextRequest) {
         select: { action: true },
       }),
       db.studentNote.count({ where: { studentId, kind: "إجراء" } }).catch(() => 0),
+      db.studentCall.count({ where: { studentId } }).catch(() => 0),
+      db.studentLeave.count({ where: { studentId } }).catch(() => 0),
+      db.studentNote.count({ where: { studentId, kind: "تعهد ولي الأمر" } }).catch(() => 0),
+      db.studentNote.count({ where: { studentId } }).catch(() => 0),
     ]);
 
     if (!student) return validationError("الطالب غير موجود");
@@ -156,12 +169,27 @@ export async function GET(req: NextRequest) {
       (log) => log.action === "خصم" || log.action === "خصم تلقائي",
     ).length;
     const addedMovements = opportunityLogs.length - deductedMovements;
+    const dismissalActions = opportunityLogs.filter((log) =>
+      String(log.action || "").includes("فصل"),
+    ).length;
+    const reactivationActions = opportunityLogs.filter((log) =>
+      String(log.action || "").includes("إعادة تفعيل") || String(log.action || "").includes("فرصة أخيرة"),
+    ).length;
+    const timelineCount =
+      1 +
+      grades.length +
+      opportunityLogs.length +
+      Number(callsCount || 0) +
+      Number(leavesCount || 0) +
+      Number(notesCount || 0) +
+      Number(actionNotes || 0);
 
     return NextResponse.json({
       studentId,
       grades: grades.length,
       exams: new Set(grades.map((grade) => grade.examId)).size,
       absent,
+      absences: absent,
       success,
       failed,
       graceGrades,
@@ -170,7 +198,15 @@ export async function GET(req: NextRequest) {
       baseOpportunities: student.baseOpportunities,
       hasActiveChapter: Boolean(realActiveChapterLink),
       deductedMovements,
+      deductions: deductedMovements,
       addedMovements,
+      calls: Number(callsCount || 0),
+      leaves: Number(leavesCount || 0),
+      pledges: Number(pledgesCount || 0),
+      notes: Number(notesCount || 0),
+      dismissals: dismissalActions,
+      reactivations: reactivationActions,
+      timeline: timelineCount,
       actions: Number(actionNotes || 0) + opportunityLogs.length,
       source: "database" as const,
       generatedAt: new Date().toISOString(),

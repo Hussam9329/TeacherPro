@@ -15,7 +15,8 @@ import {
   type Student,
   type StudentLeave,
 } from "@/lib/teacher-store";
-import { gradeEntrySheetApi } from "@/lib/api";
+import { gradeApi, gradeEntrySheetApi, type ApiResult } from "@/lib/api";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -217,9 +218,6 @@ export function GradeEntryView() {
     courseChapters,
     studentLeaves,
     opportunityLogs,
-    addGrade,
-    deleteGrade,
-    clearAbsentGradesForExam,
     courseName,
     classification,
     mergeStudentsCache,
@@ -312,14 +310,14 @@ export function GradeEntryView() {
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
     setEntrySheetLoading(true);
     setEntrySheetError(null);
 
     gradeEntrySheetApi
-      .get(selectedExam.id)
+      .get(selectedExam.id, { signal: controller.signal, quietAbort: true })
       .then((result) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         if (!result) {
           setEntrySheetStudents([]);
           setEntrySheetGrades([]);
@@ -350,7 +348,7 @@ export function GradeEntryView() {
         mergeGradesCache(loadedGrades);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setEntrySheetStudents([]);
         setEntrySheetGrades([]);
         setEntrySheetLeaves([]);
@@ -361,11 +359,11 @@ export function GradeEntryView() {
         );
       })
       .finally(() => {
-        if (!cancelled) setEntrySheetLoading(false);
+        if (!controller.signal.aborted) setEntrySheetLoading(false);
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [selectedExamId, exams, mergeStudentsCache, mergeGradesCache, syncKey]);
 
@@ -1003,12 +1001,94 @@ export function GradeEntryView() {
       .map((courseId) => courseName(courseId));
   }, [selectedExam, entryCourseChaptersSource, courseName]);
 
+  const gradePayloadFromResult = (result: ApiResult): { grade?: Grade; academicRecalculation?: { students?: Student[] } } =>
+    (result.data || {}) as { grade?: Grade; academicRecalculation?: { students?: Student[] } };
+
+  const emitGradeEntryServerSync = (reason: string) => {
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason,
+      scopes: ["grades", "students", "opportunities", "dashboard", "grade-entry-notes"],
+    });
+  };
+
+  const mergeServerGradeIntoEntrySheet = (grade: Grade) => {
+    setEntrySheetGrades((current) => {
+      const exists = current.some(
+        (item) => item.studentId === grade.studentId && item.examId === grade.examId,
+      );
+      return exists
+        ? current.map((item) =>
+            item.studentId === grade.studentId && item.examId === grade.examId
+              ? { ...item, ...grade, id: grade.id || item.id }
+              : item,
+          )
+        : [grade, ...current];
+    });
+    mergeGradesCache([grade]);
+  };
+
+  const removeEntryGrade = (grade: Grade) => {
+    setEntrySheetGrades((current) =>
+      current.filter(
+        (item) =>
+          item.id !== grade.id &&
+          !(item.studentId === grade.studentId && item.examId === grade.examId),
+      ),
+    );
+  };
+
+  const markStudentSavedNow = (studentId: string, label = "تم حفظها") => {
+    const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
+    const baghdadNow = new Date(Date.now() + BAGHDAD_OFFSET_MS);
+    const hh = String(baghdadNow.getUTCHours()).padStart(2, "0");
+    const mm = String(baghdadNow.getUTCMinutes()).padStart(2, "0");
+    setSavedRows((prev) => ({
+      ...prev,
+      [studentId]: `${label} ${hh}:${mm}`,
+    }));
+  };
+
+  const deleteExistingGradeFromServer = async (studentId: string, existing: Grade) => {
+    if (!selectedExam) return;
+    setSavingRows((prev) => ({ ...prev, [studentId]: true }));
+    const result = await gradeApi.remove(existing.id, existing.studentId, existing.examId);
+    setSavingRows((prev) => ({ ...prev, [studentId]: false }));
+
+    if (!result.ok || result.queued) {
+      showGradeEntryNotice(
+        "error",
+        result.error || "تعذر حذف الدرجة من قاعدة البيانات. لم يتم تغيير ورقة الإدخال.",
+      );
+      restoreDraftFromSavedGrade(studentId);
+      return;
+    }
+
+    removeEntryGrade(existing);
+    setDrafts((prev) => {
+      const next = { ...prev };
+      delete next[studentId];
+      return next;
+    });
+    setEditableRows((prev) => ({ ...prev, [studentId]: false }));
+    setSavedRows((prev) => ({ ...prev, [studentId]: "تم حذف الدرجة من قاعدة البيانات" }));
+    emitGradeEntryServerSync("grade-entry-delete");
+    showGradeEntryNotice("success", "تم حذف الدرجة من قاعدة البيانات وإعادة احتساب الطالب");
+  };
+
   const saveGrade = async (
     studentId: string,
     draftOverride?: DraftGrade,
     options: { silent?: boolean; skipReactivationWarning?: boolean } = {},
   ) => {
     if (!selectedExam) return;
+    if (entrySheetError) {
+      showGradeEntryNotice(
+        "error",
+        "لا يمكن حفظ درجة لأن ورقة الإدخال لم تُحمّل من قاعدة البيانات.",
+      );
+      return;
+    }
     const leave = getStudentLeaveForSelectedExam(studentId);
     if (leave) {
       showGradeEntryNotice(
@@ -1059,7 +1139,7 @@ export function GradeEntryView() {
     }
 
     setSavingRows((prev) => ({ ...prev, [studentId]: true }));
-    addGrade({
+    const result = await gradeApi.add({
       studentId,
       examId: selectedExam.id,
       status,
@@ -1067,21 +1147,35 @@ export function GradeEntryView() {
       notes: draft.notes,
     });
     setSavingRows((prev) => ({ ...prev, [studentId]: false }));
+
+    if (!result.ok || result.queued) {
+      showGradeEntryNotice(
+        "error",
+        result.error || "تعذر حفظ الدرجة في قاعدة البيانات. لم يتم اعتماد أي تغيير محلي.",
+      );
+      return;
+    }
+
+    const payload = gradePayloadFromResult(result);
+    if (!payload.grade) {
+      showGradeEntryNotice(
+        "error",
+        "تم قبول الطلب لكن لم يرجع الخادم سجل الدرجة النهائي. حدّث ورقة الإدخال للتأكد.",
+      );
+      return;
+    }
+
+    mergeServerGradeIntoEntrySheet(payload.grade);
+    if (payload.academicRecalculation?.students?.length) {
+      mergeStudentsCache(payload.academicRecalculation.students);
+    }
     setEditableRows((prev) => ({ ...prev, [studentId]: false }));
-    // اعرض وقت الحفظ بتوقيت بغداد بصيغة إنكليزية (HH:MM) لتطابق صيغة
-    // formatGradeEntryTimestamp المستخدمة في عرض وقت الإدخال.
-    const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
-    const baghdadNow = new Date(Date.now() + BAGHDAD_OFFSET_MS);
-    const hh = String(baghdadNow.getUTCHours()).padStart(2, "0");
-    const mm = String(baghdadNow.getUTCMinutes()).padStart(2, "0");
-    setSavedRows((prev) => ({
-      ...prev,
-      [studentId]: `تم حفظها ${hh}:${mm}`,
-    }));
+    markStudentSavedNow(studentId);
+    emitGradeEntryServerSync("grade-entry-save");
     if (!options.silent)
       showGradeEntryNotice(
         "success",
-        "تم حفظ الدرجة محلياً وستتم مزامنتها تلقائياً",
+        "تم حفظ الدرجة في قاعدة البيانات وإعادة احتساب الطالب",
       );
   };
 
@@ -1098,21 +1192,7 @@ export function GradeEntryView() {
 
     if (draft.status === "درجة") {
       if (!normalizedScore) {
-        if (existing) {
-          const deleted = deleteGrade(existing.id);
-          if (deleted) {
-            setEntrySheetGrades((current) =>
-              current.filter((grade) => grade.id !== existing.id),
-            );
-            setDrafts((prev) => {
-              const next = { ...prev };
-              delete next[studentId];
-              return next;
-            });
-            setEditableRows((prev) => ({ ...prev, [studentId]: false }));
-            setSavedRows((prev) => ({ ...prev, [studentId]: "تم حذف الدرجة" }));
-          }
-        }
+        if (existing) void deleteExistingGradeFromServer(studentId, existing);
         return;
       }
       if (!isScoreInsideExamRange(normalizedScore, selectedExam.fullMark))
@@ -1210,10 +1290,44 @@ export function GradeEntryView() {
 
   const handleClearAbsentGradesConfirmed = async () => {
     if (!selectedExam) return;
+    if (entrySheetError) {
+      toast.error("لا يمكن إلغاء الغياب لأن ورقة الإدخال غير محملة من قاعدة البيانات.");
+      return;
+    }
+
     const affectedStudentIds = new Set(
       absentGradesForSelectedExam.map((grade) => grade.studentId),
     );
-    const removedCount = clearAbsentGradesForExam(selectedExam.id);
+    setSavingRows((prev) => {
+      const next = { ...prev };
+      affectedStudentIds.forEach((studentId) => {
+        next[studentId] = true;
+      });
+      return next;
+    });
+
+    const result = await gradeApi.removeAbsentByExam(selectedExam.id);
+
+    setSavingRows((prev) => {
+      const next = { ...prev };
+      affectedStudentIds.forEach((studentId) => {
+        delete next[studentId];
+      });
+      return next;
+    });
+
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر إلغاء حالات الغياب من قاعدة البيانات.");
+      return;
+    }
+
+    const payload = (result.data || {}) as { deleted?: number; studentIds?: string[]; academicRecalculation?: { students?: Student[] } };
+    const removedCount = Number(payload.deleted ?? absentGradesForSelectedExam.length);
+    const realAffectedStudentIds = new Set(payload.studentIds?.length ? payload.studentIds : Array.from(affectedStudentIds));
+
+    if (payload.academicRecalculation?.students?.length) {
+      mergeStudentsCache(payload.academicRecalculation.students);
+    }
 
     if (removedCount > 0) {
       setEntrySheetGrades((current) =>
@@ -1224,33 +1338,29 @@ export function GradeEntryView() {
       );
       setDrafts((prev) => {
         const next = { ...prev };
-        affectedStudentIds.forEach((studentId) => {
+        realAffectedStudentIds.forEach((studentId) => {
           delete next[studentId];
         });
         return next;
       });
       setEditableRows((prev) => {
         const next = { ...prev };
-        affectedStudentIds.forEach((studentId) => {
-          delete next[studentId];
-        });
-        return next;
-      });
-      setSavingRows((prev) => {
-        const next = { ...prev };
-        affectedStudentIds.forEach((studentId) => {
+        realAffectedStudentIds.forEach((studentId) => {
           delete next[studentId];
         });
         return next;
       });
       setSavedRows((prev) => {
         const next = { ...prev };
-        affectedStudentIds.forEach((studentId) => {
-          next[studentId] = "تم إلغاء الغياب";
+        realAffectedStudentIds.forEach((studentId) => {
+          next[studentId] = "تم إلغاء الغياب من قاعدة البيانات";
         });
         return next;
       });
-      toast.success(`تم إلغاء حالة غائب من ${removedCount} طالب`);
+      emitGradeEntryServerSync("grade-entry-clear-absent");
+      toast.success(`تم إلغاء حالة غائب من ${removedCount} طالب من قاعدة البيانات`);
+    } else {
+      toast.info("لا توجد حالات غياب محفوظة في قاعدة البيانات لهذا الامتحان");
     }
   };
 
@@ -1269,41 +1379,85 @@ export function GradeEntryView() {
     });
   };
 
-  const handleMarkAllMissingAsAbsentConfirmed = () => {
+  const handleMarkAllMissingAsAbsentConfirmed = async () => {
     if (!selectedExam) return;
+    if (entrySheetError) {
+      toast.error("لا يمكن تسجيل الغياب الجماعي لأن ورقة الإدخال غير محملة من قاعدة البيانات.");
+      return;
+    }
 
     const timestamp = new Date().toLocaleTimeString("ar-IQ", {
       hour: "2-digit",
       minute: "2-digit",
     });
+    const targetStudents = [...missingExamStudents];
+
+    setSavingRows((prev) => {
+      const next = { ...prev };
+      targetStudents.forEach((student) => {
+        next[student.id] = true;
+      });
+      return next;
+    });
+
+    const results = await Promise.all(
+      targetStudents.map(async (student) => {
+        const draft: DraftGrade = {
+          status: "غائب",
+          score: "",
+          notes: "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
+        };
+        const result = await gradeApi.add({
+          studentId: student.id,
+          examId: selectedExam.id,
+          status: "غائب",
+          score: null,
+          notes: draft.notes,
+        });
+        return { student, draft, result };
+      }),
+    );
+
+    setSavingRows((prev) => {
+      const next = { ...prev };
+      targetStudents.forEach((student) => {
+        delete next[student.id];
+      });
+      return next;
+    });
+
+    const successful = results.filter(({ result }) => result.ok && !result.queued);
+    const failed = results.filter(({ result }) => !result.ok || result.queued);
     const nextDrafts: Record<string, DraftGrade> = {};
     const nextSavedRows: Record<string, string> = {};
     const nextEditableRows: Record<string, boolean> = {};
+    const recalculatedStudents: Student[] = [];
 
-    missingExamStudents.forEach((student) => {
-      const draft: DraftGrade = {
-        status: "غائب",
-        score: "",
-        notes: "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
-      };
-      addGrade({
-        studentId: student.id,
-        examId: selectedExam.id,
-        status: "غائب",
-        score: null,
-        notes: draft.notes,
-      });
+    successful.forEach(({ student, draft, result }) => {
+      const payload = gradePayloadFromResult(result);
+      if (payload.grade) mergeServerGradeIntoEntrySheet(payload.grade);
+      if (payload.academicRecalculation?.students?.length) {
+        recalculatedStudents.push(...payload.academicRecalculation.students);
+      }
       nextDrafts[student.id] = draft;
       nextSavedRows[student.id] = `تم تسجيله غائب ${timestamp}`;
       nextEditableRows[student.id] = false;
     });
 
+    if (recalculatedStudents.length) mergeStudentsCache(recalculatedStudents);
     setDrafts((prev) => ({ ...prev, ...nextDrafts }));
     setSavedRows((prev) => ({ ...prev, ...nextSavedRows }));
     setEditableRows((prev) => ({ ...prev, ...nextEditableRows }));
-    toast.success(
-      `تم تسجيل ${missingExamStudents.length} طالب من كل طلاب الامتحان كغائب وستتم المزامنة تلقائياً`,
-    );
+
+    if (successful.length > 0) {
+      emitGradeEntryServerSync("grade-entry-mark-missing-absent");
+      toast.success(
+        `تم تسجيل ${successful.length} طالب كغائب في قاعدة البيانات${failed.length ? `، وفشل ${failed.length}` : ""}`,
+      );
+    }
+    if (failed.length > 0 && successful.length === 0) {
+      toast.error("تعذر تسجيل الغياب الجماعي من قاعدة البيانات.");
+    }
   };
 
   const handleQuickScan = () => {
