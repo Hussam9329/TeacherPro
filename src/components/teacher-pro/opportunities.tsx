@@ -5,7 +5,6 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
 import {
   opportunityStatsApi,
-  opportunityLogApi,
   studentApi,
   type OpportunityStatsResponse,
   type OpportunityBulkTargetsResponse,
@@ -56,28 +55,6 @@ const opportunityExportColumns: ExportColumn<any>[] = [
   { key: "telegram", label: "التليكرام", value: (s) => s.telegram || "" },
 ];
 
-type OpportunityStudent = Student & {
-  hasActiveChapter?: boolean;
-  activeChapterConflictCount?: number;
-  activeChapter?: { id: string; name: string; opportunities: number } | null;
-  isOpportunityFull?: boolean;
-  isOpportunityOverLimit?: boolean;
-};
-
-type OpportunityLogWithRelations = {
-  id: string;
-  studentId: string;
-  examId?: string | null;
-  action: string;
-  amount: number;
-  reason?: string | null;
-  date: string;
-  chapterId?: string | null;
-  chapterNameSnapshot?: string | null;
-  student?: { id: string; name: string; code: string; courseId: string; status: string } | null;
-  exam?: { id: string; name: string; date: string; type: string } | null;
-};
-
 export function OpportunitiesView() {
   const {
     students,
@@ -89,6 +66,10 @@ export function OpportunitiesView() {
     studentCalls,
     studentNotes,
     logs,
+    adjustOpportunities,
+    bulkAdjustOpportunities,
+    resetOpportunities,
+    undoOpportunityLog,
     courseName,
     activeChapterForCourse,
     mergeStudentsCache,
@@ -101,7 +82,7 @@ export function OpportunitiesView() {
   const debouncedSearch = useDebouncedValue(search, 180);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
-  const [serverStudents, setServerStudents] = useState<OpportunityStudent[]>([]);
+  const [serverStudents, setServerStudents] = useState<Student[]>([]);
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [studentsLoading, setStudentsLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -113,9 +94,6 @@ export function OpportunitiesView() {
     "dashboard",
   ]);
   const [detailsStudentId, setDetailsStudentId] = useState("");
-  const [detailsLogs, setDetailsLogs] = useState<OpportunityLogWithRelations[]>([]);
-  const [detailsLogsLoading, setDetailsLogsLoading] = useState(false);
-  const [detailsRefreshKey, setDetailsRefreshKey] = useState(0);
   const [databaseStats, setDatabaseStats] =
     useState<OpportunityStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
@@ -154,12 +132,11 @@ export function OpportunitiesView() {
         opportunityStatus: filterStatus,
         opportunityCount: filterOpportunityCount,
         q: debouncedSearch,
-        opportunityMode: true,
       })
       .then((studentResult) => {
         if (cancelled || !studentResult) return;
         const nextStudents = (studentResult.students ||
-          []) as unknown as OpportunityStudent[];
+          []) as unknown as Student[];
         setServerStudents(nextStudents);
         setServerTotalPages(Math.max(1, Number(studentResult.totalPages || 1)));
         mergeStudentsCache(nextStudents);
@@ -265,42 +242,6 @@ export function OpportunitiesView() {
     syncKey,
   ]);
 
-  useEffect(() => {
-    if (!detailsStudentId) {
-      setDetailsLogs([]);
-      setDetailsLogsLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setDetailsLogsLoading(true);
-    opportunityLogApi
-      .list({ studentId: detailsStudentId, pageSize: 100 })
-      .then((result) => {
-        if (cancelled) return;
-        setDetailsLogs(
-          ((result?.opportunityLogs || []) as unknown as OpportunityLogWithRelations[]).map(
-            (log) => ({
-              ...log,
-              date: log.date ? String(log.date).slice(0, 10) : "",
-            }),
-          ),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setDetailsLogs([]);
-          toast.error("تعذر تحميل تفاصيل فرص الطالب من قاعدة البيانات.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setDetailsLogsLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [detailsStudentId, detailsRefreshKey, refreshKey, syncKey]);
-
   const filtered = serverStudents;
   const totalPages = serverTotalPages;
   const paged = serverStudents;
@@ -345,10 +286,6 @@ export function OpportunitiesView() {
     databaseStats?.noOpportunities,
   );
   const statsDismissed = databaseStatValue(databaseStats?.dismissed);
-  const statsNoActiveChapter = databaseStatValue(databaseStats?.noActiveChapter);
-  const statsConflicts = databaseStatValue(databaseStats?.activeChapterConflicts);
-  const statsOverLimit = databaseStatValue(databaseStats?.overLimit);
-  const statsFullOpportunities = databaseStatValue(databaseStats?.fullOpportunities);
   const statsSuffix = "";
 
   const clearFilters = () => {
@@ -369,12 +306,10 @@ export function OpportunitiesView() {
 
   const selectedDetailsLogs = useMemo(() => {
     if (!detailsStudentId) return [];
-    return detailsLogs.length > 0 || detailsLogsLoading
-      ? detailsLogs
-      : (opportunityLogs as OpportunityLogWithRelations[])
-          .filter((log) => log.studentId === detailsStudentId)
-          .sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  }, [detailsLogs, detailsLogsLoading, opportunityLogs, detailsStudentId]);
+    return opportunityLogs
+      .filter((log) => log.studentId === detailsStudentId)
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  }, [opportunityLogs, detailsStudentId]);
 
   const selectedDetailsStats = useMemo(() => {
     return selectedDetailsLogs.reduce(
@@ -417,33 +352,6 @@ export function OpportunitiesView() {
       .trim()
       .replace(/^@+/, "");
     return username ? `https://t.me/${encodeURIComponent(username)}` : "#";
-  };
-
-  const selectedActionStudent = useMemo(
-    () =>
-      serverStudents.find((student) => student.id === actionDialog.studentId) ||
-      students.find((student) => student.id === actionDialog.studentId) ||
-      null,
-    [actionDialog.studentId, serverStudents, students],
-  );
-
-  const getStudentActiveChapter = (student: OpportunityStudent | Student | null) => {
-    if (!student) return null;
-    const snapshot = (student as OpportunityStudent).activeChapter;
-    if (snapshot) return snapshot;
-    const fallback = activeChapterForCourse(student.courseId);
-    return fallback
-      ? { id: fallback.id, name: fallback.name, opportunities: fallback.opportunities }
-      : null;
-  };
-
-  const hasSingleServerActiveChapter = (student: OpportunityStudent | Student | null) => {
-    if (!student) return false;
-    const opportunityStudent = student as OpportunityStudent;
-    if (opportunityStudent.hasActiveChapter !== undefined) {
-      return Boolean(opportunityStudent.hasActiveChapter);
-    }
-    return Boolean(getStudentActiveChapter(student));
   };
 
   const graceEndDate = (student: Student): string => {
@@ -491,7 +399,7 @@ export function OpportunitiesView() {
     };
   };
 
-  const renderOpportunityReason = (log: OpportunityLogWithRelations | (typeof opportunityLogs)[number]) => {
+  const renderOpportunityReason = (log: (typeof opportunityLogs)[number]) => {
     const cleaned = cleanOpportunityReason(log.reason);
     const hasHiddenLink = String(log.reason || "").includes(
       "[academic-reactivation-link:",
@@ -548,9 +456,8 @@ export function OpportunitiesView() {
     );
   };
 
-  const renderLogExamDetails = (log: OpportunityLogWithRelations | (typeof opportunityLogs)[number]) => {
-    const relatedExam = (log as OpportunityLogWithRelations).exam;
-    const exam = relatedExam || exams.find((item) => item.id === log.examId);
+  const renderLogExamDetails = (log: (typeof opportunityLogs)[number]) => {
+    const exam = exams.find((item) => item.id === log.examId);
     if (!log.examId)
       return (
         <div className="rounded-xl border bg-muted/40 p-3 text-xs text-muted-foreground">
@@ -590,82 +497,30 @@ export function OpportunitiesView() {
   };
 
   const handleAction = runActionLocked(async () => {
-    const selectedStudent = selectedActionStudent as OpportunityStudent | null;
-    if (!selectedStudent) {
-      toast.error("تعذر تحديد الطالب المطلوب. حدّث الصفحة ثم حاول مرة أخرى.");
+    const selectedStudent = students.find(
+      (student) => student.id === actionDialog.studentId,
+    );
+    if (!selectedStudent || !activeChapterForCourse(selectedStudent.courseId)) {
+      toast.error("لا يمكن تعديل فرص طالب قبل اختيار فصل نشط لدورته");
       return;
     }
-    if (!hasSingleServerActiveChapter(selectedStudent)) {
-      toast.error("لا يمكن تعديل فرص طالب قبل اختيار فصل نشط واحد وصالح لدورته");
-      return;
-    }
-    if (actionDialog.type !== "reset" && !reason.trim()) {
-      toast.error("يرجى إدخال السبب");
-      return;
-    }
-
-    const normalizedAmount = Math.max(1, Math.trunc(Number(amount) || 1));
-    const result = await opportunityStatsApi.studentAction({
-      studentId: selectedStudent.id,
-      actionType: actionDialog.type,
-      amount: normalizedAmount,
-      reason: reason.trim(),
-    });
-
-    if (!result.ok) {
-      toast.error(result.error || "تعذر تنفيذ إجراء الفرص من الخادم");
-      return;
-    }
-
-    const updatedStudent = result.data?.student as OpportunityStudent | undefined;
-    if (updatedStudent?.id) {
-      mergeStudentsCache([updatedStudent]);
-      setServerStudents((current) =>
-        current.map((student) =>
-          student.id === updatedStudent.id
-            ? { ...student, ...updatedStudent }
-            : student,
-        ),
+    if (actionDialog.type === "reset") {
+      resetOpportunities(actionDialog.studentId);
+      toast.success("تم إعادة تعيين الفرص");
+    } else {
+      if (!reason.trim()) {
+        toast.error("يرجى إدخال السبب");
+        return;
+      }
+      const amt = actionDialog.type === "deduct" ? -amount : amount;
+      adjustOpportunities(actionDialog.studentId, amt, reason.trim());
+      toast.success(
+        actionDialog.type === "deduct" ? "تم خصم الفرص" : "تم إضافة الفرص",
       );
     }
-
-    toast.success(
-      actionDialog.type === "deduct"
-        ? "تم خصم الفرص من الخادم وإعادة الاحتساب"
-        : actionDialog.type === "add"
-          ? "تمت إضافة الفرص من الخادم وإعادة الاحتساب"
-          : "تمت إعادة تعيين الفرص من الخادم وإعادة الاحتساب",
-    );
     setActionDialog({ studentId: "", type: "add", open: false });
     setReason("");
     setAmount(1);
-    setDetailsRefreshKey((key) => key + 1);
-    setRefreshKey((key) => key + 1);
-  });
-
-  const handleUndoLog = runActionLocked(async (logId: string) => {
-    const result = await opportunityStatsApi.studentAction({
-      actionType: "undo",
-      logId,
-      reason: "تراجع من صفحة إدارة الفرص",
-    });
-    if (!result.ok) {
-      toast.error(result.error || "تعذر التراجع عن حركة الفرص من الخادم");
-      return;
-    }
-    const updatedStudent = result.data?.student as OpportunityStudent | undefined;
-    if (updatedStudent?.id) {
-      mergeStudentsCache([updatedStudent]);
-      setServerStudents((current) =>
-        current.map((student) =>
-          student.id === updatedStudent.id
-            ? { ...student, ...updatedStudent }
-            : student,
-        ),
-      );
-    }
-    toast.success("تم تسجيل حركة تراجع موثقة وإعادة احتساب الطالب");
-    setDetailsRefreshKey((key) => key + 1);
     setRefreshKey((key) => key + 1);
   });
 
@@ -934,7 +789,7 @@ export function OpportunitiesView() {
       </Card>
 
       {/* Opportunity Overview */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-7">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
@@ -973,38 +828,6 @@ export function OpportunitiesView() {
             </p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-              {statsNoActiveChapter}
-            </p>
-            <p className="text-xs text-muted-foreground">بلا فصل نشط</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-destructive">
-              {statsConflicts}
-            </p>
-            <p className="text-xs text-muted-foreground">تعارض فصول</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-primary">
-              {statsFullOpportunities}
-            </p>
-            <p className="text-xs text-muted-foreground">فرص كاملة</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-destructive">
-              {statsOverLimit}
-            </p>
-            <p className="text-xs text-muted-foreground">فوق السقف</p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Student Opportunities */}
@@ -1024,18 +847,12 @@ export function OpportunitiesView() {
               </p>
             ) : (
               paged.map((student) => {
-                const activeChapter = getStudentActiveChapter(student);
-                const hasChapter = hasSingleServerActiveChapter(student);
-                const opportunityCap = Math.max(
-                  0,
-                  Number(activeChapter?.opportunities || student.baseOpportunities || 0),
-                );
+                const activeChapter = activeChapterForCourse(student.courseId);
+                const hasChapter = Boolean(activeChapter);
                 const oppPercent =
-                  hasChapter && opportunityCap > 0
-                    ? Math.min(100, (student.opportunities / opportunityCap) * 100)
+                  hasChapter && student.baseOpportunities > 0
+                    ? (student.opportunities / student.baseOpportunities) * 100
                     : 0;
-                const hasChapterConflict =
-                  Number((student as OpportunityStudent).activeChapterConflictCount || 0) > 1;
                 return (
                   <div
                     key={student.id}
@@ -1057,30 +874,7 @@ export function OpportunitiesView() {
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {courseName(student.courseId)}
-                        {activeChapter ? ` • ${activeChapter.name}` : ""}
                       </p>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {activeChapter ? (
-                          <Badge variant="secondary" className="text-[10px]">
-                            سقف الفصل: {activeChapter.opportunities}
-                          </Badge>
-                        ) : null}
-                        {student.isOpportunityFull ? (
-                          <Badge variant="outline" className="text-[10px]">
-                            فرص كاملة
-                          </Badge>
-                        ) : null}
-                        {student.isOpportunityOverLimit ? (
-                          <Badge variant="destructive" className="text-[10px]">
-                            فوق السقف
-                          </Badge>
-                        ) : null}
-                        {hasChapterConflict ? (
-                          <Badge variant="destructive" className="text-[10px]">
-                            تعارض فصول نشطة
-                          </Badge>
-                        ) : null}
-                      </div>
                       {student.status === "مفصول" &&
                         student.dismissalReason && (
                           <p className="mt-1 text-xs font-semibold text-destructive">
@@ -1120,7 +914,7 @@ export function OpportunitiesView() {
                         }`}
                       >
                         {hasChapter
-                          ? `${student.opportunities}/${opportunityCap || student.baseOpportunities}`
+                          ? `${student.opportunities}/${student.baseOpportunities}`
                           : "0/0"}
                       </span>
                     </div>
@@ -1141,7 +935,12 @@ export function OpportunitiesView() {
                         className="text-xs"
                         onClick={() => setDetailsStudentId(student.id)}
                       >
-                        التفاصيل
+                        التفاصيل{" "}
+                        {opportunityLogs.filter(
+                          (log) => log.studentId === student.id,
+                        ).length > 0
+                          ? `(${opportunityLogs.filter((log) => log.studentId === student.id).length})`
+                          : ""}
                       </Button>
                       <Button
                         variant="outline"
@@ -1235,7 +1034,11 @@ export function OpportunitiesView() {
               opportunityLogs.slice(0, 20).map((log) => {
                 const student = students.find((s) => s.id === log.studentId);
                 const exam = exams.find((item) => item.id === log.examId);
-                const canUndo = log.action === "إضافة" || log.action === "خصم";
+                const canUndo = Boolean(
+                  student &&
+                  activeChapterForCourse(student.courseId) &&
+                  (log.action === "إضافة" || log.action === "خصم"),
+                );
                 return (
                   <div
                     key={log.id}
@@ -1275,7 +1078,12 @@ export function OpportunitiesView() {
                         size="sm"
                         className="h-7 text-xs"
                         disabled={!canUndo}
-                        onClick={() => handleUndoLog(log.id)}
+                        onClick={() => {
+                          const ok = undoOpportunityLog(log.id);
+                          ok
+                            ? toast.success("تم التراجع عن الحركة")
+                            : toast.error("لا يمكن التراجع عن هذه الحركة");
+                        }}
                       >
                         تراجع
                       </Button>
@@ -1349,11 +1157,7 @@ export function OpportunitiesView() {
                 </div>
               </div>
               <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
-                {detailsLogsLoading ? (
-                  <p className="empty-state py-8">
-                    جاري تحميل سجل الطالب من قاعدة البيانات...
-                  </p>
-                ) : selectedDetailsLogs.length === 0 ? (
+                {selectedDetailsLogs.length === 0 ? (
                   <p className="empty-state py-8">
                     لا توجد حركات فرص لهذا الطالب
                   </p>
@@ -1601,7 +1405,7 @@ export function OpportunitiesView() {
                   ? "خصم فرص"
                   : "إعادة تعيين الفرص"}
               {" - "}
-              {selectedActionStudent?.name}
+              {students.find((s) => s.id === actionDialog.studentId)?.name}
             </DialogTitle>
           </DialogHeader>
           {actionDialog.type !== "reset" ? (
@@ -1636,11 +1440,8 @@ export function OpportunitiesView() {
             <>
               <p className="text-sm text-muted-foreground">
                 سيتم إعادة تعيين فرص الطالب إلى العدد الأساسي (
-                {Number(
-                  getStudentActiveChapter(selectedActionStudent)?.opportunities ||
-                    selectedActionStudent?.baseOpportunities ||
-                    0,
-                )}
+                {students.find((s) => s.id === actionDialog.studentId)
+                  ?.baseOpportunities || 0}
                 )
               </p>
             </>

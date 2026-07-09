@@ -369,7 +369,6 @@ export async function GET(req: NextRequest) {
     "grades.add",
     "grades.view",
     "grades.edit",
-    "opportunities.view",
   ]);
   if (authError) return authError;
 
@@ -414,48 +413,10 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  const opportunityMode = searchParams.get("opportunityMode") === "1";
-  let responseStudents: Array<Record<string, unknown>> = students as unknown as Array<Record<string, unknown>>;
-  if (opportunityMode && students.length > 0) {
-    const courseIds = Array.from(new Set(students.map((student) => student.courseId)));
-    const activeLinks = await db.courseChapter.findMany({
-      where: { courseId: { in: courseIds }, active: true, archived: false },
-      select: {
-        courseId: true,
-        chapter: { select: { id: true, name: true, opportunities: true } },
-      },
-    });
-    const activeLinksByCourseId = new Map<string, typeof activeLinks>();
-    for (const link of activeLinks) {
-      const list = activeLinksByCourseId.get(link.courseId) || [];
-      list.push(link);
-      activeLinksByCourseId.set(link.courseId, list);
-    }
-    responseStudents = students.map((student) => {
-      const links = activeLinksByCourseId.get(student.courseId) || [];
-      const activeChapter = links.length === 1 ? links[0].chapter : null;
-      const cap = Math.max(0, Math.trunc(Number(activeChapter?.opportunities || student.baseOpportunities || 0)));
-      return {
-        ...student,
-        hasActiveChapter: links.length === 1 && cap > 0,
-        activeChapterConflictCount: links.length,
-        activeChapter: activeChapter
-          ? {
-              id: activeChapter.id,
-              name: activeChapter.name,
-              opportunities: Number(activeChapter.opportunities || 0),
-            }
-          : null,
-        isOpportunityFull: cap > 0 && Number(student.opportunities || 0) >= cap,
-        isOpportunityOverLimit: cap > 0 && Number(student.opportunities || 0) > cap,
-      };
-    });
-  }
-
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   return NextResponse.json({
-    students: responseStudents,
+    students,
     totalCount,
     page,
     pageSize,
@@ -468,15 +429,37 @@ type InitialOpportunitiesResult = {
   opportunities: number;
   baseOpportunities: number;
   hasActiveChapter: boolean;
+  activeChapterName?: string;
   warning?: string;
+  error?: string;
 };
+
+function studentCodeNumber(code: string | null | undefined): number {
+  const match = String(code || "").match(/^BIO-(\d+)$/);
+  return match ? Number(match[1]) : 0;
+}
+
+async function getNextStudentCode(
+  tx: Prisma.TransactionClient,
+): Promise<string> {
+  const existingCodes = await tx.student.findMany({
+    select: { code: true },
+    where: { code: { startsWith: "BIO-" } },
+  });
+  const maxCode = existingCodes.reduce(
+    (max, student) => Math.max(max, studentCodeNumber(student.code)),
+    0,
+  );
+  return `BIO-${String(maxCode + 1).padStart(3, "0")}`;
+}
 
 /**
  * السيرفر هو صاحب القرار النهائي لفرص الطالب عند التسجيل.
  * لا نعتمد نهائياً على opportunities/baseOpportunities القادمة من العميل،
- * لأن أي طلب API مباشر قد يرسل قيماً غير صحيحة. عند وجود فصل نشط للدورة
+ * لأن أي طلب API مباشر قد يرسل قيماً غير صحيحة. عند وجود فصل نشط واحد للدورة
  * نستخدم فرص الفصل فقط، وعند غياب الفصل النشط نسجل الطالب بفرص صفر مع
- * تحذير إداري واضح في استجابة الخادم.
+ * تحذير إداري واضح. أما وجود أكثر من فصل نشط فهو تعارض خطير يمنع التسجيل
+ * حتى يتم إصلاح صفحة الفصول والفرص.
  */
 async function getInitialOpportunities(
   course: { id: string; name?: string | null } | null,
@@ -487,15 +470,26 @@ async function getInitialOpportunities(
       baseOpportunities: 0,
       hasActiveChapter: false,
       warning: "الدورة المحددة غير موجودة، لذلك لا يمكن احتساب فرص الطالب.",
+      error: "الدورة المحددة غير موجودة",
     };
   }
 
-  const activeCourseChapter = await db.courseChapter.findFirst({
+  const activeCourseChapters = await db.courseChapter.findMany({
     where: { courseId: course.id, active: true, archived: false },
-    select: { chapterId: true },
+    include: { chapter: { select: { name: true, opportunities: true } } },
   });
 
-  if (!activeCourseChapter) {
+  if (activeCourseChapters.length > 1) {
+    return {
+      opportunities: 0,
+      baseOpportunities: 0,
+      hasActiveChapter: false,
+      error:
+        "لا يمكن تسجيل الطالب لأن هذه الدورة تحتوي أكثر من فصل نشط. أصلح الفصول والفرص أولاً.",
+    };
+  }
+
+  if (activeCourseChapters.length === 0) {
     return {
       opportunities: 0,
       baseOpportunities: 0,
@@ -504,22 +498,31 @@ async function getInitialOpportunities(
     };
   }
 
-  const chapter = await db.chapter.findUnique({
-    where: { id: activeCourseChapter.chapterId },
-    select: { opportunities: true },
-  });
+  const activeCourseChapter = activeCourseChapters[0];
+  const opp = Math.max(
+    0,
+    Math.trunc(Number(activeCourseChapter.chapter.opportunities || 0)),
+  );
 
-  const opp = Math.max(0, Math.trunc(Number(chapter?.opportunities || 0)));
   return {
     opportunities: opp,
     baseOpportunities: opp,
     hasActiveChapter: true,
+    activeChapterName: activeCourseChapter.chapter.name,
+    warning:
+      opp <= 0
+        ? "الفصل النشط لهذه الدورة فرصه 0، لذلك سيبدأ الطالب بدون فرص."
+        : undefined,
   };
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, "students.add");
-  if (authError) return authError;
+  const principalOrError = await requirePermissionPrincipal(
+    req,
+    "students.add",
+  );
+  if (principalOrError instanceof NextResponse) return principalOrError;
+  const principal = principalOrError;
 
   const body = await req.json();
 
@@ -602,6 +605,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (course.active === false) {
+    return NextResponse.json(
+      { error: "هذه الدورة موقوفة عن التسجيل حالياً" },
+      { status: 400 },
+    );
+  }
+
   const courseChoices = {
     courseProgram: body.courseProgram,
     courseTerm: body.courseProgram === "كورسات" ? body.courseTerm : null,
@@ -629,6 +639,12 @@ export async function POST(req: NextRequest) {
   );
 
   const initialOpportunitiesResult = await getInitialOpportunities(course);
+  if (initialOpportunitiesResult.error) {
+    return NextResponse.json(
+      { error: initialOpportunitiesResult.error },
+      { status: 409 },
+    );
+  }
   const opportunitiesWarning = initialOpportunitiesResult.warning;
   const initialOpportunities = {
     opportunities: initialOpportunitiesResult.opportunities,
@@ -636,41 +652,63 @@ export async function POST(req: NextRequest) {
   };
 
   try {
-    const student = await db.student.create({
-      data: {
-        name: String(body.name ?? "").trim(),
-        school: String(body.school ?? "").trim(),
-        gender: body.gender,
-        phone: sanitizePhoneInput(String(body.phone ?? "")),
-        parentPhone: sanitizePhoneInput(String(body.parentPhone ?? "")),
-        telegram: sanitizeTelegramInput(String(body.telegram ?? "")),
-        courseProgram: body.courseProgram || null,
-        courseTerm:
-          body.courseProgram === "كورسات" ? body.courseTerm || null : null,
-        studyType: body.studyType || null,
-        locationScope: body.locationScope || null,
-        baghdadMode: body.baghdadMode || null,
-        mainSite: body.locationScope || body.mainSite,
-        subSite: resolvedSubSite || body.subSite,
-        code: body.code,
-        status: body.status || "نشط",
-        dismissalType: body.dismissalType,
-        dismissalReason: body.dismissalReason,
-        dismissalNotes: body.dismissalNotes
-          ? String(body.dismissalNotes)
-          : null,
-        createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
-        // السيرفر يحسب الفرص حصراً من الفصل النشط، ولا يثق بأي قيمة مرسلة من العميل.
-        ...initialOpportunities,
-        accountingGraceDays: normalizeGraceDays(body.accountingGraceDays),
-        courseId: body.courseId,
-        ...uniqueKeys,
-      },
+    const student = await db.$transaction(async (tx) => {
+      const code = await getNextStudentCode(tx);
+      const createdStudent = await tx.student.create({
+        data: {
+          name: String(body.name ?? "").trim(),
+          school: String(body.school ?? "").trim(),
+          gender: body.gender,
+          phone: sanitizePhoneInput(String(body.phone ?? "")),
+          parentPhone: sanitizePhoneInput(String(body.parentPhone ?? "")),
+          telegram: sanitizeTelegramInput(String(body.telegram ?? "")),
+          courseProgram: body.courseProgram || null,
+          courseTerm:
+            body.courseProgram === "كورسات" ? body.courseTerm || null : null,
+          studyType: body.studyType || null,
+          locationScope: body.locationScope || null,
+          baghdadMode: body.baghdadMode || null,
+          mainSite: body.locationScope || body.mainSite,
+          subSite: resolvedSubSite || body.subSite,
+          // الكود يولّد حصراً من السيرفر حتى لا يظهر كود وهمي من الكاش المحلي.
+          code,
+          status: "نشط",
+          dismissalType: "",
+          dismissalReason: "",
+          dismissalNotes: body.dismissalNotes
+            ? String(body.dismissalNotes)
+            : null,
+          createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
+          // السيرفر يحسب الفرص حصراً من الفصل النشط، ولا يثق بأي قيمة مرسلة من العميل.
+          ...initialOpportunities,
+          accountingGraceDays: normalizeGraceDays(body.accountingGraceDays),
+          courseId: body.courseId,
+          ...uniqueKeys,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          module: "تسجيل الطلاب",
+          action: "تسجيل طالب",
+          details: `${createdStudent.name} - ${createdStudent.code} - ${course.name}${
+            initialOpportunitiesResult.activeChapterName
+              ? ` - ${initialOpportunitiesResult.activeChapterName}`
+              : ""
+          }`,
+          userId: principal.id,
+          userName: principal.name,
+        },
+      });
+
+      return createdStudent;
     });
+
     return NextResponse.json(
       {
         student,
         opportunitiesWarning,
+        source: "database",
       },
       { status: 201 },
     );

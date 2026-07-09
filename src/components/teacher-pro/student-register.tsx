@@ -1,8 +1,18 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { useTeacherStore } from "@/lib/teacher-store";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useTeacherStore,
+  type Course,
+  type Student,
+} from "@/lib/teacher-store";
+import {
+  studentApi,
+  studentRegisterApi,
+  type StudentRegisterContextResponse,
+} from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -39,7 +49,6 @@ import {
   OUT_OF_COUNTRY_LOCATION_SCOPE,
 } from "@/lib/course-config";
 import {
-  getStudentDuplicateMessage,
   normalizePhoneForDuplicate,
   normalizeTelegramIdentifier,
   sanitizeTelegramInput,
@@ -50,18 +59,23 @@ import {
   TEXT_ONLY_PATTERN,
 } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { StepProgress } from "./ui-kit";
+import { StepProgress, LoadingState, EmptyState } from "./ui-kit";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import {
   AlertCircle,
   BookOpen,
   CalendarDays,
+  Loader2,
   MapPin,
   PhoneCall,
+  RefreshCcw,
   Save,
   School,
+  ShieldCheck,
   Smartphone,
   User,
   UserPlus,
+  WifiOff,
 } from "lucide-react";
 import { Send } from "lucide-react";
 
@@ -88,6 +102,14 @@ type StudentRegisterForm = {
   subSite: string;
   createdAt: string;
   accountingGraceDays: string;
+};
+
+type RegisterContextRow = StudentRegisterContextResponse["courses"][number];
+
+type StudentCreateResponse = {
+  student?: Student;
+  opportunitiesWarning?: string;
+  source?: "database";
 };
 
 function todayISO(): string {
@@ -167,6 +189,39 @@ function RequiredMark() {
   return <span className="text-destructive">*</span>;
 }
 
+function normalizeRegisterContextCourse(row: RegisterContextRow): Course {
+  return {
+    ...(row.course as Record<string, unknown>),
+    id: String(row.course.id || row.id),
+    name: String(row.course.name || ""),
+    active: row.course.active !== undefined ? Boolean(row.course.active) : true,
+    createdAt: row.course.createdAt
+      ? String(row.course.createdAt).slice(0, 10)
+      : todayISO(),
+    availablePrograms: Array.isArray(row.course.availablePrograms)
+      ? row.course.availablePrograms.map(String)
+      : [],
+    availableStudyTypes: Array.isArray(row.course.availableStudyTypes)
+      ? row.course.availableStudyTypes.map(String)
+      : [],
+    studyTypesByProgram:
+      row.course.studyTypesByProgram &&
+      typeof row.course.studyTypesByProgram === "object"
+        ? (row.course.studyTypesByProgram as Course["studyTypesByProgram"])
+        : {},
+    locationConfig:
+      row.course.locationConfig && typeof row.course.locationConfig === "object"
+        ? (row.course.locationConfig as Course["locationConfig"])
+        : {},
+  };
+}
+
+function getStudentCreateResponse(data: unknown): StudentCreateResponse {
+  return data && typeof data === "object"
+    ? (data as StudentCreateResponse)
+    : {};
+}
+
 function SectionTitle({
   icon: Icon,
   title,
@@ -201,28 +256,77 @@ function SectionTitle({
 }
 
 export function StudentRegisterView() {
-  const { students, courses, addStudent, activeChapterForCourse } =
-    useTeacherStore();
+  const { students, courses, mergeStudentsCache } = useTeacherStore();
   const [form, setForm] = useState<StudentRegisterForm>(() =>
     readStudentDraft(),
   );
+  const [registerContext, setRegisterContext] =
+    useState<StudentRegisterContextResponse | null>(null);
+  const [contextLoading, setContextLoading] = useState(true);
+  const [contextError, setContextError] = useState("");
   const { locked: isSubmitting, runLocked } = useActionLock();
 
+  const loadRegisterContext = useCallback(async () => {
+    setContextLoading(true);
+    setContextError("");
+    try {
+      const context = await studentRegisterApi.context();
+      if (!context) {
+        setRegisterContext(null);
+        setContextError("تعذر تحميل الدورات من قاعدة البيانات.");
+        return;
+      }
+      setRegisterContext(context);
+    } catch {
+      setRegisterContext(null);
+      setContextError("تعذر الاتصال بالخادم لتحميل سياق التسجيل.");
+    } finally {
+      setContextLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRegisterContext();
+  }, [loadRegisterContext]);
+
+  const contextRows = registerContext?.rows || [];
+
+  const filteredCourseRows = useMemo(
+    () => contextRows.filter((row) => row.course.active !== false),
+    [contextRows],
+  );
+
   const filteredCourses = useMemo(
-    () => courses.filter((c) => c.active),
-    [courses],
+    () => filteredCourseRows.map(normalizeRegisterContextCourse),
+    [filteredCourseRows],
+  );
+
+  const selectedCourseRow = useMemo(
+    () => contextRows.find((row) => row.id === form.courseId) || null,
+    [contextRows, form.courseId],
   );
 
   const selectedCourse = useMemo(
-    () => courses.find((c) => c.id === form.courseId),
-    [courses, form.courseId],
+    () =>
+      selectedCourseRow
+        ? normalizeRegisterContextCourse(selectedCourseRow)
+        : courses.find((c) => c.id === form.courseId) || null,
+    [courses, form.courseId, selectedCourseRow],
   );
 
-  const selectedCourseActiveChapter = form.courseId
-    ? activeChapterForCourse(form.courseId)
-    : null;
+  const selectedCourseActiveChapter = selectedCourseRow?.activeChapter || null;
   const selectedCourseHasNoActiveChapter = Boolean(
-    form.courseId && !selectedCourseActiveChapter,
+    form.courseId &&
+    selectedCourseRow &&
+    selectedCourseRow.activeChapterCount === 0,
+  );
+  const selectedCourseHasChapterConflict = Boolean(
+    form.courseId &&
+    selectedCourseRow &&
+    selectedCourseRow.activeChapterCount > 1,
+  );
+  const selectedCourseCannotRegister = Boolean(
+    form.courseId && selectedCourseRow && !selectedCourseRow.canRegister,
   );
   const selectedCourseOpportunityPreview =
     selectedCourseActiveChapter?.opportunities ?? 0;
@@ -367,10 +471,6 @@ export function StudentRegisterView() {
     );
   }, [students, form.telegram]);
 
-  const hasDuplicateContact = Boolean(
-    duplicatePhoneStudent || duplicateTelegramStudent,
-  );
-
   useEffect(() => {
     if (!form.studyType) return;
     if (
@@ -394,6 +494,7 @@ export function StudentRegisterView() {
         label: "الدورة والموقع",
         complete: Boolean(
           form.courseId &&
+          !selectedCourseCannotRegister &&
           effectiveCourseProgram &&
           (effectiveCourseProgram !== "كورسات" || form.courseTerm) &&
           (courseAvailableStudyTypes.length === 0 || form.studyType) &&
@@ -426,6 +527,7 @@ export function StudentRegisterView() {
       effectiveCourseProgram,
       effectiveSubSite,
       isOutOfCountry,
+      selectedCourseCannotRegister,
     ],
   );
   const hasDraftData = useMemo(
@@ -484,6 +586,17 @@ export function StudentRegisterView() {
   };
 
   const validateRequiredFields = () => {
+    if (contextLoading)
+      return "انتظر اكتمال تحميل سياق التسجيل من قاعدة البيانات";
+    if (!registerContext) {
+      return contextError || "تعذر تحميل سياق التسجيل من قاعدة البيانات";
+    }
+    if (selectedCourseCannotRegister) {
+      return selectedCourseHasChapterConflict
+        ? "لا يمكن التسجيل لأن الدورة تحتوي أكثر من فصل نشط. أصلح الفصول والفرص أولاً."
+        : "لا يمكن التسجيل في هذه الدورة حالياً.";
+    }
+
     const requiredChecks: [boolean, string][] = [
       [Boolean(form.name.trim()), "اسم الطالب: هذا الحقل مطلوب"],
       [Boolean(form.school.trim()), "اسم المدرسة: هذا الحقل مطلوب"],
@@ -547,13 +660,8 @@ export function StudentRegisterView() {
       return "فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم";
     }
 
-    const duplicateMessage = getStudentDuplicateMessage(students, {
-      name: form.name,
-      phone: form.phone,
-      telegram: form.telegram,
-    });
-    if (duplicateMessage) return duplicateMessage;
-
+    // فحص التكرار النهائي يتم في السيرفر باستعلام مباشر على المفاتيح الفريدة.
+    // الفحص المحلي أدناه للعرض فقط لأن كاش الطلاب قد يكون جزئياً أو غير محمّل بالكامل.
     return null;
   };
 
@@ -567,43 +675,47 @@ export function StudentRegisterView() {
         return;
       }
 
-      const chapter = selectedCourseActiveChapter;
-      const result = addStudent({
+      const result = await studentApi.add({
         name: form.name.trim(),
         school: form.school.trim(),
         gender: form.gender,
         phone: form.phone.trim(),
         parentPhone: form.parentPhone.trim(),
         telegram: sanitizeTelegramInput(form.telegram),
-        courseProgram: effectiveCourseProgram as any,
-        courseTerm: (effectiveCourseProgram === "كورسات"
-          ? form.courseTerm
-          : "") as any,
-        studyType: form.studyType as any,
-        locationScope: form.locationScope as any,
-        baghdadMode: effectiveBaghdadMode as any,
+        courseProgram: effectiveCourseProgram,
+        courseTerm: effectiveCourseProgram === "كورسات" ? form.courseTerm : "",
+        studyType: form.studyType,
+        locationScope: form.locationScope,
+        baghdadMode: effectiveBaghdadMode,
         courseId: form.courseId,
         mainSite: form.locationScope,
         subSite: effectiveSubSite,
-        status: "نشط",
-        dismissalType: "",
-        dismissalReason: "",
-        dismissalNotes: "",
         createdAt: form.createdAt,
-        opportunities: chapter?.opportunities ?? 0,
-        baseOpportunities: chapter?.opportunities ?? 0,
         accountingGraceDays,
       });
 
       if (!result.ok) {
-        toast.error(result.message);
+        toast.error(result.error || "تعذر حفظ بيانات الطالب");
         return;
       }
 
+      const response = getStudentCreateResponse(result.data);
+      if (response.student) {
+        mergeStudentsCache([response.student]);
+      }
+      emitTeacherProDataChanged({
+        source: "local-mutation",
+        reason: "تسجيل طالب من السيرفر",
+        scopes: ["students", "opportunities", "dashboard"],
+      });
+
       window.localStorage.removeItem(STUDENT_DRAFT_KEY);
       setForm(emptyForm());
-      toast.success("تم حفظ بيانات الطالب", {
-        description: `${gracePeriodDescription}، وتمت إضافة الطالب إلى سجل الطلاب بنجاح`,
+      void loadRegisterContext();
+      toast.success("تم حفظ بيانات الطالب من قاعدة البيانات", {
+        description: `${response.student?.code ? `الكود: ${response.student.code} — ` : ""}${
+          response.opportunitiesWarning || gracePeriodDescription
+        }`,
       });
     },
   );
@@ -632,12 +744,72 @@ export function StudentRegisterView() {
         </CardHeader>
 
         <CardContent className="p-4 md:p-6 lg:p-8">
+          {contextLoading ? (
+            <LoadingState
+              title="جاري تحميل سياق التسجيل من قاعدة البيانات..."
+              description="نحضّر الدورات النشطة والفصول والفرص الحقيقية قبل السماح بالحفظ."
+            />
+          ) : contextError ? (
+            <EmptyState
+              icon={WifiOff}
+              title="تعذر تحميل سياق التسجيل"
+              description={contextError}
+              action={
+                <Button
+                  type="button"
+                  onClick={() => void loadRegisterContext()}
+                >
+                  <RefreshCcw className="ml-2 h-4 w-4" />
+                  إعادة المحاولة
+                </Button>
+              }
+            />
+          ) : null}
+
           <form
             onSubmit={handleSubmit}
             autoComplete="off"
             className="space-y-6"
           >
             <StepProgress steps={formSteps} />
+
+            {registerContext && (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <div className="rounded-2xl border bg-background/70 p-4">
+                  <p className="text-xs font-bold text-muted-foreground">
+                    الدورات النشطة
+                  </p>
+                  <p className="mt-1 text-2xl font-black text-foreground">
+                    {registerContext.stats.active}
+                  </p>
+                </div>
+                <div className="rounded-2xl border bg-background/70 p-4">
+                  <p className="text-xs font-bold text-muted-foreground">
+                    جاهزة للتسجيل
+                  </p>
+                  <p className="mt-1 text-2xl font-black text-primary">
+                    {registerContext.stats.selectable}
+                  </p>
+                </div>
+                <div className="rounded-2xl border bg-background/70 p-4">
+                  <p className="text-xs font-bold text-muted-foreground">
+                    بلا فصل نشط
+                  </p>
+                  <p className="mt-1 text-2xl font-black text-amber-600 dark:text-amber-400">
+                    {registerContext.stats.withoutActiveChapter}
+                  </p>
+                </div>
+                <div className="rounded-2xl border bg-background/70 p-4">
+                  <p className="text-xs font-bold text-muted-foreground">
+                    تعارض فصل
+                  </p>
+                  <p className="mt-1 text-2xl font-black text-destructive">
+                    {registerContext.stats.withChapterConflict}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <section className="surface-card p-5 md:p-6">
               <SectionTitle
                 icon={BookOpen}
@@ -657,7 +829,11 @@ export function StudentRegisterView() {
                     name="courseId"
                     value={form.courseId}
                     onValueChange={handleCourseChange}
-                    disabled={filteredCourses.length === 0}
+                    disabled={
+                      contextLoading ||
+                      !registerContext ||
+                      filteredCourses.length === 0
+                    }
                   >
                     <SelectTrigger
                       id="reg-courseId"
@@ -678,44 +854,97 @@ export function StudentRegisterView() {
                           لا توجد دورات مسجلة
                         </div>
                       ) : (
-                        filteredCourses.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))
+                        filteredCourseRows.map((row) => {
+                          const c = normalizeRegisterContextCourse(row);
+                          return (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                              {row.activeChapter
+                                ? ` — ${row.activeChapter.opportunities} فرص`
+                                : " — بلا فصل نشط"}
+                            </SelectItem>
+                          );
+                        })
                       )}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              {form.courseId && (
+              {form.courseId && selectedCourseRow && (
                 <div
                   className={`mt-5 rounded-2xl border p-4 text-sm leading-6 ${
-                    selectedCourseHasNoActiveChapter
+                    selectedCourseHasChapterConflict
                       ? "border-destructive/50 bg-destructive/10 text-destructive"
-                      : "border-primary/20 bg-primary/5 text-foreground"
+                      : selectedCourseHasNoActiveChapter
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                        : "border-primary/20 bg-primary/5 text-foreground"
                   }`}
                 >
-                  <div className="flex items-start gap-2">
-                    <AlertCircle
-                      className={`mt-0.5 h-4 w-4 shrink-0 ${
-                        selectedCourseHasNoActiveChapter
-                          ? "text-destructive"
-                          : "text-primary"
-                      }`}
-                    />
-                    <div className="space-y-1">
-                      <p className="font-black">
-                        {selectedCourseHasNoActiveChapter
-                          ? "هذه الدورة لا تحتوي على فصل نشط"
-                          : "الفصل النشط جاهز لهذه الدورة"}
-                      </p>
-                      <p>
-                        {selectedCourseHasNoActiveChapter
-                          ? "هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص."
-                          : `سيُسجل الطالب بعدد فرص ${selectedCourseOpportunityPreview} من الفصل النشط الحالي.`}
-                      </p>
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div className="flex items-start gap-2">
+                      {selectedCourseHasChapterConflict ? (
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                      ) : selectedCourseHasNoActiveChapter ? (
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                      ) : (
+                        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      )}
+                      <div className="space-y-1">
+                        <p className="font-black">
+                          {selectedCourseHasChapterConflict
+                            ? "تعارض خطر في فصول هذه الدورة"
+                            : selectedCourseHasNoActiveChapter
+                              ? "هذه الدورة لا تحتوي على فصل نشط"
+                              : "الفصل النشط جاهز لهذه الدورة"}
+                        </p>
+                        <p>
+                          {selectedCourseHasChapterConflict
+                            ? "تم منع التسجيل بهذه الدورة حتى لا يحصل الطالب على فرص خاطئة."
+                            : selectedCourseHasNoActiveChapter
+                              ? "يمكن التسجيل، لكن الطالب سيبدأ بفرص 0 إلى أن يتم تفعيل فصل للدورة."
+                              : `سيُسجل الطالب بعدد فرص ${selectedCourseOpportunityPreview} من الفصل النشط الحالي.`}
+                        </p>
+                        {selectedCourseRow.warnings.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {selectedCourseRow.warnings.map((warning) => (
+                              <Badge
+                                key={warning}
+                                variant="secondary"
+                                className="rounded-full"
+                              >
+                                {warning}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center md:min-w-72">
+                      <div className="rounded-2xl border bg-background/70 p-3">
+                        <p className="text-[11px] text-muted-foreground">
+                          الطلاب
+                        </p>
+                        <p className="font-black">
+                          {selectedCourseRow.counts.total}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border bg-background/70 p-3">
+                        <p className="text-[11px] text-muted-foreground">
+                          النشطون
+                        </p>
+                        <p className="font-black">
+                          {selectedCourseRow.counts.active}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border bg-background/70 p-3">
+                        <p className="text-[11px] text-muted-foreground">
+                          فرص البداية
+                        </p>
+                        <p className="font-black">
+                          {selectedCourseOpportunityPreview}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1108,8 +1337,9 @@ export function StudentRegisterView() {
                   </div>
                   {duplicateTelegramStudent && (
                     <p className="text-xs font-bold text-destructive">
-                      معرف التليكرام مستخدم للطالب:{" "}
-                      {duplicateTelegramStudent.name}
+                      تنبيه محلي: معرف التليكرام موجود في الكاش للطالب{" "}
+                      {duplicateTelegramStudent.name}. السيرفر سيفحص نهائياً عند
+                      الحفظ.
                     </p>
                   )}
                 </div>
@@ -1140,7 +1370,9 @@ export function StudentRegisterView() {
                   </div>
                   {duplicatePhoneStudent && (
                     <p className="text-xs font-bold text-destructive">
-                      رقم الهاتف مستخدم للطالب: {duplicatePhoneStudent.name}
+                      تنبيه محلي: رقم الهاتف موجود في الكاش للطالب{" "}
+                      {duplicatePhoneStudent.name}. السيرفر سيفحص نهائياً عند
+                      الحفظ.
                     </p>
                   )}
                 </div>
@@ -1262,25 +1494,38 @@ export function StudentRegisterView() {
 
             <div className="flex flex-col gap-3 rounded-3xl border bg-muted/35 p-4 md:flex-row md:items-center md:justify-between">
               <div
-                className={`flex items-start gap-2 text-sm leading-6 ${selectedCourseHasNoActiveChapter ? "font-bold text-destructive" : "text-muted-foreground"}`}
+                className={`flex items-start gap-2 text-sm leading-6 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "font-bold text-destructive" : "text-muted-foreground"}`}
               >
                 <AlertCircle
-                  className={`mt-0.5 h-4 w-4 shrink-0 ${selectedCourseHasNoActiveChapter ? "text-destructive" : "text-primary"}`}
+                  className={`mt-0.5 h-4 w-4 shrink-0 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "text-destructive" : "text-primary"}`}
                 />
                 <span>
-                  {selectedCourseHasNoActiveChapter
-                    ? "تنبيه قبل الحفظ: هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص."
-                    : "راجع بيانات الطالب والدورة قبل الحفظ."}
+                  {selectedCourseHasChapterConflict
+                    ? "التسجيل موقوف لهذه الدورة لأن فيها أكثر من فصل نشط."
+                    : selectedCourseHasNoActiveChapter
+                      ? "تنبيه قبل الحفظ: هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص."
+                      : "راجع بيانات الطالب والدورة قبل الحفظ. الحفظ النهائي يتم من قاعدة البيانات."}
                 </span>
               </div>
               <Button
                 type="submit"
                 size="lg"
-                disabled={isSubmitting || hasDuplicateContact}
+                disabled={
+                  isSubmitting ||
+                  contextLoading ||
+                  !registerContext ||
+                  selectedCourseCannotRegister
+                }
                 className="h-14 min-w-56 rounded-2xl px-10 text-base font-black shadow-lg shadow-primary/20"
               >
-                <Save className="ml-2 h-5 w-5" />
-                {isSubmitting ? "جاري الحفظ..." : "حفظ بيانات الطالب"}
+                {isSubmitting ? (
+                  <Loader2 className="ml-2 h-5 w-5 animate-spin" />
+                ) : (
+                  <Save className="ml-2 h-5 w-5" />
+                )}
+                {isSubmitting
+                  ? "جاري الحفظ في قاعدة البيانات..."
+                  : "حفظ بيانات الطالب"}
               </Button>
             </div>
           </form>
