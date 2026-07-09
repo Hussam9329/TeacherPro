@@ -60,22 +60,48 @@ function hasAcademicExamChange(before: unknown, after: unknown): boolean {
 }
 
 
-async function courseNamesWithoutActiveChapter(courseIds: string[]): Promise<string[]> {
+
+async function courseSelectionProblems(courseIds: string[]): Promise<string[]> {
   const uniqueCourseIds = Array.from(new Set(courseIds.filter(Boolean)));
   if (uniqueCourseIds.length === 0) return [];
+
   const courses = await db.course.findMany({
     where: { id: { in: uniqueCourseIds } },
-    select: { id: true, name: true },
-  }) as Array<{ id: string; name: string }>;
+    select: { id: true, name: true, active: true },
+  }) as Array<{ id: string; name: string; active: boolean }>;
+  const courseById = new Map<string, { id: string; name: string; active: boolean }>(
+    courses.map((course) => [course.id, course]),
+  );
+
   const activeLinks = await db.courseChapter.findMany({
     where: { courseId: { in: uniqueCourseIds }, active: true, archived: false },
     select: { courseId: true },
   }) as Array<{ courseId: string }>;
-  const activeCourseIds = new Set(activeLinks.map((link) => link.courseId));
-  const courseNameById = new Map<string, string>(courses.map((course) => [course.id, course.name]));
-  return uniqueCourseIds
-    .filter((courseId) => !activeCourseIds.has(courseId))
-    .map((courseId) => courseNameById.get(courseId) || courseId);
+
+  const activeCountsByCourseId = new Map<string, number>();
+  for (const link of activeLinks) {
+    activeCountsByCourseId.set(link.courseId, (activeCountsByCourseId.get(link.courseId) || 0) + 1);
+  }
+
+  const problems: string[] = [];
+  for (const courseId of uniqueCourseIds) {
+    const course = courseById.get(courseId);
+    const label = course?.name || courseId;
+    if (!course) {
+      problems.push(`الدورة "${label}" غير موجودة`);
+      continue;
+    }
+    if (!course.active) {
+      problems.push(`الدورة "${label}" موقوفة عن التسجيل والاختيارات الجديدة`);
+    }
+    const activeCount = activeCountsByCourseId.get(courseId) || 0;
+    if (activeCount === 0) {
+      problems.push(`الدورة "${label}" بلا فصل نشط`);
+    } else if (activeCount > 1) {
+      problems.push(`الدورة "${label}" لديها ${activeCount} فصول نشطة`);
+    }
+  }
+  return problems;
 }
 
 function validateExamPayload(body: Record<string, unknown>) {
@@ -83,6 +109,11 @@ function validateExamPayload(body: Record<string, unknown>) {
   if (nameError) return nameError;
   if (!['يومي', 'تراكمي', 'فاينل'].includes(String(body.type ?? ''))) return 'نوع الامتحان غير صحيح';
   if (parseCourseIds(body.courseIds).length === 0) return 'يجب اختيار دورة واحدة على الأقل';
+  const selectedMainSites = String(body.mainSite ?? '')
+    .split(',')
+    .map((site) => site.trim())
+    .filter(Boolean);
+  if (selectedMainSites.length === 0) return 'يجب اختيار منطقة واحدة على الأقل';
   const noDiscount = parseBoolean(body.noDiscount);
   const fullMark = Number(body.fullMark ?? 100);
   const passMark = Number(body.passMark ?? 50);
@@ -130,9 +161,9 @@ export async function POST(req: NextRequest) {
     const validationMessage = validateExamPayload(body);
     if (validationMessage) return validationError(validationMessage);
     const parsedCourseIds = parseCourseIds(body.courseIds);
-    const invalidCourseNames = await courseNamesWithoutActiveChapter(parsedCourseIds);
-    if (invalidCourseNames.length > 0) {
-      return validationError(`لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourseNames.join('، ')}`);
+    const courseProblems = await courseSelectionProblems(parsedCourseIds);
+    if (courseProblems.length > 0) {
+      return validationError(`لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${courseProblems.join('، ')}`);
     }
     const noDiscount = parseBoolean(body.noDiscount);
     const exam = await db.$transaction(async (tx) => {
@@ -157,7 +188,13 @@ export async function POST(req: NextRequest) {
       await syncExamCourseLinks(tx, createdExam.id, parsedCourseIds);
       return createdExam;
     });
-    return NextResponse.json({ exam }, { status: 201 });
+    await writeRequestAuditLog(req, 'الامتحانات', 'إضافة امتحان من قاعدة البيانات', {
+      examId: exam.id,
+      examName: exam.name,
+      courseIds: parsedCourseIds,
+      active: exam.active,
+    });
+    return NextResponse.json({ exam, source: 'database' }, { status: 201 });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حفظ الامتحان حالياً.');
   }
@@ -206,9 +243,9 @@ export async function PUT(req: NextRequest) {
     });
     if (candidateValidationMessage) return validationError(candidateValidationMessage);
     const candidateCourseIds = parseCourseIds(data.courseIds ?? existingExam.courseIds);
-    const invalidCourseNames = await courseNamesWithoutActiveChapter(candidateCourseIds);
-    if (invalidCourseNames.length > 0) {
-      return validationError(`لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourseNames.join('، ')}`);
+    const courseProblems = await courseSelectionProblems(candidateCourseIds);
+    if (courseProblems.length > 0) {
+      return validationError(`لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${courseProblems.join('، ')}`);
     }
     const effectiveNoDiscount = Boolean(data.noDiscount ?? existingExam.noDiscount);
     if (effectiveNoDiscount) {

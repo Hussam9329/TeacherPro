@@ -36,6 +36,15 @@ type ViewMode = "cards" | "table";
 type NotesFilter = "all" | "with-notes" | "without-notes";
 type PledgeFilter = "all" | "with-pledge" | "without-pledge";
 
+type DismissedStats = {
+  total: number;
+  temporary: number;
+  final: number;
+  withNotes: number;
+  withPledge: number;
+  withoutPledge: number;
+};
+
 type DismissalDetail = {
   studentId: string;
   type: string;
@@ -133,6 +142,16 @@ export function DismissedStudentsView() {
   const [detailsError, setDetailsError] = useState("");
   const [savingNoteIds, setSavingNoteIds] = useState<Record<string, boolean>>({});
   const [reactivatingIds, setReactivatingIds] = useState<Record<string, boolean>>({});
+  const [dismissedStats, setDismissedStats] = useState<DismissedStats>({
+    total: 0,
+    temporary: 0,
+    final: 0,
+    withNotes: 0,
+    withPledge: 0,
+    withoutPledge: 0,
+  });
+  const [dismissedStatsLoading, setDismissedStatsLoading] = useState(false);
+  const [dismissedStatsError, setDismissedStatsError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -214,6 +233,42 @@ export function DismissedStudentsView() {
 
     return () => controller.abort();
   }, [dismissedServerStudents]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("q", debouncedSearch);
+    if (filterCourseId) params.set("courseId", filterCourseId);
+    if (filterDismissalType) params.set("dismissalType", filterDismissalType);
+    if (filterNotes !== "all") params.set("notesFilter", filterNotes);
+    if (filterPledge !== "all") params.set("pledgeFilter", filterPledge);
+
+    setDismissedStatsLoading(true);
+    setDismissedStatsError("");
+    fetch(`/api/dismissed-students/stats?${params.toString()}`, {
+      credentials: "same-origin",
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload: { stats?: DismissedStats } | null) => {
+        if (controller.signal.aborted) return;
+        if (!payload?.stats) {
+          setDismissedStatsError("تعذر تحميل إحصائيات المفصولين من قاعدة البيانات.");
+          return;
+        }
+        setDismissedStats(payload.stats);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        console.warn("[DismissedStudentsView] stats load failed", error);
+        setDismissedStatsError("تعذر تحميل إحصائيات المفصولين من قاعدة البيانات.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDismissedStatsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [debouncedSearch, filterCourseId, filterDismissalType, filterNotes, filterPledge, syncKey]);
 
   const dismissedTypes = useMemo(
     () =>
@@ -326,20 +381,6 @@ export function DismissedStudentsView() {
     filterPledge,
   ]);
 
-  const dismissedStats = useMemo(() => {
-    const total = dismissedStudents.length;
-    const temporary = dismissedStudents.filter(
-      (s) => (dismissalDetails[s.id]?.type || s.dismissalType || "") === "فصل مؤقت",
-    ).length;
-    const final = dismissedStudents.filter(
-      (s) => (dismissalDetails[s.id]?.type || s.dismissalType || "") === "فصل نهائي",
-    ).length;
-    const withNotes = dismissedStudents.filter((s) =>
-      Boolean(String(dismissalDetails[s.id]?.notes ?? s.dismissalNotes ?? "").trim()),
-    ).length;
-    const withPledge = dismissedStudents.filter((s) => Boolean(dismissalDetails[s.id]?.hasPledge)).length;
-    return { total, temporary, final, withNotes, withPledge };
-  }, [dismissedStudents, dismissalDetails]);
 
   const canRunSensitiveActions = !listError && !detailsError && !dismissedStudentsSearchLoading && !dismissalDetailsLoading;
 
@@ -544,17 +585,17 @@ export function DismissedStudentsView() {
   };
 
   const renderStatusBanner = () => {
-    if (dismissedStudentsSearchLoading || dismissalDetailsLoading) {
+    if (dismissedStudentsSearchLoading || dismissalDetailsLoading || dismissedStatsLoading) {
       return (
         <div className="rounded-2xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           جاري تحميل المفصولين وتفاصيل الفصل من قاعدة البيانات...
         </div>
       );
     }
-    if (listError || detailsError) {
+    if (listError || detailsError || dismissedStatsError) {
       return (
         <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {listError || detailsError}
+          {listError || detailsError || dismissedStatsError}
         </div>
       );
     }
@@ -567,41 +608,48 @@ export function DismissedStudentsView() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard
           label="إجمالي المفصولين"
-          value={dismissedStats.total}
+          value={dismissedStatsLoading ? "..." : dismissedStats.total}
           icon={Users}
           tone="danger"
           hint="حسب الفلاتر الحالية"
         />
         <StatCard
           label="فصل مؤقت"
-          value={dismissedStats.temporary}
+          value={dismissedStatsLoading ? "..." : dismissedStats.temporary}
           icon={Clock}
           tone="warning"
           hint="قابلون لإعادة التفعيل"
         />
         <StatCard
           label="فصل نهائي"
-          value={dismissedStats.final}
+          value={dismissedStatsLoading ? "..." : dismissedStats.final}
           icon={Ban}
           tone="danger"
           hint="فصل دائم"
         />
         <StatCard
           label="بملاحظات"
-          value={dismissedStats.withNotes}
+          value={dismissedStatsLoading ? "..." : dismissedStats.withNotes}
           icon={FileText}
           tone="info"
           hint="لديهم ملاحظات إدارية"
         />
         <StatCard
           label="بتعهد"
-          value={dismissedStats.withPledge}
+          value={dismissedStatsLoading ? "..." : dismissedStats.withPledge}
           icon={HandHeart}
           tone="primary"
           hint="تعهد ولي الأمر"
+        />
+        <StatCard
+          label="بدون تعهد"
+          value={dismissedStatsLoading ? "..." : dismissedStats.withoutPledge}
+          icon={Ban}
+          tone="warning"
+          hint="بحسب تفاصيل الفصل من الخادم"
         />
       </div>
 

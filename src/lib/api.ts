@@ -747,6 +747,28 @@ export interface CourseOverviewResponse {
   generatedAt?: string;
 }
 
+export interface ExamCreateContextRow {
+  id: string;
+  course: Record<string, unknown>;
+  activeChapterCount: number;
+  activeChapter: { id: string; name: string; opportunities: number } | null;
+  activeStudents: number;
+  siteCounts: Record<string, number>;
+  canSelectForExam: boolean;
+  blockers: string[];
+}
+
+export interface ExamCreateContextResponse {
+  source: "database";
+  rows: ExamCreateContextRow[];
+  stats: {
+    totalCourses: number;
+    selectableCourses: number;
+    blockedCourses: number;
+    activeStudents: number;
+  };
+}
+
 
 export interface ChapterOverviewResponse {
   source: "database";
@@ -1124,6 +1146,11 @@ export const studentApi = {
 };
 
 // ─── Exam API ─────────────────────────────────────────────────────────────────
+
+export const examCreateContextApi = {
+  get: (options: ApiGetOptions = {}) =>
+    apiGet<ExamCreateContextResponse>("exams/create-context", options),
+};
 
 export const examApi = {
   add: (exam: Record<string, unknown>) => apiPost("exams", exam),

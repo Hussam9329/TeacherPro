@@ -1,7 +1,14 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { useTeacherStore, type Exam } from "@/lib/teacher-store";
+import React, { useEffect, useMemo, useState } from "react";
+import type { Exam } from "@/lib/teacher-store";
+import {
+  examApi,
+  examCreateContextApi,
+  type ExamCreateContextRow,
+} from "@/lib/api";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
+import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +27,7 @@ import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { hasActiveChapterLink, studentMatchesExamMainSites } from "@/lib/exam-utils";
+import { normalizeExamSiteValue } from "@/lib/exam-utils";
 
 type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
 const EXAM_MAIN_SITE_OPTIONS: string[] = [...MAIN_SITE_OPTIONS];
@@ -52,7 +59,6 @@ function defaultDateTimeForDate(date: string) {
 function numberInputValue(value: number | string) {
   return Number(value) === 0 ? "" : String(value);
 }
-
 
 function formatRangeNumber(value: number) {
   if (!Number.isFinite(value)) return "—";
@@ -170,30 +176,72 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
   };
 }
 
-export function ExamNewView() {
-  const {
-    courses,
-    courseChapters,
-    students,
-    addExam,
-    courseName,
-  } = useTeacherStore();
+function selectedCourseBlockers(rows: ExamCreateContextRow[], selectedIds: string[]): string[] {
+  return selectedIds.flatMap((id) => {
+    const row = rows.find((item) => item.id === id);
+    if (!row) return [`الدورة ${id} غير موجودة في سياق قاعدة البيانات`];
+    return row.canSelectForExam ? [] : row.blockers.map((blocker) => `${String(row.course?.name || row.id)}: ${blocker}`);
+  });
+}
 
+function selectedSiteActiveStudentCount(rows: ExamCreateContextRow[], selectedCourseIds: string[], selectedSites: string[]): number | null {
+  if (selectedCourseIds.length === 0 || selectedSites.length === 0) return null;
+  const selectedRows = rows.filter((row) => selectedCourseIds.includes(row.id));
+  const normalizedSites = selectedSites.map(normalizeExamSiteValue).filter(Boolean);
+  const allSelected = EXAM_MAIN_SITE_OPTIONS.every((site) => normalizedSites.includes(normalizeExamSiteValue(site)));
+  if (allSelected) {
+    return selectedRows.reduce((sum, row) => sum + Number(row.activeStudents || 0), 0);
+  }
+  return selectedRows.reduce((sum, row) => {
+    return sum + normalizedSites.reduce((siteSum, site) => siteSum + Number(row.siteCounts?.[site] || 0), 0);
+  }, 0);
+}
+
+export function ExamNewView() {
+  const syncKey = useTeacherProSyncKey(["courses", "chapters", "students", "exams"]);
   const [form, setForm] = useState<ExamFormState>(() => emptyForm());
+  const [contextRows, setContextRows] = useState<ExamCreateContextRow[]>([]);
+  const [contextLoading, setContextLoading] = useState(true);
+  const [contextError, setContextError] = useState("");
   const { locked: isAddingExam, runLocked: runAddExamLocked } = useActionLock();
 
-  const activeCourses = useMemo(() => courses.filter((course) => course.active), [courses]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setContextLoading(true);
+    setContextError("");
+    examCreateContextApi
+      .get({ signal: controller.signal, quietAbort: true })
+      .then((payload) => {
+        if (controller.signal.aborted) return;
+        if (!payload?.rows) {
+          setContextRows([]);
+          setContextError("تعذر تحميل سياق إضافة الامتحان من قاعدة البيانات.");
+          return;
+        }
+        setContextRows(payload.rows);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setContextRows([]);
+          setContextError("تعذر تحميل سياق إضافة الامتحان من قاعدة البيانات.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setContextLoading(false);
+      });
+    return () => controller.abort();
+  }, [syncKey]);
+
+  const selectableCourses = useMemo(
+    () => contextRows.filter((row) => row.canSelectForExam),
+    [contextRows],
+  );
+  const blockedCourses = useMemo(
+    () => contextRows.filter((row) => !row.canSelectForExam),
+    [contextRows],
+  );
 
   const availableMainSitesFor = (_state: ExamFormState): string[] => EXAM_MAIN_SITE_OPTIONS;
-
-  const selectedSiteMatchedStudentsCount = (state: ExamFormState) => {
-    if (state.courseIds.length === 0 || state.mainSites.length === 0) return null;
-    return students.filter((student) =>
-      student.status === "نشط" &&
-      state.courseIds.includes(student.courseId) &&
-      studentMatchesExamMainSites(student, state.mainSites),
-    ).length;
-  };
 
   const validateForm = (state: ExamFormState) => {
     const fullMark = Number(state.fullMark);
@@ -204,10 +252,12 @@ export function ExamNewView() {
       ? 0
       : Number(state.discountMark);
 
+    if (contextLoading) return "انتظر تحميل سياق إضافة الامتحان من قاعدة البيانات";
+    if (contextError) return contextError;
     if (!state.name.trim()) return "يرجى إدخال اسم الامتحان";
     if (state.courseIds.length === 0) return "يرجى اختيار دورة واحدة على الأقل";
-    const invalidCourses = state.courseIds.filter((courseId) => !hasActiveChapterLink(courseChapters, courseId));
-    if (invalidCourses.length > 0) return `لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourses.map(courseName).join("، ")}`;
+    const blockers = selectedCourseBlockers(contextRows, state.courseIds);
+    if (blockers.length > 0) return `لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${blockers.join("، ")}`;
     if (state.mainSites.length === 0) return "يرجى اختيار منطقة واحدة على الأقل أو اختيار الكل";
     if (![fullMark, passMark, discountMark].every(Number.isFinite)) return "درجات الامتحان يجب أن تكون أرقاماً صحيحة";
     if (fullMark <= 0) return "الدرجة الكاملة يجب أن تكون أكبر من صفر";
@@ -226,9 +276,14 @@ export function ExamNewView() {
       toast.error(error);
       return;
     }
-    addExam(buildExamPayload(form));
+    const result = await examApi.add(buildExamPayload(form) as unknown as Record<string, unknown>);
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر إضافة الامتحان من الخادم.");
+      return;
+    }
     setForm(emptyForm());
-    toast.success("تمت إضافة الامتحان");
+    emitTeacherProDataChanged({ source: "local-mutation", reason: "exam-created", scopes: ["exams", "grades", "opportunities", "follow-up", "dashboard"] });
+    toast.success("تمت إضافة الامتحان من قاعدة البيانات");
   });
 
   const toggleCourseSelection = (state: ExamFormState, courseId: string): ExamFormState => ({
@@ -237,47 +292,69 @@ export function ExamNewView() {
   });
 
   const renderCourseSelector = (state: ExamFormState, setState: (updater: (prev: ExamFormState) => ExamFormState) => void, allId: string) => {
-    const eligibleCourses = activeCourses.filter((course) => hasActiveChapterLink(courseChapters, course.id));
-    const excludedCourses = activeCourses.filter((course) => !hasActiveChapterLink(courseChapters, course.id));
-    const allSelected = eligibleCourses.length > 0 && eligibleCourses.every((course) => state.courseIds.includes(course.id));
+    const allSelected = selectableCourses.length > 0 && selectableCourses.every((row) => state.courseIds.includes(row.id));
     return (
       <div className="space-y-3">
-        <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-3">
-        <div className="flex items-center gap-2 border-b pb-2">
-          <Checkbox
-            id={allId}
-            checked={allSelected}
-            onCheckedChange={() => setState((prev) => ({ ...prev, courseIds: allSelected ? [] : eligibleCourses.map((course) => course.id) }))}
-          />
-          <Label htmlFor={allId} className="text-sm font-bold">الكل للدورات المربوطة بفصل</Label>
-        </div>
-          {activeCourses.map((course) => {
-            const eligible = hasActiveChapterLink(courseChapters, course.id);
-            return (
-              <div key={course.id} className="flex items-center gap-2">
-                <Checkbox
-                  id={`${allId}-${course.id}`}
-                  checked={state.courseIds.includes(course.id)}
-                  disabled={!eligible}
-                  onCheckedChange={() => setState((prev) => toggleCourseSelection(prev, course.id))}
-                />
-                <Label htmlFor={`${allId}-${course.id}`} className="text-sm">
-                  {course.name}
-                </Label>
-                <Badge variant={eligible ? "outline" : "destructive"} className="text-[10px]">
-                  {eligible ? (course.availablePrograms?.join("، ") || "—") : "مستبعدة: بلا فصل نشط"}
-                </Badge>
-              </div>
-            );
-          })}
-        </div>
-        {excludedCourses.length > 0 && (
+        {contextLoading ? (
+          <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+            جاري تحميل الدورات والفصول النشطة من قاعدة البيانات...
+          </div>
+        ) : contextError ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            {contextError}
+          </div>
+        ) : (
+          <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border p-3">
+            <div className="flex items-center gap-2 border-b pb-2">
+              <Checkbox
+                id={allId}
+                checked={allSelected}
+                disabled={selectableCourses.length === 0}
+                onCheckedChange={() => setState((prev) => ({ ...prev, courseIds: allSelected ? [] : selectableCourses.map((row) => row.id) }))}
+              />
+              <Label htmlFor={allId} className="text-sm font-bold">الكل للدورات الصالحة من قاعدة البيانات</Label>
+              <Badge variant="outline" className="text-[10px]">{selectableCourses.length} صالحة</Badge>
+            </div>
+            {contextRows.map((row) => {
+              const courseName = String(row.course?.name || row.id);
+              return (
+                <div key={row.id} className="space-y-1 rounded-xl border bg-background/60 p-2">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id={`${allId}-${row.id}`}
+                      checked={state.courseIds.includes(row.id)}
+                      disabled={!row.canSelectForExam}
+                      onCheckedChange={() => setState((prev) => toggleCourseSelection(prev, row.id))}
+                    />
+                    <Label htmlFor={`${allId}-${row.id}`} className="text-sm font-bold">
+                      {courseName}
+                    </Label>
+                    <Badge variant={row.canSelectForExam ? "outline" : "destructive"} className="text-[10px]">
+                      {row.canSelectForExam ? "صالحة للامتحان" : "غير صالحة"}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-1 pr-7 text-[11px] text-muted-foreground">
+                    <span>الطلاب النشطون: {row.activeStudents}</span>
+                    <span>الفصل النشط: {row.activeChapter?.name || "—"}</span>
+                    <span>فرص الفصل: {row.activeChapter?.opportunities ?? "—"}</span>
+                  </div>
+                  {row.blockers.length > 0 ? (
+                    <div className="pr-7 text-[11px] text-destructive">
+                      {row.blockers.join("، ")}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {blockedCourses.length > 0 && !contextLoading && !contextError && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
             <p className="font-bold">دورات مستبعدة من اختيار الكل</p>
             <ul className="mt-2 list-disc space-y-1 pr-5">
-              {excludedCourses.map((course) => (
-                <li key={course.id}>
-                  دورة {course.name} مستبعدة لأنها بلا فصل نشط.
+              {blockedCourses.slice(0, 6).map((row) => (
+                <li key={row.id}>
+                  {String(row.course?.name || row.id)}: {row.blockers.join("، ")}
                 </li>
               ))}
             </ul>
@@ -327,7 +404,7 @@ export function ExamNewView() {
     const noDiscount = Boolean(state.noDiscount);
     const mainSitesForState = availableMainSitesFor(state);
     const allMainSitesSelected = mainSitesForState.length > 0 && state.mainSites.length === mainSitesForState.length;
-    const matchedStudentsCount = selectedSiteMatchedStudentsCount(state);
+    const matchedStudentsCount = selectedSiteActiveStudentCount(contextRows, state.courseIds, state.mainSites);
     const judgmentPreview = buildJudgmentPreview(state);
 
     return (
@@ -391,12 +468,12 @@ export function ExamNewView() {
           </div>
           {matchedStudentsCount === 0 && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
-              لا يوجد طلاب مطابقون لهذه المواقع في الدورات المختارة. قد يتم إنشاء الامتحان بدون نتائج متوقعة.
+              لا يوجد طلاب نشطون ظاهرون من سياق الخادم لهذه المواقع في الدورات المختارة. قد يتم إنشاء الامتحان بدون نتائج متوقعة.
             </div>
           )}
           {matchedStudentsCount !== null && matchedStudentsCount > 0 && (
             <p className="text-xs text-muted-foreground">
-              الطلاب المتوقع شمولهم حسب الدورات والمواقع المختارة: {matchedStudentsCount}
+              مؤشر الطلاب النشطين حسب الدورات والمواقع المختارة من الخادم: {matchedStudentsCount}
             </p>
           )}
         </div>
@@ -475,11 +552,34 @@ export function ExamNewView() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader><CardTitle>إضافة امتحان جديد</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader>
+          <CardTitle>إضافة امتحان جديد</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-2xl border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">الدورات الصالحة</p>
+              <p className="text-2xl font-black">{contextLoading ? "..." : selectableCourses.length}</p>
+            </div>
+            <div className="rounded-2xl border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">الدورات المستبعدة</p>
+              <p className="text-2xl font-black">{contextLoading ? "..." : blockedCourses.length}</p>
+            </div>
+            <div className="rounded-2xl border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">الطلاب النشطون</p>
+              <p className="text-2xl font-black">{contextLoading ? "..." : contextRows.reduce((sum, row) => sum + Number(row.activeStudents || 0), 0)}</p>
+            </div>
+            <div className="rounded-2xl border bg-muted/30 p-3">
+              <p className="text-xs text-muted-foreground">مصدر الصفحة</p>
+              <p className="text-sm font-bold text-emerald-600">قاعدة البيانات</p>
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {renderFormFields(form, setForm, "exam")}
-            <Button type="submit" disabled={isAddingExam} className="w-full">{isAddingExam ? "جاري الإضافة..." : "إضافة الامتحان"}</Button>
+            <Button type="submit" disabled={isAddingExam || contextLoading || Boolean(contextError)} className="w-full">
+              {isAddingExam ? "جاري الإضافة..." : "إضافة الامتحان"}
+            </Button>
           </form>
         </CardContent>
       </Card>

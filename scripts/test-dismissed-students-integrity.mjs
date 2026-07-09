@@ -24,11 +24,13 @@ function must(condition, okMessage, failMessage) {
 const pagePath = "src/components/teacher-pro/dismissed-students.tsx";
 const detailsRoutePath = "src/app/api/dismissed-students/details/route.ts";
 const statusActionRoutePath = "src/app/api/students/status-action/route.ts";
+const dismissedStatsRoutePath = "src/app/api/dismissed-students/stats/route.ts";
 const pkgPath = "package.json";
 
 const page = read(pagePath);
 const detailsRoute = read(detailsRoutePath);
 const statusActionRoute = read(statusActionRoutePath);
+const dismissedStatsRoute = read(dismissedStatsRoutePath);
 const pkg = JSON.parse(read(pkgPath));
 
 must(
@@ -109,6 +111,24 @@ must(
     statusActionRoute.includes("auditLog.create"),
   "API حالة الطالب ينفذ الفصل/إعادة التفعيل داخل transaction مع سجلات وتدقيق",
   "إعادة التفعيل والفصل يجب أن تبقى داخل transaction واحدة مع audit log.",
+);
+
+
+must(
+  page.includes("/api/dismissed-students/stats?") &&
+    page.includes("setDismissedStats") &&
+    page.includes("dismissedStatsLoading"),
+  "إحصائيات المفصولين تأتي من API قاعدة البيانات وليست من الصفحة الحالية فقط",
+  "يجب أن تقرأ صفحة المفصولين إحصائياتها من /api/dismissed-students/stats حتى لا تتأثر بحد الصفحة أو تأخر تفاصيل التعهد.",
+);
+
+must(
+  dismissedStatsRoute.includes('source: "database"') &&
+    dismissedStatsRoute.includes("withPledge") &&
+    dismissedStatsRoute.includes("withoutPledge") &&
+    dismissedStatsRoute.includes('distinct: ["studentId"]'),
+  "API إحصائيات المفصولين يحسب التعهدات والملاحظات من قاعدة البيانات",
+  "يجب أن يحسب API الإحصائيات total/withPledge/withoutPledge من DB وبطلاب مميزين.",
 );
 
 must(
