@@ -132,6 +132,80 @@ type RegistryViewMode = "cards" | "table";
 
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
 
+type RegistryIssueFilter =
+  | ""
+  | "no-active-chapter"
+  | "active-chapter-conflict"
+  | "zero-opportunities"
+  | "opportunity-full"
+  | "opportunity-over-limit"
+  | "missing-contact"
+  | "no-telegram";
+
+type RegistryStudentHealth = Student & {
+  hasActiveChapter?: boolean;
+  activeChapterConflictCount?: number;
+  activeChapter?: { id: string; name: string; opportunities: number } | null;
+  isOpportunityFull?: boolean;
+  isOpportunityOverLimit?: boolean;
+};
+
+const registryIssueFilterLabels: Record<Exclude<RegistryIssueFilter, "">, string> = {
+  "no-active-chapter": "بدون فصل نشط",
+  "active-chapter-conflict": "تعارض فصول نشطة",
+  "zero-opportunities": "فرص صفر",
+  "opportunity-full": "فرص كاملة",
+  "opportunity-over-limit": "فوق السقف",
+  "missing-contact": "ناقص بيانات تواصل",
+  "no-telegram": "بلا تليكرام",
+};
+
+function registryHealthBadges(student: Student) {
+  const row = student as RegistryStudentHealth;
+  const badges: Array<{ label: string; className: string }> = [];
+  const conflictCount = Number(row.activeChapterConflictCount || 0);
+
+  if (conflictCount > 1) {
+    badges.push({
+      label: `تعارض فصول نشطة: ${conflictCount}`,
+      className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+    });
+  } else if (row.hasActiveChapter === false) {
+    badges.push({
+      label: "بدون فصل نشط",
+      className: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    });
+  }
+
+  if (row.isOpportunityOverLimit) {
+    badges.push({
+      label: "فرص فوق السقف",
+      className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+    });
+  } else if (row.isOpportunityFull) {
+    badges.push({
+      label: "فرص كاملة",
+      className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+    });
+  }
+
+  if (!sanitizePhoneInput(student.phone || "") || !sanitizePhoneInput(student.parentPhone || "")) {
+    badges.push({
+      label: "ناقص بيانات تواصل",
+      className: "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+    });
+  }
+
+  if (!normalizeTelegramIdentifier(student.telegram || "")) {
+    badges.push({
+      label: "بلا تليكرام",
+      className: "border-muted-foreground/30 bg-muted/60 text-muted-foreground",
+    });
+  }
+
+  return badges;
+}
+
 const studentDeleteImpactLabels: Array<
   [keyof StudentDeleteImpactResponse["counts"], string]
 > = [
@@ -216,12 +290,12 @@ function whatsappLink(phone: string): string {
     sanitized.startsWith("07") && sanitized.length === 11
       ? `964${sanitized.slice(1)}`
       : sanitized;
-  return `whatsapp://send?phone=${encodeURIComponent(appPhone)}`;
+  return `https://wa.me/${encodeURIComponent(appPhone)}`;
 }
 
 function telegramLink(telegram: string): string {
   const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
-  return `tg://resolve?domain=${encodeURIComponent(username)}`;
+  return `https://t.me/${encodeURIComponent(username)}`;
 }
 
 function normalizeGraceDaysInput(value: string): string {
@@ -384,10 +458,6 @@ export function StudentRegistryView() {
     studentCalls,
     studentNotes,
     logs,
-    dismissStudent,
-    reactivateStudent,
-    updateStudent,
-    deleteStudent,
     setSection,
     courseName,
     activeChapterForCourse,
@@ -401,6 +471,8 @@ export function StudentRegistryView() {
   const [filterCourseTerm, setFilterCourseTerm] = useState("");
   const [filterStudyType, setFilterStudyType] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
+  const [filterRegistryIssue, setFilterRegistryIssue] =
+    useState<RegistryIssueFilter>("");
 
   // خيارات الفلاتر تُشتق من إعدادات الدورة/نوع الدورة المختارة، وليس من قوائم ثابتة.
   const availableProgramsForFilter = useMemo(
@@ -504,6 +576,8 @@ export function StudentRegistryView() {
     useActionLock();
   const { locked: isDeletingStudent, runLocked: runDeleteStudentLocked } =
     useActionLock();
+  const { locked: isStatusActionSaving, runLocked: runStatusActionLocked } =
+    useActionLock();
   const debouncedSearch = useDebouncedValue(search, 180);
   // Fetch location filter options from server (distinct query, not all students)
   const [locationFilterOptions, setLocationFilterOptions] = useState<string[]>(
@@ -527,14 +601,18 @@ export function StudentRegistryView() {
         studyType: filterStudyType,
       });
 
+    const controller = new AbortController();
+
     fetch(
       `/api/students/filter-options${params.size ? `?${params.toString()}` : ""}`,
       {
         credentials: "same-origin",
+        signal: controller.signal,
       },
     )
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
+        if (controller.signal.aborted) return;
         if (Array.isArray(data?.locationOptions)) {
           setLocationFilterOptions(data.locationOptions.filter(Boolean));
           return;
@@ -554,9 +632,12 @@ export function StudentRegistryView() {
         }
         setLocationFilterOptions(fallbackLocations());
       })
-      .catch(() => {
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
         setLocationFilterOptions(fallbackLocations());
       });
+
+    return () => controller.abort();
   }, [
     students,
     filterStatus,
@@ -575,22 +656,28 @@ export function StudentRegistryView() {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     setServerStudentsLoading(true);
     setServerStudentsError(null);
 
     studentApi
-      .list({
-        q: debouncedSearch,
-        status: filterStatus,
-        courseId: filterCourseId,
-        courseProgram: filterCourseProgram,
-        courseTerm: filterCourseProgram === "كورسات" ? filterCourseTerm : "",
-        studyType: filterStudyType,
-        location: filterLocation,
-        page,
-        pageSize,
-      })
+      .list(
+        {
+          q: debouncedSearch,
+          status: filterStatus,
+          courseId: filterCourseId,
+          courseProgram: filterCourseProgram,
+          courseTerm: filterCourseProgram === "كورسات" ? filterCourseTerm : "",
+          studyType: filterStudyType,
+          location: filterLocation,
+          registryIssue: filterRegistryIssue,
+          opportunityMode: true,
+          page,
+          pageSize,
+        },
+        { signal: controller.signal, quietAbort: true },
+      )
       .then((result) => {
         if (cancelled) return;
         if (!result) {
@@ -625,6 +712,7 @@ export function StudentRegistryView() {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [
     debouncedSearch,
@@ -634,6 +722,7 @@ export function StudentRegistryView() {
     filterCourseTerm,
     filterStudyType,
     filterLocation,
+    filterRegistryIssue,
     page,
     pageSize,
     serverRefreshKey,
@@ -1007,7 +1096,7 @@ export function StudentRegistryView() {
             : {}),
         }
       : {};
-    const result = updateStudent(editDialog.id, {
+    const result = await studentApi.update(editDialog.id, {
       ...transferUpdates,
       name: form.name.trim(),
       school: form.school.trim(),
@@ -1015,15 +1104,14 @@ export function StudentRegistryView() {
       phone: form.phone.trim(),
       parentPhone: form.parentPhone.trim(),
       telegram: sanitizeTelegramInput(form.telegram),
-      courseProgram: (editEffectiveCourseProgram || "") as any,
-      courseTerm: (editEffectiveCourseProgram === "كورسات"
-        ? form.courseTerm
-        : "") as any,
-      studyType: form.studyType as any,
-      locationScope: form.locationScope as any,
-      baghdadMode: (form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE
-        ? ""
-        : form.baghdadMode || editBaghdadMode || "") as any,
+      courseProgram: editEffectiveCourseProgram || "",
+      courseTerm: editEffectiveCourseProgram === "كورسات" ? form.courseTerm : "",
+      studyType: form.studyType,
+      locationScope: form.locationScope,
+      baghdadMode:
+        form.locationScope === OUT_OF_COUNTRY_LOCATION_SCOPE
+          ? ""
+          : form.baghdadMode || editBaghdadMode || "",
       courseId: form.courseId,
       mainSite: form.locationScope,
       subSite:
@@ -1038,8 +1126,19 @@ export function StudentRegistryView() {
     });
 
     if (!result.ok) {
-      toast.error(result.message);
+      toast.error(result.error || "تعذر تعديل بيانات الطالب");
       return;
+    }
+    const updatedStudent = (result.data as { student?: Student } | null)?.student;
+    if (updatedStudent) {
+      mergeStudentsCache([updatedStudent]);
+      setServerStudents((prev) =>
+        prev
+          ? prev.map((student) =>
+              student.id === updatedStudent.id ? updatedStudent : student,
+            )
+          : prev,
+      );
     }
     setEditDialog({ open: false, id: "", form: emptyEditForm });
     setEditOriginalStudent(null);
@@ -1051,6 +1150,10 @@ export function StudentRegistryView() {
   });
 
   const openDeleteDialog = (student: Student) => {
+    if (registryServerUnavailable) {
+      toast.error("لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالخادم ثم حاول مجدداً.");
+      return;
+    }
     setDeleteDialog({ open: true, id: student.id, studentName: student.name });
     setDeleteImpact(null);
     setDeleteImpactLoading(true);
@@ -1062,20 +1165,35 @@ export function StudentRegistryView() {
   };
 
   const handleDeleteConfirm = runDeleteStudentLocked(async () => {
-    const ok = deleteStudent(deleteDialog.id);
-    if (ok) {
+    if (registryServerUnavailable) {
+      toast.error("لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة.");
+      return;
+    }
+    const result = await studentApi.remove(deleteDialog.id);
+    if (!result.ok) {
+      toast.error(result.error || "تعذر أرشفة الطالب");
+      return;
+    }
+    const archivedStudent = (result.data as { student?: Student } | null)?.student;
+    if (archivedStudent) {
+      mergeStudentsCache([archivedStudent]);
+      setServerStudents((prev) =>
+        prev
+          ? prev.map((student) =>
+              student.id === archivedStudent.id ? archivedStudent : student,
+            ).filter((student) => filterStatus || student.status !== ARCHIVED_STUDENT_STATUS)
+          : prev,
+      );
+    } else {
       setServerStudents((prev) =>
         prev ? prev.filter((student) => student.id !== deleteDialog.id) : prev,
       );
-      setServerTotalCount((value) => Math.max(0, value - 1));
-      setServerRefreshKey((value) => value + 1);
-      toast.success("تمت أرشفة الطالب بدل الحذف النهائي", {
-        description:
-          "بقيت درجاته وإجازاته ومكالماته وفرصه وملاحظاته وأوراق تصحيحه محفوظة.",
-      });
-    } else {
-      toast.error("تعذر أرشفة الطالب");
     }
+    setServerRefreshKey((value) => value + 1);
+    toast.success("تمت أرشفة الطالب بدل الحذف النهائي", {
+      description:
+        "بقيت درجاته وإجازاته ومكالماته وفرصه وملاحظاته وأوراق تصحيحه محفوظة.",
+    });
     setDeleteDialog({ open: false, id: "", studentName: "" });
     setDeleteImpact(null);
   });
@@ -1100,6 +1218,11 @@ export function StudentRegistryView() {
       if (filterStatus && s.status !== filterStatus) return false;
       if (!filterStatus && s.status === ARCHIVED_STUDENT_STATUS) return false;
       if (filterCourseId && s.courseId !== filterCourseId) return false;
+      if (filterRegistryIssue) {
+        const badges = registryHealthBadges(s).map((badge) => badge.label);
+        const label = registryIssueFilterLabels[filterRegistryIssue];
+        if (!badges.some((badge) => badge.includes(label))) return false;
+      }
       if (
         !studentMatchesListFilters(s, {
           courseProgram: filterCourseProgram,
@@ -1120,6 +1243,7 @@ export function StudentRegistryView() {
     filterCourseTerm,
     filterStudyType,
     filterLocation,
+    filterRegistryIssue,
   ]);
 
   const usingServerStudents = Boolean(serverStudents);
@@ -1133,55 +1257,86 @@ export function StudentRegistryView() {
   const paged = usingServerStudents
     ? filtered
     : localFiltered.slice((page - 1) * pageSize, page * pageSize);
+  const registryServerUnavailable = Boolean(serverStudentsError && !serverStudents);
   const dismissedStudents = students.filter(
     (student) => student.status === "مفصول",
   );
 
-  const handleDismiss = () => {
+  const handleDismiss = runStatusActionLocked(async () => {
     if (!dismissDialog.student) return;
+    if (registryServerUnavailable) {
+      toast.error("لا يمكن فصل طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالخادم ثم حاول مجدداً.");
+      return;
+    }
     if (!dismissReason.trim()) {
       toast.error("يرجى إدخال سبب الفصل");
       return;
     }
-    dismissStudent(
-      dismissDialog.student.id,
-      dismissType,
-      dismissReason.trim(),
-      dismissNotes.trim(),
-    );
+    const result = await studentApi.statusAction({
+      action: "dismiss",
+      studentId: dismissDialog.student.id,
+      dismissalType: dismissType,
+      reason: dismissReason.trim(),
+      notes: dismissNotes.trim(),
+    });
+    if (!result.ok) {
+      toast.error(result.error || "تعذر فصل الطالب");
+      return;
+    }
+    const updatedStudent = (result.data as { student?: Student } | null)?.student;
+    if (updatedStudent) {
+      mergeStudentsCache([updatedStudent]);
+      setServerStudents((prev) =>
+        prev
+          ? prev.map((student) =>
+              student.id === updatedStudent.id ? updatedStudent : student,
+            )
+          : prev,
+      );
+    }
     setDismissDialog({ student: null, open: false });
     setDismissReason("");
     setDismissNotes("");
-    toast.success("تم فصل الطالب");
-  };
-
-  const handleReactivate = (studentId: string) => {
-    const student = students.find((item) => item.id === studentId);
-    reactivateStudent(studentId);
-    setServerStudents((prev) => {
-      if (!prev) return prev;
-      const next = prev.map((item) =>
-        item.id === studentId
-          ? ({
-              ...item,
-              status: "نشط",
-              dismissalType: "",
-              dismissalReason: "",
-              dismissalNotes: "",
-            } as Student)
-          : item,
-      );
-      return filterStatus && filterStatus !== "نشط"
-        ? next.filter((item) => item.id !== studentId)
-        : next;
+    setServerRefreshKey((value) => value + 1);
+    toast.success("تم فصل الطالب من قاعدة البيانات", {
+      description: "تم حفظ حالة الطالب وسجل الفرص والملاحظة الإدارية داخل عملية واحدة.",
     });
+  });
+
+  const handleReactivate = runStatusActionLocked(async (studentId: string) => {
+    if (registryServerUnavailable) {
+      toast.error("لا يمكن إعادة تفعيل طالب أثناء عرض نسخة محلية مؤقتة.");
+      return;
+    }
+    const student = students.find((item) => item.id === studentId);
+    const result = await studentApi.statusAction({
+      action: "reactivate",
+      studentId,
+    });
+    if (!result.ok) {
+      toast.error(result.error || "تعذر إعادة تفعيل الطالب");
+      return;
+    }
+    const updatedStudent = (result.data as { student?: Student } | null)?.student;
+    if (updatedStudent) {
+      mergeStudentsCache([updatedStudent]);
+      setServerStudents((prev) => {
+        if (!prev) return prev;
+        const next = prev.map((item) =>
+          item.id === studentId ? updatedStudent : item,
+        );
+        return filterStatus && filterStatus !== "نشط"
+          ? next.filter((item) => item.id !== studentId)
+          : next;
+      });
+    }
     setServerRefreshKey((value) => value + 1);
     toast.success(
       student?.status === ARCHIVED_STUDENT_STATUS
         ? "تمت استعادة الطالب من الأرشيف"
         : "تم إعادة تفعيل الطالب",
     );
-  };
+  });
 
   // Export rows: use current filtered results (server or local).
   // For full server-side export, the ExportDialog fetches from /api/students/export
@@ -1208,6 +1363,7 @@ export function StudentRegistryView() {
     if (filterCourseTerm) params.set("courseTerm", filterCourseTerm);
     if (filterStudyType) params.set("studyType", filterStudyType);
     if (filterLocation) params.set("location", filterLocation);
+    if (filterRegistryIssue) params.set("registryIssue", filterRegistryIssue);
     const res = await fetch(`/api/students/export?${params.toString()}`, {
       credentials: "same-origin",
     });
@@ -1228,6 +1384,7 @@ export function StudentRegistryView() {
     setFilterCourseTerm("");
     setFilterStudyType("");
     setFilterLocation("");
+    setFilterRegistryIssue("");
     setViewMode("cards");
     setPage(1);
   };
@@ -1417,6 +1574,33 @@ export function StudentRegistryView() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="registry-issue" className="text-xs">
+                مشاكل/صحة الطالب
+              </Label>
+              <Select
+                name="registryIssue"
+                value={filterRegistryIssue || "all"}
+                onValueChange={(v) => {
+                  setFilterRegistryIssue(
+                    v === "all" ? "" : (v as RegistryIssueFilter),
+                  );
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-issue">
+                  <SelectValue placeholder="كل الطلاب" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الطلاب</SelectItem>
+                  {Object.entries(registryIssueFilterLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-1 2xl:col-span-2">
               <Label htmlFor="registry-search" className="text-xs">
                 بحث
@@ -1566,6 +1750,9 @@ export function StudentRegistryView() {
       {serverStudentsError && (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300">
           {serverStudentsError}
+          <span className="mt-1 block text-xs">
+            تم إيقاف التعديل والفصل والأرشفة مؤقتاً حتى ترجع بيانات قاعدة البيانات، حتى لا تتعامل الصفحة مع كاش قديم.
+          </span>
         </div>
       )}
 
@@ -1726,6 +1913,20 @@ export function StudentRegistryView() {
                   </div>
                 </div>
 
+                {registryHealthBadges(student).length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-1.5">
+                    {registryHealthBadges(student).map((badge) => (
+                      <Badge
+                        key={badge.label}
+                        variant="outline"
+                        className={`rounded-full ${badge.className}`}
+                      >
+                        {badge.label}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
                 {student.status === "مفصول" && (
                   <div className="mb-3 rounded bg-destructive/10 p-2 text-xs text-destructive">
                     <div>
@@ -1752,6 +1953,7 @@ export function StudentRegistryView() {
                     variant="secondary"
                     size="sm"
                     className="min-h-11 text-xs"
+                    disabled={registryServerUnavailable}
                     onClick={() => openEditDialog(student)}
                   >
                     تعديل
@@ -1761,6 +1963,7 @@ export function StudentRegistryView() {
                       variant="destructive"
                       size="sm"
                       className="min-h-11 text-xs"
+                      disabled={registryServerUnavailable || isStatusActionSaving}
                       onClick={() => setDismissDialog({ student, open: true })}
                     >
                       فصل
@@ -1770,6 +1973,7 @@ export function StudentRegistryView() {
                       variant="default"
                       size="sm"
                       className="min-h-11 text-xs"
+                      disabled={registryServerUnavailable || isStatusActionSaving}
                       onClick={() => handleReactivate(student.id)}
                     >
                       {student.status === ARCHIVED_STUDENT_STATUS
@@ -1782,6 +1986,7 @@ export function StudentRegistryView() {
                       variant="outline"
                       size="sm"
                       className="min-h-11 border-destructive/40 text-xs text-destructive hover:bg-destructive/10"
+                      disabled={registryServerUnavailable || isDeletingStudent}
                       onClick={() => openDeleteDialog(student)}
                     >
                       أرشفة
@@ -1870,6 +2075,7 @@ export function StudentRegistryView() {
                       <Button
                         variant="secondary"
                         size="sm"
+                        disabled={registryServerUnavailable}
                         onClick={() => openEditDialog(student)}
                       >
                         تعديل
@@ -1878,6 +2084,7 @@ export function StudentRegistryView() {
                         <Button
                           variant="destructive"
                           size="sm"
+                          disabled={registryServerUnavailable || isStatusActionSaving}
                           onClick={() =>
                             setDismissDialog({ student, open: true })
                           }
@@ -1887,6 +2094,7 @@ export function StudentRegistryView() {
                       ) : (
                         <Button
                           size="sm"
+                          disabled={registryServerUnavailable || isStatusActionSaving}
                           onClick={() => handleReactivate(student.id)}
                         >
                           {student.status === ARCHIVED_STUDENT_STATUS
@@ -1899,6 +2107,7 @@ export function StudentRegistryView() {
                           variant="outline"
                           size="sm"
                           className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                          disabled={registryServerUnavailable || isDeletingStudent}
                           onClick={() => openDeleteDialog(student)}
                         >
                           أرشفة

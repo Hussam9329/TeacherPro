@@ -22,7 +22,8 @@
     "test:student-register": "node scripts/test-student-register-integrity.mjs",
     "test:student-register-integrity": "node scripts/test-student-register-integrity.mjs",
     "test:bulk-register": "node scripts/test-bulk-register-integrity.mjs",
-    "test:bulk-register-integrity": "node scripts/test-bulk-register-integrity.mjs"
+    "test:bulk-register-integrity": "node scripts/test-bulk-register-integrity.mjs",
+    "test:student-registry": "node scripts/test-student-registry-integrity.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1080.0",

@@ -469,6 +469,7 @@ export interface StudentListQuery {
   opportunityStatus?: string;
   opportunityCount?: string;
   opportunityMode?: boolean;
+  registryIssue?: string;
   page?: number;
   pageSize?: number;
 }
@@ -1054,6 +1055,7 @@ export const studentRegisterApi = {
 export const studentApi = {
   list: async (
     query: StudentListQuery = {},
+    options: ApiGetOptions = {},
   ): Promise<StudentListResponse | null> => {
     const queryString = buildQueryString({
       q: query.q,
@@ -1067,14 +1069,18 @@ export const studentApi = {
       opportunityStatus: query.opportunityStatus,
       opportunityCount: query.opportunityCount,
       opportunityMode: query.opportunityMode ? "1" : undefined,
+      registryIssue: query.registryIssue,
       page: query.page ?? 1,
       pageSize: query.pageSize ?? DEFAULT_STUDENT_PAGE_SIZE,
     });
     return apiGet<StudentListResponse>(
       `students${queryString ? `?${queryString}` : ""}`,
+      options,
     );
   },
   add: (student: Record<string, unknown>) => apiPost("students", student),
+  statusAction: (payload: Record<string, unknown>) =>
+    apiPost("students/status-action", payload),
   listAll: async (
     query: StudentListQuery = {},
   ): Promise<StudentListResponse | null> => {
