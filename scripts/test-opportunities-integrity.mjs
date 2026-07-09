@@ -63,8 +63,9 @@ check(
   statsRoute.includes('noActiveChapterWhere') &&
     statsRoute.includes('activeChapterConflicts') &&
     statsRoute.includes('overLimit') &&
-    statsRoute.includes('fullOpportunities'),
-  'إحصائيات إدارة الفرص تعرض مشاكل المحرك: بلا فصل، تعارض، فرص كاملة، فوق السقف',
+    statsRoute.includes('fullOpportunities') &&
+    statsRoute.includes('belowFullOpportunities'),
+  'إحصائيات إدارة الفرص تعرض مشاكل المحرك: بلا فصل، تعارض، فرص كاملة، فرص ناقصة، فوق السقف',
 );
 check(
   bulkTargetsRoute.includes('hasActiveChapterWhere') &&
@@ -83,6 +84,15 @@ check(
     opportunityLogsRoute.includes('student: { select:'),
   'سجل الفرص يدعم جلب سجل طالب محدد مع بيانات الطالب والامتحان',
 );
+
+check(
+  opportunitiesView.includes('statsBelowFullOpportunities') &&
+    opportunitiesView.includes('طلاب فرصهم ناقصة') &&
+    opportunitiesView.includes('دورات بلا فصل نشط') &&
+    opportunitiesView.includes('دورات فيها تعارض فصول'),
+  'واجهة إدارة الفرص تعرض كارت الفرص الناقصة وتوضح أن مشاكل الفصول تخص الدورات لا الطلاب',
+);
+
 check(
   packageJson.includes('test:opportunities-integrity'),
   'يوجد أمر اختبار خاص بسلامة تبويبة إدارة الفرص داخل package.json',
