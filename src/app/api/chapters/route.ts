@@ -88,12 +88,19 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد الفصل المطلوب');
-    const activeLinks = await db.courseChapter.count({ where: { chapterId: id, active: true } });
+    const [activeLinks, linkedCourseChapters, linkedOpportunityLogs] = await Promise.all([
+      db.courseChapter.count({ where: { chapterId: id, active: true } }),
+      db.courseChapter.count({ where: { chapterId: id } }),
+      db.opportunityLog.count({ where: { chapterId: id } }),
+    ]);
     if (activeLinks > 0) return validationError('لا يمكن حذف فصل مفعل حالياً. ألغِ تفعيله أولاً.', 409);
-    await db.$transaction(async (tx) => {
-      await tx.courseChapter.deleteMany({ where: { chapterId: id } });
-      await tx.chapter.delete({ where: { id } });
-    });
+    if (linkedCourseChapters > 0 || linkedOpportunityLogs > 0) {
+      return validationError(
+        `لا يمكن حذف الفصل لأنه مرتبط بـ ${linkedCourseChapters} ربط دورة و ${linkedOpportunityLogs} سجل فرص. احذف الروابط أو راجع الأثر قبل الحذف.`,
+        409,
+      );
+    }
+    await db.chapter.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حذف الفصل حالياً.');

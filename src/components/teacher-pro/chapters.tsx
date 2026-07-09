@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore } from "@/lib/teacher-store";
+import { chapterApi, courseChapterApi, type ChapterCourseLinkOverview, type ChapterOverviewResponse } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -38,182 +38,296 @@ import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
 import { useActionLock } from "@/hooks/use-action-lock";
 
+type CourseFilter = "all" | "has-active" | "no-active" | "multiple-active" | "needs-repair";
+type ChapterFilter = "all" | "active" | "unused" | "deletable" | "protected";
+type ChapterRow = ChapterOverviewResponse["chapterRows"][number];
+type CourseRow = ChapterOverviewResponse["courseRows"][number];
+
+type EditChapterDialog = {
+  open: boolean;
+  id: string;
+  chName: string;
+  opps: number;
+  row: ChapterRow | null;
+};
+
+type ActionDialog = {
+  open: boolean;
+  link: ChapterCourseLinkOverview | null;
+  course: CourseRow | null;
+  action: "activate" | "deactivate";
+};
+
+const courseFilterLabels: Record<CourseFilter, string> = {
+  all: "كل الدورات",
+  "has-active": "لديها فصل نشط",
+  "no-active": "بلا فصل نشط",
+  "multiple-active": "أكثر من فصل نشط",
+  "needs-repair": "تحتاج مراجعة فرص",
+};
+
+const chapterFilterLabels: Record<ChapterFilter, string> = {
+  all: "كل الفصول",
+  active: "مفعلة بدورات",
+  unused: "غير مرتبطة",
+  deletable: "قابلة للحذف",
+  protected: "محمية من الحذف",
+};
+
+function normalizeSearch(value: string): string {
+  return value
+    .toLocaleLowerCase("ar-IQ")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .trim();
+}
+
+function statCard(label: string, value: React.ReactNode, hint?: string) {
+  return (
+    <div className="rounded-2xl border bg-card/70 p-4 shadow-sm">
+      <p className="text-xs font-bold text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-black">{value}</p>
+      {hint ? <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
+    </div>
+  );
+}
+
+function renderBlockers(blockers: string[]) {
+  if (!blockers.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {blockers.map((blocker) => (
+        <Badge key={blocker} variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200">
+          {blocker}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
 export function ChaptersView() {
-  const {
-    chapters,
-    courseChapters,
-    courses,
-    opportunityLogs,
-    addChapter,
-    updateChapter,
-    deleteChapter,
-    attachChapter,
-    toggleChapter,
-    deleteCourseChapter,
-    chapterName,
-    courseName,
-  } = useTeacherStore();
-  const [chapterName_input, setChapterNameInput] = useState("");
+  const { loadSectionDataFromServer } = useTeacherStore();
+  const [overview, setOverview] = useState<ChapterOverviewResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [searchText, setSearchText] = useState("");
+  const [courseFilter, setCourseFilter] = useState<CourseFilter>("all");
+  const [chapterFilter, setChapterFilter] = useState<ChapterFilter>("all");
+  const [chapterNameInput, setChapterNameInput] = useState("");
   const [opportunities, setOpportunities] = useState(5);
   const [courseId, setCourseId] = useState("");
   const [chapterId, setChapterId] = useState("");
-  const [showForceDialog, setShowForceDialog] = useState(false);
-  const [pendingCCId, setPendingCCId] = useState("");
-  const [editChapterDialog, setEditChapterDialog] = useState({
+  const [editChapterDialog, setEditChapterDialog] = useState<EditChapterDialog>({
     open: false,
     id: "",
     chName: "",
     opps: 0,
+    row: null,
   });
-  const [deleteChapterDialog, setDeleteChapterDialog] = useState({
-    open: false,
-    id: "",
-    chName: "",
-  });
-  const [deleteCCDialog, setDeleteCCDialog] = useState({ open: false, id: "" });
-  const { locked: isAddingChapter, runLocked: runAddChapterLocked } =
-    useActionLock();
-  const { locked: isAttachingChapter, runLocked: runAttachChapterLocked } =
-    useActionLock();
-  const { locked: isSavingChapter, runLocked: runSaveChapterLocked } =
-    useActionLock();
-  const { locked: isDeletingChapter, runLocked: runDeleteChapterLocked } =
-    useActionLock();
-  const { locked: isDeletingLink, runLocked: runDeleteLinkLocked } =
-    useActionLock();
-  const { locked: isFixingZeroOpp, runLocked: runFixZeroOppLocked } =
-    useActionLock();
+  const [deleteChapterDialog, setDeleteChapterDialog] = useState<{ open: boolean; row: ChapterRow | null }>({ open: false, row: null });
+  const [deleteLinkDialog, setDeleteLinkDialog] = useState<{ open: boolean; link: ChapterCourseLinkOverview | null; course: CourseRow | null }>({ open: false, link: null, course: null });
+  const [actionDialog, setActionDialog] = useState<ActionDialog>({ open: false, link: null, course: null, action: "activate" });
+  const [repairDialog, setRepairDialog] = useState(false);
 
-  const openEditChapterDialog = (id: string) => {
-    const chapter = chapters.find((ch) => ch.id === id);
-    if (!chapter) return;
-    setEditChapterDialog({
-      open: true,
-      id,
-      chName: chapter.name,
-      opps: chapter.opportunities,
+  const { locked: isAddingChapter, runLocked: runAddChapterLocked } = useActionLock();
+  const { locked: isAttachingChapter, runLocked: runAttachChapterLocked } = useActionLock();
+  const { locked: isSavingChapter, runLocked: runSaveChapterLocked } = useActionLock();
+  const { locked: isDeletingChapter, runLocked: runDeleteChapterLocked } = useActionLock();
+  const { locked: isDeletingLink, runLocked: runDeleteLinkLocked } = useActionLock();
+  const { locked: isApplyingAction, runLocked: runApplyActionLocked } = useActionLock();
+  const { locked: isFixingZeroOpp, runLocked: runFixZeroOppLocked } = useActionLock();
+
+  const loadOverview = async (options: { quiet?: boolean } = {}) => {
+    if (!options.quiet) setLoading(true);
+    const data = await chapterApi.overview();
+    if (data) setOverview(data);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    chapterApi
+      .overview({ signal: controller.signal, quietAbort: true })
+      .then((data) => {
+        if (data) setOverview(data);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
+
+  const refreshAfterMutation = async (reason: string) => {
+    await Promise.all([
+      loadOverview({ quiet: true }),
+      loadSectionDataFromServer("chapters"),
+    ]);
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason,
+      scopes: ["chapters", "courses", "students", "opportunities", "dashboard", "logs"],
     });
   };
-  const handleEditChapterSave = runSaveChapterLocked(async () => {
-    if (!editChapterDialog.chName.trim()) {
+
+  const filteredCourses = useMemo(() => {
+    const query = normalizeSearch(searchText);
+    return (overview?.courseRows || []).filter((row) => {
+      const haystack = normalizeSearch([
+        row.course.name,
+        row.activeLink?.chapter.name || "",
+        ...row.links.map((link) => link.chapter.name),
+      ].join(" "));
+      if (query && !haystack.includes(query)) return false;
+      if (courseFilter === "has-active" && row.counts.activeLinks === 0) return false;
+      if (courseFilter === "no-active" && row.counts.activeLinks !== 0) return false;
+      if (courseFilter === "multiple-active" && row.counts.activeLinks <= 1) return false;
+      if (courseFilter === "needs-repair" && !row.health.needsRepair) return false;
+      return true;
+    });
+  }, [overview, searchText, courseFilter]);
+
+  const filteredChapters = useMemo(() => {
+    const query = normalizeSearch(searchText);
+    return (overview?.chapterRows || []).filter((row) => {
+      const haystack = normalizeSearch(row.chapter.name);
+      if (query && !haystack.includes(query)) return false;
+      if (chapterFilter === "active" && row.counts.activeLinks === 0) return false;
+      if (chapterFilter === "unused" && row.counts.linkedCourses > 0) return false;
+      if (chapterFilter === "deletable" && !row.deleteSafety.canDelete) return false;
+      if (chapterFilter === "protected" && row.deleteSafety.canDelete) return false;
+      return true;
+    });
+  }, [overview, searchText, chapterFilter]);
+
+  const filteredCourseStats = useMemo(() => ({
+    total: filteredCourses.length,
+    withActive: filteredCourses.filter((row) => row.counts.activeLinks === 1).length,
+    withoutActive: filteredCourses.filter((row) => row.counts.activeLinks === 0).length,
+    needsRepair: filteredCourses.filter((row) => row.health.needsRepair).length,
+  }), [filteredCourses]);
+
+  const handleAddChapter = runAddChapterLocked(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = chapterNameInput.trim();
+    if (!name) {
       toast.error("يرجى إدخال اسم الفصل");
       return;
     }
-    updateChapter(editChapterDialog.id, {
-      name: editChapterDialog.chName.trim(),
-      opportunities: Math.max(0, editChapterDialog.opps),
+    const result = await chapterApi.add({ name, opportunities: Math.max(0, Number(opportunities) || 0) });
+    if (!result.ok) {
+      toast.error(result.error || "تعذر إضافة الفصل");
+      return;
+    }
+    setChapterNameInput("");
+    setOpportunities(5);
+    await refreshAfterMutation("إضافة فصل server-first");
+    toast.success("تمت إضافة الفصل من قاعدة البيانات");
+  });
+
+  const handleAttachChapter = runAttachChapterLocked(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!courseId || !chapterId) {
+      toast.error("يرجى اختيار الدورة والفصل");
+      return;
+    }
+    const result = await courseChapterApi.add({ courseId, chapterId });
+    if (!result.ok) {
+      toast.error(result.error || "تعذر ربط الفصل بالدورة");
+      return;
+    }
+    setCourseId("");
+    setChapterId("");
+    await refreshAfterMutation("ربط فصل بدورة server-first");
+    toast.success("تم ربط الفصل بالدورة بعد تأكيد قاعدة البيانات");
+  });
+
+  const openEditChapterDialog = (row: ChapterRow) => {
+    setEditChapterDialog({
+      open: true,
+      id: row.id,
+      chName: row.chapter.name,
+      opps: row.chapter.opportunities,
+      row,
     });
-    setEditChapterDialog({ open: false, id: "", chName: "", opps: 0 });
-    toast.success("تم تعديل الفصل");
+  };
+
+  const handleEditChapterSave = runSaveChapterLocked(async () => {
+    const name = editChapterDialog.chName.trim();
+    if (!name) {
+      toast.error("يرجى إدخال اسم الفصل");
+      return;
+    }
+    const result = await chapterApi.update(editChapterDialog.id, {
+      name,
+      opportunities: Math.max(0, Number(editChapterDialog.opps) || 0),
+    });
+    if (!result.ok) {
+      toast.error(result.error || "تعذر تعديل الفصل");
+      return;
+    }
+    setEditChapterDialog({ open: false, id: "", chName: "", opps: 0, row: null });
+    await refreshAfterMutation("تعديل فصل server-first");
+    toast.success("تم تعديل الفصل بعد تأكيد قاعدة البيانات");
   });
 
-  const openDeleteChapterDialog = (id: string, chName: string) => {
-    setDeleteChapterDialog({ open: true, id, chName });
-  };
   const handleDeleteChapterConfirm = runDeleteChapterLocked(async () => {
-    const activeLinks = courseChapters.filter(
-      (cc) => cc.chapterId === deleteChapterDialog.id && cc.active,
-    ).length;
-    const linkedCourseChapters = courseChapters.filter(
-      (cc) => cc.chapterId === deleteChapterDialog.id,
-    ).length;
-    const linkedOpportunityLogs = opportunityLogs.filter(
-      (log) => log.chapterId === deleteChapterDialog.id,
-    ).length;
-
-    if (activeLinks > 0) {
-      toast.error("لا يمكن حذف فصل فعال حالياً. ألغِ تفعيله أولاً.");
+    const row = deleteChapterDialog.row;
+    if (!row) return;
+    if (!row.deleteSafety.canDelete) {
+      toast.error("هذا الفصل محمي من الحذف بسبب روابط أو سجلات لها أثر.");
       return;
     }
-    if (linkedCourseChapters > 0 || linkedOpportunityLogs > 0) {
-      toast.error(
-        `لا يمكن حذف الفصل لأنه مرتبط بـ ${linkedCourseChapters} ربط دورة و ${linkedOpportunityLogs} سجل فرص. احذف الروابط أو راجع الأثر قبل الحذف.`,
-      );
+    const result = await chapterApi.remove(row.id);
+    if (!result.ok) {
+      toast.error(result.error || "تعذر حذف الفصل");
       return;
     }
-
-    const ok = deleteChapter(deleteChapterDialog.id);
-    ok
-      ? toast.success("تم حذف الفصل")
-      : toast.error("لا يمكن حذف الفصل لأنه مرتبط بسجلات لها أثر عالمي");
-    setDeleteChapterDialog({ open: false, id: "", chName: "" });
+    setDeleteChapterDialog({ open: false, row: null });
+    await refreshAfterMutation("حذف فصل آمن");
+    toast.success("تم حذف الفصل بعد فحص الأثر");
   });
 
-  const openDeleteCCDialog = (id: string) => {
-    setDeleteCCDialog({ open: true, id });
-  };
-  const handleDeleteCCConfirm = runDeleteLinkLocked(async () => {
-    const ok = deleteCourseChapter(deleteCCDialog.id);
-    ok
-      ? toast.success("تم حذف الربط")
-      : toast.error("لا يمكن حذف ربط مفعل، قم بإلغاء التفعيل أولاً");
-    setDeleteCCDialog({ open: false, id: "" });
-  });
-
-  const handleAddChapter = runAddChapterLocked(
-    async (e: React.FormEvent<HTMLFormElement>) => {
-      e.preventDefault();
-      if (!chapterName_input.trim()) {
-        toast.error("يرجى إدخال اسم الفصل");
-        return;
-      }
-      addChapter(chapterName_input.trim(), opportunities);
-      setChapterNameInput("");
-      setOpportunities(5);
-      toast.success("تمت إضافة الفصل");
-    },
-  );
-
-  const handleAttachChapter = runAttachChapterLocked(
-    async (e: React.FormEvent<HTMLFormElement>) => {
-      e.preventDefault();
-      if (!courseId || !chapterId) {
-        toast.error("يرجى اختيار الدورة والفصل");
-        return;
-      }
-      const exists = courseChapters.some(
-        (cc) =>
-          cc.courseId === courseId &&
-          cc.chapterId === chapterId &&
-          !cc.archived,
-      );
-      if (exists) {
-        toast.error("الفصل مرتبط مسبقاً بهذه الدورة");
-        return;
-      }
-      attachChapter(courseId, chapterId);
-      toast.success("تم ربط الفصل بالدورة");
-    },
-  );
-
-  const handleToggleChapter = (ccId: string) => {
-    const cc = courseChapters.find((x) => x.id === ccId);
-    if (!cc) return;
-
-    if (!cc.active) {
-      // Check if students have non-zero opportunities
-      const students = useTeacherStore
-        .getState()
-        .students.filter((s) => s.courseId === cc.courseId);
-      const notZero = students.filter((s) => s.opportunities !== 0);
-      if (notZero.length > 0) {
-        setPendingCCId(ccId);
-        setShowForceDialog(true);
-        return;
-      }
+  const handleDeleteLinkConfirm = runDeleteLinkLocked(async () => {
+    const link = deleteLinkDialog.link;
+    if (!link) return;
+    if (!link.deleteSafety.canDelete) {
+      toast.error("هذا الربط محمي من الحذف لأنه مفعل أو يحمل أرشيف فرص.");
+      return;
     }
+    const result = await courseChapterApi.remove(link.id);
+    if (!result.ok) {
+      toast.error(result.error || "تعذر حذف الربط");
+      return;
+    }
+    setDeleteLinkDialog({ open: false, link: null, course: null });
+    await refreshAfterMutation("حذف ربط فصل بدورة آمن");
+    toast.success("تم حذف الربط بعد تأكيد قاعدة البيانات");
+  });
 
-    toggleChapter(ccId, false);
-    toast.success(
-      cc.active ? "تم إلغاء تفعيل الفصل" : "تم تفعيل الفصل وتوزيع الفرص",
-    );
+  const openActionDialog = (course: CourseRow, link: ChapterCourseLinkOverview) => {
+    setActionDialog({
+      open: true,
+      course,
+      link,
+      action: link.active ? "deactivate" : "activate",
+    });
   };
 
-  const handleForceActivate = () => {
-    toggleChapter(pendingCCId, true);
-    setShowForceDialog(false);
-    toast.success("تم تفعيل الفصل وأرشفة الفرص السابقة");
-  };
+  const handleApplyChapterAction = runApplyActionLocked(async () => {
+    const { link, action } = actionDialog;
+    if (!link) return;
+    const result = await courseChapterApi.activate(link.id, action, { confirmImpact: true });
+    if (!result.ok) {
+      toast.error(result.error || "تعذر تنفيذ إجراء الفصل");
+      return;
+    }
+    setActionDialog({ open: false, link: null, course: null, action: "activate" });
+    await refreshAfterMutation(action === "activate" ? "تفعيل فصل آمن" : "إلغاء تفعيل فصل آمن");
+    toast.success(action === "activate" ? "تم تفعيل الفصل وتحديث الفرص بأمان" : "تم إلغاء التفعيل وأرشفة الفرص بأمان");
+  });
 
   const handleFixZeroOpportunities = runFixZeroOppLocked(async () => {
     try {
@@ -227,399 +341,377 @@ export function ChaptersView() {
         toast.error(payload?.error || "تعذر إصلاح فرص الطلاب حالياً.");
         return;
       }
+      setRepairDialog(false);
+      await refreshAfterMutation("إصلاح فرص 0/0 بعد معاينة الأثر");
       if (payload?.fixedTotal > 0) {
-        toast.success(
-          payload.message || `تم إصلاح ${payload.fixedTotal} طالب.`,
-        );
-        // أعد تحميل بيانات الطلاب في الصفحات الأخرى عبر تحديث بسيط
-        window.dispatchEvent(new CustomEvent("teacherpro:students-updated"));
-        emitTeacherProDataChanged({
-          source: "local-mutation",
-          reason: "إصلاح فرص الطلاب",
-          scopes: ["students", "opportunities", "dashboard", "logs"],
-        });
+        toast.success(payload.message || `تم إصلاح ${payload.fixedTotal} طالب.`);
       } else {
-        toast.info(payload.message || "لا يوجد طلاب يحتاجون إصلاحاً.");
+        toast.info(payload?.message || "لا يوجد طلاب يحتاجون إصلاحاً.");
       }
     } catch {
       toast.error("تعذر الاتصال بالخادم لإصلاح فرص الطلاب.");
     }
   });
 
+  const resetFilters = () => {
+    setSearchText("");
+    setCourseFilter("all");
+    setChapterFilter("all");
+  };
+
+  const renderLoadingSkeleton = () => (
+    <div className="space-y-4" aria-live="polite" aria-busy="true">
+      {[0, 1, 2].map((index) => (
+        <div key={index} className="rounded-3xl border bg-card/80 p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="h-6 w-44 animate-pulse rounded-full bg-muted" />
+            <span className="h-8 w-24 animate-pulse rounded-full bg-muted" />
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            {[0, 1, 2, 3].map((cell) => (
+              <span key={cell} className="h-20 animate-pulse rounded-2xl bg-muted" />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const renderCourseRow = (row: CourseRow) => (
+    <Card key={row.id} className="overflow-hidden border bg-card/90 shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-lg">{row.course.name}</CardTitle>
+              <Badge variant={row.course.active ? "secondary" : "outline"}>
+                {row.course.active ? "نشطة للتسجيل" : "موقوفة عن التسجيل"}
+              </Badge>
+              {row.counts.activeLinks === 1 ? <Badge>فصل نشط واحد</Badge> : null}
+              {row.counts.activeLinks === 0 ? <Badge variant="destructive">بلا فصل نشط</Badge> : null}
+              {row.counts.activeLinks > 1 ? <Badge variant="destructive">تعارض: أكثر من فصل نشط</Badge> : null}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              الفصل النشط: {row.activeLink ? `${row.activeLink.chapter.name} (${row.activeLink.chapter.opportunities} فرص)` : "لا يوجد"}
+            </p>
+          </div>
+          {row.health.needsRepair ? <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200">تحتاج مراجعة</Badge> : <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200">سليمة</Badge>}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {statCard("الطلاب", row.counts.students, `نشط ${row.counts.activeStudents} / مفصول ${row.counts.dismissedStudents}`)}
+          {statCard("المؤرشفون", row.counts.archivedStudents)}
+          {statCard("روابط الفصول", row.counts.linkedChapters, `نشط ${row.counts.activeLinks}`)}
+          {statCard("فرص 0/0", row.counts.zeroZeroWithActive)}
+          {statCard("فوق السقف", row.counts.aboveCap)}
+        </div>
+
+        {row.warnings.length ? (
+          <div className="rounded-2xl border border-amber-500/35 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
+            <p className="mb-2 font-black">تنبيهات هذه الدورة</p>
+            <div className="flex flex-wrap gap-1.5">
+              {row.warnings.map((warning) => <Badge key={warning} variant="outline" className="border-amber-500/40 bg-background/70">{warning}</Badge>)}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-muted-foreground">الفصول المرتبطة</p>
+          {row.links.length === 0 ? (
+            <p className="rounded-2xl border border-dashed bg-muted/25 p-4 text-xs text-muted-foreground">لا يوجد أي فصل مربوط بهذه الدورة.</p>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {row.links.map((link) => (
+                <div key={link.id} className={`rounded-2xl border p-3 ${link.active ? "border-primary bg-primary/5" : "bg-muted/20"}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <b>{link.chapter.name}</b>
+                        <Badge variant={link.active ? "default" : "outline"}>{link.active ? "مفعل" : "غير مفعل"}</Badge>
+                        {link.archiveCount > 0 ? <Badge variant="outline">أرشيف {link.archiveCount}</Badge> : null}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">فرص الفصل: {link.chapter.opportunities}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant={link.active ? "outline" : "default"} className="rounded-full" onClick={() => openActionDialog(row, link)}>
+                        {link.active ? "إلغاء التفعيل" : "تفعيل آمن"}
+                      </Button>
+                      <Button size="sm" variant="ghost" className="rounded-full text-destructive" onClick={() => setDeleteLinkDialog({ open: true, link, course: row })} disabled={!link.deleteSafety.canDelete}>
+                        حذف الربط
+                      </Button>
+                    </div>
+                  </div>
+                  {renderBlockers(link.deleteSafety.blockers)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderChapterRow = (row: ChapterRow) => (
+    <div key={row.id} className="rounded-2xl border bg-card/80 p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <b>{row.chapter.name}</b>
+            <Badge variant="outline">{row.chapter.opportunities} فرص</Badge>
+            {row.deleteSafety.canDelete ? <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-200">قابل للحذف</Badge> : <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200">محمي</Badge>}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            مرتبط بـ {row.counts.linkedCourses} دورة · مفعل بـ {row.counts.activeLinks} · سجلات فرص {row.counts.opportunityLogs}
+          </p>
+          {renderBlockers(row.deleteSafety.blockers)}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" className="rounded-full" onClick={() => openEditChapterDialog(row)}>تعديل</Button>
+          <Button size="sm" variant="ghost" className="rounded-full text-destructive" onClick={() => setDeleteChapterDialog({ open: true, row })} disabled={!row.deleteSafety.canDelete}>حذف</Button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const actionCourse = actionDialog.course;
+  const actionLink = actionDialog.link;
+  const repairCount = overview?.stats.studentsZeroZeroWithActive || 0;
+
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-background">
         <CardHeader>
-          <CardTitle>الفصول والفرص</CardTitle>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>الفصول والفرص</CardTitle>
+              <p className="mt-2 text-sm text-muted-foreground">
+                إدارة الفصول أصبحت مبنية على ملخص قاعدة البيانات: فصل نشط واحد لكل دورة، أثر واضح قبل التفعيل، وحماية من الاعتماد على كاش الطلاب.
+              </p>
+            </div>
+            <Button variant="outline" className="rounded-full" onClick={() => void loadOverview()} disabled={loading}>تحديث الملخص</Button>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            إضافة الفصول للدورات وتفعيل فصل واحد فقط لكل دورة.
-          </p>
-          <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/10 p-3 space-y-2">
-            <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
-              <strong>إصلاح فرص الطلاب:</strong> إذا لاحظت أن بعض الطلاب فرصهم
-              <code className="mx-1 px-1 rounded bg-amber-100 dark:bg-amber-900/40">
-                0/0
-              </code>
-              رغم أن الفصل مفعّل لدورتهم، اضغط الزر أدناه لمنحهم فرص الفصل النشط
-              تلقائياً. يبحث الإصلاح عن كل طالب فرصه الأساسية صفر في دورة بها
-              فصل نشط ويمنحه نفس فرص زملائه.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleFixZeroOpportunities}
-              disabled={isFixingZeroOpp}
-              className="border-amber-500/50 text-amber-900 hover:bg-amber-100 dark:text-amber-100 dark:hover:bg-amber-900/30"
-            >
-              {isFixingZeroOpp ? "جاري الإصلاح..." : "إصلاح فرص الطلاب (0/0)"}
-            </Button>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {statCard("الدورات", overview?.stats.courses ?? "—")}
+            {statCard("الفصول", overview?.stats.chapters ?? "—")}
+            {statCard("بلا فصل نشط", overview?.stats.coursesWithoutActiveChapter ?? "—")}
+            {statCard("تعارض نشط", overview?.stats.coursesWithMultipleActiveChapters ?? "—")}
+            {statCard("طلاب 0/0", repairCount)}
+          </div>
+
+          <div className="rounded-2xl border border-dashed bg-muted/25 p-3 text-xs text-muted-foreground">
+            أي تفعيل أو إلغاء تفعيل يعرض أثره قبل التنفيذ، ويتم من الخادم داخل عملية واحدة حتى لا يظهر أكثر من فصل نشط لنفس الدورة.
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        {/* Add Chapter + Attach */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="grid gap-3 lg:grid-cols-[1.2fr_220px_220px_auto]">
+            <Input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="بحث باسم الدورة أو الفصل" />
+            <Select value={courseFilter} onValueChange={(value) => setCourseFilter(value as CourseFilter)}>
+              <SelectTrigger><SelectValue placeholder="حالة الدورات" /></SelectTrigger>
+              <SelectContent>
+                {(Object.keys(courseFilterLabels) as CourseFilter[]).map((key) => <SelectItem key={key} value={key}>{courseFilterLabels[key]}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={chapterFilter} onValueChange={(value) => setChapterFilter(value as ChapterFilter)}>
+              <SelectTrigger><SelectValue placeholder="حالة الفصول" /></SelectTrigger>
+              <SelectContent>
+                {(Object.keys(chapterFilterLabels) as ChapterFilter[]).map((key) => <SelectItem key={key} value={key}>{chapterFilterLabels[key]}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" onClick={resetFilters} className="rounded-full">تصفير الفلاتر</Button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <Badge variant="outline">المعروض: {filteredCourseStats.total}</Badge>
+            <Badge variant="outline">بفصل نشط: {filteredCourseStats.withActive}</Badge>
+            <Badge variant="outline">بلا فصل: {filteredCourseStats.withoutActive}</Badge>
+            <Badge variant="outline">تحتاج مراجعة: {filteredCourseStats.needsRepair}</Badge>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
         <Card>
-          <CardHeader>
-            <CardTitle>إضافة الفصول للدورات</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>إضافة وربط الفصول</CardTitle></CardHeader>
           <CardContent className="space-y-6">
-            {/* Add Chapter Form */}
-            <form onSubmit={handleAddChapter} className="space-y-4">
+            <form onSubmit={handleAddChapter} className="space-y-3 rounded-2xl border bg-muted/20 p-4">
+              <p className="font-bold">إضافة فصل منهجي</p>
               <div className="space-y-2">
-                <Label htmlFor="chapter-name">اسم الفصل المنهجي</Label>
-                <Input
-                  id="chapter-name"
-                  name="chapterName"
-                  autoComplete="off"
-                  value={chapterName_input}
-                  onChange={(e) => setChapterNameInput(e.target.value)}
-                  required
-                  placeholder="الفصل الأول - الخلية"
-                />
+                <Label htmlFor="chapter-name">اسم الفصل</Label>
+                <Input id="chapter-name" value={chapterNameInput} onChange={(event) => setChapterNameInput(event.target.value)} placeholder="مثلاً: الفصل الأول" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="chapter-opportunities">
-                  عدد الفرص لهذا الفصل
-                </Label>
-                <Input
-                  id="chapter-opportunities"
-                  name="opportunities"
-                  type="number"
-                  min={0}
-                  autoComplete="off"
-                  value={opportunities}
-                  onChange={(e) =>
-                    setOpportunities(Number(toLatinDigits(e.target.value)) || 0)
-                  }
-                />
+                <Label htmlFor="chapter-opps">عدد الفرص</Label>
+                <Input id="chapter-opps" type="number" min={0} value={opportunities} onChange={(event) => setOpportunities(Math.max(0, Number(toLatinDigits(event.target.value)) || 0))} />
               </div>
-              <Button
-                type="submit"
-                disabled={isAddingChapter}
-                className="w-full"
-              >
-                {isAddingChapter ? "جاري الإضافة..." : "إضافة فصل منهجي"}
-              </Button>
-              <div className="rounded-2xl border bg-muted/30 p-3 space-y-2">
-                <p className="text-xs font-semibold">مكتبة الفصول</p>
-                {chapters.map((ch) => (
-                  <div
-                    key={ch.id}
-                    className="flex items-center justify-between gap-2 text-xs"
-                  >
-                    <span className="truncate">
-                      {ch.name} - {ch.opportunities} فرص
-                    </span>
-                    <div className="flex gap-1">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="h-7 text-[11px]"
-                        onClick={() => openEditChapterDialog(ch.id)}
-                      >
-                        تعديل
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        className="h-7 text-[11px]"
-                        onClick={() => openDeleteChapterDialog(ch.id, ch.name)}
-                      >
-                        حذف
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <Button type="submit" disabled={isAddingChapter} className="w-full rounded-full">{isAddingChapter ? "جاري الإضافة..." : "إضافة فصل من الخادم"}</Button>
             </form>
 
-            <Separator />
-
-            {/* Attach Chapter Form */}
-            <form onSubmit={handleAttachChapter} className="space-y-4">
+            <form onSubmit={handleAttachChapter} className="space-y-3 rounded-2xl border bg-muted/20 p-4">
+              <p className="font-bold">ربط فصل بدورة</p>
               <div className="space-y-2">
-                <Label htmlFor="chapter-course">اختر الدورة</Label>
-                <Select
-                  name="courseId"
-                  value={courseId}
-                  onValueChange={setCourseId}
-                >
-                  <SelectTrigger id="chapter-course">
-                    <SelectValue placeholder="اختر الدورة" />
-                  </SelectTrigger>
+                <Label>الدورة</Label>
+                <Select value={courseId} onValueChange={setCourseId}>
+                  <SelectTrigger><SelectValue placeholder="اختر الدورة" /></SelectTrigger>
                   <SelectContent>
-                    {courses.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
+                    {(overview?.courseRows || []).map((row) => <SelectItem key={row.course.id} value={row.course.id}>{row.course.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="chapter-id">اختر الفصل المنهجي لإضافته</Label>
-                <Select
-                  name="chapterId"
-                  value={chapterId}
-                  onValueChange={setChapterId}
-                >
-                  <SelectTrigger id="chapter-id">
-                    <SelectValue placeholder="اختر الفصل" />
-                  </SelectTrigger>
+                <Label>الفصل</Label>
+                <Select value={chapterId} onValueChange={setChapterId}>
+                  <SelectTrigger><SelectValue placeholder="اختر الفصل" /></SelectTrigger>
                   <SelectContent>
-                    {chapters.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} - {c.opportunities} فرص
-                      </SelectItem>
-                    ))}
+                    {(overview?.chapterRows || []).map((row) => <SelectItem key={row.chapter.id} value={row.chapter.id}>{row.chapter.name} - {row.chapter.opportunities} فرص</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <Button
-                type="submit"
-                variant="secondary"
-                disabled={isAttachingChapter}
-                className="w-full"
-              >
-                {isAttachingChapter ? "جاري الربط..." : "إضافة الفصل للدورة"}
-              </Button>
+              <Button type="submit" disabled={isAttachingChapter} className="w-full rounded-full">{isAttachingChapter ? "جاري الربط..." : "ربط الفصل بالدورة"}</Button>
             </form>
+
+            <div className="rounded-2xl border border-amber-500/35 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-100">
+              <p className="font-black">إصلاح فرص الطلاب 0/0</p>
+              <p className="mt-1 leading-6">الإصلاح يعمل على الطلاب النشطين فقط في الدورات التي لديها فصل نشط، ولا يرجع فرصاً للمفصولين أو المؤرشفين.</p>
+              <Button type="button" variant="outline" size="sm" className="mt-3 rounded-full border-amber-500/50" onClick={() => setRepairDialog(true)} disabled={isFixingZeroOpp || repairCount === 0}>
+                {repairCount > 0 ? `معاينة وإصلاح ${repairCount} طالب` : "لا يوجد إصلاح مطلوب"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Linked Chapters */}
         <Card>
-          <CardHeader>
-            <CardTitle>الفصول المنهجية المرتبطة بالدورات</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4 max-h-[600px] overflow-y-auto">
-              {courses.map((course) => {
-                const linked = courseChapters.filter(
-                  (cc) => cc.courseId === course.id && !cc.archived,
-                );
-                return (
-                  <div
-                    key={course.id}
-                    className="p-4 rounded-2xl border bg-card/80 shadow-sm"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="font-bold">{course.name}</p>
-                      <Badge variant="secondary">
-                        {course.availablePrograms?.join("، ") || "—"}
-                      </Badge>
-                    </div>
-                    {linked.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-2">
-                        لا توجد فصول مرتبطة
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {linked.map((cc) => (
-                          <div
-                            key={cc.id}
-                            className="flex items-center justify-between p-2 rounded-xl bg-muted/60"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm">
-                                {chapterName(cc.chapterId)}
-                              </span>
-                              <Badge
-                                variant={cc.active ? "default" : "secondary"}
-                                className="text-[10px]"
-                              >
-                                {cc.active ? "مفعل" : "معطل"}
-                              </Badge>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleToggleChapter(cc.id)}
-                              >
-                                {cc.active ? "إلغاء التفعيل" : "تفعيل"}
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => openDeleteCCDialog(cc.id)}
-                              >
-                                حذف الربط
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+          <CardHeader><CardTitle>مكتبة الفصول</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {filteredChapters.length === 0 ? <p className="rounded-2xl border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">لا توجد فصول مطابقة للفلاتر.</p> : filteredChapters.map(renderChapterRow)}
           </CardContent>
         </Card>
       </div>
 
-      {/* Edit Chapter Dialog */}
-      <Dialog
-        open={editChapterDialog.open}
-        onOpenChange={(o) =>
-          setEditChapterDialog((prev) => ({ ...prev, open: o }))
-        }
-      >
-        <DialogContent dir="rtl">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-lg font-black">حالة الدورات والفصول</h3>
+          <p className="text-xs text-muted-foreground">كل الأرقام من قاعدة البيانات مباشرة.</p>
+        </div>
+        {loading ? renderLoadingSkeleton() : filteredCourses.length === 0 ? <p className="rounded-2xl border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">لا توجد دورات مطابقة للفلاتر.</p> : filteredCourses.map(renderCourseRow)}
+      </div>
+
+      <Dialog open={editChapterDialog.open} onOpenChange={(open) => setEditChapterDialog((prev) => ({ ...prev, open }))}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>تعديل الفصل</DialogTitle>
-            <DialogDescription>أدخل البيانات الجديدة للفصل</DialogDescription>
+            <DialogDescription>إذا كان الفصل مرتبطاً بدورات، راجع الأثر الظاهر قبل تغيير عدد الفرص.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          {editChapterDialog.row ? (
+            <div className="rounded-xl border bg-muted/25 p-3 text-xs text-muted-foreground">
+              مرتبط بـ {editChapterDialog.row.counts.linkedCourses} دورة · مفعل بـ {editChapterDialog.row.counts.activeLinks} · سجلات فرص {editChapterDialog.row.counts.opportunityLogs}
+            </div>
+          ) : null}
+          <div className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="chapter-edit-name">اسم الفصل</Label>
-              <Input
-                id="chapter-edit-name"
-                name="chName"
-                autoComplete="off"
-                value={editChapterDialog.chName}
-                onChange={(e) =>
-                  setEditChapterDialog((prev) => ({
-                    ...prev,
-                    chName: e.target.value,
-                  }))
-                }
-              />
+              <Label>اسم الفصل</Label>
+              <Input value={editChapterDialog.chName} onChange={(event) => setEditChapterDialog((prev) => ({ ...prev, chName: event.target.value }))} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="chapter-edit-opps">عدد الفرص</Label>
-              <Input
-                id="chapter-edit-opps"
-                name="opps"
-                type="number"
-                min={0}
-                autoComplete="off"
-                value={editChapterDialog.opps}
-                onChange={(e) =>
-                  setEditChapterDialog((prev) => ({
-                    ...prev,
-                    opps: Number(toLatinDigits(e.target.value)) || 0,
-                  }))
-                }
-              />
+              <Label>عدد الفرص</Label>
+              <Input type="number" min={0} value={editChapterDialog.opps} onChange={(event) => setEditChapterDialog((prev) => ({ ...prev, opps: Math.max(0, Number(toLatinDigits(event.target.value)) || 0) }))} />
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() =>
-                setEditChapterDialog((prev) => ({ ...prev, open: false }))
-              }
-            >
-              إلغاء
-            </Button>
-            <Button onClick={handleEditChapterSave} disabled={isSavingChapter}>
-              {isSavingChapter ? "جاري الحفظ..." : "حفظ"}
-            </Button>
+            <Button variant="outline" onClick={() => setEditChapterDialog({ open: false, id: "", chName: "", opps: 0, row: null })}>إلغاء</Button>
+            <Button onClick={handleEditChapterSave} disabled={isSavingChapter}>{isSavingChapter ? "جاري الحفظ..." : "حفظ بعد تأكيد الخادم"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Chapter AlertDialog */}
-      <AlertDialog
-        open={deleteChapterDialog.open}
-        onOpenChange={(o) =>
-          setDeleteChapterDialog((prev) => ({ ...prev, open: o }))
-        }
-      >
-        <AlertDialogContent dir="rtl">
+      <AlertDialog open={deleteChapterDialog.open} onOpenChange={(open) => setDeleteChapterDialog((prev) => ({ ...prev, open }))}>
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+            <AlertDialogTitle>حذف الفصل</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تريد حذف الفصل &quot;{deleteChapterDialog.chName}&quot; من
-              المكتبة؟ لا يمكن حذف فصل فعال حالياً.
+              {deleteChapterDialog.row?.deleteSafety.canDelete ? "هذا الفصل لا يحمل روابط أو سجلات أثر، ويمكن حذفه بأمان." : "هذا الفصل محمي من الحذف لأن له أثراً على النظام."}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteChapterDialog.row ? renderBlockers(deleteChapterDialog.row.deleteSafety.blockers) : null}
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteChapterConfirm}
-              disabled={isDeletingChapter}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isDeletingChapter ? "جاري الحذف..." : "حذف"}
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDeleteChapterConfirm} disabled={isDeletingChapter || !deleteChapterDialog.row?.deleteSafety.canDelete}>حذف</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete Course Chapter AlertDialog */}
-      <AlertDialog
-        open={deleteCCDialog.open}
-        onOpenChange={(o) =>
-          setDeleteCCDialog((prev) => ({ ...prev, open: o }))
-        }
-      >
-        <AlertDialogContent dir="rtl">
+      <AlertDialog open={deleteLinkDialog.open} onOpenChange={(open) => setDeleteLinkDialog((prev) => ({ ...prev, open }))}>
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>تأكيد حذف الربط</AlertDialogTitle>
+            <AlertDialogTitle>حذف ربط الفصل بالدورة</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تريد حذف ربط الفصل بهذه الدورة؟ لا يمكن حذف ربط مفعل.
+              {deleteLinkDialog.link?.deleteSafety.canDelete ? "الربط غير مفعل ولا يحمل أرشيف فرص، ويمكن حذفه بأمان." : "هذا الربط محمي من الحذف لأنه مفعل أو يحتوي أرشيف فرص."}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <p className="text-sm font-bold">{deleteLinkDialog.course?.course.name} / {deleteLinkDialog.link?.chapter.name}</p>
+          {deleteLinkDialog.link ? renderBlockers(deleteLinkDialog.link.deleteSafety.blockers) : null}
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteCCConfirm}
-              disabled={isDeletingLink}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isDeletingLink ? "جاري الحذف..." : "حذف الربط"}
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDeleteLinkConfirm} disabled={isDeletingLink || !deleteLinkDialog.link?.deleteSafety.canDelete}>حذف الربط</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Force Activate Dialog */}
-      <Dialog open={showForceDialog} onOpenChange={setShowForceDialog}>
-        <DialogContent dir="rtl">
+      <Dialog open={actionDialog.open} onOpenChange={(open) => setActionDialog((prev) => ({ ...prev, open }))}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>تنبيه قبل التفعيل</DialogTitle>
+            <DialogTitle>{actionDialog.action === "activate" ? "تفعيل فصل بأمان" : "إلغاء تفعيل الفصل"}</DialogTitle>
+            <DialogDescription>
+              هذا الإجراء server-first وسيتم داخل قاعدة البيانات مع أرشفة/استرجاع الفرص حسب الحالة.
+            </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            حسب التعليمات يجب أن تكون فرص جميع طلاب الدورة صفر قبل تفعيل الفصل.
-            النظام سيؤرشف الفرص الحالية ثم يضبط فرص الفصل الجديد.
-          </p>
+          {actionCourse && actionLink ? (
+            <div className="space-y-3 text-sm">
+              <div className="rounded-2xl border bg-muted/25 p-3">
+                <p className="font-black">{actionCourse.course.name}</p>
+                <p className="text-muted-foreground">{actionLink.chapter.name} - {actionLink.chapter.opportunities} فرص</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {statCard("طلاب نشطون", actionCourse.counts.activeStudents)}
+                {statCard("مفصولون", actionCourse.counts.dismissedStudents, "تحديث base فقط عند التفعيل")}
+                {statCard("مؤرشفون", actionCourse.counts.archivedStudents, "لا يتأثرون")}
+                {statCard("أرشيف الرابط", actionLink.archiveCount)}
+              </div>
+              {actionDialog.action === "activate" ? (
+                <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">سيتم تعطيل أي فصل نشط آخر لنفس الدورة، ثم تفعيل هذا الفصل وتحديث فرص الطلاب النشطين من قاعدة البيانات مباشرة.</p>
+              ) : (
+                <p className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">سيتم أرشفة فرص الطلاب غير المؤرشفين ثم تصفير فرص الدورة لأنها ستصبح بلا فصل نشط.</p>
+              )}
+            </div>
+          ) : null}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowForceDialog(false)}>
-              إلغاء
-            </Button>
-            <Button onClick={handleForceActivate}>أرشفة وتفعيل</Button>
+            <Button variant="outline" onClick={() => setActionDialog({ open: false, link: null, course: null, action: "activate" })}>إلغاء</Button>
+            <Button onClick={handleApplyChapterAction} disabled={isApplyingAction}>{isApplyingAction ? "جاري التنفيذ..." : "تنفيذ بعد معاينة الأثر"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={repairDialog} onOpenChange={setRepairDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>إصلاح فرص الطلاب 0/0</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم إصلاح الطلاب النشطين فقط الذين فرصهم 0/0 داخل دورات لديها فصل نشط. المفصولون والمؤرشفون لن تُعاد لهم فرص.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-2xl border bg-muted/25 p-4 text-sm">
+            الطلاب المرشحون للإصلاح حسب قاعدة البيانات: <b>{repairCount}</b>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction onClick={handleFixZeroOpportunities} disabled={isFixingZeroOpp || repairCount === 0}>{isFixingZeroOpp ? "جاري الإصلاح..." : "إصلاح الآن"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

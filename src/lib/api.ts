@@ -734,6 +734,69 @@ export interface CourseOverviewResponse {
   generatedAt?: string;
 }
 
+
+export interface ChapterOverviewResponse {
+  source: "database";
+  generatedAt?: string;
+  stats: {
+    courses: number;
+    chapters: number;
+    links: number;
+    coursesWithoutActiveChapter: number;
+    coursesWithMultipleActiveChapters: number;
+    studentsZeroZeroWithActive: number;
+    studentsAboveChapterCap: number;
+    deletableChapters: number;
+  };
+  courseRows: Array<{
+    id: string;
+    course: { id: string; name: string; active: boolean };
+    counts: {
+      students: number;
+      activeStudents: number;
+      dismissedStudents: number;
+      archivedStudents: number;
+      nonArchivedStudents: number;
+      linkedChapters: number;
+      activeLinks: number;
+      zeroZeroWithActive: number;
+      aboveCap: number;
+      nonZeroWithoutActive: number;
+    };
+    activeLink: ChapterCourseLinkOverview | null;
+    links: ChapterCourseLinkOverview[];
+    warnings: string[];
+    health: { needsRepair: boolean; canSafelyActivate: boolean };
+  }>;
+  chapterRows: Array<{
+    id: string;
+    chapter: { id: string; name: string; opportunities: number };
+    counts: {
+      linkedCourses: number;
+      activeLinks: number;
+      archivedLinks: number;
+      archiveEntries: number;
+      opportunityLogs: number;
+    };
+    deleteSafety: {
+      canDelete: boolean;
+      blockers: string[];
+      recommendedAction: string;
+    };
+  }>;
+}
+
+export interface ChapterCourseLinkOverview {
+  id: string;
+  courseId: string;
+  chapterId: string;
+  active: boolean;
+  archived: boolean;
+  archiveCount: number;
+  chapter: { id: string; name: string; opportunities: number };
+  deleteSafety: { canDelete: boolean; blockers: string[] };
+}
+
 export interface GradeListResponse {
   grades: Array<Record<string, unknown>>;
   totalCount: number;
@@ -902,7 +965,9 @@ export const courseApi = {
 // ─── Chapter API ──────────────────────────────────────────────────────────────
 
 export const chapterApi = {
-  add: (chapter: { id: string; name: string; opportunities: number }) =>
+  overview: (options: ApiGetOptions = {}) =>
+    apiGet<ChapterOverviewResponse>("chapters/overview", options),
+  add: (chapter: { name: string; opportunities: number }) =>
     apiPost("chapters", chapter),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("chapters", { id, ...updates }),
@@ -921,16 +986,24 @@ export const courseChapterApi = {
       "courseChapters",
     ),
   add: (cc: {
-    id: string;
+    id?: string;
     courseId: string;
     chapterId: string;
-    active: boolean;
-    archived: boolean;
-    archive: string;
+    active?: boolean;
+    archived?: boolean;
+    archive?: string;
   }) => apiPost("course-chapters", cc),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("course-chapters", { id, ...updates }),
-  remove: (id: string) => apiDelete("course-chapters", id),
+  activate: (
+    courseChapterId: string,
+    action: "activate" | "deactivate",
+    options: { confirmImpact: boolean } = { confirmImpact: true },
+  ) => apiPost("course-chapters/activate", { courseChapterId, action, confirmImpact: options.confirmImpact }),
+  remove: (id: string, options: { confirmImpact?: boolean } = {}) =>
+    apiDelete("course-chapters", id, {
+      confirmImpact: options.confirmImpact ? "1" : undefined,
+    }),
 };
 
 // ─── Student API ──────────────────────────────────────────────────────────────

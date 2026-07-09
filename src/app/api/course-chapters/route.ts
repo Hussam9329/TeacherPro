@@ -102,12 +102,13 @@ export async function POST(req: NextRequest) {
     if (existing) return validationError('الفصل مرتبط مسبقاً بهذه الدورة', 409);
     const courseChapter = await db.courseChapter.create({
       data: {
-        active: body.active ?? false,
-        archived: body.archived ?? false,
-        archive: body.archive ?? '[]',
+        active: false,
+        archived: false,
+        archive: '[]',
         courseId: String(body.courseId),
         chapterId: String(body.chapterId),
       },
+      include: { course: true, chapter: true },
     });
     return NextResponse.json({ courseChapter }, { status: 201 });
   } catch (error) {
@@ -147,6 +148,16 @@ export async function PUT(req: NextRequest) {
     if (body.chapterId !== undefined && !syncStudentOpportunities) updateData.chapterId = String(body.chapterId);
 
     const result = await db.$transaction(async (tx) => {
+      const existingCourseChapter = await tx.courseChapter.findUnique({ where: { id: String(id) } });
+      if (!existingCourseChapter) {
+        throw new Error('رابط الفصل غير موجود أو تم حذفه مسبقاً');
+      }
+      if (updateData.active === true) {
+        await tx.courseChapter.updateMany({
+          where: { courseId: existingCourseChapter.courseId, id: { not: String(id) }, active: true },
+          data: { active: false, archived: false },
+        });
+      }
       const courseChapter = await tx.courseChapter.update({ where: { id: String(id) }, data: updateData });
       let affectedStudents = 0;
       let opportunityStudents = 0;
@@ -254,6 +265,11 @@ export async function DELETE(req: NextRequest) {
     const link = await db.courseChapter.findUnique({ where: { id } });
     if (!link) return validationError('رابط الفصل غير موجود أو تم حذفه مسبقاً', 404);
     if (link.active) return validationError('لا يمكن حذف ربط فصل مفعل. ألغِ التفعيل أولاً.', 409);
+    const archiveEntries = parseArchiveEntries(link.archive);
+    const confirmImpact = searchParams.get('confirmImpact') === '1';
+    if (archiveEntries.length > 0 && !confirmImpact) {
+      return validationError(`لا يمكن حذف هذا الربط لأنه يحتوي أرشيف فرص لـ ${archiveEntries.length} طالب. راجع الأثر أولاً.`, 409);
+    }
     await db.courseChapter.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (error) {

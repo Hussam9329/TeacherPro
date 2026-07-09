@@ -20,6 +20,9 @@ import { db } from "@/lib/db";
  * baseOpportunities === 0 — that's a contradiction).
  *
  * Admin-only. Returns the number of students fixed per course.
+ *
+ * Safety: fixes active students only. Archived/dismissed students are skipped
+ * because returning opportunities to them can contradict the dismissal/archive flow.
  */
 export async function PATCH(req: NextRequest) {
   const authError = await requirePermission(req, "students.edit");
@@ -46,8 +49,9 @@ export async function PATCH(req: NextRequest) {
       where: { id: { in: chapterIds } },
       select: { id: true, opportunities: true },
     });
+    const typedChapters = chapters as Array<{ id: string; opportunities: number }>;
     const chapterOppById = new Map(
-      chapters.map((ch) => [ch.id, Number(ch.opportunities || 0)]),
+      typedChapters.map((ch) => [ch.id, Number(ch.opportunities || 0)] as const),
     );
 
     const perCourse: Array<{
@@ -66,6 +70,7 @@ export async function PATCH(req: NextRequest) {
       const update = await db.student.updateMany({
         where: {
           courseId: link.courseId,
+          status: 'نشط',
           opportunities: 0,
           baseOpportunities: 0,
         },
