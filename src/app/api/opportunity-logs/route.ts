@@ -66,9 +66,21 @@ export async function GET(req: NextRequest) {
 
     const { parsePagination } = await import('@/lib/pagination');
     const { page, limit, skip } = parsePagination(req);
+    const { searchParams } = new URL(req.url);
+    const studentId = String(searchParams.get('studentId') || '').trim();
+    const where = studentId ? { studentId } : {};
     const [opportunityLogs, totalCount] = await Promise.all([
-      db.opportunityLog.findMany({ orderBy: { date: 'desc' }, skip, take: limit }),
-      db.opportunityLog.count(),
+      db.opportunityLog.findMany({
+        where,
+        orderBy: { date: 'desc' },
+        skip,
+        take: limit,
+        include: {
+          student: { select: { id: true, name: true, code: true, courseId: true, status: true } },
+          exam: { select: { id: true, name: true, date: true, type: true } },
+        },
+      }),
+      db.opportunityLog.count({ where }),
     ]);
     const totalPages = Math.max(1, Math.ceil(totalCount / limit));
     return NextResponse.json({

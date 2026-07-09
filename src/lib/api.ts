@@ -468,6 +468,7 @@ export interface StudentListQuery {
   /** Used by OpportunitiesView for database-paginated opportunity filters. */
   opportunityStatus?: string;
   opportunityCount?: string;
+  opportunityMode?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -533,6 +534,17 @@ export interface OpportunityStatsResponse {
   noOpportunities: number;
   dismissed: number;
   active: number;
+  noActiveChapter?: number;
+  activeChapterConflicts?: number;
+  overLimit?: number;
+  fullOpportunities?: number;
+  belowFullOpportunities?: number;
+  source: "database";
+}
+
+export interface OpportunityStudentActionResponse {
+  student?: Record<string, unknown> | null;
+  opportunityLog?: Record<string, unknown> | null;
   source: "database";
 }
 
@@ -1027,6 +1039,7 @@ export const studentApi = {
       courseIds: query.courseIds,
       opportunityStatus: query.opportunityStatus,
       opportunityCount: query.opportunityCount,
+      opportunityMode: query.opportunityMode ? "1" : undefined,
       page: query.page ?? 1,
       pageSize: query.pageSize ?? DEFAULT_STUDENT_PAGE_SIZE,
     });
@@ -1333,6 +1346,16 @@ export const opportunityStatsApi = {
       mode: "filter",
       ...payload,
     }) as Promise<ApiResult & { data?: OpportunityBulkAdjustResponse }>,
+  studentAction: (payload: {
+    studentId?: string;
+    logId?: string;
+    actionType: "add" | "deduct" | "reset" | "undo";
+    amount?: number;
+    reason?: string;
+  }) =>
+    apiPost("opportunities/student-action", payload) as Promise<
+      ApiResult & { data?: OpportunityStudentActionResponse }
+    >,
 };
 
 export const callCourseExamsApi = {
@@ -1426,11 +1449,16 @@ export const callCandidatesApi = {
 // ─── OpportunityLog API ───────────────────────────────────────────────────────
 
 export const opportunityLogApi = {
-  list: () =>
-    apiGetAllPages<Pick<ServerData, "opportunityLogs">>(
-      "opportunity-logs",
+  list: (query: { studentId?: string; pageSize?: number } = {}) => {
+    const queryString = buildQueryString({
+      studentId: query.studentId,
+    });
+    return apiGetAllPages<Pick<ServerData, "opportunityLogs">>(
+      `opportunity-logs${queryString ? `?${queryString}` : ""}`,
       "opportunityLogs",
-    ),
+      query.pageSize || 500,
+    );
+  },
   add: (log: Record<string, unknown>) => apiPost("opportunity-logs", log),
   bulkAdjust: (payload: {
     students?: Array<Record<string, unknown>>;

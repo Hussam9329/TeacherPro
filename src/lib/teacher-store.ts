@@ -115,6 +115,12 @@ export interface Student {
   opportunities: number;
   baseOpportunities: number;
   accountingGraceDays: number;
+  /** Server-side snapshot used by إدارة الفرص so actions never depend on stale course-chapter cache. */
+  hasActiveChapter?: boolean;
+  activeChapterConflictCount?: number;
+  activeChapter?: { id: string; name: string; opportunities: number } | null;
+  isOpportunityFull?: boolean;
+  isOpportunityOverLimit?: boolean;
 }
 
 export type CourseTransferPolicy = "reset" | "keep";

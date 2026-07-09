@@ -369,6 +369,7 @@ export async function GET(req: NextRequest) {
     "grades.add",
     "grades.view",
     "grades.edit",
+    "opportunities.view",
   ]);
   if (authError) return authError;
 
@@ -413,10 +414,48 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
+  const opportunityMode = searchParams.get("opportunityMode") === "1";
+  let responseStudents: Array<Record<string, unknown>> = students as unknown as Array<Record<string, unknown>>;
+  if (opportunityMode && students.length > 0) {
+    const courseIds = Array.from(new Set(students.map((student) => student.courseId)));
+    const activeLinks = await db.courseChapter.findMany({
+      where: { courseId: { in: courseIds }, active: true, archived: false },
+      select: {
+        courseId: true,
+        chapter: { select: { id: true, name: true, opportunities: true } },
+      },
+    });
+    const activeLinksByCourseId = new Map<string, typeof activeLinks>();
+    for (const link of activeLinks) {
+      const list = activeLinksByCourseId.get(link.courseId) || [];
+      list.push(link);
+      activeLinksByCourseId.set(link.courseId, list);
+    }
+    responseStudents = students.map((student) => {
+      const links = activeLinksByCourseId.get(student.courseId) || [];
+      const activeChapter = links.length === 1 ? links[0].chapter : null;
+      const cap = Math.max(0, Math.trunc(Number(activeChapter?.opportunities || student.baseOpportunities || 0)));
+      return {
+        ...student,
+        hasActiveChapter: links.length === 1 && cap > 0,
+        activeChapterConflictCount: links.length,
+        activeChapter: activeChapter
+          ? {
+              id: activeChapter.id,
+              name: activeChapter.name,
+              opportunities: Number(activeChapter.opportunities || 0),
+            }
+          : null,
+        isOpportunityFull: cap > 0 && Number(student.opportunities || 0) >= cap,
+        isOpportunityOverLimit: cap > 0 && Number(student.opportunities || 0) > cap,
+      };
+    });
+  }
+
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   return NextResponse.json({
-    students,
+    students: responseStudents,
     totalCount,
     page,
     pageSize,

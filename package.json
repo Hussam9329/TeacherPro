@@ -17,7 +17,8 @@
     "test:calls-integrity": "node scripts/test-calls-integrity.mjs",
     "test:side-effects": "node scripts/test-calls-integrity.mjs",
     "test:courses-integrity": "node scripts/test-courses-integrity.mjs",
-    "test:chapters-integrity": "node scripts/test-chapters-integrity.mjs"
+    "test:chapters-integrity": "node scripts/test-chapters-integrity.mjs",
+    "test:opportunities-integrity": "node scripts/test-opportunities-integrity.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1080.0",
