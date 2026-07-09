@@ -31,7 +31,9 @@ export function archivedStudentWhere(): Prisma.StudentWhereInput {
 }
 
 export function followupStudentWhere(): Prisma.StudentWhereInput {
-  return { status: { notIn: [STUDENT_STATUS_DISMISSED, STUDENT_STATUS_ARCHIVED] } };
+  // المتابعة تشمل النشطين والمفصولين — المفصولين يحتاجون متابعة أيضاً
+  // (مكالمات لولي الأمر، تعهدات، إعادة تفعيل). فقط المؤرشفون مستثنون.
+  return { status: { notIn: [STUDENT_STATUS_ARCHIVED] } };
 }
 
 export function studentScopeWhere(scope: StudentOperationalScope = "visible"): Prisma.StudentWhereInput {
