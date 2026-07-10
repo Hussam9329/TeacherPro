@@ -51,7 +51,8 @@ import {
 } from "@/lib/exam-utils";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { examStatsApi, type ExamRecordStat } from "@/lib/api";
+import { examApi, examStatsApi, type ExamRecordStat } from "@/lib/api";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 
 const examGradeExportColumns: ExportColumn<any>[] = [
@@ -207,9 +208,7 @@ export function ExamRecordsView() {
     correctionSheets,
     studentLeaves,
     studentCalls,
-    updateExam,
-    toggleExam,
-    deleteExam,
+    loadFromServer,
     courseName,
     classification,
   } = useTeacherStore();
@@ -248,6 +247,8 @@ export function ExamRecordsView() {
     scheduledDeactivateAt: "",
   });
   const [clockTick, setClockTick] = useState(0);
+  const [expandedExamIds, setExpandedExamIds] = useState<Record<string, boolean>>({});
+  const [mutatingExamIds, setMutatingExamIds] = useState<Record<string, boolean>>({});
   const { locked: isDeletingExam, runLocked: runDeleteExamLocked } =
     useActionLock();
 
@@ -301,23 +302,23 @@ export function ExamRecordsView() {
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
     setDatabaseExamStatsLoading(true);
     examStatsApi
-      .get(examIds)
+      .get(examIds, { signal: controller.signal, quietAbort: true })
       .then((result) => {
-        if (!cancelled) setDatabaseExamStats(result?.statsByExamId || {});
+        if (!controller.signal.aborted) {
+          setDatabaseExamStats(result?.statsByExamId || {});
+        }
       })
       .catch(() => {
-        if (!cancelled) setDatabaseExamStats({});
+        if (!controller.signal.aborted) setDatabaseExamStats({});
       })
       .finally(() => {
-        if (!cancelled) setDatabaseExamStatsLoading(false);
+        if (!controller.signal.aborted) setDatabaseExamStatsLoading(false);
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [filteredExamIdsKey, syncKey]);
 
   const examStatValue = (examId: string, key: keyof ExamRecordStat) => {
@@ -409,6 +410,25 @@ export function ExamRecordsView() {
     return [...MAIN_SITE_OPTIONS];
   };
 
+  const isExamMutating = (examId: string) => Boolean(mutatingExamIds[examId]);
+
+  const setExamMutating = (examId: string, value: boolean) => {
+    setMutatingExamIds((current) => ({ ...current, [examId]: value }));
+  };
+
+  const toggleExamDetails = (examId: string) => {
+    setExpandedExamIds((current) => ({ ...current, [examId]: !current[examId] }));
+  };
+
+  const refreshExamRecordsAfterMutation = async (reason: string) => {
+    await loadFromServer();
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason,
+      scopes: ["exams", "grades", "opportunities", "dashboard"],
+    });
+  };
+
   const openEditExamDialog = (examId: string) => {
     const exam = exams.find((item) => item.id === examId);
     if (!exam) return;
@@ -479,7 +499,7 @@ export function ExamRecordsView() {
     return null;
   };
 
-  const handleEditExam = () => {
+  const handleEditExam = async () => {
     const error = validateEditExam(editDialog);
     if (error) return toast.error(error);
     const isFinalExam = editDialog.type === "فاينل";
@@ -505,7 +525,8 @@ export function ExamRecordsView() {
                 scheduledDeactivateAt: editDialog.scheduledDeactivateAt,
               };
 
-    updateExam(editDialog.id, {
+    setExamMutating(editDialog.id, true);
+    const result = await examApi.update(editDialog.id, {
       name: editDialog.name.trim(),
       type: editDialog.type,
       courseIds: editDialog.courseIds,
@@ -529,8 +550,16 @@ export function ExamRecordsView() {
       noDiscount,
       ...statusPatch,
     });
+    setExamMutating(editDialog.id, false);
+
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر تعديل الامتحان من الخادم.");
+      return;
+    }
+
     setEditDialog(emptyEditState());
-    toast.success("تم تعديل الامتحان بالكامل وإعادة الاحتساب");
+    await refreshExamRecordsAfterMutation("exam-records-edit");
+    toast.success("تم تعديل الامتحان من قاعدة البيانات وإعادة الاحتساب");
   };
 
   const openScheduleDeactivateDialog = (examId: string) => {
@@ -544,34 +573,48 @@ export function ExamRecordsView() {
     });
   };
 
-  const handleScheduleDeactivate = () => {
+  const handleScheduleDeactivate = async () => {
     if (!deactivateDialog.scheduledDeactivateAt) {
       toast.error("حدد تاريخ ووقت التعطيل المجدول");
       return;
     }
-    updateExam(deactivateDialog.id, {
+    setExamMutating(deactivateDialog.id, true);
+    const result = await examApi.update(deactivateDialog.id, {
       active: true,
       scheduledActivateAt: "",
       scheduledDeactivateAt: deactivateDialog.scheduledDeactivateAt,
     });
+    setExamMutating(deactivateDialog.id, false);
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر جدولة تعطيل الامتحان من الخادم.");
+      return;
+    }
     setDeactivateDialog({
       open: false,
       id: "",
       name: "",
       scheduledDeactivateAt: "",
     });
-    toast.success("تمت جدولة تعطيل الامتحان");
+    await refreshExamRecordsAfterMutation("exam-records-schedule-deactivate");
+    toast.success("تمت جدولة تعطيل الامتحان من قاعدة البيانات");
   };
 
-  const handleClearScheduledDeactivate = () => {
-    updateExam(deactivateDialog.id, { scheduledDeactivateAt: "" });
+  const handleClearScheduledDeactivate = async () => {
+    setExamMutating(deactivateDialog.id, true);
+    const result = await examApi.update(deactivateDialog.id, { scheduledDeactivateAt: "" });
+    setExamMutating(deactivateDialog.id, false);
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر إلغاء التعطيل المجدول من الخادم.");
+      return;
+    }
     setDeactivateDialog({
       open: false,
       id: "",
       name: "",
       scheduledDeactivateAt: "",
     });
-    toast.success("تم إلغاء التعطيل المجدول");
+    await refreshExamRecordsAfterMutation("exam-records-clear-schedule");
+    toast.success("تم إلغاء التعطيل المجدول من قاعدة البيانات");
   };
 
   const openDeleteExamDialog = (examId: string) => {
@@ -607,8 +650,13 @@ export function ExamRecordsView() {
       );
       return;
     }
-    const ok = deleteExam(deleteDialog.id);
-    ok ? toast.success("تم حذف الامتحان") : toast.error("تعذر حذف الامتحان");
+    setExamMutating(deleteDialog.id, true);
+    const result = await examApi.remove(deleteDialog.id);
+    setExamMutating(deleteDialog.id, false);
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر حذف الامتحان من الخادم.");
+      return;
+    }
     setDeleteDialog({
       open: false,
       id: "",
@@ -616,6 +664,8 @@ export function ExamRecordsView() {
       gradeCount: null,
       dependentCount: 0,
     });
+    await refreshExamRecordsAfterMutation("exam-records-delete");
+    toast.success("تم حذف الامتحان من قاعدة البيانات");
   });
 
   const renderEditExamFields = () => {
@@ -987,6 +1037,65 @@ export function ExamRecordsView() {
     );
   };
 
+  const handleToggleExamActive = async (exam: Exam) => {
+    setExamMutating(exam.id, true);
+    const result = await examApi.update(exam.id, { active: !exam.active });
+    setExamMutating(exam.id, false);
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر تغيير حالة الامتحان من الخادم.");
+      return;
+    }
+    await refreshExamRecordsAfterMutation(exam.active ? "exam-records-disable" : "exam-records-enable");
+    toast.success(exam.active ? "تم تعطيل الامتحان من قاعدة البيانات" : "تم تفعيل الامتحان من قاعدة البيانات");
+  };
+
+  const renderExamDetailsPanel = (exam: Exam, details: ExamDetailItem[]) => (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2 text-center md:grid-cols-4">
+        <div className="rounded bg-emerald-50 p-2 dark:bg-emerald-950/40">
+          <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+            {examStatValue(exam.id, "passCount")}
+          </p>
+          <p className="text-[10px] text-muted-foreground">ناجح</p>
+        </div>
+        <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40">
+          <p className="text-lg font-bold text-rose-600 dark:text-rose-400">
+            {examStatValue(exam.id, "notPassedCount")}
+          </p>
+          <p className="text-[10px] text-muted-foreground">محاسب/غائب</p>
+        </div>
+        <div className="rounded bg-cyan-50 p-2 dark:bg-cyan-950/40">
+          <p className="text-lg font-bold text-cyan-600 dark:text-cyan-400">
+            {examStatValue(exam.id, "protectedCount")}
+          </p>
+          <p className="text-[10px] text-muted-foreground">سماح/إجازة</p>
+        </div>
+        <div className="rounded bg-sky-50 p-2 dark:bg-sky-950/40">
+          <p className="text-lg font-bold text-sky-600 dark:text-sky-400">
+            {examStatValue(exam.id, "total")}
+          </p>
+          <p className="text-[10px] text-muted-foreground">إجمالي</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2 xl:grid-cols-3">
+        {details.map((item) => (
+          <div
+            key={item.label}
+            className="rounded-xl border bg-muted/40 p-2"
+          >
+            <p className="text-[10px] text-muted-foreground">{item.label}</p>
+            <p className="mt-0.5 font-semibold">{item.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-dashed bg-muted/30 p-3 text-center text-xs text-muted-foreground">
+        تم إخفاء تفاصيل درجات الطلاب من سجل الامتحانات. يمكن مراجعة الدرجات من قائمة سجل الدرجات.
+      </div>
+    </div>
+  );
+
   const renderExamActions = (exam: Exam) => (
     <div className="flex flex-wrap gap-1">
       <div className="min-w-32">
@@ -1004,13 +1113,23 @@ export function ExamRecordsView() {
           description={`تقرير درجات امتحان ${exam.name}`}
         />
       </div>
-      <Button variant="outline" size="sm" onClick={() => toggleExam(exam.id)}>
-        {exam.active ? "تعطيل الآن" : "تفعيل الآن"}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => void handleToggleExamActive(exam)}
+        disabled={isExamMutating(exam.id)}
+      >
+        {isExamMutating(exam.id)
+          ? "جاري..."
+          : exam.active
+            ? "تعطيل الآن"
+            : "تفعيل الآن"}
       </Button>
       <Button
         variant="outline"
         size="sm"
         onClick={() => openScheduleDeactivateDialog(exam.id)}
+        disabled={isExamMutating(exam.id)}
       >
         تعطيل مجدول
       </Button>
@@ -1018,6 +1137,7 @@ export function ExamRecordsView() {
         variant="secondary"
         size="sm"
         onClick={() => openEditExamDialog(exam.id)}
+        disabled={isExamMutating(exam.id)}
       >
         تعديل
       </Button>
@@ -1025,6 +1145,7 @@ export function ExamRecordsView() {
         variant="destructive"
         size="sm"
         onClick={() => openDeleteExamDialog(exam.id)}
+        disabled={isExamMutating(exam.id)}
       >
         حذف
       </Button>
@@ -1035,6 +1156,7 @@ export function ExamRecordsView() {
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       {filteredExams.map((exam) => {
         const details = examDetails(exam, examStatValue(exam.id, "total"));
+        const detailsOpen = Boolean(expandedExamIds[exam.id]);
         return (
           <Card
             key={exam.id}
@@ -1060,61 +1182,32 @@ export function ExamRecordsView() {
                     >
                       متاح للإدخال: {getEntryAvailability(exam).answer}
                     </Badge>
+                    <Badge variant="outline">
+                      سجلات: {examStatValue(exam.id, "total")}
+                    </Badge>
                   </div>
                 </div>
-                {renderExamActions(exam)}
+                <div className="flex flex-col items-end gap-2">
+                  <Button
+                    type="button"
+                    variant={detailsOpen ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => toggleExamDetails(exam.id)}
+                  >
+                    {detailsOpen ? "إخفاء التفاصيل" : "إظهار التفاصيل"}
+                  </Button>
+                  {renderExamActions(exam)}
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="mb-3 grid grid-cols-2 gap-2 text-center md:grid-cols-4">
-                <div className="rounded bg-emerald-50 p-2 dark:bg-emerald-950/40">
-                  <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
-                    {examStatValue(exam.id, "passCount")}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">ناجح</p>
+              {detailsOpen ? (
+                renderExamDetailsPanel(exam, details)
+              ) : (
+                <div className="rounded-2xl border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+                  تفاصيل الامتحان مخفية حتى تضغط على "إظهار التفاصيل". القائمة تعرض الامتحانات والبحث فقط حتى تبقى الصفحة خفيفة وواضحة للمستخدم.
                 </div>
-                <div className="rounded bg-rose-50 p-2 dark:bg-rose-950/40">
-                  <p className="text-lg font-bold text-rose-600 dark:text-rose-400">
-                    {examStatValue(exam.id, "notPassedCount")}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    محاسب/غائب
-                  </p>
-                </div>
-                <div className="rounded bg-cyan-50 p-2 dark:bg-cyan-950/40">
-                  <p className="text-lg font-bold text-cyan-600 dark:text-cyan-400">
-                    {examStatValue(exam.id, "protectedCount")}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    سماح/إجازة
-                  </p>
-                </div>
-                <div className="rounded bg-sky-50 p-2 dark:bg-sky-950/40">
-                  <p className="text-lg font-bold text-sky-600 dark:text-sky-400">
-                    {examStatValue(exam.id, "total")}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">إجمالي</p>
-                </div>
-              </div>
-
-              <div className="mb-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-2 xl:grid-cols-3">
-                {details.map((item) => (
-                  <div
-                    key={item.label}
-                    className="rounded-xl border bg-muted/40 p-2"
-                  >
-                    <p className="text-[10px] text-muted-foreground">
-                      {item.label}
-                    </p>
-                    <p className="mt-0.5 font-semibold">{item.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="rounded-xl border border-dashed bg-muted/30 p-3 text-center text-xs text-muted-foreground">
-                تم إخفاء تفاصيل درجات الطلاب من سجل الامتحانات. يمكن مراجعة
-                الدرجات من قائمة سجل الدرجات.
-              </div>
+              )}
             </CardContent>
           </Card>
         );
@@ -1138,83 +1231,77 @@ export function ExamRecordsView() {
             <th className="p-3 text-right">الحالة</th>
             <th className="p-3 text-right">متاح للإدخال</th>
             <th className="p-3 text-right">الدورات</th>
-            <th className="p-3 text-right">الموقع</th>
-            <th className="p-3 text-right">الكاملة</th>
-            <th className="p-3 text-right">النجاح</th>
-            <th className="p-3 text-right">الخصم</th>
-            <th className="p-3 text-right">خصم الفرص</th>
-            <th className="p-3 text-right">درجة الفصل</th>
-            <th className="p-3 text-right">تفعيل مجدول</th>
-            <th className="p-3 text-right">تعطيل مجدول</th>
             <th className="p-3 text-right">السجلات</th>
+            <th className="p-3 text-right">التفاصيل</th>
             <th className="p-3 text-right">الإجراءات</th>
           </tr>
         </thead>
         <tbody>
           {filteredExams.map((exam) => {
+            const details = examDetails(exam, examStatValue(exam.id, "total"));
+            const detailsOpen = Boolean(expandedExamIds[exam.id]);
             return (
-              <tr key={exam.id} className="border-t align-top">
-                <td className="p-3 font-bold">{exam.name}</td>
-                <td className="p-3">{formatAppDate(exam.date)}</td>
-                <td className="p-3">
-                  <div className="flex flex-wrap gap-1">
-                    <Badge>{exam.type}</Badge>
-                    {exam.noDiscount && (
-                      <Badge variant="secondary">بدون خصم</Badge>
-                    )}
-                  </div>
-                </td>
-                <td className="p-3">
-                  <Badge variant="outline">{getExamStatus(exam)}</Badge>
-                </td>
-                <td className="p-3 min-w-52">
-                  <div className="space-y-1">
-                    <Badge
-                      variant={
-                        getEntryAvailability(exam).available
-                          ? "secondary"
-                          : "destructive"
-                      }
+              <React.Fragment key={exam.id}>
+                <tr className="border-t align-top">
+                  <td className="p-3 font-bold">{exam.name}</td>
+                  <td className="p-3">{formatAppDate(exam.date)}</td>
+                  <td className="p-3">
+                    <div className="flex flex-wrap gap-1">
+                      <Badge>{exam.type}</Badge>
+                      {exam.noDiscount && (
+                        <Badge variant="secondary">بدون خصم</Badge>
+                      )}
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <Badge variant="outline">{getExamStatus(exam)}</Badge>
+                  </td>
+                  <td className="p-3 min-w-48">
+                    <div className="space-y-1">
+                      <Badge
+                        variant={
+                          getEntryAvailability(exam).available
+                            ? "secondary"
+                            : "destructive"
+                        }
+                      >
+                        {getEntryAvailability(exam).answer}
+                      </Badge>
+                      <p className="text-xs text-muted-foreground">
+                        {detailsOpen ? getEntryAvailability(exam).reason : "اضغط إظهار التفاصيل للسبب الكامل"}
+                      </p>
+                    </div>
+                  </td>
+                  <td className="p-3 min-w-44">
+                    {exam.courseIds.map(courseName).join("، ") || "—"}
+                  </td>
+                  <td className="p-3">{examStatValue(exam.id, "total")}</td>
+                  <td className="p-3">
+                    <Button
+                      type="button"
+                      variant={detailsOpen ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => toggleExamDetails(exam.id)}
                     >
-                      {getEntryAvailability(exam).answer}
-                    </Badge>
-                    <p className="text-xs text-muted-foreground">
-                      {getEntryAvailability(exam).reason}
-                    </p>
-                  </div>
-                </td>
-                <td className="p-3 min-w-44">
-                  {exam.courseIds.map(courseName).join("، ") || "—"}
-                </td>
-                <td className="p-3 min-w-36">
-                  {splitSelection(exam.mainSite).join("، ") || "الكل"}
-                </td>
-                <td className="p-3">{exam.fullMark}</td>
-                <td className="p-3">{exam.passMark}</td>
-                <td className="p-3">
-                  {exam.noDiscount ? "معطل" : exam.discountMark}
-                </td>
-                <td className="p-3">
-                  {exam.noDiscount ? "معطل" : exam.opportunitiesPenalty}
-                </td>
-                <td className="p-3">
-                  {exam.noDiscount ? "معطل" : (exam.dismissalGrade ?? "—")}
-                </td>
-                <td className="p-3 min-w-36">
-                  {formatDateTime(exam.scheduledActivateAt)}
-                </td>
-                <td className="p-3 min-w-36">
-                  {formatDateTime(exam.scheduledDeactivateAt)}
-                </td>
-                <td className="p-3">{examStatValue(exam.id, "total")}</td>
-                <td className="p-3 min-w-80">{renderExamActions(exam)}</td>
-              </tr>
+                      {detailsOpen ? "إخفاء التفاصيل" : "إظهار التفاصيل"}
+                    </Button>
+                  </td>
+                  <td className="p-3 min-w-80">{renderExamActions(exam)}</td>
+                </tr>
+                {detailsOpen && (
+                  <tr className="border-t bg-muted/20">
+                    <td colSpan={9} className="p-4">
+                      {renderExamDetailsPanel(exam, details)}
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             );
           })}
           {filteredExams.length === 0 && (
             <tr>
               <td
-                colSpan={16}
+                colSpan={9}
                 className="p-8 text-center text-muted-foreground"
               >
                 لا توجد امتحانات مطابقة للفلاتر.
@@ -1345,7 +1432,7 @@ export function ExamRecordsView() {
             >
               إلغاء
             </Button>
-            <Button onClick={handleEditExam}>حفظ التعديل الكامل</Button>
+            <Button onClick={() => void handleEditExam()} disabled={isExamMutating(editDialog.id)}>حفظ التعديل الكامل</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1395,10 +1482,10 @@ export function ExamRecordsView() {
             >
               إلغاء
             </Button>
-            <Button variant="outline" onClick={handleClearScheduledDeactivate}>
+            <Button variant="outline" onClick={() => void handleClearScheduledDeactivate()} disabled={isExamMutating(deactivateDialog.id)}>
               إلغاء التعطيل المجدول
             </Button>
-            <Button onClick={handleScheduleDeactivate}>حفظ الجدولة</Button>
+            <Button onClick={() => void handleScheduleDeactivate()} disabled={isExamMutating(deactivateDialog.id)}>حفظ الجدولة</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

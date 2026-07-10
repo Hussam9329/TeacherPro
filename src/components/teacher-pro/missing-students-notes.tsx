@@ -19,17 +19,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { missingStudentsNotesStatsApi, type MissingStudentsNotesStatsResponse } from "@/lib/api";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { formatAppDate } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
-import {
-  deleteGradeEntryMissingNote,
-  fetchGradeEntryMissingNotesFromServer,
-  GRADE_ENTRY_MISSING_NOTES_EVENT,
-  readGradeEntryMissingNotes,
-  type GradeEntryMissingNote,
-} from "@/lib/grade-entry-notes";
+import type { GradeEntryMissingNote } from "@/lib/grade-entry-notes";
 import { EmptyState, StatCard } from "./ui-kit";
-import { AlertTriangle, ClipboardList, FileText, Search } from "lucide-react";
+import { AlertTriangle, ClipboardList, Database, FileText, Search } from "lucide-react";
 
 function formatDateTime(value: string) {
   if (!value) return "-";
@@ -44,6 +39,26 @@ function formatDateTime(value: string) {
   });
 }
 
+function normalizeNote(item: unknown): GradeEntryMissingNote | null {
+  const raw = item as Partial<GradeEntryMissingNote> | null;
+  if (!raw || typeof raw !== "object") return null;
+  const examId = String(raw.examId || "").trim();
+  const text = String(raw.text || "").trim();
+  if (!examId || !text) return null;
+  const now = new Date().toISOString();
+  return {
+    id: String(raw.id || `exam:${examId}`),
+    examId,
+    examName: String(raw.examName || "امتحان غير محدد"),
+    examDate: String(raw.examDate || ""),
+    text,
+    userId: raw.userId ?? null,
+    userName: raw.userName ?? null,
+    createdAt: String(raw.createdAt || raw.updatedAt || now),
+    updatedAt: String(raw.updatedAt || raw.createdAt || now),
+  };
+}
+
 export function MissingStudentsNotesView() {
   const syncKey = useTeacherProSyncKey(["grade-entry-notes", "grades", "exams"]);
   const { exams, setSection } = useTeacherStore();
@@ -52,26 +67,71 @@ export function MissingStudentsNotesView() {
   const [deleteDialogNote, setDeleteDialogNote] = useState<GradeEntryMissingNote | null>(null);
   const [databaseStats, setDatabaseStats] = useState<MissingStudentsNotesStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesError, setNotesError] = useState("");
+  const [deletingNote, setDeletingNote] = useState(false);
 
-  const refreshNotes = () => setNotes(readGradeEntryMissingNotes());
-  const refreshDatabaseStats = () => {
+  const refreshDatabaseStats = (signal?: AbortSignal) => {
     setDatabaseStatsLoading(true);
     missingStudentsNotesStatsApi
-      .get()
-      .then((result) => setDatabaseStats(result))
-      .catch(() => setDatabaseStats(null))
-      .finally(() => setDatabaseStatsLoading(false));
+      .get(signal ? { signal, quietAbort: true } : undefined)
+      .then((result) => {
+        if (!signal?.aborted) setDatabaseStats(result);
+      })
+      .catch(() => {
+        if (!signal?.aborted) setDatabaseStats(null);
+      })
+      .finally(() => {
+        if (!signal?.aborted) setDatabaseStatsLoading(false);
+      });
+  };
+
+  const refreshNotesFromDatabase = (signal: AbortSignal) => {
+    setNotesLoading(true);
+    setNotesError("");
+    fetch("/api/grade-entry-missing-notes", {
+      credentials: "same-origin",
+      signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = (await response.json()) as { notes?: unknown[] };
+        return (payload.notes || [])
+          .map(normalizeNote)
+          .filter((note): note is GradeEntryMissingNote => Boolean(note));
+      })
+      .then((nextNotes) => {
+        if (!signal.aborted) setNotes(nextNotes);
+      })
+      .catch(() => {
+        if (!signal.aborted) {
+          setNotes([]);
+          setNotesError("تعذر تحميل ملاحظات الطلاب غير الموجودين من قاعدة البيانات. تم تعطيل الحذف حتى يرجع الاتصال.");
+        }
+      })
+      .finally(() => {
+        if (!signal.aborted) setNotesLoading(false);
+      });
   };
 
   useEffect(() => {
-    refreshNotes();
-    refreshDatabaseStats();
-    void fetchGradeEntryMissingNotesFromServer().then(() => setNotes(readGradeEntryMissingNotes()));
-    window.addEventListener(GRADE_ENTRY_MISSING_NOTES_EVENT, refreshNotes);
-    window.addEventListener("storage", refreshNotes);
+    const controller = new AbortController();
+    refreshNotesFromDatabase(controller.signal);
+    refreshDatabaseStats(controller.signal);
+
+    const refreshAfterExternalChange = () => {
+      if (!controller.signal.aborted) {
+        refreshNotesFromDatabase(controller.signal);
+        refreshDatabaseStats(controller.signal);
+      }
+    };
+
+    window.addEventListener("teacherpro:grade-entry-missing-notes-updated", refreshAfterExternalChange);
+    window.addEventListener("storage", refreshAfterExternalChange);
     return () => {
-      window.removeEventListener(GRADE_ENTRY_MISSING_NOTES_EVENT, refreshNotes);
-      window.removeEventListener("storage", refreshNotes);
+      controller.abort();
+      window.removeEventListener("teacherpro:grade-entry-missing-notes-updated", refreshAfterExternalChange);
+      window.removeEventListener("storage", refreshAfterExternalChange);
     };
   }, [syncKey]);
 
@@ -80,7 +140,7 @@ export function MissingStudentsNotesView() {
     if (!normalizedSearch) return notes;
     return notes.filter((note) =>
       normalizeForSearch(
-        `${note.examName} ${note.examDate} ${note.text}`,
+        `${note.examName} ${note.examDate} ${note.text} ${note.userName || ""}`,
       ).includes(normalizedSearch),
     );
   }, [normalizedSearch, notes]);
@@ -89,14 +149,38 @@ export function MissingStudentsNotesView() {
     databaseStatsLoading && !databaseStats ? "…" : value ?? "—";
 
   const handleDeleteNote = (note: GradeEntryMissingNote) => {
+    if (notesError || notesLoading) {
+      return;
+    }
     setDeleteDialogNote(note);
   };
 
-  const confirmDeleteNote = () => {
+  const confirmDeleteNote = async () => {
     if (!deleteDialogNote) return;
-    void deleteGradeEntryMissingNote(deleteDialogNote.examId).finally(refreshDatabaseStats);
-    setDeleteDialogNote(null);
-    refreshNotes();
+    setDeletingNote(true);
+    const params = new URLSearchParams();
+    if (deleteDialogNote.id) params.set("id", deleteDialogNote.id);
+    else params.set("examId", deleteDialogNote.examId);
+
+    try {
+      const response = await fetch(`/api/grade-entry-missing-notes?${params.toString()}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setNotes((current) => current.filter((note) => note.id !== deleteDialogNote.id));
+      refreshDatabaseStats();
+      emitTeacherProDataChanged({
+        source: "local-mutation",
+        reason: "missing-students-notes-delete",
+        scopes: ["grade-entry-notes", "grades", "exams", "dashboard"],
+      });
+    } catch {
+      setNotesError("تعذر حذف الملاحظة من قاعدة البيانات. تحقق من الصلاحيات أو الاتصال ثم حاول مجدداً.");
+    } finally {
+      setDeletingNote(false);
+      setDeleteDialogNote(null);
+    }
   };
 
   return (
@@ -106,16 +190,17 @@ export function MissingStudentsNotesView() {
           <AlertDialogHeader>
             <AlertDialogTitle>حذف الملاحظة</AlertDialogTitle>
             <AlertDialogDescription>
-              سيتم حذف ملاحظات امتحان {deleteDialogNote?.examName || "هذا الامتحان"}. هل تريد المتابعة؟
+              سيتم حذف ملاحظات امتحان {deleteDialogNote?.examName || "هذا الامتحان"} من قاعدة البيانات. هل تريد المتابعة؟
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogCancel disabled={deletingNote}>إلغاء</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={confirmDeleteNote}
+              onClick={() => void confirmDeleteNote()}
+              disabled={deletingNote}
             >
-              حذف
+              {deletingNote ? "جاري الحذف..." : "حذف من قاعدة البيانات"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -130,7 +215,7 @@ export function MissingStudentsNotesView() {
         <Button type="button" variant="outline" onClick={() => setSection("grade-entry")}>فتح تسجيل الدرجات</Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <StatCard
           label="عدد الملاحظات"
           value={statValue(databaseStats?.total)}
@@ -152,7 +237,30 @@ export function MissingStudentsNotesView() {
           tone="danger"
           hint="مجموع النصوص من قاعدة البيانات"
         />
+        <StatCard
+          label="مصدر الصفحة"
+          value="DB"
+          icon={Database}
+          tone="success"
+          hint="لا تعتمد على localStorage للعرض"
+        />
       </div>
+
+      {notesLoading ? (
+        <div className="rounded-2xl border bg-muted/40 p-3 text-sm text-muted-foreground">
+          جاري تحميل ملاحظات الطلاب غير الموجودين من قاعدة البيانات...
+        </div>
+      ) : null}
+
+      {notesError ? (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
+          {notesError}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+          القائمة والإحصائيات من قاعدة البيانات، والحذف لا يتم إلا بعد موافقة الخادم.
+        </div>
+      )}
 
       <Card>
         <CardHeader className="gap-3">
@@ -205,6 +313,7 @@ export function MissingStudentsNotesView() {
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant="secondary">{currentExam?.type || "امتحان"}</Badge>
                           <h3 className="text-base font-black">{currentExam?.name || note.examName}</h3>
+                          {note.userName ? <Badge variant="outline">المدخل: {note.userName}</Badge> : null}
                         </div>
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <span>تاريخ الامتحان: {examDate ? formatAppDate(examDate, examDate) : "غير محدد"}</span>
@@ -217,6 +326,7 @@ export function MissingStudentsNotesView() {
                         size="sm"
                         className="border-destructive/30 text-destructive hover:bg-destructive/10"
                         onClick={() => handleDeleteNote(note)}
+                        disabled={Boolean(notesError) || notesLoading}
                       >
                         حذف الملاحظة
                       </Button>

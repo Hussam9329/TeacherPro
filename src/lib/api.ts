@@ -1184,6 +1184,7 @@ export const gradeEntrySheetApi = {
 export const gradeApi = {
   list: async (
     query: GradeListQuery = {},
+    options: ApiGetOptions = {},
   ): Promise<GradeListResponse | null> => {
     const queryString = buildQueryString({
       examId: query.examId,
@@ -1201,6 +1202,7 @@ export const gradeApi = {
     });
     return apiGet<GradeListResponse>(
       `grades${queryString ? `?${queryString}` : ""}`,
+      options,
     );
   },
   add: (grade: Record<string, unknown>) => apiPost("grades", grade),
@@ -1291,6 +1293,7 @@ export const gradeCoverageStatsApi = {
       nameLetter?: string;
       q?: string;
     } = {},
+    options: ApiGetOptions = {},
   ) => {
     const queryString = buildQueryString({
       examId: query.examId,
@@ -1303,24 +1306,27 @@ export const gradeCoverageStatsApi = {
     });
     return apiGet<GradeCoverageStatsResponse>(
       `grades/stats${queryString ? `?${queryString}` : ""}`,
+      options,
     );
   },
 };
 
 export const missingStudentsNotesStatsApi = {
-  get: () =>
+  get: (options: ApiGetOptions = {}) =>
     apiGet<MissingStudentsNotesStatsResponse>(
       "grade-entry-missing-notes/stats",
+      options,
     ),
 };
 
 export const examStatsApi = {
-  get: (examIds: string[] = []) => {
+  get: (examIds: string[] = [], options: ApiGetOptions = {}) => {
     const queryString = buildQueryString({
       examIds: examIds.filter(Boolean).join(","),
     });
     return apiGet<ExamStatsResponse>(
       `exams/stats${queryString ? `?${queryString}` : ""}`,
+      options,
     );
   },
 };

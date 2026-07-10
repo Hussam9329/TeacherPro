@@ -45,6 +45,7 @@ import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { formatGradeScore, isGradeEntered } from "@/lib/exam-utils";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { CheckCircle2, UserX } from "lucide-react";
 import { StatCard } from "./ui-kit";
@@ -131,8 +132,6 @@ export function GradeRecordsView() {
     students,
     courses,
     opportunityLogs,
-    updateGrade,
-    deleteGrade,
     classification,
     mergeStudentsCache,
     mergeGradesCache,
@@ -197,35 +196,38 @@ export function GradeRecordsView() {
   ]);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     const rawStatus = serverStatusForGradeFilter(filterStatus);
 
     setServerGradesLoading(true);
     setServerGradesError(null);
 
     gradeApi
-      .list({
-        examId: filterExamId || undefined,
-        status: rawStatus,
-        statusFilter: filterStatus,
-        q: debouncedSearch || undefined,
-        courseId: filterCourseId || undefined,
-        courseProgram: filterCourseProgram || undefined,
-        courseTerm:
-          filterCourseProgram === "كورسات" && filterCourseTerm
-            ? filterCourseTerm
-            : undefined,
-        studyType: filterStudyType || undefined,
-        nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
-        page,
-        pageSize,
-      })
+      .list(
+        {
+          examId: filterExamId || undefined,
+          status: rawStatus,
+          statusFilter: filterStatus,
+          q: debouncedSearch || undefined,
+          courseId: filterCourseId || undefined,
+          courseProgram: filterCourseProgram || undefined,
+          courseTerm:
+            filterCourseProgram === "كورسات" && filterCourseTerm
+              ? filterCourseTerm
+              : undefined,
+          studyType: filterStudyType || undefined,
+          nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
+          page,
+          pageSize,
+        },
+        { signal: controller.signal, quietAbort: true },
+      )
       .then((result) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         if (!result) {
           setServerGrades(null);
           setServerGradesError(
-            "تعذر تحميل سجل الدرجات من الخادم. سيتم عرض آخر نسخة محفوظة مؤقتاً.",
+            "تعذر تحميل سجل الدرجات من الخادم. تم تعطيل التعديل والحذف حتى يرجع الاتصال.",
           );
           return;
         }
@@ -246,19 +248,17 @@ export function GradeRecordsView() {
         if (page > nextTotalPages) setPage(nextTotalPages);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setServerGrades(null);
         setServerGradesError(
-          "تعذر تحميل سجل الدرجات من الخادم. سيتم عرض آخر نسخة محفوظة مؤقتاً.",
+          "تعذر تحميل سجل الدرجات من الخادم. تم تعطيل التعديل والحذف حتى يرجع الاتصال.",
         );
       })
       .finally(() => {
-        if (!cancelled) setServerGradesLoading(false);
+        if (!controller.signal.aborted) setServerGradesLoading(false);
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [
     debouncedSearch,
     filterExamId,
@@ -277,34 +277,35 @@ export function GradeRecordsView() {
   ]);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     setGradeCoverageStatsLoading(true);
     gradeCoverageStatsApi
-      .get({
-        examId: filterExamId || undefined,
-        courseId: filterCourseId || undefined,
-        courseProgram: filterCourseProgram || undefined,
-        courseTerm:
-          filterCourseProgram === "كورسات" && filterCourseTerm
-            ? filterCourseTerm
-            : undefined,
-        studyType: filterStudyType || undefined,
-        nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
-        q: debouncedSearch || undefined,
-      })
+      .get(
+        {
+          examId: filterExamId || undefined,
+          courseId: filterCourseId || undefined,
+          courseProgram: filterCourseProgram || undefined,
+          courseTerm:
+            filterCourseProgram === "كورسات" && filterCourseTerm
+              ? filterCourseTerm
+              : undefined,
+          studyType: filterStudyType || undefined,
+          nameLetter: filterNameLetter !== "all" ? filterNameLetter : undefined,
+          q: debouncedSearch || undefined,
+        },
+        { signal: controller.signal, quietAbort: true },
+      )
       .then((result) => {
-        if (!cancelled) setGradeCoverageStats(result);
+        if (!controller.signal.aborted) setGradeCoverageStats(result);
       })
       .catch(() => {
-        if (!cancelled) setGradeCoverageStats(null);
+        if (!controller.signal.aborted) setGradeCoverageStats(null);
       })
       .finally(() => {
-        if (!cancelled) setGradeCoverageStatsLoading(false);
+        if (!controller.signal.aborted) setGradeCoverageStatsLoading(false);
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [
     debouncedSearch,
     filterExamId,
@@ -317,8 +318,33 @@ export function GradeRecordsView() {
     syncKey,
   ]);
 
+  const canRunGradeRecordActions = !serverGradesError && serverGrades !== null;
+
+  const gradeForAction = (gradeId: string) =>
+    (serverGrades || []).find((item) => item.id === gradeId) ||
+    grades.find((item) => item.id === gradeId);
+
+  const updateServerGradeRow = (gradeId: string, patch: Partial<Grade>) => {
+    setServerGrades((current) =>
+      current
+        ? current.map((grade) =>
+            grade.id === gradeId ? { ...grade, ...patch } : grade,
+          )
+        : current,
+    );
+  };
+
+  const refreshGradeRecordsAfterMutation = (reason: string) => {
+    setServerRefreshKey((key) => key + 1);
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason,
+      scopes: ["grades", "students", "opportunities", "dashboard"],
+    });
+  };
+
   const isAcademicAccountingRow = (gradeId: string) => {
-    const grade = grades.find((item) => item.id === gradeId);
+    const grade = gradeForAction(gradeId);
     const exam = grade ? exams.find((item) => item.id === grade.examId) : null;
     const student = grade
       ? students.find((item) => item.id === grade.studentId)
@@ -353,7 +379,7 @@ export function GradeRecordsView() {
     score: number | null,
     notes: string,
   ) => {
-    const grade = grades.find((item) => item.id === gradeId);
+    const grade = gradeForAction(gradeId);
     const exam = grade ? exams.find((item) => item.id === grade.examId) : null;
     const student = students.find((item) => item.id === studentId);
     if (!grade || !exam || !student || !studentHasManualReactivation(studentId))
@@ -397,21 +423,23 @@ export function GradeRecordsView() {
       notes,
     );
 
-  const toggleAcademicAccounting = (gradeId: string, checked: boolean) => {
+  const toggleAcademicAccounting = async (gradeId: string, checked: boolean) => {
+    if (!canRunGradeRecordActions) {
+      toast.error("تعذر تنفيذ الإجراء قبل تحميل سجل الدرجات من الخادم.");
+      return;
+    }
     if (!isAcademicAccountingRow(gradeId)) {
       toast.error("التأشير متاح فقط لحالة محاسبة رسوب");
       return;
     }
-    updateGrade(gradeId, { academicAccountingChecked: checked });
-    setServerGrades((current) =>
-      current
-        ? current.map((grade) =>
-            grade.id === gradeId
-              ? { ...grade, academicAccountingChecked: checked }
-              : grade,
-          )
-        : current,
-    );
+    const result = await gradeApi.update(gradeId, { academicAccountingChecked: checked });
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر حفظ تأشير المحاسبة من الخادم.");
+      return;
+    }
+    updateServerGradeRow(gradeId, { academicAccountingChecked: checked });
+    mergeGradesCache([{ ...(gradeForAction(gradeId) as Grade), academicAccountingChecked: checked }]);
+    refreshGradeRecordsAfterMutation("grade-records-accounting-check");
     toast.success(
       checked ? "تم تأشير محاسبة الرسوب" : "تم إلغاء تأشير محاسبة الرسوب",
     );
@@ -633,7 +661,11 @@ export function GradeRecordsView() {
   }, [page, totalPages]);
 
   const openEditGradeDialog = (gradeId: string) => {
-    const grade = grades.find((item) => item.id === gradeId);
+    if (!canRunGradeRecordActions) {
+      toast.error("تعذر تعديل الدرجة قبل تحميل سجل الدرجات من الخادم.");
+      return;
+    }
+    const grade = gradeForAction(gradeId);
     if (!grade) return;
     setEditDialog({
       open: true,
@@ -651,7 +683,7 @@ export function GradeRecordsView() {
   };
 
   const validateEditDialogScore = () => {
-    const grade = grades.find((item) => item.id === editDialog.id);
+    const grade = gradeForAction(editDialog.id);
     const exam = grade ? exams.find((item) => item.id === grade.examId) : null;
     if (!grade || !exam) return null;
     const score =
@@ -671,32 +703,40 @@ export function GradeRecordsView() {
     return { grade, score };
   };
 
-  const saveEditGradeUnchecked = () => {
+  const saveEditGradeUnchecked = async () => {
+    if (!canRunGradeRecordActions) {
+      toast.error("تعذر تعديل الدرجة قبل تحميل سجل الدرجات من الخادم.");
+      return;
+    }
     const validated = validateEditDialogScore();
     if (!validated) return;
-    const { score } = validated;
+    const { grade, score } = validated;
 
-    updateGrade(editDialog.id, {
+    const result = await gradeApi.update(editDialog.id, {
       status: editDialog.status,
       score,
       notes: editDialog.notes,
       academicAccountingChecked: false,
     });
-    setServerGrades((current) =>
-      current
-        ? current.map((grade) =>
-            grade.id === editDialog.id
-              ? {
-                  ...grade,
-                  status: editDialog.status,
-                  score,
-                  notes: editDialog.notes,
-                  academicAccountingChecked: false,
-                }
-              : grade,
-          )
-        : current,
-    );
+
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر تعديل الدرجة من الخادم.");
+      return;
+    }
+
+    const updatedGrade =
+      ((result.data as { grade?: Grade } | null)?.grade as Grade | undefined) ||
+      ({
+        ...grade,
+        status: editDialog.status,
+        score,
+        notes: editDialog.notes,
+        academicAccountingChecked: false,
+      } as Grade);
+
+    updateServerGradeRow(editDialog.id, updatedGrade);
+    mergeGradesCache([updatedGrade]);
+
     setEditDialog({
       open: false,
       id: "",
@@ -704,8 +744,8 @@ export function GradeRecordsView() {
       score: "",
       notes: "",
     });
-    setServerRefreshKey((key) => key + 1);
-    toast.success("تم تعديل الدرجة وإعادة الاحتساب");
+    refreshGradeRecordsAfterMutation("grade-records-edit");
+    toast.success("تم تعديل الدرجة من قاعدة البيانات وإعادة الاحتساب");
   };
 
   const handleSaveEditGrade = () => {
@@ -724,11 +764,15 @@ export function GradeRecordsView() {
       setReactivationEditConfirmOpen(true);
       return;
     }
-    saveEditGradeUnchecked();
+    void saveEditGradeUnchecked();
   };
 
   const openDeleteGradeDialog = (gradeId: string) => {
-    const grade = grades.find((item) => item.id === gradeId);
+    if (!canRunGradeRecordActions) {
+      toast.error("تعذر حذف الدرجة قبل تحميل سجل الدرجات من الخادم.");
+      return;
+    }
+    const grade = gradeForAction(gradeId);
     const student = grade
       ? students.find((item) => item.id === grade.studentId)
       : null;
@@ -741,19 +785,28 @@ export function GradeRecordsView() {
   };
 
   const handleDeleteGrade = runDeleteGradeLocked(async () => {
-    const ok = deleteGrade(deleteDialog.id);
-    if (ok) {
-      setServerGrades((current) =>
-        current
-          ? current.filter((grade) => grade.id !== deleteDialog.id)
-          : current,
-      );
-      setServerTotalCount((count) => Math.max(0, count - 1));
-      setServerRefreshKey((key) => key + 1);
-      toast.success("تم حذف الدرجة");
-    } else {
-      toast.error("تعذر حذف الدرجة");
+    if (!canRunGradeRecordActions) {
+      toast.error("تعذر حذف الدرجة قبل تحميل سجل الدرجات من الخادم.");
+      return;
     }
+    const grade = gradeForAction(deleteDialog.id);
+    if (!grade) {
+      toast.error("تعذر العثور على الدرجة المطلوبة.");
+      return;
+    }
+    const result = await gradeApi.remove(deleteDialog.id, grade.studentId, grade.examId);
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر حذف الدرجة من الخادم.");
+      return;
+    }
+    setServerGrades((current) =>
+      current
+        ? current.filter((item) => item.id !== deleteDialog.id)
+        : current,
+    );
+    setServerTotalCount((count) => Math.max(0, count - 1));
+    refreshGradeRecordsAfterMutation("grade-records-delete");
+    toast.success("تم حذف الدرجة من قاعدة البيانات");
     setDeleteDialog({ open: false, id: "", label: "" });
   });
 
@@ -1154,7 +1207,7 @@ export function GradeRecordsView() {
                       <Checkbox
                         checked={Boolean(grade.academicAccountingChecked)}
                         onCheckedChange={(checked) =>
-                          toggleAcademicAccounting(grade.id, checked === true)
+                          void toggleAcademicAccounting(grade.id, checked === true)
                         }
                       />
                       <span>
@@ -1168,6 +1221,7 @@ export function GradeRecordsView() {
                     variant="secondary"
                     size="sm"
                     onClick={() => openEditGradeDialog(grade.id)}
+                    disabled={!canRunGradeRecordActions}
                   >
                     تعديل
                   </Button>
@@ -1175,6 +1229,7 @@ export function GradeRecordsView() {
                     variant="destructive"
                     size="sm"
                     onClick={() => openDeleteGradeDialog(grade.id)}
+                    disabled={!canRunGradeRecordActions}
                   >
                     حذف
                   </Button>
@@ -1242,7 +1297,7 @@ export function GradeRecordsView() {
                           <Checkbox
                             checked={Boolean(grade.academicAccountingChecked)}
                             onCheckedChange={(checked) =>
-                              toggleAcademicAccounting(
+                              void toggleAcademicAccounting(
                                 grade.id,
                                 checked === true,
                               )
@@ -1263,6 +1318,7 @@ export function GradeRecordsView() {
                           variant="secondary"
                           size="sm"
                           onClick={() => openEditGradeDialog(grade.id)}
+                          disabled={!canRunGradeRecordActions}
                         >
                           تعديل
                         </Button>
@@ -1270,6 +1326,7 @@ export function GradeRecordsView() {
                           variant="destructive"
                           size="sm"
                           onClick={() => openDeleteGradeDialog(grade.id)}
+                          disabled={!canRunGradeRecordActions}
                         >
                           حذف
                         </Button>
@@ -1383,7 +1440,7 @@ export function GradeRecordsView() {
             >
               إلغاء
             </Button>
-            <Button onClick={handleSaveEditGrade}>حفظ التعديل</Button>
+            <Button onClick={handleSaveEditGrade} disabled={!canRunGradeRecordActions}>حفظ التعديل</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1408,7 +1465,7 @@ export function GradeRecordsView() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
                 setReactivationEditConfirmOpen(false);
-                saveEditGradeUnchecked();
+                void saveEditGradeUnchecked();
               }}
             >
               متابعة
