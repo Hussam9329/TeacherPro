@@ -17,7 +17,7 @@ import {
 } from "@/lib/teacher-store";
 import { gradeApi, gradeEntrySheetApi, type ApiResult } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -210,6 +210,7 @@ function formatGradeEntryTimestamp(value?: string | Date | null): string {
 
 export function GradeEntryView() {
   const syncKey = useTeacherProSyncKey(["grades", "students", "exams", "opportunities", "grade-entry-notes", "dashboard"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const {
     exams,
     students,
@@ -311,22 +312,25 @@ export function GradeEntryView() {
     }
 
     const controller = new AbortController();
-    setEntrySheetLoading(true);
-    setEntrySheetError(null);
+    const silent = isBackgroundSync();
+    if (!silent) setEntrySheetLoading(true);
+    if (!silent) setEntrySheetError(null);
 
     gradeEntrySheetApi
       .get(selectedExam.id, { signal: controller.signal, quietAbort: true })
       .then((result) => {
         if (controller.signal.aborted) return;
         if (!result) {
-          setEntrySheetStudents([]);
-          setEntrySheetGrades([]);
-          setEntrySheetLeaves([]);
-          setEntrySheetOpportunityLogs([]);
-          setEntrySheetCourseChapters([]);
-          setEntrySheetError(
-            "تعذر تحميل ورقة إدخال الدرجات من قاعدة البيانات. حدّث الصفحة أو تحقق من صلاحية الحساب.",
-          );
+          if (!silent) {
+            setEntrySheetStudents([]);
+            setEntrySheetGrades([]);
+            setEntrySheetLeaves([]);
+            setEntrySheetOpportunityLogs([]);
+            setEntrySheetCourseChapters([]);
+            setEntrySheetError(
+              "تعذر تحميل ورقة إدخال الدرجات من قاعدة البيانات. حدّث الصفحة أو تحقق من صلاحية الحساب.",
+            );
+          }
           return;
         }
 
@@ -348,7 +352,7 @@ export function GradeEntryView() {
         mergeGradesCache(loadedGrades);
       })
       .catch(() => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || silent) return;
         setEntrySheetStudents([]);
         setEntrySheetGrades([]);
         setEntrySheetLeaves([]);
@@ -365,7 +369,7 @@ export function GradeEntryView() {
     return () => {
       controller.abort();
     };
-  }, [selectedExamId, exams, mergeStudentsCache, mergeGradesCache, syncKey]);
+  }, [selectedExamId, exams, mergeStudentsCache, mergeGradesCache, syncKey, isBackgroundSync]);
 
   const availableProgramsForFilter = useMemo(
     () =>

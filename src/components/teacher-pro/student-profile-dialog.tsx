@@ -22,7 +22,7 @@ import {
 } from "@/lib/api";
 import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib/grade-classification";
 import { ArrowRightIcon } from "lucide-react";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "timeline";
 
@@ -261,6 +261,7 @@ export function StudentProfileDialog({
   graceEndDate,
 }: StudentProfileDialogProps) {
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "opportunity-logs", "follow-up", "correction", "logs", "grade-entry-notes"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const [tab, setTab] = useState<StudentFileTab>("details");
   const [databaseStats, setDatabaseStats] = useState<StudentProfileStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
@@ -467,14 +468,15 @@ export function StudentProfileDialog({
     }
 
     let cancelled = false;
-    setDatabaseStatsLoading(true);
+    const silent = isBackgroundSync();
+    if (!silent) setDatabaseStatsLoading(true);
     studentProfileStatsApi
       .get(student.id)
       .then((result) => {
         if (!cancelled) setDatabaseStats(result);
       })
       .catch(() => {
-        if (!cancelled) setDatabaseStats(null);
+        if (!cancelled && !silent) setDatabaseStats(null);
       })
       .finally(() => {
         if (!cancelled) setDatabaseStatsLoading(false);
@@ -483,7 +485,7 @@ export function StudentProfileDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, student?.id, syncKey]);
+  }, [open, student?.id, syncKey, isBackgroundSync]);
 
   useEffect(() => {
     if (!open || !student?.id) {
@@ -500,22 +502,25 @@ export function StudentProfileDialog({
     }
 
     let cancelled = false;
-    setDatabaseGradesLoading(true);
-    setDatabaseGradesError(null);
+    const silent = isBackgroundSync();
+    if (!silent) setDatabaseGradesLoading(true);
+    if (!silent) setDatabaseGradesError(null);
 
     studentProfileLogApi
       .get(student.id)
       .then((result) => {
         if (cancelled) return;
         if (!result) {
-          setDatabaseGrades([]);
-          setDatabaseExams([]);
-          setDatabaseOpportunityLogs([]);
-          setDatabaseStudentLeaves([]);
-          setDatabaseStudentCalls([]);
-          setDatabaseStudentNotes([]);
-          setDatabaseLogs([]);
-          setDatabaseGradesError("تعذر تحميل لوغ الطالب الكامل من الخادم حالياً.");
+          if (!silent) {
+            setDatabaseGrades([]);
+            setDatabaseExams([]);
+            setDatabaseOpportunityLogs([]);
+            setDatabaseStudentLeaves([]);
+            setDatabaseStudentCalls([]);
+            setDatabaseStudentNotes([]);
+            setDatabaseLogs([]);
+            setDatabaseGradesError("تعذر تحميل لوغ الطالب الكامل من الخادم حالياً.");
+          }
           return;
         }
         setDatabaseGrades((result.grades || []) as unknown as Grade[]);
@@ -527,7 +532,7 @@ export function StudentProfileDialog({
         setDatabaseLogs((result.logs || []) as unknown as LogEntry[]);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled || silent) return;
         setDatabaseGrades([]);
         setDatabaseExams([]);
         setDatabaseOpportunityLogs([]);
@@ -544,7 +549,7 @@ export function StudentProfileDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, student?.id, syncKey]);
+  }, [open, student?.id, syncKey, isBackgroundSync]);
 
   if (!open || !student || !isMounted) return null;
 

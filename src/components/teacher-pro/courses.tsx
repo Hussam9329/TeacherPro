@@ -35,7 +35,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { BookOpen, Settings, MapPin, GraduationCap, Monitor, Building } from "lucide-react";
 import { EmptyState } from "./ui-kit";
@@ -704,6 +704,7 @@ function courseDeleteBadge(row: CourseOverviewRow) {
 export function CoursesView() {
   const { loadSectionDataFromServer } = useTeacherStore();
   const syncKey = useTeacherProSyncKey(["courses", "chapters", "students", "exams"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
 
   const [rows, setRows] = useState<CourseOverviewRow[]>([]);
   const [stats, setStats] = useState<CourseOverviewResponse["stats"] | null>(null);
@@ -741,12 +742,15 @@ export function CoursesView() {
   const { locked: isDeletingCourse, runLocked: runDeleteCourseLocked } = useActionLock();
   const { locked: isTogglingCourse, runLocked: runToggleCourseLocked } = useActionLock();
 
-  const refreshOverview = useCallback(async (signal?: AbortSignal) => {
-    setIsLoading(true);
-    setLoadError("");
+  const refreshOverview = useCallback(async (
+    signal?: AbortSignal,
+    options: { silent?: boolean } = {},
+  ) => {
+    if (!options.silent) setIsLoading(true);
+    if (!options.silent) setLoadError("");
     const data = await courseApi.overview({ signal, quietAbort: true });
     if (!data) {
-      if (!signal?.aborted) {
+      if (!signal?.aborted && !options.silent) {
         setLoadError("تعذر تحميل ملخص الدورات من قاعدة البيانات.");
         setIsLoading(false);
       }
@@ -760,12 +764,12 @@ export function CoursesView() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void refreshOverview(controller.signal);
+    void refreshOverview(controller.signal, { silent: isBackgroundSync() });
     return () => controller.abort();
-  }, [refreshOverview, syncKey]);
+  }, [refreshOverview, syncKey, isBackgroundSync]);
 
   const syncCoursesAfterMutation = useCallback(async (reason: string) => {
-    await refreshOverview();
+    await refreshOverview(undefined, { silent: true });
     void loadSectionDataFromServer("courses");
     emitTeacherProDataChanged({
       source: "local-mutation",

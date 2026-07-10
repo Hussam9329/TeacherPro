@@ -1,5 +1,5 @@
 "use client";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -533,6 +533,7 @@ export function StudentRegistryView() {
   );
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
   const syncKey = useTeacherProSyncKey(["students", "courses", "opportunities", "grades", "follow-up", "dashboard"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const [activeStudentsTotal, setActiveStudentsTotal] = useState<number | null>(
     null,
   );
@@ -658,8 +659,9 @@ export function StudentRegistryView() {
     let cancelled = false;
     const controller = new AbortController();
 
-    setServerStudentsLoading(true);
-    setServerStudentsError(null);
+    const silent = isBackgroundSync();
+    if (!silent) setServerStudentsLoading(true);
+    if (!silent) setServerStudentsError(null);
 
     studentApi
       .list(
@@ -681,10 +683,12 @@ export function StudentRegistryView() {
       .then((result) => {
         if (cancelled) return;
         if (!result) {
-          setServerStudents(null);
-          setServerStudentsError(
-            "تعذر تحميل نتائج الطلاب من الخادم. سيتم عرض النسخة المحلية مؤقتاً.",
-          );
+          if (!silent) {
+            setServerStudents(null);
+            setServerStudentsError(
+              "تعذر تحميل نتائج الطلاب من الخادم. سيتم عرض النسخة المحلية مؤقتاً.",
+            );
+          }
           return;
         }
 
@@ -700,7 +704,7 @@ export function StudentRegistryView() {
         }
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled || silent) return;
         setServerStudents(null);
         setServerStudentsError(
           "تعذر تحميل نتائج الطلاب من الخادم. سيتم عرض النسخة المحلية مؤقتاً.",
@@ -728,6 +732,7 @@ export function StudentRegistryView() {
     serverRefreshKey,
     syncKey,
     mergeStudentsCache,
+    isBackgroundSync,
   ]);
 
   useEffect(() => {

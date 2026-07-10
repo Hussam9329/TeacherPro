@@ -12,7 +12,7 @@ import {
   type StudentRegisterContextResponse,
   type StudentRegisterContextRow,
 } from "@/lib/api";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -329,6 +329,7 @@ export function StudentBulkTextImportView() {
     "dashboard",
     "bulk-import",
   ]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const { students, loadFromServer, mergeStudentsCache } = useTeacherStore();
   const [rawText, setRawText] = useState("");
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
@@ -341,28 +342,32 @@ export function StudentBulkTextImportView() {
   const [contextLoading, setContextLoading] = useState(true);
   const [contextError, setContextError] = useState("");
 
-  const loadBulkContext = useCallback(async () => {
-    setContextLoading(true);
-    setContextError("");
+  const loadBulkContext = useCallback(async (silent = false) => {
+    if (!silent) setContextLoading(true);
+    if (!silent) setContextError("");
     try {
       const context = await studentRegisterApi.context();
       if (!context) {
-        setRegisterContext(null);
-        setContextError("تعذر تحميل سياق التسجيل الجماعي من قاعدة البيانات.");
+        if (!silent) {
+          setRegisterContext(null);
+          setContextError("تعذر تحميل سياق التسجيل الجماعي من قاعدة البيانات.");
+        }
         return;
       }
       setRegisterContext(context);
     } catch {
-      setRegisterContext(null);
-      setContextError("تعذر الاتصال بالخادم لتحميل سياق التسجيل الجماعي.");
+      if (!silent) {
+        setRegisterContext(null);
+        setContextError("تعذر الاتصال بالخادم لتحميل سياق التسجيل الجماعي.");
+      }
     } finally {
       setContextLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadBulkContext();
-  }, [loadBulkContext, syncKey]);
+    void loadBulkContext(isBackgroundSync());
+  }, [loadBulkContext, syncKey, isBackgroundSync]);
 
   useEffect(() => {
     let cancelled = false;

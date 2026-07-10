@@ -1,5 +1,5 @@
 "use client";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,7 @@ function normalizeNote(item: unknown): GradeEntryMissingNote | null {
 
 export function MissingStudentsNotesView() {
   const syncKey = useTeacherProSyncKey(["grade-entry-notes", "grades", "exams"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const { exams, setSection } = useTeacherStore();
   const [notes, setNotes] = useState<GradeEntryMissingNote[]>([]);
   const [search, setSearch] = useState("");
@@ -71,8 +72,8 @@ export function MissingStudentsNotesView() {
   const [notesError, setNotesError] = useState("");
   const [deletingNote, setDeletingNote] = useState(false);
 
-  const refreshDatabaseStats = (signal?: AbortSignal) => {
-    setDatabaseStatsLoading(true);
+  const refreshDatabaseStats = (signal?: AbortSignal, silent = false) => {
+    if (!silent) setDatabaseStatsLoading(true);
     missingStudentsNotesStatsApi
       .get(signal ? { signal, quietAbort: true } : undefined)
       .then((result) => {
@@ -86,9 +87,9 @@ export function MissingStudentsNotesView() {
       });
   };
 
-  const refreshNotesFromDatabase = (signal: AbortSignal) => {
-    setNotesLoading(true);
-    setNotesError("");
+  const refreshNotesFromDatabase = (signal: AbortSignal, silent = false) => {
+    if (!silent) setNotesLoading(true);
+    if (!silent) setNotesError("");
     fetch("/api/grade-entry-missing-notes", {
       credentials: "same-origin",
       signal,
@@ -104,7 +105,7 @@ export function MissingStudentsNotesView() {
         if (!signal.aborted) setNotes(nextNotes);
       })
       .catch(() => {
-        if (!signal.aborted) {
+        if (!signal.aborted && !silent) {
           setNotes([]);
           setNotesError("تعذر تحميل ملاحظات الطلاب غير الموجودين من قاعدة البيانات. تم تعطيل الحذف حتى يرجع الاتصال.");
         }
@@ -116,24 +117,23 @@ export function MissingStudentsNotesView() {
 
   useEffect(() => {
     const controller = new AbortController();
-    refreshNotesFromDatabase(controller.signal);
-    refreshDatabaseStats(controller.signal);
+    const silent = isBackgroundSync();
+    refreshNotesFromDatabase(controller.signal, silent);
+    refreshDatabaseStats(controller.signal, silent);
 
     const refreshAfterExternalChange = () => {
       if (!controller.signal.aborted) {
-        refreshNotesFromDatabase(controller.signal);
-        refreshDatabaseStats(controller.signal);
+        refreshNotesFromDatabase(controller.signal, true);
+        refreshDatabaseStats(controller.signal, true);
       }
     };
 
     window.addEventListener("teacherpro:grade-entry-missing-notes-updated", refreshAfterExternalChange);
-    window.addEventListener("storage", refreshAfterExternalChange);
     return () => {
       controller.abort();
       window.removeEventListener("teacherpro:grade-entry-missing-notes-updated", refreshAfterExternalChange);
-      window.removeEventListener("storage", refreshAfterExternalChange);
     };
-  }, [syncKey]);
+  }, [syncKey, isBackgroundSync]);
 
   const normalizedSearch = useMemo(() => normalizeForSearch(search), [search]);
   const filteredNotes = useMemo(() => {

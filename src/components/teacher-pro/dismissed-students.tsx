@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type OpportunityLog, type Student } from "@/lib/teacher-store";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { studentApi } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -115,6 +115,7 @@ function serverActionData(result: { data?: unknown }) {
 
 export function DismissedStudentsView() {
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "dismissed", "dashboard"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const {
     students,
     courses,
@@ -155,8 +156,9 @@ export function DismissedStudentsView() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setDismissedStudentsSearchLoading(true);
-    setListError("");
+    const silent = isBackgroundSync();
+    if (!silent) setDismissedStudentsSearchLoading(true);
+    if (!silent) setListError("");
     studentApi
       .list(
         {
@@ -171,8 +173,10 @@ export function DismissedStudentsView() {
       .then((result) => {
         if (controller.signal.aborted) return;
         if (!result) {
-          setDismissedServerStudents([]);
-          setListError("تعذر تحميل المفصولين من قاعدة البيانات. لا توجد إجراءات حساسة متاحة حتى يرجع الاتصال.");
+          if (!silent) {
+            setDismissedServerStudents([]);
+            setListError("تعذر تحميل المفصولين من قاعدة البيانات. لا توجد إجراءات حساسة متاحة حتى يرجع الاتصال.");
+          }
           return;
         }
         const next = (result.students || []) as unknown as Student[];
@@ -180,7 +184,7 @@ export function DismissedStudentsView() {
         mergeStudentsCache(next);
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && !silent) {
           setDismissedServerStudents([]);
           setListError("تعذر تحميل المفصولين من قاعدة البيانات. لا توجد إجراءات حساسة متاحة حتى يرجع الاتصال.");
         }
@@ -189,7 +193,7 @@ export function DismissedStudentsView() {
         if (!controller.signal.aborted) setDismissedStudentsSearchLoading(false);
       });
     return () => controller.abort();
-  }, [debouncedSearch, filterCourseId, mergeStudentsCache, syncKey]);
+  }, [debouncedSearch, filterCourseId, mergeStudentsCache, syncKey, isBackgroundSync]);
 
   useEffect(() => {
     const ids = dismissedServerStudents.map((student) => student.id).filter(Boolean);
@@ -243,8 +247,9 @@ export function DismissedStudentsView() {
     if (filterNotes !== "all") params.set("notesFilter", filterNotes);
     if (filterPledge !== "all") params.set("pledgeFilter", filterPledge);
 
-    setDismissedStatsLoading(true);
-    setDismissedStatsError("");
+    const silent = isBackgroundSync();
+    if (!silent) setDismissedStatsLoading(true);
+    if (!silent) setDismissedStatsError("");
     fetch(`/api/dismissed-students/stats?${params.toString()}`, {
       credentials: "same-origin",
       signal: controller.signal,
@@ -253,7 +258,7 @@ export function DismissedStudentsView() {
       .then((payload: { stats?: DismissedStats } | null) => {
         if (controller.signal.aborted) return;
         if (!payload?.stats) {
-          setDismissedStatsError("تعذر تحميل إحصائيات المفصولين من قاعدة البيانات.");
+          if (!silent) setDismissedStatsError("تعذر تحميل إحصائيات المفصولين من قاعدة البيانات.");
           return;
         }
         setDismissedStats(payload.stats);
@@ -261,14 +266,14 @@ export function DismissedStudentsView() {
       .catch((error) => {
         if (controller.signal.aborted) return;
         console.warn("[DismissedStudentsView] stats load failed", error);
-        setDismissedStatsError("تعذر تحميل إحصائيات المفصولين من قاعدة البيانات.");
+        if (!silent) setDismissedStatsError("تعذر تحميل إحصائيات المفصولين من قاعدة البيانات.");
       })
       .finally(() => {
         if (!controller.signal.aborted) setDismissedStatsLoading(false);
       });
 
     return () => controller.abort();
-  }, [debouncedSearch, filterCourseId, filterDismissalType, filterNotes, filterPledge, syncKey]);
+  }, [debouncedSearch, filterCourseId, filterDismissalType, filterNotes, filterPledge, syncKey, isBackgroundSync]);
 
   const dismissedTypes = useMemo(
     () =>

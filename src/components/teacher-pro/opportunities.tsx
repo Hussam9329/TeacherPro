@@ -1,5 +1,5 @@
 "use client";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
@@ -112,6 +112,7 @@ export function OpportunitiesView() {
     "grades",
     "dashboard",
   ]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const [detailsStudentId, setDetailsStudentId] = useState("");
   const [detailsLogs, setDetailsLogs] = useState<OpportunityLogWithRelations[]>([]);
   const [detailsLogsLoading, setDetailsLogsLoading] = useState(false);
@@ -145,7 +146,8 @@ export function OpportunitiesView() {
 
   useEffect(() => {
     let cancelled = false;
-    setStudentsLoading(true);
+    const silent = isBackgroundSync();
+    if (!silent) setStudentsLoading(true);
     studentApi
       .list({
         page,
@@ -165,7 +167,7 @@ export function OpportunitiesView() {
         mergeStudentsCache(nextStudents);
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && !silent) {
           setServerStudents([]);
           setServerTotalPages(1);
           toast.error("تعذر تحميل طلاب الفرص من قاعدة البيانات.");
@@ -187,12 +189,14 @@ export function OpportunitiesView() {
     refreshKey,
     syncKey,
     mergeStudentsCache,
+    isBackgroundSync,
   ]);
 
   useEffect(() => {
     let cancelled = false;
+    const silent = isBackgroundSync();
     const timer = window.setTimeout(() => {
-      setDatabaseStatsLoading(true);
+      if (!silent) setDatabaseStatsLoading(true);
       opportunityStatsApi
         .get({
           courseId: filterCourseId,
@@ -222,12 +226,14 @@ export function OpportunitiesView() {
     debouncedSearch,
     refreshKey,
     syncKey,
+    isBackgroundSync,
   ]);
 
   useEffect(() => {
     let cancelled = false;
+    const silent = isBackgroundSync();
     const timer = window.setTimeout(() => {
-      setBulkTargetLoading(true);
+      if (!silent) setBulkTargetLoading(true);
       opportunityStatsApi
         .bulkTargets({
           courseId: filterCourseId,
@@ -263,6 +269,7 @@ export function OpportunitiesView() {
     bulkExcludeDismissed,
     bulkExcludeFullOpportunities,
     syncKey,
+    isBackgroundSync,
   ]);
 
   useEffect(() => {
@@ -724,7 +731,7 @@ export function OpportunitiesView() {
     );
     if (affected === 0) {
       toast.error("لم يتم تطبيق العملية على أي طالب");
-      setRefreshKey((key) => key + 1);
+        setRefreshKey((key) => key + 1);
       return;
     }
 

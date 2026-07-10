@@ -3,7 +3,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import { syncVersionApi } from "@/lib/api";
-import { emitTeacherProDataChanged, subscribeTeacherProDataChanged, type TeacherProDataChangedDetail } from "@/lib/teacherpro-sync";
+import {
+  consumeTeacherProLocalMutationEcho,
+  emitTeacherProDataChanged,
+  isTeacherProInteractionBusy,
+  requestTeacherProSyncNow,
+  subscribeTeacherProDataChanged,
+  subscribeTeacherProLocalMutation,
+  TEACHERPRO_SYNC_PENDING_EVENT,
+  TEACHERPRO_SYNC_SETTLED_EVENT,
+  type TeacherProDataChangedDetail,
+} from "@/lib/teacherpro-sync";
 import {
   LayoutDashboard,
   BookOpen,
@@ -143,6 +153,28 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   logs: ["logs", "opportunity-logs"],
   "admin-log-reset": ["logs", "opportunity-logs", "opportunities", "dashboard"],
 };
+
+// These sections own server-side page queries through useTeacherProSyncKey.
+// The layout must not refetch the same section as well, otherwise one external
+// event creates two overlapping requests and a visible UI refresh.
+const PAGE_OWNED_SYNC_SECTIONS = new Set<SectionId>([
+  "dashboard",
+  "missing-students-notes",
+  "courses",
+  "student-registry",
+  "student-bulk-import",
+  "dismissed-students",
+  "exam-new",
+  "grade-entry",
+  "exam-records",
+  "grade-records",
+  "opportunities",
+  "e-correction",
+  "follow-up",
+  "follow-up-calls",
+  "follow-up-leaves",
+  "follow-up-pledges",
+]);
 
 function detailMatchesSection(
   detail: Pick<TeacherProDataChangedDetail, "scopes"> | undefined,
@@ -602,14 +634,18 @@ export function TeacherProLayout() {
 
   useEffect(() => {
     if (!isAuthenticated || dbLoading) return;
+    if (PAGE_OWNED_SYNC_SECTIONS.has(currentSection)) return;
     if (lazyLoadedSectionsRef.current.has(currentSection)) return;
     lazyLoadedSectionsRef.current.add(currentSection);
     void loadSectionDataFromServer(currentSection);
   }, [currentSection, dbLoading, isAuthenticated, loadSectionDataFromServer]);
 
-  // أي تعديل ناجح في أي مكان يطلق إشارة sync عامة.
-  // نعيد تحميل القسم الحالي فقط حتى تبقى الواجهة فورية بدون تحميل كل الجداول الثقيلة.
+  // Smart Sync: one refresh owner per page, silent external refreshes, and
+  // no local echo after a successful mutation.
   const syncRefreshTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(
+    null,
+  );
+  const snapshotRebaselineTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(
     null,
   );
   const mainScrollRef = useRef<HTMLDivElement | null>(null);
@@ -618,9 +654,22 @@ export function TeacherProLayout() {
   );
   const isUserScrollingRef = useRef(false);
   const lastServerSyncSnapshotRef = useRef<SyncVersionSnapshot | null>(null);
+  const serverVersionCheckRef = useRef<
+    ((options?: { force?: boolean; rebaselineOnly?: boolean }) => Promise<void>) | null
+  >(null);
 
   useEffect(() => {
     if (!isAuthenticated) return;
+
+    const scheduleSnapshotRebaseline = () => {
+      if (snapshotRebaselineTimerRef.current) {
+        window.clearTimeout(snapshotRebaselineTimerRef.current);
+      }
+      snapshotRebaselineTimerRef.current = window.setTimeout(() => {
+        snapshotRebaselineTimerRef.current = null;
+        void serverVersionCheckRef.current?.({ force: true, rebaselineOnly: true });
+      }, 450) as unknown as ReturnType<typeof window.setTimeout>;
+    };
 
     const refreshCurrentSection = (
       detail?: TeacherProDataChangedDetail | {
@@ -629,33 +678,44 @@ export function TeacherProLayout() {
       },
     ) => {
       if (!detailMatchesSection(detail, currentSection)) return;
-
-      // لا نعيد تحميل القسم العام لنفس التاب بعد كل تعديل محلي: الصفحة نفسها
-      // أو الـ store يحدثان الحالة فوراً. إعادة التحميل هنا كانت تتزامن مع
-      // useTeacherProSyncKey داخل الصفحة وتسبب refetch مزدوج ورجفة أثناء السكرول.
       if (detail?.source === "local-mutation") return;
+
+      // A remote mutation already triggered the page-owned query. Rebaseline
+      // the lightweight version snapshot so the next poll does not replay it.
+      if (detail?.source === "broadcast" || detail?.source === "storage") {
+        scheduleSnapshotRebaseline();
+      }
+
+      if (PAGE_OWNED_SYNC_SECTIONS.has(currentSection)) return;
 
       lazyLoadedSectionsRef.current.delete(currentSection);
       if (syncRefreshTimerRef.current) {
         window.clearTimeout(syncRefreshTimerRef.current);
       }
-      const refreshDelay = isUserScrollingRef.current ? 420 : 160;
-      syncRefreshTimerRef.current = window.setTimeout(() => {
-        if (isUserScrollingRef.current) {
-          refreshCurrentSection(detail);
+
+      const scheduleRefresh = () => {
+        const busy = isUserScrollingRef.current || isTeacherProInteractionBusy();
+        if (busy) {
+          syncRefreshTimerRef.current = window.setTimeout(
+            scheduleRefresh,
+            500,
+          ) as unknown as ReturnType<typeof window.setTimeout>;
           return;
         }
+        syncRefreshTimerRef.current = null;
         void loadSectionDataFromServer(currentSection);
-        const cameFromAnotherContext =
-          detail?.source && detail.source !== "local-mutation";
+
         const touchesCore =
           !detail?.scopes ||
           detail.scopes.includes("all") ||
           detail.scopes.includes("core");
-        if (cameFromAnotherContext && touchesCore) {
-          void loadFromServer();
-        }
-      }, refreshDelay) as unknown as ReturnType<typeof window.setTimeout>;
+        if (touchesCore) void loadFromServer();
+      };
+
+      syncRefreshTimerRef.current = window.setTimeout(
+        scheduleRefresh,
+        650,
+      ) as unknown as ReturnType<typeof window.setTimeout>;
     };
 
     const unsubscribe = subscribeTeacherProDataChanged(refreshCurrentSection);
@@ -677,6 +737,9 @@ export function TeacherProLayout() {
       if (syncRefreshTimerRef.current) {
         window.clearTimeout(syncRefreshTimerRef.current);
       }
+      if (snapshotRebaselineTimerRef.current) {
+        window.clearTimeout(snapshotRebaselineTimerRef.current);
+      }
     };
   }, [isAuthenticated, currentSection, loadSectionDataFromServer, loadFromServer]);
 
@@ -690,7 +753,7 @@ export function TeacherProLayout() {
       }
       scrollIdleTimerRef.current = window.setTimeout(() => {
         isUserScrollingRef.current = false;
-      }, 180) as unknown as ReturnType<typeof window.setTimeout>;
+      }, 220) as unknown as ReturnType<typeof window.setTimeout>;
     };
     scroller.addEventListener("scroll", onScroll, { passive: true });
     return () => {
@@ -702,16 +765,43 @@ export function TeacherProLayout() {
     };
   }, []);
 
-  // كشف تغييرات التبويبات الأخرى أو مستخدم آخر بفحص خفيف جداً للإصدار.
-  // لا يحمل الطلاب/الدرجات؛ فقط بصمة counts وآخر timestamps، ثم يطلق sync عند الاختلاف.
+  // Small non-blocking notice only when an external refresh is deliberately
+  // held because the user is editing/scrolling.
+  useEffect(() => {
+    const onPending = () => {
+      toast("توجد تحديثات جديدة", {
+        id: "teacherpro-smart-sync-pending",
+        description: "تم تأجيل تطبيقها حتى لا يتغير النموذج أو الجدول أثناء عملك.",
+        duration: 8000,
+        action: {
+          label: "تطبيق الآن",
+          onClick: requestTeacherProSyncNow,
+        },
+      });
+    };
+    const onSettled = () => toast.dismiss("teacherpro-smart-sync-pending");
+    window.addEventListener(TEACHERPRO_SYNC_PENDING_EVENT, onPending);
+    window.addEventListener(TEACHERPRO_SYNC_SETTLED_EVENT, onSettled);
+    return () => {
+      window.removeEventListener(TEACHERPRO_SYNC_PENDING_EVENT, onPending);
+      window.removeEventListener(TEACHERPRO_SYNC_SETTLED_EVENT, onSettled);
+    };
+  }, []);
+
+  // Lightweight server-version polling. Local mutation echoes are consumed,
+  // remote events are coalesced, and the event stays inside this tab because
+  // every tab either receives the original broadcast or polls on wake.
   useEffect(() => {
     if (!isAuthenticated) return;
     let stopped = false;
     let inFlight = false;
 
-    const checkServerVersion = async (force = false) => {
+    const checkServerVersion = async (options: {
+      force?: boolean;
+      rebaselineOnly?: boolean;
+    } = {}) => {
       if (stopped || inFlight) return;
-      if (!force && typeof document !== "undefined" && document.hidden) return;
+      if (!options.force && typeof document !== "undefined" && document.hidden) return;
       inFlight = true;
       try {
         const result = await syncVersionApi.get();
@@ -722,39 +812,66 @@ export function TeacherProLayout() {
           lastServerSyncSnapshotRef.current = snapshot;
           return;
         }
-        if (snapshot.version !== previousSnapshot.version) {
-          const changedScopes = inferChangedSyncScopes(
-            previousSnapshot,
-            snapshot,
-          );
-          lastServerSyncSnapshotRef.current = snapshot;
-          emitTeacherProDataChanged({
-            source: "server-version",
-            reason: "تغيير جديد في قاعدة البيانات",
-            scopes: changedScopes,
-            version: snapshot.version,
-          });
+        if (snapshot.version === previousSnapshot.version) return;
+
+        const changedScopes = inferChangedSyncScopes(previousSnapshot, snapshot);
+        lastServerSyncSnapshotRef.current = snapshot;
+
+        if (options.rebaselineOnly) {
+          consumeTeacherProLocalMutationEcho(changedScopes);
+          return;
         }
+
+        const { externalScopes } = consumeTeacherProLocalMutationEcho(changedScopes);
+        if (externalScopes.length === 0) return;
+
+        emitTeacherProDataChanged({
+          source: "server-version",
+          reason: "تغيير جديد في قاعدة البيانات",
+          scopes: externalScopes,
+          version: snapshot.version,
+          broadcast: false,
+        });
       } catch {
-        // فشل فحص الإصدار لا يزعج المستخدم؛ فحص sync وقائي فقط.
+        // Sync polling is protective and must never interrupt the user.
       } finally {
         inFlight = false;
       }
     };
 
-    void checkServerVersion(true);
-    const interval = window.setInterval(() => void checkServerVersion(false), 5000);
-    const onWake = () => void checkServerVersion(true);
+    serverVersionCheckRef.current = checkServerVersion;
+    void checkServerVersion({ force: true });
+    const interval = window.setInterval(
+      () => void checkServerVersion(),
+      10_000,
+    );
+    const onWake = () => void checkServerVersion({ force: true });
+    const unsubscribeLocalMutation = subscribeTeacherProLocalMutation(() => {
+      // The API mutation has already completed; update only the version baseline.
+      if (snapshotRebaselineTimerRef.current) {
+        window.clearTimeout(snapshotRebaselineTimerRef.current);
+      }
+      snapshotRebaselineTimerRef.current = window.setTimeout(() => {
+        snapshotRebaselineTimerRef.current = null;
+        void checkServerVersion({ force: true, rebaselineOnly: true });
+      }, 350) as unknown as ReturnType<typeof window.setTimeout>;
+    });
+
     window.addEventListener("focus", onWake);
     window.addEventListener("online", onWake);
     document.addEventListener("visibilitychange", onWake);
 
     return () => {
       stopped = true;
+      serverVersionCheckRef.current = null;
+      unsubscribeLocalMutation();
       window.clearInterval(interval);
       window.removeEventListener("focus", onWake);
       window.removeEventListener("online", onWake);
       document.removeEventListener("visibilitychange", onWake);
+      if (snapshotRebaselineTimerRef.current) {
+        window.clearTimeout(snapshotRebaselineTimerRef.current);
+      }
     };
   }, [isAuthenticated]);
 

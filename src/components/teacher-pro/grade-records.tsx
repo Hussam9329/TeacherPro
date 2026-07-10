@@ -1,5 +1,5 @@
 "use client";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Grade, type Student } from "@/lib/teacher-store";
@@ -165,6 +165,7 @@ export function GradeRecordsView() {
     useState(false);
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
   const syncKey = useTeacherProSyncKey(["grades", "students", "exams", "opportunities", "dashboard"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     id: "",
@@ -199,8 +200,9 @@ export function GradeRecordsView() {
     const controller = new AbortController();
     const rawStatus = serverStatusForGradeFilter(filterStatus);
 
-    setServerGradesLoading(true);
-    setServerGradesError(null);
+    const silent = isBackgroundSync();
+    if (!silent) setServerGradesLoading(true);
+    if (!silent) setServerGradesError(null);
 
     gradeApi
       .list(
@@ -225,10 +227,12 @@ export function GradeRecordsView() {
       .then((result) => {
         if (controller.signal.aborted) return;
         if (!result) {
-          setServerGrades(null);
-          setServerGradesError(
-            "تعذر تحميل سجل الدرجات من الخادم. تم تعطيل التعديل والحذف حتى يرجع الاتصال.",
-          );
+          if (!silent) {
+            setServerGrades(null);
+            setServerGradesError(
+              "تعذر تحميل سجل الدرجات من الخادم. تم تعطيل التعديل والحذف حتى يرجع الاتصال.",
+            );
+          }
           return;
         }
 
@@ -248,7 +252,7 @@ export function GradeRecordsView() {
         if (page > nextTotalPages) setPage(nextTotalPages);
       })
       .catch(() => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || silent) return;
         setServerGrades(null);
         setServerGradesError(
           "تعذر تحميل سجل الدرجات من الخادم. تم تعطيل التعديل والحذف حتى يرجع الاتصال.",
@@ -274,11 +278,13 @@ export function GradeRecordsView() {
     syncKey,
     mergeGradesCache,
     mergeStudentsCache,
+    isBackgroundSync,
   ]);
 
   useEffect(() => {
     const controller = new AbortController();
-    setGradeCoverageStatsLoading(true);
+    const silent = isBackgroundSync();
+    if (!silent) setGradeCoverageStatsLoading(true);
     gradeCoverageStatsApi
       .get(
         {
@@ -316,6 +322,7 @@ export function GradeRecordsView() {
     filterStudyType,
     serverRefreshKey,
     syncKey,
+    isBackgroundSync,
   ]);
 
   const canRunGradeRecordActions = !serverGradesError && serverGrades !== null;

@@ -8,7 +8,7 @@ import {
   type ExamCreateContextRow,
 } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -199,6 +199,7 @@ function selectedSiteActiveStudentCount(rows: ExamCreateContextRow[], selectedCo
 
 export function ExamNewView() {
   const syncKey = useTeacherProSyncKey(["courses", "chapters", "students", "exams"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const [form, setForm] = useState<ExamFormState>(() => emptyForm());
   const [contextRows, setContextRows] = useState<ExamCreateContextRow[]>([]);
   const [contextLoading, setContextLoading] = useState(true);
@@ -207,21 +208,24 @@ export function ExamNewView() {
 
   useEffect(() => {
     const controller = new AbortController();
-    setContextLoading(true);
-    setContextError("");
+    const silent = isBackgroundSync();
+    if (!silent) setContextLoading(true);
+    if (!silent) setContextError("");
     examCreateContextApi
       .get({ signal: controller.signal, quietAbort: true })
       .then((payload) => {
         if (controller.signal.aborted) return;
         if (!payload?.rows) {
-          setContextRows([]);
-          setContextError("تعذر تحميل سياق إضافة الامتحان من قاعدة البيانات.");
+          if (!silent) {
+            setContextRows([]);
+            setContextError("تعذر تحميل سياق إضافة الامتحان من قاعدة البيانات.");
+          }
           return;
         }
         setContextRows(payload.rows);
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && !silent) {
           setContextRows([]);
           setContextError("تعذر تحميل سياق إضافة الامتحان من قاعدة البيانات.");
         }
@@ -230,7 +234,7 @@ export function ExamNewView() {
         if (!controller.signal.aborted) setContextLoading(false);
       });
     return () => controller.abort();
-  }, [syncKey]);
+  }, [syncKey, isBackgroundSync]);
 
   const selectableCourses = useMemo(
     () => contextRows.filter((row) => row.canSelectForExam),

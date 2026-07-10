@@ -2680,6 +2680,11 @@ function toPersistedUiSnapshot(
   };
 }
 
+// Latest-request-wins guards. A slower request that started before a newer
+// sync must never overwrite the newer server state.
+let loadAllRequestSequence = 0;
+const sectionLoadRequestSequence = new Map<SectionId, number>();
+
 // ─── Store ───────────────────────────────────────────────────────────────────
 
 export const useTeacherStore = create<TeacherState>()(
@@ -2712,9 +2717,11 @@ export const useTeacherStore = create<TeacherState>()(
       },
 
       loadFromServer: async () => {
+        const requestSequence = ++loadAllRequestSequence;
         set({ dbLoading: true });
         try {
           const serverData = await loadAllFromServer();
+          if (requestSequence !== loadAllRequestSequence) return false;
           if (!serverData) {
             set({ dbLoading: false, dbConnected: false });
             return false;
@@ -2941,6 +2948,7 @@ export const useTeacherStore = create<TeacherState>()(
               })) as LogEntry[])
             : get().logs;
 
+          if (requestSequence !== loadAllRequestSequence) return false;
           set({
             courses,
             chapters,
@@ -2978,7 +2986,9 @@ export const useTeacherStore = create<TeacherState>()(
           return true;
         } catch (e) {
           console.warn("[Store] Failed to load from server:", e);
-          set({ dbLoading: false, dbConnected: false });
+          if (requestSequence === loadAllRequestSequence) {
+            set({ dbLoading: false, dbConnected: false });
+          }
           return false;
         }
       },
@@ -2986,6 +2996,9 @@ export const useTeacherStore = create<TeacherState>()(
       loadSectionDataFromServer: async (section) => {
         if (!get().isAuthenticated) return;
 
+        const requestSequence =
+          (sectionLoadRequestSequence.get(section) || 0) + 1;
+        sectionLoadRequestSequence.set(section, requestSequence);
         const nextState: Partial<TeacherState> = {};
 
         try {
@@ -3147,7 +3160,12 @@ export const useTeacherStore = create<TeacherState>()(
             }
           }
 
-          if (Object.keys(nextState).length > 0) set(nextState);
+          if (
+            sectionLoadRequestSequence.get(section) === requestSequence &&
+            Object.keys(nextState).length > 0
+          ) {
+            set(nextState);
+          }
         } catch (error) {
           console.warn(
             "[Store] Failed to lazy-load section data:",

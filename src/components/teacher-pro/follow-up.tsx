@@ -1,5 +1,5 @@
 "use client";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -372,6 +372,7 @@ function buildDismissalKey(parts: {
 
 function FollowUpViewBase({ view }: { view: FollowView }) {
   const syncKey = useTeacherProSyncKey(["follow-up", "students", "grades", "opportunities", "dashboard"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const {
     courses,
     students,
@@ -468,8 +469,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const controller = new AbortController();
 
     async function loadLeavesFromDatabase() {
-      setLeaveLoading(true);
-      setLeaveError("");
+      const silent = isBackgroundSync();
+      if (!silent) setLeaveLoading(true);
+      if (!silent) setLeaveError("");
       try {
         const collected: StudentLeave[] = [];
         let page = 1;
@@ -505,8 +507,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       } catch (error) {
         if (controller.signal.aborted) return;
         console.warn("[FollowUp/leaves] failed to load leaves from database", error);
-        setLeaveRowsFromDb([]);
-        setLeaveError("تعذر تحميل الإجازات من قاعدة البيانات. تم تعطيل الحفظ والحذف حتى يرجع الاتصال.");
+        if (!silent) {
+          setLeaveRowsFromDb([]);
+          setLeaveError("تعذر تحميل الإجازات من قاعدة البيانات. تم تعطيل الحفظ والحذف حتى يرجع الاتصال.");
+        }
       } finally {
         if (!controller.signal.aborted) setLeaveLoading(false);
       }
@@ -515,7 +519,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     void loadLeavesFromDatabase();
 
     return () => controller.abort();
-  }, [view, mergeStudentsCache, syncKey]);
+  }, [view, mergeStudentsCache, syncKey, isBackgroundSync]);
 
   const [callCourseId, setCallCourseId] = useState("");
   const [callExamId, setCallExamId] = useState("");
@@ -626,7 +630,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     let cancelled = false;
     const controller = new AbortController();
     const mutationVersionAtRequestStart = callMutationVersionRef.current;
-    setCallLoading(true);
+    const silent = isBackgroundSync();
+    if (!silent) setCallLoading(true);
 
     callCandidatesApi
       .get(
@@ -660,7 +665,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         });
       })
       .catch(() => {
-        if (!cancelled && !controller.signal.aborted) {
+        if (!cancelled && !controller.signal.aborted && !silent) {
           setCallRowsFromDb([]);
           setCallPageStudentCalls([]);
           setCallServerPageInfo({
@@ -688,6 +693,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     debouncedCallFilterSearch,
     callGradePage,
     syncKey,
+    isBackgroundSync,
   ]);
 
   useEffect(() => {
@@ -699,8 +705,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     let cancelled = false;
     const controller = new AbortController();
+    const silent = isBackgroundSync();
     const timer = window.setTimeout(() => {
-      setCallDatabaseStatsLoading(true);
+      if (!silent) setCallDatabaseStatsLoading(true);
       callStatsApi
         .get(
           {
@@ -736,6 +743,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     debouncedCallGeneralSearch,
     debouncedCallFilterSearch,
     syncKey,
+    isBackgroundSync,
   ]);
 
   useEffect(() => {
@@ -749,9 +757,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     }
 
     const controller = new AbortController();
-    setPledgeLoading(true);
-    setPledgeDatabaseStatsLoading(true);
-    setPledgeError("");
+    const silent = isBackgroundSync();
+    if (!silent) setPledgeLoading(true);
+    if (!silent) setPledgeDatabaseStatsLoading(true);
+    if (!silent) setPledgeError("");
 
     pledgeApi
       .list(
@@ -765,9 +774,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       .then((result) => {
         if (controller.signal.aborted) return;
         if (!result) {
-          setPledgeRowsFromDb([]);
-          setPledgeDatabaseStats(null);
-          setPledgeError("تعذر تحميل التعهدات من قاعدة البيانات. لا يمكن تنفيذ إجراء حساس حتى يرجع الاتصال.");
+          if (!silent) {
+            setPledgeRowsFromDb([]);
+            setPledgeDatabaseStats(null);
+            setPledgeError("تعذر تحميل التعهدات من قاعدة البيانات. لا يمكن تنفيذ إجراء حساس حتى يرجع الاتصال.");
+          }
           return;
         }
         const nextRows = (result.rows || []) as unknown as PledgeRow[];
@@ -776,7 +787,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         mergeStudentsCache(nextRows.map((row) => row.student).filter(Boolean) as Student[]);
       })
       .catch(() => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && !silent) {
           setPledgeRowsFromDb([]);
           setPledgeDatabaseStats(null);
           setPledgeError("تعذر تحميل التعهدات من قاعدة البيانات. لا يمكن تنفيذ إجراء حساس حتى يرجع الاتصال.");
@@ -797,6 +808,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     pledgeStatusFilter,
     mergeStudentsCache,
     syncKey,
+    isBackgroundSync,
   ]);
 
   const filteredStudents = useMemo(() => {
