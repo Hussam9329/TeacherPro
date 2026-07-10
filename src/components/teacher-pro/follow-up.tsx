@@ -15,11 +15,12 @@ import {
   callCandidatesApi,
   callCourseExamsApi,
   callStatsApi,
-  pledgeStatsApi,
+  pledgeApi,
   studentApi,
   studentCallApi,
   studentLeaveApi,
   type CallStatsResponse,
+  type PledgeActionResponse,
   type PledgeStatsResponse,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -381,9 +382,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     studentNotes,
     opportunityLogs,
     logs,
-    addStudentNote,
-    deleteStudentNote,
-    reactivateStudent,
     courseName,
     activeChapterForCourse,
     mergeStudentsCache,
@@ -548,12 +546,17 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     useState<PledgeStatsResponse | null>(null);
   const [pledgeDatabaseStatsLoading, setPledgeDatabaseStatsLoading] =
     useState(false);
+  const [pledgeRowsFromDb, setPledgeRowsFromDb] = useState<PledgeRow[]>([]);
+  const [pledgeLoading, setPledgeLoading] = useState(false);
+  const [pledgeError, setPledgeError] = useState("");
+  const [pledgeSavingKeys, setPledgeSavingKeys] = useState<Record<string, boolean>>({});
   const [callGradeDisplayModes, setCallGradeDisplayModes] = useState<
     Record<string, CallGradeDisplayMode>
   >({});
   const debouncedCallGeneralSearch = useDebouncedValue(callGeneralSearch, 300);
   const debouncedCallFilterSearch = useDebouncedValue(callFilterSearch, 300);
   const [pledgeSearch, setPledgeSearch] = useState("");
+  const debouncedPledgeSearch = useDebouncedValue(pledgeSearch, 250);
   const [pledgeTypeFilter, setPledgeTypeFilter] =
     useState<PledgeTypeFilter>("all");
   const [pledgeStatusFilter, setPledgeStatusFilter] =
@@ -732,29 +735,64 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   useEffect(() => {
     if (view !== "pledges") {
+      setPledgeRowsFromDb([]);
       setPledgeDatabaseStats(null);
       setPledgeDatabaseStatsLoading(false);
+      setPledgeLoading(false);
+      setPledgeError("");
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
+    setPledgeLoading(true);
     setPledgeDatabaseStatsLoading(true);
-    pledgeStatsApi
-      .get()
+    setPledgeError("");
+
+    pledgeApi
+      .list(
+        {
+          q: debouncedPledgeSearch,
+          typeFilter: pledgeTypeFilter,
+          statusFilter: pledgeStatusFilter,
+        },
+        { signal: controller.signal, quietAbort: true },
+      )
       .then((result) => {
-        if (!cancelled) setPledgeDatabaseStats(result);
+        if (controller.signal.aborted) return;
+        if (!result) {
+          setPledgeRowsFromDb([]);
+          setPledgeDatabaseStats(null);
+          setPledgeError("تعذر تحميل التعهدات من قاعدة البيانات. لا يمكن تنفيذ إجراء حساس حتى يرجع الاتصال.");
+          return;
+        }
+        const nextRows = (result.rows || []) as unknown as PledgeRow[];
+        setPledgeRowsFromDb(nextRows);
+        setPledgeDatabaseStats(result.stats || null);
+        mergeStudentsCache(nextRows.map((row) => row.student).filter(Boolean) as Student[]);
       })
       .catch(() => {
-        if (!cancelled) setPledgeDatabaseStats(null);
+        if (!controller.signal.aborted) {
+          setPledgeRowsFromDb([]);
+          setPledgeDatabaseStats(null);
+          setPledgeError("تعذر تحميل التعهدات من قاعدة البيانات. لا يمكن تنفيذ إجراء حساس حتى يرجع الاتصال.");
+        }
       })
       .finally(() => {
-        if (!cancelled) setPledgeDatabaseStatsLoading(false);
+        if (!controller.signal.aborted) {
+          setPledgeLoading(false);
+          setPledgeDatabaseStatsLoading(false);
+        }
       });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [view, students.length, studentNotes.length, syncKey]);
+    return () => controller.abort();
+  }, [
+    view,
+    debouncedPledgeSearch,
+    pledgeTypeFilter,
+    pledgeStatusFilter,
+    mergeStudentsCache,
+    syncKey,
+  ]);
 
   const filteredStudents = useMemo(() => {
     // نتائج منتقي الإجازات تأتي مباشرة من الخادم (leavePickerStudents).
@@ -1029,85 +1067,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     });
   };
 
-  const pledgeRows = useMemo<PledgeRow[]>(() => {
-    const rows: PledgeRow[] = [];
-    const seen = new Set<string>();
-
-    students
-      .filter((student) => student.status === "مفصول")
-      .forEach((student) => {
-        const dismissalInfo = dismissalInfoForStudent(student);
-        if (!dismissalInfo) return;
-        const note = pledgeNoteForDismissal(student, dismissalInfo);
-        const key = note?.dismissalKey || dismissalInfo.key;
-        seen.add(key);
-        rows.push({
-          key,
-          student,
-          dismissalInfo,
-          group: dismissalGroupFromType(dismissalInfo.type),
-          pledged: Boolean(note),
-          note,
-          reactivated: false,
-        });
-      });
-
-    pledgeNotes.forEach((note) => {
-      const student = students.find((item) => item.id === note.studentId);
-      if (!student) return;
-      const dismissalInfo = dismissalInfoFromPledgeNote(student, note);
-      const key = note.dismissalKey || dismissalInfo.key || note.id;
-      if (seen.has(key)) return;
-      seen.add(key);
-      rows.push({
-        key,
-        student,
-        dismissalInfo,
-        group: dismissalGroupFromType(note.dismissalType || dismissalInfo.type),
-        pledged: true,
-        note,
-        reactivated: student.status !== "مفصول",
-      });
-    });
-
-    return rows
-      .filter((row) => {
-        if (pledgeTypeFilter === "temporary" && row.group !== "temporary")
-          return false;
-        if (pledgeTypeFilter === "final" && row.group !== "final") return false;
-        if (pledgeStatusFilter === "pledged" && !row.pledged) return false;
-        if (pledgeStatusFilter === "pending" && row.pledged) return false;
-        if (pledgeStatusFilter === "reactivated" && !row.reactivated)
-          return false;
-        return (
-          !pledgeSearch ||
-          searchAny(pledgeSearch, [
-            row.student.name,
-            row.student.code,
-            row.student.phone,
-            row.student.parentPhone,
-            row.dismissalInfo.type,
-            row.dismissalInfo.reason,
-            row.note?.text,
-            row.student.status,
-          ])
-        );
-      })
-      .sort((a, b) =>
-        `${a.pledged ? 1 : 0}-${a.group === "temporary" ? 0 : 1}-${a.student.name}`.localeCompare(
-          `${b.pledged ? 1 : 0}-${b.group === "temporary" ? 0 : 1}-${b.student.name}`,
-          "ar",
-        ),
-      );
-  }, [
-    students,
-    pledgeNotes,
-    opportunityLogs,
-    exams,
-    pledgeSearch,
-    pledgeTypeFilter,
-    pledgeStatusFilter,
-  ]);
+  const pledgeRows = useMemo<PledgeRow[]>(
+    () => pledgeRowsFromDb,
+    [pledgeRowsFromDb],
+  );
 
   const refreshLeavesFromPayload = (leave: StudentLeave | null | undefined) => {
     if (!leave) return;
@@ -2099,52 +2062,64 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     );
   };
 
-  const togglePledge = (row: PledgeRow, checked: boolean) => {
-    const { student, dismissalInfo } = row;
-    const existing = row.note || pledgeNoteForDismissal(student, dismissalInfo);
-    if (checked) {
-      if (existing) return;
-      addStudentNote({
-        studentId: student.id,
-        kind: PLEDGE_NOTE_KIND,
-        text: `تم تعهد ولي الأمر على ${dismissalInfo.type}: ${dismissalInfo.reason}`,
-        date: todayISO(),
-        sourceType: dismissalInfo.sourceType,
-        sourceId: dismissalInfo.sourceId,
-        dismissalKey: dismissalInfo.key,
-        dismissalType: dismissalInfo.type,
-        dismissalReason: dismissalInfo.reason,
-        dismissalDate: dismissalInfo.date,
-      });
-      reactivateStudent(student.id);
-      toast.success(
-        "تم تثبيت التعهد وإعادة تفعيل الطالب حسب شروط إعادة التفعيل. ستجده بعد ذلك من فلتر: تم التعهد / تم التعهد وإعادة التفعيل.",
-      );
+  const togglePledge = async (row: PledgeRow, checked: boolean) => {
+    if (pledgeLoading || pledgeError) {
+      toast.error("انتظر تحميل التعهدات من قاعدة البيانات قبل تنفيذ الإجراء.");
       return;
     }
-    if (existing) {
-      studentNotes
-        .filter(
-          (note) =>
-            note.studentId === student.id && note.kind === PLEDGE_NOTE_KIND,
-        )
-        .filter((note) => {
-          if (existing.id && note.id === existing.id) return true;
-          if (note.dismissalKey) return note.dismissalKey === dismissalInfo.key;
-          if (note.sourceType && note.sourceId)
-            return (
-              note.sourceType === dismissalInfo.sourceType &&
-              note.sourceId === dismissalInfo.sourceId
-            );
-          return false;
-        })
-        .forEach((note) => deleteStudentNote(note.id));
-      toast.success("تم إلغاء التعهد المرتبط بهذا الفصل فقط");
+
+    const { student, dismissalInfo } = row;
+    const key = row.note?.id || row.key;
+    setPledgeSavingKeys((current) => ({ ...current, [key]: true }));
+
+    const result = await pledgeApi.action({
+      action: checked ? "pledge-and-reactivate" : "remove-pledge",
+      studentId: student.id,
+      dismissalInfo,
+      noteId: row.note?.id,
+    });
+
+    setPledgeSavingKeys((current) => ({ ...current, [key]: false }));
+
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر تنفيذ إجراء التعهد من الخادم.");
+      return;
     }
+
+    const payload = (result.data || {}) as PledgeActionResponse;
+    if (payload.student) {
+      mergeStudentsCache([payload.student as unknown as Student]);
+    }
+
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason: checked ? "pledge-and-reactivate" : "pledge-remove",
+      scopes: ["follow-up", "students", "opportunities", "dismissed", "dashboard"],
+    });
+
+    const refreshed = await pledgeApi.list({
+      q: debouncedPledgeSearch,
+      typeFilter: pledgeTypeFilter,
+      statusFilter: pledgeStatusFilter,
+    });
+
+    if (refreshed) {
+      const nextRows = (refreshed.rows || []) as unknown as PledgeRow[];
+      setPledgeRowsFromDb(nextRows);
+      setPledgeDatabaseStats(refreshed.stats || null);
+      mergeStudentsCache(nextRows.map((nextRow) => nextRow.student).filter(Boolean) as Student[]);
+    }
+
+    toast.success(
+      checked
+        ? "تم تثبيت التعهد وإعادة تفعيل الطالب من قاعدة البيانات."
+        : "تم إلغاء التعهد المرتبط بهذا الفصل من قاعدة البيانات.",
+    );
   };
 
   const renderPledgeRow = (row: PledgeRow) => {
     const { student, dismissalInfo, group, pledged, reactivated } = row;
+    const saving = Boolean(pledgeSavingKeys[row.note?.id || row.key]);
     return (
       <div
         key={row.key}
@@ -2196,10 +2171,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           {renderPhoneLink("رقم ولي الأمر", student.parentPhone)}
         </div>
         <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-muted/30 px-3 py-2">
-          <span className="text-sm font-bold">التعهد</span>
+          <span className="text-sm font-bold">{saving ? "جاري الحفظ..." : "التعهد"}</span>
           <Checkbox
             checked={pledged}
-            onCheckedChange={(value) => togglePledge(row, Boolean(value))}
+            disabled={saving || pledgeLoading || Boolean(pledgeError)}
+            onCheckedChange={(value) => void togglePledge(row, Boolean(value))}
           />
         </label>
         <div className="flex items-center justify-end">
@@ -2682,6 +2658,20 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             </Card>
           </div>
 
+          {pledgeLoading ? (
+            <div className="rounded-2xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+              جاري تحميل التعهدات من قاعدة البيانات...
+            </div>
+          ) : pledgeError ? (
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {pledgeError}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
+              التعهدات محملة من قاعدة البيانات، وتثبيت التعهد مع إعادة التفعيل يتم كإجراء واحد آمن من الخادم.
+            </div>
+          )}
+
           <Card>
             <CardContent className="grid gap-3 p-4 md:grid-cols-3">
               <div className="space-y-2">
@@ -2742,7 +2732,16 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <CardTitle>قائمة التعهدات</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {pledgeRows.length === 0 ? (
+              {pledgeLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="h-24 animate-pulse rounded-2xl border bg-muted/40"
+                    />
+                  ))}
+                </div>
+              ) : pledgeRows.length === 0 ? (
                 <p className="empty-state py-8">لا توجد نتائج للتعهدات</p>
               ) : (
                 pledgeRows.map(renderPledgeRow)
