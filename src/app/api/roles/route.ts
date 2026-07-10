@@ -11,6 +11,17 @@ const ADMIN_USERNAME = 'admin';
 const ADMIN_ROLE_ID = 'role_admin';
 const SENSITIVE_PERMISSION_IDS = new Set([
   'accounts.manage',
+  'accounts.permissions.manage',
+  'accounts.users.add',
+  'accounts.users.edit',
+  'accounts.users.delete',
+  'accounts.roles.add',
+  'accounts.roles.edit',
+  'accounts.roles.delete',
+  'logs.clear',
+  'logs.restore',
+  'logs.delete',
+  'page.admin-log-reset.manage',
   'backup.view',
   'system.settings',
 ]);

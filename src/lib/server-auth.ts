@@ -179,8 +179,46 @@ export function clearAuthCookie(res: NextResponse): void {
   });
 }
 
+const SERVER_PERMISSION_EQUIVALENTS: Record<string, string[]> = {
+  "system.dashboard": ["page.dashboard.view"],
+  "courses.view": ["page.courses.view"],
+  "courses.add": ["page.courses.view"],
+  "courses.edit": ["page.courses.view"],
+  "courses.delete": ["page.courses.view"],
+  "chapters.view": ["page.chapters.view"],
+  "chapters.add": ["page.chapters.view"],
+  "chapters.edit": ["page.chapters.view"],
+  "chapters.delete": ["page.chapters.view"],
+  "students.view": ["page.student-registry.view", "page.dismissed-students.view"],
+  "students.add": ["page.student-register.view", "page.student-bulk-import.view"],
+  "students.edit": ["students.dismiss", "students.reactivate"],
+  "students.delete": [],
+  "exams.view": ["page.exam-records.view"],
+  "exams.add": ["page.exam-new.view"],
+  "exams.edit": ["page.exam-records.view"],
+  "exams.delete": ["page.exam-records.view"],
+  "grades.view": ["page.grade-records.view", "page.missing-students-notes.view"],
+  "grades.add": ["page.grade-entry.view"],
+  "grades.edit": ["page.grade-records.view"],
+  "grades.delete": ["page.grade-records.view"],
+  "opportunities.view": ["page.opportunities.view"],
+  "opportunities.manage": ["page.opportunities.view"],
+  "follow-up.view": ["page.follow-up-calls.view", "page.follow-up-leaves.view", "page.follow-up-pledges.view"],
+  "follow-up.manage": ["follow-up.calls.manage", "follow-up.leaves.manage", "follow-up.pledges.manage"],
+  "correction.view": ["page.e-correction.view"],
+  "correction.manage": ["page.e-correction.view"],
+  "accounts.view": ["page.accounts.view", "accounts.users.view", "accounts.roles.view", "accounts.security.view"],
+  "accounts.manage": ["accounts.users.add", "accounts.users.edit", "accounts.users.delete", "accounts.roles.add", "accounts.roles.edit", "accounts.roles.delete", "accounts.permissions.manage"],
+  "logs.view": ["page.logs.view", "logs.export"],
+  "logs.clear": ["page.admin-log-reset.manage"],
+  "logs.restore": ["page.admin-log-reset.manage"],
+};
+
 function hasPermission(principal: AuthPrincipal, permission: string): boolean {
-  return principal.isAdmin || principal.permissions.includes(permission);
+  if (principal.isAdmin || principal.permissions.includes(permission)) return true;
+  return (SERVER_PERMISSION_EQUIVALENTS[permission] || []).some((alias) =>
+    principal.permissions.includes(alias),
+  );
 }
 
 export function unauthorizedResponse() {

@@ -65,6 +65,18 @@ const LOG_RESET_SCOPES = [
     danger: true,
   },
   {
+    id: "audit-permissions",
+    title: "تصفير تغييرات الصلاحيات فقط",
+    description: "الأدوار، صلاحيات المستخدمين، وتغييرات التفويض.",
+    danger: true,
+  },
+  {
+    id: "audit-log-reset",
+    title: "تصفير سجلات تصفير الـ log",
+    description: "سجلات عمليات التصفير والاستعادة نفسها. استخدمها بحذر شديد.",
+    danger: true,
+  },
+  {
     id: "audit-exports",
     title: "تصفير إجراءات التصدير والنسخ الاحتياطي",
     description: "سجلات التصدير والاستيراد والنسخ الاحتياطي.",

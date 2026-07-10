@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useTeacherStore, PERMISSION_CATALOG, type PermissionEntry } from '@/lib/teacher-store';
+import { useTeacherStore, PERMISSION_CATALOG, SECTION_PERMISSIONS, type PermissionEntry } from '@/lib/teacher-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { useActionLock } from '@/hooks/use-action-lock';
+import { userApi, roleApi } from '@/lib/api';
+import { emitTeacherProDataChanged } from '@/lib/teacherpro-sync';
 
 // ─── Permission categories for grouping ──────────────────────────────────────
 
@@ -54,6 +56,61 @@ const PERMISSION_LEVEL_LABELS: Record<PermissionEntry['level'], string> = {
   delete: 'حذف',
   manage: 'إدارة',
 };
+
+const PAGE_PERMISSION_IDS = new Set(Object.values(SECTION_PERMISSIONS));
+const ACTION_PERMISSION_PREFIXES = [
+  'accounts.',
+  'logs.',
+  'students.',
+  'exams.',
+  'grades.',
+  'follow-up.',
+  'opportunities.',
+] as const;
+
+function PermissionGovernancePanel() {
+  const pagePermissions = PERMISSION_CATALOG.filter(permission => PAGE_PERMISSION_IDS.has(permission.id));
+  const actionPermissions = PERMISSION_CATALOG.filter(permission =>
+    ACTION_PERMISSION_PREFIXES.some(prefix => permission.id.startsWith(prefix)) &&
+    !PAGE_PERMISSION_IDS.has(permission.id),
+  );
+  const coveredPages = pagePermissions.length;
+  const totalPages = Object.keys(SECTION_PERMISSIONS).length;
+
+  return (
+    <Card className="border-primary/20 bg-primary/5">
+      <CardContent className="space-y-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="font-black">هيكلة الصلاحيات الذكية</p>
+            <p className="text-sm text-muted-foreground">
+              كل صفحة لها صلاحية فتح مستقلة، وكل إجراء حساس له صلاحية عملية منفصلة حتى لا تختلط المشاهدة مع التعديل.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="default">{coveredPages}/{totalPages} صفحات مغطاة</Badge>
+            <Badge variant="secondary">{actionPermissions.length} صلاحية إجراء</Badge>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+          <div className="rounded-xl border bg-background/75 p-3">
+            <p className="text-xs font-semibold text-muted-foreground">فتح الصفحات</p>
+            <p className="text-lg font-black">{pagePermissions.length}</p>
+          </div>
+          <div className="rounded-xl border bg-background/75 p-3">
+            <p className="text-xs font-semibold text-muted-foreground">إدارة الحسابات</p>
+            <p className="text-lg font-black">{PERMISSION_CATALOG.filter(p => p.id.startsWith('accounts.')).length}</p>
+          </div>
+          <div className="rounded-xl border bg-background/75 p-3">
+            <p className="text-xs font-semibold text-muted-foreground">السجلات والتصفير</p>
+            <p className="text-lg font-black">{PERMISSION_CATALOG.filter(p => p.id.startsWith('logs.') || p.id === 'page.admin-log-reset.manage').length}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 
 function normalizePermissionIds(permissions: string[]) {
   return Array.from(new Set(permissions.filter(Boolean)));
@@ -260,7 +317,7 @@ function PermissionChecklist({
 // ─── Roles Tab Component ─────────────────────────────────────────────────────
 
 function RolesTab() {
-  const { roles, addRole, updateRole, deleteRole, users } = useTeacherStore();
+  const { roles, users, loadFromServer } = useTeacherStore();
 
   const [showAddRoleDialog, setShowAddRoleDialog] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
@@ -280,11 +337,17 @@ function RolesTab() {
       toast.error('يرجى إدخال اسم الدور');
       return;
     }
-    addRole({ name: newRoleName.trim(), isDefault: false, permissions: newRolePerms });
+    const result = await roleApi.add({ name: newRoleName.trim(), isDefault: false, permissions: newRolePerms });
+    if (!result.ok || result.queued) {
+      toast.error(result.error || 'تعذر إضافة الدور من الخادم');
+      return;
+    }
+    await loadFromServer();
+    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-role-add', scopes: ['accounts', 'logs'] });
     setShowAddRoleDialog(false);
     setNewRoleName('');
     setNewRolePerms([]);
-    toast.success('تمت إضافة الدور');
+    toast.success('تمت إضافة الدور من قاعدة البيانات');
   });
 
   const handleEditRole = (roleId: string) => {
@@ -296,24 +359,27 @@ function RolesTab() {
 
   const handleSaveRole = runSaveRoleLocked(async () => {
     if (!editRoleId) return;
-    updateRole(editRoleId, { permissions: editRolePerms });
-    // Also update all users with this role
-    const roleName = roles.find(r => r.id === editRoleId)?.name;
-    if (roleName) {
-      users.forEach(u => {
-        if (u.roleId === editRoleId) {
-          useTeacherStore.getState().updateUserPermissions(u.id, [...editRolePerms]);
-        }
-      });
+    const result = await roleApi.update(editRoleId, { permissions: editRolePerms });
+    if (!result.ok || result.queued) {
+      toast.error(result.error || 'تعذر تحديث صلاحيات الدور من الخادم');
+      return;
     }
+    await loadFromServer();
+    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-role-permissions', scopes: ['accounts', 'logs'] });
     setEditRoleId(null);
     setEditRolePerms([]);
-    toast.success('تم تحديث صلاحيات الدور');
+    toast.success('تم تحديث صلاحيات الدور من قاعدة البيانات');
   });
 
   const handleDeleteRole = runDeleteRoleLocked(async () => {
-    const ok = deleteRole(deleteRoleDialog.id);
-    if (ok) { toast.success('تم حذف الدور'); } else { toast.error('لا يمكن حذف هذا الدور'); }
+    const result = await roleApi.remove(deleteRoleDialog.id);
+    if (!result.ok || result.queued) {
+      toast.error(result.error || 'لا يمكن حذف هذا الدور');
+      return;
+    }
+    await loadFromServer();
+    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-role-delete', scopes: ['accounts', 'logs'] });
+    toast.success('تم حذف الدور من قاعدة البيانات');
     setDeleteRoleDialog({ open: false, id: '', name: '' });
   });
 
@@ -418,7 +484,7 @@ function RolesTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد حذف الدور</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تريد حذف الدور &quot;{deleteRoleDialog.name}&quot;؟ سيتم نقل المستخدمين المرتبطين إلى دور &quot;مشاهدة فقط&quot;. لا يمكن حذف الأدوار الافتراضية.
+              هل تريد حذف الدور &quot;{deleteRoleDialog.name}&quot;؟ لا يتم الحذف إذا كان الدور افتراضياً أو مرتبطاً بمستخدمين. انقل المستخدمين أولاً ثم احذف الدور.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -436,7 +502,7 @@ function RolesTab() {
 // ─── Users Tab Component ─────────────────────────────────────────────────────
 
 function UsersTab() {
-  const { users, roles, addUser, updateUser, toggleUser, updateUserPermissions, deleteUser } = useTeacherStore();
+  const { users, roles, loadFromServer } = useTeacherStore();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newUser, setNewUser] = useState({
@@ -469,7 +535,7 @@ function UsersTab() {
     }
     const role = roles.find(r => r.id === newUser.roleId);
     const perms = newUser.permissions.length > 0 ? newUser.permissions : (role?.permissions || []);
-    addUser({
+    const result = await userApi.add({
       username: newUser.username.trim(),
       name: newUser.name.trim(),
       roleId: newUser.roleId,
@@ -478,9 +544,15 @@ function UsersTab() {
       password: newUser.password.trim(),
       active: true,
     });
+    if (!result.ok || result.queued) {
+      toast.error(result.error || 'تعذر إضافة المستخدم من الخادم');
+      return;
+    }
+    await loadFromServer();
+    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-user-add', scopes: ['accounts', 'logs'] });
     setShowAddDialog(false);
     setNewUser({ username: '', name: '', password: '', roleId: 'role_checker', permissions: [] });
-    toast.success('تمت إضافة المستخدم');
+    toast.success('تمت إضافة المستخدم من قاعدة البيانات');
   });
 
   const openEditUserDialog = (userId: string) => {
@@ -492,9 +564,15 @@ function UsersTab() {
     if (!editUserDialog.name.trim()) { toast.error('يرجى إدخال الاسم'); return; }
     const updates: { name: string; password?: string } = { name: editUserDialog.name.trim() };
     if (editUserDialog.password.trim()) updates.password = editUserDialog.password.trim();
-    updateUser(editUserDialog.id, updates);
+    const result = await userApi.update(editUserDialog.id, updates);
+    if (!result.ok || result.queued) {
+      toast.error(result.error || 'تعذر تعديل المستخدم من الخادم');
+      return;
+    }
+    await loadFromServer();
+    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-user-edit', scopes: ['accounts', 'logs'] });
     setEditUserDialog({ open: false, id: '', name: '', password: '' });
-    toast.success('تم تعديل المستخدم');
+    toast.success('تم تعديل المستخدم من قاعدة البيانات');
   });
 
   const openDeleteUserDialog = (userId: string) => {
@@ -502,8 +580,14 @@ function UsersTab() {
     setDeleteUserDialog({ open: true, id: userId, userName: user?.name || '' });
   };
   const handleDeleteUserConfirm = runDeleteUserLocked(async () => {
-    const ok = deleteUser(deleteUserDialog.id);
-    if (ok) { toast.success('تم حذف المستخدم'); } else { toast.error('لا يمكن حذف هذا المستخدم'); }
+    const result = await userApi.remove(deleteUserDialog.id);
+    if (!result.ok || result.queued) {
+      toast.error(result.error || 'لا يمكن حذف هذا المستخدم');
+      return;
+    }
+    await loadFromServer();
+    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-user-delete', scopes: ['accounts', 'logs'] });
+    toast.success('تم حذف المستخدم من قاعدة البيانات');
     setDeleteUserDialog({ open: false, id: '', userName: '' });
   });
 
@@ -518,10 +602,17 @@ function UsersTab() {
   const handleSavePermissions = runSavePermissionsLocked(async () => {
     const editedUser = users.find(u => u.id === editPermsId);
     const isAdminUser = editedUser?.username.trim().toLowerCase() === 'admin' || editedUser?.roleId === 'role_admin';
-    updateUserPermissions(editPermsId, isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : editPerms);
+    const nextPermissions = isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : editPerms;
+    const result = await userApi.update(editPermsId, { permissions: nextPermissions });
+    if (!result.ok || result.queued) {
+      toast.error(result.error || 'تعذر تحديث الصلاحيات من الخادم');
+      return;
+    }
+    await loadFromServer();
+    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-user-permissions', scopes: ['accounts', 'logs'] });
     setEditPermsId('');
     setEditPerms([]);
-    toast.success(isAdminUser ? 'صلاحيات المدير كاملة دائماً' : 'تم تحديث الصلاحيات');
+    toast.success(isAdminUser ? 'صلاحيات المدير كاملة دائماً' : 'تم تحديث الصلاحيات من قاعدة البيانات');
   });
 
 
@@ -607,13 +698,19 @@ function UsersTab() {
                     size="sm"
                     className="text-xs"
                     disabled={user.username.trim().toLowerCase() === 'admin'}
-                    onClick={() => {
+                    onClick={async () => {
                       if (user.username.trim().toLowerCase() === 'admin') {
                         toast.info('حساب admin يبقى فعال دائماً');
                         return;
                       }
-                      toggleUser(user.id);
-                      toast.success(user.active ? 'تم تعطيل المستخدم' : 'تم تفعيل المستخدم');
+                      const result = await userApi.update(user.id, { active: !user.active });
+                      if (!result.ok || result.queued) {
+                        toast.error(result.error || 'تعذر تغيير حالة المستخدم من الخادم');
+                        return;
+                      }
+                      await loadFromServer();
+                      emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-user-toggle', scopes: ['accounts', 'logs'] });
+                      toast.success(user.active ? 'تم تعطيل المستخدم من قاعدة البيانات' : 'تم تفعيل المستخدم من قاعدة البيانات');
                     }}
                   >
                     {user.username.trim().toLowerCase() === 'admin' ? 'فعال دائماً' : user.active ? 'تعطيل' : 'تفعيل'}
@@ -1071,8 +1168,10 @@ export function AccountsView() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold">إدارة الحسابات</h2>
-        <p className="text-sm text-muted-foreground">إدارة المستخدمين والأدوار والصلاحيات</p>
+        <p className="text-sm text-muted-foreground">إدارة المستخدمين والأدوار والصلاحيات بتفصيل صفحة/إجراء حتى لا تتداخل الصلاحيات.</p>
       </div>
+
+      <PermissionGovernancePanel />
 
       <Tabs defaultValue="users" dir="rtl">
         <TabsList className="w-full max-w-3xl">

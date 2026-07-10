@@ -56,6 +56,18 @@ const CLEAR_SCOPE_DEFINITIONS = {
     includesAudit: true,
     includesOpportunity: false,
   },
+  'audit-permissions': {
+    label: 'تغييرات الأدوار والصلاحيات',
+    modules: ['الصلاحيات', 'إدارة الحسابات', 'الحسابات', 'أمان الحسابات'],
+    includesAudit: true,
+    includesOpportunity: false,
+  },
+  'audit-log-reset': {
+    label: 'تصفير واستعادة السجلات',
+    modules: ['تصفير الlog', 'تصفير السجلات', 'أمان الحسابات'],
+    includesAudit: true,
+    includesOpportunity: false,
+  },
   'audit-exports': {
     label: 'إجراءات التصدير والنسخ الاحتياطي',
     modules: ['تصدير', 'النسخ الاحتياطي'],

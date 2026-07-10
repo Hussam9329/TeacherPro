@@ -1675,7 +1675,12 @@ export const roleApi = {
 // ─── Log API ──────────────────────────────────────────────────────────────────
 
 export const logApi = {
-  list: () => apiGetAllPages<Pick<ServerData, "logs">>("logs", "logs"),
+  list: (options: { queryString?: string; signal?: AbortSignal; quietAbort?: boolean } = {}) =>
+    apiGet<Pick<ServerData, "logs"> & Record<string, unknown>>(
+      `logs${options.queryString ? `?${options.queryString}` : ""}`,
+      { signal: options.signal, quietAbort: options.quietAbort },
+    ),
+  listAll: () => apiGetAllPages<Pick<ServerData, "logs">>("logs", "logs"),
   add: async (log: Record<string, unknown>): Promise<ApiResult> => {
     // Use direct fetch instead of apiPost so that 403 responses (server-only
     // audit entries) don't trigger console.warn noise. The UI creates local
