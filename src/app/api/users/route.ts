@@ -2,7 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission, requirePermissionPrincipal, type AuthPrincipal } from '@/lib/server-auth';
+import { requireAnyPermission, requirePermission, requirePermissionPrincipal, type AuthPrincipal } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { normalizePasswordForStorage } from '@/lib/passwords';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
@@ -13,17 +13,15 @@ const ADMIN_ROLE_ID = 'role_admin';
 const ADMIN_ROLE_NAME = 'مدير عام';
 const SENSITIVE_PERMISSION_IDS = new Set([
   'accounts.manage',
-  'accounts.permissions.manage',
   'accounts.users.add',
   'accounts.users.edit',
   'accounts.users.delete',
   'accounts.roles.add',
   'accounts.roles.edit',
   'accounts.roles.delete',
+  'accounts.permissions.assign',
   'logs.clear',
   'logs.restore',
-  'logs.delete',
-  'page.admin-log-reset.manage',
   'backup.view',
   'system.settings',
 ]);
@@ -153,7 +151,7 @@ function safeUserSelect() {
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, 'accounts.view');
+  const authError = await requireAnyPermission(req, ['accounts.view', 'accounts.users.view']);
   if (authError) return authError;
 
   try {
@@ -168,7 +166,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const principalOrError = await requirePermissionPrincipal(req, 'accounts.manage');
+  const principalOrError = await requirePermissionPrincipal(req, 'accounts.users.add');
   if (principalOrError instanceof NextResponse) return principalOrError;
   const principal = principalOrError;
 
@@ -211,7 +209,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const principalOrError = await requirePermissionPrincipal(req, 'accounts.manage');
+  const principalOrError = await requirePermissionPrincipal(req, 'accounts.users.edit');
   if (principalOrError instanceof NextResponse) return principalOrError;
   const principal = principalOrError;
 
@@ -288,7 +286,7 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const principalOrError = await requirePermissionPrincipal(req, 'accounts.manage');
+  const principalOrError = await requirePermissionPrincipal(req, 'accounts.users.delete');
   if (principalOrError instanceof NextResponse) return principalOrError;
   const principal = principalOrError;
 

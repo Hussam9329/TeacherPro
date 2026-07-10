@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthPrincipal, requirePermission } from '@/lib/server-auth';
-import { Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { routeErrorResponse } from '@/lib/route-helpers';
 
@@ -118,66 +118,50 @@ function isAllowedClientLogEntry(module: string, action: string): boolean {
   return actions.has(action.trim());
 }
 
-function readPositiveInteger(searchParams: URLSearchParams, key: string, fallback: number, max = 500): number {
-  const value = Number(searchParams.get(key) || searchParams.get(key === "limit" ? "pageSize" : key) || fallback);
-  if (!Number.isFinite(value) || value <= 0) return fallback;
-  return Math.min(Math.max(1, Math.trunc(value)), max);
-}
-
-function buildLogSearchWhere(searchParams: URLSearchParams): Prisma.AuditLogWhereInput {
-  const q = String(searchParams.get("q") || "").trim();
-  const moduleFilter = String(searchParams.get("module") || "").trim();
-  const user = String(searchParams.get("user") || searchParams.get("userName") || "").trim();
-
-  const where: Prisma.AuditLogWhereInput = {};
-  if (moduleFilter) where.module = moduleFilter;
-  if (user) where.userName = user;
-  if (q) {
-    where.OR = [
-      { module: { contains: q, mode: "insensitive" } },
-      { action: { contains: q, mode: "insensitive" } },
-      { details: { contains: q, mode: "insensitive" } },
-      { userName: { contains: q, mode: "insensitive" } },
-    ];
-  }
-  return where;
-}
-
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, 'logs.view');
   if (authError) return authError;
 
   try {
-    const { searchParams } = new URL(req.url);
-    const page = readPositiveInteger(searchParams, "page", 1, 100000);
-    const pageSize = readPositiveInteger(searchParams, "limit", 20, 500);
-    const skip = (page - 1) * pageSize;
-    const where = buildLogSearchWhere(searchParams);
+    const { parsePagination } = await import('@/lib/pagination');
+    const { page, limit, skip } = parsePagination(req);
+    const searchParams = new URL(req.url).searchParams;
+    const q = String(searchParams.get('q') || '').trim();
+    const moduleName = String(searchParams.get('module') || '').trim();
+    const userName = String(searchParams.get('user') || searchParams.get('userName') || '').trim();
 
-    const [logs, totalCount, moduleRows, userRows] = await Promise.all([
-      db.auditLog.findMany({ where, orderBy: { time: 'desc' }, skip, take: pageSize }),
+    const where: Prisma.AuditLogWhereInput = {};
+    if (moduleName) where.module = moduleName;
+    if (userName) where.userName = userName;
+    if (q) {
+      where.OR = [
+        { module: { contains: q, mode: 'insensitive' } },
+        { action: { contains: q, mode: 'insensitive' } },
+        { details: { contains: q, mode: 'insensitive' } },
+        { userName: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const [logs, totalCount, modulesRaw, usersRaw] = await Promise.all([
+      db.auditLog.findMany({ where, orderBy: { time: 'desc' }, skip, take: limit }),
       db.auditLog.count({ where }),
-      db.auditLog.findMany({ distinct: ['module'], select: { module: true }, orderBy: { module: 'asc' }, take: 200 }),
-      db.auditLog.findMany({ distinct: ['userName'], select: { userName: true }, orderBy: { userName: 'asc' }, take: 200 }),
+      db.auditLog.findMany({ distinct: ['module'], select: { module: true }, orderBy: { module: 'asc' } }),
+      db.auditLog.findMany({ distinct: ['userName'], select: { userName: true }, orderBy: { userName: 'asc' } }),
     ]);
 
-    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    const totalPages = Math.max(1, Math.ceil(totalCount / limit));
     return NextResponse.json({
-      logs: logs.map((log) => ({
-        ...log,
-        user: log.userName || 'غير محدد',
-        time: log.time instanceof Date ? log.time.toISOString() : String(log.time || ''),
-      })),
-      modules: moduleRows.map((row) => row.module).filter(Boolean),
-      users: userRows.map((row) => row.userName || '').filter(Boolean),
+      logs,
+      modules: modulesRaw.map((item) => item.module).filter(Boolean),
+      users: usersRaw.map((item) => item.userName || '').filter(Boolean),
       total: totalCount,
       totalCount,
       page,
-      limit: pageSize,
-      pageSize,
+      limit,
+      pageSize: limit,
       totalPages,
       hasMore: page < totalPages,
-      source: "database",
+      source: 'database',
     });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل السجلات حالياً.');
@@ -250,9 +234,9 @@ export async function DELETE(req: NextRequest) {
   if (!principal) {
     return NextResponse.json({ error: 'يجب تسجيل الدخول أولاً.' }, { status: 401 });
   }
-  if (!principal.isAdmin) {
+  if (!principal.isAdmin || !principal.permissions.includes('logs.delete')) {
     return NextResponse.json(
-      { error: 'حذف السجلات متاح لمدير النظام فقط.' },
+      { error: 'حذف السجلات متاح لمدير النظام صاحب صلاحية حذف السجلات فقط.' },
       { status: 403 },
     );
   }

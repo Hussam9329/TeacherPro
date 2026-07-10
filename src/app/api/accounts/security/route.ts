@@ -3,16 +3,27 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requirePermission } from '@/lib/server-auth';
+import { requireAnyPermission } from '@/lib/server-auth';
 import { routeErrorResponse } from '@/lib/route-helpers';
 
 const ADMIN_USERNAME = 'admin';
 const ADMIN_ROLE_ID = 'role_admin';
 const SENSITIVE_PERMISSION_IDS = new Set([
   'accounts.manage',
+  'accounts.users.add',
+  'accounts.users.edit',
+  'accounts.users.delete',
+  'accounts.roles.add',
+  'accounts.roles.edit',
+  'accounts.roles.delete',
+  'accounts.permissions.assign',
+  'accounts.security.view',
   'backup.view',
   'system.settings',
   'logs.view',
+  'logs.delete',
+  'logs.clear',
+  'logs.restore',
 ]);
 
 function readEnv(name: string): string {
@@ -41,7 +52,7 @@ function isAdminUser(user: { username?: string | null; roleId?: string | null; r
 }
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, 'accounts.manage');
+  const authError = await requireAnyPermission(req, ['accounts.manage', 'accounts.security.view']);
   if (authError) return authError;
 
   try {

@@ -2,8 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { logApi } from "@/lib/api";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
-import { Card, CardContent } from "@/components/ui/card";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -18,47 +18,33 @@ import {
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 
-type LogRow = {
+type AuditLogRow = {
   id: string;
   time: string;
-  user: string;
-  userName?: string;
+  user?: string;
+  userName?: string | null;
   module: string;
   action: string;
-  details: string;
+  details?: string | null;
 };
 
-type LogsResponse = {
-  logs: LogRow[];
-  modules?: string[];
-  users?: string[];
-  totalCount: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-  hasMore: boolean;
-  source?: "database";
-};
-
-const logExportColumns: ExportColumn<LogRow>[] = [
+const logExportColumns: ExportColumn<AuditLogRow>[] = [
   { key: "time", label: "الوقت", value: (log) => log.time || "" },
-  { key: "user", label: "المستخدم", value: (log) => log.user || log.userName || "" },
+  { key: "userName", label: "المستخدم", value: (log) => log.userName || log.user || "" },
   { key: "module", label: "الوحدة", value: (log) => log.module || "" },
   { key: "action", label: "الإجراء", value: (log) => log.action || "" },
   { key: "details", label: "التفاصيل", value: (log) => log.details || "" },
 ];
 
-function buildQueryString(input: Record<string, string | number | undefined>) {
-  const params = new URLSearchParams();
-  Object.entries(input).forEach(([key, value]) => {
-    if (value !== undefined && value !== "") params.set(key, String(value));
-  });
-  return params.toString();
+function formatLogTime(value: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en-US", { hour12: false });
 }
 
 export function LogsView() {
-  const syncKey = useTeacherProSyncKey(["logs", "accounts"]);
-  const [logs, setLogs] = useState<LogRow[]>([]);
+  const [logs, setLogs] = useState<AuditLogRow[]>([]);
   const [modules, setModules] = useState<string[]>([]);
   const [users, setUsers] = useState<string[]>([]);
   const [search, setSearch] = useState("");
@@ -76,55 +62,71 @@ export function LogsView() {
     const controller = new AbortController();
     setLoading(true);
     setError("");
-
-    const query = buildQueryString({
-      q: debouncedSearch,
-      module: filterModule,
-      user: filterUser,
-      page,
-      limit: pageSize,
-    });
-
-    logApi.list(query ? { queryString: query, signal: controller.signal, quietAbort: true } : { signal: controller.signal, quietAbort: true })
-      .then((payload) => {
+    logApi
+      .list(
+        {
+          q: debouncedSearch || undefined,
+          module: filterModule || undefined,
+          user: filterUser || undefined,
+          page,
+          pageSize,
+        },
+        { signal: controller.signal, quietAbort: true },
+      )
+      .then((result) => {
         if (controller.signal.aborted) return;
-        if (!payload) {
+        if (!result) {
           setLogs([]);
           setError("تعذر تحميل السجلات من قاعدة البيانات.");
           return;
         }
-        const data = payload as unknown as LogsResponse;
-        setLogs(data.logs || []);
-        setModules(data.modules || []);
-        setUsers(data.users || []);
-        setTotalCount(Number(data.totalCount || 0));
-        setTotalPages(Math.max(1, Number(data.totalPages || 1)));
+        const nextLogs = ((result.logs || []) as unknown as AuditLogRow[]).map((log) => ({
+          ...log,
+          userName: log.userName || log.user || "النظام",
+        }));
+        setLogs(nextLogs);
+        setModules((result.modules || []).filter(Boolean));
+        setUsers((result.users || []).filter(Boolean));
+        setTotalCount(Number(result.totalCount || nextLogs.length || 0));
+        setTotalPages(Math.max(1, Number(result.totalPages || 1)));
       })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setLogs([]);
-          setError("تعذر تحميل السجلات من قاعدة البيانات.");
-        }
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        console.warn("[LogsView] failed to load logs", err);
+        setLogs([]);
+        setError("تعذر تحميل السجلات من قاعدة البيانات.");
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
 
     return () => controller.abort();
-  }, [debouncedSearch, filterModule, filterUser, page, pageSize, syncKey]);
+  }, [debouncedSearch, filterModule, filterUser, page, pageSize]);
 
-  const filteredExportRows = useMemo(() => logs, [logs]);
+  const currentRangeLabel = useMemo(() => {
+    if (totalCount === 0) return "0";
+    const from = (page - 1) * pageSize + 1;
+    const to = Math.min(totalCount, page * pageSize);
+    return `${from}-${to} من ${totalCount}`;
+  }, [page, pageSize, totalCount]);
+
+  const resetFilters = () => {
+    setSearch("");
+    setFilterModule("");
+    setFilterUser("");
+    setPage(1);
+  };
 
   return (
     <div className="space-y-4">
-      <Card className="border-primary/15 bg-primary/5">
-        <CardContent className="p-4 text-sm text-muted-foreground">
-          السجلات هنا تُقرأ مباشرة من قاعدة البيانات وبفلاتر خادمية. لا يتم الاعتماد على كاش محلي حتى تبقى سجلات التدقيق حقيقية.
-        </CardContent>
-      </Card>
-
       <Card>
-        <CardContent className="p-4">
+        <CardHeader className="pb-2">
+          <CardTitle>السجلات</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            السجلات تُقرأ من قاعدة البيانات مباشرة مع بحث وفلاتر خادمية حتى لا تظهر نتائج كاش قديمة.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3 p-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4 lg:grid-cols-6">
             <div className="space-y-1">
               <Label htmlFor="logs-module" className="text-xs">الوحدة</Label>
@@ -139,17 +141,14 @@ export function LogsView() {
                 <SelectTrigger id="logs-module"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {modules.map((m) => (
-                    <SelectItem key={m} value={m}>{m}</SelectItem>
-                  ))}
+                  {modules.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-1">
               <Label htmlFor="logs-user" className="text-xs">المستخدم</Label>
               <Select
-                name="user"
+                name="userId"
                 value={filterUser || "all"}
                 onValueChange={(v) => {
                   setFilterUser(v === "all" ? "" : v);
@@ -159,133 +158,121 @@ export function LogsView() {
                 <SelectTrigger id="logs-user"><SelectValue placeholder="الكل" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
-                  {users.map((u) => (
-                    <SelectItem key={u} value={u}>{u}</SelectItem>
-                  ))}
+                  {users.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="space-y-1 md:col-span-2">
               <Label htmlFor="logs-search" className="text-xs">بحث</Label>
               <Input
                 id="logs-search"
                 name="search"
                 data-teacherpro-search="true"
-                autoComplete="off"
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="إجراء / تفاصيل / وحدة / مستخدم"
+                placeholder="بحث بالإجراء، التفاصيل، الوحدة، المستخدم"
               />
             </div>
-
             <div className="space-y-1">
-              <Label htmlFor="logs-pageSize" className="text-xs">حجم الصفحة</Label>
+              <Label htmlFor="logs-page-size" className="text-xs">عدد الصفوف</Label>
               <Select
-                name="pageSize"
                 value={String(pageSize)}
                 onValueChange={(v) => {
                   setPageSize(Number(v));
                   setPage(1);
                 }}
               >
-                <SelectTrigger id="logs-pageSize" className="h-9"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="logs-page-size"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="10">10</SelectItem>
-                  <SelectItem value="20">20</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
+                  {[10, 20, 50, 100].map((size) => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-
-            <div className="space-y-1">
-              <span className="text-xs font-medium">تصدير الصفحة الحالية</span>
+            <div className="flex items-end gap-2">
+              <Button variant="outline" onClick={resetFilters}>مسح</Button>
               <ExportDialog
-                title="تصدير السجلات"
-                fileName="logs"
-                rows={filteredExportRows}
+                rows={logs}
                 columns={logExportColumns}
+                title="تصدير السجلات المعروضة"
+                fileName="teacherpro-audit-logs"
                 triggerLabel="تصدير"
-                description="تصدير الصفحة الحالية من سجلات النظام حسب الفلاتر الخادمية"
               />
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-muted/30 px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">قاعدة البيانات</Badge>
+              <span className="text-muted-foreground">المعروض: {currentRangeLabel}</span>
+              {loading ? <Badge variant="outline">جاري التحميل...</Badge> : null}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                emitTeacherProDataChanged({ source: "manual", reason: "logs-refresh", scopes: ["logs"] });
+                setPage((current) => current);
+              }}
+            >
+              تحديث
+            </Button>
+          </div>
+
+          {error ? (
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              {error}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0">
+          <div className="table-wrap">
+            <table className="responsive-table text-sm">
+              <thead>
+                <tr>
+                  <th className="p-3 text-right">الوقت</th>
+                  <th className="p-3 text-right">المستخدم</th>
+                  <th className="p-3 text-right">الوحدة</th>
+                  <th className="p-3 text-right">الإجراء</th>
+                  <th className="p-3 text-right">التفاصيل</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log) => (
+                  <tr key={log.id} className="border-t">
+                    <td className="whitespace-nowrap p-3 text-xs text-muted-foreground">{formatLogTime(log.time)}</td>
+                    <td className="p-3">{log.userName || log.user || "النظام"}</td>
+                    <td className="p-3"><Badge variant="outline">{log.module || "—"}</Badge></td>
+                    <td className="p-3 font-medium">{log.action || "—"}</td>
+                    <td className="max-w-xl p-3 text-xs text-muted-foreground">{log.details || "—"}</td>
+                  </tr>
+                ))}
+                {!loading && logs.length === 0 ? (
+                  <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">لا توجد سجلات حسب الفلترة الحالية.</td></tr>
+                ) : null}
+                {loading && logs.length === 0 ? (
+                  <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">جاري تحميل السجلات من قاعدة البيانات...</td></tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-        <span>عرض {logs.length} من {totalCount} سجل</span>
-        <Badge variant="outline">المصدر: قاعدة البيانات</Badge>
+      <div className="flex items-center justify-between gap-2">
+        <Button variant="outline" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+          السابق
+        </Button>
+        <span className="text-sm text-muted-foreground">صفحة {page} من {totalPages}</span>
+        <Button variant="outline" disabled={page >= totalPages || loading} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+          التالي
+        </Button>
       </div>
-
-      {error ? (
-        <Card className="border-destructive/40">
-          <CardContent className="space-y-3 p-6">
-            <p className="font-semibold text-destructive">{error}</p>
-            <Button variant="outline" onClick={() => setPage((value) => value)}>
-              إعادة المحاولة
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="divide-y">
-              {loading ? (
-                Array.from({ length: 6 }).map((_, index) => (
-                  <div key={index} className="space-y-2 p-4">
-                    <div className="h-4 w-1/3 rounded bg-muted animate-pulse" />
-                    <div className="h-3 w-2/3 rounded bg-muted animate-pulse" />
-                  </div>
-                ))
-              ) : logs.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">
-                  لا توجد سجلات حسب الفلاتر الحالية
-                </div>
-              ) : (
-                logs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="flex items-start gap-4 p-4 transition-colors hover:bg-muted/30"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline" className="text-[10px]">{log.module}</Badge>
-                        <span className="text-sm font-medium">{log.action}</span>
-                      </div>
-                      {log.details ? (
-                        <p className="mt-1 text-xs text-muted-foreground">{log.details}</p>
-                      ) : null}
-                    </div>
-                    <div className="shrink-0 text-left">
-                      <p className="text-xs text-muted-foreground">{log.user || log.userName || "—"}</p>
-                      <p className="text-[10px] text-muted-foreground">{log.time}</p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            السابق
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            صفحة {page} من {totalPages}
-          </span>
-          <Button variant="outline" size="sm" disabled={page >= totalPages || loading} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
-            التالي
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

@@ -51,20 +51,8 @@ const CLEAR_SCOPE_DEFINITIONS = {
     includesOpportunity: false,
   },
   'audit-accounts': {
-    label: 'إجراءات الحسابات والأمان وتسجيل الدخول',
-    modules: ['الحسابات', 'أمان الحسابات', 'تسجيل الدخول', 'الصلاحيات'],
-    includesAudit: true,
-    includesOpportunity: false,
-  },
-  'audit-permissions': {
-    label: 'تغييرات الأدوار والصلاحيات',
-    modules: ['الصلاحيات', 'إدارة الحسابات', 'الحسابات', 'أمان الحسابات'],
-    includesAudit: true,
-    includesOpportunity: false,
-  },
-  'audit-log-reset': {
-    label: 'تصفير واستعادة السجلات',
-    modules: ['تصفير الlog', 'تصفير السجلات', 'أمان الحسابات'],
+    label: 'إجراءات الحسابات والصلاحيات والأمان وتسجيل الدخول',
+    modules: ['الحسابات', 'أمان الحسابات', 'تسجيل الدخول', 'الصلاحيات', 'إدارة الحسابات'],
     includesAudit: true,
     includesOpportunity: false,
   },

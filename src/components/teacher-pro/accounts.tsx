@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useTeacherStore, PERMISSION_CATALOG, SECTION_PERMISSIONS, type PermissionEntry } from '@/lib/teacher-store';
+import { useTeacherStore, PERMISSION_CATALOG, type PermissionEntry } from '@/lib/teacher-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,8 +16,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { useActionLock } from '@/hooks/use-action-lock';
-import { userApi, roleApi } from '@/lib/api';
-import { emitTeacherProDataChanged } from '@/lib/teacherpro-sync';
 
 // ─── Permission categories for grouping ──────────────────────────────────────
 
@@ -28,12 +26,21 @@ const PREFERRED_PERMISSION_CATEGORIES = [
   'الطلاب',
   'الامتحانات',
   'الدرجات',
+  'الدرجات / الطلاب غير الموجودين',
   'الفرص',
   'المتابعة',
+  'المتابعة / المكالمات',
+  'المتابعة / الإجازات',
+  'المتابعة / التعهدات',
   'التصحيح',
   'التصحيح الإلكتروني',
+  'إدارة الحسابات / المستخدمين',
+  'إدارة الحسابات / الأدوار',
+  'إدارة الحسابات / الصلاحيات',
+  'إدارة الحسابات / الأمان',
   'الحسابات',
   'السجلات',
+  'تصفير الـ Log',
   'المواقع',
   'واتساب',
   'نسخ الديمو',
@@ -56,61 +63,6 @@ const PERMISSION_LEVEL_LABELS: Record<PermissionEntry['level'], string> = {
   delete: 'حذف',
   manage: 'إدارة',
 };
-
-const PAGE_PERMISSION_IDS = new Set(Object.values(SECTION_PERMISSIONS));
-const ACTION_PERMISSION_PREFIXES = [
-  'accounts.',
-  'logs.',
-  'students.',
-  'exams.',
-  'grades.',
-  'follow-up.',
-  'opportunities.',
-] as const;
-
-function PermissionGovernancePanel() {
-  const pagePermissions = PERMISSION_CATALOG.filter(permission => PAGE_PERMISSION_IDS.has(permission.id));
-  const actionPermissions = PERMISSION_CATALOG.filter(permission =>
-    ACTION_PERMISSION_PREFIXES.some(prefix => permission.id.startsWith(prefix)) &&
-    !PAGE_PERMISSION_IDS.has(permission.id),
-  );
-  const coveredPages = pagePermissions.length;
-  const totalPages = Object.keys(SECTION_PERMISSIONS).length;
-
-  return (
-    <Card className="border-primary/20 bg-primary/5">
-      <CardContent className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="font-black">هيكلة الصلاحيات الذكية</p>
-            <p className="text-sm text-muted-foreground">
-              كل صفحة لها صلاحية فتح مستقلة، وكل إجراء حساس له صلاحية عملية منفصلة حتى لا تختلط المشاهدة مع التعديل.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="default">{coveredPages}/{totalPages} صفحات مغطاة</Badge>
-            <Badge variant="secondary">{actionPermissions.length} صلاحية إجراء</Badge>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-          <div className="rounded-xl border bg-background/75 p-3">
-            <p className="text-xs font-semibold text-muted-foreground">فتح الصفحات</p>
-            <p className="text-lg font-black">{pagePermissions.length}</p>
-          </div>
-          <div className="rounded-xl border bg-background/75 p-3">
-            <p className="text-xs font-semibold text-muted-foreground">إدارة الحسابات</p>
-            <p className="text-lg font-black">{PERMISSION_CATALOG.filter(p => p.id.startsWith('accounts.')).length}</p>
-          </div>
-          <div className="rounded-xl border bg-background/75 p-3">
-            <p className="text-xs font-semibold text-muted-foreground">السجلات والتصفير</p>
-            <p className="text-lg font-black">{PERMISSION_CATALOG.filter(p => p.id.startsWith('logs.') || p.id === 'page.admin-log-reset.manage').length}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 
 function normalizePermissionIds(permissions: string[]) {
   return Array.from(new Set(permissions.filter(Boolean)));
@@ -314,10 +266,94 @@ function PermissionChecklist({
   );
 }
 
+
+const PAGE_PERMISSION_BLUEPRINT = [
+  { page: 'مكالمات', view: 'follow-up.calls.view', manage: 'follow-up.calls.manage' },
+  { page: 'الإجازات', view: 'follow-up.leaves.view', manage: 'follow-up.leaves.manage' },
+  { page: 'التعهدات', view: 'follow-up.pledges.view', manage: 'follow-up.pledges.manage' },
+  { page: 'الطلاب غير الموجودين', view: 'grades.missing.view', manage: 'grades.missing.manage' },
+  { page: 'إدارة الحسابات / المستخدمين', view: 'accounts.users.view', manage: 'accounts.users.add / edit / delete' },
+  { page: 'إدارة الحسابات / الأدوار', view: 'accounts.roles.view', manage: 'accounts.roles.add / edit / delete' },
+  { page: 'إدارة الحسابات / الصلاحيات', view: 'accounts.permissions.view', manage: 'accounts.permissions.assign' },
+  { page: 'السجلات', view: 'logs.view', manage: 'logs.delete' },
+  { page: 'تصفير الـ Log', view: 'logs.clear', manage: 'logs.restore' },
+];
+
+function PermissionsArchitectureTab() {
+  const grouped = getPermissionsByCategory(PERMISSION_CATALOG);
+  const totalByLevel = PERMISSION_CATALOG.reduce<Record<string, number>>((acc, permission) => {
+    acc[permission.level] = (acc[permission.level] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">هيكلة الصلاحيات الذكية</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            كل صفحة وكل إجراء حساس صار له Permission ID واضح. أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل PERMISSION_CATALOG وتنعكس تلقائياً في إدارة الأدوار والحسابات.
+          </p>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إجمالي الصلاحيات</p><p className="text-2xl font-black">{PERMISSION_CATALOG.length}</p></div>
+          <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">عرض</p><p className="text-2xl font-black">{totalByLevel.read || 0}</p></div>
+          <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إضافة/تعديل</p><p className="text-2xl font-black">{totalByLevel.write || 0}</p></div>
+          <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إدارة/حذف</p><p className="text-2xl font-black">{(totalByLevel.manage || 0) + (totalByLevel.delete || 0)}</p></div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">ربط الصفحات والإجراءات</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {PAGE_PERMISSION_BLUEPRINT.map((item) => (
+            <div key={item.page} className="rounded-xl border bg-background p-3">
+              <p className="mb-2 font-semibold">{item.page}</p>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <p><span className="font-semibold text-foreground">عرض:</span> {item.view}</p>
+                <p><span className="font-semibold text-foreground">إجراء:</span> {item.manage}</p>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {PERMISSION_CATEGORIES.map((category) => {
+          const permissions = grouped.get(category) || [];
+          if (permissions.length === 0) return null;
+          return (
+            <Card key={category}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">{category}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {permissions.map((permission) => (
+                  <div key={permission.id} className="rounded-xl border bg-muted/15 p-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold">{permission.label}</span>
+                      <Badge variant="outline" className="text-[10px]">{permission.id}</Badge>
+                      <Badge variant="secondary" className="text-[10px]">{PERMISSION_LEVEL_LABELS[permission.level]}</Badge>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">{permission.description}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
 // ─── Roles Tab Component ─────────────────────────────────────────────────────
 
 function RolesTab() {
-  const { roles, users, loadFromServer } = useTeacherStore();
+  const { roles, addRole, updateRole, deleteRole, users } = useTeacherStore();
 
   const [showAddRoleDialog, setShowAddRoleDialog] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
@@ -337,17 +373,11 @@ function RolesTab() {
       toast.error('يرجى إدخال اسم الدور');
       return;
     }
-    const result = await roleApi.add({ name: newRoleName.trim(), isDefault: false, permissions: newRolePerms });
-    if (!result.ok || result.queued) {
-      toast.error(result.error || 'تعذر إضافة الدور من الخادم');
-      return;
-    }
-    await loadFromServer();
-    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-role-add', scopes: ['accounts', 'logs'] });
+    addRole({ name: newRoleName.trim(), isDefault: false, permissions: newRolePerms });
     setShowAddRoleDialog(false);
     setNewRoleName('');
     setNewRolePerms([]);
-    toast.success('تمت إضافة الدور من قاعدة البيانات');
+    toast.success('تمت إضافة الدور');
   });
 
   const handleEditRole = (roleId: string) => {
@@ -359,27 +389,24 @@ function RolesTab() {
 
   const handleSaveRole = runSaveRoleLocked(async () => {
     if (!editRoleId) return;
-    const result = await roleApi.update(editRoleId, { permissions: editRolePerms });
-    if (!result.ok || result.queued) {
-      toast.error(result.error || 'تعذر تحديث صلاحيات الدور من الخادم');
-      return;
+    updateRole(editRoleId, { permissions: editRolePerms });
+    // Also update all users with this role
+    const roleName = roles.find(r => r.id === editRoleId)?.name;
+    if (roleName) {
+      users.forEach(u => {
+        if (u.roleId === editRoleId) {
+          useTeacherStore.getState().updateUserPermissions(u.id, [...editRolePerms]);
+        }
+      });
     }
-    await loadFromServer();
-    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-role-permissions', scopes: ['accounts', 'logs'] });
     setEditRoleId(null);
     setEditRolePerms([]);
-    toast.success('تم تحديث صلاحيات الدور من قاعدة البيانات');
+    toast.success('تم تحديث صلاحيات الدور');
   });
 
   const handleDeleteRole = runDeleteRoleLocked(async () => {
-    const result = await roleApi.remove(deleteRoleDialog.id);
-    if (!result.ok || result.queued) {
-      toast.error(result.error || 'لا يمكن حذف هذا الدور');
-      return;
-    }
-    await loadFromServer();
-    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-role-delete', scopes: ['accounts', 'logs'] });
-    toast.success('تم حذف الدور من قاعدة البيانات');
+    const ok = deleteRole(deleteRoleDialog.id);
+    if (ok) { toast.success('تم حذف الدور'); } else { toast.error('لا يمكن حذف هذا الدور'); }
     setDeleteRoleDialog({ open: false, id: '', name: '' });
   });
 
@@ -484,7 +511,7 @@ function RolesTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد حذف الدور</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تريد حذف الدور &quot;{deleteRoleDialog.name}&quot;؟ لا يتم الحذف إذا كان الدور افتراضياً أو مرتبطاً بمستخدمين. انقل المستخدمين أولاً ثم احذف الدور.
+              هل تريد حذف الدور &quot;{deleteRoleDialog.name}&quot;؟ سيتم نقل المستخدمين المرتبطين إلى دور &quot;مشاهدة فقط&quot;. لا يمكن حذف الأدوار الافتراضية.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -502,7 +529,7 @@ function RolesTab() {
 // ─── Users Tab Component ─────────────────────────────────────────────────────
 
 function UsersTab() {
-  const { users, roles, loadFromServer } = useTeacherStore();
+  const { users, roles, addUser, updateUser, toggleUser, updateUserPermissions, deleteUser } = useTeacherStore();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newUser, setNewUser] = useState({
@@ -535,7 +562,7 @@ function UsersTab() {
     }
     const role = roles.find(r => r.id === newUser.roleId);
     const perms = newUser.permissions.length > 0 ? newUser.permissions : (role?.permissions || []);
-    const result = await userApi.add({
+    addUser({
       username: newUser.username.trim(),
       name: newUser.name.trim(),
       roleId: newUser.roleId,
@@ -544,15 +571,9 @@ function UsersTab() {
       password: newUser.password.trim(),
       active: true,
     });
-    if (!result.ok || result.queued) {
-      toast.error(result.error || 'تعذر إضافة المستخدم من الخادم');
-      return;
-    }
-    await loadFromServer();
-    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-user-add', scopes: ['accounts', 'logs'] });
     setShowAddDialog(false);
     setNewUser({ username: '', name: '', password: '', roleId: 'role_checker', permissions: [] });
-    toast.success('تمت إضافة المستخدم من قاعدة البيانات');
+    toast.success('تمت إضافة المستخدم');
   });
 
   const openEditUserDialog = (userId: string) => {
@@ -564,15 +585,9 @@ function UsersTab() {
     if (!editUserDialog.name.trim()) { toast.error('يرجى إدخال الاسم'); return; }
     const updates: { name: string; password?: string } = { name: editUserDialog.name.trim() };
     if (editUserDialog.password.trim()) updates.password = editUserDialog.password.trim();
-    const result = await userApi.update(editUserDialog.id, updates);
-    if (!result.ok || result.queued) {
-      toast.error(result.error || 'تعذر تعديل المستخدم من الخادم');
-      return;
-    }
-    await loadFromServer();
-    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-user-edit', scopes: ['accounts', 'logs'] });
+    updateUser(editUserDialog.id, updates);
     setEditUserDialog({ open: false, id: '', name: '', password: '' });
-    toast.success('تم تعديل المستخدم من قاعدة البيانات');
+    toast.success('تم تعديل المستخدم');
   });
 
   const openDeleteUserDialog = (userId: string) => {
@@ -580,14 +595,8 @@ function UsersTab() {
     setDeleteUserDialog({ open: true, id: userId, userName: user?.name || '' });
   };
   const handleDeleteUserConfirm = runDeleteUserLocked(async () => {
-    const result = await userApi.remove(deleteUserDialog.id);
-    if (!result.ok || result.queued) {
-      toast.error(result.error || 'لا يمكن حذف هذا المستخدم');
-      return;
-    }
-    await loadFromServer();
-    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-user-delete', scopes: ['accounts', 'logs'] });
-    toast.success('تم حذف المستخدم من قاعدة البيانات');
+    const ok = deleteUser(deleteUserDialog.id);
+    if (ok) { toast.success('تم حذف المستخدم'); } else { toast.error('لا يمكن حذف هذا المستخدم'); }
     setDeleteUserDialog({ open: false, id: '', userName: '' });
   });
 
@@ -602,17 +611,10 @@ function UsersTab() {
   const handleSavePermissions = runSavePermissionsLocked(async () => {
     const editedUser = users.find(u => u.id === editPermsId);
     const isAdminUser = editedUser?.username.trim().toLowerCase() === 'admin' || editedUser?.roleId === 'role_admin';
-    const nextPermissions = isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : editPerms;
-    const result = await userApi.update(editPermsId, { permissions: nextPermissions });
-    if (!result.ok || result.queued) {
-      toast.error(result.error || 'تعذر تحديث الصلاحيات من الخادم');
-      return;
-    }
-    await loadFromServer();
-    emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-user-permissions', scopes: ['accounts', 'logs'] });
+    updateUserPermissions(editPermsId, isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : editPerms);
     setEditPermsId('');
     setEditPerms([]);
-    toast.success(isAdminUser ? 'صلاحيات المدير كاملة دائماً' : 'تم تحديث الصلاحيات من قاعدة البيانات');
+    toast.success(isAdminUser ? 'صلاحيات المدير كاملة دائماً' : 'تم تحديث الصلاحيات');
   });
 
 
@@ -698,19 +700,13 @@ function UsersTab() {
                     size="sm"
                     className="text-xs"
                     disabled={user.username.trim().toLowerCase() === 'admin'}
-                    onClick={async () => {
+                    onClick={() => {
                       if (user.username.trim().toLowerCase() === 'admin') {
                         toast.info('حساب admin يبقى فعال دائماً');
                         return;
                       }
-                      const result = await userApi.update(user.id, { active: !user.active });
-                      if (!result.ok || result.queued) {
-                        toast.error(result.error || 'تعذر تغيير حالة المستخدم من الخادم');
-                        return;
-                      }
-                      await loadFromServer();
-                      emitTeacherProDataChanged({ source: 'local-mutation', reason: 'accounts-user-toggle', scopes: ['accounts', 'logs'] });
-                      toast.success(user.active ? 'تم تعطيل المستخدم من قاعدة البيانات' : 'تم تفعيل المستخدم من قاعدة البيانات');
+                      toggleUser(user.id);
+                      toast.success(user.active ? 'تم تعطيل المستخدم' : 'تم تفعيل المستخدم');
                     }}
                   >
                     {user.username.trim().toLowerCase() === 'admin' ? 'فعال دائماً' : user.active ? 'تعطيل' : 'تفعيل'}
@@ -1168,16 +1164,15 @@ export function AccountsView() {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold">إدارة الحسابات</h2>
-        <p className="text-sm text-muted-foreground">إدارة المستخدمين والأدوار والصلاحيات بتفصيل صفحة/إجراء حتى لا تتداخل الصلاحيات.</p>
+        <p className="text-sm text-muted-foreground">إدارة المستخدمين والأدوار والصلاحيات</p>
       </div>
 
-      <PermissionGovernancePanel />
-
       <Tabs defaultValue="users" dir="rtl">
-        <TabsList className="w-full max-w-3xl">
+        <TabsList className="w-full max-w-5xl">
           <TabsTrigger value="users" className="flex-1">المستخدمين</TabsTrigger>
           <TabsTrigger value="roles" className="flex-1">الأدوار والصلاحيات</TabsTrigger>
           <TabsTrigger value="security" className="flex-1">الأمان</TabsTrigger>
+          <TabsTrigger value="architecture" className="flex-1">هيكلة الصلاحيات</TabsTrigger>
         </TabsList>
         <TabsContent value="users" className="mt-4">
           <UsersTab />
@@ -1187,6 +1182,9 @@ export function AccountsView() {
         </TabsContent>
         <TabsContent value="security" className="mt-4">
           <SecurityTab />
+        </TabsContent>
+        <TabsContent value="architecture" className="mt-4">
+          <PermissionsArchitectureTab />
         </TabsContent>
       </Tabs>
     </div>

@@ -1674,13 +1674,34 @@ export const roleApi = {
 
 // ─── Log API ──────────────────────────────────────────────────────────────────
 
+export type LogListQuery = {
+  q?: string;
+  module?: string;
+  user?: string;
+  page?: number;
+  pageSize?: number;
+};
+
 export const logApi = {
-  list: (options: { queryString?: string; signal?: AbortSignal; quietAbort?: boolean } = {}) =>
-    apiGet<Pick<ServerData, "logs"> & Record<string, unknown>>(
-      `logs${options.queryString ? `?${options.queryString}` : ""}`,
-      { signal: options.signal, quietAbort: options.quietAbort },
-    ),
-  listAll: () => apiGetAllPages<Pick<ServerData, "logs">>("logs", "logs"),
+  list: (query: LogListQuery = {}, options: ApiGetOptions = {}) => {
+    const queryString = buildQueryString({
+      q: query.q,
+      module: query.module,
+      user: query.user,
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? 50,
+    });
+    return apiGet<Pick<ServerData, "logs"> & {
+      modules?: string[];
+      users?: string[];
+      totalCount?: number;
+      page?: number;
+      pageSize?: number;
+      totalPages?: number;
+      hasMore?: boolean;
+      source?: string;
+    }>(`logs${queryString ? `?${queryString}` : ""}`, options);
+  },
   add: async (log: Record<string, unknown>): Promise<ApiResult> => {
     // Use direct fetch instead of apiPost so that 403 responses (server-only
     // audit entries) don't trigger console.warn noise. The UI creates local
