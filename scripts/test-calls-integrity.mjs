@@ -154,11 +154,26 @@ assert(
 
 
 
+
+assert(
+  followUp.includes('callLoading && visibleCallRows.length === 0') &&
+    followUp.includes('callRowsRef.current.length === 0') &&
+    followUp.includes('بقيت آخر بيانات ناجحة ظاهرة') &&
+    followUp.includes('callCandidatesRequestSequenceRef') &&
+    followUp.includes('optimistic-call-') &&
+    followUp.includes('mergeSavedCall(payload, status ? optimisticCall : null, !status)'),
+  'جدول المكالمات يبقى ظاهراً أثناء التحديث الخلفي ولا يُمسح عند فشل أو تداخل الطلبات',
+);
+assert(
+  followUp.includes('scopes: ["follow-up", "students", "dashboard", "logs"]'),
+  'صدى حفظ المكالمة يستهلك كل نطاقات studentCalls ولا يعيد تحميل التبويب من server-version',
+);
+
 assert(
   followUp.includes('callMutationVersionRef') &&
     followUp.includes('mutationVersionAtRequestStart') &&
     followUp.includes('dispatchLocal: false') &&
-    followUp.includes('scopes: ["follow-up", "logs"]'),
+    followUp.includes('scopes: ["follow-up", "students", "dashboard", "logs"]'),
   'حفظ حالة الاتصال محمي من طلبات Sync الأقدم ولا يعيد تحميل نفس التبويب فوراً',
 );
 

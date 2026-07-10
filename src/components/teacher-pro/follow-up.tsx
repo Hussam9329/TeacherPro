@@ -537,6 +537,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   >([]);
   const [callSavingKeys, setCallSavingKeys] = useState<Record<string, boolean>>({});
   const callMutationVersionRef = useRef(0);
+  const callCandidatesRequestSequenceRef = useRef(0);
+  const callRowsRef = useRef<CallStudentRow[]>([]);
   const [callNoteDrafts, setCallNoteDrafts] = useState<Record<string, string>>({});
   const [callServerPageInfo, setCallServerPageInfo] = useState({
     totalCount: 0,
@@ -621,6 +623,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   useEffect(() => {
     if (view !== "calls" || !callCourseId || !callExamId) {
+      callCandidatesRequestSequenceRef.current += 1;
+      callRowsRef.current = [];
       setCallRowsFromDb([]);
       setCallPageStudentCalls([]);
       setCallServerPageInfo({ totalCount: 0, totalPages: 1, hasMore: false });
@@ -629,9 +633,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     }
     let cancelled = false;
     const controller = new AbortController();
+    const requestSequence = ++callCandidatesRequestSequenceRef.current;
     const mutationVersionAtRequestStart = callMutationVersionRef.current;
     const silent = isBackgroundSync();
-    if (!silent) setCallLoading(true);
+    // لا نستبدل الجدول الموجود بحالة تحميل عند أي مزامنة أو إعادة جلب.
+    // الـSkeleton يظهر فقط في أول تحميل عندما لا توجد صفوف معروضة أصلاً.
+    const shouldBlockTable = !silent && callRowsRef.current.length === 0;
+    setCallLoading(shouldBlockTable);
 
     callCandidatesApi
       .get(
@@ -647,8 +655,16 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         { signal: controller.signal, quietAbort: true },
       )
       .then((result) => {
-        if (cancelled || controller.signal.aborted || !result) return;
-        setCallRowsFromDb((result.rows || []) as unknown as CallStudentRow[]);
+        if (
+          cancelled ||
+          controller.signal.aborted ||
+          !result ||
+          requestSequence !== callCandidatesRequestSequenceRef.current
+        )
+          return;
+        const nextRows = (result.rows || []) as unknown as CallStudentRow[];
+        callRowsRef.current = nextRows;
+        setCallRowsFromDb(nextRows);
         // لا نسمح لطلب بدأ قبل حفظ المستخدم أن يعيد حالة اتصال قديمة فوق النتيجة المحفوظة.
         if (mutationVersionAtRequestStart === callMutationVersionRef.current) {
           setCallPageStudentCalls(
@@ -665,19 +681,23 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         });
       })
       .catch(() => {
-        if (!cancelled && !controller.signal.aborted && !silent) {
-          setCallRowsFromDb([]);
-          setCallPageStudentCalls([]);
-          setCallServerPageInfo({
-            totalCount: 0,
-            totalPages: 1,
-            hasMore: false,
-          });
-          toast.error("تعذر تحميل طلاب المكالمات من قاعدة البيانات.");
+        if (
+          !cancelled &&
+          !controller.signal.aborted &&
+          requestSequence === callCandidatesRequestSequenceRef.current &&
+          !silent
+        ) {
+          // نحافظ على آخر جدول ناجح بدلاً من مسحه وإرباك المستخدم.
+          toast.error("تعذر تحديث طلاب المكالمات. بقيت آخر بيانات ناجحة ظاهرة.");
         }
       })
       .finally(() => {
-        if (!cancelled && !controller.signal.aborted) setCallLoading(false);
+        if (
+          !cancelled &&
+          !controller.signal.aborted &&
+          requestSequence === callCandidatesRequestSequenceRef.current
+        )
+          setCallLoading(false);
       });
 
     return () => {
@@ -1286,11 +1306,21 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         `${item?.reason || ""} | ${item.exam.name} | ${formatGradeScore(item.grade, item.exam, "—")}`,
     };
     const savingKey = `status:${payload.studentId}:${payload.examId}:${payload.category}`;
+    const previousCall = existing || null;
+    const optimisticCall: StudentCall = {
+      id: existing?.id || `optimistic-call-${Date.now()}`,
+      createdAt: existing?.createdAt || todayISO(),
+      ...payload,
+    };
+
+    // يتغير الصف فوراً من دون انتظار الشبكة، ثم يُستبدل برد قاعدة البيانات.
+    mergeSavedCall(payload, status ? optimisticCall : null, !status);
     setCallSaving(savingKey, true);
     callMutationVersionRef.current += 1;
     try {
       const result = await studentCallApi.upsert(payload);
       if (!result.ok) {
+        mergeSavedCall(payload, previousCall, !previousCall);
         toast.error(result.error || "تعذر حفظ حالة التواصل.");
         return;
       }
@@ -1299,7 +1329,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       emitTeacherProDataChanged({
         source: "local-mutation",
         reason: "تحديث مكالمة طالب",
-        scopes: ["follow-up", "logs"],
+        scopes: ["follow-up", "students", "dashboard", "logs"],
         // الحالة أُدمجت من رد الخادم بالفعل؛ ننبّه التبويبات الأخرى فقط كي لا
         // يعيد هذا التبويب تحميل نفسه ويستبدل النتيجة بطلب Sync أقدم.
         dispatchLocal: false,
@@ -1345,7 +1375,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       emitTeacherProDataChanged({
         source: "local-mutation",
         reason: "تحديث ملاحظات المكالمات",
-        scopes: ["follow-up", "logs"],
+        scopes: ["follow-up", "students", "dashboard", "logs"],
         dispatchLocal: false,
       });
       toast.success(notes.trim() ? "تم حفظ ملاحظة المكالمات" : "تم حذف ملاحظة المكالمات");
@@ -2598,7 +2628,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 <p className="empty-state py-8">
                   اختر الدورة ثم الامتحان لعرض الطلاب.
                 </p>
-              ) : callLoading ? (
+              ) : callLoading && visibleCallRows.length === 0 ? (
                 renderCallLoadingSkeleton()
               ) : visibleCallRows.length === 0 ? (
                 <p className="empty-state py-8">

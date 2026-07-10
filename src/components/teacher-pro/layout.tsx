@@ -34,7 +34,6 @@ import {
   Handshake,
   Shield,
   ScrollText,
-  ShieldAlert,
   Sun,
   Moon,
   Menu,
@@ -110,7 +109,6 @@ const menuItems: {
   { id: "follow-up-pledges", title: "تعهدات", sub: "تعهدات الفصل", icon: Handshake },
   { id: "accounts", title: "إدارة الحسابات", sub: "صلاحيات", icon: Shield },
   { id: "logs", title: "السجلات", sub: "تدقيق", icon: ScrollText },
-  { id: "admin-log-reset", title: "تصفير الlog", sub: "مدير النظام فقط", icon: ShieldAlert },
 ];
 
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
@@ -122,7 +120,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records", "missing-students-notes"],
   },
   { title: "المتابعة", itemIds: ["follow-up-calls", "follow-up-leaves", "follow-up-pledges"] },
-  { title: "الإدارة", itemIds: ["accounts", "logs", "admin-log-reset"] },
+  { title: "الإدارة", itemIds: ["accounts", "logs"] },
 ];
 
 const familyItemIds = new Set<SectionId>(
@@ -151,7 +149,8 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   "follow-up-pledges": ["follow-up", "students", "opportunities", "dashboard"],
   accounts: ["accounts", "logs"],
   logs: ["logs", "opportunity-logs"],
-  "admin-log-reset": ["logs", "opportunity-logs", "opportunities", "dashboard"],
+  // Legacy hidden section: old persisted links are redirected to logs.
+  "admin-log-reset": ["logs", "opportunity-logs"],
 };
 
 // These sections own server-side page queries through useTeacherProSyncKey.
@@ -316,6 +315,8 @@ function readSectionFromLocation(): SectionId | null {
   // Backward compatibility: redirect old section IDs
   if (value === 'whatsapp') return 'follow-up-calls' as SectionId;
   if (value === 'follow-up') return 'follow-up-leaves' as SectionId;
+  // التبويبة أزيلت من الواجهة؛ الروابط القديمة تنتقل للسجلات بأمان.
+  if (value === 'admin-log-reset') return 'logs' as SectionId;
   if (value === 'course-new' || value === 'site-management') {
     return 'courses' as SectionId;
   }
@@ -339,7 +340,6 @@ import { ECorrectionView } from "./e-correction";
 import { FollowUpCallsView, FollowUpLeavesView, FollowUpPledgesView, FollowUpView } from "./follow-up";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
-import { AdminLogResetView } from "./admin-log-reset";
 import { LoadingState } from "./ui-kit";
 
 const sectionComponents: Record<SectionId, React.ComponentType> = {
@@ -363,7 +363,8 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "e-correction": ECorrectionView,
   accounts: AccountsView,
   logs: LogsView,
-  "admin-log-reset": AdminLogResetView,
+  // Keep the legacy key type-safe while rendering the safe destination only.
+  "admin-log-reset": LogsView,
 };
 
 
@@ -939,6 +940,10 @@ export function TeacherProLayout() {
   useEffect(() => {
     if (currentSection === "follow-up") {
       setSection("follow-up-leaves");
+      return;
+    }
+    if (currentSection === "admin-log-reset") {
+      setSection("logs");
     }
   }, [currentSection, setSection]);
   const firstVisibleSectionId = visibleMenuItems[0]?.id ?? null;
