@@ -34,7 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import {
   ClipboardCheck,
   ClipboardPaste,
@@ -71,7 +71,7 @@ const COLUMN_NAMES = [
   "الدورة",
   "نوع الدورة",
   "الكورس",
-  "نوع الدراسة",
+  "نوع البرنامج",
   "الموقع الرئيسي",
   "الموقع الفرعي",
   "الحالة",
@@ -79,7 +79,7 @@ const COLUMN_NAMES = [
   "فترة السماح",
   "رقم هاتف الطالب",
   "رقم ولي الأمر",
-  "معرف التليكرام",
+  "معرف التيليجرام",
 ];
 
 const SAMPLE_TEXT = `مراد سلمان سرحان سلمان\tالياسمين للبنين\tذكر\tالدورة الصيفية\tمنهج كامل\t\tإلكتروني\tبغداد\tبغداد - عموم بغداد\tنشط\t0\t0 يوم\t7505687475\t7505374138\tMorad_SS2
@@ -133,7 +133,7 @@ const PREVIEW_CATEGORY_COPY: Record<
   unknownCourseOrLocation: {
     title: "غير معروف الدورة/الموقع",
     description:
-      "الدورة غير موجودة، أو نوع الدراسة/الموقع غير مفعّل ضمن إعدادات الدورة.",
+      "الدورة غير موجودة، أو نوع البرنامج/الموقع غير مفعّل ضمن إعدادات الدورة.",
     badge: "دورة/موقع",
   },
 };
@@ -350,7 +350,7 @@ export function StudentBulkTextImportView() {
       if (!context) {
         if (!silent) {
           setRegisterContext(null);
-          setContextError("تعذر تحميل سياق التسجيل الجماعي من قاعدة البيانات.");
+          setContextError("تعذر تحميل سياق التسجيل الجماعي من بيانات النظام.");
         }
         return;
       }
@@ -358,7 +358,7 @@ export function StudentBulkTextImportView() {
     } catch {
       if (!silent) {
         setRegisterContext(null);
-        setContextError("تعذر الاتصال بالخادم لتحميل سياق التسجيل الجماعي.");
+        setContextError("تعذر الاتصال بالنظام لتحميل سياق التسجيل الجماعي.");
       }
     } finally {
       setContextLoading(false);
@@ -379,7 +379,7 @@ export function StudentBulkTextImportView() {
         }
       })
       .catch(() => {
-        // فحص التكرار المحلي يستخدم آخر كاش متاح عند فشل الاتصال.
+        // فحص التكرار المحلي يستخدم آخر بيانات مؤقتة متاح عند فشل الاتصال.
       });
     return () => {
       cancelled = true;
@@ -441,13 +441,13 @@ export function StudentBulkTextImportView() {
 
   const buildPreview = () => {
     if (contextLoading) {
-      toast.error("انتظر اكتمال تحميل سياق التسجيل الجماعي من قاعدة البيانات");
+      toast.error("انتظر اكتمال تحميل سياق التسجيل الجماعي من بيانات النظام");
       return;
     }
     if (!registerContext) {
       toast.error("تعذر فحص التسجيل الجماعي", {
         description:
-          contextError || "لا يوجد سياق دورات متاح من قاعدة البيانات.",
+          contextError || "لا يوجد سياق دورات متاح من بيانات النظام.",
       });
       return;
     }
@@ -540,7 +540,7 @@ export function StudentBulkTextImportView() {
           "عند اختيار كورسات يجب تحديد الكورس الأول أو الكورس الثاني",
         );
       if (!studyType || !STUDY_TYPES.includes(studyType))
-        errors.push("نوع الدراسة يجب أن يكون إلكتروني أو حضوري أو مدمج");
+        errors.push("نوع البرنامج يجب أن يكون إلكتروني أو حضوري أو مدمج");
       if (!locationScope) errors.push("الموقع الرئيسي مطلوب");
       if (!subSite) errors.push("الموقع الفرعي مطلوب");
       if (!status) errors.push("الحالة يجب أن تكون نشط أو مفصول");
@@ -556,7 +556,7 @@ export function StudentBulkTextImportView() {
         (courseRow.activeChapterCount || 0) === 0
       ) {
         warnings.push(
-          "لا يوجد فصل نشط لهذه الدورة؛ الخادم سيسجل الطالب بفرص 0 بوضوح.",
+          "لا يوجد فصل نشط لهذه الدورة؛ النظام سيسجل الطالب بفرص 0 بوضوح.",
         );
       } else if (courseRow?.activeChapter && opportunities <= 0) {
         warnings.push(
@@ -565,7 +565,7 @@ export function StudentBulkTextImportView() {
       }
       if (courseRow?.activeChapter && inputOpportunities !== opportunities) {
         warnings.push(
-          `تم تجاهل عمود الفرص (${inputOpportunities}) واعتماد فرص الفصل النشط من قاعدة البيانات: ${opportunities}.`,
+          `تم تجاهل عمود الفرص (${inputOpportunities}) واعتماد فرص الفصل النشط من بيانات النظام: ${opportunities}.`,
         );
       }
 
@@ -585,7 +585,7 @@ export function StudentBulkTextImportView() {
         const provinces = getProvinceOptions(course, studyType);
         if (provinces.length > 0 && !provinces.includes(subSite)) {
           errors.push(
-            `المحافظة "${subSite}" غير مفعّلة لهذه الدورة/نوع الدراسة`,
+            `المحافظة "${subSite}" غير مفعّلة لهذه الدورة/نوع البرنامج`,
           );
         }
       }
@@ -692,7 +692,7 @@ export function StudentBulkTextImportView() {
       if (telegramKey) {
         const previous = telegramMap.get(telegramKey);
         if (previous)
-          row.errors.push(`معرف التليكرام مكرر داخل النص مع السطر ${previous}`);
+          row.errors.push(`معرف التيليجرام مكرر داخل النص مع السطر ${previous}`);
         else telegramMap.set(telegramKey, row.rowNumber);
       }
       if (parentPhoneKey) {
@@ -764,7 +764,7 @@ export function StudentBulkTextImportView() {
       reason: "إضافة جماعية للطلاب",
       scopes: ["students", "opportunities", "dashboard", "bulk-import", "logs"],
     });
-    toast.success("تمت الإضافة الجماعية من قاعدة البيانات", {
+    toast.success("تمت الإضافة الجماعية من بيانات النظام", {
       description: `تمت إضافة ${response.count ?? studentsToImport.length} طالب إلى سجل الطلاب${response.warnings?.length ? `، مع ${response.warnings.length} تنبيه فرص` : ""}`,
     });
     setRawText("");
@@ -804,7 +804,7 @@ export function StudentBulkTextImportView() {
           <div className="text-[11px] text-muted-foreground">
             {row.activeChapterName
               ? `من ${row.activeChapterName}`
-              : "من قاعدة البيانات"}
+              : "من بيانات النظام"}
           </div>
         </td>
         <td className="p-3 dir-ltr text-left">
@@ -912,7 +912,7 @@ export function StudentBulkTextImportView() {
               <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
                 <Badge variant="outline">{EXPECTED_COLUMNS} عمود</Badge>
                 <Badge variant="outline">الأرقام تُحوّل تلقائياً إلى 07</Badge>
-                <Badge variant="outline">@ التليكرام اختياري</Badge>
+                <Badge variant="outline">@ التيليجرام اختياري</Badge>
                 <Badge
                   variant={
                     contextLoading
@@ -923,9 +923,9 @@ export function StudentBulkTextImportView() {
                   }
                 >
                   {contextLoading
-                    ? "جاري تحميل سياق قاعدة البيانات"
+                    ? "جارٍ تجهيز بيانات التسجيل"
                     : registerContext
-                      ? `الدورات من قاعدة البيانات: ${registerContext.stats.active}`
+                      ? `الدورات من بيانات النظام: ${registerContext.stats.active}`
                       : "سياق التسجيل غير متاح"}
                 </Badge>
               </div>
@@ -958,7 +958,7 @@ export function StudentBulkTextImportView() {
             ) : null}
             <div className="mt-3 rounded-2xl border border-primary/15 bg-primary/5 p-3 text-xs leading-6 text-muted-foreground">
               التسجيل الجماعي لا يعتمد على عمود الفرص المكتوب بالنص؛ فرص البداية
-              تُحسب من الفصل النشط للدورة في قاعدة البيانات، والدورة الموقوفة أو
+              تُحسب من الفصل النشط للدورة في بيانات النظام، والدورة الموقوفة أو
               ذات تعارض الفصول تُرفض قبل الإضافة.
             </div>
           </section>
@@ -1111,7 +1111,7 @@ export function StudentBulkTextImportView() {
               <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm leading-6 text-muted-foreground">
                   {importPolicy === "valid-only"
-                    ? "عند الضغط سيتم إرسال الأسطر الجاهزة فقط إلى الخادم."
+                    ? "عند الضغط سيتم إرسال الأسطر الجاهزة فقط إلى النظام."
                     : "عند الضغط يجب أن تكون كل الأسطر سليمة، وإلا لن يبدأ الاستيراد."}
                 </div>
                 <Button

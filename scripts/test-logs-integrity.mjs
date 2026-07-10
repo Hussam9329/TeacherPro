@@ -26,8 +26,8 @@ const logsHasLatestRequestGuard =
 must(
   logsView.includes("logApi") &&
     logsHasLatestRequestGuard &&
-    logsView.includes("قاعدة البيانات"),
-  "صفحة السجلات صارت Server-driven وتلغي الطلبات القديمة",
+    logsView.includes("CountScopeSummary") && logsView.includes("بيانات النظام"),
+  "صفحة السجلات تقرأ من النظام وتلغي الطلبات القديمة",
   "صفحة السجلات يجب أن تقرأ من logApi مع حماية Latest Request لا من كاش Zustand فقط.",
 );
 
@@ -53,8 +53,8 @@ must(
     logsRoute.includes("searchParams.get('module')") &&
     logsRoute.includes("searchParams.get('user')") &&
     logsRoute.includes("source: 'database'"),
-  "API السجلات يدعم البحث والفلاتر والصفحات من قاعدة البيانات",
-  "GET /api/logs يجب أن يدعم q/module/user مع pagination ويرجع source=database.",
+  "API السجلات يدعم البحث والفلاتر والصفحات من بيانات النظام",
+  "GET /api/logs يجب أن يدعم q/module/user مع الصفحات ويرجع المصدر الموثوق.",
 );
 
 must(

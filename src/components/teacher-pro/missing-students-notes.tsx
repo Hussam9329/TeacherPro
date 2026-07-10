@@ -107,7 +107,7 @@ export function MissingStudentsNotesView() {
       .catch(() => {
         if (!signal.aborted && !silent) {
           setNotes([]);
-          setNotesError("تعذر تحميل ملاحظات الطلاب غير الموجودين من قاعدة البيانات. تم تعطيل الحذف حتى يرجع الاتصال.");
+          setNotesError("تعذر تحميل ملاحظات الطلاب غير الموجودين من بيانات النظام. تم تعطيل الحذف حتى يرجع الاتصال.");
         }
       })
       .finally(() => {
@@ -176,7 +176,7 @@ export function MissingStudentsNotesView() {
         scopes: ["grade-entry-notes", "grades", "exams", "dashboard"],
       });
     } catch {
-      setNotesError("تعذر حذف الملاحظة من قاعدة البيانات. تحقق من الصلاحيات أو الاتصال ثم حاول مجدداً.");
+      setNotesError("تعذر حذف الملاحظة من بيانات النظام. تحقق من الصلاحيات أو الاتصال ثم حاول مجدداً.");
     } finally {
       setDeletingNote(false);
       setDeleteDialogNote(null);
@@ -190,7 +190,7 @@ export function MissingStudentsNotesView() {
           <AlertDialogHeader>
             <AlertDialogTitle>حذف الملاحظة</AlertDialogTitle>
             <AlertDialogDescription>
-              سيتم حذف ملاحظات امتحان {deleteDialogNote?.examName || "هذا الامتحان"} من قاعدة البيانات. هل تريد المتابعة؟
+              سيتم حذف ملاحظات امتحان {deleteDialogNote?.examName || "هذا الامتحان"} من بيانات النظام. هل تريد المتابعة؟
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -200,14 +200,14 @@ export function MissingStudentsNotesView() {
               onClick={() => void confirmDeleteNote()}
               disabled={deletingNote}
             >
-              {deletingNote ? "جاري الحذف..." : "حذف من قاعدة البيانات"}
+              {deletingNote ? "جاري الحذف..." : "حذف من بيانات النظام"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h2 className="text-2xl font-black tracking-tight">الطلاب الغير موجودين</h2>
+          <h2 className="text-2xl font-black tracking-tight">الطلاب غير الموجودين</h2>
           <p className="mt-1 text-sm leading-7 text-muted-foreground">
             هنا تظهر كل الملاحظات التي يكتبها مدخل الدرجات من صفحة تسجيل الدرجات لكل امتحان.
           </p>
@@ -221,34 +221,34 @@ export function MissingStudentsNotesView() {
           value={statValue(databaseStats?.total)}
           icon={ClipboardList}
           tone="info"
-          hint="عدّ مباشر من قاعدة البيانات"
+          hint="عدّ مباشر من بيانات النظام"
         />
         <StatCard
           label="امتحانات تحتوي ملاحظات"
           value={statValue(databaseStats?.examsWithNotes)}
           icon={FileText}
           tone="warning"
-          hint="عدّ مباشر من قاعدة البيانات"
+          hint="عدّ مباشر من بيانات النظام"
         />
         <StatCard
           label="إجمالي الأحرف"
           value={statValue(databaseStats?.totalCharacters)}
           icon={AlertTriangle}
           tone="danger"
-          hint="مجموع النصوص من قاعدة البيانات"
+          hint="مجموع النصوص من بيانات النظام"
         />
         <StatCard
           label="مصدر الصفحة"
-          value="DB"
+          value="النظام"
           icon={Database}
           tone="success"
-          hint="لا تعتمد على localStorage للعرض"
+          hint="لا تعتمد على بيانات مؤقتة للعرض"
         />
       </div>
 
       {notesLoading ? (
         <div className="rounded-2xl border bg-muted/40 p-3 text-sm text-muted-foreground">
-          جاري تحميل ملاحظات الطلاب غير الموجودين من قاعدة البيانات...
+          جاري تحميل ملاحظات الطلاب غير الموجودين من بيانات النظام...
         </div>
       ) : null}
 
@@ -258,7 +258,7 @@ export function MissingStudentsNotesView() {
         </div>
       ) : (
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
-          القائمة والإحصائيات من قاعدة البيانات، والحذف لا يتم إلا بعد موافقة الخادم.
+          القائمة والإحصائيات من بيانات النظام، والحذف لا يتم إلا بعد تأكيد الحفظ.
         </div>
       )}
 

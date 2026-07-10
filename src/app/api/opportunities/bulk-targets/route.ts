@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     return routeErrorResponse(
       error,
-      "تعذر احتساب نطاق عملية الفرص الجماعية من قاعدة البيانات.",
+      "تعذر احتساب نطاق عملية الفرص الجماعية من بيانات النظام.",
     );
   }
 }

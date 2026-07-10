@@ -37,12 +37,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { searchAny } from "@/lib/validation";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
+import { CountScopeSummary } from "./ui-kit";
 import { formatGradeScore } from "@/lib/exam-utils";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
@@ -253,7 +254,7 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
   },
   {
     key: "telegram",
-    label: "معرف التلكرام",
+    label: "معرف التيليجرام",
     value: ({ row }) => row.student.telegram || "",
   },
   { key: "note", label: "ملاحظات المكالمات", value: ({ note }) => note },
@@ -391,8 +392,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [globalSearch, setGlobalSearch] = useState("");
   const debouncedGlobalSearch = useDebouncedValue(globalSearch, 180);
 
-  // نتائج البحث من الخادم للطالب المعروض في منتقي الإجازات.
-  // نستخدم بحث الخادم بدلاً من الكاش المحلي لأن الكاش قد لا يحوي
+  // نتائج البحث من النظام للطالب المعروض في منتقي الإجازات.
+  // نستخدم بحث النظام بدلاً من البيانات المؤقتة المحلية لأن البيانات المؤقتة قد لا يحوي
   // إلا أول 200 طالب، مما يخفي الطلاب القدامى أو الإضافيين عن المستخدم.
   const [leavePickerStudents, setLeavePickerStudents] = useState<Student[]>([]);
   const [leavePickerLoading, setLeavePickerLoading] = useState(false);
@@ -427,7 +428,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     let cancelled = false;
 
     // حمّل المفصولين بشكل صريح حتى تظهرهم قائمة التعهدات لاحقاً.
-    // لا نعتمد على هذا المصدر لمنتقي الإجازات — استخدام البحث من الخادم
+    // لا نعتمد على هذا المصدر لمنتقي الإجازات — استخدام البحث من النظام
     // يضمن ظهور أي طالب بغض النظر عن ترتيبه الزمني.
     studentApi
       .list({ status: "مفصول", pageSize: 200 })
@@ -437,7 +438,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         mergeStudentsCache(all as unknown as Student[]);
       })
       .catch(() => {
-        // الصفحة تستخدم آخر كاش متاح إذا فشل الاتصال المؤقت.
+        // الصفحة تستخدم آخر بيانات مؤقتة متاح إذا فشل الاتصال المؤقت.
       });
 
     return () => {
@@ -509,7 +510,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         console.warn("[FollowUp/leaves] failed to load leaves from database", error);
         if (!silent) {
           setLeaveRowsFromDb([]);
-          setLeaveError("تعذر تحميل الإجازات من قاعدة البيانات. تم تعطيل الحفظ والحذف حتى يرجع الاتصال.");
+          setLeaveError("تعذر تحميل الإجازات من بيانات النظام. تم تعطيل الحفظ والحذف حتى يرجع الاتصال.");
         }
       } finally {
         if (!controller.signal.aborted) setLeaveLoading(false);
@@ -609,7 +610,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       .catch(() => {
         if (!cancelled && !controller.signal.aborted) {
           setCallCourseExamsFromDb([]);
-          toast.error("تعذر تحميل امتحانات المكالمات من قاعدة البيانات.");
+          toast.error("تعذر تحميل امتحانات المكالمات من بيانات النظام.");
         }
       })
       .finally(() => {
@@ -797,7 +798,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           if (!silent) {
             setPledgeRowsFromDb([]);
             setPledgeDatabaseStats(null);
-            setPledgeError("تعذر تحميل التعهدات من قاعدة البيانات. لا يمكن تنفيذ إجراء حساس حتى يرجع الاتصال.");
+            setPledgeError("تعذر تحميل التعهدات من بيانات النظام. لا يمكن تنفيذ إجراء حساس حتى يرجع الاتصال.");
           }
           return;
         }
@@ -810,7 +811,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         if (!controller.signal.aborted && !silent) {
           setPledgeRowsFromDb([]);
           setPledgeDatabaseStats(null);
-          setPledgeError("تعذر تحميل التعهدات من قاعدة البيانات. لا يمكن تنفيذ إجراء حساس حتى يرجع الاتصال.");
+          setPledgeError("تعذر تحميل التعهدات من بيانات النظام. لا يمكن تنفيذ إجراء حساس حتى يرجع الاتصال.");
         }
       })
       .finally(() => {
@@ -832,8 +833,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   ]);
 
   const filteredStudents = useMemo(() => {
-    // نتائج منتقي الإجازات تأتي مباشرة من الخادم (leavePickerStudents).
-    // هذا يضمن ظهور أي طالب بغض النظر عن ترتيبه في الكاش المحلي.
+    // نتائج منتقي الإجازات تأتي مباشرة من النظام (leavePickerStudents).
+    // هذا يضمن ظهور أي طالب بغض النظر عن ترتيبه في البيانات المؤقتة المحلية.
     // نطبّق فلترة محلية إضافية بسيطة بالاستعلام نفسه لتسريع الكتابة.
     const query = globalSearch.trim().toLowerCase();
     if (!query) return leavePickerStudents.slice(0, 30);
@@ -951,7 +952,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     callStudentNoteLookup.get(studentId);
 
   // تبويبة المكالمات صارت Server-Driven بالكامل:
-  // لا نبني الصفوف من كاش الطلاب أو الدرجات المحلي حتى لا تختلف القائمة عن الإحصائيات والتصدير.
+  // لا نبني الصفوف من بيانات الطلاب المؤقتة أو الدرجات المحلي حتى لا تختلف القائمة عن الإحصائيات والتصدير.
   const callRows = callRowsFromDb;
 
   const callTotalPages = Math.max(1, callServerPageInfo.totalPages);
@@ -1119,7 +1120,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   const saveLeave = async () => {
     if (leaveError || leaveLoading) {
-      toast.error("انتظر تحميل الإجازات من قاعدة البيانات قبل الحفظ.");
+      toast.error("انتظر تحميل الإجازات من بيانات النظام قبل الحفظ.");
       return;
     }
     if (!leaveStudentId || !leaveReason.trim()) {
@@ -1150,7 +1151,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       );
     });
     if (duplicate) {
-      toast.error("هذا الطالب لديه إجازة مسجلة بنفس النطاق حسب قاعدة البيانات");
+      toast.error("هذا الطالب لديه إجازة مسجلة بنفس النطاق حسب بيانات النظام");
       return;
     }
 
@@ -1174,7 +1175,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     setLeaveSaving(false);
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر حفظ الإجازة من الخادم.");
+      toast.error(result.error || "تعذر حفظ الإجازة من النظام.");
       return;
     }
 
@@ -1205,7 +1206,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     toast.success(
       leaveMode === "period"
-        ? "تمت إضافة الإجازة للفترة وإعادة احتساب الطالب من قاعدة البيانات"
+        ? "تمت إضافة الإجازة للفترة وإعادة احتساب الطالب من بيانات النظام"
         : "تمت إضافة الإجازة وإعادة احتساب الطالب بدون محاسبة هذا الامتحان",
     );
   };
@@ -1313,7 +1314,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       ...payload,
     };
 
-    // يتغير الصف فوراً من دون انتظار الشبكة، ثم يُستبدل برد قاعدة البيانات.
+    // يتغير الصف فوراً من دون انتظار الشبكة، ثم يُستبدل برد بيانات النظام.
     mergeSavedCall(payload, status ? optimisticCall : null, !status);
     setCallSaving(savingKey, true);
     callMutationVersionRef.current += 1;
@@ -1330,7 +1331,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         source: "local-mutation",
         reason: "تحديث مكالمة طالب",
         scopes: ["follow-up", "students", "dashboard", "logs"],
-        // الحالة أُدمجت من رد الخادم بالفعل؛ ننبّه التبويبات الأخرى فقط كي لا
+        // الحالة أُدمجت من رد النظام بالفعل؛ ننبّه التبويبات الأخرى فقط كي لا
         // يعيد هذا التبويب تحميل نفسه ويستبدل النتيجة بطلب Sync أقدم.
         dispatchLocal: false,
       });
@@ -1501,11 +1502,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   const deleteLeaveServerFirst = async (leave: StudentLeave) => {
     if (leaveError || leaveLoading) {
-      toast.error("انتظر تحميل الإجازات من قاعدة البيانات قبل الحذف.");
+      toast.error("انتظر تحميل الإجازات من بيانات النظام قبل الحذف.");
       return;
     }
     const ok = window.confirm(
-      "سيتم حذف الإجازة من قاعدة البيانات واسترجاع أي درجات محفوظة احتياطياً ثم إعادة احتساب الطالب. هل تريد المتابعة؟",
+      "سيتم حذف الإجازة من بيانات النظام واسترجاع أي درجات محفوظة احتياطياً ثم إعادة احتساب الطالب. هل تريد المتابعة؟",
     );
     if (!ok) return;
 
@@ -1514,7 +1515,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     setLeaveDeletingIds((current) => ({ ...current, [leave.id]: false }));
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر حذف الإجازة من الخادم.");
+      toast.error(result.error || "تعذر حذف الإجازة من النظام.");
       return;
     }
 
@@ -1530,7 +1531,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     toast.success(
       restored > 0
         ? `تم حذف الإجازة واسترجاع ${restored} درجة/درجات ثم إعادة الاحتساب`
-        : "تم حذف الإجازة وإعادة احتساب الطالب من قاعدة البيانات",
+        : "تم حذف الإجازة وإعادة احتساب الطالب من بيانات النظام",
     );
   };
 
@@ -1539,7 +1540,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       <CardHeader>
         <CardTitle>الإجازات السابقة</CardTitle>
         <p className="text-sm text-muted-foreground">
-          كل الإجازات هنا تأتي من قاعدة البيانات، وأي حذف يسترجع الدرجات المحفوظة احتياطياً قبل إعادة الاحتساب.
+          كل الإجازات هنا تأتي من بيانات النظام، وأي حذف يسترجع الدرجات المحفوظة احتياطياً قبل إعادة الاحتساب.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -1571,7 +1572,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               id="leave-search"
               value={leaveSearch}
               onChange={(event) => setLeaveSearch(event.target.value)}
-              placeholder="اسم / كود / هاتف / تليكرام / امتحان / سبب / ملاحظة"
+              placeholder="اسم / كود / هاتف / تيليجرام / امتحان / سبب / ملاحظة"
             />
           </div>
           <div className="space-y-1">
@@ -1724,7 +1725,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     if (!normalizedTelegram) {
       return (
         <span className="rounded-xl border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          التلكرام: لا يوجد معرف
+          التيليجرام: لا يوجد معرف
         </span>
       );
     }
@@ -1735,7 +1736,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         target="_blank"
         rel="noreferrer"
       >
-        التلكرام: {normalizedTelegram}
+        التيليجرام: {normalizedTelegram}
       </a>
     );
   };
@@ -2002,7 +2003,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
               {displayedGradeItems.length === 0 ? (
                 <p className="mt-3 rounded-xl border border-dashed bg-background/70 p-3 text-xs text-muted-foreground">
-                  لا توجد درجات محفوظة لهذا الطالب ضمن امتحانات هذه الدورة.
+                  لا توجد درجات مسجلة لهذا الطالب ضمن امتحانات هذه الدورة.
                 </p>
               ) : historyGradeItems.length === 0 ? (
                 <p className="mt-3 rounded-xl border border-dashed bg-background/70 p-3 text-xs text-muted-foreground">
@@ -2095,7 +2096,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     ? "جاري حفظ الملاحظة..."
                     : Object.prototype.hasOwnProperty.call(callNoteDrafts, row.student.id)
                       ? "توجد ملاحظة غير محفوظة"
-                      : "محفوظة من قاعدة البيانات"}
+                      : "محفوظة من بيانات النظام"}
                 </span>
                 <Button
                   type="button"
@@ -2117,7 +2118,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   const togglePledge = async (row: PledgeRow, checked: boolean) => {
     if (pledgeLoading || pledgeError) {
-      toast.error("انتظر تحميل التعهدات من قاعدة البيانات قبل تنفيذ الإجراء.");
+      toast.error("انتظر تحميل التعهدات من بيانات النظام قبل تنفيذ الإجراء.");
       return;
     }
 
@@ -2135,7 +2136,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     setPledgeSavingKeys((current) => ({ ...current, [key]: false }));
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر تنفيذ إجراء التعهد من الخادم.");
+      toast.error(result.error || "تعذر تنفيذ إجراء التعهد من النظام.");
       return;
     }
 
@@ -2165,8 +2166,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     toast.success(
       checked
-        ? "تم تثبيت التعهد وإعادة تفعيل الطالب من قاعدة البيانات."
-        : "تم إلغاء التعهد المرتبط بهذا الفصل من قاعدة البيانات.",
+        ? "تم تثبيت التعهد وإعادة تفعيل الطالب من بيانات النظام."
+        : "تم إلغاء التعهد المرتبط بهذا الفصل من بيانات النظام.",
     );
   };
 
@@ -2383,7 +2384,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               </div>
               {selectedLeaveStudent && (
                 <p className="rounded-xl bg-muted/50 p-2 text-xs text-muted-foreground">
-                  نوع الدراسة: <b>{selectedLeaveStudent.studyType || "—"}</b>
+                  نوع البرنامج: <b>{selectedLeaveStudent.studyType || "—"}</b>
                 </p>
               )}
               <Button
@@ -2490,7 +2491,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                       setCallGeneralSearch(event.target.value);
                       setCallGradePage(1);
                     }}
-                    placeholder="اسم / كود / هاتف / تليكرام / مدرسة / امتحان / درجة"
+                    placeholder="اسم / كود / هاتف / تيليجرام / مدرسة / امتحان / درجة"
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
@@ -2536,42 +2537,26 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               ) : !callExamSelected ? (
                 <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
                   تم اختيار الدورة. اختر امتحاناً من امتحانات هذه الدورة لعرض
-                  الطلاب. مصدر الامتحانات هنا قاعدة البيانات مباشرة، وليس الكاش المحلي.
+                  الطلاب. مصدر الامتحانات هنا بيانات النظام، وليس البيانات المؤقتة المحلية.
                 </p>
               ) : callLoading ? (
                 <div className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-                    <span>جاري تحميل طلاب ودرجات هذه الدورة من قاعدة البيانات...</span>
+                    <span>جاري تحميل طلاب ودرجات هذه الدورة من بيانات النظام...</span>
                   </div>
                 </div>
               ) : null}
             </CardContent>
           </Card>
-          <div className="grid gap-3 md:grid-cols-6">
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">
-                  الطلاب المطابقون من قاعدة البيانات
-                </p>
-                <b className="text-2xl">
-                  {callStatValue(callDatabaseStats?.total)}
-                </b>
-              </CardContent>
-            </Card>
-            <Card className="border-primary/30 bg-primary/5">
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">
-                  {callStatusFilter !== "all"
-                    ? `عدد ${callStatusFilterLabels[callStatusFilter]}`
-                    : "عدد الطلاب الكلي (كل الحالات)"}
-                </p>
-                <b className="text-2xl text-primary">
-                  {callStatValue(callDatabaseStats?.total)}
-                </b>
-              </CardContent>
-            </Card>
-            <Card>
+          <CountScopeSummary
+            subject="الطلاب"
+            filteredTotal={callStatValue(callDatabaseStats?.total)}
+            pageCount={visibleCallRows.length}
+            className="md:grid-cols-2"
+          />
+          <div className="grid gap-3 md:grid-cols-4">
+            <Card className="border-dashed border-sky-500/35 bg-sky-500/5" data-count-scope="filtered">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">تم الاتصال</p>
                 <b className="text-2xl">
@@ -2579,7 +2564,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </b>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-dashed border-sky-500/35 bg-sky-500/5" data-count-scope="filtered">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">لم يرد</p>
                 <b className="text-2xl">
@@ -2587,7 +2572,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </b>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-dashed border-sky-500/35 bg-sky-500/5" data-count-scope="filtered">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">الرقم خاطئ</p>
                 <b className="text-2xl">
@@ -2595,7 +2580,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </b>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-dashed border-sky-500/35 bg-sky-500/5" data-count-scope="filtered">
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">بدون إجراء</p>
                 <b className="text-2xl">
@@ -2609,19 +2594,19 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               <CardTitle>قائمة الطلاب ودرجاتهم</CardTitle>
               <p className="text-sm text-muted-foreground">
                 لا تظهر القائمة إلا بعد اختيار دورة ثم امتحان. كل شيء داخل هذه التبويبة
-                يأتي من قاعدة البيانات مباشرة: الطلاب، الدرجات، آخر امتحانين، المكالمات، والملاحظات.
+                يأتي من بيانات النظام: الطلاب، الدرجات، آخر امتحانين، المكالمات، والملاحظات.
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-muted/40 px-3 py-2 text-sm">
                 <span>
-                  عدد الطلاب الكلي من قاعدة البيانات:{" "}
+                  المطابقون للفلاتر:{" "}
                   <b>
                     {callStatValue(callDatabaseStats?.total)}
                   </b>
                 </span>
                 <span>
-                  الصفحة <b>{callSafePage}</b> من <b>{callTotalPages}</b>
+                  الصفحة <b>{callSafePage}</b> من <b>{callTotalPages}</b> · المعروض في الصفحة: <b>{visibleCallRows.length}</b>
                 </span>
               </div>
               {!callExamSelected ? (
@@ -2713,7 +2698,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
           {pledgeLoading ? (
             <div className="rounded-2xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-              جاري تحميل التعهدات من قاعدة البيانات...
+              جاري تحميل التعهدات من بيانات النظام...
             </div>
           ) : pledgeError ? (
             <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -2721,7 +2706,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             </div>
           ) : (
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
-              التعهدات محملة من قاعدة البيانات، وتثبيت التعهد مع إعادة التفعيل يتم كإجراء واحد آمن من الخادم.
+              التعهدات محملة من بيانات النظام، وتثبيت التعهد مع إعادة التفعيل يتم كإجراء واحد آمن من النظام.
             </div>
           )}
 

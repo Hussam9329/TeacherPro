@@ -136,7 +136,7 @@ export async function GET(req: NextRequest) {
           ? authSecret.length >= 32
             ? 'مفعّل وبطول مناسب.'
             : 'مفعّل لكنه قصير. الأفضل 32 حرفاً أو أكثر.'
-          : 'غير مفعّل. يجب ضبط TEACHERPRO_AUTH_SECRET في السيرفر.',
+          : 'غير مفعّل. يجب ضبط TEACHERPRO_AUTH_SECRET في النظام.',
       },
       {
         id: 'bot-token',

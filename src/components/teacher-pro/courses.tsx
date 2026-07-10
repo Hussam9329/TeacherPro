@@ -32,7 +32,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
@@ -150,16 +150,16 @@ function validateCourseForm(form: CourseFormState): string | null {
   for (const studyType of form.availableStudyTypes) {
     const config = form.locationConfig[studyType];
     if (!config || config.scopes.length === 0) {
-      return `يجب تحديد إعدادات المواقع لنوع الدراسة "${studyType}"`;
+      return `يجب تحديد إعدادات المواقع لنوع البرنامج "${studyType}"`;
     }
     if (config.scopes.includes("بغداد") && !config.baghdadMode) {
-      return `يجب اختيار نوع بغداد لنوع الدراسة "${studyType}"`;
+      return `يجب اختيار نوع بغداد لنوع البرنامج "${studyType}"`;
     }
     if (config.baghdadMode === "بغداد - مخصص" && (!config.baghdadSites || config.baghdadSites.length === 0)) {
-      return `يجب اختيار موقع واحد على الأقل من مواقع بغداد لنوع الدراسة "${studyType}"`;
+      return `يجب اختيار موقع واحد على الأقل من مواقع بغداد لنوع البرنامج "${studyType}"`;
     }
     if (config.scopes.includes("محافظات") && (!config.provinces || config.provinces.length === 0)) {
-      return `يجب اختيار محافظة واحدة على الأقل لنوع الدراسة "${studyType}"`;
+      return `يجب اختيار محافظة واحدة على الأقل لنوع البرنامج "${studyType}"`;
     }
   }
 
@@ -443,11 +443,11 @@ function CourseBuilderForm({
         <>
           <Separator />
 
-          {/* نوع الدراسة حسب نوع الدورة */}
+          {/* نوع البرنامج حسب نوع الدورة */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm font-bold text-foreground">
               <Monitor className="size-4 text-primary" />
-              <span>نوع الدراسة لكل نوع دورة</span>
+              <span>نوع البرنامج لكل نوع دورة</span>
             </div>
             {form.availablePrograms.map((program) => (
               <Card key={program} className="border-dashed bg-muted/20">
@@ -617,7 +617,7 @@ function CourseBuilderForm({
                 {summary.locationLines.map((line) => <li key={line}>{line}</li>)}
               </ul>
             ) : (
-              <p className="text-muted-foreground">بعد اختيار نوع الدراسة ستظهر هنا المواقع التي ستكون مفعلة في التسجيل.</p>
+              <p className="text-muted-foreground">بعد اختيار نوع البرنامج ستظهر هنا المواقع التي ستكون مفعلة في التسجيل.</p>
             )}
           </div>
         </CardContent>
@@ -751,7 +751,7 @@ export function CoursesView() {
     const data = await courseApi.overview({ signal, quietAbort: true });
     if (!data) {
       if (!signal?.aborted && !options.silent) {
-        setLoadError("تعذر تحميل ملخص الدورات من قاعدة البيانات.");
+        setLoadError("تعذر تحميل ملخص الدورات من بيانات النظام.");
         setIsLoading(false);
       }
       return;
@@ -824,7 +824,7 @@ export function CoursesView() {
     }
     setCreateForm(emptyCourseForm());
     setShowCreateForm(false);
-    toast.success("تمت إضافة الدورة من قاعدة البيانات");
+    toast.success("تمت إضافة الدورة من بيانات النظام");
     await syncCoursesAfterMutation("إضافة دورة");
   });
 
@@ -856,7 +856,7 @@ export function CoursesView() {
     const impact = (result.data as { studentConfigImpact?: { affectedStudents?: number; message?: string } } | null)?.studentConfigImpact;
     setEditDialog({ open: false, courseId: "", form: emptyCourseForm(), row: null });
     toast.success(
-      impact?.message || "تم تعديل الدورة بعد تأكيد قاعدة البيانات",
+      impact?.message || "تم تعديل الدورة بعد التحقق من الحفظ",
     );
     await syncCoursesAfterMutation("تعديل دورة");
   });
@@ -882,7 +882,7 @@ export function CoursesView() {
       toast.error(result.error || "تعذر حذف الدورة");
       return;
     }
-    toast.success("تم حذف الدورة بعد تأكيد قاعدة البيانات");
+    toast.success("تم حذف الدورة بعد التحقق من الحفظ");
     setDeleteDialog({ open: false, id: "", courseName: "", confirmText: "", row: null });
     await syncCoursesAfterMutation("حذف دورة");
   });
@@ -902,7 +902,7 @@ export function CoursesView() {
   const renderStats = () => (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       <div className="rounded-2xl border bg-card/80 p-4 shadow-sm">
-        <p className="text-xs text-muted-foreground">إجمالي الدورات</p>
+        <p className="text-xs text-muted-foreground">إجمالي الدورات في النظام</p>
         <p className="mt-1 text-2xl font-black">{stats?.total ?? rows.length}</p>
       </div>
       <div className="rounded-2xl border bg-emerald-500/5 p-4 shadow-sm">
@@ -969,7 +969,7 @@ export function CoursesView() {
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              أنشئت: {formatAppDate(row.course.createdAt)} — البيانات من قاعدة البيانات مباشرة
+              أنشئت: {formatAppDate(row.course.createdAt)} — البيانات من بيانات النظام
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1092,7 +1092,7 @@ export function CoursesView() {
               <h2 className="text-xl font-black">إدارة الدورات</h2>
             </div>
             <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-              هذه الصفحة تقرأ الدورات وأثرها من قاعدة البيانات مباشرة: الطلاب، الامتحانات، الفصول، وإمكانية الحذف. أي تعديل لا يظهر كنجاح إلا بعد موافقة الخادم.
+              هذه الصفحة تقرأ الدورات وأثرها من بيانات النظام: الطلاب، الامتحانات، الفصول، وإمكانية الحذف. أي تعديل لا يظهر كنجاح إلا بعد تأكيد الحفظ.
             </p>
           </div>
           <Button onClick={() => setShowCreateForm((value) => !value)}>
@@ -1116,7 +1116,7 @@ export function CoursesView() {
               form={createForm}
               setForm={setCreateForm}
               onSubmit={handleCreate}
-              submitLabel="حفظ الدورة من قاعدة البيانات"
+              submitLabel="حفظ الدورة من بيانات النظام"
               submitDisabled={isAddingCourse}
             />
           </CardContent>
@@ -1171,7 +1171,7 @@ export function CoursesView() {
           </div>
           <div className="rounded-2xl border bg-muted/30 p-3 text-xs text-muted-foreground">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">المعروض: {filteredStats.total}</Badge>
+              <Badge variant="outline" data-count-scope="filtered">المطابقون للفلاتر: {filteredStats.total}</Badge>
               <Badge variant="secondary">نشطة: {filteredStats.active}</Badge>
               <Badge variant="secondary">موقوفة: {filteredStats.inactive}</Badge>
               <Badge variant="outline">قابلة للحذف: {filteredStats.deletable}</Badge>
@@ -1232,7 +1232,7 @@ export function CoursesView() {
               <div className="mx-auto w-full max-w-6xl space-y-2 pl-10">
                 <DialogTitle className="text-2xl font-black">تعديل الدورة</DialogTitle>
                 <DialogDescription>
-                  الحفظ يتم من الخادم أولاً. إذا كان التعديل يحذف خياراً يستخدمه طلاب مسجلون، سيتم رفضه برسالة واضحة حتى لا يتغير تصنيف طالب قديم بدون قصد.
+                  الحفظ يتم من النظام أولاً. إذا كان التعديل يحذف خياراً يستخدمه طلاب مسجلون، سيتم رفضه برسالة واضحة حتى لا يتغير تصنيف طالب قديم بدون قصد.
                 </DialogDescription>
                 {editDialog.row ? (
                   <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
@@ -1254,7 +1254,7 @@ export function CoursesView() {
                     }))
                   }
                   onSubmit={handleEditSave}
-                  submitLabel="حفظ التعديلات بعد فحص الخادم"
+                  submitLabel="حفظ التعديلات بعد فحص النظام"
                   submitDisabled={isSavingCourse}
                 />
               </div>
@@ -1278,7 +1278,7 @@ export function CoursesView() {
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-right leading-7">
                 <p>
-                  الحذف لا يعتمد على كاش الصفحة. يتم السماح به فقط إذا أكدت قاعدة البيانات أن الدورة غير مرتبطة بطلاب أو امتحانات.
+                  الحذف لا يعتمد على بيانات الصفحة المؤقتة. يتم السماح به فقط إذا أكدت بيانات النظام أن الدورة غير مرتبطة بطلاب أو امتحانات.
                 </p>
                 {deleteDialog.row ? (
                   <div className={`rounded-xl border p-3 ${deleteDialog.row.deleteSafety.canDelete ? "bg-muted/40" : "border-destructive/25 bg-destructive/10 text-destructive"}`}>
@@ -1286,7 +1286,7 @@ export function CoursesView() {
                     <p className="text-sm">
                       {deleteDialog.row.deleteSafety.blockers.length
                         ? deleteDialog.row.deleteSafety.blockers.join("، ")
-                        : "لا توجد روابط مانعة حسب آخر فحص من قاعدة البيانات."}
+                        : "لا توجد روابط مانعة حسب آخر فحص من بيانات النظام."}
                     </p>
                     <p className="text-sm">{deleteDialog.row.deleteSafety.recommendedAction}</p>
                   </div>

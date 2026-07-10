@@ -54,6 +54,6 @@ export async function GET(req: NextRequest) {
       source: "database",
     });
   } catch (error) {
-    return routeErrorResponse(error, "تعذر تحميل امتحانات المكالمات من قاعدة البيانات.");
+    return routeErrorResponse(error, "تعذر تحميل امتحانات المكالمات من بيانات النظام.");
   }
 }

@@ -18,8 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { toast } from "sonner";
-import { StatCard } from "./ui-kit";
+import { toast } from "@/lib/user-toast";
+import { CountScopeSummary, StatCard } from "./ui-kit";
 import {
   Users,
   Clock,
@@ -151,6 +151,14 @@ export function DismissedStudentsView() {
     withPledge: 0,
     withoutPledge: 0,
   });
+  const [systemDismissedStats, setSystemDismissedStats] = useState<DismissedStats>({
+    total: 0,
+    temporary: 0,
+    final: 0,
+    withNotes: 0,
+    withPledge: 0,
+    withoutPledge: 0,
+  });
   const [dismissedStatsLoading, setDismissedStatsLoading] = useState(false);
   const [dismissedStatsError, setDismissedStatsError] = useState("");
 
@@ -175,7 +183,7 @@ export function DismissedStudentsView() {
         if (!result) {
           if (!silent) {
             setDismissedServerStudents([]);
-            setListError("تعذر تحميل المفصولين من قاعدة البيانات. لا توجد إجراءات حساسة متاحة حتى يرجع الاتصال.");
+            setListError("تعذر تحميل المفصولين من بيانات النظام. لا توجد إجراءات حساسة متاحة حتى يرجع الاتصال.");
           }
           return;
         }
@@ -186,7 +194,7 @@ export function DismissedStudentsView() {
       .catch(() => {
         if (!controller.signal.aborted && !silent) {
           setDismissedServerStudents([]);
-          setListError("تعذر تحميل المفصولين من قاعدة البيانات. لا توجد إجراءات حساسة متاحة حتى يرجع الاتصال.");
+          setListError("تعذر تحميل المفصولين من بيانات النظام. لا توجد إجراءات حساسة متاحة حتى يرجع الاتصال.");
         }
       })
       .finally(() => {
@@ -218,7 +226,7 @@ export function DismissedStudentsView() {
         if (controller.signal.aborted) return;
         if (!payload?.details) {
           setDismissalDetails({});
-          setDetailsError("تعذر تحميل تفاصيل الفصل من قاعدة البيانات.");
+          setDetailsError("تعذر تحميل تفاصيل الفصل من بيانات النظام.");
           return;
         }
         setDismissalDetails(
@@ -229,7 +237,7 @@ export function DismissedStudentsView() {
         if (controller.signal.aborted) return;
         console.warn("[DismissedStudentsView] details load failed", error);
         setDismissalDetails({});
-        setDetailsError("تعذر تحميل تفاصيل الفصل من قاعدة البيانات.");
+        setDetailsError("تعذر تحميل تفاصيل الفصل من بيانات النظام.");
       })
       .finally(() => {
         if (!controller.signal.aborted) setDismissalDetailsLoading(false);
@@ -255,18 +263,19 @@ export function DismissedStudentsView() {
       signal: controller.signal,
     })
       .then((response) => (response.ok ? response.json() : null))
-      .then((payload: { stats?: DismissedStats } | null) => {
+      .then((payload: { stats?: DismissedStats; filtered?: DismissedStats; system?: DismissedStats } | null) => {
         if (controller.signal.aborted) return;
         if (!payload?.stats) {
-          if (!silent) setDismissedStatsError("تعذر تحميل إحصائيات المفصولين من قاعدة البيانات.");
+          if (!silent) setDismissedStatsError("تعذر تحميل إحصائيات المفصولين من بيانات النظام.");
           return;
         }
-        setDismissedStats(payload.stats);
+        setDismissedStats(payload.filtered || payload.stats);
+        if (payload.system) setSystemDismissedStats(payload.system);
       })
       .catch((error) => {
         if (controller.signal.aborted) return;
         console.warn("[DismissedStudentsView] stats load failed", error);
-        if (!silent) setDismissedStatsError("تعذر تحميل إحصائيات المفصولين من قاعدة البيانات.");
+        if (!silent) setDismissedStatsError("تعذر تحميل إحصائيات المفصولين من بيانات النظام.");
       })
       .finally(() => {
         if (!controller.signal.aborted) setDismissedStatsLoading(false);
@@ -400,13 +409,13 @@ export function DismissedStudentsView() {
 
   const handleReactivate = async (student: Student) => {
     if (!canRunSensitiveActions) {
-      toast.error("انتظر تحميل المفصولين وتفاصيل الفصل من قاعدة البيانات قبل تنفيذ إعادة التفعيل.");
+      toast.error("انتظر تحميل المفصولين وتفاصيل الفصل من بيانات النظام قبل تنفيذ إعادة التفعيل.");
       return;
     }
 
     const serverDetail = dismissalDetails[student.id];
     if (!serverDetail) {
-      toast.error("تفاصيل الفصل غير محملة من قاعدة البيانات لهذا الطالب. حدّث الصفحة ثم حاول مرة أخرى.");
+      toast.error("تفاصيل الفصل غير محملة من بيانات النظام لهذا الطالب. حدّث الصفحة ثم حاول مرة أخرى.");
       return;
     }
 
@@ -415,7 +424,7 @@ export function DismissedStudentsView() {
         `لم يتم تسجيل تعهد لهذا الفصل.\n\nالطالب: ${student.name}\nنوع الفصل: ${serverDetail.type || "مفصول"}\nالسبب: ${serverDetail.reason || "لا يوجد سبب مسجل"}\n\nهل تريد إعادة التفعيل رغم عدم وجود تعهد؟`,
       );
       if (!ok) return;
-      toast.warning("سيتم تنفيذ إعادة التفعيل بدون تعهد مسجل لهذا الفصل بعد موافقة الخادم.");
+      toast.warning("سيتم تنفيذ إعادة التفعيل بدون تعهد مسجل لهذا الفصل بعد تأكيد الحفظ.");
     }
 
     setReactivatingIds((current) => ({ ...current, [student.id]: true }));
@@ -426,7 +435,7 @@ export function DismissedStudentsView() {
     setReactivatingIds((current) => ({ ...current, [student.id]: false }));
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر إعادة تفعيل الطالب من الخادم.");
+      toast.error(result.error || "تعذر إعادة تفعيل الطالب من النظام.");
       return;
     }
 
@@ -440,7 +449,7 @@ export function DismissedStudentsView() {
       return next;
     });
     emitTeacherProDataChanged({ source: "local-mutation", reason: "dismissed-students-reactivate", scopes: ["students", "opportunities", "dismissed", "dashboard"] });
-    toast.success("تمت إعادة تفعيل الطالب من قاعدة البيانات");
+    toast.success("تمت إعادة تفعيل الطالب من بيانات النظام");
   };
 
   const renderDismissalContext = (student: Student) => {
@@ -450,7 +459,7 @@ export function DismissedStudentsView() {
       <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-3 text-sm">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <Badge variant={fromDatabase ? "secondary" : "outline"}>
-            {fromDatabase ? "تفاصيل الفصل من قاعدة البيانات" : "تفاصيل محلية مؤقتة"}
+            {fromDatabase ? "تفاصيل الفصل من بيانات النظام" : "تفاصيل محلية مؤقتة"}
           </Badge>
           {detail.dismissalDate ? <Badge variant="outline">تاريخ الفصل: {detail.dismissalDate}</Badge> : null}
         </div>
@@ -498,7 +507,7 @@ export function DismissedStudentsView() {
 
   const handleSaveNote = async (studentId: string) => {
     if (!canRunSensitiveActions) {
-      toast.error("انتظر تحميل بيانات المفصولين من الخادم قبل حفظ الملاحظة.");
+      toast.error("انتظر تحميل بيانات المفصولين من النظام قبل حفظ الملاحظة.");
       return;
     }
 
@@ -514,7 +523,7 @@ export function DismissedStudentsView() {
     setSavingNoteIds((current) => ({ ...current, [studentId]: false }));
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر حفظ ملاحظات الفصل من الخادم.");
+      toast.error(result.error || "تعذر حفظ ملاحظات الفصل من النظام.");
       return;
     }
 
@@ -538,7 +547,7 @@ export function DismissedStudentsView() {
       return next;
     });
     emitTeacherProDataChanged({ source: "local-mutation", reason: "dismissed-students-note", scopes: ["students", "dismissed", "dashboard"] });
-    toast.success("تم حفظ ملاحظات الفصل من قاعدة البيانات");
+    toast.success("تم حفظ ملاحظات الفصل من بيانات النظام");
   };
 
   const applyPreset = (values: FilterPresetValues) => {
@@ -593,7 +602,7 @@ export function DismissedStudentsView() {
     if (dismissedStudentsSearchLoading || dismissalDetailsLoading || dismissedStatsLoading) {
       return (
         <div className="rounded-2xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          جاري تحميل المفصولين وتفاصيل الفصل من قاعدة البيانات...
+          جاري تحميل المفصولين وتفاصيل الفصل من بيانات النظام...
         </div>
       );
     }
@@ -606,7 +615,7 @@ export function DismissedStudentsView() {
     }
     return (
       <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
-        بيانات المفصولين وتفاصيل الفصل محملة من قاعدة البيانات، والإجراءات الحساسة لا تُنفّذ إلا بعد موافقة الخادم.
+        بيانات المفصولين وتفاصيل الفصل محملة من بيانات النظام، والإجراءات الحساسة لا تُنفّذ إلا بعد تأكيد الحفظ.
       </div>
     );
   };
@@ -615,48 +624,60 @@ export function DismissedStudentsView() {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard
-          label="إجمالي المفصولين"
-          value={dismissedStatsLoading ? "..." : dismissedStats.total}
+          label="إجمالي المفصولين في النظام"
+          value={dismissedStatsLoading ? "..." : systemDismissedStats.total}
           icon={Users}
           tone="danger"
-          hint="حسب الفلاتر الحالية"
+          hint="كل الطلاب المفصولين"
+          scope="system"
         />
         <StatCard
           label="فصل مؤقت"
-          value={dismissedStatsLoading ? "..." : dismissedStats.temporary}
+          value={dismissedStatsLoading ? "..." : systemDismissedStats.temporary}
           icon={Clock}
           tone="warning"
-          hint="قابلون لإعادة التفعيل"
+          hint="من إجمالي النظام"
+          scope="system"
         />
         <StatCard
           label="فصل نهائي"
-          value={dismissedStatsLoading ? "..." : dismissedStats.final}
+          value={dismissedStatsLoading ? "..." : systemDismissedStats.final}
           icon={Ban}
           tone="danger"
-          hint="فصل دائم"
+          hint="من إجمالي النظام"
+          scope="system"
         />
         <StatCard
           label="بملاحظات"
-          value={dismissedStatsLoading ? "..." : dismissedStats.withNotes}
+          value={dismissedStatsLoading ? "..." : systemDismissedStats.withNotes}
           icon={FileText}
           tone="info"
-          hint="لديهم ملاحظات إدارية"
+          hint="من إجمالي النظام"
+          scope="system"
         />
         <StatCard
           label="بتعهد"
-          value={dismissedStatsLoading ? "..." : dismissedStats.withPledge}
+          value={dismissedStatsLoading ? "..." : systemDismissedStats.withPledge}
           icon={HandHeart}
           tone="primary"
-          hint="تعهد ولي الأمر"
+          hint="من إجمالي النظام"
+          scope="system"
         />
         <StatCard
           label="بدون تعهد"
-          value={dismissedStatsLoading ? "..." : dismissedStats.withoutPledge}
+          value={dismissedStatsLoading ? "..." : systemDismissedStats.withoutPledge}
           icon={Ban}
           tone="warning"
-          hint="بحسب تفاصيل الفصل من الخادم"
+          hint="من إجمالي النظام"
+          scope="system"
         />
       </div>
+
+      <CountScopeSummary
+        systemTotal={systemDismissedStats.total}
+        filteredTotal={dismissedStats.total}
+        pageCount={dismissedStudents.length}
+      />
 
       {renderStatusBanner()}
 
@@ -758,7 +779,7 @@ export function DismissedStudentsView() {
                 data-teacherpro-search="true"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="اسم / كود / سبب / ملاحظات / تليكرام"
+                placeholder="اسم / كود / سبب / ملاحظات / تيليجرام"
               />
             </div>
             <div className="space-y-1">
@@ -773,7 +794,7 @@ export function DismissedStudentsView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cards">الكارتات</SelectItem>
+                  <SelectItem value="cards">البطاقات</SelectItem>
                   <SelectItem value="table">الجدول</SelectItem>
                 </SelectContent>
               </Select>
@@ -833,7 +854,7 @@ export function DismissedStudentsView() {
                   <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                     <span>الهاتف: {student.phone || "—"}</span>
                     <span>ولي الأمر: {student.parentPhone || "—"}</span>
-                    <span>التليكرام: {student.telegram || "—"}</span>
+                    <span>التيليجرام: {student.telegram || "—"}</span>
                     <span>
                       الفرص: {student.opportunities}/{student.baseOpportunities}
                     </span>

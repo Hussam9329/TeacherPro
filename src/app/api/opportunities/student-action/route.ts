@@ -267,7 +267,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const message = error instanceof Error && error.message
       ? error.message
-      : "تعذر تنفيذ إجراء الفرص من الخادم حالياً.";
+      : "تعذر تنفيذ إجراء الفرص من النظام حالياً.";
     return routeErrorResponse(error, message);
   }
 }

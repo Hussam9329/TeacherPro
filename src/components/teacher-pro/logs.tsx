@@ -22,6 +22,8 @@ import {
   useTeacherProSyncKey,
 } from "@/hooks/use-teacherpro-sync";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
+import { CountScopeSummary } from "./ui-kit";
+import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 
 type AuditLogDisplayItem = {
   label: string;
@@ -78,6 +80,7 @@ export function LogsView() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [totalCount, setTotalCount] = useState(0);
+  const [systemTotalCount, setSystemTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -103,17 +106,34 @@ export function LogsView() {
         if (!request.isLatest()) return;
         if (!result) {
           if (!background) setLogs([]);
-          setError("تعذر تحميل السجلات من قاعدة البيانات.");
+          setError("تعذر تحميل السجلات من بيانات النظام.");
           return;
         }
         const nextLogs = ((result.logs || []) as unknown as AuditLogRow[]).map((log) => ({
           ...log,
+          module: humanizeTeacherProText(log.module || ""),
+          action: humanizeTeacherProText(log.action || ""),
+          details: log.details ? humanizeTeacherProText(log.details) : log.details,
           userName: log.userName || log.user || "النظام",
+          display: log.display
+            ? {
+                ...log.display,
+                summary: log.display.summary
+                  ? humanizeTeacherProText(log.display.summary)
+                  : log.display.summary,
+                items: (log.display.items || []).map((item) => ({
+                  ...item,
+                  label: humanizeTeacherProText(item.label),
+                  value: humanizeTeacherProText(item.value),
+                })),
+              }
+            : log.display,
         }));
         setLogs(nextLogs);
         setModules((result.modules || []).filter(Boolean));
         setUsers((result.users || []).filter(Boolean));
         setTotalCount(Number(result.totalCount || nextLogs.length || 0));
+        setSystemTotalCount(Number(result.systemTotalCount || result.totalCount || nextLogs.length || 0));
         setTotalPages(Math.max(1, Number(result.totalPages || 1)));
         logsLoadedRef.current = true;
       })
@@ -121,7 +141,7 @@ export function LogsView() {
         if (!request.isLatest()) return;
         console.warn("[LogsView] failed to load logs", err);
         if (!background) setLogs([]);
-        setError("تعذر تحميل السجلات من قاعدة البيانات.");
+        setError("تعذر تحميل السجلات من بيانات النظام.");
       })
       .finally(() => {
         if (request.isLatest()) setLoading(false);
@@ -238,11 +258,16 @@ export function LogsView() {
             </div>
           </div>
 
+          <CountScopeSummary
+            systemTotal={systemTotalCount}
+            filteredTotal={totalCount}
+            pageCount={logs.length}
+          />
+
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-muted/30 px-3 py-2 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">قاعدة البيانات</Badge>
-              <span className="text-muted-foreground">المعروض: {currentRangeLabel}</span>
-              {loading ? <Badge variant="outline">جاري التحميل...</Badge> : null}
+              <span className="text-muted-foreground">نطاق النتائج: {currentRangeLabel}</span>
+              {loading ? <Badge variant="outline">جارٍ تحميل البيانات...</Badge> : null}
             </div>
             <Button
               variant="outline"
@@ -323,7 +348,7 @@ export function LogsView() {
                   <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">لا توجد سجلات حسب الفلترة الحالية.</td></tr>
                 ) : null}
                 {loading && logs.length === 0 ? (
-                  <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">جاري تحميل السجلات من قاعدة البيانات...</td></tr>
+                  <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">جاري تحميل السجلات من بيانات النظام...</td></tr>
                 ) : null}
               </tbody>
             </table>

@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 
 /**
- * ملف الطالب يجب أن يعرض تاريخه الحقيقي من قاعدة البيانات، وليس من الكاش المحلي.
+ * ملف الطالب يجب أن يعرض تاريخه الحقيقي من بيانات النظام، وليس من البيانات المؤقتة المحلي.
  * هذا المسار يجلب كل السجلات المرتبطة بطالب واحد حتى لو لم يفتح المستخدم
  * صفحات الدرجات/الفرص/الإجازات قبل فتح ملف الطالب.
  */
@@ -116,6 +116,6 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    return routeErrorResponse(error, "تعذر تحميل لوغ ملف الطالب من قاعدة البيانات.");
+    return routeErrorResponse(error, "تعذر تحميل لوغ ملف الطالب من بيانات النظام.");
   }
 }

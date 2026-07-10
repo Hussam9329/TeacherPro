@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import {
   formatAppDate,
   getPhoneValidationError,
@@ -273,13 +273,13 @@ export function StudentRegisterView() {
       const context = await studentRegisterApi.context();
       if (!context) {
         setRegisterContext(null);
-        setContextError("تعذر تحميل الدورات من قاعدة البيانات.");
+        setContextError("تعذر تحميل الدورات من بيانات النظام.");
         return;
       }
       setRegisterContext(context);
     } catch {
       setRegisterContext(null);
-      setContextError("تعذر الاتصال بالخادم لتحميل سياق التسجيل.");
+      setContextError("تعذر الاتصال بالنظام لتحميل سياق التسجيل.");
     } finally {
       setContextLoading(false);
     }
@@ -587,9 +587,9 @@ export function StudentRegisterView() {
 
   const validateRequiredFields = () => {
     if (contextLoading)
-      return "انتظر اكتمال تحميل سياق التسجيل من قاعدة البيانات";
+      return "انتظر اكتمال تحميل سياق التسجيل من بيانات النظام";
     if (!registerContext) {
-      return contextError || "تعذر تحميل سياق التسجيل من قاعدة البيانات";
+      return contextError || "تعذر تحميل سياق التسجيل من بيانات النظام";
     }
     if (selectedCourseCannotRegister) {
       return selectedCourseHasChapterConflict
@@ -621,7 +621,7 @@ export function StudentRegisterView() {
     }
     // Study type validation
     if (courseAvailableStudyTypes.length > 0 && !form.studyType) {
-      return "يرجى اختيار نوع الدراسة";
+      return "يرجى اختيار نوع البرنامج";
     }
     // Location scope validation
     if (courseLocationScopes.length > 0 && !form.locationScope) {
@@ -660,8 +660,8 @@ export function StudentRegisterView() {
       return "فترة السماح يجب أن تكون رقماً من 0 إلى 30 يوم";
     }
 
-    // فحص التكرار النهائي يتم في السيرفر باستعلام مباشر على المفاتيح الفريدة.
-    // الفحص المحلي أدناه للعرض فقط لأن كاش الطلاب قد يكون جزئياً أو غير محمّل بالكامل.
+    // فحص التكرار النهائي يتم في النظام باستعلام مباشر على المفاتيح الفريدة.
+    // الفحص المحلي أدناه للعرض فقط لأن بيانات الطلاب المؤقتة قد يكون جزئياً أو غير محمّل بالكامل.
     return null;
   };
 
@@ -705,14 +705,14 @@ export function StudentRegisterView() {
       }
       emitTeacherProDataChanged({
         source: "local-mutation",
-        reason: "تسجيل طالب من السيرفر",
+        reason: "تسجيل طالب من النظام",
         scopes: ["students", "opportunities", "dashboard"],
       });
 
       window.localStorage.removeItem(STUDENT_DRAFT_KEY);
       setForm(emptyForm());
       void loadRegisterContext();
-      toast.success("تم حفظ بيانات الطالب من قاعدة البيانات", {
+      toast.success("تم حفظ بيانات الطالب من بيانات النظام", {
         description: `${response.student?.code ? `الكود: ${response.student.code} — ` : ""}${
           response.opportunitiesWarning || gracePeriodDescription
         }`,
@@ -746,7 +746,7 @@ export function StudentRegisterView() {
         <CardContent className="p-4 md:p-6 lg:p-8">
           {contextLoading ? (
             <LoadingState
-              title="جاري تحميل سياق التسجيل من قاعدة البيانات..."
+              title="جاري تحميل سياق التسجيل من بيانات النظام..."
               description="نحضّر الدورات النشطة والفصول والفرص الحقيقية قبل السماح بالحفظ."
             />
           ) : contextError ? (
@@ -1045,7 +1045,7 @@ export function StudentRegisterView() {
                       htmlFor="reg-studyType"
                       className="font-bold text-foreground"
                     >
-                      نوع الدراسة <RequiredMark />
+                      نوع البرنامج <RequiredMark />
                     </Label>
                     <Select
                       name="studyType"
@@ -1065,7 +1065,7 @@ export function StudentRegisterView() {
                         className={selectTriggerClass}
                         aria-required="true"
                       >
-                        <SelectValue placeholder="اختر نوع الدراسة..." />
+                        <SelectValue placeholder="اختر نوع البرنامج..." />
                       </SelectTrigger>
                       <SelectContent>
                         {courseAvailableStudyTypes.map((st) => (
@@ -1315,7 +1315,7 @@ export function StudentRegisterView() {
                     htmlFor="reg-telegram"
                     className="font-bold text-foreground"
                   >
-                    معرف التليكرام
+                    معرف التيليجرام
                   </Label>
                   <div className="relative">
                     <FieldIcon icon={Send} />
@@ -1337,8 +1337,8 @@ export function StudentRegisterView() {
                   </div>
                   {duplicateTelegramStudent && (
                     <p className="text-xs font-bold text-destructive">
-                      تنبيه محلي: معرف التليكرام موجود في الكاش للطالب{" "}
-                      {duplicateTelegramStudent.name}. السيرفر سيفحص نهائياً عند
+                      تنبيه محلي: معرف التيليجرام موجود في البيانات المؤقتة للطالب{" "}
+                      {duplicateTelegramStudent.name}. النظام سيفحص نهائياً عند
                       الحفظ.
                     </p>
                   )}
@@ -1370,8 +1370,8 @@ export function StudentRegisterView() {
                   </div>
                   {duplicatePhoneStudent && (
                     <p className="text-xs font-bold text-destructive">
-                      تنبيه محلي: رقم الهاتف موجود في الكاش للطالب{" "}
-                      {duplicatePhoneStudent.name}. السيرفر سيفحص نهائياً عند
+                      تنبيه محلي: رقم الهاتف موجود في البيانات المؤقتة للطالب{" "}
+                      {duplicatePhoneStudent.name}. النظام سيفحص نهائياً عند
                       الحفظ.
                     </p>
                   )}
@@ -1504,7 +1504,7 @@ export function StudentRegisterView() {
                     ? "التسجيل موقوف لهذه الدورة لأن فيها أكثر من فصل نشط."
                     : selectedCourseHasNoActiveChapter
                       ? "تنبيه قبل الحفظ: هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص."
-                      : "راجع بيانات الطالب والدورة قبل الحفظ. الحفظ النهائي يتم من قاعدة البيانات."}
+                      : "راجع بيانات الطالب والدورة قبل الحفظ. الحفظ النهائي يتم من بيانات النظام."}
                 </span>
               </div>
               <Button
@@ -1524,7 +1524,7 @@ export function StudentRegisterView() {
                   <Save className="ml-2 h-5 w-5" />
                 )}
                 {isSubmitting
-                  ? "جاري الحفظ في قاعدة البيانات..."
+                  ? "جارٍ الحفظ..."
                   : "حفظ بيانات الطالب"}
               </Button>
             </div>

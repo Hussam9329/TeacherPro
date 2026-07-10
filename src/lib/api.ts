@@ -27,10 +27,10 @@ function toUserFriendlyError(
     normalized.includes("networkerror") ||
     normalized.includes("network error")
   ) {
-    return "تعذر الاتصال بالخادم. تحقق من الإنترنت ثم حاول مرة أخرى.";
+    return "تعذر الاتصال بالنظام. تحقق من الإنترنت ثم حاول مرة أخرى.";
   }
   if (normalized.includes("unexpected token") || normalized.includes("json")) {
-    return "استجابة الخادم غير مفهومة. حاول تحديث الصفحة.";
+    return "استجابة النظام غير مفهومة. حاول تحديث الصفحة.";
   }
   if (normalized.includes("id is required")) {
     return "تعذر تحديد السجل المطلوب. حدّث الصفحة ثم حاول مرة أخرى.";
@@ -39,7 +39,7 @@ function toUserFriendlyError(
     return "لا يمكن تنفيذ العملية لأن السجل مرتبط ببيانات أخرى.";
   }
   if (/^http\s?\d{3}$/i.test(message.trim())) {
-    return "تعذر تنفيذ العملية على الخادم. حاول مرة أخرى.";
+    return "تعذر تنفيذ العملية على النظام. حاول مرة أخرى.";
   }
 
   return message;
@@ -550,17 +550,22 @@ export interface StudentDeleteImpactResponse {
   source: "database";
 }
 
-export interface OpportunityStatsResponse {
+export interface OpportunityCountSet {
   total: number;
   hasOpportunities: number;
   noOpportunities: number;
   dismissed: number;
   active: number;
-  noActiveChapter?: number;
-  activeChapterConflicts?: number;
-  overLimit?: number;
-  fullOpportunities?: number;
-  belowFullOpportunities?: number;
+  noActiveChapter: number;
+  activeChapterConflicts: number;
+  overLimit: number;
+  fullOpportunities: number;
+  belowFullOpportunities: number;
+}
+
+export interface OpportunityStatsResponse extends OpportunityCountSet {
+  system: OpportunityCountSet;
+  filtered: OpportunityCountSet;
   source: "database";
 }
 
@@ -1716,6 +1721,7 @@ export const logApi = {
       modules?: string[];
       users?: string[];
       totalCount?: number;
+      systemTotalCount?: number;
       page?: number;
       pageSize?: number;
       totalPages?: number;

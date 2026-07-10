@@ -34,7 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import {
   formatBaghdadDateTime,
@@ -74,7 +74,7 @@ const examGradeExportColumns: ExportColumn<any>[] = [
   { key: "phone", label: "الهاتف", value: (row) => row.student?.phone || "" },
   {
     key: "telegram",
-    label: "التليكرام",
+    label: "التيليجرام",
     value: (row) => row.student?.telegram || "",
   },
   { key: "notes", label: "ملاحظات", value: (row) => row.grade.notes || "" },
@@ -553,13 +553,13 @@ export function ExamRecordsView() {
     setExamMutating(editDialog.id, false);
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر تعديل الامتحان من الخادم.");
+      toast.error(result.error || "تعذر تعديل الامتحان من النظام.");
       return;
     }
 
     setEditDialog(emptyEditState());
     await refreshExamRecordsAfterMutation("exam-records-edit");
-    toast.success("تم تعديل الامتحان من قاعدة البيانات وإعادة الاحتساب");
+    toast.success("تم تعديل الامتحان من بيانات النظام وإعادة الاحتساب");
   };
 
   const openScheduleDeactivateDialog = (examId: string) => {
@@ -586,7 +586,7 @@ export function ExamRecordsView() {
     });
     setExamMutating(deactivateDialog.id, false);
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر جدولة تعطيل الامتحان من الخادم.");
+      toast.error(result.error || "تعذر جدولة تعطيل الامتحان من النظام.");
       return;
     }
     setDeactivateDialog({
@@ -596,7 +596,7 @@ export function ExamRecordsView() {
       scheduledDeactivateAt: "",
     });
     await refreshExamRecordsAfterMutation("exam-records-schedule-deactivate");
-    toast.success("تمت جدولة تعطيل الامتحان من قاعدة البيانات");
+    toast.success("تمت جدولة تعطيل الامتحان من بيانات النظام");
   };
 
   const handleClearScheduledDeactivate = async () => {
@@ -604,7 +604,7 @@ export function ExamRecordsView() {
     const result = await examApi.update(deactivateDialog.id, { scheduledDeactivateAt: "" });
     setExamMutating(deactivateDialog.id, false);
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر إلغاء التعطيل المجدول من الخادم.");
+      toast.error(result.error || "تعذر إلغاء التعطيل المجدول من النظام.");
       return;
     }
     setDeactivateDialog({
@@ -614,7 +614,7 @@ export function ExamRecordsView() {
       scheduledDeactivateAt: "",
     });
     await refreshExamRecordsAfterMutation("exam-records-clear-schedule");
-    toast.success("تم إلغاء التعطيل المجدول من قاعدة البيانات");
+    toast.success("تم إلغاء التعطيل المجدول من بيانات النظام");
   };
 
   const openDeleteExamDialog = (examId: string) => {
@@ -654,7 +654,7 @@ export function ExamRecordsView() {
     const result = await examApi.remove(deleteDialog.id);
     setExamMutating(deleteDialog.id, false);
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر حذف الامتحان من الخادم.");
+      toast.error(result.error || "تعذر حذف الامتحان من النظام.");
       return;
     }
     setDeleteDialog({
@@ -665,7 +665,7 @@ export function ExamRecordsView() {
       dependentCount: 0,
     });
     await refreshExamRecordsAfterMutation("exam-records-delete");
-    toast.success("تم حذف الامتحان من قاعدة البيانات");
+    toast.success("تم حذف الامتحان من بيانات النظام");
   });
 
   const renderEditExamFields = () => {
@@ -1042,11 +1042,11 @@ export function ExamRecordsView() {
     const result = await examApi.update(exam.id, { active: !exam.active });
     setExamMutating(exam.id, false);
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر تغيير حالة الامتحان من الخادم.");
+      toast.error(result.error || "تعذر تغيير حالة الامتحان من النظام.");
       return;
     }
     await refreshExamRecordsAfterMutation(exam.active ? "exam-records-disable" : "exam-records-enable");
-    toast.success(exam.active ? "تم تعطيل الامتحان من قاعدة البيانات" : "تم تفعيل الامتحان من قاعدة البيانات");
+    toast.success(exam.active ? "تم تعطيل الامتحان من بيانات النظام" : "تم تفعيل الامتحان من بيانات النظام");
   };
 
   const renderExamDetailsPanel = (exam: Exam, details: ExamDetailItem[]) => (
@@ -1405,7 +1405,7 @@ export function ExamRecordsView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cards">الكارتات</SelectItem>
+                  <SelectItem value="cards">البطاقات</SelectItem>
                   <SelectItem value="table">الجدول</SelectItem>
                 </SelectContent>
               </Select>
@@ -1514,7 +1514,7 @@ export function ExamRecordsView() {
                 <p>الامتحان: &quot;{deleteDialog.name}&quot;</p>
                 {deleteDialog.gradeCount === null ? (
                   <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-                    جاري التحقق من قاعدة البيانات لمعرفة هل توجد درجات مرتبطة
+                    جاري التحقق من بيانات النظام لمعرفة هل توجد درجات مرتبطة
                     بهذا الامتحان.
                   </p>
                 ) : deleteDialog.gradeCount > 0 ? (

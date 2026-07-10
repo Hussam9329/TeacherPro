@@ -39,7 +39,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import { formatAppDate } from "@/lib/format";
 import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
@@ -48,7 +48,7 @@ import { formatGradeScore, isGradeEntered } from "@/lib/exam-utils";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { CheckCircle2, UserX } from "lucide-react";
-import { StatCard } from "./ui-kit";
+import { CountScopeSummary, StatCard } from "./ui-kit";
 import {
   examMatchesAcademicFilters,
   getAcademicCourseProgramFilterOptions,
@@ -101,7 +101,7 @@ const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
   { key: "code", label: "الكود", value: ({ student }) => student?.code || "" },
   {
     key: "telegram",
-    label: "التليكرام",
+    label: "التيليجرام",
     value: ({ student }) => student?.telegram || "",
   },
   { key: "exam", label: "الامتحان", value: ({ exam }) => exam?.name || "" },
@@ -160,6 +160,8 @@ export function GradeRecordsView() {
     null,
   );
   const [gradeCoverageStats, setGradeCoverageStats] =
+    useState<GradeCoverageStatsResponse | null>(null);
+  const [systemGradeCoverageStats, setSystemGradeCoverageStats] =
     useState<GradeCoverageStatsResponse | null>(null);
   const [gradeCoverageStatsLoading, setGradeCoverageStatsLoading] =
     useState(false);
@@ -230,7 +232,7 @@ export function GradeRecordsView() {
           if (!silent) {
             setServerGrades(null);
             setServerGradesError(
-              "تعذر تحميل سجل الدرجات من الخادم. تم تعطيل التعديل والحذف حتى يرجع الاتصال.",
+              "تعذر تحميل سجل الدرجات من النظام. تم تعطيل التعديل والحذف حتى يرجع الاتصال.",
             );
           }
           return;
@@ -255,7 +257,7 @@ export function GradeRecordsView() {
         if (controller.signal.aborted || silent) return;
         setServerGrades(null);
         setServerGradesError(
-          "تعذر تحميل سجل الدرجات من الخادم. تم تعطيل التعديل والحذف حتى يرجع الاتصال.",
+          "تعذر تحميل سجل الدرجات من النظام. تم تعطيل التعديل والحذف حتى يرجع الاتصال.",
         );
       })
       .finally(() => {
@@ -324,6 +326,19 @@ export function GradeRecordsView() {
     syncKey,
     isBackgroundSync,
   ]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    gradeCoverageStatsApi
+      .get({}, { signal: controller.signal, quietAbort: true })
+      .then((result) => {
+        if (!controller.signal.aborted) setSystemGradeCoverageStats(result);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSystemGradeCoverageStats(null);
+      });
+    return () => controller.abort();
+  }, [serverRefreshKey, syncKey]);
 
   const canRunGradeRecordActions = !serverGradesError && serverGrades !== null;
 
@@ -432,7 +447,7 @@ export function GradeRecordsView() {
 
   const toggleAcademicAccounting = async (gradeId: string, checked: boolean) => {
     if (!canRunGradeRecordActions) {
-      toast.error("تعذر تنفيذ الإجراء قبل تحميل سجل الدرجات من الخادم.");
+      toast.error("تعذر تنفيذ الإجراء قبل تحميل سجل الدرجات من النظام.");
       return;
     }
     if (!isAcademicAccountingRow(gradeId)) {
@@ -441,7 +456,7 @@ export function GradeRecordsView() {
     }
     const result = await gradeApi.update(gradeId, { academicAccountingChecked: checked });
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر حفظ تأشير المحاسبة من الخادم.");
+      toast.error(result.error || "تعذر حفظ تأشير المحاسبة من النظام.");
       return;
     }
     updateServerGradeRow(gradeId, { academicAccountingChecked: checked });
@@ -584,15 +599,11 @@ export function GradeRecordsView() {
   );
 
   const displayedGradeCoverage = {
-    withGrade: gradeCoverageStats?.withGrade,
-    withoutGrade: gradeCoverageStats?.withoutGrade,
-    total: gradeCoverageStats?.total,
-    scopeLabel: filterExamId
-      ? `ضمن ${examById.get(filterExamId)?.name || "الامتحان المحدد"}`
-      : "ضمن كل الامتحانات",
-    missingHint: filterExamId
-      ? "لم تُدخل لهم درجة لهذا الامتحان"
-      : "لا يملكون أي سجل درجة لحد الآن",
+    withGrade: systemGradeCoverageStats?.withGrade,
+    withoutGrade: systemGradeCoverageStats?.withoutGrade,
+    total: systemGradeCoverageStats?.total,
+    scopeLabel: "إجمالي الطلاب في النظام",
+    missingHint: "لا يملكون درجات مسجلة حتى الآن",
   };
 
   const statValue = (value: number | undefined) => {
@@ -669,7 +680,7 @@ export function GradeRecordsView() {
 
   const openEditGradeDialog = (gradeId: string) => {
     if (!canRunGradeRecordActions) {
-      toast.error("تعذر تعديل الدرجة قبل تحميل سجل الدرجات من الخادم.");
+      toast.error("تعذر تعديل الدرجة قبل تحميل سجل الدرجات من النظام.");
       return;
     }
     const grade = gradeForAction(gradeId);
@@ -712,7 +723,7 @@ export function GradeRecordsView() {
 
   const saveEditGradeUnchecked = async () => {
     if (!canRunGradeRecordActions) {
-      toast.error("تعذر تعديل الدرجة قبل تحميل سجل الدرجات من الخادم.");
+      toast.error("تعذر تعديل الدرجة قبل تحميل سجل الدرجات من النظام.");
       return;
     }
     const validated = validateEditDialogScore();
@@ -727,7 +738,7 @@ export function GradeRecordsView() {
     });
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر تعديل الدرجة من الخادم.");
+      toast.error(result.error || "تعذر تعديل الدرجة من النظام.");
       return;
     }
 
@@ -752,7 +763,7 @@ export function GradeRecordsView() {
       notes: "",
     });
     refreshGradeRecordsAfterMutation("grade-records-edit");
-    toast.success("تم تعديل الدرجة من قاعدة البيانات وإعادة الاحتساب");
+    toast.success("تم تعديل الدرجة من بيانات النظام وإعادة الاحتساب");
   };
 
   const handleSaveEditGrade = () => {
@@ -776,7 +787,7 @@ export function GradeRecordsView() {
 
   const openDeleteGradeDialog = (gradeId: string) => {
     if (!canRunGradeRecordActions) {
-      toast.error("تعذر حذف الدرجة قبل تحميل سجل الدرجات من الخادم.");
+      toast.error("تعذر حذف الدرجة قبل تحميل سجل الدرجات من النظام.");
       return;
     }
     const grade = gradeForAction(gradeId);
@@ -793,7 +804,7 @@ export function GradeRecordsView() {
 
   const handleDeleteGrade = runDeleteGradeLocked(async () => {
     if (!canRunGradeRecordActions) {
-      toast.error("تعذر حذف الدرجة قبل تحميل سجل الدرجات من الخادم.");
+      toast.error("تعذر حذف الدرجة قبل تحميل سجل الدرجات من النظام.");
       return;
     }
     const grade = gradeForAction(deleteDialog.id);
@@ -803,7 +814,7 @@ export function GradeRecordsView() {
     }
     const result = await gradeApi.remove(deleteDialog.id, grade.studentId, grade.examId);
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر حذف الدرجة من الخادم.");
+      toast.error(result.error || "تعذر حذف الدرجة من النظام.");
       return;
     }
     setServerGrades((current) =>
@@ -813,7 +824,7 @@ export function GradeRecordsView() {
     );
     setServerTotalCount((count) => Math.max(0, count - 1));
     refreshGradeRecordsAfterMutation("grade-records-delete");
-    toast.success("تم حذف الدرجة من قاعدة البيانات");
+    toast.success("تم حذف الدرجة من بيانات النظام");
     setDeleteDialog({ open: false, id: "", label: "" });
   });
 
@@ -856,20 +867,27 @@ export function GradeRecordsView() {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <StatCard
-          label="طلاب لديهم درجة"
+          label="طلاب لديهم درجات مسجلة"
           value={statValue(displayedGradeCoverage.withGrade)}
           icon={CheckCircle2}
           tone="success"
           hint={`${displayedGradeCoverage.scopeLabel} من أصل ${statValue(displayedGradeCoverage.total)} طالب`}
         />
         <StatCard
-          label="طلاب بلا درجة"
+          label="طلاب بلا درجات مسجلة"
           value={statValue(displayedGradeCoverage.withoutGrade)}
           icon={UserX}
           tone="warning"
           hint={displayedGradeCoverage.missingHint}
         />
       </div>
+
+      <CountScopeSummary
+        subject="الطلاب"
+        systemTotal={statValue(systemGradeCoverageStats?.total)}
+        filteredTotal={statValue(gradeCoverageStats?.total)}
+        pageCount={paged.length}
+      />
 
       <Card>
         <CardContent className="p-4">
@@ -887,7 +905,7 @@ export function GradeRecordsView() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="اسم / كود / تليكرام / امتحان"
+                placeholder="اسم / كود / تيليجرام / امتحان"
               />
             </div>
             <div className="space-y-1">
@@ -966,7 +984,7 @@ export function GradeRecordsView() {
             )}
             <div className="space-y-1">
               <Label htmlFor="grade-records-study-type" className="text-xs">
-                نوع الدراسة
+                نوع البرنامج
               </Label>
               <Select
                 value={filterStudyType || "all"}
@@ -1071,7 +1089,7 @@ export function GradeRecordsView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cards">الكارتات</SelectItem>
+                  <SelectItem value="cards">البطاقات</SelectItem>
                   <SelectItem value="table">الجدول</SelectItem>
                 </SelectContent>
               </Select>
@@ -1099,7 +1117,7 @@ export function GradeRecordsView() {
               <h3 className="text-sm font-black">ورقة إدخال الدرجة</h3>
               <p className="mt-1 text-xs leading-6 text-muted-foreground">
                 {selectedFilteredExam
-                  ? `الامتحان المحدد: ${selectedFilteredExam.name}. الورقة تبقى متاحة من تسجيل الدرجات وتعرض الطلاب من قاعدة البيانات حسب هذا الامتحان.`
+                  ? `الامتحان المحدد: ${selectedFilteredExam.name}. الورقة تبقى متاحة من تسجيل الدرجات وتعرض الطلاب من بيانات النظام حسب هذا الامتحان.`
                   : "اختر امتحاناً من الفلتر حتى تعرف الورقة التي تريد إدخال درجاتها."}
               </p>
             </div>
@@ -1116,7 +1134,7 @@ export function GradeRecordsView() {
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
-          عرض {paged.length} من {filteredTotalCount} سجل
+          المعروض في الصفحة: {paged.length} · المطابقون للفلاتر: {filteredTotalCount}
         </span>
         <div className="flex items-center gap-2">
           <Label htmlFor="grade-records-pageSize" className="text-xs">
@@ -1143,7 +1161,7 @@ export function GradeRecordsView() {
 
       {serverGradesLoading && (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
-          جاري تحميل سجل الدرجات من قاعدة البيانات...
+          جاري تحميل سجل الدرجات من بيانات النظام...
         </div>
       )}
 
@@ -1358,7 +1376,7 @@ export function GradeRecordsView() {
             السابق
           </Button>
           <span className="text-sm text-muted-foreground">
-            {page} / {totalPages}
+            صفحة {page} من {totalPages} · المعروض في الصفحة: {paged.length}
           </span>
           <Button
             variant="outline"

@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     return routeErrorResponse(
       error,
-      "تعذر تحميل إحصائيات الطلاب من قاعدة البيانات حالياً.",
+      "تعذر تحميل إحصائيات الطلاب من بيانات النظام حالياً.",
     );
   }
 }

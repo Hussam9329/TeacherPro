@@ -389,7 +389,7 @@ export async function GET(req: NextRequest) {
     const payload = await buildPledgeRows(new URL(req.url).searchParams);
     return NextResponse.json(payload);
   } catch (error) {
-    return routeErrorResponse(error, "تعذر تحميل التعهدات من قاعدة البيانات.");
+    return routeErrorResponse(error, "تعذر تحميل التعهدات من بيانات النظام.");
   }
 }
 

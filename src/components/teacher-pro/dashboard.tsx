@@ -106,7 +106,7 @@ export function DashboardView() {
         });
         const data = await res.json().catch(() => null);
         if (!res.ok) {
-          throw new Error(data?.error || "تعذر تحميل الإحصائيات من قاعدة البيانات.");
+          throw new Error(data?.error || "تعذر تحميل الإحصائيات من بيانات النظام.");
         }
         if (!request.isLatest()) return;
         setStats(data as DashboardStats);
@@ -116,7 +116,7 @@ export function DashboardView() {
         setStatsError(
           error instanceof Error
             ? error.message
-            : "تعذر تحميل الإحصائيات من قاعدة البيانات.",
+            : "تعذر تحميل الإحصائيات من بيانات النظام.",
         );
         if (!background) setStats(null);
       } finally {
@@ -136,28 +136,28 @@ export function DashboardView() {
       value: stats?.activeStudents,
       icon: Users,
       tone: "success" as const,
-      hint: "عدّ مباشر من قاعدة البيانات",
+      hint: "عدّ مباشر من بيانات النظام",
     },
     {
       label: "طلاب مفصولون",
       value: stats?.dismissedStudents,
       icon: Shield,
       tone: "warning" as const,
-      hint: "عدّ مباشر من قاعدة البيانات",
+      hint: "عدّ مباشر من بيانات النظام",
     },
     {
       label: "إجمالي الطلاب",
       value: stats?.totalStudents,
       icon: BookOpen,
       tone: "info" as const,
-      hint: "كل الطلاب المسجلين في قاعدة البيانات",
+      hint: "كل الطلاب المسجلين في بيانات النظام",
     },
     {
       label: "أوراق بانتظار التصحيح",
       value: stats?.pendingCorrectionSheets,
       icon: Clock,
       tone: "danger" as const,
-      hint: "كل الأوراق غير المكتملة في قاعدة البيانات",
+      hint: "كل الأوراق غير المكتملة في بيانات النظام",
     },
   ];
 
@@ -186,16 +186,16 @@ export function DashboardView() {
               <Database className="size-5" />
             </div>
             <div>
-              <p className="font-black">مصدر أرقام اللوحة: قاعدة البيانات مباشرة</p>
+              <p className="font-black">مصدر أرقام اللوحة: بيانات النظام</p>
               <p className="mt-1 text-xs leading-6 text-muted-foreground">
-                لا يتم حساب كروت الرئيسية من كاش الطلاب أو الصفحات المحملة جزئياً. آخر تحديث: {statsLoading ? "جاري التحميل" : formatStatsTime(stats?.generatedAt)}
+                لا يتم حساب بطاقات الرئيسية من بيانات الطلاب المؤقتة أو الصفحات المحملة جزئياً. آخر تحديث: {statsLoading ? "جاري التحميل" : formatStatsTime(stats?.generatedAt)}
               </p>
               {statsError && <p className="mt-1 text-xs font-bold text-destructive">{statsError}</p>}
             </div>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={() => void loadStats({ background: true })} disabled={statsLoading}>
             <RefreshCw className={cn("ml-2 size-4", statsLoading && "animate-spin")} />
-            تحديث من قاعدة البيانات
+            تحديث من بيانات النظام
           </Button>
         </CardContent>
       </Card>
@@ -208,7 +208,7 @@ export function DashboardView() {
               تنبيهات إدارية
             </CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              مشاكل محسوبة من قاعدة البيانات مباشرة حتى لا تختفي بسبب كاش أو فلتر جزئي.
+              مشاكل محسوبة من بيانات النظام حتى لا تختفي بسبب بيانات مؤقتة أو فلتر جزئي.
             </p>
           </div>
           <span className="rounded-full bg-muted px-3 py-1 text-xs font-bold text-muted-foreground">
@@ -226,7 +226,7 @@ export function DashboardView() {
             <EmptyState
               icon={AlertTriangle}
               title="تعذر عرض التنبيهات"
-              description="التنبيهات لا تُحسب من بيانات محلية ناقصة. أعد المحاولة بعد التأكد من اتصال قاعدة البيانات."
+              description="التنبيهات لا تُحسب من بيانات محلية ناقصة. أعد المحاولة بعد التأكد من اتصال بيانات النظام."
               action={
                 <Button type="button" variant="outline" onClick={() => void loadStats()}>
                   إعادة المحاولة
@@ -237,7 +237,7 @@ export function DashboardView() {
             <EmptyState
               icon={CheckCircle2}
               title="لا توجد تنبيهات حرجة حالياً"
-              description="لم ترجع قاعدة البيانات أي امتحانات ناقصة الدرجات، طلاب بلا فصل نشط، إجازات اليوم، فرص صفر، أو تعهدات معلقة."
+              description="لم ترجع بيانات النظام أي امتحانات ناقصة الدرجات، طلاب بلا فصل نشط، إجازات اليوم، فرص صفر، أو تعهدات معلقة."
             />
           ) : (
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
@@ -280,14 +280,14 @@ export function DashboardView() {
               <UserX className="size-5" />
             </div>
             <div>
-              <h3 className="text-lg font-black">الطلاب الغير موجودين</h3>
+              <h3 className="text-lg font-black">الطلاب غير الموجودين</h3>
               <p className="mt-1 text-sm leading-7 text-muted-foreground">
-                افتح كل الملاحظات التي يكتبها مدخل الدرجات عن الطلاب غير الموجودين في قوائم الامتحانات. العدد هنا من قاعدة البيانات مباشرة.
+                افتح كل الملاحظات التي يكتبها مدخل الدرجات عن الطلاب غير الموجودين في قوائم الامتحانات. العدد هنا من بيانات النظام.
               </p>
             </div>
           </div>
           <Button type="button" className="shrink-0" onClick={() => setSection("missing-students-notes")}>
-            الطلاب الغير موجودين
+            الطلاب غير الموجودين
             {(stats?.missingStudentsNotes ?? 0) > 0 && (
               <span className="mr-2 rounded-full bg-white/20 px-2 py-0.5 text-xs">
                 {stats?.missingStudentsNotes}
@@ -302,7 +302,7 @@ export function DashboardView() {
           <div>
             <CardTitle className="text-base">آخر الفعاليات</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
-              أحدث عمليات النظام من قاعدة البيانات مباشرة
+              أحدث عمليات النظام من بيانات النظام
             </p>
           </div>
           <Button

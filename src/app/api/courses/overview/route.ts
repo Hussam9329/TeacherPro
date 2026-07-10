@@ -61,7 +61,7 @@ function summarizeCourseWarnings(input: {
   for (const studyType of input.studyTypes) {
     const config = input.locationConfig[studyType as StudyType];
     if (!config || !Array.isArray(config.scopes) || config.scopes.length === 0) {
-      warnings.push(`نوع الدراسة "${studyType}" لا يحتوي إعداد مواقع مكتمل.`);
+      warnings.push(`نوع البرنامج "${studyType}" لا يحتوي إعداد مواقع مكتمل.`);
     }
   }
   return warnings;

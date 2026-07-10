@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
     if (conflict) {
       return NextResponse.json(
         {
-          error: "حساب التليكرام مرتبط بطالب آخر ولا يمكن ربطه مرتين.",
+          error: "حساب التيليجرام مرتبط بطالب آخر ولا يمكن ربطه مرتين.",
           conflictStudent: { id: conflict.id, name: conflict.name, phone: conflict.phone },
         },
         { status: 409 },
@@ -93,8 +93,8 @@ export async function POST(req: NextRequest) {
     });
 
     await writeSystemAuditLog(
-      "بوت التليكرام",
-      "ربط طالب بحساب تليكرام",
+      "بوت التيليجرام",
+      "ربط طالب بحساب تيليجرام",
       {
         studentId: updated.id,
         studentName: updated.name,

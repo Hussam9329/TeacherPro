@@ -402,7 +402,7 @@ export async function GET(req: NextRequest) {
       {
         id: 'dismissed-needs-pledge',
         title: 'طلاب مفصولون يحتاجون تعهد',
-        description: 'طلاب مفصولون لا يوجد لهم تعهد ولي أمر محفوظ في قاعدة البيانات.',
+        description: 'طلاب مفصولون لا يوجد لهم تعهد ولي أمر محفوظ في بيانات النظام.',
         count: dismissedNeedsPledgeCount,
         tone: 'warning',
         actionSection: 'follow-up-pledges',
@@ -425,7 +425,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error('[API] /api/stats error:', error);
     return NextResponse.json(
-      { error: 'تعذر تحميل الإحصائيات والتنبيهات من قاعدة البيانات حالياً.' },
+      { error: 'تعذر تحميل الإحصائيات والتنبيهات من بيانات النظام حالياً.' },
       { status: 500 },
     );
   }

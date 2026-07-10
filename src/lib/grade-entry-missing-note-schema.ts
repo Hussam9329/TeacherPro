@@ -59,4 +59,4 @@ export async function withGradeEntryMissingNoteSchema<T>(
 }
 
 export const gradeEntryMissingNoteSchemaMessage =
-  'جدول ملاحظات الطلاب الغير موجودين غير جاهز بعد أو يحتاج تنظيف علاقات قديمة. سيُصلح تلقائياً عند أول محاولة استخدام.';
+  'جدول ملاحظات الطلاب غير الموجودين غير جاهز بعد أو يحتاج تنظيف علاقات قديمة. سيُصلح تلقائياً عند أول محاولة استخدام.';

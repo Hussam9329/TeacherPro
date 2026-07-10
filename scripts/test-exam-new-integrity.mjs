@@ -53,7 +53,7 @@ must(
 
 must(
   page.includes("لا يمكن حفظ الامتحان بسبب مشاكل الدورات") &&
-    page.includes("انتظر تحميل سياق إضافة الامتحان من قاعدة البيانات"),
+    page.includes("انتظر تحميل سياق إضافة الامتحان من بيانات النظام"),
   "التحقق المحلي يوقف الحفظ عند غياب سياق الخادم أو وجود مشاكل دورات",
   "يجب أن يمنع validateForm الحفظ قبل تحميل سياق DB أو عند وجود blockers.",
 );
@@ -61,7 +61,7 @@ must(
 must(
   page.includes("emitTeacherProDataChanged") &&
     page.includes("exam-created") &&
-    page.includes("تمت إضافة الامتحان من قاعدة البيانات"),
+    page.includes("تمت إضافة الامتحان من بيانات النظام"),
   "بعد نجاح الخادم يتم بث مزامنة واضحة لباقي النظام",
   "يجب بث مزامنة بعد إضافة الامتحان حتى تعترف باقي الصفحات بالتغيير.",
 );
@@ -103,7 +103,7 @@ must(
 
 must(
   route.includes("writeRequestAuditLog") &&
-    route.includes("إضافة امتحان من قاعدة البيانات") &&
+    route.includes("إضافة امتحان من بيانات النظام") &&
     route.includes("source: 'database'"),
   "API إضافة الامتحان يسجل Audit ويرجع مصدر قاعدة البيانات",
   "يجب تسجيل إضافة الامتحان في audit log وإرجاع source=database.",

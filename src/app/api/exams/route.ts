@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
       await syncExamCourseLinks(tx, createdExam.id, parsedCourseIds);
       return createdExam;
     });
-    await writeRequestAuditLog(req, 'الامتحانات', 'إضافة امتحان من قاعدة البيانات', {
+    await writeRequestAuditLog(req, 'الامتحانات', 'إضافة امتحان من بيانات النظام', {
       examId: exam.id,
       examName: exam.name,
       courseIds: parsedCourseIds,

@@ -30,12 +30,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
+import { CountScopeSummary } from "./ui-kit";
 
 const opportunityExportColumns: ExportColumn<any>[] = [
   { key: "student", label: "الطالب", value: (s) => s.name || "" },
@@ -44,7 +45,7 @@ const opportunityExportColumns: ExportColumn<any>[] = [
   { key: "status", label: "الحالة", value: (s) => s.status || "" },
   {
     key: "opportunities",
-    label: "الفرص الحالية",
+    label: "فرص محفوظة",
     value: (s) => s.opportunities ?? "",
   },
   {
@@ -53,7 +54,7 @@ const opportunityExportColumns: ExportColumn<any>[] = [
     value: (s) => s.baseOpportunities ?? "",
   },
   { key: "phone", label: "الهاتف", value: (s) => s.phone || "" },
-  { key: "telegram", label: "التليكرام", value: (s) => s.telegram || "" },
+  { key: "telegram", label: "التيليجرام", value: (s) => s.telegram || "" },
 ];
 
 type OpportunityStudent = Student & {
@@ -170,7 +171,7 @@ export function OpportunitiesView() {
         if (!cancelled && !silent) {
           setServerStudents([]);
           setServerTotalPages(1);
-          toast.error("تعذر تحميل طلاب الفرص من قاعدة البيانات.");
+          toast.error("تعذر تحميل طلاب الفرص من بيانات النظام.");
         }
       })
       .finally(() => {
@@ -296,7 +297,7 @@ export function OpportunitiesView() {
       .catch(() => {
         if (!cancelled) {
           setDetailsLogs([]);
-          toast.error("تعذر تحميل تفاصيل فرص الطالب من قاعدة البيانات.");
+          toast.error("تعذر تحميل تفاصيل فرص الطالب من بيانات النظام.");
         }
       })
       .finally(() => {
@@ -344,20 +345,18 @@ export function OpportunitiesView() {
     if (databaseStatsLoading && !databaseStats) return "…";
     return value ?? "—";
   };
-  const statsTotal = databaseStatValue(databaseStats?.total);
-  const statsHasOpportunities = databaseStatValue(
-    databaseStats?.hasOpportunities,
-  );
-  const statsNoOpportunities = databaseStatValue(
-    databaseStats?.noOpportunities,
-  );
-  const statsDismissed = databaseStatValue(databaseStats?.dismissed);
-  const statsNoActiveChapter = databaseStatValue(databaseStats?.noActiveChapter);
-  const statsConflicts = databaseStatValue(databaseStats?.activeChapterConflicts);
-  const statsOverLimit = databaseStatValue(databaseStats?.overLimit);
-  const statsFullOpportunities = databaseStatValue(databaseStats?.fullOpportunities);
+  const systemStats = databaseStats?.system;
+  const filteredStats = databaseStats?.filtered;
+  const statsTotal = databaseStatValue(systemStats?.total);
+  const statsHasOpportunities = databaseStatValue(systemStats?.hasOpportunities);
+  const statsNoOpportunities = databaseStatValue(systemStats?.noOpportunities);
+  const statsDismissed = databaseStatValue(systemStats?.dismissed);
+  const statsNoActiveChapter = databaseStatValue(systemStats?.noActiveChapter);
+  const statsConflicts = databaseStatValue(systemStats?.activeChapterConflicts);
+  const statsOverLimit = databaseStatValue(systemStats?.overLimit);
+  const statsFullOpportunities = databaseStatValue(systemStats?.fullOpportunities);
   const statsBelowFullOpportunities = databaseStatValue(
-    databaseStats?.belowFullOpportunities,
+    systemStats?.belowFullOpportunities,
   );
   const statsSuffix = "";
 
@@ -623,7 +622,7 @@ export function OpportunitiesView() {
     });
 
     if (!result.ok) {
-      toast.error(result.error || "تعذر تنفيذ إجراء الفرص من الخادم");
+      toast.error(result.error || "تعذر تنفيذ إجراء الفرص من النظام");
       return;
     }
 
@@ -641,10 +640,10 @@ export function OpportunitiesView() {
 
     toast.success(
       actionDialog.type === "deduct"
-        ? "تم خصم الفرص من الخادم وإعادة الاحتساب"
+        ? "تم خصم الفرص من النظام وإعادة الاحتساب"
         : actionDialog.type === "add"
-          ? "تمت إضافة الفرص من الخادم وإعادة الاحتساب"
-          : "تمت إعادة تعيين الفرص من الخادم وإعادة الاحتساب",
+          ? "تمت إضافة الفرص من النظام وإعادة الاحتساب"
+          : "تمت إعادة تعيين الفرص من النظام وإعادة الاحتساب",
     );
     setActionDialog({ studentId: "", type: "add", open: false });
     setReason("");
@@ -660,7 +659,7 @@ export function OpportunitiesView() {
       reason: "تراجع من صفحة إدارة الفرص",
     });
     if (!result.ok) {
-      toast.error(result.error || "تعذر التراجع عن حركة الفرص من الخادم");
+      toast.error(result.error || "تعذر التراجع عن حركة الفرص من النظام");
       return;
     }
     const updatedStudent = result.data?.student as OpportunityStudent | undefined;
@@ -736,7 +735,7 @@ export function OpportunitiesView() {
     }
 
     toast.success(
-      `${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${affected} طالب من كل المطابقين في قاعدة البيانات${bulkSkippedCount ? `، وتم استثناء ${bulkSkippedCount}` : ""}`,
+      `${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${affected} طالب من كل المطابقين في بيانات النظام${bulkSkippedCount ? `، وتم استثناء ${bulkSkippedCount}` : ""}`,
     );
     setBulkActionDialog({ type: "add", open: false });
     setBulkReason("");
@@ -899,10 +898,10 @@ export function OpportunitiesView() {
               عمليات جماعية حسب الفلترة الحالية
             </p>
             <p className="text-xs text-muted-foreground">
-              سيطبق الإجراء على كل الطلاب المطابقين للفلاتر من قاعدة البيانات،
+              سيطبق الإجراء على كل الطلاب المطابقين للفلاتر من بيانات النظام،
               وليس الصفحة الحالية فقط.{" "}
               {bulkTargetLoading
-                ? "جاري احتساب النطاق الكامل من قاعدة البيانات…"
+                ? "جاري احتساب النطاق الكامل من بيانات النظام…"
                 : ""}{" "}
               {bulkSkippedNoActiveChapterCount > 0
                 ? `يوجد ${bulkSkippedNoActiveChapterCount} طالب بلا فصل نشط.`
@@ -944,14 +943,19 @@ export function OpportunitiesView() {
       </Card>
 
       {/* Opportunity Overview */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-8">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-black">إجمالي الطلاب في النظام</h3>
+          <Badge variant="outline">نطاق كلي</Badge>
+        </div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-8">
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
               {statsHasOpportunities}
               {statsSuffix}
             </p>
-            <p className="text-xs text-muted-foreground">طلاب لديهم فرص</p>
+            <p className="text-xs text-muted-foreground">طلاب لديهم فرص محفوظة</p>
           </CardContent>
         </Card>
         <Card>
@@ -960,7 +964,7 @@ export function OpportunitiesView() {
               {statsNoOpportunities}
               {statsSuffix}
             </p>
-            <p className="text-xs text-muted-foreground">طلاب نشطون بدون فرص</p>
+            <p className="text-xs text-muted-foreground">طلاب نشطون بلا فرص محفوظة</p>
           </CardContent>
         </Card>
         <Card>
@@ -979,7 +983,7 @@ export function OpportunitiesView() {
               {statsSuffix}
             </p>
             <p className="text-xs text-muted-foreground">
-              إجمالي من قاعدة البيانات
+              إجمالي الطلاب في النظام
             </p>
           </CardContent>
         </Card>
@@ -988,7 +992,7 @@ export function OpportunitiesView() {
             <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
               {statsNoActiveChapter}
             </p>
-            <p className="text-xs text-muted-foreground">دورات بلا فصل نشط</p>
+            <p className="text-xs text-muted-foreground">طلاب بلا فصل نشط</p>
           </CardContent>
         </Card>
         <Card>
@@ -996,7 +1000,7 @@ export function OpportunitiesView() {
             <p className="text-2xl font-bold text-destructive">
               {statsConflicts}
             </p>
-            <p className="text-xs text-muted-foreground">دورات فيها تعارض فصول</p>
+            <p className="text-xs text-muted-foreground">طلاب ضمن تعارض فصول</p>
           </CardContent>
         </Card>
         <Card>
@@ -1004,7 +1008,7 @@ export function OpportunitiesView() {
             <p className="text-2xl font-bold text-primary">
               {statsFullOpportunities}
             </p>
-            <p className="text-xs text-muted-foreground">فرص كاملة</p>
+            <p className="text-xs text-muted-foreground">فرص محفوظة كاملة</p>
           </CardContent>
         </Card>
         <Card>
@@ -1013,7 +1017,7 @@ export function OpportunitiesView() {
               {statsBelowFullOpportunities}
             </p>
             <p className="text-xs text-muted-foreground">
-              طلاب فرصهم ناقصة
+              طلاب فرصهم المحفوظة ناقصة
             </p>
           </CardContent>
         </Card>
@@ -1025,7 +1029,15 @@ export function OpportunitiesView() {
             <p className="text-xs text-muted-foreground">فوق السقف</p>
           </CardContent>
         </Card>
+        </div>
       </div>
+
+      <CountScopeSummary
+        subject="الطلاب"
+        systemTotal={databaseStatValue(systemStats?.total)}
+        filteredTotal={databaseStatValue(filteredStats?.total)}
+        pageCount={paged.length}
+      />
 
       {/* Student Opportunities */}
       <Card>
@@ -1036,7 +1048,7 @@ export function OpportunitiesView() {
           <div className="space-y-2">
             {studentsLoading ? (
               <p className="empty-state py-8">
-                جاري تحميل الطلاب من قاعدة البيانات...
+                جاري تحميل الطلاب من بيانات النظام...
               </p>
             ) : paged.length === 0 ? (
               <p className="empty-state py-8">
@@ -1229,7 +1241,7 @@ export function OpportunitiesView() {
             السابق
           </Button>
           <span className="text-sm text-muted-foreground">
-            {page} / {totalPages}
+            صفحة {page} من {totalPages} · المعروض في الصفحة: {paged.length}
           </span>
           <Button
             variant="outline"
@@ -1333,7 +1345,7 @@ export function OpportunitiesView() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">الفرص الحالية</p>
+                  <p className="text-xs text-muted-foreground">فرص محفوظة</p>
                   <p className="font-bold">
                     {selectedDetailsStudent.opportunities}/
                     {selectedDetailsStudent.baseOpportunities}
@@ -1371,7 +1383,7 @@ export function OpportunitiesView() {
               <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
                 {detailsLogsLoading ? (
                   <p className="empty-state py-8">
-                    جاري تحميل سجل الطالب من قاعدة البيانات...
+                    جاري تحميل سجل الطالب من بيانات النظام...
                   </p>
                 ) : selectedDetailsLogs.length === 0 ? (
                   <p className="empty-state py-8">

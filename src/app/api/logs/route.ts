@@ -143,9 +143,10 @@ export async function GET(req: NextRequest) {
       ];
     }
 
-    const [logs, totalCount, modulesRaw, usersRaw] = await Promise.all([
+    const [logs, totalCount, systemTotalCount, modulesRaw, usersRaw] = await Promise.all([
       db.auditLog.findMany({ where, orderBy: { time: 'desc' }, skip, take: limit }),
       db.auditLog.count({ where }),
+      db.auditLog.count(),
       db.auditLog.findMany({ distinct: ['module'], select: { module: true }, orderBy: { module: 'asc' } }),
       db.auditLog.findMany({ distinct: ['userName'], select: { userName: true }, orderBy: { userName: 'asc' } }),
     ]);
@@ -197,6 +198,7 @@ export async function GET(req: NextRequest) {
       users: usersRaw.map((item) => item.userName || '').filter(Boolean),
       total: totalCount,
       totalCount,
+      systemTotalCount,
       page,
       limit,
       pageSize: limit,

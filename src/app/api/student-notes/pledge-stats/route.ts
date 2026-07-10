@@ -18,7 +18,7 @@ function dismissalGroupFromType(
 }
 
 /**
- * إحصائيات التعهدات من قاعدة البيانات مباشرة.
+ * إحصائيات التعهدات من بيانات النظام مباشرة.
  * لا تستخدم قائمة الطلاب المحملة في الواجهة لأنها قد تكون صفحة واحدة فقط.
  */
 export async function GET(req: NextRequest) {
@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     return routeErrorResponse(
       error,
-      "تعذر تحميل إحصائيات التعهدات من قاعدة البيانات.",
+      "تعذر تحميل إحصائيات التعهدات من بيانات النظام.",
     );
   }
 }

@@ -77,7 +77,7 @@ function classifyForExamStats(
 }
 
 /**
- * إحصائيات كروت سجل الامتحانات من قاعدة البيانات مباشرة.
+ * إحصائيات بطاقات سجل الامتحانات من بيانات النظام مباشرة.
  * تستخدم نفس تصنيف الدرجات المركزي حتى لا تختلف الأرقام عن التصدير والمكالمات.
  */
 export async function GET(req: NextRequest) {
@@ -211,6 +211,6 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    return routeErrorResponse(error, "تعذر تحميل إحصائيات الامتحانات من قاعدة البيانات.");
+    return routeErrorResponse(error, "تعذر تحميل إحصائيات الامتحانات من بيانات النظام.");
   }
 }

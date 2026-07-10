@@ -69,7 +69,7 @@ function isExamWithinStudentGracePeriod(student: StudentLite, exam: ExamLite): b
 }
 
 /**
- * إحصائيات كروت ملف الطالب من قاعدة البيانات مباشرة.
+ * إحصائيات بطاقات ملف الطالب من بيانات النظام مباشرة.
  * لا تعتمد على مصفوفات grades/opportunityLogs المحملة في الصفحة الحالية.
  */
 export async function GET(req: NextRequest) {
@@ -212,6 +212,6 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    return routeErrorResponse(error, "تعذر تحميل إحصائيات ملف الطالب من قاعدة البيانات.");
+    return routeErrorResponse(error, "تعذر تحميل إحصائيات ملف الطالب من بيانات النظام.");
   }
 }

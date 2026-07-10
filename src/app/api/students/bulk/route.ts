@@ -97,7 +97,7 @@ function getPrismaStudentErrorResponse(error: unknown) {
       : String(targetValue ?? "");
     if (target.includes("telegramKey")) {
       return NextResponse.json(
-        { error: "معرف التليكرام مسجل مسبقاً لطالب آخر" },
+        { error: "معرف التيليجرام مسجل مسبقاً لطالب آخر" },
         { status: 409 },
       );
     }
@@ -165,7 +165,7 @@ export async function POST(req: NextRequest) {
   const courseById = new Map(courses.map((course) => [course.id, course]));
 
   // حمّل روابط الفصول النشطة مرة واحدة لكل الدورات المتضمنة في الاستيراد.
-  // السيرفر هو صاحب القرار النهائي للفرص: لا نعتمد على opportunities/baseOpportunities
+  // النظام هو صاحب القرار النهائي للفرص: لا نعتمد على opportunities/baseOpportunities
   // القادمة من العميل نهائياً، بل نحسبها حصراً من الفصل النشط للدورة.
   const activeCourseChapters = (
     courseIds.length
@@ -349,7 +349,7 @@ export async function POST(req: NextRequest) {
       if (previous)
         return NextResponse.json(
           {
-            error: `السطر ${rowNo}: معرف التليكرام مكرر داخل النص مع السطر ${previous}`,
+            error: `السطر ${rowNo}: معرف التيليجرام مكرر داخل النص مع السطر ${previous}`,
           },
           { status: 400 },
         );

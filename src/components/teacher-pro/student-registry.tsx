@@ -44,7 +44,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import {
   formatAppDate,
   getPhoneValidationError,
@@ -83,7 +83,7 @@ import {
   UserPlus,
   UserRound,
 } from "lucide-react";
-import { EmptyState } from "./ui-kit";
+import { CountScopeSummary, EmptyState } from "./ui-kit";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
@@ -109,7 +109,7 @@ const studentExportColumns: ExportColumn<any>[] = [
     value: (s) => s.courseProgram || "",
   },
   { key: "courseTerm", label: "الكورس", value: (s) => s.courseTerm || "" },
-  { key: "studyType", label: "نوع الدراسة", value: (s) => s.studyType || "" },
+  { key: "studyType", label: "نوع البرنامج", value: (s) => s.studyType || "" },
   {
     key: "locationScope",
     label: "نطاق الموقع",
@@ -125,7 +125,7 @@ const studentExportColumns: ExportColumn<any>[] = [
   },
   { key: "phone", label: "الهاتف", value: (s) => s.phone || "" },
   { key: "parentPhone", label: "ولي الأمر", value: (s) => s.parentPhone || "" },
-  { key: "telegram", label: "التليكرام", value: (s) => s.telegram || "" },
+  { key: "telegram", label: "التيليجرام", value: (s) => s.telegram || "" },
 ];
 
 type RegistryViewMode = "cards" | "table";
@@ -157,7 +157,7 @@ const registryIssueFilterLabels: Record<Exclude<RegistryIssueFilter, "">, string
   "opportunity-full": "فرص كاملة",
   "opportunity-over-limit": "فوق السقف",
   "missing-contact": "ناقص بيانات تواصل",
-  "no-telegram": "بلا تليكرام",
+  "no-telegram": "بلا تيليجرام",
 };
 
 function registryHealthBadges(student: Student) {
@@ -198,7 +198,7 @@ function registryHealthBadges(student: Student) {
 
   if (!normalizeTelegramIdentifier(student.telegram || "")) {
     badges.push({
-      label: "بلا تليكرام",
+      label: "بلا تيليجرام",
       className: "border-muted-foreground/30 bg-muted/60 text-muted-foreground",
     });
   }
@@ -534,6 +534,7 @@ export function StudentRegistryView() {
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
   const syncKey = useTeacherProSyncKey(["students", "courses", "opportunities", "grades", "follow-up", "dashboard"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
+  const [studentsSystemTotal, setStudentsSystemTotal] = useState<number | null>(null);
   const [activeStudentsTotal, setActiveStudentsTotal] = useState<number | null>(
     null,
   );
@@ -686,7 +687,7 @@ export function StudentRegistryView() {
           if (!silent) {
             setServerStudents(null);
             setServerStudentsError(
-              "تعذر تحميل نتائج الطلاب من الخادم. سيتم عرض النسخة المحلية مؤقتاً.",
+              "تعذر تحميل نتائج الطلاب من النظام. سيتم عرض النسخة المحلية مؤقتاً.",
             );
           }
           return;
@@ -707,7 +708,7 @@ export function StudentRegistryView() {
         if (cancelled || silent) return;
         setServerStudents(null);
         setServerStudentsError(
-          "تعذر تحميل نتائج الطلاب من الخادم. سيتم عرض النسخة المحلية مؤقتاً.",
+          "تعذر تحميل نتائج الطلاب من النظام. سيتم عرض النسخة المحلية مؤقتاً.",
         );
       })
       .finally(() => {
@@ -741,6 +742,7 @@ export function StudentRegistryView() {
       .get()
       .then((result) => {
         if (cancelled) return;
+        setStudentsSystemTotal(result ? Number(result.total || 0) : null);
         setActiveStudentsTotal(result ? Number(result.active || 0) : null);
         setDismissedStudentsTotal(
           result ? Number(result.dismissed || 0) : null,
@@ -751,6 +753,7 @@ export function StudentRegistryView() {
       })
       .catch(() => {
         if (cancelled) return;
+        setStudentsSystemTotal(null);
         setActiveStudentsTotal(null);
         setDismissedStudentsTotal(null);
         setNoActiveChapterStudentsTotal(null);
@@ -802,9 +805,9 @@ export function StudentRegistryView() {
     [editAvailablePrograms, editDialog.form.courseProgram],
   );
 
-  // كشف تغيير نوع الدراسة أو نوع الدورة — نعاملهما بنفس سياسة نقل الطالب
+  // كشف تغيير نوع البرنامج أو نوع الدورة — نعاملهما بنفس سياسة نقل الطالب
   // المستخدمة عند تغيير الدورة: إما اعتباره طالباً جديداً (reset) أو الإبقاء
-  // على فرصه (keep). السبب: تغيير نوع الدراسة/الدورة قد يعني أن الطالب بدأ
+  // على فرصه (keep). السبب: تغيير نوع البرنامج/الدورة قد يعني أن الطالب بدأ
   // مساراً جديداً، فيحق للمستخدم اختيار ما إذا كانت الفرص تُعاد ضبطها.
   const editStudyTypeChanged = Boolean(
     editOriginalStudent &&
@@ -1020,7 +1023,7 @@ export function StudentRegistryView() {
     if (missing) return missing[1];
 
     if (editNeedsTransferPolicy && !courseTransferPolicy) {
-      return "عند نقل الطالب إلى دورة أخرى أو تغيير نوع الدراسة/الدورة يجب اختيار طريقة التعامل مع الفرص";
+      return "عند نقل الطالب إلى دورة أخرى أو تغيير نوع البرنامج/الدورة يجب اختيار طريقة التعامل مع الفرص";
     }
 
     // Course settings-based validation
@@ -1031,7 +1034,7 @@ export function StudentRegistryView() {
       return "يرجى اختيار الكورس";
     }
     if (editAvailableStudyTypes.length > 0 && !form.studyType) {
-      return "يرجى اختيار نوع الدراسة";
+      return "يرجى اختيار نوع البرنامج";
     }
     if (editLocationScopes.length > 0 && !form.locationScope) {
       return "يرجى اختيار الموقع";
@@ -1156,7 +1159,7 @@ export function StudentRegistryView() {
 
   const openDeleteDialog = (student: Student) => {
     if (registryServerUnavailable) {
-      toast.error("لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالخادم ثم حاول مجدداً.");
+      toast.error("لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالنظام ثم حاول مجدداً.");
       return;
     }
     setDeleteDialog({ open: true, id: student.id, studentName: student.name });
@@ -1270,7 +1273,7 @@ export function StudentRegistryView() {
   const handleDismiss = runStatusActionLocked(async () => {
     if (!dismissDialog.student) return;
     if (registryServerUnavailable) {
-      toast.error("لا يمكن فصل طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالخادم ثم حاول مجدداً.");
+      toast.error("لا يمكن فصل طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالنظام ثم حاول مجدداً.");
       return;
     }
     if (!dismissReason.trim()) {
@@ -1303,7 +1306,7 @@ export function StudentRegistryView() {
     setDismissReason("");
     setDismissNotes("");
     setServerRefreshKey((value) => value + 1);
-    toast.success("تم فصل الطالب من قاعدة البيانات", {
+    toast.success("تم فصل الطالب من بيانات النظام", {
       description: "تم حفظ حالة الطالب وسجل الفرص والملاحظة الإدارية داخل عملية واحدة.",
     });
   });
@@ -1508,7 +1511,7 @@ export function StudentRegistryView() {
             )}
             <div className="space-y-1">
               <Label htmlFor="registry-study-type" className="text-xs">
-                نوع الدراسة
+                نوع البرنامج
               </Label>
               <Select
                 name="studyType"
@@ -1620,7 +1623,7 @@ export function StudentRegistryView() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="اسم / كود / تليكرام / هاتف"
+                placeholder="اسم / كود / تيليجرام / هاتف"
               />
             </div>
             <div className="space-y-1">
@@ -1635,7 +1638,7 @@ export function StudentRegistryView() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cards">الكارتات</SelectItem>
+                  <SelectItem value="cards">البطاقات</SelectItem>
                   <SelectItem value="table">الجدول</SelectItem>
                 </SelectContent>
               </Select>
@@ -1718,11 +1721,15 @@ export function StudentRegistryView() {
         </Card>
       </div>
 
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>
-          عرض {paged.length} من {filteredTotalCount} طالب
-        </span>
-        <div className="flex items-center gap-2">
+      <div className="space-y-2">
+        <CountScopeSummary
+          subject="الطلاب"
+          systemTotal={studentsSystemTotal ?? "…"}
+          filteredTotal={filteredTotalCount}
+          pageCount={paged.length}
+        />
+        <div className="flex items-center justify-end text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
           <Label htmlFor="registry-pageSize" className="text-xs">
             حجم الصفحة:
           </Label>
@@ -1743,12 +1750,13 @@ export function StudentRegistryView() {
               <SelectItem value="100">100</SelectItem>
             </SelectContent>
           </Select>
+          </div>
         </div>
       </div>
 
       {serverStudentsLoading && (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
-          جاري تحميل نتائج الطلاب من قاعدة البيانات...
+          جاري تحميل نتائج الطلاب من بيانات النظام...
         </div>
       )}
 
@@ -1756,7 +1764,7 @@ export function StudentRegistryView() {
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300">
           {serverStudentsError}
           <span className="mt-1 block text-xs">
-            تم إيقاف التعديل والفصل والأرشفة مؤقتاً حتى ترجع بيانات قاعدة البيانات، حتى لا تتعامل الصفحة مع كاش قديم.
+            تم إيقاف التعديل والفصل والأرشفة مؤقتاً حتى ترجع بيانات بيانات النظام، حتى لا تتعامل الصفحة مع بيانات مؤقتة قديمة.
           </span>
         </div>
       )}
@@ -1843,7 +1851,7 @@ export function StudentRegistryView() {
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground">
-                      نوع الدراسة
+                      نوع البرنامج
                     </span>
                     <p className="text-xs font-medium">
                       {student.studyType || "-"}
@@ -1884,7 +1892,7 @@ export function StudentRegistryView() {
                   </div>
                   <div>
                     <span className="text-xs text-muted-foreground">
-                      تليكرام
+                      تيليجرام
                     </span>
                     <p className="text-xs">
                       {student.telegram ? (
@@ -2013,7 +2021,7 @@ export function StudentRegistryView() {
                 <th className="p-3 text-right">الدراسة</th>
                 <th className="p-3 text-right">الموقع</th>
                 <th className="p-3 text-right">الهاتف</th>
-                <th className="p-3 text-right">التليكرام</th>
+                <th className="p-3 text-right">التيليجرام</th>
                 <th className="p-3 text-right">الفرص</th>
                 <th className="p-3 text-right">السماح</th>
                 <th className="p-3 text-right">الحالة</th>
@@ -2138,7 +2146,7 @@ export function StudentRegistryView() {
             السابق
           </Button>
           <span className="text-sm text-muted-foreground">
-            {page} / {totalPages}
+            صفحة {page} من {totalPages} · المعروض في الصفحة: {paged.length}
           </span>
           <Button
             variant="outline"
@@ -2240,7 +2248,7 @@ export function StudentRegistryView() {
                     <li>• الأرقام تقبل الصيغة العراقية 07 وتتكون من 11 رقم.</li>
                     <li>• فترة السماح لا تتجاوز 30 يوم.</li>
                     <li>
-                      • تغيير الدورة يعيد تهيئة خيارات نوع الدراسة والموقع.
+                      • تغيير الدورة يعيد تهيئة خيارات نوع البرنامج والموقع.
                     </li>
                   </ul>
                 </div>
@@ -2253,7 +2261,7 @@ export function StudentRegistryView() {
                     <div>
                       <h3 className="font-black">البيانات الأساسية</h3>
                       <p className="text-xs text-muted-foreground">
-                        الاسم، المدرسة، الجنس، ومعرف التليكرام.
+                        الاسم، المدرسة، الجنس، ومعرف التيليجرام.
                       </p>
                     </div>
                   </div>
@@ -2306,7 +2314,7 @@ export function StudentRegistryView() {
                       </Select>
                     </div>
                     <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="edit-telegram">معرف التليكرام</Label>
+                      <Label htmlFor="edit-telegram">معرف التيليجرام</Label>
                       <Input
                         id="edit-telegram"
                         name="telegram"
@@ -2374,7 +2382,7 @@ export function StudentRegistryView() {
                   <div className="mb-4 flex items-center gap-2">
                     <GraduationCap className="size-5 text-primary" />
                     <div>
-                      <h3 className="font-black">الدورة ونوع الدراسة</h3>
+                      <h3 className="font-black">الدورة ونوع البرنامج</h3>
                       <p className="text-xs text-muted-foreground">
                         اختر الدورة ثم أكمل الخيارات المرتبطة بها.
                       </p>
@@ -2441,7 +2449,7 @@ export function StudentRegistryView() {
                               {editCourseChanged
                                 ? "تم تغيير دورة الطالب — اختر سياسة نقل الفرص قبل الحفظ"
                                 : editStudyTypeChanged
-                                  ? "تم تغيير نوع الدراسة — اختر سياسة التعامل مع الفرص قبل الحفظ"
+                                  ? "تم تغيير نوع البرنامج — اختر سياسة التعامل مع الفرص قبل الحفظ"
                                   : "تم تغيير نوع الدورة — اختر سياسة التعامل مع الفرص قبل الحفظ"}
                             </p>
                             <p className="mt-1 text-xs leading-6 opacity-90">
@@ -2458,7 +2466,7 @@ export function StudentRegistryView() {
                               )}
                               {editStudyTypeChanged && (
                                 <>
-                                  {" "}نوع الدراسة الجديد: {editDialog.form.studyType}.
+                                  {" "}نوع البرنامج الجديد: {editDialog.form.studyType}.
                                 </>
                               )}
                               {editCourseProgramChanged && (
@@ -2586,7 +2594,7 @@ export function StudentRegistryView() {
                     {editDialog.form.courseId &&
                       editAvailableStudyTypes.length > 0 && (
                         <div className="space-y-2">
-                          <Label htmlFor="edit-studyType">نوع الدراسة</Label>
+                          <Label htmlFor="edit-studyType">نوع البرنامج</Label>
                           <Select
                             name="studyType"
                             value={editDialog.form.studyType}
@@ -2607,7 +2615,7 @@ export function StudentRegistryView() {
                               id="edit-studyType"
                               className="h-12 rounded-2xl"
                             >
-                              <SelectValue placeholder="اختر نوع الدراسة..." />
+                              <SelectValue placeholder="اختر نوع البرنامج..." />
                             </SelectTrigger>
                             <SelectContent>
                               {editAvailableStudyTypes.map((t) => (
@@ -2628,7 +2636,7 @@ export function StudentRegistryView() {
                     <div>
                       <h3 className="font-black">الموقع</h3>
                       <p className="text-xs text-muted-foreground">
-                        تظهر الخيارات حسب نوع الدراسة والدورة المختارة.
+                        تظهر الخيارات حسب نوع البرنامج والدورة المختارة.
                       </p>
                     </div>
                   </div>
@@ -2693,7 +2701,7 @@ export function StudentRegistryView() {
                       </div>
                     ) : (
                       <div className="rounded-2xl border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground md:col-span-2">
-                        اختر الدورة ونوع الدراسة لعرض خيارات الموقع.
+                        اختر الدورة ونوع البرنامج لعرض خيارات الموقع.
                       </div>
                     )}
 
@@ -2852,7 +2860,7 @@ export function StudentRegistryView() {
                 </div>
                 <div className="rounded-2xl border bg-muted/40 p-3 text-foreground">
                   <div className="mb-2 font-bold">
-                    فحص العلاقات من قاعدة البيانات
+                    فحص العلاقات من بيانات النظام
                   </div>
                   {deleteImpactLoading ? (
                     <div className="text-muted-foreground">

@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { toast } from 'sonner';
+import { toast } from '@/lib/user-toast';
 import { useActionLock } from '@/hooks/use-action-lock';
 import { useLatestRequest } from '@/hooks/use-latest-request';
 import {
@@ -297,7 +297,7 @@ function PermissionsArchitectureTab() {
         <CardHeader>
           <CardTitle className="text-base">هيكلة الصلاحيات الذكية</CardTitle>
           <p className="text-sm text-muted-foreground">
-            كل صفحة وكل إجراء حساس صار له Permission ID واضح. أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل PERMISSION_CATALOG وتنعكس تلقائياً في إدارة الأدوار والحسابات.
+            كل صفحة وكل إجراء حساس صار له رمز الصلاحية واضح. أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل PERMISSION_CATALOG وتنعكس تلقائياً في إدارة الأدوار والحسابات.
           </p>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 md:grid-cols-4">

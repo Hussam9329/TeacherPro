@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
 
   if (!TELEGRAM_BOT_TOKEN) {
     return NextResponse.json(
-      { error: 'TEACHERPRO_BOT_TOKEN أو TELEGRAM_BOT_TOKEN غير مضبوط. مطلوب لجلب صور التليغرام.' },
+      { error: 'TEACHERPRO_BOT_TOKEN أو TELEGRAM_BOT_TOKEN غير مضبوط. مطلوب لجلب صور تيليجرام.' },
       { status: 503 },
     );
   }
@@ -171,7 +171,7 @@ export async function GET(req: NextRequest) {
       void uploadToR2(key, buffer, contentType).catch(() => {});
     }
 
-    // خدم الصورة مباشرة من الخادم مع cache-control طويل (24 ساعة).
+    // خدم الصورة مباشرة من النظام مع cache-control طويل (24 ساعة).
     return new NextResponse(buffer, {
       status: 200,
       headers: {

@@ -37,8 +37,8 @@ must(
 
 must(
   page.includes("method: \"DELETE\"") &&
-    page.includes("حذف من قاعدة البيانات") &&
-    page.includes("تعذر حذف الملاحظة من قاعدة البيانات"),
+    page.includes("حذف من بيانات النظام") &&
+    page.includes("تعذر حذف الملاحظة من بيانات النظام"),
   "حذف ملاحظة الطلاب غير الموجودين Server-first من API",
   "الحذف يجب أن يمر عبر DELETE إلى API مع رسالة فشل واضحة."
 );
@@ -46,7 +46,7 @@ must(
 must(
   page.includes("missingStudentsNotesStatsApi") &&
     page.includes("مصدر الصفحة") &&
-    page.includes("DB"),
+    page.includes("النظام"),
   "الإحصائيات ومصدر الصفحة واضحان للمستخدم من قاعدة البيانات",
   "يجب عرض إحصائيات قاعدة البيانات ومؤشر مصدر الصفحة."
 );

@@ -32,7 +32,7 @@ const checks = [
       layout.includes("externalScopes"),
   ],
   [
-    "فحص نسخة قاعدة البيانات صار كل 10 ثوانٍ ويتوقف عند إخفاء التبويب",
+    "فحص نسخة بيانات النظام صار كل 10 ثوانٍ ويتوقف عند إخفاء التبويب",
     layout.includes("10_000") &&
       layout.includes("document.hidden"),
   ],

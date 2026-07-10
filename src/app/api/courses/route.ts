@@ -78,7 +78,7 @@ function firstUsageBlockMessage(
   if (firstRemovedStudyType) {
     const [key, count] = firstRemovedStudyType;
     const [program, studyType] = key.split('|||');
-    return `لا يمكن حذف نوع الدراسة "${studyType}" من نوع الدورة "${program}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${courseName}". انقل الطلاب أو غيّر نوع دراستهم أولاً.`;
+    return `لا يمكن حذف نوع البرنامج "${studyType}" من نوع الدورة "${program}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${courseName}". انقل الطلاب أو غيّر نوع دراستهم أولاً.`;
   }
 
   const removedScopeCounts = countByUsageKey(linkedStudents, (student) => {
@@ -92,7 +92,7 @@ function firstUsageBlockMessage(
   if (firstRemovedScope) {
     const [key, count] = firstRemovedScope;
     const [studyType, scope] = key.split('|||');
-    return `لا يمكن حذف الموقع "${scope}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${courseName}". انقل الطلاب أو غيّر مواقعهم أولاً.`;
+    return `لا يمكن حذف الموقع "${scope}" من نوع البرنامج "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${courseName}". انقل الطلاب أو غيّر مواقعهم أولاً.`;
   }
 
   const removedBaghdadSiteCounts = countByUsageKey(linkedStudents, (student) => {
@@ -107,7 +107,7 @@ function firstUsageBlockMessage(
   if (firstRemovedBaghdadSite) {
     const [key, count] = firstRemovedBaghdadSite;
     const [studyType, site] = key.split('|||');
-    return `لا يمكن حذف موقع بغداد "${site}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${courseName}". انقل الطلاب أو غيّر موقعهم أولاً.`;
+    return `لا يمكن حذف موقع بغداد "${site}" من نوع البرنامج "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${courseName}". انقل الطلاب أو غيّر موقعهم أولاً.`;
   }
 
   const removedProvinceCounts = countByUsageKey(linkedStudents, (student) => {
@@ -124,7 +124,7 @@ function firstUsageBlockMessage(
   if (firstRemovedProvince) {
     const [key, count] = firstRemovedProvince;
     const [studyType, province] = key.split('|||');
-    return `لا يمكن حذف المحافظة "${province}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين بها في دورة "${courseName}". انقل الطلاب أو غيّر محافظاتهم أولاً.`;
+    return `لا يمكن حذف المحافظة "${province}" من نوع البرنامج "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين بها في دورة "${courseName}". انقل الطلاب أو غيّر محافظاتهم أولاً.`;
   }
 
   return null;
@@ -151,39 +151,39 @@ function validateCoursePayload(body: Record<string, unknown>, isUpdate = false):
     const studyTypes = parseJsonArray<string>(studyTypesByProgram[program as keyof StudyTypesByProgram]);
     if (studyTypes.length === 0) return `يجب اختيار نوع دراسة واحد على الأقل لنوع الدورة "${program}"`;
     for (const st of studyTypes) {
-      if (!(STUDY_TYPES as readonly string[]).includes(st)) return `نوع الدراسة "${st}" غير صالح`;
+      if (!(STUDY_TYPES as readonly string[]).includes(st)) return `نوع البرنامج "${st}" غير صالح`;
       studyTypesSet.add(st);
     }
   }
 
   // Keep availableStudyTypes as the normalized union for backward compatibility.
   const studyTypes = Array.from(studyTypesSet);
-  if (studyTypes.length === 0) return 'يجب اختيار خيار واحد على الأقل من نوع الدراسة';
+  if (studyTypes.length === 0) return 'يجب اختيار خيار واحد على الأقل من نوع البرنامج';
 
   // Validate locationConfig
   const locationConfig = parseJsonRecord<CourseLocationConfig>(body.locationConfig, {});
   for (const studyType of studyTypes) {
     const config = locationConfig[studyType as StudyType];
-    if (!config) return `يجب تحديد إعدادات المواقع لنوع الدراسة "${studyType}"`;
+    if (!config) return `يجب تحديد إعدادات المواقع لنوع البرنامج "${studyType}"`;
     if (!config.scopes || config.scopes.length === 0)
-      return `يجب اختيار بغداد أو محافظات لنوع الدراسة "${studyType}"`;
+      return `يجب اختيار بغداد أو محافظات لنوع البرنامج "${studyType}"`;
     for (const scope of config.scopes) {
       if (!(LOCATION_SCOPES as readonly string[]).includes(scope))
         return `الموقع "${scope}" غير صالح`;
     }
     if (config.scopes.includes('بغداد')) {
       if (!config.baghdadMode || !(BAGHDAD_MODES as readonly string[]).includes(config.baghdadMode))
-        return `يجب اختيار نوع بغداد لنوع الدراسة "${studyType}"`;
+        return `يجب اختيار نوع بغداد لنوع البرنامج "${studyType}"`;
       if (studyType === 'حضوري' && config.baghdadMode !== 'بغداد - مخصص')
         return 'نوع بغداد للدراسة الحضورية يجب أن يكون بغداد - مخصص';
       if (config.baghdadMode === 'بغداد - مخصص') {
         if (!config.baghdadSites || config.baghdadSites.length === 0)
-          return `يجب اختيار موقع واحد على الأقل من مواقع بغداد لنوع الدراسة "${studyType}"`;
+          return `يجب اختيار موقع واحد على الأقل من مواقع بغداد لنوع البرنامج "${studyType}"`;
       }
     }
     if (config.scopes.includes('محافظات')) {
       if (!config.provinces || config.provinces.length === 0) {
-        return `يجب اختيار محافظة واحدة على الأقل لنوع الدراسة "${studyType}"`;
+        return `يجب اختيار محافظة واحدة على الأقل لنوع البرنامج "${studyType}"`;
       }
       for (const prov of config.provinces) {
         const normalizedProvince = normalizeIraqiProvinceName(prov);

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 
 export const telegramSubmissionSchemaMessage =
-  "جدول مستلمات بوت التليغرام غير جاهز بعد. حاولت TeacherPro تجهيزه تلقائياً؛ إذا بقي التحذير ظاهراً شغّل prisma migrate deploy أو امنح مستخدم قاعدة البيانات صلاحية إنشاء الجداول.";
+  "جدول مستلمات بوت تيليجرام غير جاهز بعد. حاولت TeacherPro تجهيزه تلقائياً؛ إذا بقي التحذير ظاهراً شغّل prisma migrate deploy أو امنح مستخدم بيانات النظام صلاحية إنشاء الجداول.";
 
 type EnsureResult = { ok: true } | { ok: false; error: unknown };
 

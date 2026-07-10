@@ -394,7 +394,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     return routeErrorResponse(
       error,
-      "تعذر تحميل إحصائيات المكالمات من قاعدة البيانات حالياً.",
+      "تعذر تحميل إحصائيات المكالمات من بيانات النظام حالياً.",
     );
   }
 }

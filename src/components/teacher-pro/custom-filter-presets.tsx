@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 
 type FilterValue = string | number | boolean | null | undefined;
 export type FilterPresetValues = Record<string, FilterValue>;

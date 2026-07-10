@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import { toLatinDigits } from "@/lib/format";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
@@ -179,7 +179,7 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
 function selectedCourseBlockers(rows: ExamCreateContextRow[], selectedIds: string[]): string[] {
   return selectedIds.flatMap((id) => {
     const row = rows.find((item) => item.id === id);
-    if (!row) return [`الدورة ${id} غير موجودة في سياق قاعدة البيانات`];
+    if (!row) return [`الدورة ${id} غير موجودة في سياق بيانات النظام`];
     return row.canSelectForExam ? [] : row.blockers.map((blocker) => `${String(row.course?.name || row.id)}: ${blocker}`);
   });
 }
@@ -218,7 +218,7 @@ export function ExamNewView() {
         if (!payload?.rows) {
           if (!silent) {
             setContextRows([]);
-            setContextError("تعذر تحميل سياق إضافة الامتحان من قاعدة البيانات.");
+            setContextError("تعذر تحميل سياق إضافة الامتحان من بيانات النظام.");
           }
           return;
         }
@@ -227,7 +227,7 @@ export function ExamNewView() {
       .catch(() => {
         if (!controller.signal.aborted && !silent) {
           setContextRows([]);
-          setContextError("تعذر تحميل سياق إضافة الامتحان من قاعدة البيانات.");
+          setContextError("تعذر تحميل سياق إضافة الامتحان من بيانات النظام.");
         }
       })
       .finally(() => {
@@ -256,7 +256,7 @@ export function ExamNewView() {
       ? 0
       : Number(state.discountMark);
 
-    if (contextLoading) return "انتظر تحميل سياق إضافة الامتحان من قاعدة البيانات";
+    if (contextLoading) return "انتظر تحميل سياق إضافة الامتحان من بيانات النظام";
     if (contextError) return contextError;
     if (!state.name.trim()) return "يرجى إدخال اسم الامتحان";
     if (state.courseIds.length === 0) return "يرجى اختيار دورة واحدة على الأقل";
@@ -282,12 +282,12 @@ export function ExamNewView() {
     }
     const result = await examApi.add(buildExamPayload(form) as unknown as Record<string, unknown>);
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر إضافة الامتحان من الخادم.");
+      toast.error(result.error || "تعذر إضافة الامتحان من النظام.");
       return;
     }
     setForm(emptyForm());
     emitTeacherProDataChanged({ source: "local-mutation", reason: "exam-created", scopes: ["exams", "grades", "opportunities", "follow-up", "dashboard"] });
-    toast.success("تمت إضافة الامتحان من قاعدة البيانات");
+    toast.success("تمت إضافة الامتحان من بيانات النظام");
   });
 
   const toggleCourseSelection = (state: ExamFormState, courseId: string): ExamFormState => ({
@@ -301,7 +301,7 @@ export function ExamNewView() {
       <div className="space-y-3">
         {contextLoading ? (
           <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
-            جاري تحميل الدورات والفصول النشطة من قاعدة البيانات...
+            جاري تحميل الدورات والفصول النشطة من بيانات النظام...
           </div>
         ) : contextError ? (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -316,7 +316,7 @@ export function ExamNewView() {
                 disabled={selectableCourses.length === 0}
                 onCheckedChange={() => setState((prev) => ({ ...prev, courseIds: allSelected ? [] : selectableCourses.map((row) => row.id) }))}
               />
-              <Label htmlFor={allId} className="text-sm font-bold">الكل للدورات الصالحة من قاعدة البيانات</Label>
+              <Label htmlFor={allId} className="text-sm font-bold">الكل للدورات الصالحة من بيانات النظام</Label>
               <Badge variant="outline" className="text-[10px]">{selectableCourses.length} صالحة</Badge>
             </div>
             {contextRows.map((row) => {
@@ -472,12 +472,12 @@ export function ExamNewView() {
           </div>
           {matchedStudentsCount === 0 && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
-              لا يوجد طلاب نشطون ظاهرون من سياق الخادم لهذه المواقع في الدورات المختارة. قد يتم إنشاء الامتحان بدون نتائج متوقعة.
+              لا يوجد طلاب نشطون ظاهرون من سياق النظام لهذه المواقع في الدورات المختارة. قد يتم إنشاء الامتحان بدون نتائج متوقعة.
             </div>
           )}
           {matchedStudentsCount !== null && matchedStudentsCount > 0 && (
             <p className="text-xs text-muted-foreground">
-              مؤشر الطلاب النشطين حسب الدورات والمواقع المختارة من الخادم: {matchedStudentsCount}
+              مؤشر الطلاب النشطين حسب الدورات والمواقع المختارة من النظام: {matchedStudentsCount}
             </p>
           )}
         </div>
@@ -575,7 +575,7 @@ export function ExamNewView() {
             </div>
             <div className="rounded-2xl border bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">مصدر الصفحة</p>
-              <p className="text-sm font-bold text-emerald-600">قاعدة البيانات</p>
+              <p className="text-sm font-bold text-emerald-600">بيانات النظام</p>
             </div>
           </div>
 

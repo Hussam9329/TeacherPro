@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { CalendarDays, CheckSquare, RotateCcw, ShieldAlert, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

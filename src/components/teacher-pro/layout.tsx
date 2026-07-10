@@ -52,7 +52,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
+import {
+  TEACHERPRO_ACTION_COPY,
+  type TeacherProActionStatusDetail,
+} from "@/lib/teacherpro-language";
 
 const menuItems: {
   id: SectionId;
@@ -68,7 +72,7 @@ const menuItems: {
   },
   {
     id: "missing-students-notes",
-    title: "الطلاب الغير موجودين",
+    title: "الطلاب غير الموجودين",
     sub: "ملاحظات الإدخال",
     icon: UserX,
   },
@@ -477,6 +481,38 @@ export function TeacherProLayout() {
     status: "idle",
     at: 0,
   });
+  const [actionStatus, setActionStatus] = useState<TeacherProActionStatusDetail>({
+    status: "idle",
+    label: "",
+    at: 0,
+  });
+  const actionStatusTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<TeacherProActionStatusDetail>).detail;
+      if (!detail?.status) return;
+      setActionStatus(detail);
+      if (actionStatusTimerRef.current) {
+        window.clearTimeout(actionStatusTimerRef.current);
+        actionStatusTimerRef.current = null;
+      }
+      if (detail.status === "saved") {
+        actionStatusTimerRef.current = window.setTimeout(() => {
+          setActionStatus({ status: "idle", label: "", at: Date.now() });
+        }, 2600);
+      } else if (detail.status === "failed") {
+        actionStatusTimerRef.current = window.setTimeout(() => {
+          setActionStatus({ status: "idle", label: "", at: Date.now() });
+        }, 8000);
+      }
+    };
+    window.addEventListener("teacherpro:user-action-status", handler);
+    return () => {
+      window.removeEventListener("teacherpro:user-action-status", handler);
+      if (actionStatusTimerRef.current) window.clearTimeout(actionStatusTimerRef.current);
+    };
+  }, []);
 
   const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>(() => {
     // Open all families by default
@@ -604,7 +640,7 @@ export function TeacherProLayout() {
       if (detail?.transient && currentSection === "grade-entry") {
         return;
       }
-      const message = detail?.message || "تعذر حفظ التغيير في الخادم وتم الاحتفاظ به محلياً";
+      const message = detail?.message || "تعذر حفظ التغيير في النظام وتم الاحتفاظ به محلياً";
       if (currentSection === "grade-entry") {
         window.dispatchEvent(new CustomEvent("teacherpro:grade-entry-sync-error", { detail: { message } }));
         return;
@@ -629,14 +665,14 @@ export function TeacherProLayout() {
     };
   }, [restoreSession]);
 
-  // تحميل البيانات من الخادم عند بدء التطبيق
+  // تحميل البيانات من النظام عند بدء التطبيق
   const [initDone, setInitDone] = useState(false);
   useEffect(() => {
     if (initDone || !isAuthenticated) return;
     setInitDone(true);
     loadFromServer().then((ok) => {
       if (!ok) {
-        toast.warning("أنت تعمل محلياً؛ البيانات قد لا تُحفظ في السيرفر إلى أن يعود اتصال قاعدة البيانات.");
+        toast.warning("أنت تعمل محلياً؛ البيانات قد لا تُحفظ في النظام إلى أن يعود الاتصال بالنظام.");
       }
     });
   }, [initDone, isAuthenticated, loadFromServer]);
@@ -852,7 +888,7 @@ export function TeacherProLayout() {
 
         emitTeacherProDataChanged({
           source: "server-version",
-          reason: "تغيير جديد في قاعدة البيانات",
+          reason: "تغيير جديد في بيانات النظام",
           scopes: externalScopes,
           version: snapshot.version,
           broadcast: false,
@@ -1106,7 +1142,7 @@ export function TeacherProLayout() {
           </div>
           {!dbLoading && !dbConnected && (
             <div className="mt-3 rounded-2xl border border-amber-300/30 bg-amber-500/10 px-3 py-2 text-xs leading-6 text-amber-100">
-              أنت تعمل محلياً؛ البيانات قد لا تُحفظ في السيرفر.
+              أنت تعمل محلياً؛ البيانات قد لا تُحفظ في النظام.
             </div>
           )}
         </div>
@@ -1359,6 +1395,26 @@ export function TeacherProLayout() {
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {actionStatus.status !== "idle" ? (
+                <Badge
+                  variant={actionStatus.status === "failed" ? "destructive" : "outline"}
+                  className="hidden items-center gap-1.5 sm:flex"
+                  aria-live="polite"
+                  title={actionStatus.description}
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full bg-current",
+                      actionStatus.status === "saving" && "animate-pulse",
+                    )}
+                  />
+                  {actionStatus.status === "saving"
+                    ? TEACHERPRO_ACTION_COPY.saving
+                    : actionStatus.status === "saved"
+                      ? TEACHERPRO_ACTION_COPY.saved
+                      : `${TEACHERPRO_ACTION_COPY.failed} · ${TEACHERPRO_ACTION_COPY.retry}`}
+                </Badge>
+              ) : null}
               {syncStatus.status !== "idle" ? (
                 <Badge
                   variant={syncStatus.status === "error" ? "destructive" : "outline"}
@@ -1401,7 +1457,7 @@ export function TeacherProLayout() {
 
         {!dbLoading && !dbConnected && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100 md:px-6">
-            أنت تعمل محلياً؛ البيانات قد لا تُحفظ في السيرفر. تأكد من اتصال قاعدة البيانات قبل الاعتماد على التغييرات.
+            أنت تعمل محلياً؛ البيانات قد لا تُحفظ في النظام. تأكد من الاتصال بالنظام قبل الاعتماد على التغييرات.
           </div>
         )}
 

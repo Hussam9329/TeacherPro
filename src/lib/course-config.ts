@@ -106,7 +106,7 @@ export function getStudyTypesByProgram(course: CourseSettingsSource): StudyTypes
     const selected = parseJsonArray<unknown>(rawMap[program]);
     const normalized = uniqueStudyTypes(selected);
 
-    // توافق خلفي: الدورات القديمة كانت تحفظ نوع الدراسة كقائمة عامة.
+    // توافق خلفي: الدورات القديمة كانت تحفظ نوع البرنامج كقائمة عامة.
     result[program] = normalized.length > 0 ? normalized : [...legacyStudyTypes];
   }
 
@@ -221,10 +221,10 @@ export function validateStudentCourseChoices(
   // 3. التحقق من studyType حسب نوع الدورة المختار
   const availableStudyTypes = getAvailableStudyTypesForProgram(course, choices.courseProgram);
   if (!choices.studyType) {
-    return { ok: false, error: "نوع الدراسة مطلوب" };
+    return { ok: false, error: "نوع البرنامج مطلوب" };
   }
   if (!availableStudyTypes.includes(choices.studyType as StudyType)) {
-    return { ok: false, error: `نوع الدراسة "${choices.studyType}" غير متاح لنوع الدورة "${choices.courseProgram}"` };
+    return { ok: false, error: `نوع البرنامج "${choices.studyType}" غير متاح لنوع الدورة "${choices.courseProgram}"` };
   }
 
   // 4. التحقق من locationScope
@@ -242,7 +242,7 @@ export function validateStudentCourseChoices(
   }
 
   if (!locationScopes.includes(choices.locationScope as LocationScope)) {
-    return { ok: false, error: `الموقع "${choices.locationScope}" غير متاح لنوع الدراسة المختار` };
+    return { ok: false, error: `الموقع "${choices.locationScope}" غير متاح لنوع البرنامج المختار` };
   }
 
   // 5. إذا بغداد

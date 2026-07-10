@@ -14,7 +14,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Download, FileCode, FileSpreadsheet, FileText, Printer, RotateCcw } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
+import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 
 export type ExportColumn<T = Record<string, unknown>> = {
   key: string;
@@ -27,8 +28,12 @@ export type ExportColumn<T = Record<string, unknown>> = {
 type ExportFormat = "csv" | "excel" | "html" | "pdf";
 type PageOrientation = "portrait" | "landscape";
 
+function normalizeExportValue(value: string | number | null | undefined): string | number {
+  return typeof value === "string" ? humanizeTeacherProText(value) : value ?? "";
+}
+
 function escapeCsvCell(value: string | number | null | undefined): string {
-  const str = String(value ?? "");
+  const str = String(normalizeExportValue(value));
   if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -70,7 +75,7 @@ function buildCsv<T>(rows: T[], columns: ExportColumn<T>[]): string {
 }
 
 function plainExcelCell(value: string | number | null | undefined): string {
-  return String(value ?? "")
+  return String(normalizeExportValue(value))
     .replace(/\t/g, " ")
     .replace(/\r?\n/g, " ")
     .trim();
@@ -90,7 +95,7 @@ function buildTableRows<T>(rows: T[], columns: ExportColumn<T>[]): string {
     .map(
       (row) =>
         `<tr>${columns
-          .map((col) => `<td>${escapeHtml(String(col.value(row) ?? ""))}</td>`)
+          .map((col) => `<td>${escapeHtml(String(normalizeExportValue(col.value(row))))}</td>`)
           .join("")}</tr>`,
     )
     .join("");
@@ -115,7 +120,7 @@ function buildHtml<T>(
   const printableScript = options.printable
     ? `<script>document.title=${escapeJsString(documentTitle)};try{window.history.replaceState(null,document.title,'/${encodeURIComponent(safeUrlName)}.pdf');}catch(e){}</script>`
     : "";
-  return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${escapeHtml(documentTitle)}</title><style>
+  return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${escapeHtml(humanizeTeacherProText(documentTitle))}</title><style>
   @page { size: A4 ${options.orientation || "portrait"}; margin: 10mm; }
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; }
@@ -144,8 +149,8 @@ function buildHtml<T>(
     thead { display: table-header-group; }
     th, td { padding: 4px 5px; }
   }
-  </style>${printableScript}</head><body>${printableToolbar}<main class="report"><header class="report-header"><h1>${escapeHtml(title)}</h1><div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}</div></header><div class="table-wrap"><table><thead><tr>${columns
-    .map((col) => `<th>${escapeHtml(col.label)}</th>`)
+  </style>${printableScript}</head><body>${printableToolbar}<main class="report"><header class="report-header"><h1>${escapeHtml(humanizeTeacherProText(title))}</h1><div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}</div></header><div class="table-wrap"><table><thead><tr>${columns
+    .map((col) => `<th>${escapeHtml(humanizeTeacherProText(col.label))}</th>`)
     .join("")}</tr></thead><tbody>${buildTableRows(rows, columns)}</tbody></table></div></main></body></html>`;
 }
 
@@ -266,7 +271,7 @@ export function ExportDialog<T = Record<string, unknown>>({
       return loadedRows;
     } catch (error) {
       console.error("[ExportDialog] failed to fetch server export rows:", error);
-      toast.error("تعذر تحميل بيانات التصدير الكاملة من الخادم");
+      toast.error("تعذر تحميل بيانات التصدير الكاملة من النظام");
       return null;
     } finally {
       setExporting(false);

@@ -15,7 +15,7 @@ import {
 } from "@/lib/telegram-submission-schema";
 
 /**
- * إحصائيات مستلمات البوت من قاعدة البيانات مباشرة.
+ * إحصائيات مستلمات البوت من بيانات النظام مباشرة.
  * لا تعتمد على قائمة submissions المعروضة في الصفحة.
  */
 export async function GET(req: NextRequest) {
@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
     }
     return routeErrorResponse(
       error,
-      "تعذر تحميل إحصائيات مستلمات البوت من قاعدة البيانات.",
+      "تعذر تحميل إحصائيات مستلمات البوت من بيانات النظام.",
     );
   }
 }

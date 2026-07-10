@@ -34,7 +34,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import { toLatinDigits } from "@/lib/format";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { useLatestRequest } from "@/hooks/use-latest-request";
@@ -92,7 +92,7 @@ function normalizeSearch(value: string): string {
 
 function statCard(label: string, value: React.ReactNode, hint?: string) {
   return (
-    <div className="rounded-2xl border bg-card/70 p-4 shadow-sm">
+    <div className="rounded-2xl border border-primary/20 bg-card/70 p-4 shadow-sm" data-count-scope="system">
       <p className="text-xs font-bold text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-black">{value}</p>
       {hint ? <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
@@ -247,8 +247,8 @@ export function ChaptersView() {
     }
     setChapterNameInput("");
     setOpportunities(5);
-    await refreshAfterMutation("إضافة فصل server-first");
-    toast.success("تمت إضافة الفصل من قاعدة البيانات");
+    await refreshAfterMutation("إضافة فصل بعد التحقق من الحفظ");
+    toast.success("تمت إضافة الفصل من بيانات النظام");
   });
 
   const handleAttachChapter = runAttachChapterLocked(async (event: React.FormEvent<HTMLFormElement>) => {
@@ -264,8 +264,8 @@ export function ChaptersView() {
     }
     setCourseId("");
     setChapterId("");
-    await refreshAfterMutation("ربط فصل بدورة server-first");
-    toast.success("تم ربط الفصل بالدورة بعد تأكيد قاعدة البيانات");
+    await refreshAfterMutation("ربط فصل بدورة بعد التحقق من الحفظ");
+    toast.success("تم ربط الفصل بالدورة بعد التحقق من الحفظ");
   });
 
   const openEditChapterDialog = (row: ChapterRow) => {
@@ -293,8 +293,8 @@ export function ChaptersView() {
       return;
     }
     setEditChapterDialog({ open: false, id: "", chName: "", opps: 0, row: null });
-    await refreshAfterMutation("تعديل فصل server-first");
-    toast.success("تم تعديل الفصل بعد تأكيد قاعدة البيانات");
+    await refreshAfterMutation("تعديل فصل بعد التحقق من الحفظ");
+    toast.success("تم تعديل الفصل بعد التحقق من الحفظ");
   });
 
   const handleDeleteChapterConfirm = runDeleteChapterLocked(async () => {
@@ -328,7 +328,7 @@ export function ChaptersView() {
     }
     setDeleteLinkDialog({ open: false, link: null, course: null });
     await refreshAfterMutation("حذف ربط فصل بدورة آمن");
-    toast.success("تم حذف الربط بعد تأكيد قاعدة البيانات");
+    toast.success("تم حذف الربط بعد التحقق من الحفظ");
   });
 
   const openActionDialog = (course: CourseRow, link: ChapterCourseLinkOverview) => {
@@ -373,7 +373,7 @@ export function ChaptersView() {
         toast.info(payload?.message || "لا يوجد طلاب يحتاجون إصلاحاً.");
       }
     } catch {
-      toast.error("تعذر الاتصال بالخادم لإصلاح فرص الطلاب.");
+      toast.error("تعذر الاتصال بالنظام لإصلاح فرص الطلاب.");
     }
   });
 
@@ -510,7 +510,7 @@ export function ChaptersView() {
             <div>
               <CardTitle>الفصول والفرص</CardTitle>
               <p className="mt-2 text-sm text-muted-foreground">
-                إدارة الفصول أصبحت مبنية على ملخص قاعدة البيانات: فصل نشط واحد لكل دورة، أثر واضح قبل التفعيل، وحماية من الاعتماد على كاش الطلاب.
+                إدارة الفصول أصبحت مبنية على ملخص بيانات النظام: فصل نشط واحد لكل دورة، أثر واضح قبل التفعيل، وحماية من الاعتماد على بيانات الطلاب المؤقتة.
               </p>
             </div>
             <Button variant="outline" className="rounded-full" onClick={() => void loadOverview()} disabled={loading || refreshing}>{refreshing ? "جارٍ التحديث..." : "تحديث الملخص"}</Button>
@@ -518,15 +518,15 @@ export function ChaptersView() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {statCard("الدورات", overview?.stats.courses ?? "—")}
-            {statCard("الفصول", overview?.stats.chapters ?? "—")}
+            {statCard("إجمالي الدورات في النظام", overview?.stats.courses ?? "—")}
+            {statCard("إجمالي الفصول في النظام", overview?.stats.chapters ?? "—")}
             {statCard("بلا فصل نشط", overview?.stats.coursesWithoutActiveChapter ?? "—")}
             {statCard("تعارض نشط", overview?.stats.coursesWithMultipleActiveChapters ?? "—")}
             {statCard("طلاب 0/0", repairCount)}
           </div>
 
           <div className="rounded-2xl border border-dashed bg-muted/25 p-3 text-xs text-muted-foreground">
-            أي تفعيل أو إلغاء تفعيل يعرض أثره قبل التنفيذ، ويتم من الخادم داخل عملية واحدة حتى لا يظهر أكثر من فصل نشط لنفس الدورة.
+            أي تفعيل أو إلغاء تفعيل يعرض أثره قبل التنفيذ، ويتم من النظام داخل عملية واحدة حتى لا يظهر أكثر من فصل نشط لنفس الدورة.
           </div>
         </CardContent>
       </Card>
@@ -550,7 +550,7 @@ export function ChaptersView() {
             <Button variant="outline" onClick={resetFilters} className="rounded-full">تصفير الفلاتر</Button>
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <Badge variant="outline">المعروض: {filteredCourseStats.total}</Badge>
+            <Badge variant="outline" data-count-scope="filtered">المطابقون للفلاتر: {filteredCourseStats.total}</Badge>
             <Badge variant="outline">بفصل نشط: {filteredCourseStats.withActive}</Badge>
             <Badge variant="outline">بلا فصل: {filteredCourseStats.withoutActive}</Badge>
             <Badge variant="outline">تحتاج مراجعة: {filteredCourseStats.needsRepair}</Badge>
@@ -572,7 +572,7 @@ export function ChaptersView() {
                 <Label htmlFor="chapter-opps">عدد الفرص</Label>
                 <Input id="chapter-opps" type="number" min={0} value={opportunities} onChange={(event) => setOpportunities(Math.max(0, Number(toLatinDigits(event.target.value)) || 0))} />
               </div>
-              <Button type="submit" disabled={isAddingChapter} className="w-full rounded-full">{isAddingChapter ? "جاري الإضافة..." : "إضافة فصل من الخادم"}</Button>
+              <Button type="submit" disabled={isAddingChapter} className="w-full rounded-full">{isAddingChapter ? "جاري الإضافة..." : "إضافة فصل من النظام"}</Button>
             </form>
 
             <form onSubmit={handleAttachChapter} className="space-y-3 rounded-2xl border bg-muted/20 p-4">
@@ -619,7 +619,7 @@ export function ChaptersView() {
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-lg font-black">حالة الدورات والفصول</h3>
-          <p className="text-xs text-muted-foreground">كل الأرقام من قاعدة البيانات مباشرة.</p>
+          <p className="text-xs text-muted-foreground">كل الأرقام من بيانات النظام.</p>
         </div>
         {loading ? renderLoadingSkeleton() : filteredCourses.length === 0 ? <p className="rounded-2xl border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">لا توجد دورات مطابقة للفلاتر.</p> : filteredCourses.map(renderCourseRow)}
       </div>
@@ -647,7 +647,7 @@ export function ChaptersView() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditChapterDialog({ open: false, id: "", chName: "", opps: 0, row: null })}>إلغاء</Button>
-            <Button onClick={handleEditChapterSave} disabled={isSavingChapter}>{isSavingChapter ? "جاري الحفظ..." : "حفظ بعد تأكيد الخادم"}</Button>
+            <Button onClick={handleEditChapterSave} disabled={isSavingChapter}>{isSavingChapter ? "جاري الحفظ..." : "حفظ بعد التحقق من الحفظ"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -690,7 +690,7 @@ export function ChaptersView() {
           <DialogHeader>
             <DialogTitle>{actionDialog.action === "activate" ? "تفعيل فصل بأمان" : "إلغاء تفعيل الفصل"}</DialogTitle>
             <DialogDescription>
-              هذا الإجراء server-first وسيتم داخل قاعدة البيانات مع أرشفة/استرجاع الفرص حسب الحالة.
+              هذا الإجراء بعد التحقق من الحفظ وسيتم داخل بيانات النظام مع أرشفة/استرجاع الفرص حسب الحالة.
             </DialogDescription>
           </DialogHeader>
           {actionCourse && actionLink ? (
@@ -706,7 +706,7 @@ export function ChaptersView() {
                 {statCard("أرشيف الرابط", actionLink.archiveCount)}
               </div>
               {actionDialog.action === "activate" ? (
-                <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">سيتم تعطيل أي فصل نشط آخر لنفس الدورة، ثم تفعيل هذا الفصل وتحديث فرص الطلاب النشطين من قاعدة البيانات مباشرة.</p>
+                <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">سيتم تعطيل أي فصل نشط آخر لنفس الدورة، ثم تفعيل هذا الفصل وتحديث فرص الطلاب النشطين من بيانات النظام.</p>
               ) : (
                 <p className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">سيتم أرشفة فرص الطلاب غير المؤرشفين ثم تصفير فرص الدورة لأنها ستصبح بلا فصل نشط.</p>
               )}
@@ -728,7 +728,7 @@ export function ChaptersView() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="rounded-2xl border bg-muted/25 p-4 text-sm">
-            الطلاب المرشحون للإصلاح حسب قاعدة البيانات: <b>{repairCount}</b>
+            الطلاب المرشحون للإصلاح حسب بيانات النظام: <b>{repairCount}</b>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>

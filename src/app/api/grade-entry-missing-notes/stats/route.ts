@@ -30,6 +30,6 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    return routeErrorResponse(error, "تعذر تحميل إحصائيات ملاحظات الطلاب غير الموجودين من قاعدة البيانات.");
+    return routeErrorResponse(error, "تعذر تحميل إحصائيات ملاحظات الطلاب غير الموجودين من بيانات النظام.");
   }
 }

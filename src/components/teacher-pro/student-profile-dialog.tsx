@@ -396,7 +396,7 @@ export function StudentProfileDialog({
         id: `grade-${grade.id}`,
         date: grade.updatedAt || grade.createdAt,
         source: "الدرجات",
-        title: grade.status === "درجة" ? "درجة محفوظة" : grade.status,
+        title: grade.status === "درجة" ? "درجة مسجلة" : grade.status,
         details: gradeLogDetailsWithAccounting(grade, student, examById.get(grade.examId), studentLeavesForProfile, studentOpportunities),
         tone: grade.status === "درجة" ? "default" as const : grade.status === "غائب" ? "danger" as const : "secondary" as const,
       })),
@@ -519,7 +519,7 @@ export function StudentProfileDialog({
             setDatabaseStudentCalls([]);
             setDatabaseStudentNotes([]);
             setDatabaseLogs([]);
-            setDatabaseGradesError("تعذر تحميل لوغ الطالب الكامل من الخادم حالياً.");
+            setDatabaseGradesError("تعذر تحميل لوغ الطالب الكامل من النظام حالياً.");
           }
           return;
         }
@@ -540,7 +540,7 @@ export function StudentProfileDialog({
         setDatabaseStudentCalls([]);
         setDatabaseStudentNotes([]);
         setDatabaseLogs([]);
-        setDatabaseGradesError("تعذر تحميل لوغ الطالب الكامل من الخادم حالياً.");
+        setDatabaseGradesError("تعذر تحميل لوغ الطالب الكامل من النظام حالياً.");
       })
       .finally(() => {
         if (!cancelled) setDatabaseGradesLoading(false);
@@ -582,11 +582,11 @@ export function StudentProfileDialog({
   const timelineCount = profileStatValue(databaseStats?.timeline);
 
   const gradesEmptyMessage = databaseGradesLoading
-    ? "جاري تحميل درجات الطالب من الخادم…"
+    ? "جاري تحميل درجات الطالب من النظام…"
     : databaseGradesError
       ? databaseGradesError
       : databaseStats && databaseStats.grades > 0 && studentGrades.length === 0
-        ? "توجد درجات محفوظة في قاعدة البيانات لكن تعذر عرضها الآن. حدّث الصفحة أو أعد فتح الملف."
+        ? "توجد درجات مسجلة في بيانات النظام لكن تعذر عرضها الآن. حدّث الصفحة أو أعد فتح الملف."
         : "لا توجد درجات لهذا الطالب";
 
   const cards: { id: StudentFileTab; label: string; value: string | number; hint: string }[] = [
@@ -600,7 +600,7 @@ export function StudentProfileDialog({
     { id: "actions", label: "الملاحظات", value: notesCount, hint: "ملاحظات وإجراءات" },
     { id: "timeline", label: "السجل الزمني", value: timelineCount, hint: "كل حركة مرتبطة بالطالب" },
     { id: "exams", label: "الامتحانات", value: examCount, hint: "عدد الامتحانات" },
-    { id: "grades", label: "ضمن السماح", value: graceGradeCount, hint: "درجات محفوظة بدون خصم" },
+    { id: "grades", label: "ضمن السماح", value: graceGradeCount, hint: "درجات مسجلة بدون خصم" },
     { id: "grades", label: "بدون خصم", value: noDiscountGradeCount, hint: "درجات امتحانات لا تحاسب الطالب" },
   ];
 
@@ -674,8 +674,8 @@ export function StudentProfileDialog({
                 <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-4">
                   <InfoBox label="رقم الطالب" value={<ContactLink href={whatsappLink(student.phone)}>{student.phone}</ContactLink>} />
                   <InfoBox label="رقم ولي الأمر" value={<ContactLink href={whatsappLink(student.parentPhone)}>{student.parentPhone}</ContactLink>} />
-                  <InfoBox label="التليكرام" value={student.telegram ? <ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink> : "—"} />
-                  <InfoBox label="نوع الدراسة" value={student.studyType || "—"} />
+                  <InfoBox label="التيليجرام" value={student.telegram ? <ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink> : "—"} />
+                  <InfoBox label="نوع البرنامج" value={student.studyType || "—"} />
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
@@ -770,7 +770,7 @@ export function StudentProfileDialog({
             {tab === "opportunities" && (
               <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
                 <h4 className="mb-4 text-base font-black sm:text-lg">سجل الفرص</h4>
-                <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3"><div className="rounded-2xl bg-primary/10 p-3 text-center"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-xs text-muted-foreground">الفرص الحالية</p></div><div className="rounded-2xl bg-red-500/10 p-3 text-center"><p className="text-xl font-black text-red-600 sm:text-2xl">{deductedCount}</p><p className="text-xs text-muted-foreground">حركات خصم</p></div><div className="rounded-2xl bg-emerald-500/10 p-3 text-center"><p className="text-xl font-black text-emerald-600 sm:text-2xl">{addedCount}</p><p className="text-xs text-muted-foreground">حركات إضافة/تعديل</p></div></div>
+                <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3"><div className="rounded-2xl bg-primary/10 p-3 text-center"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-xs text-muted-foreground">فرص محفوظة</p></div><div className="rounded-2xl bg-red-500/10 p-3 text-center"><p className="text-xl font-black text-red-600 sm:text-2xl">{deductedCount}</p><p className="text-xs text-muted-foreground">حركات خصم</p></div><div className="rounded-2xl bg-emerald-500/10 p-3 text-center"><p className="text-xl font-black text-emerald-600 sm:text-2xl">{addedCount}</p><p className="text-xs text-muted-foreground">حركات إضافة/تعديل</p></div></div>
                 <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                   {opportunityTraceRows.length === 0 ? <p className="empty-state py-8">لا توجد حركات فرص</p> : [...opportunityTraceRows].reverse().map((row) => (
                     <div key={row.log.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center"><span>{formatAppDate(row.log.date)}</span><Badge className="w-fit" variant={row.log.action === "خصم" || row.log.action === "خصم تلقائي" ? "destructive" : "default"}>{row.log.action} {row.log.amount}</Badge><span className="break-words text-muted-foreground">{row.details}</span></div>

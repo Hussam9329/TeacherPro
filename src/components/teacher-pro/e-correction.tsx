@@ -40,7 +40,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import { toLatinDigits } from "@/lib/format";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { examMatchesAcademicFilters } from "@/lib/filter-sequence";
@@ -212,7 +212,7 @@ function getSubmissionPagePreview(
 
 function botMatchLabel(matchType?: string) {
   if (matchType === "code") return "مطابق بالكود";
-  if (matchType === "telegram") return "مطابق بالتليكرام";
+  if (matchType === "telegram") return "مطابق بالتيليجرام";
   if (matchType === "phone") return "مطابق بالهاتف";
   return "يحتاج مراجعة يدوية";
 }
@@ -231,7 +231,7 @@ function botMatchDetails(submission?: TelegramExamSubmission | null) {
     (submission.matchType === "code"
       ? "تم ربط المستلم اعتماداً على كود الطالب."
       : submission.matchType === "telegram"
-        ? "تم ربط المستلم اعتماداً على معرف التليكرام."
+        ? "تم ربط المستلم اعتماداً على معرف التيليجرام."
         : submission.matchType === "phone"
           ? "تم ربط المستلم اعتماداً على رقم الهاتف."
           : "يحتاج مراجعة يدوية قبل الاعتماد الكامل على هذا الربط.")
@@ -906,7 +906,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                     إعدادات ربط البوت المباشر
                   </p>
                   <p>
-                    هذه القيم هي التي يضعها بوت التليغرام في ملف البيئة حتى يرسل
+                    هذه القيم هي التي يضعها بوت تيليجرام في ملف البيئة حتى يرسل
                     التسليمات إلى TeacherPro مباشرة.
                   </p>
                 </div>
@@ -960,11 +960,11 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                     dir="ltr"
                   >
                     {telegramBotTokenConfigured
-                      ? "مضبوط في السيرفر — صور التصحيح من fileId يمكن عرضها"
+                      ? "مضبوط في النظام — صور التصحيح من fileId يمكن عرضها"
                       : "غير مضبوط — صور fileId لن تظهر"}
                   </code>
                   <p className="mt-2 text-xs">
-                    هذا توكن بوت Telegram نفسه، ويُستخدم من السيرفر فقط لجلب
+                    هذا توكن بوت Telegram نفسه، ويُستخدم من النظام فقط لجلب
                     الصور عند فتح مستلمات التصحيح. لا تضعه داخل الواجهة أو
                     الكود.
                   </p>
@@ -1018,7 +1018,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-destructive">
                   البوت لن يستطيع إرسال أوراق التصحيح قبل إضافة{" "}
                   <span dir="ltr">TEACHERPRO_BOT_INGEST_TOKEN</span> إلى إعدادات
-                  بيئة TeacherPro وإعادة تشغيل السيرفر.
+                  بيئة TeacherPro وإعادة تشغيل النظام.
                 </div>
               )}
             </CardContent>
@@ -1031,7 +1031,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                 <p>{botSchemaWarning}</p>
                 <p className="text-xs opacity-80">
                   الصفحة ستبقى شغالة، لكن استقبال مستلمات البوت يحتاج تجهيز جدول
-                  قاعدة البيانات.
+                  بيانات النظام.
                 </p>
               </CardContent>
             </Card>
@@ -1180,7 +1180,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                             هاتف الطالب: {submission.student?.phone || "—"}
                           </span>
                           <span>
-                            تلكرام الطالب:{" "}
+                            تيليجرام الطالب:{" "}
                             {submission.student?.telegram ||
                               submission.telegramUsername ||
                               submission.telegramUserId ||
@@ -1385,7 +1385,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                   </p>
                 </div>
                 <div className="rounded-2xl border bg-muted/30 p-3">
-                  <p className="text-xs text-muted-foreground">معرف التلكرام</p>
+                  <p className="text-xs text-muted-foreground">معرف التيليجرام</p>
                   <p className="font-medium">
                     {botSubmissionDialog?.student?.telegram ||
                       botSubmissionDialog?.telegramUsername ||

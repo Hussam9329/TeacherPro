@@ -92,7 +92,7 @@ assert(
   'صفحة الفصول لا تبني عملياتها من كاش Zustand القديم',
 );
 assert(
-  chaptersView.includes('courseChapterApi.activate') && chaptersView.includes('تنفيذ بعد معاينة الأثر') && chaptersView.includes('server-first'),
+  chaptersView.includes('courseChapterApi.activate') && chaptersView.includes('تنفيذ بعد معاينة الأثر') && chaptersView.includes('بعد التحقق من الحفظ'),
   'تفعيل وإلغاء الفصل في الواجهة يتم بعد معاينة أثر واضحة وبطلب server-first',
 );
 assert(

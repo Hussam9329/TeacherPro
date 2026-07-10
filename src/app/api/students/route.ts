@@ -94,7 +94,7 @@ function getPrismaStudentErrorResponse(error: unknown) {
       : String(targetValue ?? "");
     if (target.includes("telegramKey")) {
       return NextResponse.json(
-        { error: "معرف التليكرام مسجل مسبقاً لطالب آخر" },
+        { error: "معرف التيليجرام مسجل مسبقاً لطالب آخر" },
         { status: 409 },
       );
     }
@@ -583,7 +583,7 @@ async function getNextStudentCode(
 }
 
 /**
- * السيرفر هو صاحب القرار النهائي لفرص الطالب عند التسجيل.
+ * النظام هو صاحب القرار النهائي لفرص الطالب عند التسجيل.
  * لا نعتمد نهائياً على opportunities/baseOpportunities القادمة من العميل،
  * لأن أي طلب API مباشر قد يرسل قيماً غير صحيحة. عند وجود فصل نشط واحد للدورة
  * نستخدم فرص الفصل فقط، وعند غياب الفصل النشط نسجل الطالب بفرص صفر مع
@@ -799,7 +799,7 @@ export async function POST(req: NextRequest) {
           baghdadMode: body.baghdadMode || null,
           mainSite: body.locationScope || body.mainSite,
           subSite: resolvedSubSite || body.subSite,
-          // الكود يولّد حصراً من السيرفر حتى لا يظهر كود وهمي من الكاش المحلي.
+          // الكود يولّد حصراً من النظام حتى لا يظهر كود وهمي من البيانات المؤقتة المحلي.
           code,
           status: "نشط",
           dismissalType: "",
@@ -808,7 +808,7 @@ export async function POST(req: NextRequest) {
             ? String(body.dismissalNotes)
             : null,
           createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
-          // السيرفر يحسب الفرص حصراً من الفصل النشط، ولا يثق بأي قيمة مرسلة من العميل.
+          // النظام يحسب الفرص حصراً من الفصل النشط، ولا يثق بأي قيمة مرسلة من العميل.
           ...initialOpportunities,
           accountingGraceDays: normalizeGraceDays(body.accountingGraceDays),
           courseId: body.courseId,
@@ -1089,7 +1089,7 @@ export async function PUT(req: NextRequest) {
     }
   }
 
-  // كشف تغيير الدورة، نوع الدراسة، أو نوع الدورة. كل واحدة من هذي التغييرات
+  // كشف تغيير الدورة، نوع البرنامج، أو نوع الدورة. كل واحدة من هذي التغييرات
   // تستوجب قراراً واضحاً من المستخدم: هل يريد اعتبار الطالب جديداً (reset)
   // أو الإبقاء على فرصه (keep)؟
   const fieldsRequiringTransferPolicy =
@@ -1140,7 +1140,7 @@ export async function PUT(req: NextRequest) {
     if (needsTransferPolicy && !courseTransferPolicy) {
       const reasons: string[] = [];
       if (courseChanged) reasons.push("الدورة");
-      if (studyTypeChanged) reasons.push("نوع الدراسة");
+      if (studyTypeChanged) reasons.push("نوع البرنامج");
       if (courseProgramChanged) reasons.push("نوع الدورة");
       return NextResponse.json(
         {
@@ -1180,7 +1180,7 @@ export async function PUT(req: NextRequest) {
     const student = await db.student.update({ where: { id }, data });
 
     // أعِد حساب الحالة الأكاديمية للطالب بعد أي تعديل. هذا يضمن أن الفرص
-    // وحالة الفصل تبقى متزامنة مع قاعدة البيانات حتى لو كان العميل يرسل
+    // وحالة الفصل تبقى متزامنة مع بيانات النظام حتى لو كان العميل يرسل
     // قيماً قديمة أو لو تغيرت إعدادات الدورة/الفصل بشكل غير مباشر.
     // إعادة الحساب idempotent — لو ما تغير شي، ما تكتب شي.
     let academicRecalculation: Awaited<

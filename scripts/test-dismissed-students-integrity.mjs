@@ -73,7 +73,7 @@ must(
 must(
   page.includes("canRunSensitiveActions") &&
     page.includes("disabled={!canRunSensitiveActions") &&
-    page.includes("تفاصيل الفصل غير محملة من قاعدة البيانات"),
+    page.includes("تفاصيل الفصل غير محملة من بيانات النظام"),
   "الإجراءات الحساسة تُمنع عند فشل تحميل بيانات الخادم أو تفاصيل الفصل",
   "يجب منع إعادة التفعيل/الحفظ عند عرض بيانات غير مؤكدة من الخادم.",
 );

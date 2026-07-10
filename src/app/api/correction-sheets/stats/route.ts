@@ -8,7 +8,7 @@ import { ensureExamSchema } from '@/lib/exam-schema';
 import { routeErrorResponse } from '@/lib/route-helpers';
 
 /**
- * إحصائيات أوراق التصحيح من قاعدة البيانات مباشرة.
+ * إحصائيات أوراق التصحيح من بيانات النظام مباشرة.
  * لا تعتمد على correctionSheets الموجودة في الصفحة لأنها قد تكون صفحة محملة جزئياً.
  */
 export async function GET(req: NextRequest) {
@@ -38,6 +38,6 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    return routeErrorResponse(error, 'تعذر تحميل إحصائيات التصحيح من قاعدة البيانات.');
+    return routeErrorResponse(error, 'تعذر تحميل إحصائيات التصحيح من بيانات النظام.');
   }
 }

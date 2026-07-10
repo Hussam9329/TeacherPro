@@ -33,6 +33,38 @@ function composeAnd(parts: Prisma.StudentWhereInput[]): Prisma.StudentWhereInput
   return filtered.length ? { AND: filtered } : {};
 }
 
+async function collectDismissedStats(
+  where: Prisma.StudentWhereInput,
+): Promise<{
+  total: number;
+  temporary: number;
+  final: number;
+  withNotes: number;
+  withPledge: number;
+  withoutPledge: number;
+}> {
+  const [total, temporary, final, withNotes, pledgeRows] = await db.$transaction([
+    db.student.count({ where }),
+    db.student.count({ where: composeAnd([where, { dismissalType: "فصل مؤقت" }]) }),
+    db.student.count({ where: composeAnd([where, { dismissalType: "فصل نهائي" }]) }),
+    db.student.count({ where: composeAnd([where, { dismissalNotes: { not: "" } }]) }),
+    db.studentNote.findMany({
+      where: { kind: PLEDGE_NOTE_KIND, student: where },
+      select: { studentId: true },
+      distinct: ["studentId"],
+    }),
+  ]);
+  const withPledge = pledgeRows.length;
+  return {
+    total,
+    temporary,
+    final,
+    withNotes,
+    withPledge,
+    withoutPledge: Math.max(0, total - withPledge),
+  };
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "students.view");
   if (authError) return authError;
@@ -44,62 +76,42 @@ export async function GET(req: NextRequest) {
   const notesFilter = cleanText(searchParams.get("notesFilter"));
   const pledgeFilter = cleanText(searchParams.get("pledgeFilter"));
 
-  const baseParts: Prisma.StudentWhereInput[] = [{ status: "مفصول" }];
+  const systemWhere: Prisma.StudentWhereInput = { status: "مفصول" };
+  const filteredParts: Prisma.StudentWhereInput[] = [systemWhere];
   const searchWhere = buildSearchWhere(q);
-  if (searchWhere) baseParts.push(searchWhere);
-  if (courseId) baseParts.push({ courseId });
-  if (dismissalType) baseParts.push({ dismissalType });
+  if (searchWhere) filteredParts.push(searchWhere);
+  if (courseId) filteredParts.push({ courseId });
+  if (dismissalType) filteredParts.push({ dismissalType });
   if (notesFilter === "with-notes") {
-    baseParts.push({ dismissalNotes: { not: "" } });
+    filteredParts.push({ dismissalNotes: { not: "" } });
   } else if (notesFilter === "without-notes") {
-    baseParts.push({
-      OR: [{ dismissalNotes: null }, { dismissalNotes: "" }],
-    });
+    filteredParts.push({ OR: [{ dismissalNotes: null }, { dismissalNotes: "" }] });
   }
 
-  const baseWhere = composeAnd(baseParts);
-
+  const beforePledgeWhere = composeAnd(filteredParts);
   const pledgeRows = await db.studentNote.findMany({
-    where: {
-      kind: PLEDGE_NOTE_KIND,
-      student: baseWhere,
-    },
+    where: { kind: PLEDGE_NOTE_KIND, student: beforePledgeWhere },
     select: { studentId: true },
     distinct: ["studentId"],
   });
   const pledgedStudentIds = pledgeRows.map((row) => row.studentId);
 
-  const finalParts = [...baseParts];
   if (pledgeFilter === "with-pledge") {
-    finalParts.push({ id: { in: pledgedStudentIds.length ? pledgedStudentIds : ["__none__"] } });
+    filteredParts.push({ id: { in: pledgedStudentIds.length ? pledgedStudentIds : ["__none__"] } });
   } else if (pledgeFilter === "without-pledge") {
-    finalParts.push({ id: { notIn: pledgedStudentIds } });
+    filteredParts.push({ id: { notIn: pledgedStudentIds } });
   }
-  const where = composeAnd(finalParts);
+  const filteredWhere = composeAnd(filteredParts);
 
-  const [total, temporary, final, withNotes, filteredPledgeRows] = await db.$transaction([
-    db.student.count({ where }),
-    db.student.count({ where: composeAnd([where, { dismissalType: "فصل مؤقت" }]) }),
-    db.student.count({ where: composeAnd([where, { dismissalType: "فصل نهائي" }]) }),
-    db.student.count({ where: composeAnd([where, { dismissalNotes: { not: "" } }]) }),
-    db.studentNote.findMany({
-      where: { kind: PLEDGE_NOTE_KIND, student: where },
-      select: { studentId: true },
-      distinct: ["studentId"],
-    }),
+  const [system, filtered] = await Promise.all([
+    collectDismissedStats(systemWhere),
+    collectDismissedStats(filteredWhere),
   ]);
-
-  const withPledge = filteredPledgeRows.length;
 
   return NextResponse.json({
     source: "database",
-    stats: {
-      total,
-      temporary,
-      final,
-      withNotes,
-      withPledge,
-      withoutPledge: Math.max(0, total - withPledge),
-    },
+    stats: filtered,
+    system,
+    filtered,
   });
 }

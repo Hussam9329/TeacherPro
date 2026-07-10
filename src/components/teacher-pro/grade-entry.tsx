@@ -48,7 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
 import {
@@ -170,7 +170,7 @@ const GradeEntrySearchInput = React.memo(function GradeEntrySearchInput({
           if (focused) event.preventDefault();
         }
       }}
-      placeholder="اسم / كود / تليكرام / محافظة"
+      placeholder="اسم / كود / تيليجرام / محافظة"
       autoComplete="off"
       className="h-10"
     />
@@ -328,7 +328,7 @@ export function GradeEntryView() {
             setEntrySheetOpportunityLogs([]);
             setEntrySheetCourseChapters([]);
             setEntrySheetError(
-              "تعذر تحميل ورقة إدخال الدرجات من قاعدة البيانات. حدّث الصفحة أو تحقق من صلاحية الحساب.",
+              "تعذر تحميل ورقة إدخال الدرجات من بيانات النظام. حدّث الصفحة أو تحقق من صلاحية الحساب.",
             );
           }
           return;
@@ -359,7 +359,7 @@ export function GradeEntryView() {
         setEntrySheetOpportunityLogs([]);
         setEntrySheetCourseChapters([]);
         setEntrySheetError(
-          "تعذر تحميل ورقة إدخال الدرجات من قاعدة البيانات. حدّث الصفحة أو تحقق من صلاحية الحساب.",
+          "تعذر تحميل ورقة إدخال الدرجات من بيانات النظام. حدّث الصفحة أو تحقق من صلاحية الحساب.",
         );
       })
       .finally(() => {
@@ -867,7 +867,7 @@ export function GradeEntryView() {
 
         if (normalizedSearch && !matchesSearch) return false;
 
-        // عند البحث: إذا كان للطالب درجة محفوظة لهذا الامتحان، اعرضه حتى لو
+        // عند البحث: إذا كان للطالب درجة مسجلة لهذا الامتحان، اعرضه حتى لو
         // تغيرت دورته/موقعه أو لم يعد ضمن الفصل النشط. هذا يحمي السجل من
         // الاختفاء ويجعل البحث يجد أي طالب درجته موجودة.
         const forceShowSavedGradeSearchResult = Boolean(
@@ -1062,7 +1062,7 @@ export function GradeEntryView() {
     if (!result.ok || result.queued) {
       showGradeEntryNotice(
         "error",
-        result.error || "تعذر حذف الدرجة من قاعدة البيانات. لم يتم تغيير ورقة الإدخال.",
+        result.error || "تعذر حذف الدرجة من بيانات النظام. لم يتم تغيير ورقة الإدخال.",
       );
       restoreDraftFromSavedGrade(studentId);
       return;
@@ -1075,9 +1075,9 @@ export function GradeEntryView() {
       return next;
     });
     setEditableRows((prev) => ({ ...prev, [studentId]: false }));
-    setSavedRows((prev) => ({ ...prev, [studentId]: "تم حذف الدرجة من قاعدة البيانات" }));
+    setSavedRows((prev) => ({ ...prev, [studentId]: "تم حذف الدرجة من بيانات النظام" }));
     emitGradeEntryServerSync("grade-entry-delete");
-    showGradeEntryNotice("success", "تم حذف الدرجة من قاعدة البيانات وإعادة احتساب الطالب");
+    showGradeEntryNotice("success", "تم حذف الدرجة من بيانات النظام وإعادة احتساب الطالب");
   };
 
   const saveGrade = async (
@@ -1089,7 +1089,7 @@ export function GradeEntryView() {
     if (entrySheetError) {
       showGradeEntryNotice(
         "error",
-        "لا يمكن حفظ درجة لأن ورقة الإدخال لم تُحمّل من قاعدة البيانات.",
+        "لا يمكن حفظ درجة لأن ورقة الإدخال لم تُحمّل من بيانات النظام.",
       );
       return;
     }
@@ -1155,7 +1155,7 @@ export function GradeEntryView() {
     if (!result.ok || result.queued) {
       showGradeEntryNotice(
         "error",
-        result.error || "تعذر حفظ الدرجة في قاعدة البيانات. لم يتم اعتماد أي تغيير محلي.",
+        result.error || "تعذر حفظ الدرجة في بيانات النظام. لم يتم اعتماد أي تغيير محلي.",
       );
       return;
     }
@@ -1164,7 +1164,7 @@ export function GradeEntryView() {
     if (!payload.grade) {
       showGradeEntryNotice(
         "error",
-        "تم قبول الطلب لكن لم يرجع الخادم سجل الدرجة النهائي. حدّث ورقة الإدخال للتأكد.",
+        "تم قبول الطلب لكن لم يرجع النظام سجل الدرجة النهائي. حدّث ورقة الإدخال للتأكد.",
       );
       return;
     }
@@ -1179,7 +1179,7 @@ export function GradeEntryView() {
     if (!options.silent)
       showGradeEntryNotice(
         "success",
-        "تم حفظ الدرجة في قاعدة البيانات وإعادة احتساب الطالب",
+        "تم حفظ الدرجة في بيانات النظام وإعادة احتساب الطالب",
       );
   };
 
@@ -1295,7 +1295,7 @@ export function GradeEntryView() {
   const handleClearAbsentGradesConfirmed = async () => {
     if (!selectedExam) return;
     if (entrySheetError) {
-      toast.error("لا يمكن إلغاء الغياب لأن ورقة الإدخال غير محملة من قاعدة البيانات.");
+      toast.error("لا يمكن إلغاء الغياب لأن ورقة الإدخال غير محملة من بيانات النظام.");
       return;
     }
 
@@ -1321,7 +1321,7 @@ export function GradeEntryView() {
     });
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر إلغاء حالات الغياب من قاعدة البيانات.");
+      toast.error(result.error || "تعذر إلغاء حالات الغياب من بيانات النظام.");
       return;
     }
 
@@ -1357,14 +1357,14 @@ export function GradeEntryView() {
       setSavedRows((prev) => {
         const next = { ...prev };
         realAffectedStudentIds.forEach((studentId) => {
-          next[studentId] = "تم إلغاء الغياب من قاعدة البيانات";
+          next[studentId] = "تم إلغاء الغياب من بيانات النظام";
         });
         return next;
       });
       emitGradeEntryServerSync("grade-entry-clear-absent");
-      toast.success(`تم إلغاء حالة غائب من ${removedCount} طالب من قاعدة البيانات`);
+      toast.success(`تم إلغاء حالة غائب من ${removedCount} طالب من بيانات النظام`);
     } else {
-      toast.info("لا توجد حالات غياب محفوظة في قاعدة البيانات لهذا الامتحان");
+      toast.info("لا توجد حالات غياب محفوظة في بيانات النظام لهذا الامتحان");
     }
   };
 
@@ -1386,7 +1386,7 @@ export function GradeEntryView() {
   const handleMarkAllMissingAsAbsentConfirmed = async () => {
     if (!selectedExam) return;
     if (entrySheetError) {
-      toast.error("لا يمكن تسجيل الغياب الجماعي لأن ورقة الإدخال غير محملة من قاعدة البيانات.");
+      toast.error("لا يمكن تسجيل الغياب الجماعي لأن ورقة الإدخال غير محملة من بيانات النظام.");
       return;
     }
 
@@ -1456,11 +1456,11 @@ export function GradeEntryView() {
     if (successful.length > 0) {
       emitGradeEntryServerSync("grade-entry-mark-missing-absent");
       toast.success(
-        `تم تسجيل ${successful.length} طالب كغائب في قاعدة البيانات${failed.length ? `، وفشل ${failed.length}` : ""}`,
+        `تم تسجيل ${successful.length} طالب كغائب في بيانات النظام${failed.length ? `، وفشل ${failed.length}` : ""}`,
       );
     }
     if (failed.length > 0 && successful.length === 0) {
-      toast.error("تعذر تسجيل الغياب الجماعي من قاعدة البيانات.");
+      toast.error("تعذر تسجيل الغياب الجماعي من بيانات النظام.");
     }
   };
 
@@ -1674,7 +1674,7 @@ export function GradeEntryView() {
               size="sm"
               onClick={handleMarkAllMissingAsAbsent}
               disabled={!selectedExam || missingExamStudents.length === 0}
-              title="يسجل كل طلاب الدورة المرتبطين بهذا الامتحان الذين لا يملكون درجة محفوظة كغائبين، وليس الصفحة الحالية فقط"
+              title="يسجل كل طلاب الدورة المرتبطين بهذا الامتحان الذين لا يملكون درجة مسجلة كغائبين، وليس الصفحة الحالية فقط"
             >
               تسجيل الكل كغائب ({missingExamStudents.length})
             </Button>
@@ -1780,7 +1780,7 @@ export function GradeEntryView() {
                 </CardTitle>
                 <p className="mt-1 text-xs leading-6 text-muted-foreground">
                   اكتب هنا أسماء أو درجات طلاب غير موجودين أثناء إدخال درجات هذا
-                  الامتحان. ستظهر كل الملاحظات لاحقاً من زر الطلاب الغير موجودين
+                  الامتحان. ستظهر كل الملاحظات لاحقاً من زر الطلاب غير الموجودين
                   في لوحة النظام.
                 </p>
               </div>
@@ -1850,7 +1850,7 @@ export function GradeEntryView() {
                   ورقة إدخال الدرجة - {examStudents.length} طالب
                 </CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  البحث هنا يجد الطالب حتى لو تغيرت دورته ما دامت درجته محفوظة
+                  البحث هنا يجد الطالب حتى لو تغيرت دورته ما دامت درجته مسجلة
                   لهذا الامتحان، ويعرض وقت إدخال الدرجة في السجل.
                 </p>
               </div>
@@ -1859,7 +1859,7 @@ export function GradeEntryView() {
           <CardContent>
             {entrySheetLoading && (
               <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
-                جاري تحميل ورقة إدخال الدرجات من قاعدة البيانات...
+                جاري تحميل ورقة إدخال الدرجات من بيانات النظام...
               </div>
             )}
             {entrySheetError && (
@@ -1869,9 +1869,14 @@ export function GradeEntryView() {
             )}
             {examStudents.length > 0 && (
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
-                <span>
-                  عرض {visibleExamStudents.length} من {examStudents.length} طالب
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" data-count-scope="filtered">
+                    المطابقون للفلاتر: {examStudents.length}
+                  </Badge>
+                  <Badge variant="secondary" data-count-scope="page">
+                    المعروض في الصفحة: {visibleExamStudents.length}
+                  </Badge>
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Label htmlFor="grade-entry-page-size" className="text-xs">
                     حجم الصفحة
@@ -1929,7 +1934,7 @@ export function GradeEntryView() {
                   {entrySheetLoading
                     ? "جاري تجهيز ورقة إدخال الدرجة..."
                     : entrySheetError
-                      ? "تعذر تحميل الطلاب من قاعدة البيانات لهذا الامتحان."
+                      ? "تعذر تحميل الطلاب من بيانات النظام لهذا الامتحان."
                       : "لا يوجد طلاب مطابقون للفلاتر أو للدورات المربوطة بفصل نشط."}
                 </p>
               ) : (
@@ -2023,7 +2028,7 @@ export function GradeEntryView() {
                             ) ||
                             student.status === "مؤرشف") && (
                             <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
-                              ظهر هذا الطالب لأن له درجة محفوظة لهذا الامتحان،
+                              ظهر هذا الطالب لأن له درجة مسجلة لهذا الامتحان،
                               حتى لو لم يعد مطابقاً للدورة أو الموقع أو الفصل
                               الحالي.
                             </p>

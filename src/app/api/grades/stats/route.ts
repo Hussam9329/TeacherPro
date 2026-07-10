@@ -207,7 +207,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     return routeErrorResponse(
       error,
-      "تعذر تحميل إحصائيات الدرجات من قاعدة البيانات حالياً.",
+      "تعذر تحميل إحصائيات الدرجات من بيانات النظام حالياً.",
     );
   }
 }

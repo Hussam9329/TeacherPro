@@ -45,7 +45,7 @@ export function requireBotToken(req: NextRequest): NextResponse | null {
   const configuredToken = readBotIngestToken();
   if (!configuredToken) {
     return NextResponse.json(
-      { error: "TEACHERPRO_BOT_INGEST_TOKEN غير مفعّل في إعدادات السيرفر." },
+      { error: "TEACHERPRO_BOT_INGEST_TOKEN غير مفعّل في إعدادات النظام." },
       { status: 503 },
     );
   }

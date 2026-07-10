@@ -77,7 +77,7 @@ export function getStudentDuplicateMessage(
 
   if (!duplicate) return null;
   if (candidateTelegram && normalizeTelegramIdentifier(duplicate.telegram) === candidateTelegram) {
-    return 'لا يمكن إضافة الطالب: معرف التليكرام مسجل مسبقاً لطالب آخر';
+    return 'لا يمكن إضافة الطالب: معرف التيليجرام مسجل مسبقاً لطالب آخر';
   }
   if (candidatePhone && normalizePhoneForDuplicate(duplicate.phone) === candidatePhone) {
     return 'لا يمكن إضافة الطالب: رقم الهاتف مسجل مسبقاً لطالب آخر';

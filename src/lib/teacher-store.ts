@@ -188,7 +188,7 @@ function buildCourseUsageBlockMessage(
   if (firstRemovedStudyType) {
     const [key, count] = firstRemovedStudyType;
     const [program, studyType] = key.split("|||");
-    return `لا يمكن حذف نوع الدراسة "${studyType}" من نوع الدورة "${program}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${course.name}". انقل الطلاب أو غيّر نوع دراستهم أولاً.`;
+    return `لا يمكن حذف نوع البرنامج "${studyType}" من نوع الدورة "${program}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${course.name}". انقل الطلاب أو غيّر نوع دراستهم أولاً.`;
   }
 
   const nextLocationConfig = getCourseLocationConfig(draftCourse);
@@ -211,7 +211,7 @@ function buildCourseUsageBlockMessage(
   if (firstRemovedScope) {
     const [key, count] = firstRemovedScope;
     const [studyType, scope] = key.split("|||");
-    return `لا يمكن حذف الموقع "${scope}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${course.name}". انقل الطلاب أو غيّر مواقعهم أولاً.`;
+    return `لا يمكن حذف الموقع "${scope}" من نوع البرنامج "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${course.name}". انقل الطلاب أو غيّر مواقعهم أولاً.`;
   }
 
   const removedBaghdadSiteCounts = countStudentsBy(students, (student) => {
@@ -233,7 +233,7 @@ function buildCourseUsageBlockMessage(
   if (firstRemovedBaghdadSite) {
     const [key, count] = firstRemovedBaghdadSite;
     const [studyType, site] = key.split("|||");
-    return `لا يمكن حذف موقع بغداد "${site}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${course.name}". انقل الطلاب أو غيّر موقعهم أولاً.`;
+    return `لا يمكن حذف موقع بغداد "${site}" من نوع البرنامج "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين به في دورة "${course.name}". انقل الطلاب أو غيّر موقعهم أولاً.`;
   }
 
   const removedProvinceCounts = countStudentsBy(students, (student) => {
@@ -258,7 +258,7 @@ function buildCourseUsageBlockMessage(
   if (firstRemovedProvince) {
     const [key, count] = firstRemovedProvince;
     const [studyType, province] = key.split("|||");
-    return `لا يمكن حذف المحافظة "${province}" من نوع الدراسة "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين بها في دورة "${course.name}". انقل الطلاب أو غيّر محافظاتهم أولاً.`;
+    return `لا يمكن حذف المحافظة "${province}" من نوع البرنامج "${studyType}" لأن ${formatLinkedStudentCount(count)} مرتبطين بها في دورة "${course.name}". انقل الطلاب أو غيّر محافظاتهم أولاً.`;
   }
 
   return null;
@@ -2166,7 +2166,7 @@ function getSyncErrorMessage(error: unknown): string {
   if (isFailedApiResult(error) && error.error?.trim()) return error.error;
   if (error instanceof Error && error.message.trim()) return error.message;
   if (typeof error === "string" && error.trim()) return error;
-  return "تعذر حفظ التغيير في الخادم. سيتم الاحتفاظ بالتغيير محلياً ومحاولة مزامنته لاحقاً.";
+  return "تعذر حفظ التغيير في النظام. سيتم الاحتفاظ بالتغيير محلياً ومحاولة مزامنته لاحقاً.";
 }
 
 function notifySyncFailure(
@@ -3410,7 +3410,7 @@ export const useTeacherStore = create<TeacherState>()(
         // عند فتح الصفحة أو بعد تسجيل الخروج، مع إبقاء السجل محفوظاً محلياً.
         if (!get().isAuthenticated || !currentUser?.id) return;
 
-        // تخطّي إرسال السجلات server-only للخادم؛ الخادم يرفضها بـ 403
+        // تخطّي إرسال السجلات server-only للخادم؛ النظام يرفضها بـ 403
         // (لأنها حساسة ويجب أن تُكتب من الـ server handler فقط).
         // نبقيها محلية للـ UI feedback فقط.
         if (isServerOnlyLogEntry(module, action)) return;
@@ -3890,7 +3890,7 @@ export const useTeacherStore = create<TeacherState>()(
             get().logAction(
               "تسجيل الطلاب",
               "تراجع تسجيل طالب",
-              result.error || "رفض الخادم حفظ الطالب",
+              result.error || "رفض النظام حفظ الطالب",
             );
           }
         });
@@ -3962,9 +3962,9 @@ export const useTeacherStore = create<TeacherState>()(
           }
         };
 
-        // لا ترسل حقول الطالب كاملة إلى الخادم عند تعديل بيانات عادية.
+        // لا ترسل حقول الطالب كاملة إلى النظام عند تعديل بيانات عادية.
         // إرسال opportunities/baseOpportunities دائماً كان يجعل تغيير الدورة من سجل الطلاب
-        // يكتب رصيد الفرص المحلي فوق رصيد قاعدة البيانات، مع أن المستخدم لم يطلب تعديل الفرص.
+        // يكتب رصيد الفرص المحلي فوق رصيد بيانات النظام، مع أن المستخدم لم يطلب تعديل الفرص.
         includeIfProvided("name");
         includeIfProvided("school");
         includeIfProvided("gender");

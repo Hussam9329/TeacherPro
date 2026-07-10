@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { beginTeacherProInteractionBlocker } from "@/lib/teacherpro-sync";
+import { emitTeacherProActionStatus, TEACHERPRO_ACTION_COPY } from "@/lib/teacherpro-language";
 
 export function useActionLock(minDelayMs = 700) {
   const lockedRef = useRef(false);
@@ -40,6 +41,11 @@ export function useActionLock(minDelayMs = 700) {
           "mutation-in-progress",
         );
         setLocked(true);
+        emitTeacherProActionStatus({
+          status: "saving",
+          label: TEACHERPRO_ACTION_COPY.saving,
+          description: "يتم الآن التحقق من البيانات وحفظ التغيير.",
+        });
         const startedAt = Date.now();
         try {
           await action(...args);

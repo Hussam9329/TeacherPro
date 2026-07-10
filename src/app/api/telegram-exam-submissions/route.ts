@@ -99,7 +99,7 @@ function requireBotToken(req: NextRequest): NextResponse | null {
   const configuredToken = readBotIngestToken();
   if (!configuredToken) {
     return NextResponse.json(
-      { error: "TEACHERPRO_BOT_INGEST_TOKEN غير مفعّل في إعدادات السيرفر." },
+      { error: "TEACHERPRO_BOT_INGEST_TOKEN غير مفعّل في إعدادات النظام." },
       { status: 503 },
     );
   }
@@ -410,7 +410,7 @@ function resolveSubmissionMatchInfo(
     return {
       matchType: "telegram",
       matchSource: incomingTelegram,
-      matchDetails: `مطابق بالتليكرام: ${incomingTelegram}`,
+      matchDetails: `مطابق بالتيليجرام: ${incomingTelegram}`,
     };
   }
 
@@ -436,7 +436,7 @@ function resolveSubmissionMatchInfo(
     matchType: "manual_review",
     matchSource: "",
     matchDetails:
-      "يحتاج مراجعة يدوية: تم ربط المستلم بالطالب بدون قيمة كود/تليكرام/هاتف مؤكدة في طلب البوت.",
+      "يحتاج مراجعة يدوية: تم ربط المستلم بالطالب بدون قيمة كود/تيليجرام/هاتف مؤكدة في طلب البوت.",
   };
 }
 
@@ -606,8 +606,8 @@ export async function POST(req: NextRequest) {
         examId,
         status: "درجة",
         score: null,
-        sourceLabel: "مستلم بوت التليغرام",
-        notes: "تم استلام التسليم من بوت التليغرام وينتظر التصحيح الإلكتروني.",
+        sourceLabel: "مستلم بوت تيليجرام",
+        notes: "تم استلام التسليم من بوت تيليجرام وينتظر التصحيح الإلكتروني.",
         allowBlankGrade: true,
         preserveExistingScoreWhenBlank: true,
         blockOnLeave: false,
@@ -668,7 +668,7 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    await writeSystemAuditLog("التصحيح الإلكتروني", "استلام مستلم تليكرام وربطه بدرجة", {
+    await writeSystemAuditLog("التصحيح الإلكتروني", "استلام مستلم تيليجرام وربطه بدرجة", {
       submissionId: result.submission.id,
       studentId: result.submission.studentId,
       examId: result.submission.examId,
@@ -765,11 +765,11 @@ export async function PUT(req: NextRequest) {
             ),
             notes:
               textValue(body.gradeNotes ?? body.grade_notes, 1000) ||
-              `تم اعتماد الدرجة من مستلم بوت التليغرام (${nextStatus}).`,
+              `تم اعتماد الدرجة من مستلم بوت تيليجرام (${nextStatus}).`,
             academicAccountingChecked:
               body.academicAccountingChecked ??
               body.academic_accounting_checked,
-            sourceLabel: "مستلم بوت التليغرام",
+            sourceLabel: "مستلم بوت تيليجرام",
             allowBlankGrade: false,
             blockOnLeave: true,
           })
@@ -799,7 +799,7 @@ export async function PUT(req: NextRequest) {
       };
     });
 
-    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "تحديث مستلم تليكرام وربط الدرجة", {
+    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "تحديث مستلم تيليجرام وربط الدرجة", {
       submissionId: result.submission.id,
       studentId: result.submission.studentId,
       examId: result.submission.examId,
@@ -852,7 +852,7 @@ export async function DELETE(req: NextRequest) {
         matchType: true,
       },
     });
-    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "حذف مستلم تليكرام", {
+    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "حذف مستلم تيليجرام", {
       submissionId: deleted.id,
       studentId: deleted.studentId,
       examId: deleted.examId,
