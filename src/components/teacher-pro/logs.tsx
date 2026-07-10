@@ -18,6 +18,11 @@ import {
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 
+type AuditLogDisplayItem = {
+  label: string;
+  value: string;
+};
+
 type AuditLogRow = {
   id: string;
   time: string;
@@ -26,6 +31,12 @@ type AuditLogRow = {
   module: string;
   action: string;
   details?: string | null;
+  display?: {
+    summary?: string;
+    items?: AuditLogDisplayItem[];
+    technicalDetails?: string | null;
+    isStructured?: boolean;
+  } | null;
 };
 
 const logExportColumns: ExportColumn<AuditLogRow>[] = [
@@ -33,7 +44,11 @@ const logExportColumns: ExportColumn<AuditLogRow>[] = [
   { key: "userName", label: "المستخدم", value: (log) => log.userName || log.user || "" },
   { key: "module", label: "الوحدة", value: (log) => log.module || "" },
   { key: "action", label: "الإجراء", value: (log) => log.action || "" },
-  { key: "details", label: "التفاصيل", value: (log) => log.details || "" },
+  {
+    key: "details",
+    label: "ملخص العملية",
+    value: (log) => log.display?.summary || log.details || "",
+  },
 ];
 
 function formatLogTime(value: string) {
@@ -57,6 +72,7 @@ export function LogsView() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -101,7 +117,7 @@ export function LogsView() {
       });
 
     return () => controller.abort();
-  }, [debouncedSearch, filterModule, filterUser, page, pageSize]);
+  }, [debouncedSearch, filterModule, filterUser, page, pageSize, refreshKey]);
 
   const currentRangeLabel = useMemo(() => {
     if (totalCount === 0) return "0";
@@ -123,7 +139,7 @@ export function LogsView() {
         <CardHeader className="pb-2">
           <CardTitle>السجلات</CardTitle>
           <p className="text-sm text-muted-foreground">
-            السجلات تُقرأ من قاعدة البيانات مباشرة مع بحث وفلاتر خادمية حتى لا تظهر نتائج كاش قديمة.
+            سجل واضح يشرح ما حدث ومن نفّذه. المعرّفات والبيانات البرمجية مخفية افتراضياً، ويمكن فتحها للتدقيق التقني فقط.
           </p>
         </CardHeader>
         <CardContent className="space-y-3 p-4">
@@ -214,7 +230,7 @@ export function LogsView() {
               size="sm"
               onClick={() => {
                 emitTeacherProDataChanged({ source: "manual", reason: "logs-refresh", scopes: ["logs"] });
-                setPage((current) => current);
+                setRefreshKey((current) => current + 1);
               }}
             >
               تحديث
@@ -239,7 +255,7 @@ export function LogsView() {
                   <th className="p-3 text-right">المستخدم</th>
                   <th className="p-3 text-right">الوحدة</th>
                   <th className="p-3 text-right">الإجراء</th>
-                  <th className="p-3 text-right">التفاصيل</th>
+                  <th className="p-3 text-right">ملخص العملية</th>
                 </tr>
               </thead>
               <tbody>
@@ -249,7 +265,39 @@ export function LogsView() {
                     <td className="p-3">{log.userName || log.user || "النظام"}</td>
                     <td className="p-3"><Badge variant="outline">{log.module || "—"}</Badge></td>
                     <td className="p-3 font-medium">{log.action || "—"}</td>
-                    <td className="max-w-xl p-3 text-xs text-muted-foreground">{log.details || "—"}</td>
+                    <td className="max-w-2xl p-3 align-top">
+                      <div className="space-y-2">
+                        <p className="text-sm leading-7 text-foreground">
+                          {log.display?.summary || log.details || "—"}
+                        </p>
+                        {(log.display?.items || []).length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {(log.display?.items || []).slice(0, 6).map((item) => (
+                              <span
+                                key={`${item.label}:${item.value}`}
+                                className="rounded-lg border bg-muted/40 px-2 py-1 text-[11px] text-muted-foreground"
+                              >
+                                <span className="font-medium text-foreground">{item.label}:</span>{" "}
+                                {item.value}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {log.display?.technicalDetails ? (
+                          <details className="group rounded-xl border border-dashed bg-muted/20 px-3 py-2">
+                            <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
+                              عرض التفاصيل التقنية
+                            </summary>
+                            <pre
+                              dir="ltr"
+                              className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-background p-2 text-left font-mono text-[10px] leading-5 text-muted-foreground"
+                            >
+                              {log.display.technicalDetails}
+                            </pre>
+                          </details>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {!loading && logs.length === 0 ? (

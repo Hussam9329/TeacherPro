@@ -153,6 +153,15 @@ assert(
 );
 
 
+
+assert(
+  followUp.includes('callMutationVersionRef') &&
+    followUp.includes('mutationVersionAtRequestStart') &&
+    followUp.includes('dispatchLocal: false') &&
+    followUp.includes('scopes: ["follow-up", "logs"]'),
+  'حفظ حالة الاتصال محمي من طلبات Sync الأقدم ولا يعيد تحميل نفس التبويب فوراً',
+);
+
 if (process.exitCode) {
   console.error('\nفشل اختبار سلامة تبويبة المكالمات. راجع الرسائل أعلاه.');
   process.exit(process.exitCode);

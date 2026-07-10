@@ -13,6 +13,7 @@ const must = (condition, ok, bad = ok) => condition ? pass(ok) : fail(bad);
 const logsView = read("src/components/teacher-pro/logs.tsx");
 const logsRoute = read("src/app/api/logs/route.ts");
 const api = read("src/lib/api.ts");
+const auditDisplay = read("src/lib/audit-log-display.ts");
 const pkg = JSON.parse(read("package.json"));
 
 must(
@@ -55,6 +56,24 @@ must(
     logsRoute.includes("حذف السجلات متاح لمدير النظام صاحب صلاحية حذف السجلات فقط"),
   "حذف سجل مفرد مقيد بالمدير وصلاحية logs.delete",
   "DELETE /api/logs يجب أن لا يكتفي بقراءة السجلات أو حذف غير مضبوط.",
+);
+
+
+must(
+  logsView.includes("ملخص العملية") &&
+    logsView.includes("عرض التفاصيل التقنية") &&
+    logsView.includes("log.display?.summary") &&
+    logsRoute.includes("formatAuditLogDisplay") &&
+    logsRoute.includes("extractAuditEntityIds") &&
+    auditDisplay.includes("buildKnownSummary"),
+  "السجلات تعرض وصفاً عربياً مفهوماً وتخفي JSON خلف تفاصيل تقنية اختيارية",
+  "يجب تحويل تفاصيل السجل الخام إلى ملخص بشري مع إبقاء JSON للتدقيق فقط.",
+);
+
+must(
+  logsView.includes("setRefreshKey((current) => current + 1)"),
+  "زر تحديث السجلات ينفذ طلباً جديداً فعلياً",
+  "زر التحديث يجب أن يغير refreshKey بدلاً من setPage للقيمة نفسها.",
 );
 
 must(

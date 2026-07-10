@@ -6,6 +6,7 @@ import { getAuthPrincipal, requirePermission } from '@/lib/server-auth';
 import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { routeErrorResponse } from '@/lib/route-helpers';
+import { extractAuditEntityIds, formatAuditLogDisplay } from '@/lib/audit-log-display';
 
 /**
  * Whitelist of (module, action) pairs the CLIENT is allowed to write.
@@ -149,9 +150,49 @@ export async function GET(req: NextRequest) {
       db.auditLog.findMany({ distinct: ['userName'], select: { userName: true }, orderBy: { userName: 'asc' } }),
     ]);
 
+    // Humanize the CURRENT page only. This keeps the route fast even with tens of
+    // thousands of audit rows, while making old JSON logs readable immediately.
+    const studentIds = new Set<string>();
+    const examIds = new Set<string>();
+    logs.forEach((log) => {
+      const ids = extractAuditEntityIds(log.details);
+      ids.studentIds.forEach((id) => studentIds.add(id));
+      ids.examIds.forEach((id) => examIds.add(id));
+    });
+
+    const [students, exams] = await Promise.all([
+      studentIds.size
+        ? db.student.findMany({
+            where: { id: { in: Array.from(studentIds) } },
+            select: { id: true, name: true, code: true },
+          })
+        : Promise.resolve([]),
+      examIds.size
+        ? db.exam.findMany({
+            where: { id: { in: Array.from(examIds) } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const entityLabels = {
+      students: Object.fromEntries(
+        students.map((student) => [
+          student.id,
+          student.code ? `${student.name} (${student.code})` : student.name,
+        ]),
+      ),
+      exams: Object.fromEntries(exams.map((exam) => [exam.id, exam.name])),
+    };
+
+    const displayLogs = logs.map((log) => ({
+      ...log,
+      display: formatAuditLogDisplay(log, entityLabels),
+    }));
+
     const totalPages = Math.max(1, Math.ceil(totalCount / limit));
     return NextResponse.json({
-      logs,
+      logs: displayLogs,
       modules: modulesRaw.map((item) => item.module).filter(Boolean),
       users: usersRaw.map((item) => item.userName || '').filter(Boolean),
       total: totalCount,

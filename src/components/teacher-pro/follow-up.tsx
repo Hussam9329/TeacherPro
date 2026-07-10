@@ -1,7 +1,7 @@
 "use client";
 import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   useTeacherStore,
   type Exam,
@@ -532,6 +532,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     StudentCall[]
   >([]);
   const [callSavingKeys, setCallSavingKeys] = useState<Record<string, boolean>>({});
+  const callMutationVersionRef = useRef(0);
   const [callNoteDrafts, setCallNoteDrafts] = useState<Record<string, string>>({});
   const [callServerPageInfo, setCallServerPageInfo] = useState({
     totalCount: 0,
@@ -624,6 +625,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     }
     let cancelled = false;
     const controller = new AbortController();
+    const mutationVersionAtRequestStart = callMutationVersionRef.current;
     setCallLoading(true);
 
     callCandidatesApi
@@ -642,9 +644,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       .then((result) => {
         if (cancelled || controller.signal.aborted || !result) return;
         setCallRowsFromDb((result.rows || []) as unknown as CallStudentRow[]);
-        setCallPageStudentCalls(
-          (result.studentCalls || []) as unknown as StudentCall[],
-        );
+        // لا نسمح لطلب بدأ قبل حفظ المستخدم أن يعيد حالة اتصال قديمة فوق النتيجة المحفوظة.
+        if (mutationVersionAtRequestStart === callMutationVersionRef.current) {
+          setCallPageStudentCalls(
+            (result.studentCalls || []) as unknown as StudentCall[],
+          );
+        }
         if (result.exams?.length) {
           setCallCourseExamsFromDb(result.exams as unknown as Exam[]);
         }
@@ -1270,6 +1275,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     };
     const savingKey = `status:${payload.studentId}:${payload.examId}:${payload.category}`;
     setCallSaving(savingKey, true);
+    callMutationVersionRef.current += 1;
     try {
       const result = await studentCallApi.upsert(payload);
       if (!result.ok) {
@@ -1281,7 +1287,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       emitTeacherProDataChanged({
         source: "local-mutation",
         reason: "تحديث مكالمة طالب",
-        scopes: ["follow-up", "students", "dashboard"],
+        scopes: ["follow-up", "logs"],
+        // الحالة أُدمجت من رد الخادم بالفعل؛ ننبّه التبويبات الأخرى فقط كي لا
+        // يعيد هذا التبويب تحميل نفسه ويستبدل النتيجة بطلب Sync أقدم.
+        dispatchLocal: false,
       });
       toast.success("تم حفظ إجراء التواصل");
     } finally {
@@ -1307,6 +1316,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     if (!notes.trim() && !existing) return;
     const savingKey = `note:${row.student.id}`;
     setCallSaving(savingKey, true);
+    callMutationVersionRef.current += 1;
     try {
       const result = await studentCallApi.upsert(payload);
       if (!result.ok) {
@@ -1323,7 +1333,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       emitTeacherProDataChanged({
         source: "local-mutation",
         reason: "تحديث ملاحظات المكالمات",
-        scopes: ["follow-up", "students", "dashboard"],
+        scopes: ["follow-up", "logs"],
+        dispatchLocal: false,
       });
       toast.success(notes.trim() ? "تم حفظ ملاحظة المكالمات" : "تم حذف ملاحظة المكالمات");
     } finally {

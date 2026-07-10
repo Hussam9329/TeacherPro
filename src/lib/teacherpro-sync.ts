@@ -130,6 +130,8 @@ export function emitTeacherProDataChanged(input: {
   scopes?: string | string[];
   version?: string;
   broadcast?: boolean;
+  /** Keep the current tab untouched while still notifying other tabs/windows. */
+  dispatchLocal?: boolean;
 } = {}): TeacherProDataChangedDetail | null {
   if (!canUseWindow()) return null;
 
@@ -142,7 +144,7 @@ export function emitTeacherProDataChanged(input: {
     at: Date.now(),
   };
 
-  dispatchLocal(detail);
+  if (input.dispatchLocal !== false) dispatchLocal(detail);
 
   if (input.broadcast !== false) {
     getBroadcastChannel()?.postMessage(detail);
