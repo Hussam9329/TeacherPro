@@ -8,6 +8,7 @@ import {
   type Grade,
   type Student,
   type StudentCall,
+  type StudentLeave,
   type StudentNote,
 } from "@/lib/teacher-store";
 import {
@@ -17,6 +18,7 @@ import {
   pledgeStatsApi,
   studentApi,
   studentCallApi,
+  studentLeaveApi,
   type CallStatsResponse,
   type PledgeStatsResponse,
 } from "@/lib/api";
@@ -379,8 +381,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     studentNotes,
     opportunityLogs,
     logs,
-    addStudentLeave,
-    deleteStudentLeave,
     addStudentNote,
     deleteStudentNote,
     reactivateStudent,
@@ -456,6 +456,68 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [leaveDateFrom, setLeaveDateFrom] = useState(todayISO());
   const [leaveDateTo, setLeaveDateTo] = useState(todayISO());
   const [leaveNotes, setLeaveNotes] = useState("");
+  const [leaveRowsFromDb, setLeaveRowsFromDb] = useState<StudentLeave[]>([]);
+  const [leaveLoading, setLeaveLoading] = useState(false);
+  const [leaveError, setLeaveError] = useState("");
+  const [leaveSaving, setLeaveSaving] = useState(false);
+  const [leaveDeletingIds, setLeaveDeletingIds] = useState<Record<string, boolean>>({});
+  const [leaveSearch, setLeaveSearch] = useState("");
+  const debouncedLeaveSearch = useDebouncedValue(leaveSearch, 180);
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState<"all" | LeaveMode>("all");
+
+  useEffect(() => {
+    if (view !== "leaves") return;
+    const controller = new AbortController();
+
+    async function loadLeavesFromDatabase() {
+      setLeaveLoading(true);
+      setLeaveError("");
+      try {
+        const collected: StudentLeave[] = [];
+        let page = 1;
+        let totalPages = 1;
+
+        while (page <= totalPages) {
+          const params = new URLSearchParams({
+            page: String(page),
+            pageSize: "500",
+          });
+          const response = await fetch(`/api/student-leaves?${params.toString()}`, {
+            credentials: "same-origin",
+            signal: controller.signal,
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = (await response.json()) as {
+            studentLeaves?: StudentLeave[];
+            totalPages?: number;
+            hasMore?: boolean;
+          };
+          collected.push(...((payload.studentLeaves || []) as StudentLeave[]));
+          totalPages = Math.max(1, Number(payload.totalPages || 1));
+          if (!payload.hasMore || page >= totalPages) break;
+          page += 1;
+        }
+
+        if (controller.signal.aborted) return;
+        setLeaveRowsFromDb(collected);
+        const relatedStudents = collected
+          .map((leave) => leave.student)
+          .filter(Boolean) as Student[];
+        if (relatedStudents.length) mergeStudentsCache(relatedStudents);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.warn("[FollowUp/leaves] failed to load leaves from database", error);
+        setLeaveRowsFromDb([]);
+        setLeaveError("تعذر تحميل الإجازات من قاعدة البيانات. تم تعطيل الحفظ والحذف حتى يرجع الاتصال.");
+      } finally {
+        if (!controller.signal.aborted) setLeaveLoading(false);
+      }
+    }
+
+    void loadLeavesFromDatabase();
+
+    return () => controller.abort();
+  }, [view, mergeStudentsCache, syncKey]);
 
   const [callCourseId, setCallCourseId] = useState("");
   const [callExamId, setCallExamId] = useState("");
@@ -1047,7 +1109,19 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     pledgeStatusFilter,
   ]);
 
-  const saveLeave = () => {
+  const refreshLeavesFromPayload = (leave: StudentLeave | null | undefined) => {
+    if (!leave) return;
+    setLeaveRowsFromDb((current) => [
+      leave,
+      ...current.filter((item) => item.id !== leave.id),
+    ]);
+  };
+
+  const saveLeave = async () => {
+    if (leaveError || leaveLoading) {
+      toast.error("انتظر تحميل الإجازات من قاعدة البيانات قبل الحفظ.");
+      return;
+    }
     if (!leaveStudentId || !leaveReason.trim()) {
       toast.error("اختر الطالب وسبب الإجازة");
       return;
@@ -1060,9 +1134,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       toast.error("حدد بداية ونهاية فترة الإجازة");
       return;
     }
+
     const from = leaveDateFrom <= leaveDateTo ? leaveDateFrom : leaveDateTo;
     const to = leaveDateFrom <= leaveDateTo ? leaveDateTo : leaveDateFrom;
-    const duplicate = studentLeaves.some((leave) => {
+    const duplicate = leaveRowsFromDb.some((leave) => {
       if (leave.studentId !== leaveStudentId) return false;
       if (leaveMode === "exam")
         return (
@@ -1075,33 +1150,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       );
     });
     if (duplicate) {
-      toast.error("هذا الطالب لديه إجازة مسجلة بنفس النطاق");
+      toast.error("هذا الطالب لديه إجازة مسجلة بنفس النطاق حسب قاعدة البيانات");
       return;
     }
-    const student = students.find((item) => item.id === leaveStudentId);
-    const affectedGrades = grades.filter((grade) => {
-      if (grade.studentId !== leaveStudentId) return false;
-      if (leaveMode === "exam") return grade.examId === leaveExamId;
-      const exam = exams.find((item) => item.id === grade.examId);
-      return Boolean(
-        exam &&
-        leaveAppliesToExam(
-          {
-            studentId: leaveStudentId,
-            leaveType: "period",
-            dateFrom: from,
-            dateTo: to,
-          },
-          leaveStudentId,
-          exam,
-        ),
-      );
-    });
-    const removedGradeMessages = affectedGrades.map((grade) => {
-      const exam = exams.find((item) => item.id === grade.examId);
-      return `${exam?.name || "امتحان محذوف"}: ${formatGradeScore(grade, exam, "—")}`;
-    });
-    addStudentLeave({
+
+    const student =
+      leavePickerStudents.find((item) => item.id === leaveStudentId) ||
+      students.find((item) => item.id === leaveStudentId);
+    const payload = {
       studentId: leaveStudentId,
       examId: leaveMode === "exam" ? leaveExamId : "",
       leaveType: leaveMode,
@@ -1111,26 +1167,47 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       dateFrom: leaveMode === "exam" ? leaveDate || todayISO() : from,
       dateTo: leaveMode === "exam" ? leaveDate || todayISO() : to,
       notes: leaveNotes.trim(),
-    });
+    };
+
+    setLeaveSaving(true);
+    const result = await studentLeaveApi.add(payload);
+    setLeaveSaving(false);
+
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر حفظ الإجازة من الخادم.");
+      return;
+    }
+
+    const response = (result.data || {}) as {
+      studentLeave?: StudentLeave;
+      backedUpGrades?: number;
+      restoredGradeCount?: number;
+    };
+    refreshLeavesFromPayload(response.studentLeave);
     setCustomLeaveReason("");
     setLeaveReasonChoice("حالة مرضية");
     setLeaveNotes("");
-    if (removedGradeMessages.length > 0) {
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason: "student-leave-created",
+      scopes: ["follow-up", "grades", "students", "opportunities", "dashboard"],
+    });
+
+    const backedUpGrades = Number(response.backedUpGrades || 0);
+    if (backedUpGrades > 0) {
       toast.success(
-        removedGradeMessages.length === 1
-          ? `تم حذف درجة الطالب ${removedGradeMessages[0]} لأن الطالب أصبح مجازًا`
-          : `تم حذف ${removedGradeMessages.length} درجات لأن الطالب أصبح مجازًا`,
-        removedGradeMessages.length > 1
-          ? { description: removedGradeMessages.join(" | ") }
-          : undefined,
+        backedUpGrades === 1
+          ? "تم حفظ الإجازة وحذف درجة مرتبطة بعد أخذ نسخة احتياطية لها"
+          : `تم حفظ الإجازة وحذف ${backedUpGrades} درجات مرتبطة بعد أخذ نسخة احتياطية لها`,
       );
-    } else {
-      toast.success(
-        leaveMode === "period"
-          ? "تمت إضافة الإجازة للفترة وإلغاء محاسبة امتحاناتها"
-          : "تمت إضافة الإجازة وإعادة احتساب الطالب بدون محاسبة هذا الامتحان",
-      );
+      return;
     }
+
+    toast.success(
+      leaveMode === "period"
+        ? "تمت إضافة الإجازة للفترة وإعادة احتساب الطالب من قاعدة البيانات"
+        : "تمت إضافة الإجازة وإعادة احتساب الطالب بدون محاسبة هذا الامتحان",
+    );
   };
 
   const callExportRows = callRows.map((row) => ({
@@ -1354,16 +1431,167 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     );
   };
 
+  const leavesForDisplay = useMemo(() => {
+    const normalizedSearch = debouncedLeaveSearch.trim();
+    return leaveRowsFromDb
+      .filter((leave) => {
+        const relatedStudent =
+          leave.student && typeof leave.student === "object"
+            ? leave.student
+            : null;
+        const relatedExam =
+          leave.exam && typeof leave.exam === "object" ? leave.exam : null;
+        const student =
+          students.find((item) => item.id === leave.studentId) ||
+          relatedStudent;
+        const exam =
+          exams.find((item) => item.id === leave.examId) || relatedExam;
+        const isPeriod = (leave.leaveType || "exam") === "period";
+        if (leaveTypeFilter !== "all" && (isPeriod ? "period" : "exam") !== leaveTypeFilter)
+          return false;
+        if (!normalizedSearch) return true;
+        return searchAny(normalizedSearch, [
+          student?.name,
+          student?.code,
+          student?.phone,
+          student?.telegram,
+          exam?.name,
+          leave.reason,
+          leave.notes,
+          leave.studyType,
+          leave.date,
+          leave.dateFrom,
+          leave.dateTo,
+        ]);
+      })
+      .sort((a, b) =>
+        String(b.dateFrom || b.date || "").localeCompare(String(a.dateFrom || a.date || "")),
+      );
+  }, [
+    debouncedLeaveSearch,
+    leaveRowsFromDb,
+    leaveTypeFilter,
+    students,
+    exams,
+  ]);
+
+  const leaveStats = useMemo(() => {
+    const total = leaveRowsFromDb.length;
+    const exam = leaveRowsFromDb.filter((leave) => (leave.leaveType || "exam") === "exam").length;
+    const period = leaveRowsFromDb.filter((leave) => (leave.leaveType || "exam") === "period").length;
+    const withNotes = leaveRowsFromDb.filter((leave) => Boolean(String(leave.notes || "").trim())).length;
+    return { total, exam, period, withNotes };
+  }, [leaveRowsFromDb]);
+
+  const deleteLeaveServerFirst = async (leave: StudentLeave) => {
+    if (leaveError || leaveLoading) {
+      toast.error("انتظر تحميل الإجازات من قاعدة البيانات قبل الحذف.");
+      return;
+    }
+    const ok = window.confirm(
+      "سيتم حذف الإجازة من قاعدة البيانات واسترجاع أي درجات محفوظة احتياطياً ثم إعادة احتساب الطالب. هل تريد المتابعة؟",
+    );
+    if (!ok) return;
+
+    setLeaveDeletingIds((current) => ({ ...current, [leave.id]: true }));
+    const result = await studentLeaveApi.remove(leave.id);
+    setLeaveDeletingIds((current) => ({ ...current, [leave.id]: false }));
+
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر حذف الإجازة من الخادم.");
+      return;
+    }
+
+    setLeaveRowsFromDb((current) => current.filter((item) => item.id !== leave.id));
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason: "student-leave-deleted",
+      scopes: ["follow-up", "grades", "students", "opportunities", "dashboard"],
+    });
+
+    const response = (result.data || {}) as { restoredGradeCount?: number };
+    const restored = Number(response.restoredGradeCount || 0);
+    toast.success(
+      restored > 0
+        ? `تم حذف الإجازة واسترجاع ${restored} درجة/درجات ثم إعادة الاحتساب`
+        : "تم حذف الإجازة وإعادة احتساب الطالب من قاعدة البيانات",
+    );
+  };
+
   const renderLeaveList = () => (
     <Card>
       <CardHeader>
         <CardTitle>الإجازات السابقة</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          كل الإجازات هنا تأتي من قاعدة البيانات، وأي حذف يسترجع الدرجات المحفوظة احتياطياً قبل إعادة الاحتساب.
+        </p>
       </CardHeader>
-      <CardContent className="space-y-2">
-        {studentLeaves.length === 0 ? (
-          <p className="empty-state py-6">لا توجد إجازات مسجلة</p>
+      <CardContent className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-2xl border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">إجمالي الإجازات</p>
+            <b className="text-2xl">{leaveStats.total}</b>
+          </div>
+          <div className="rounded-2xl border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">حسب الامتحان</p>
+            <b className="text-2xl">{leaveStats.exam}</b>
+          </div>
+          <div className="rounded-2xl border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">فترة زمنية</p>
+            <b className="text-2xl">{leaveStats.period}</b>
+          </div>
+          <div className="rounded-2xl border bg-muted/30 p-3">
+            <p className="text-xs text-muted-foreground">بملاحظات</p>
+            <b className="text-2xl">{leaveStats.withNotes}</b>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-[1fr_220px]">
+          <div className="space-y-1">
+            <Label htmlFor="leave-search" className="text-xs">
+              بحث في الإجازات
+            </Label>
+            <Input
+              id="leave-search"
+              value={leaveSearch}
+              onChange={(event) => setLeaveSearch(event.target.value)}
+              placeholder="اسم / كود / هاتف / تليكرام / امتحان / سبب / ملاحظة"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="leave-type-filter" className="text-xs">
+              نوع الإجازة
+            </Label>
+            <Select
+              value={leaveTypeFilter}
+              onValueChange={(value) => setLeaveTypeFilter(value as "all" | LeaveMode)}
+            >
+              <SelectTrigger id="leave-type-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل الإجازات</SelectItem>
+                <SelectItem value="exam">حسب الامتحان</SelectItem>
+                <SelectItem value="period">فترة زمنية</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {leaveLoading ? (
+          <div className="space-y-2" aria-busy="true" aria-live="polite">
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="h-20 animate-pulse rounded-2xl bg-muted" />
+            ))}
+          </div>
+        ) : leaveError ? (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            {leaveError}
+          </div>
+        ) : leavesForDisplay.length === 0 ? (
+          <p className="empty-state py-6">لا توجد إجازات مطابقة للفلاتر الحالية</p>
         ) : (
-          studentLeaves.map((leave) => {
+          leavesForDisplay.map((leave) => {
             const relatedStudent =
               leave.student && typeof leave.student === "object"
                 ? leave.student
@@ -1380,6 +1608,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             const studentDisplayCode = student?.code
               ? ` (${student.code})`
               : "";
+            const deleting = Boolean(leaveDeletingIds[leave.id]);
             return (
               <div
                 key={leave.id}
@@ -1403,11 +1632,17 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => deleteStudentLeave(leave.id)}
+                    disabled={deleting || leaveLoading || Boolean(leaveError)}
+                    onClick={() => void deleteLeaveServerFirst(leave)}
                   >
-                    حذف
+                    {deleting ? "جاري الحذف..." : "حذف"}
                   </Button>
                 </div>
+                {leave.notes ? (
+                  <p className="lg:col-span-5 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    ملاحظة: {leave.notes}
+                  </p>
+                ) : null}
               </div>
             );
           })
@@ -1991,7 +2226,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         exams={exams}
         grades={grades}
         opportunityLogs={opportunityLogs}
-        studentLeaves={studentLeaves}
+        studentLeaves={leaveRowsFromDb.length ? leaveRowsFromDb : studentLeaves}
         studentCalls={studentCalls}
         studentNotes={studentNotes}
         logs={logs}
@@ -2122,8 +2357,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   نوع الدراسة: <b>{selectedLeaveStudent.studyType || "—"}</b>
                 </p>
               )}
-              <Button className="w-full" onClick={saveLeave}>
-                حفظ الإجازة
+              <Button
+                className="w-full"
+                onClick={() => void saveLeave()}
+                disabled={leaveSaving || leaveLoading || Boolean(leaveError)}
+              >
+                {leaveSaving ? "جاري الحفظ..." : "حفظ الإجازة"}
               </Button>
             </CardContent>
           </Card>
