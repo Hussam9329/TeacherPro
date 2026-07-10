@@ -49,7 +49,8 @@ const checks = [
   [
     "التحديث الخارجي يُدمج ويؤجل أثناء الكتابة أو السكرول بدلاً من مقاطعة المستخدم",
     syncHook.includes("EXTERNAL_SYNC_DEBOUNCE_MS") &&
-      syncHook.includes("isTeacherProInteractionBusy") &&
+      syncHook.includes("getTeacherProInteractionState") &&
+      syncHook.includes("interaction.hard") &&
       syncHook.includes("MAX_INTERACTION_DEFERRAL_MS"),
   ],
   [
@@ -71,6 +72,23 @@ const checks = [
     "طلبات المكالمات القديمة لا تستبدل حالة تم الاتصال المحفوظة",
     calls.includes("mutationVersionAtRequestStart") &&
       calls.includes("callMutationVersionRef.current"),
+  ],
+  [
+    "النوافذ المفتوحة والعمليات الجارية تمنع التحديث الخارجي القسري",
+    syncLib.includes("hasOpenTeacherProDialog") &&
+      syncLib.includes("explicitInteractionBlockers") &&
+      syncLib.includes("beginTeacherProInteractionBlocker"),
+  ],
+  [
+    "التحميل الكامل محصور بأول اتصال وتحديثات الخلفية لا تعرض شاشة تحميل عامة",
+    store.includes("const isInitialLoad = !get().dbConnected") &&
+      store.includes("announceTeacherProSyncRefreshing"),
+  ],
+  [
+    "مؤشر حالة المزامنة موحد في رأس النظام",
+    layout.includes("TEACHERPRO_SYNC_STATUS_EVENT") &&
+      layout.includes("جارٍ التحديث") &&
+      layout.includes("تمت المزامنة"),
   ],
 ];
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTeacherStore, PERMISSION_CATALOG, type PermissionEntry } from '@/lib/teacher-store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { useActionLock } from '@/hooks/use-action-lock';
+import { useLatestRequest } from '@/hooks/use-latest-request';
+import {
+  useTeacherProBackgroundSyncDetector,
+  useTeacherProSyncKey,
+} from '@/hooks/use-teacherpro-sync';
 
 // ─── Permission categories for grouping ──────────────────────────────────────
 
@@ -987,32 +992,48 @@ function formatSecurityTime(value: string) {
 }
 
 function SecurityTab() {
+  const syncKey = useTeacherProSyncKey(['accounts', 'logs']);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
+  const beginSecurityRequest = useLatestRequest();
+  const overviewLoadedRef = useRef(false);
   const [overview, setOverview] = useState<SecurityOverview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
-  const loadOverview = async () => {
-    setLoading(true);
+  const loadOverview = useCallback(async (options: { background?: boolean } = {}) => {
+    const request = beginSecurityRequest();
+    const background = Boolean(options.background || overviewLoadedRef.current);
+    if (background) setRefreshing(true);
+    else setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/accounts/security', { credentials: 'same-origin' });
+      const res = await fetch('/api/accounts/security', {
+        credentials: 'same-origin',
+        signal: request.signal,
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => null) as { error?: string } | null;
         throw new Error(data?.error || 'تعذر تحميل لوحة الأمان');
       }
       const data = await res.json() as SecurityOverview;
+      if (!request.isLatest()) return;
       setOverview(data);
+      overviewLoadedRef.current = true;
     } catch (err) {
+      if (!request.isLatest()) return;
       setError(err instanceof Error ? err.message : 'تعذر تحميل لوحة الأمان');
-      setOverview(null);
+      if (!background) setOverview(null);
     } finally {
+      if (!request.isLatest()) return;
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [beginSecurityRequest]);
 
   useEffect(() => {
-    void loadOverview();
-  }, []);
+    void loadOverview({ background: isBackgroundSync() });
+  }, [isBackgroundSync, loadOverview, syncKey]);
 
   if (loading) {
     return (
@@ -1043,7 +1064,7 @@ function SecurityTab() {
           <h3 className="text-lg font-bold">أمان الحسابات</h3>
           <p className="text-sm text-muted-foreground">فحص سريع للأسرار، الصلاحيات الحساسة، وآخر تغييرات الحسابات.</p>
         </div>
-        <Button variant="outline" onClick={() => void loadOverview()}>تحديث الفحص</Button>
+        <Button variant="outline" disabled={refreshing} onClick={() => void loadOverview({ background: true })}>{refreshing ? 'جارٍ التحديث...' : 'تحديث الفحص'}</Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

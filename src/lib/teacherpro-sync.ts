@@ -6,6 +6,16 @@ export const TEACHERPRO_LOCAL_MUTATION_EVENT = "teacherpro:local-mutation-record
 export const TEACHERPRO_SYNC_PENDING_EVENT = "teacherpro:sync-pending";
 export const TEACHERPRO_SYNC_APPLY_NOW_EVENT = "teacherpro:sync-apply-now";
 export const TEACHERPRO_SYNC_SETTLED_EVENT = "teacherpro:sync-settled";
+export const TEACHERPRO_SYNC_STATUS_EVENT = "teacherpro:sync-status";
+
+export type TeacherProSyncStatus = "idle" | "pending" | "refreshing" | "synced" | "error";
+
+export interface TeacherProSyncStatusDetail {
+  status: TeacherProSyncStatus;
+  scopes?: string[];
+  message?: string;
+  at: number;
+}
 
 export type TeacherProSyncSource =
   | "local-mutation"
@@ -56,6 +66,8 @@ let lastSeenEventId = "";
 let contextId = "";
 let interactionTrackingInstalled = false;
 let lastInteractionAt = 0;
+let explicitInteractionBlockers = new Map<string, string>();
+let syncStatusResetTimer: ReturnType<typeof setTimeout> | null = null;
 
 type PendingLocalMutation = {
   id: string;
@@ -235,26 +247,117 @@ function isEditableElement(element: Element | null): boolean {
   return element.getAttribute("role") === "textbox";
 }
 
-export function isTeacherProInteractionBusy(): boolean {
+function hasOpenTeacherProDialog(): boolean {
   if (!canUseWindow()) return false;
+  return Boolean(
+    document.querySelector(
+      '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [aria-modal="true"]',
+    ),
+  );
+}
+
+function hasActiveTeacherProSelection(): boolean {
+  if (!canUseWindow()) return false;
+  return Boolean(
+    document.querySelector(
+      'main [data-teacherpro-selection-active="true"], main tbody input[type="checkbox"]:checked, main [role="row"][aria-selected="true"], main [data-selected="true"], main input[type="checkbox"][data-teacherpro-selection]:checked, main [role="checkbox"][data-teacherpro-selection][data-state="checked"]',
+    ),
+  );
+}
+
+export function getTeacherProInteractionState(): {
+  busy: boolean;
+  hard: boolean;
+  reason?: string;
+} {
+  if (!canUseWindow()) return { busy: false, hard: false };
   installInteractionTracking();
-  if (document.hidden) return true;
-  if (isEditableElement(document.activeElement)) return true;
-  return Date.now() - lastInteractionAt < INTERACTION_IDLE_MS;
+
+  if (document.hidden) return { busy: true, hard: false, reason: "hidden" };
+  const explicitReason = explicitInteractionBlockers.values().next().value as
+    | string
+    | undefined;
+  if (explicitReason) return { busy: true, hard: true, reason: explicitReason };
+  if (hasOpenTeacherProDialog())
+    return { busy: true, hard: true, reason: "dialog-open" };
+  if (isEditableElement(document.activeElement))
+    return { busy: true, hard: true, reason: "editing" };
+  if (hasActiveTeacherProSelection())
+    return { busy: true, hard: true, reason: "selection-active" };
+  if (Date.now() - lastInteractionAt < INTERACTION_IDLE_MS)
+    return { busy: true, hard: false, reason: "recent-interaction" };
+  return { busy: false, hard: false };
+}
+
+export function isTeacherProInteractionBusy(): boolean {
+  return getTeacherProInteractionState().busy;
+}
+
+export function beginTeacherProInteractionBlocker(reason = "operation-in-progress"): () => void {
+  if (!canUseWindow()) return () => {};
+  const token = `busy-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  explicitInteractionBlockers.set(token, reason);
+  return () => {
+    explicitInteractionBlockers.delete(token);
+  };
+}
+
+export function announceTeacherProSyncStatus(
+  status: TeacherProSyncStatus,
+  options: { scopes?: string[]; message?: string; autoIdleMs?: number } = {},
+): void {
+  if (!canUseWindow()) return;
+  if (syncStatusResetTimer) {
+    window.clearTimeout(syncStatusResetTimer);
+    syncStatusResetTimer = null;
+  }
+  const detail: TeacherProSyncStatusDetail = {
+    status,
+    scopes: normalizeScopes(options.scopes),
+    message: options.message,
+    at: Date.now(),
+  };
+  window.dispatchEvent(
+    new CustomEvent<TeacherProSyncStatusDetail>(TEACHERPRO_SYNC_STATUS_EVENT, {
+      detail,
+    }),
+  );
+  if (options.autoIdleMs && options.autoIdleMs > 0) {
+    syncStatusResetTimer = window.setTimeout(() => {
+      syncStatusResetTimer = null;
+      announceTeacherProSyncStatus("idle");
+    }, options.autoIdleMs) as unknown as ReturnType<typeof setTimeout>;
+  }
 }
 
 export function announceTeacherProSyncPending(scopes?: string[]): void {
   if (!canUseWindow()) return;
+  const normalizedScopes = normalizeScopes(scopes) || ["all"];
+  announceTeacherProSyncStatus("pending", { scopes: normalizedScopes });
   window.dispatchEvent(
     new CustomEvent(TEACHERPRO_SYNC_PENDING_EVENT, {
-      detail: { scopes: normalizeScopes(scopes) || ["all"] },
+      detail: { scopes: normalizedScopes },
     }),
   );
 }
 
-export function announceTeacherProSyncSettled(): void {
+export function announceTeacherProSyncRefreshing(scopes?: string[]): void {
+  announceTeacherProSyncStatus("refreshing", {
+    scopes: normalizeScopes(scopes) || ["all"],
+  });
+}
+
+export function announceTeacherProSyncSettled(scopes?: string[]): void {
   if (!canUseWindow()) return;
+  announceTeacherProSyncStatus("synced", {
+    scopes: normalizeScopes(scopes) || ["all"],
+    autoIdleMs: 2200,
+  });
   window.dispatchEvent(new Event(TEACHERPRO_SYNC_SETTLED_EVENT));
+}
+
+export function announceTeacherProSyncError(message?: string): void {
+  announceTeacherProSyncStatus("error", { message, autoIdleMs: 4500 });
 }
 
 export function requestTeacherProSyncNow(): void {

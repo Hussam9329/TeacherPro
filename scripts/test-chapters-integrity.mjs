@@ -78,8 +78,13 @@ assert(
   chaptersRoute.includes('linkedCourseChapters') && chaptersRoute.includes('linkedOpportunityLogs') && !chaptersRoute.includes('await tx.courseChapter.deleteMany({ where: { chapterId: id } })'),
   'حذف الفصل لا يمسح روابطه بصمت ولا يحذف تاريخ الفرص بدون فحص أثر',
 );
+const hasLatestChapterRequestGuard =
+  (chaptersView.includes('new AbortController()') && chaptersView.includes('controller.abort()')) ||
+  (chaptersView.includes('useLatestRequest') &&
+    chaptersView.includes('beginOverviewRequest') &&
+    chaptersView.includes('request.isLatest()'));
 assert(
-  chaptersView.includes('chapterApi.overview') && chaptersView.includes('new AbortController()') && chaptersView.includes('controller.abort()') && chaptersView.includes('quietAbort: true'),
+  chaptersView.includes('chapterApi.overview') && hasLatestChapterRequestGuard && chaptersView.includes('quietAbort: true'),
   'صفحة الفصول تلغي طلبات التحميل القديمة ولا تعتمد على طلبات متداخلة',
 );
 assert(

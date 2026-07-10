@@ -3,8 +3,9 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import {
   announceTeacherProSyncPending,
+  announceTeacherProSyncRefreshing,
   announceTeacherProSyncSettled,
-  isTeacherProInteractionBusy,
+  getTeacherProInteractionState,
   subscribeTeacherProDataChanged,
   TEACHERPRO_SYNC_APPLY_NOW_EVENT,
   type TeacherProDataChangedDetail,
@@ -52,13 +53,12 @@ export function useTeacherProSyncKey(scopes?: string | string[]): number {
 
     const flush = (force = false) => {
       if (!pendingRef.current) return;
-      const hidden = typeof document !== "undefined" && document.hidden;
+      const interaction = getTeacherProInteractionState();
       const pendingFor = Date.now() - pendingSinceRef.current;
       const shouldDefer =
         !force &&
-        (hidden ||
-          (isTeacherProInteractionBusy() &&
-            pendingFor < MAX_INTERACTION_DEFERRAL_MS));
+        interaction.busy &&
+        (interaction.hard || pendingFor < MAX_INTERACTION_DEFERRAL_MS);
 
       if (shouldDefer) {
         if (!announcedRef.current && pendingFor >= 1200) {
@@ -74,11 +74,13 @@ export function useTeacherProSyncKey(scopes?: string | string[]): number {
       }
 
       clearTimer();
+      const scopes = pendingRef.current.scopes;
       pendingRef.current = null;
       pendingSinceRef.current = 0;
       announcedRef.current = false;
-      announceTeacherProSyncSettled();
+      announceTeacherProSyncRefreshing(scopes);
       startTransition(() => setKey((value) => value + 1));
+      window.setTimeout(() => announceTeacherProSyncSettled(scopes), 1200);
     };
 
     const queue = (detail: TeacherProDataChangedDetail) => {

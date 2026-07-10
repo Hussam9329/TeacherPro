@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,11 @@ import {
   UserX,
 } from "lucide-react";
 import { EmptyState, StatCard } from "./ui-kit";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import {
+  useTeacherProBackgroundSyncDetector,
+  useTeacherProSyncKey,
+} from "@/hooks/use-teacherpro-sync";
+import { useLatestRequest } from "@/hooks/use-latest-request";
 
 type DashboardAlert = {
   id: string;
@@ -80,39 +84,51 @@ function formatStatsTime(value?: string) {
 export function DashboardView() {
   const { setSection } = useTeacherStore();
   const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams", "correction"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
+  const beginStatsRequest = useLatestRequest();
+  const statsLoadedRef = useRef(false);
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [statsError, setStatsError] = useState("");
 
-  const loadStats = useCallback(() => {
-    let cancelled = false;
-    setStatsLoading(true);
-    setStatsError("");
-    fetch("/api/stats", { credentials: "same-origin", cache: "no-store" })
-      .then(async (res) => {
+  const loadStats = useCallback(
+    async (options: { background?: boolean } = {}) => {
+      const request = beginStatsRequest();
+      const background = Boolean(options.background || statsLoadedRef.current);
+      if (!background) setStatsLoading(true);
+      setStatsError("");
+      try {
+        const res = await fetch("/api/stats", {
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: request.signal,
+        });
         const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(data?.error || "تعذر تحميل الإحصائيات من قاعدة البيانات.");
-        return data as DashboardStats;
-      })
-      .then((data) => {
-        if (!cancelled) setStats(data);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setStats(null);
-          setStatsError(error instanceof Error ? error.message : "تعذر تحميل الإحصائيات من قاعدة البيانات.");
+        if (!res.ok) {
+          throw new Error(data?.error || "تعذر تحميل الإحصائيات من قاعدة البيانات.");
         }
-      })
-      .finally(() => {
-        if (!cancelled) setStatsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+        if (!request.isLatest()) return;
+        setStats(data as DashboardStats);
+        statsLoadedRef.current = true;
+      } catch (error) {
+        if (!request.isLatest()) return;
+        setStatsError(
+          error instanceof Error
+            ? error.message
+            : "تعذر تحميل الإحصائيات من قاعدة البيانات.",
+        );
+        if (!background) setStats(null);
+      } finally {
+        if (request.isLatest()) setStatsLoading(false);
+      }
+    },
+    [beginStatsRequest],
+  );
 
-  useEffect(() => loadStats(), [loadStats, syncKey]);
+  useEffect(() => {
+    void loadStats({ background: isBackgroundSync() });
+  }, [isBackgroundSync, loadStats, syncKey]);
 
   const kpiCards = [
     {
@@ -177,7 +193,7 @@ export function DashboardView() {
               {statsError && <p className="mt-1 text-xs font-bold text-destructive">{statsError}</p>}
             </div>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={loadStats} disabled={statsLoading}>
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadStats({ background: true })} disabled={statsLoading}>
             <RefreshCw className={cn("ml-2 size-4", statsLoading && "animate-spin")} />
             تحديث من قاعدة البيانات
           </Button>
@@ -212,7 +228,7 @@ export function DashboardView() {
               title="تعذر عرض التنبيهات"
               description="التنبيهات لا تُحسب من بيانات محلية ناقصة. أعد المحاولة بعد التأكد من اتصال قاعدة البيانات."
               action={
-                <Button type="button" variant="outline" onClick={loadStats}>
+                <Button type="button" variant="outline" onClick={() => void loadStats()}>
                   إعادة المحاولة
                 </Button>
               }

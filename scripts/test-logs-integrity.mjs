@@ -16,13 +16,19 @@ const api = read("src/lib/api.ts");
 const auditDisplay = read("src/lib/audit-log-display.ts");
 const pkg = JSON.parse(read("package.json"));
 
+const logsHasLatestRequestGuard =
+  (logsView.includes("AbortController") && logsView.includes("signal: controller.signal")) ||
+  (logsView.includes("useLatestRequest") &&
+    logsView.includes("beginLogsRequest") &&
+    logsView.includes("request.isLatest()") &&
+    logsView.includes("signal: request.signal"));
+
 must(
   logsView.includes("logApi") &&
-    logsView.includes("AbortController") &&
-    logsView.includes("signal: controller.signal") &&
+    logsHasLatestRequestGuard &&
     logsView.includes("قاعدة البيانات"),
   "صفحة السجلات صارت Server-driven وتلغي الطلبات القديمة",
-  "صفحة السجلات يجب أن تقرأ من logApi مع AbortController لا من كاش Zustand فقط.",
+  "صفحة السجلات يجب أن تقرأ من logApi مع حماية Latest Request لا من كاش Zustand فقط.",
 );
 
 must(

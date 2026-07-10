@@ -4,6 +4,9 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import { syncVersionApi } from "@/lib/api";
 import {
+  announceTeacherProSyncPending,
+  announceTeacherProSyncRefreshing,
+  announceTeacherProSyncSettled,
   consumeTeacherProLocalMutationEcho,
   emitTeacherProDataChanged,
   isTeacherProInteractionBusy,
@@ -12,7 +15,9 @@ import {
   subscribeTeacherProLocalMutation,
   TEACHERPRO_SYNC_PENDING_EVENT,
   TEACHERPRO_SYNC_SETTLED_EVENT,
+  TEACHERPRO_SYNC_STATUS_EVENT,
   type TeacherProDataChangedDetail,
+  type TeacherProSyncStatusDetail,
 } from "@/lib/teacherpro-sync";
 import {
   LayoutDashboard,
@@ -160,6 +165,7 @@ const PAGE_OWNED_SYNC_SECTIONS = new Set<SectionId>([
   "dashboard",
   "missing-students-notes",
   "courses",
+  "chapters",
   "student-registry",
   "student-bulk-import",
   "dismissed-students",
@@ -173,6 +179,8 @@ const PAGE_OWNED_SYNC_SECTIONS = new Set<SectionId>([
   "follow-up-calls",
   "follow-up-leaves",
   "follow-up-pledges",
+  "accounts",
+  "logs",
 ]);
 
 function detailMatchesSection(
@@ -465,6 +473,10 @@ export function TeacherProLayout() {
   } = useTeacherStore();
 
   const lazyLoadedSectionsRef = useRef<Set<SectionId>>(new Set());
+  const [syncStatus, setSyncStatus] = useState<TeacherProSyncStatusDetail>({
+    status: "idle",
+    at: 0,
+  });
 
   const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>(() => {
     // Open all families by default
@@ -694,27 +706,30 @@ export function TeacherProLayout() {
         window.clearTimeout(syncRefreshTimerRef.current);
       }
 
-      const scheduleRefresh = () => {
+      const scheduleRefresh = async () => {
         const busy = isUserScrollingRef.current || isTeacherProInteractionBusy();
         if (busy) {
+          announceTeacherProSyncPending(detail?.scopes);
           syncRefreshTimerRef.current = window.setTimeout(
-            scheduleRefresh,
+            () => void scheduleRefresh(),
             500,
           ) as unknown as ReturnType<typeof window.setTimeout>;
           return;
         }
         syncRefreshTimerRef.current = null;
-        void loadSectionDataFromServer(currentSection);
+        announceTeacherProSyncRefreshing(detail?.scopes);
+        await loadSectionDataFromServer(currentSection);
 
         const touchesCore =
           !detail?.scopes ||
           detail.scopes.includes("all") ||
           detail.scopes.includes("core");
-        if (touchesCore) void loadFromServer();
+        if (touchesCore) await loadFromServer();
+        announceTeacherProSyncSettled(detail?.scopes);
       };
 
       syncRefreshTimerRef.current = window.setTimeout(
-        scheduleRefresh,
+        () => void scheduleRefresh(),
         650,
       ) as unknown as ReturnType<typeof window.setTimeout>;
     };
@@ -764,6 +779,15 @@ export function TeacherProLayout() {
       }
       isUserScrollingRef.current = false;
     };
+  }, []);
+
+  useEffect(() => {
+    const onStatus = (event: Event) => {
+      const detail = (event as CustomEvent<TeacherProSyncStatusDetail>).detail;
+      if (detail?.status) setSyncStatus(detail);
+    };
+    window.addEventListener(TEACHERPRO_SYNC_STATUS_EVENT, onStatus);
+    return () => window.removeEventListener(TEACHERPRO_SYNC_STATUS_EVENT, onStatus);
   }, []);
 
   // Small non-blocking notice only when an external refresh is deliberately
@@ -1335,6 +1359,27 @@ export function TeacherProLayout() {
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {syncStatus.status !== "idle" ? (
+                <Badge
+                  variant={syncStatus.status === "error" ? "destructive" : "outline"}
+                  className="hidden items-center gap-1.5 sm:flex"
+                  aria-live="polite"
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full bg-current",
+                      syncStatus.status === "refreshing" && "animate-pulse",
+                    )}
+                  />
+                  {syncStatus.status === "pending"
+                    ? "توجد تحديثات جديدة"
+                    : syncStatus.status === "refreshing"
+                      ? "جارٍ التحديث"
+                      : syncStatus.status === "synced"
+                        ? "تمت المزامنة"
+                        : "تعذر التحديث"}
+                </Badge>
+              ) : null}
               <Button
                 variant="outline"
                 size="icon"

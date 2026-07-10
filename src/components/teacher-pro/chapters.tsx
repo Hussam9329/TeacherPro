@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore } from "@/lib/teacher-store";
 import { chapterApi, courseChapterApi, type ChapterCourseLinkOverview, type ChapterOverviewResponse } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
@@ -37,6 +37,11 @@ import {
 import { toast } from "sonner";
 import { toLatinDigits } from "@/lib/format";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { useLatestRequest } from "@/hooks/use-latest-request";
+import {
+  useTeacherProBackgroundSyncDetector,
+  useTeacherProSyncKey,
+} from "@/hooks/use-teacherpro-sync";
 
 type CourseFilter = "all" | "has-active" | "no-active" | "multiple-active" | "needs-repair";
 type ChapterFilter = "all" | "active" | "unused" | "deletable" | "protected";
@@ -110,8 +115,19 @@ function renderBlockers(blockers: string[]) {
 
 export function ChaptersView() {
   const { loadSectionDataFromServer } = useTeacherStore();
+  const syncKey = useTeacherProSyncKey([
+    "chapters",
+    "courses",
+    "students",
+    "opportunities",
+    "dashboard",
+  ]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
+  const beginOverviewRequest = useLatestRequest();
+  const overviewLoadedRef = useRef(false);
   const [overview, setOverview] = useState<ChapterOverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [courseFilter, setCourseFilter] = useState<CourseFilter>("all");
   const [chapterFilter, setChapterFilter] = useState<ChapterFilter>("all");
@@ -139,26 +155,34 @@ export function ChaptersView() {
   const { locked: isApplyingAction, runLocked: runApplyActionLocked } = useActionLock();
   const { locked: isFixingZeroOpp, runLocked: runFixZeroOppLocked } = useActionLock();
 
-  const loadOverview = async (options: { quiet?: boolean } = {}) => {
-    if (!options.quiet) setLoading(true);
-    const data = await chapterApi.overview();
-    if (data) setOverview(data);
-    setLoading(false);
-  };
+  const loadOverview = useCallback(
+    async (options: { quiet?: boolean } = {}) => {
+      const request = beginOverviewRequest();
+      const quiet = Boolean(options.quiet || overviewLoadedRef.current);
+      if (quiet) setRefreshing(true);
+      else setLoading(true);
+      try {
+        const data = await chapterApi.overview({
+          signal: request.signal,
+          quietAbort: true,
+        });
+        if (!request.isLatest()) return;
+        if (data) {
+          setOverview(data);
+          overviewLoadedRef.current = true;
+        }
+      } finally {
+        if (!request.isLatest()) return;
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [beginOverviewRequest],
+  );
 
   useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    chapterApi
-      .overview({ signal: controller.signal, quietAbort: true })
-      .then((data) => {
-        if (data) setOverview(data);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
+    void loadOverview({ quiet: isBackgroundSync() });
+  }, [isBackgroundSync, loadOverview, syncKey]);
 
   const refreshAfterMutation = async (reason: string) => {
     await Promise.all([
@@ -489,7 +513,7 @@ export function ChaptersView() {
                 إدارة الفصول أصبحت مبنية على ملخص قاعدة البيانات: فصل نشط واحد لكل دورة، أثر واضح قبل التفعيل، وحماية من الاعتماد على كاش الطلاب.
               </p>
             </div>
-            <Button variant="outline" className="rounded-full" onClick={() => void loadOverview()} disabled={loading}>تحديث الملخص</Button>
+            <Button variant="outline" className="rounded-full" onClick={() => void loadOverview()} disabled={loading || refreshing}>{refreshing ? "جارٍ التحديث..." : "تحديث الملخص"}</Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">

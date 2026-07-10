@@ -50,6 +50,9 @@ import { toBaghdadDateTimeLocal } from "./baghdad-time";
 import { formatAppDate, toLatinDigits } from "./format";
 import { recalculateAcademicState } from "./academic-engine";
 import {
+  announceTeacherProSyncError,
+  announceTeacherProSyncRefreshing,
+  announceTeacherProSyncSettled,
   emitTeacherProDataChanged,
   emitTeacherProLogsChangedDebounced,
 } from "./teacherpro-sync";
@@ -2718,12 +2721,22 @@ export const useTeacherStore = create<TeacherState>()(
 
       loadFromServer: async () => {
         const requestSequence = ++loadAllRequestSequence;
-        set({ dbLoading: true });
+        const isInitialLoad = !get().dbConnected;
+        if (isInitialLoad) {
+          set({ dbLoading: true });
+        } else {
+          announceTeacherProSyncRefreshing(["core"]);
+        }
         try {
           const serverData = await loadAllFromServer();
           if (requestSequence !== loadAllRequestSequence) return false;
           if (!serverData) {
-            set({ dbLoading: false, dbConnected: false });
+            if (requestSequence === loadAllRequestSequence) {
+              set({ dbLoading: false, dbConnected: false });
+              if (!isInitialLoad) {
+                announceTeacherProSyncError("تعذر تحديث البيانات في الخلفية");
+              }
+            }
             return false;
           }
 
@@ -2977,6 +2990,7 @@ export const useTeacherStore = create<TeacherState>()(
           // إصلاح أكاديمي شامل صامت بعد تحديثات القواعد.
           // يعيد احتساب الطلاب المتأثرين بقواعد قديمة بدون تكرار خصومات.
           triggerAutoFixZeroOpportunities();
+          if (!isInitialLoad) announceTeacherProSyncSettled(["core"]);
 
           // Note: we no longer auto-sync the admin user's role/permissions
           // on every load. That update required accounts.manage permission
@@ -2988,6 +3002,9 @@ export const useTeacherStore = create<TeacherState>()(
           console.warn("[Store] Failed to load from server:", e);
           if (requestSequence === loadAllRequestSequence) {
             set({ dbLoading: false, dbConnected: false });
+            if (!isInitialLoad) {
+              announceTeacherProSyncError("تعذر تحديث البيانات في الخلفية");
+            }
           }
           return false;
         }

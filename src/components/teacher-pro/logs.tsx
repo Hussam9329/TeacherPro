@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { logApi } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useLatestRequest } from "@/hooks/use-latest-request";
+import {
+  useTeacherProBackgroundSyncDetector,
+  useTeacherProSyncKey,
+} from "@/hooks/use-teacherpro-sync";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 
 type AuditLogDisplayItem = {
@@ -59,6 +64,10 @@ function formatLogTime(value: string) {
 }
 
 export function LogsView() {
+  const syncKey = useTeacherProSyncKey(["logs", "opportunity-logs"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
+  const beginLogsRequest = useLatestRequest();
+  const logsLoadedRef = useRef(false);
   const [logs, setLogs] = useState<AuditLogRow[]>([]);
   const [modules, setModules] = useState<string[]>([]);
   const [users, setUsers] = useState<string[]>([]);
@@ -75,8 +84,9 @@ export function LogsView() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
+    const request = beginLogsRequest();
+    const background = isBackgroundSync() || logsLoadedRef.current;
+    if (!background) setLoading(true);
     setError("");
     logApi
       .list(
@@ -87,12 +97,12 @@ export function LogsView() {
           page,
           pageSize,
         },
-        { signal: controller.signal, quietAbort: true },
+        { signal: request.signal, quietAbort: true },
       )
       .then((result) => {
-        if (controller.signal.aborted) return;
+        if (!request.isLatest()) return;
         if (!result) {
-          setLogs([]);
+          if (!background) setLogs([]);
           setError("تعذر تحميل السجلات من قاعدة البيانات.");
           return;
         }
@@ -105,19 +115,28 @@ export function LogsView() {
         setUsers((result.users || []).filter(Boolean));
         setTotalCount(Number(result.totalCount || nextLogs.length || 0));
         setTotalPages(Math.max(1, Number(result.totalPages || 1)));
+        logsLoadedRef.current = true;
       })
       .catch((err) => {
-        if (controller.signal.aborted) return;
+        if (!request.isLatest()) return;
         console.warn("[LogsView] failed to load logs", err);
-        setLogs([]);
+        if (!background) setLogs([]);
         setError("تعذر تحميل السجلات من قاعدة البيانات.");
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (request.isLatest()) setLoading(false);
       });
-
-    return () => controller.abort();
-  }, [debouncedSearch, filterModule, filterUser, page, pageSize, refreshKey]);
+  }, [
+    beginLogsRequest,
+    debouncedSearch,
+    filterModule,
+    filterUser,
+    isBackgroundSync,
+    page,
+    pageSize,
+    refreshKey,
+    syncKey,
+  ]);
 
   const currentRangeLabel = useMemo(() => {
     if (totalCount === 0) return "0";

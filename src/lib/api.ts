@@ -1,4 +1,7 @@
-import { inferTeacherProScopesFromEndpoint } from "./teacherpro-sync";
+import {
+  beginTeacherProInteractionBlocker,
+  inferTeacherProScopesFromEndpoint,
+} from "./teacherpro-sync";
 
 /**
  * TeacherPro — API Service Layer
@@ -99,126 +102,138 @@ async function retryTransientMutation(
 }
 
 async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
-  const result = await retryTransientMutation(async () => {
-    try {
-      const res = await fetch(`/api/${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const error = await readApiError(
-          res,
-          `تعذر حفظ البيانات (رمز ${res.status})`,
-        );
-        console.warn(`[API] POST /api/${endpoint} failed:`, error);
+  const releaseBlocker = beginTeacherProInteractionBlocker("api-post");
+  try {
+    const result = await retryTransientMutation(async () => {
+      try {
+        const res = await fetch(`/api/${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+          const error = await readApiError(
+            res,
+            `تعذر حفظ البيانات (رمز ${res.status})`,
+          );
+          console.warn(`[API] POST /api/${endpoint} failed:`, error);
+          return {
+            ok: false,
+            error,
+            status: res.status,
+            transient: isTransientHttpStatus(res.status),
+          };
+        }
+        const contentType = res.headers.get("content-type") || "";
+        const responseData = contentType.includes("application/json")
+          ? await res.json().catch(() => null)
+          : null;
         return {
-          ok: false,
-          error,
-          status: res.status,
-          transient: isTransientHttpStatus(res.status),
+          ok: true,
+          data: responseData,
+          syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
         };
+      } catch (e) {
+        const msg = toUserFriendlyError(
+          e instanceof Error ? e.message : "Network error",
+        );
+        console.warn(`[API] POST /api/${endpoint} network error:`, e);
+        return { ok: false, error: msg, status: 0, transient: true };
       }
-      const contentType = res.headers.get("content-type") || "";
-      const responseData = contentType.includes("application/json")
-        ? await res.json().catch(() => null)
-        : null;
-      return {
-        ok: true,
-        data: responseData,
-        syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
-      };
-    } catch (e) {
-      const msg = toUserFriendlyError(
-        e instanceof Error ? e.message : "Network error",
-      );
-      console.warn(`[API] POST /api/${endpoint} network error:`, e);
-      return { ok: false, error: msg, status: 0, transient: true };
+    });
+
+    // If all retries exhausted on a transient failure, queue to outbox
+    // so the mutation survives page reloads and is retried when network returns.
+    if (!result.ok && result.transient) {
+      try {
+        const { queueOnly } = require("./mutation-outbox");
+        queueOnly({
+          endpoint: `/api/${endpoint}`,
+          method: "POST",
+          payload: data,
+        });
+        return {
+          ...result,
+          queued: true,
+          syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
+        };
+      } catch {
+        // mutation-outbox not available (SSR); return as-is.
+      }
     }
-  });
-  // If all retries exhausted on a transient failure, queue to outbox
-  // so the mutation survives page reloads and is retried when network returns.
-  if (!result.ok && result.transient) {
-    try {
-      const { queueOnly } = require("./mutation-outbox");
-      queueOnly({
-        endpoint: `/api/${endpoint}`,
-        method: "POST",
-        payload: data,
-      });
-      return {
-        ...result,
-        queued: true,
-        syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
-      };
-    } catch {
-      // mutation-outbox not available (SSR); return as-is.
-    }
+    return result;
+  } finally {
+    releaseBlocker();
   }
-  return result;
 }
 
 async function apiPut(
   endpoint: string,
   data: Record<string, unknown>,
 ): Promise<ApiResult> {
-  const result = await retryTransientMutation(async () => {
-    try {
-      const res = await fetch(`/api/${endpoint}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const error = await readApiError(
-          res,
-          `تعذر تحديث البيانات (رمز ${res.status})`,
-        );
-        console.warn(`[API] PUT /api/${endpoint} failed:`, error);
+  const releaseBlocker = beginTeacherProInteractionBlocker("api-put");
+  try {
+    const result = await retryTransientMutation(async () => {
+      try {
+        const res = await fetch(`/api/${endpoint}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+          const error = await readApiError(
+            res,
+            `تعذر تحديث البيانات (رمز ${res.status})`,
+          );
+          console.warn(`[API] PUT /api/${endpoint} failed:`, error);
+          return {
+            ok: false,
+            error,
+            status: res.status,
+            transient: isTransientHttpStatus(res.status),
+          };
+        }
+        const contentType = res.headers.get("content-type") || "";
+        const responseData = contentType.includes("application/json")
+          ? await res.json().catch(() => null)
+          : null;
         return {
-          ok: false,
-          error,
-          status: res.status,
-          transient: isTransientHttpStatus(res.status),
+          ok: true,
+          data: responseData,
+          syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
         };
+      } catch (e) {
+        const msg = toUserFriendlyError(
+          e instanceof Error ? e.message : "Network error",
+        );
+        console.warn(`[API] PUT /api/${endpoint} network error:`, e);
+        return { ok: false, error: msg, status: 0, transient: true };
       }
-      const contentType = res.headers.get("content-type") || "";
-      const responseData = contentType.includes("application/json")
-        ? await res.json().catch(() => null)
-        : null;
-      return {
-        ok: true,
-        data: responseData,
-        syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
-      };
-    } catch (e) {
-      const msg = toUserFriendlyError(
-        e instanceof Error ? e.message : "Network error",
-      );
-      console.warn(`[API] PUT /api/${endpoint} network error:`, e);
-      return { ok: false, error: msg, status: 0, transient: true };
+    });
+
+    if (!result.ok && result.transient) {
+      try {
+        const { queueOnly } = require("./mutation-outbox");
+        queueOnly({
+          endpoint: `/api/${endpoint}`,
+          method: "PUT",
+          payload: data,
+        });
+        return {
+          ...result,
+          queued: true,
+          syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
+        };
+      } catch {
+        // SSR; return as-is.
+      }
     }
-  });
-  if (!result.ok && result.transient) {
-    try {
-      const { queueOnly } = require("./mutation-outbox");
-      queueOnly({
-        endpoint: `/api/${endpoint}`,
-        method: "PUT",
-        payload: data,
-      });
-      return {
-        ...result,
-        queued: true,
-        syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
-      };
-    } catch {
-      // SSR; return as-is.
-    }
+    return result;
+  } finally {
+    releaseBlocker();
   }
-  return result;
 }
 
 async function apiDelete(
@@ -226,67 +241,73 @@ async function apiDelete(
   id: string,
   extraParams: Record<string, string | undefined> = {},
 ): Promise<ApiResult> {
-  const params = new URLSearchParams();
-  params.set("id", id);
-  Object.entries(extraParams).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
-  const queryString = params.toString();
-  const fullEndpoint = `/api/${endpoint}?${queryString}`;
+  const releaseBlocker = beginTeacherProInteractionBlocker("api-delete");
+  try {
+    const params = new URLSearchParams();
+    params.set("id", id);
+    Object.entries(extraParams).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+    const queryString = params.toString();
+    const fullEndpoint = `/api/${endpoint}?${queryString}`;
 
-  const result = await retryTransientMutation(async () => {
-    try {
-      const res = await fetch(fullEndpoint, {
-        method: "DELETE",
-        credentials: "same-origin",
-      });
-      if (!res.ok) {
-        const error = await readApiError(
-          res,
-          `تعذر حذف السجل (رمز ${res.status})`,
-        );
-        console.warn(`[API] DELETE /api/${endpoint} failed:`, error);
+    const result = await retryTransientMutation(async () => {
+      try {
+        const res = await fetch(fullEndpoint, {
+          method: "DELETE",
+          credentials: "same-origin",
+        });
+        if (!res.ok) {
+          const error = await readApiError(
+            res,
+            `تعذر حذف السجل (رمز ${res.status})`,
+          );
+          console.warn(`[API] DELETE /api/${endpoint} failed:`, error);
+          return {
+            ok: false,
+            error,
+            status: res.status,
+            transient: isTransientHttpStatus(res.status),
+          };
+        }
+        const contentType = res.headers.get("content-type") || "";
+        const responseData = contentType.includes("application/json")
+          ? await res.json().catch(() => null)
+          : null;
         return {
-          ok: false,
-          error,
-          status: res.status,
-          transient: isTransientHttpStatus(res.status),
+          ok: true,
+          data: responseData,
+          syncScopes: inferTeacherProScopesFromEndpoint(fullEndpoint),
         };
+      } catch (e) {
+        const msg = toUserFriendlyError(
+          e instanceof Error ? e.message : "Network error",
+        );
+        console.warn(`[API] DELETE /api/${endpoint} network error:`, e);
+        return { ok: false, error: msg, status: 0, transient: true };
       }
-      const contentType = res.headers.get("content-type") || "";
-      const responseData = contentType.includes("application/json")
-        ? await res.json().catch(() => null)
-        : null;
-      return {
-        ok: true,
-        data: responseData,
-        syncScopes: inferTeacherProScopesFromEndpoint(fullEndpoint),
-      };
-    } catch (e) {
-      const msg = toUserFriendlyError(
-        e instanceof Error ? e.message : "Network error",
-      );
-      console.warn(`[API] DELETE /api/${endpoint} network error:`, e);
-      return { ok: false, error: msg, status: 0, transient: true };
+    });
+
+    if (!result.ok && result.transient) {
+      try {
+        const { queueOnly } = require("./mutation-outbox");
+        queueOnly({
+          endpoint: fullEndpoint,
+          method: "DELETE",
+        });
+        return {
+          ...result,
+          queued: true,
+          syncScopes: inferTeacherProScopesFromEndpoint(fullEndpoint),
+        };
+      } catch {
+        // SSR; return as-is.
+      }
     }
-  });
-  if (!result.ok && result.transient) {
-    try {
-      const { queueOnly } = require("./mutation-outbox");
-      queueOnly({
-        endpoint: fullEndpoint,
-        method: "DELETE",
-      });
-      return {
-        ...result,
-        queued: true,
-        syncScopes: inferTeacherProScopesFromEndpoint(fullEndpoint),
-      };
-    } catch {
-      // SSR; return as-is.
-    }
+    return result;
+  } finally {
+    releaseBlocker();
   }
-  return result;
 }
 
 interface ApiGetResponse<T> {

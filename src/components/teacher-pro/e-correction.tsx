@@ -1,5 +1,9 @@
 "use client";
-import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import {
+  useTeacherProBackgroundSyncDetector,
+  useTeacherProSyncKey,
+} from "@/hooks/use-teacherpro-sync";
+import { useLatestRequest } from "@/hooks/use-latest-request";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -253,6 +257,10 @@ function TelegramPageImage({
 
 export function ECorrectionView() {
   const syncKey = useTeacherProSyncKey(["correction", "students", "exams", "grades", "dashboard"]);
+  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
+  const beginBotSubmissionsRequest = useLatestRequest();
+  const beginCorrectionStatsRequest = useLatestRequest();
+  const beginBotStatsRequest = useLatestRequest();
   const {
     correctionSheets,
     students,
@@ -307,15 +315,18 @@ export function ECorrectionView() {
   const { locked: isDeletingSheet, runLocked: runDeleteSheetLocked } =
     useActionLock();
 
-  const loadBotSubmissions = async () => {
-    setIsLoadingBotSubmissions(true);
+  const loadBotSubmissions = async (options: { silent?: boolean } = {}) => {
+    const request = beginBotSubmissionsRequest();
+    if (!options.silent) setIsLoadingBotSubmissions(true);
     try {
       const response = await fetch("/api/telegram-exam-submissions", {
         cache: "no-store",
+        signal: request.signal,
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
         throw new Error(payload?.error || "تعذر تحميل مستلمات البوت");
+      if (!request.isLatest()) return;
       setBotSchemaWarning(
         payload?.migrationRequired
           ? String(payload?.message || "جدول مستلمات البوت غير جاهز بعد.")
@@ -330,54 +341,62 @@ export function ECorrectionView() {
         Array.isArray(payload.submissions) ? payload.submissions : [],
       );
     } catch (error) {
+      if (!request.isLatest()) return;
       toast.error(
         error instanceof Error ? error.message : "تعذر تحميل مستلمات البوت",
       );
     } finally {
-      setIsLoadingBotSubmissions(false);
+      if (request.isLatest()) setIsLoadingBotSubmissions(false);
     }
   };
 
-  const loadCorrectionStats = async () => {
-    setCorrectionStatsLoading(true);
+  const loadCorrectionStats = async (options: { silent?: boolean } = {}) => {
+    const request = beginCorrectionStatsRequest();
+    if (!options.silent) setCorrectionStatsLoading(true);
     try {
       const response = await fetch("/api/correction-sheets/stats", {
         cache: "no-store",
         credentials: "same-origin",
+        signal: request.signal,
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
         throw new Error(payload?.error || "تعذر تحميل إحصائيات التصحيح");
+      if (!request.isLatest()) return;
       setCorrectionStats(payload as CorrectionStatsResponse);
     } catch {
-      setCorrectionStats(null);
+      if (request.isLatest() && !options.silent) setCorrectionStats(null);
     } finally {
-      setCorrectionStatsLoading(false);
+      if (request.isLatest()) setCorrectionStatsLoading(false);
     }
   };
 
-  const loadBotDatabaseStats = async () => {
-    setBotDatabaseStatsLoading(true);
+  const loadBotDatabaseStats = async (options: { silent?: boolean } = {}) => {
+    const request = beginBotStatsRequest();
+    if (!options.silent) setBotDatabaseStatsLoading(true);
     try {
       const response = await fetch("/api/telegram-exam-submissions/stats", {
         cache: "no-store",
         credentials: "same-origin",
+        signal: request.signal,
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok)
         throw new Error(payload?.error || "تعذر تحميل إحصائيات مستلمات البوت");
+      if (!request.isLatest()) return;
       setBotDatabaseStats(payload as BotSubmissionStatsResponse);
     } catch {
-      setBotDatabaseStats(null);
+      if (request.isLatest() && !options.silent) setBotDatabaseStats(null);
     } finally {
-      setBotDatabaseStatsLoading(false);
+      if (request.isLatest()) setBotDatabaseStatsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadBotSubmissions();
-    loadCorrectionStats();
-    loadBotDatabaseStats();
+    const silent = isBackgroundSync();
+    void loadBotSubmissions({ silent });
+    void loadCorrectionStats({ silent });
+    void loadBotDatabaseStats({ silent });
   }, [syncKey]);
 
   const updateBotSubmissionStatus = async (id: string, status: string) => {
@@ -1104,7 +1123,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
               <Button
                 variant="outline"
                 className="w-full"
-                onClick={loadBotSubmissions}
+                onClick={() => void loadBotSubmissions()}
                 disabled={isLoadingBotSubmissions}
               >
                 {isLoadingBotSubmissions
