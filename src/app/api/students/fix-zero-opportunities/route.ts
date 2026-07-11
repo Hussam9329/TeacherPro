@@ -111,7 +111,7 @@ export async function PATCH(req: NextRequest) {
         },
         data: {
           baseOpportunities: baseOpp,
-          // opportunities سيُعاد احتسابها في recalculation
+          opportunities: baseOpp,
         },
       });
 
