@@ -4,35 +4,49 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
+import { routeErrorResponse } from "@/lib/route-helpers";
+import { recalculateAllStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { writeRequestAuditLog } from "@/lib/audit-log-server";
+
+type Mode = "active-only" | "include-dismissed";
+
+function readMode(req: NextRequest): Mode {
+  const raw = new URL(req.url).searchParams.get("mode");
+  if (raw === "include-dismissed") return "include-dismissed";
+  return "active-only";
+}
 
 /**
  * PATCH /api/students/fix-zero-opportunities
  *
- * Backfill endpoint that repairs students who were created with `opportunities=0`
- * and `baseOpportunities=0` even though their course had an active chapter at
- * the time of creation. This bug occurred because the client-side form was
- * sending `opportunities: 0` explicitly when `courseChapters` was not yet
- * loaded in the local store, and the server was respecting that explicit
- * zero without looking up the active chapter.
+ * إصلاح شامل لكل الطلاب الذين فرصهم معطوبة (0/0 أو 0/X أو X/0 أو
+ * baseOpportunities لا تساوي فرص الفصل النشط) بناءً على فرص الفصل النشط
+ * الحالي لكل دورة.
  *
- * Signature of a buggy record: opportunities === 0 AND baseOpportunities === 0
- * (a student whose course has an active chapter should never have
- * baseOpportunities === 0 — that's a contradiction).
+ * الطلاب المؤرشفون لا يُعاد لهم فرص إطلاقاً.
+ * الطلاب المفصولون يُعاد لهم baseOpportunities ولا تُعاد احتساب حالتهم
+ * إلا إذا طلب المستخدم صراحةً mode=include-dismissed.
  *
- * Admin-only. Returns the number of students fixed per course.
+ * بعد إصلاح الفرص، يُستدعى recalculation الأكاديمي الشامل لضمان أن
+ * opportunities والحالة الأكاديمية متوافقة مع سجلات الدرجات/الإجازات/التعهدات.
  *
- * Safety: fixes active students only. Archived/dismissed students are skipped
- * because returning opportunities to them can contradict the dismissal/archive flow.
+ * Admin-only. Returns per-course details + global recalculation summary.
  */
 export async function PATCH(req: NextRequest) {
   const authError = await requirePermission(req, "students.edit");
   if (authError) return authError;
 
+  const mode = readMode(req);
+
   try {
-    // 1. ابحث عن كل روابط الفصول النشطة (course + active chapter)
+    // 1. اجلب كل روابط الفصول النشطة غير المؤرشفة + فرص كل فصل.
     const activeLinks = await db.courseChapter.findMany({
       where: { active: true, archived: false },
-      select: { courseId: true, chapterId: true },
+      select: {
+        courseId: true,
+        chapterId: true,
+        chapter: { select: { id: true, opportunities: true } },
+      },
     });
 
     if (activeLinks.length === 0) {
@@ -40,71 +54,118 @@ export async function PATCH(req: NextRequest) {
         ok: true,
         message: "لا توجد فصول نشطة حالياً. لا حاجة للإصلاح.",
         fixedTotal: 0,
+        skippedArchivedTotal: 0,
         perCourse: [],
+        mode,
+        source: "database" as const,
+        generatedAt: new Date().toISOString(),
       });
     }
 
-    const chapterIds = Array.from(new Set(activeLinks.map((l) => l.chapterId)));
-    const chapters = await db.chapter.findMany({
-      where: { id: { in: chapterIds } },
-      select: { id: true, opportunities: true },
-    });
-    const typedChapters = chapters as Array<{ id: string; opportunities: number }>;
-    const chapterOppById = new Map(
-      typedChapters.map((ch) => [ch.id, Number(ch.opportunities || 0)] as const),
-    );
+    // courseId -> فرص الفصل النشط الوحيد (إذا تعدد، نتخطى الدورة)
+    const chapterOppByCourseId = new Map<string, number>();
+    const activeLinksByCourseId = new Map<string, number>();
+    for (const link of activeLinks) {
+      const count = (activeLinksByCourseId.get(link.courseId) || 0) + 1;
+      activeLinksByCourseId.set(link.courseId, count);
+      if (count === 1) {
+        const opp = Math.max(0, Math.trunc(Number(link.chapter?.opportunities || 0)));
+        chapterOppByCourseId.set(link.courseId, opp);
+      }
+    }
+    // احذف الدورات التي بها أكثر من فصل نشط (تتعارض الحسابات)
+    for (const [courseId, count] of activeLinksByCourseId) {
+      if (count > 1) chapterOppByCourseId.delete(courseId);
+    }
+
+    const allowedStatuses = mode === "include-dismissed" ? ["نشط", "مفصول"] : ["نشط"];
 
     const perCourse: Array<{
       courseId: string;
-      chapterId: string;
       chapterOpportunities: number;
       fixedCount: number;
+      skippedArchived: number;
     }> = [];
     let fixedTotal = 0;
+    let skippedArchivedTotal = 0;
 
-    // 2. لكل دورة فيها فصل نشط، ابحث عن الطلاب الذين فرصهم 0/0 وأصلحهم
-    for (const link of activeLinks) {
-      const baseOpp = chapterOppById.get(link.chapterId) ?? 0;
-      if (baseOpp <= 0) continue; // الفصل نفسه يحدد 0 فرصة — لا شيء لنصلحه
+    // 2. لكل دورة فيها فصل نشط واحد، أصلح أي طالب فرصه معطوبة.
+    for (const [courseId, baseOpp] of chapterOppByCourseId) {
+      if (baseOpp <= 0) continue; // الفصل نفسه فرصه 0 — لا شيء لنصلحه
 
+      // عدّ الطلاب المؤرشفين قبل تحديث البقية (للشفافية فقط)
+      const archivedCount = await db.student.count({
+        where: { courseId, status: "مؤرشف" },
+      });
+      skippedArchivedTotal += archivedCount;
+
+      // الحالات المعطوبة: 0/0، 0/X، X/0، أو baseOpportunities != فرص الفصل.
+      // نعيد baseOpportunities إلى فرص الفصل النشط؛ opportunities سيُعاد
+      // احتسابها في recalculation.
       const update = await db.student.updateMany({
         where: {
-          courseId: link.courseId,
-          status: 'نشط',
-          opportunities: 0,
-          baseOpportunities: 0,
+          courseId,
+          status: { in: allowedStatuses },
+          OR: [
+            { opportunities: 0, baseOpportunities: 0 },
+            { opportunities: 0, baseOpportunities: { not: 0 } },
+            { opportunities: { not: 0 }, baseOpportunities: 0 },
+            { baseOpportunities: { not: baseOpp } },
+          ],
         },
         data: {
-          opportunities: baseOpp,
           baseOpportunities: baseOpp,
+          // opportunities سيُعاد احتسابها في recalculation
         },
       });
 
       if (update.count > 0) {
         perCourse.push({
-          courseId: link.courseId,
-          chapterId: link.chapterId,
+          courseId,
           chapterOpportunities: baseOpp,
           fixedCount: update.count,
+          skippedArchived: archivedCount,
         });
         fixedTotal += update.count;
       }
     }
 
+    // 3. أعِد احتساب الحالة الأكاديمية لكل الطلاب غير المؤرشفين لضمان
+    // أن opportunities والحالة متوافقة مع سجلات الدرجات/الإجازات/التعهدات.
+    const recalcResult = await recalculateAllStudentsAcademicState({ batchSize: 250 });
+
+    await writeRequestAuditLog(
+      req,
+      "الطلاب",
+      `إصلاح شامل لفرص الطلاب المعطوبة (الوضع: ${mode})`,
+      {
+        fixedTotal,
+        skippedArchivedTotal,
+        perCourse,
+        recalc: recalcResult,
+      },
+    );
+
     return NextResponse.json({
       ok: true,
       message:
         fixedTotal > 0
-          ? `تم إصلاح ${fixedTotal} طالب بفرص 0/0 عبر ${perCourse.length} دورة.`
+          ? `تم إصلاح ${fixedTotal} طالب عبر ${perCourse.length} دورة، وأعيد احتساب ${recalcResult.recalculatedStudents} طالب.`
           : "لا يوجد طلاب يحتاجون إصلاحاً. جميع الطلاب في الدورات ذات الفصول النشطة لديهم فرص صحيحة.",
       fixedTotal,
+      skippedArchivedTotal,
       perCourse,
+      recalc: recalcResult,
+      mode,
+      source: "database" as const,
+      generatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("[API] /api/students/fix-zero-opportunities error:", error);
-    return NextResponse.json(
-      { error: "تعذر إكمال إصلاح فرص الطلاب. تحقق من السجلات ثم حاول مرة أخرى." },
-      { status: 500 },
+    return routeErrorResponse(
+      error,
+      "تعذر إكمال إصلاح فرص الطلاب. تحقق من السجلات ثم حاول مرة أخرى.",
     );
   }
 }
+
+export const POST = PATCH;

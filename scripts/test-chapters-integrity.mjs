@@ -108,12 +108,15 @@ assert(
   'صفحة الفصول تملك بحث وفلاتر مفهومة للدورات والفصول',
 );
 assert(
-  chaptersView.includes('معاينة وإصلاح') && chaptersView.includes('/api/students/fix-zero-opportunities') && chaptersView.includes('الطلاب النشطين فقط'),
-  'إصلاح فرص 0/0 صار بعد معاينة ويشرح أنه للطلاب النشطين فقط',
+  chaptersView.includes('معاينة وإصلاح') && chaptersView.includes('/api/students/fix-zero-opportunities') && chaptersView.includes('mode=include-dismissed'),
+  'إصلاح فرص الطلاب المعطوبة يفتح معاينة ويستدعي الوضع الشامل include-dismissed',
 );
 assert(
-  fixZeroRoute.includes("status: 'نشط'") && fixZeroRoute.includes('Archived/dismissed students are skipped'),
-  'إصلاح 0/0 يستثني المفصولين والمؤرشفين ولا يعيد لهم فرصاً بالخطأ',
+  fixZeroRoute.includes('mode') &&
+    fixZeroRoute.includes('include-dismissed') &&
+    fixZeroRoute.includes('"نشط", "مفصول"') &&
+    fixZeroRoute.includes('recalculateAllStudentsAcademicState'),
+  'إصلاح فرص الطلاب يصلح النشطين والمفصولين، يستثني المؤرشفين، ويعيد احتساب الحالة الأكاديمية',
 );
 assert(
   packageJson.includes('"test:chapters-integrity"'),

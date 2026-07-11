@@ -355,7 +355,7 @@ export function ChaptersView() {
 
   const handleFixZeroOpportunities = runFixZeroOppLocked(async () => {
     try {
-      const response = await fetch("/api/students/fix-zero-opportunities", {
+      const response = await fetch("/api/students/fix-zero-opportunities?mode=include-dismissed", {
         method: "PATCH",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
@@ -366,7 +366,7 @@ export function ChaptersView() {
         return;
       }
       setRepairDialog(false);
-      await refreshAfterMutation("إصلاح فرص 0/0 بعد معاينة الأثر");
+      await refreshAfterMutation("إصلاح شامل لفرص الطلاب المعطوبة");
       if (payload?.fixedTotal > 0) {
         toast.success(payload.message || `تم إصلاح ${payload.fixedTotal} طالب.`);
       } else {
@@ -500,7 +500,12 @@ export function ChaptersView() {
 
   const actionCourse = actionDialog.course;
   const actionLink = actionDialog.link;
+  // الإصلاح الشامل يغطي 0/0 + 0/X + X/0 + baseOpportunities != فرص الفصل،
+  // لذا الزر يبقى متاحاً ما دامت هناك دورة فيها فصل نشط.
   const repairCount = overview?.stats.studentsZeroZeroWithActive || 0;
+  const totalCourses = overview?.stats.courses ?? 0;
+  const withoutActive = overview?.stats.coursesWithoutActiveChapter ?? 0;
+  const hasActiveChapters = totalCourses - withoutActive > 0;
 
   return (
     <div className="space-y-6">
@@ -599,10 +604,14 @@ export function ChaptersView() {
             </form>
 
             <div className="rounded-2xl border border-amber-500/35 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-100">
-              <p className="font-black">إصلاح فرص الطلاب 0/0</p>
-              <p className="mt-1 leading-6">الإصلاح يعمل على الطلاب النشطين فقط في الدورات التي لديها فصل نشط، ولا يرجع فرصاً للمفصولين أو المؤرشفين.</p>
-              <Button type="button" variant="outline" size="sm" className="mt-3 rounded-full border-amber-500/50" onClick={() => setRepairDialog(true)} disabled={isFixingZeroOpp || repairCount === 0}>
-                {repairCount > 0 ? `معاينة وإصلاح ${repairCount} طالب` : "لا يوجد إصلاح مطلوب"}
+              <p className="font-black">إصلاح شامل لفرص الطلاب المعطوبة</p>
+              <p className="mt-1 leading-6">يصلح الطلاب النشطين والمفصلين في الدورات ذات الفصل النشط: 0/0، 0/X، X/0، أو فرص لا تطابق الفصل. المؤرشفون لا يُعاد لهم فرص. يُعاد احتساب الحالة الأكاديمية بعد الإصلاح.</p>
+              <Button type="button" variant="outline" size="sm" className="mt-3 rounded-full border-amber-500/50" onClick={() => setRepairDialog(true)} disabled={isFixingZeroOpp || !hasActiveChapters}>
+                {hasActiveChapters
+                  ? repairCount > 0
+                    ? `معاينة وإصلاح ${repairCount} طالب 0/0 ( + الطلاب المعطوبين الآخرين )`
+                    : "إصلاح شامل لكل الطلاب المعطوبين"
+                  : "لا يوجد فصل نشط"}
               </Button>
             </div>
           </CardContent>
@@ -722,9 +731,9 @@ export function ChaptersView() {
       <AlertDialog open={repairDialog} onOpenChange={setRepairDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>إصلاح فرص الطلاب 0/0</AlertDialogTitle>
+            <AlertDialogTitle>إصلاح شامل لفرص الطلاب المعطوبة</AlertDialogTitle>
             <AlertDialogDescription>
-              سيتم إصلاح الطلاب النشطين فقط الذين فرصهم 0/0 داخل دورات لديها فصل نشط. المفصولون والمؤرشفون لن تُعاد لهم فرص.
+              سيتم إصلاح كل الطلاب النشطين والمفصولين الذين فرصهم معطوبة (0/0 أو 0/X أو X/0 أو baseOpportunities لا تساوي فرص الفصل النشط) داخل دورات لديها فصل نشط واحد. المؤرشفون لن تُعاد لهم فرص. بعد الإصلاح، يُعاد احتساب الحالة الأكاديمية لكل الطلاب.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="rounded-2xl border bg-muted/25 p-4 text-sm">
@@ -732,7 +741,7 @@ export function ChaptersView() {
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction onClick={handleFixZeroOpportunities} disabled={isFixingZeroOpp || repairCount === 0}>{isFixingZeroOpp ? "جاري الإصلاح..." : "إصلاح الآن"}</AlertDialogAction>
+            <AlertDialogAction onClick={handleFixZeroOpportunities} disabled={isFixingZeroOpp || !hasActiveChapters}>{isFixingZeroOpp ? "جاري الإصلاح..." : "إصلاح الآن"}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
