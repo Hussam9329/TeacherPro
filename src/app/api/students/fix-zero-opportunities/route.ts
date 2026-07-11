@@ -99,19 +99,15 @@ export async function PATCH(req: NextRequest) {
       });
       skippedArchivedTotal += archivedCount;
 
-      // الحالات المعطوبة: 0/0، 0/X، X/0، أو baseOpportunities != فرص الفصل.
-      // نعيد baseOpportunities إلى فرص الفصل النشط؛ opportunities سيُعاد
-      // احتسابها في recalculation.
+      // أصلح كل الطلاب النشطين والمفصولين في الدورات ذات الفصل النشط،
+      // بصرف النظر عن قيم opportunities/baseOpportunities الحالية.
+      // نعيد baseOpportunities إلى فرص الفصل النشط، ثم نعتمد على
+      // recalculateAllStudentsAcademicState لإعادة بناء opportunities
+      // من سجلات الدرجات/الإجازات/التعهدات.
       const update = await db.student.updateMany({
         where: {
           courseId,
           status: { in: allowedStatuses },
-          OR: [
-            { opportunities: 0, baseOpportunities: 0 },
-            { opportunities: 0, baseOpportunities: { not: 0 } },
-            { opportunities: { not: 0 }, baseOpportunities: 0 },
-            { baseOpportunities: { not: baseOpp } },
-          ],
         },
         data: {
           baseOpportunities: baseOpp,
