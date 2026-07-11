@@ -206,6 +206,21 @@ function registryHealthBadges(student: Student) {
   return badges;
 }
 
+/**
+ * Keep the opportunity balance consistent with the calls page.
+ *
+ * The student list is server-driven and already receives the persisted
+ * opportunities/baseOpportunities values from /api/students.  Do not gate the
+ * display behind the client-side course/chapter cache: that cache can still be
+ * loading (or be stale) and previously made valid balances appear as 0 / 0.
+ * Chapter health remains visible through the dedicated server snapshot badges.
+ */
+function registryOpportunityText(student: Student): string {
+  const base = Number(student.baseOpportunities || 0);
+  if (base <= 0) return "0 / 0";
+  return `${Number(student.opportunities || 0)} / ${base}`;
+}
+
 const studentDeleteImpactLabels: Array<
   [keyof StudentDeleteImpactResponse["counts"], string]
 > = [
@@ -1866,9 +1881,7 @@ export function StudentRegistryView() {
                   <div>
                     <span className="text-xs text-muted-foreground">الفرص</span>
                     <p className="text-xs font-medium">
-                      {activeChapterForCourse(student.courseId)
-                        ? `${student.opportunities} / ${student.baseOpportunities}`
-                        : "0 / 0 - لم يتم اختيار الفصل"}
+                      {registryOpportunityText(student)}
                     </p>
                   </div>
                   <div>
@@ -2056,9 +2069,7 @@ export function StudentRegistryView() {
                     )}
                   </td>
                   <td className="p-3">
-                    {activeChapterForCourse(student.courseId)
-                      ? `${student.opportunities} / ${student.baseOpportunities}`
-                      : "0 / 0"}
+                    {registryOpportunityText(student)}
                   </td>
                   <td className="p-3">
                     {student.accountingGraceDays ?? 0} يوم

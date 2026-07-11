@@ -19,6 +19,13 @@ check('سجل الطلاب يستخدم روابط واتساب ويب https://w
 check('سجل الطلاب يستخدم روابط تليكرام https://t.me وليس tg://', registry.includes('https://t.me/') && !registry.includes('tg://'));
 check('تحميل سجل الطلاب يستخدم AbortController فعلياً لمنع رجوع نتائج قديمة', registry.includes('new AbortController()') && registry.includes('controller.abort()') && registry.includes('quietAbort: true'));
 check('قائمة سجل الطلاب تطلب opportunityMode حتى تصل Badges الصحة من قاعدة البيانات', registry.includes('opportunityMode: true'));
+check(
+  'سجل الطلاب يعرض رصيد الفرص المحفوظ مثل صفحة المكالمات ولا يربطه بكاش الفصل المحلي',
+  registry.includes('function registryOpportunityText(student: Student)') &&
+    registry.includes('const base = Number(student.baseOpportunities || 0)') &&
+    (registry.match(/registryOpportunityText\(student\)/g) || []).length >= 2 &&
+    !registry.includes('activeChapterForCourse(student.courseId)'),
+);
 check('سجل الطلاب يملك فلتر صحة/مشاكل واضح', registry.includes('RegistryIssueFilter') && registry.includes('registryIssueFilterLabels') && registry.includes('filterRegistryIssue'));
 check('API الطلاب يدعم registryIssue كفلتر قاعدة بيانات لا كفلتر كاش فقط', api.includes('registryIssue?: string') && api.includes('registryIssue: query.registryIssue') && studentsRoute.includes('buildRegistryIssueWhere'));
 check('تعديل الطالب في سجل الطلاب صار server-first عبر studentApi.update وليس updateStudent من الكاش', registry.includes('await studentApi.update(editDialog.id') && !registry.includes('const result = updateStudent('));
