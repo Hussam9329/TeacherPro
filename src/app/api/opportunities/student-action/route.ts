@@ -10,6 +10,7 @@ import { withFollowupTables } from "@/lib/followup-schema";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
+import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 
 const MANUAL_ACTIONS = new Set(["إضافة", "خصم", "إعادة تعيين"]);
 
@@ -171,7 +172,6 @@ export async function POST(req: NextRequest) {
               code: true,
               status: true,
               courseId: true,
-              baseOpportunities: true,
             },
           });
           if (!student) throw new Error("الطالب غير موجود أو تم حذفه.");
@@ -194,7 +194,7 @@ export async function POST(req: NextRequest) {
             ? Math.max(
                 0,
                 Math.trunc(
-                  Number(student.baseOpportunities || activeChapterResult.activeLink.chapter.opportunities || 0),
+                  Number(activeChapterResult.activeLink.chapter.opportunities || 0),
                 ),
               )
             : actionType === "undo"
@@ -240,6 +240,14 @@ export async function POST(req: NextRequest) {
       "OpportunityStudentAction",
     );
 
+    const [studentWithOpportunity] = result.student
+      ? await attachStudentOpportunitySnapshots([result.student])
+      : [null];
+    const responseResult = {
+      ...result,
+      student: studentWithOpportunity,
+    };
+
     await writeRequestAuditLog(
       req,
       "إدارة الفرص",
@@ -252,9 +260,9 @@ export async function POST(req: NextRequest) {
             : "إضافة فرصة يدوياً وإعادة احتساب",
       {
         actionType,
-        studentId: result.student?.id,
-        studentName: result.student?.name,
-        studentCode: result.student?.code,
+        studentId: responseResult.student?.id,
+        studentName: responseResult.student?.name,
+        studentCode: responseResult.student?.code,
         amount,
         reason,
         logId,
@@ -263,7 +271,7 @@ export async function POST(req: NextRequest) {
       },
     );
 
-    return NextResponse.json(result);
+    return NextResponse.json(responseResult);
   } catch (error) {
     const message = error instanceof Error && error.message
       ? error.message

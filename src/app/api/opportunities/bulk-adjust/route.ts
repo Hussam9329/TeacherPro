@@ -10,8 +10,6 @@ import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import {
   buildOpportunityFilters,
   composeStudentWhere,
-  fullOpportunityLimitForStudent,
-  hasActiveChapterWhere,
   normalizeBoolean,
 } from "@/lib/opportunity-filters-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
@@ -21,6 +19,7 @@ import {
   isConfirmedImpact,
   riskyBulkOpportunityTargetCount,
 } from "@/lib/global-side-effects-safety";
+import { attachStudentOpportunitySnapshotsWithClient } from "@/lib/student-opportunity-snapshot-server";
 
 type StudentUpdatePayload = {
   id?: unknown;
@@ -188,12 +187,8 @@ async function handleFilterBasedBulkAdjust(
   const result = await withFollowupTables(
     async () =>
       db.$transaction(async (tx) => {
-        const totalMatching = await tx.student.count({
-          where: composeStudentWhere(filters),
-        });
-
         const candidateRows = await tx.student.findMany({
-          where: composeStudentWhere([...filters, hasActiveChapterWhere()]),
+          where: composeStudentWhere(filters),
           select: {
             id: true,
             status: true,
@@ -202,11 +197,28 @@ async function handleFilterBasedBulkAdjust(
             courseId: true,
           },
         });
+        const totalMatching = candidateRows.length;
+        const snapshots =
+          await attachStudentOpportunitySnapshotsWithClient<
+            (typeof candidateRows)[number]
+          >(tx, candidateRows);
+        const eligibleRows = snapshots.filter(
+          (student) => student.opportunityHealth === "ready",
+        );
+        const noActiveChapter = snapshots.filter(
+          (student) => student.opportunityHealth === "missing-active-chapter",
+        ).length;
+        const activeChapterConflicts = snapshots.filter(
+          (student) => student.opportunityHealth === "active-chapter-conflict",
+        ).length;
+        const zeroOpportunityLimit = snapshots.filter(
+          (student) => student.opportunityHealth === "zero-limit",
+        ).length;
+        const invalidOpportunitySource =
+          noActiveChapter + activeChapterConflicts + zeroOpportunityLimit;
 
-        const targetRows = candidateRows.filter((student) => {
-          if (excludeDismissed && student.status === "مفصول") {
-            return false;
-          }
+        const targetRows = eligibleRows.filter((student) => {
+          if (excludeDismissed && student.status === "مفصول") return false;
           if (
             actionType === "add" &&
             student.status === "مفصول" &&
@@ -214,11 +226,12 @@ async function handleFilterBasedBulkAdjust(
           ) {
             return false;
           }
-          if (actionType === "deduct" && excludeFullOpportunities) {
-            return (
-              Number(student.opportunities || 0) <
-              fullOpportunityLimitForStudent(student)
-            );
+          if (
+            actionType === "deduct" &&
+            excludeFullOpportunities &&
+            student.isOpportunityFull
+          ) {
+            return false;
           }
           return true;
         });
@@ -229,7 +242,11 @@ async function handleFilterBasedBulkAdjust(
             savedOpportunityLogs: 0,
             savedStudentNotes: 0,
             totalMatching,
-            eligibleWithActiveChapter: candidateRows.length,
+            eligibleWithActiveChapter: eligibleRows.length,
+            noActiveChapter,
+            activeChapterConflicts,
+            zeroOpportunityLimit,
+            invalidOpportunitySource,
             skipped: Math.max(0, totalMatching),
             targetCount: 0,
             requiresConfirmation: false,
@@ -242,50 +259,15 @@ async function handleFilterBasedBulkAdjust(
           return {
             confirmationRequired: true,
             totalMatching,
-            eligibleWithActiveChapter: candidateRows.length,
+            eligibleWithActiveChapter: eligibleRows.length,
+            noActiveChapter,
+            activeChapterConflicts,
+            zeroOpportunityLimit,
+            invalidOpportunitySource,
             targetCount,
             skipped: Math.max(0, totalMatching - targetCount),
           };
         }
-
-        const courseIds = Array.from(
-          new Set(targetRows.map((student) => student.courseId)),
-        );
-        const activeLinks = courseIds.length
-          ? await tx.courseChapter.findMany({
-              where: {
-                courseId: { in: courseIds },
-                active: true,
-                archived: false,
-              },
-              select: { courseId: true, chapterId: true },
-            })
-          : [];
-        const chapterIds = Array.from(
-          new Set(activeLinks.map((link) => link.chapterId)),
-        );
-        const chapters = chapterIds.length
-          ? await tx.chapter.findMany({
-              where: { id: { in: chapterIds } },
-              select: { id: true, name: true, opportunities: true },
-            })
-          : [];
-        const chapterById = new Map(
-          chapters.map((chapter) => [chapter.id, chapter]),
-        );
-        const activeChapterByCourseId = new Map(
-          activeLinks.map((link) => [
-            link.courseId,
-            {
-              chapterId: link.chapterId,
-              opportunities: Number(
-                chapterById.get(link.chapterId)?.opportunities || 0,
-              ),
-              chapterNameSnapshot:
-                chapterById.get(link.chapterId)?.name || null,
-            },
-          ]),
-        );
 
         const now = new Date();
         const opportunityLogs: Array<{
@@ -312,7 +294,7 @@ async function handleFilterBasedBulkAdjust(
 
         const appliedStudentIds: string[] = [];
         for (const student of targetRows) {
-          const activeChapter = activeChapterByCourseId.get(student.courseId);
+          const activeChapter = student.activeChapter;
           if (!activeChapter) continue;
           appliedStudentIds.push(student.id);
           opportunityLogs.push({
@@ -321,8 +303,8 @@ async function handleFilterBasedBulkAdjust(
             amount,
             reason,
             date: now,
-            chapterId: activeChapter.chapterId,
-            chapterNameSnapshot: activeChapter.chapterNameSnapshot || null,
+            chapterId: activeChapter.id,
+            chapterNameSnapshot: activeChapter.name || null,
           });
           if (
             signedAmount > 0 &&
@@ -356,7 +338,11 @@ async function handleFilterBasedBulkAdjust(
           savedOpportunityLogs: opportunityLogs.length,
           savedStudentNotes: studentNotes.length,
           totalMatching,
-          eligibleWithActiveChapter: candidateRows.length,
+          eligibleWithActiveChapter: eligibleRows.length,
+          noActiveChapter,
+          activeChapterConflicts,
+          zeroOpportunityLimit,
+          invalidOpportunitySource,
           skipped: Math.max(0, totalMatching - appliedStudentIds.length),
           targetCount,
           requiresConfirmation: riskyBulkOpportunityTargetCount(targetCount),
@@ -375,6 +361,10 @@ async function handleFilterBasedBulkAdjust(
         reason,
         totalMatching: result.totalMatching,
         eligibleWithActiveChapter: result.eligibleWithActiveChapter,
+        noActiveChapter: result.noActiveChapter,
+        activeChapterConflicts: result.activeChapterConflicts,
+        zeroOpportunityLimit: result.zeroOpportunityLimit,
+        invalidOpportunitySource: result.invalidOpportunitySource,
         targetCount: result.targetCount,
         skipped: result.skipped,
       },
@@ -393,6 +383,10 @@ async function handleFilterBasedBulkAdjust(
       reason,
       totalMatching: result.totalMatching,
       eligibleWithActiveChapter: result.eligibleWithActiveChapter,
+      noActiveChapter: result.noActiveChapter,
+      activeChapterConflicts: result.activeChapterConflicts,
+      zeroOpportunityLimit: result.zeroOpportunityLimit,
+      invalidOpportunitySource: result.invalidOpportunitySource,
       targetCount: result.targetCount,
       updatedStudents: result.updatedStudents,
       savedOpportunityLogs: result.savedOpportunityLogs,
@@ -450,7 +444,13 @@ export async function POST(req: NextRequest) {
           const existingStudents = allStudentIds.length
             ? await tx.student.findMany({
                 where: { id: { in: allStudentIds } },
-                select: { id: true, status: true },
+                select: {
+                  id: true,
+                  status: true,
+                  courseId: true,
+                  opportunities: true,
+                  baseOpportunities: true,
+                },
               })
             : [];
           const existingStudentIds = new Set(
@@ -462,99 +462,54 @@ export async function POST(req: NextRequest) {
               .map((student) => student.id),
           );
           let updatedStudents = 0;
-
-          const activeChapterByCourseId = new Map<
-            string,
-            {
-              chapterId: string;
-              opportunities: number;
-              chapterNameSnapshot?: string | null;
-            }
-          >();
-          const allModifiableStudentIds = Array.from(modifiableStudentIds);
-          if (allModifiableStudentIds.length) {
-            const studentRowsForChapterCheck = await tx.student.findMany({
-              where: { id: { in: allModifiableStudentIds } },
-              select: { id: true, courseId: true },
-            });
-            const courseIdsForChapter = Array.from(
-              new Set(studentRowsForChapterCheck.map((s) => s.courseId)),
+          const modifiableStudents = existingStudents.filter(
+            (student) => student.status !== "مؤرشف",
+          );
+          const opportunitySnapshots =
+            await attachStudentOpportunitySnapshotsWithClient<
+              (typeof modifiableStudents)[number]
+            >(tx, modifiableStudents);
+          const opportunitySnapshotByStudentId = new Map(
+            opportunitySnapshots.map((student) => [student.id, student]),
+          );
+          const invalidOpportunityUpdate = students.find((student) => {
+            if (!modifiableStudentIds.has(student.id)) return false;
+            const snapshot = opportunitySnapshotByStudentId.get(student.id);
+            return !snapshot || snapshot.opportunityHealth !== "ready";
+          });
+          if (invalidOpportunityUpdate) {
+            const snapshot = opportunitySnapshotByStudentId.get(
+              invalidOpportunityUpdate.id,
             );
-            if (courseIdsForChapter.length) {
-              const activeLinks = await tx.courseChapter.findMany({
-                where: {
-                  courseId: { in: courseIdsForChapter },
-                  active: true,
-                  archived: false,
-                },
-                select: { courseId: true, chapterId: true },
-              });
-              const chapterIdsForActive = Array.from(
-                new Set(activeLinks.map((l) => l.chapterId)),
-              );
-              const chaptersForActive = chapterIdsForActive.length
-                ? await tx.chapter.findMany({
-                    where: { id: { in: chapterIdsForActive } },
-                    select: { id: true, name: true, opportunities: true },
-                  })
-                : [];
-              const chapterOppById = new Map(
-                chaptersForActive.map((c) => [
-                  c.id,
-                  Number(c.opportunities || 0),
-                ]),
-              );
-              for (const link of activeLinks) {
-                const opp = chapterOppById.get(link.chapterId) ?? 0;
-                activeChapterByCourseId.set(link.courseId, {
-                  chapterId: link.chapterId,
-                  opportunities: opp,
-                  chapterNameSnapshot:
-                    chaptersForActive.find(
-                      (chapter) => chapter.id === link.chapterId,
-                    )?.name || null,
-                });
-              }
-            }
-          }
-
-          // Build a map of studentId -> courseId using the rows we already fetched
-          const courseIdByStudentId = new Map<string, string>();
-          // We re-fetch students that are in the update payload to get their courseId.
-          // (We already have existingStudents but it only had id selected.)
-          const studentIdList = students
-            .map((s) => s.id)
-            .filter((id) => modifiableStudentIds.has(id));
-          if (studentIdList.length) {
-            const studentRowsForCourse = await tx.student.findMany({
-              where: { id: { in: studentIdList } },
-              select: { id: true, courseId: true },
-            });
-            for (const row of studentRowsForCourse) {
-              courseIdByStudentId.set(row.id, row.courseId);
-            }
+            const reason =
+              snapshot?.opportunityHealth === "active-chapter-conflict"
+                ? "الدورة تحتوي على أكثر من فصل نشط"
+                : snapshot?.opportunityHealth === "zero-limit"
+                  ? "الفصل النشط سقفه صفر"
+                  : "الدورة لا تحتوي على فصل نشط";
+            throw new Error(
+              `تعذر تحديث الفرص لأن مصدر السقف غير صالح: ${reason}. أصلح الفصل ثم أعد المحاولة.`,
+            );
           }
 
           for (const student of students.filter((item) =>
             modifiableStudentIds.has(item.id),
           )) {
-            // Clamp opportunities to baseOpportunities of the active chapter
-            // for this student's course. This prevents the client from ever
-            // writing a value above the cap (e.g. due to a stale local cache
-            // or an outdated bulk operation from before a chapter change).
-            const studentCourseId = courseIdByStudentId.get(student.id);
-            const activeChapter = studentCourseId
-              ? activeChapterByCourseId.get(studentCourseId)
-              : undefined;
-            let finalOpportunities = student.opportunities;
-            if (activeChapter && activeChapter.opportunities > 0) {
-              finalOpportunities = Math.min(
-                finalOpportunities,
-                activeChapter.opportunities,
+            // The active chapter is the only authoritative cap. The stored
+            // baseOpportunities value is audit/backward-compatibility data and
+            // must never decide a write when chapter configuration changed.
+            const opportunitySnapshot =
+              opportunitySnapshotByStudentId.get(student.id);
+            const opportunityLimit = opportunitySnapshot?.opportunityLimit;
+            if (opportunityLimit === null || opportunityLimit === undefined) {
+              throw new Error(
+                "تعذر تحديد سقف الفرص من الفصل النشط لهذا الطالب.",
               );
             }
-            // Non-negative floor.
-            finalOpportunities = Math.max(0, Math.trunc(finalOpportunities));
+            const finalOpportunities = Math.min(
+              Math.max(0, Math.trunc(student.opportunities)),
+              opportunityLimit,
+            );
 
             const data: {
               opportunities: number;

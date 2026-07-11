@@ -44,6 +44,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { toLatinDigits } from "@/lib/format";
+import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import {
   COURSE_PROGRAMS,
   COURSE_TERMS,
@@ -648,6 +649,18 @@ export function StudentBulkTextImportView() {
               createdAt: new Date().toISOString().slice(0, 10),
               opportunities,
               baseOpportunities: opportunities,
+              opportunityLimit: opportunities,
+              opportunitySource: "student-record",
+              opportunityLimitSource: "active-chapter",
+              opportunityHealth: opportunities > 0 ? "ready" : "zero-limit",
+              hasActiveChapter: opportunities > 0,
+              activeChapterConflictCount: 1,
+              // Registration context intentionally exposes only the chapter
+              // name and cap, not a chapter ID. The explicit opportunityLimit
+              // is sufficient for the shared display formatter.
+              activeChapter: null,
+              isOpportunityFull: opportunities > 0,
+              isOpportunityOverLimit: false,
               accountingGraceDays,
             }
           : null;
@@ -800,7 +813,9 @@ export function StudentBulkTextImportView() {
             : row.rawCells[8] || row.rawCells[7] || "—"}
         </td>
         <td className="p-3">
-          <div className="font-black">{row.student?.opportunities ?? "—"}</div>
+          <div className="font-black">
+            {row.student ? formatOpportunityBalance(row.student) : "—"}
+          </div>
           <div className="text-[11px] text-muted-foreground">
             {row.activeChapterName
               ? `من ${row.activeChapterName}`

@@ -22,7 +22,7 @@ check('قائمة سجل الطلاب تطلب opportunityMode حتى تصل Bad
 check(
   'سجل الطلاب يعرض رصيد الفرص المحفوظ مثل صفحة المكالمات ولا يربطه بكاش الفصل المحلي',
   registry.includes('function registryOpportunityText(student: Student)') &&
-    registry.includes('const base = Number(student.baseOpportunities || 0)') &&
+    registry.includes('formatOpportunityBalance(student, { separator: " / " })') &&
     (registry.match(/registryOpportunityText\(student\)/g) || []).length >= 2 &&
     !registry.includes('activeChapterForCourse(student.courseId)'),
 );

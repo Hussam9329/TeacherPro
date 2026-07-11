@@ -47,6 +47,7 @@ import { CountScopeSummary } from "./ui-kit";
 import { formatGradeScore } from "@/lib/exam-utils";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
+import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity-balance";
 
 type FollowView = "leaves" | "calls" | "pledges";
 type CallCategory =
@@ -403,7 +404,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     let cancelled = false;
     setLeavePickerLoading(true);
     studentApi
-      .list({ q: debouncedGlobalSearch, pageSize: 30 })
+      .list({ q: debouncedGlobalSearch, opportunityMode: true, pageSize: 30 })
       .then((result) => {
         if (cancelled) return;
         const next = (result?.students || []) as unknown as Student[];
@@ -431,7 +432,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     // لا نعتمد على هذا المصدر لمنتقي الإجازات — استخدام البحث من النظام
     // يضمن ظهور أي طالب بغض النظر عن ترتيبه الزمني.
     studentApi
-      .list({ status: "مفصول", pageSize: 200 })
+      .list({ status: "مفصول", opportunityMode: true, pageSize: 200 })
       .then((dismissedResult) => {
         if (cancelled) return;
         const all = dismissedResult?.students || [];
@@ -1390,11 +1391,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     setProfileDialogOpen(true);
   };
 
-  const studentOpportunityText = (student: Student) => {
-    const base = Number(student.baseOpportunities || 0);
-    if (base <= 0) return "0 / 0";
-    return `${Number(student.opportunities || 0)} / ${base}`;
-  };
+  const studentOpportunityText = (student: Student) =>
+    formatOpportunityBalance(student, { separator: " / " });
 
   const renderStudentPicker = () => {
     return (
@@ -1880,7 +1878,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <div className="flex flex-wrap items-center gap-2">
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-black ${
-                  Number(row.student.baseOpportunities || 0) <= 0
+                  getOpportunityLimit(row.student) === null
                     ? "bg-muted text-muted-foreground"
                     : Number(row.student.opportunities || 0) === 0
                       ? "bg-red-500/15 text-red-600 dark:text-red-400"

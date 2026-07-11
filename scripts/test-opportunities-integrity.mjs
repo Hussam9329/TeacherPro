@@ -12,6 +12,8 @@ const bulkTargetsRoute = read('src/app/api/opportunities/bulk-targets/route.ts')
 const bulkAdjustRoute = read('src/app/api/opportunities/bulk-adjust/route.ts');
 const studentActionRoute = read('src/app/api/opportunities/student-action/route.ts');
 const opportunityLogsRoute = read('src/app/api/opportunity-logs/route.ts');
+const opportunitySnapshotServer = read('src/lib/student-opportunity-snapshot-server.ts');
+const opportunityBalance = read('src/lib/opportunity-balance.ts');
 const packageJson = read('package.json');
 
 check(
@@ -55,9 +57,10 @@ check(
 check(
   studentRoute.includes('"opportunities.view"') &&
     studentRoute.includes('opportunityMode') &&
-    studentRoute.includes('activeChapterConflictCount') &&
-    studentRoute.includes('isOpportunityOverLimit'),
-  'API الطلاب يدعم وضع إدارة الفرص ويرجع حالة الفصل والسقف من قاعدة البيانات',
+    studentRoute.includes('attachStudentOpportunitySnapshots') &&
+    opportunitySnapshotServer.includes('activeChapterConflictCount') &&
+    opportunitySnapshotServer.includes('isOpportunityOverLimit'),
+  'API الطلاب يدعم وضع إدارة الفرص ويرجع حالة الفصل والسقف من المصدر الموحد',
 );
 check(
   statsRoute.includes('noActiveChapterWhere') &&
@@ -68,9 +71,11 @@ check(
   'إحصائيات إدارة الفرص تعرض مشاكل المحرك: بلا فصل، تعارض، فرص كاملة، فرص ناقصة، فوق السقف',
 );
 check(
-  bulkTargetsRoute.includes('hasActiveChapterWhere') &&
-    bulkTargetsRoute.includes('fullOpportunityLimitForStudent'),
-  'معاينة العملية الجماعية محسوبة من قاعدة البيانات وبحسب الفصل النشط',
+  bulkTargetsRoute.includes('attachStudentOpportunitySnapshots') &&
+    bulkTargetsRoute.includes('opportunityHealth === "ready"') &&
+    bulkTargetsRoute.includes('student.isOpportunityFull') &&
+    !bulkTargetsRoute.includes('fullOpportunityLimitForStudent'),
+  'معاينة العملية الجماعية تستخدم نفس Snapshot الفصل النشط ولا تعتمد على الأساس المخزن',
 );
 check(
   bulkAdjustRoute.includes('mode === "filter"') &&
@@ -91,6 +96,18 @@ check(
     opportunitiesView.includes('طلاب بلا فصل نشط') &&
     opportunitiesView.includes('طلاب ضمن تعارض فصول'),
   'واجهة إدارة الفرص تعرض بطاقة الفرص الناقصة وتوضح أن مشاكل الفصول تخص الدورات لا الطلاب',
+);
+
+check(
+  opportunitySnapshotServer.includes('Current balance always comes from Student.opportunities') &&
+    opportunitySnapshotServer.includes('const opportunityLimit = activeChapter?.opportunities ?? null') &&
+    opportunitySnapshotServer.includes('attachStudentOpportunitySnapshotsWithClient'),
+  'عقدة الفرص الموحدة تثبت أن الرصيد من الطالب والسقف من الفصل النشط وتعمل داخل transaction',
+);
+check(
+  opportunityBalance.includes('formatOpportunityBalance') &&
+    opportunityBalance.includes('Object.prototype.hasOwnProperty.call(source, "opportunityLimit")'),
+  'منسق العرض الموحد يحترم السقف الخادمي الصريح ولا يخفي الرصيد عند غياب السقف',
 );
 
 check(

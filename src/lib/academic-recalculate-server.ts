@@ -275,17 +275,23 @@ async function repairAcademicBaselinesForStudents(
       Number(chapter.opportunities || 0),
     ]),
   );
-  const baselineByCourseId = new Map<string, number>(
-    activeLinks.map((link) => {
-      const chapterOpportunities = Number(
-        chapterOppById.get(String(link.chapterId)) ?? 0,
-      );
-      return [
-        String(link.courseId),
-        Math.max(0, Math.trunc(chapterOpportunities)),
-      ];
-    }),
-  );
+  const activeLinksByCourseId = new Map<string, typeof activeLinks>();
+  for (const link of activeLinks) {
+    const links = activeLinksByCourseId.get(link.courseId) || [];
+    links.push(link);
+    activeLinksByCourseId.set(link.courseId, links);
+  }
+  const baselineByCourseId = new Map<string, number>();
+  for (const [courseId, links] of activeLinksByCourseId.entries()) {
+    if (links.length !== 1) continue;
+    const chapterOpportunities = Number(
+      chapterOppById.get(String(links[0].chapterId)) ?? 0,
+    );
+    baselineByCourseId.set(
+      String(courseId),
+      Math.max(0, Math.trunc(chapterOpportunities)),
+    );
+  }
 
   let fixed = 0;
   const updateIdsByBaseline = new Map<number, string[]>();

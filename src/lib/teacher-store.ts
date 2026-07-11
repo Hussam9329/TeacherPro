@@ -122,6 +122,18 @@ export interface Student {
   hasActiveChapter?: boolean;
   activeChapterConflictCount?: number;
   activeChapter?: { id: string; name: string; opportunities: number } | null;
+  /** Authoritative limit from the single active chapter; null means unavailable/conflicting. */
+  opportunityLimit?: number | null;
+  opportunitySource?: "student-record";
+  opportunityLimitSource?:
+    | "active-chapter"
+    | "no-active-chapter"
+    | "active-chapter-conflict";
+  opportunityHealth?:
+    | "ready"
+    | "zero-limit"
+    | "missing-active-chapter"
+    | "active-chapter-conflict";
   isOpportunityFull?: boolean;
   isOpportunityOverLimit?: boolean;
 }
@@ -1336,6 +1348,47 @@ function normalizeStudentRecord(st: Record<string, unknown>): Student {
     school: String(st.school || ""),
     opportunities: Number(st.opportunities || 0),
     baseOpportunities: Number(st.baseOpportunities || 0),
+    opportunityLimit:
+      Object.prototype.hasOwnProperty.call(st, "opportunityLimit")
+        ? st.opportunityLimit === null
+          ? null
+          : Number(st.opportunityLimit || 0)
+        : undefined,
+    opportunitySource:
+      st.opportunitySource === "student-record" ? "student-record" : undefined,
+    opportunityLimitSource:
+      st.opportunityLimitSource === "active-chapter" ||
+      st.opportunityLimitSource === "no-active-chapter" ||
+      st.opportunityLimitSource === "active-chapter-conflict"
+        ? st.opportunityLimitSource
+        : undefined,
+    opportunityHealth:
+      st.opportunityHealth === "ready" ||
+      st.opportunityHealth === "zero-limit" ||
+      st.opportunityHealth === "missing-active-chapter" ||
+      st.opportunityHealth === "active-chapter-conflict"
+        ? st.opportunityHealth
+        : undefined,
+    hasActiveChapter:
+      st.hasActiveChapter === undefined
+        ? undefined
+        : Boolean(st.hasActiveChapter),
+    activeChapterConflictCount:
+      st.activeChapterConflictCount === undefined
+        ? undefined
+        : Number(st.activeChapterConflictCount || 0),
+    activeChapter:
+      Object.prototype.hasOwnProperty.call(st, "activeChapter")
+        ? (st.activeChapter as Student["activeChapter"])
+        : undefined,
+    isOpportunityFull:
+      st.isOpportunityFull === undefined
+        ? undefined
+        : Boolean(st.isOpportunityFull),
+    isOpportunityOverLimit:
+      st.isOpportunityOverLimit === undefined
+        ? undefined
+        : Boolean(st.isOpportunityOverLimit),
     accountingGraceDays: normalizeGraceDaysValue(st.accountingGraceDays),
     dismissalNotes: String(st.dismissalNotes || ""),
     createdAt: st.createdAt ? String(st.createdAt).slice(0, 10) : todayISO(),

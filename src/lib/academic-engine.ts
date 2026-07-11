@@ -599,10 +599,18 @@ export function recalculateAcademicState(
   targetStudentIds?: Set<string>,
 ): AcademicRecalculationResult {
   const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
+  const activeCourseChapterGroups = new Map<string, AcademicCourseChapter[]>();
+  for (const link of state.courseChapters.filter(
+    (item) => item.active && !item.archived,
+  )) {
+    const links = activeCourseChapterGroups.get(link.courseId) || [];
+    links.push(link);
+    activeCourseChapterGroups.set(link.courseId, links);
+  }
   const activeCourseChapterByCourse = new Map(
-    state.courseChapters
-      .filter((link) => link.active && !link.archived)
-      .map((link) => [link.courseId, link]),
+    Array.from(activeCourseChapterGroups.entries())
+      .filter(([, links]) => links.length === 1)
+      .map(([courseId, links]) => [courseId, links[0]]),
   );
   const manualLogs = state.opportunityLogs.filter(
     (log) => !isAutomaticOpportunityLog(log),
@@ -736,7 +744,7 @@ export function recalculateAcademicState(
     });
 
     let opportunities = Number(
-      student.baseOpportunities || activeChapter?.opportunities || 0,
+      activeChapter?.opportunities ?? student.baseOpportunities ?? 0,
     );
     let dismissalType = "";
     let dismissalReason = "";
@@ -765,7 +773,7 @@ export function recalculateAcademicState(
       if (log.action === "خصم") opportunities -= amount;
       if (log.action === "إعادة تعيين")
         opportunities = Number(
-          student.baseOpportunities || activeChapter?.opportunities || 0,
+          activeChapter?.opportunities ?? student.baseOpportunities ?? 0,
         );
     });
 
@@ -1028,7 +1036,7 @@ export function recalculateAcademicState(
       return student;
 
     const opportunityCap = Number(
-      student.baseOpportunities || activeChapter?.opportunities || 0,
+      activeChapter?.opportunities ?? student.baseOpportunities ?? 0,
     );
     opportunities = Math.max(0, opportunities);
     if (opportunityCap > 0) {
@@ -1095,11 +1103,13 @@ export function getActiveChapterForStudent(
   courseChapters: AcademicCourseChapter[],
   chapters: AcademicChapter[],
 ): AcademicChapter | null {
-  const activeLink = courseChapters.find(
+  const activeLinks = courseChapters.filter(
     (link) => link.courseId === student.courseId && link.active && !link.archived,
   );
-  if (!activeLink) return null;
-  return chapters.find((chapter) => chapter.id === activeLink.chapterId) || null;
+  if (activeLinks.length !== 1) return null;
+  return (
+    chapters.find((chapter) => chapter.id === activeLinks[0].chapterId) || null
+  );
 }
 
 export type {

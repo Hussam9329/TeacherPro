@@ -14,6 +14,7 @@ import {
   parseCourseIds,
 } from "@/lib/grade-classification";
 import { studentCourseScopeWhere } from "@/lib/student-scope";
+import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 
 export type CallStatusFilter =
   | "all"
@@ -608,6 +609,12 @@ export async function GET(req: NextRequest) {
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
     const paged = sortedMatching.slice((page - 1) * pageSize, page * pageSize);
     const pagedStudentIds = paged.map((item) => item.student.id);
+    const pagedStudentsWithOpportunity = await attachStudentOpportunitySnapshots(
+      paged.map((item) => item.student),
+    );
+    const pagedStudentById = new Map(
+      pagedStudentsWithOpportunity.map((student) => [student.id, student]),
+    );
 
     const [recentGrades, relevantLeaves, studentCalls] = (pagedStudentIds.length
       ? await withFollowupTables(
@@ -677,12 +684,20 @@ export async function GET(req: NextRequest) {
     });
 
     const rows = paged.map(({ student, grade }) => {
+      const authoritativeStudent = pagedStudentById.get(student.id) || student;
       const items = (gradesByStudentId.get(student.id) || [])
         .flatMap((itemGrade) => {
           const itemExam = courseExamById.get(itemGrade.examId);
           if (!itemExam) return [];
           const leaves = leavesForExam(leavesByStudentId, student.id, itemExam);
-          return [buildGradeItem({ grade: itemGrade, exam: itemExam, student, leaves })];
+          return [
+            buildGradeItem({
+              grade: itemGrade,
+              exam: itemExam,
+              student: authoritativeStudent,
+              leaves,
+            }),
+          ];
         })
         .sort((a, b) => b.sortTime - a.sortTime || a.exam.name.localeCompare(b.exam.name, "ar"));
 
@@ -691,13 +706,13 @@ export async function GET(req: NextRequest) {
         buildGradeItem({
           grade,
           exam,
-          student,
+          student: authoritativeStudent,
           leaves: leavesForExam(selectedLeavesByStudentId, student.id, exam),
         });
 
       return {
         id: `student:${student.id}`,
-        student,
+        student: authoritativeStudent,
         items,
         focusItem,
       };

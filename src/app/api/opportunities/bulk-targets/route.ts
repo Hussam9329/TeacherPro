@@ -8,11 +8,9 @@ import { routeErrorResponse } from "@/lib/route-helpers";
 import {
   buildOpportunityFilters,
   composeStudentWhere,
-  fullOpportunityLimitForStudent,
-  hasActiveChapterWhere,
-  noActiveChapterWhere,
   normalizeBoolean,
 } from "@/lib/opportunity-filters-server";
+import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "opportunities.view");
@@ -37,65 +35,65 @@ export async function GET(req: NextRequest) {
       q: searchParams.get("q"),
     });
 
-    const baseWhere = composeStudentWhere(filters);
-    const eligibleBaseWhere = composeStudentWhere([
-      ...filters,
-      hasActiveChapterWhere(),
-    ]);
+    const rows = await db.student.findMany({
+      where: composeStudentWhere(filters),
+      select: {
+        id: true,
+        status: true,
+        courseId: true,
+        opportunities: true,
+        baseOpportunities: true,
+      },
+    });
+    const snapshots = await attachStudentOpportunitySnapshots<
+      (typeof rows)[number]
+    >(rows);
+    const eligibleRows = snapshots.filter(
+      (student) => student.opportunityHealth === "ready",
+    );
 
-    const [totalMatching, noActiveChapter, dismissedInEligibleBase, rows] =
-      await Promise.all([
-        db.student.count({ where: baseWhere }),
-        db.student.count({
-          where: composeStudentWhere([...filters, noActiveChapterWhere()]),
-        }),
-        db.student.count({
-          where: composeStudentWhere([
-            ...filters,
-            hasActiveChapterWhere(),
-            { status: "مفصول" },
-          ]),
-        }),
-        db.student.findMany({
-          where: eligibleBaseWhere,
-          select: {
-            id: true,
-            status: true,
-            opportunities: true,
-            baseOpportunities: true,
-          },
-        }),
-      ]);
+    const noActiveChapter = snapshots.filter(
+      (student) => student.opportunityHealth === "missing-active-chapter",
+    ).length;
+    const activeChapterConflicts = snapshots.filter(
+      (student) => student.opportunityHealth === "active-chapter-conflict",
+    ).length;
+    const zeroOpportunityLimit = snapshots.filter(
+      (student) => student.opportunityHealth === "zero-limit",
+    ).length;
+    const invalidOpportunitySource =
+      noActiveChapter + activeChapterConflicts + zeroOpportunityLimit;
 
-    const excludedDismissed = excludeDismissed ? dismissedInEligibleBase : 0;
+    const excludedDismissed = excludeDismissed
+      ? eligibleRows.filter((student) => student.status === "مفصول").length
+      : 0;
     const excludedFullOpportunities =
       actionType === "deduct" && excludeFullOpportunities
-        ? rows.filter(
-            (student) =>
-              Number(student.opportunities || 0) >=
-              fullOpportunityLimitForStudent(student),
-          ).length
+        ? eligibleRows.filter((student) => student.isOpportunityFull).length
         : 0;
-    const targetCount = rows.filter((student) => {
-      if (excludeDismissed && student.status === "مفصول") {
+
+    const targetCount = eligibleRows.filter((student) => {
+      if (excludeDismissed && student.status === "مفصول") return false;
+      if (
+        actionType === "deduct" &&
+        excludeFullOpportunities &&
+        student.isOpportunityFull
+      ) {
         return false;
-      }
-      if (actionType === "deduct" && excludeFullOpportunities) {
-        return (
-          Number(student.opportunities || 0) <
-          fullOpportunityLimitForStudent(student)
-        );
       }
       return true;
     }).length;
 
     return NextResponse.json({
-      totalMatching,
-      eligibleWithActiveChapter: rows.length,
+      totalMatching: rows.length,
+      eligibleWithActiveChapter: eligibleRows.length,
       noActiveChapter,
+      activeChapterConflicts,
+      zeroOpportunityLimit,
+      invalidOpportunitySource,
       excludedDismissed,
       excludedFullOpportunities,
-      skipped: Math.max(0, totalMatching - targetCount),
+      skipped: Math.max(0, rows.length - targetCount),
       targetCount,
       source: "database",
     });

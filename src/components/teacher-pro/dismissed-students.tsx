@@ -5,6 +5,7 @@ import { useTeacherStore, type OpportunityLog, type Student } from "@/lib/teache
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { studentApi } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
+import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -173,6 +174,7 @@ export function DismissedStudentsView() {
           status: "مفصول",
           q: debouncedSearch || undefined,
           courseId: filterCourseId || undefined,
+          opportunityMode: true,
           pageSize: 100,
           page: 1,
         },
@@ -856,7 +858,7 @@ export function DismissedStudentsView() {
                     <span>ولي الأمر: {student.parentPhone || "—"}</span>
                     <span>التيليجرام: {student.telegram || "—"}</span>
                     <span>
-                      الفرص: {student.opportunities}/{student.baseOpportunities}
+                      الفرص: {formatOpportunityBalance(student)}
                     </span>
                   </div>
                 </CardContent>
@@ -912,7 +914,7 @@ export function DismissedStudentsView() {
                     </td>
                     <td className="p-3 min-w-72">{renderNotesEditor(student)}</td>
                     <td className="p-3">
-                      {student.opportunities}/{student.baseOpportunities}
+                      {formatOpportunityBalance(student)}
                     </td>
                     <td className="p-3">
                       <Button

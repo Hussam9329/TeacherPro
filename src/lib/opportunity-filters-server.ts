@@ -166,16 +166,9 @@ export function bulkOpportunityWhereParts(
     parts.push({ status: { not: "مفصول" } });
   }
 
-  // أصحاب الفرص الكاملة يحتاجون مقارنة ديناميكية بفرص الفصل/الأساس، لذلك
-  // يتم استثناؤهم بعد جلب صفوف خفيفة داخل API حتى تبقى النتيجة دقيقة.
+  // أصحاب الفرص الكاملة يحتاجون مقارنة ديناميكية بسقف الفصل النشط الفعلي، لذلك
+  // يتم حسمهم بعد جلب Snapshot موحد داخل API حتى تطابق المعاينة التنفيذ.
   void excludeFullOpportunities;
 
   return parts;
-}
-
-export function fullOpportunityLimitForStudent(student: {
-  baseOpportunities?: number | null;
-}): number {
-  const base = Number(student.baseOpportunities || 0);
-  return base > 0 ? base : 3;
 }

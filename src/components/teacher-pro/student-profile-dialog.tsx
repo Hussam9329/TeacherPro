@@ -23,6 +23,7 @@ import {
 import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib/grade-classification";
 import { ArrowRightIcon } from "lucide-react";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity-balance";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "timeline";
 
@@ -346,11 +347,15 @@ export function StudentProfileDialog({
   );
 
   const opportunityTraceRows = useMemo(() => {
+    const source = databaseStats || student;
     const base = Number(
-      databaseStats?.baseOpportunities ?? student?.baseOpportunities ?? 0,
+      getOpportunityLimit(source) ??
+        databaseStats?.baseOpportunities ??
+        student?.baseOpportunities ??
+        0,
     );
     return buildOpportunityTraceRows(studentOpportunities, base);
-  }, [studentOpportunities, databaseStats?.baseOpportunities, student?.baseOpportunities]);
+  }, [studentOpportunities, databaseStats, student]);
 
   const opportunityTraceByLogId = useMemo(() => {
     const map = new Map<string, OpportunityTraceRow>();
@@ -561,9 +566,7 @@ export function StudentProfileDialog({
   const opportunityText = databaseStatsLoading && !databaseStats
     ? "…"
     : databaseStats
-      ? databaseStats.hasActiveChapter
-        ? `${databaseStats.opportunities}/${databaseStats.baseOpportunities}`
-        : "0/0"
+      ? formatOpportunityBalance(databaseStats)
       : "—";
   const successCount = profileStatValue(databaseStats?.success);
   const failedCount = profileStatValue(databaseStats?.failed);

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requirePermission, requirePermissionPrincipal } from "@/lib/server-auth";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { Prisma } from "@prisma/client";
+import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
@@ -447,7 +448,16 @@ export async function POST(req: NextRequest) {
         return { deletedCount: deleted.count, student };
       });
 
-      return NextResponse.json({ ok: true, action, ...result, source: "database" });
+      const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+        result.student,
+      ]);
+      return NextResponse.json({
+        ok: true,
+        action,
+        ...result,
+        student: studentWithOpportunity,
+        source: "database",
+      });
     }
 
     const type = cleanText(dismissalInfo.type) || "فصل مؤقت";
@@ -579,7 +589,16 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ ok: true, action, ...result, source: "database" });
+    const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+      result.student,
+    ]);
+    return NextResponse.json({
+      ok: true,
+      action,
+      ...result,
+      student: studentWithOpportunity,
+      source: "database",
+    });
   } catch (error) {
     const err = error as { code?: string; statusCode?: number };
     if (err.code === "P2025") {

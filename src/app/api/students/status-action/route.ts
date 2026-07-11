@@ -6,6 +6,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requirePermissionPrincipal } from "@/lib/server-auth";
 import { ARCHIVED_STUDENT_STATUS } from "@/lib/student-delete-impact";
+import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 
 type RegistryStatusAction = "dismiss" | "reactivate";
 
@@ -148,7 +149,16 @@ export async function POST(req: NextRequest) {
         return { student: updatedStudent, opportunityLogs: [opportunityLog].filter(Boolean), studentNotes: [studentNote] };
       });
 
-      return NextResponse.json({ ok: true, action, ...result, source: "database" });
+      const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+        result.student,
+      ]);
+      return NextResponse.json({
+        ok: true,
+        action,
+        ...result,
+        student: studentWithOpportunity,
+        source: "database",
+      });
     }
 
     const result = await db.$transaction(async (tx) => {
@@ -227,7 +237,16 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ ok: true, action, ...result, source: "database" });
+    const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+      result.student,
+    ]);
+    return NextResponse.json({
+      ok: true,
+      action,
+      ...result,
+      student: studentWithOpportunity,
+      source: "database",
+    });
   } catch (error) {
     const err = error as { statusCode?: number; message?: string };
     if (err.statusCode === 409) {

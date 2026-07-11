@@ -37,6 +37,11 @@ import { useActionLock } from "@/hooks/use-action-lock";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { CountScopeSummary } from "./ui-kit";
+import {
+  formatOpportunityBalance,
+  getOpportunityLimit,
+  getOpportunityProgressPercent,
+} from "@/lib/opportunity-balance";
 
 const opportunityExportColumns: ExportColumn<any>[] = [
   { key: "student", label: "الطالب", value: (s) => s.name || "" },
@@ -49,9 +54,9 @@ const opportunityExportColumns: ExportColumn<any>[] = [
     value: (s) => s.opportunities ?? "",
   },
   {
-    key: "baseOpportunities",
-    label: "الفرص الأساسية",
-    value: (s) => s.baseOpportunities ?? "",
+    key: "opportunityLimit",
+    label: "سقف الفصل النشط",
+    value: (s) => getOpportunityLimit(s) ?? "",
   },
   { key: "phone", label: "الهاتف", value: (s) => s.phone || "" },
   { key: "telegram", label: "التيليجرام", value: (s) => s.telegram || "" },
@@ -315,6 +320,15 @@ export function OpportunitiesView() {
 
   const bulkTargetCount = bulkTargetStats?.targetCount ?? 0;
   const bulkSkippedNoActiveChapterCount = bulkTargetStats?.noActiveChapter ?? 0;
+  const bulkActiveChapterConflictCount =
+    bulkTargetStats?.activeChapterConflicts ?? 0;
+  const bulkZeroOpportunityLimitCount =
+    bulkTargetStats?.zeroOpportunityLimit ?? 0;
+  const bulkInvalidOpportunitySourceCount =
+    bulkTargetStats?.invalidOpportunitySource ??
+    bulkSkippedNoActiveChapterCount +
+      bulkActiveChapterConflictCount +
+      bulkZeroOpportunityLimitCount;
   const bulkExcludedDismissedCount = bulkTargetStats?.excludedDismissed ?? 0;
   const bulkExcludedFullOpportunitiesCount =
     bulkTargetStats?.excludedFullOpportunities ?? 0;
@@ -438,8 +452,12 @@ export function OpportunitiesView() {
 
   const getStudentActiveChapter = (student: OpportunityStudent | Student | null) => {
     if (!student) return null;
-    const snapshot = (student as OpportunityStudent).activeChapter;
+    const opportunityStudent = student as OpportunityStudent;
+    const snapshot = opportunityStudent.activeChapter;
     if (snapshot) return snapshot;
+    if (Object.prototype.hasOwnProperty.call(opportunityStudent, "opportunityLimit")) {
+      return null;
+    }
     const fallback = activeChapterForCourse(student.courseId);
     return fallback
       ? { id: fallback.id, name: fallback.name, opportunities: fallback.opportunities }
@@ -758,6 +776,7 @@ export function OpportunitiesView() {
       opportunityStatus: filterStatus,
       opportunityCount: filterOpportunityCount,
       q: debouncedSearch,
+      opportunityMode: true,
     });
     return ((result?.students || []) as unknown as Student[]).map(
       mapOpportunityExportRow,
@@ -1058,14 +1077,7 @@ export function OpportunitiesView() {
               paged.map((student) => {
                 const activeChapter = getStudentActiveChapter(student);
                 const hasChapter = hasSingleServerActiveChapter(student);
-                const opportunityCap = Math.max(
-                  0,
-                  Number(activeChapter?.opportunities || student.baseOpportunities || 0),
-                );
-                const oppPercent =
-                  hasChapter && opportunityCap > 0
-                    ? Math.min(100, (student.opportunities / opportunityCap) * 100)
-                    : 0;
+                const oppPercent = getOpportunityProgressPercent(student);
                 const hasChapterConflict =
                   Number((student as OpportunityStudent).activeChapterConflictCount || 0) > 1;
                 return (
@@ -1151,9 +1163,7 @@ export function OpportunitiesView() {
                               : "text-emerald-600"
                         }`}
                       >
-                        {hasChapter
-                          ? `${student.opportunities}/${opportunityCap || student.baseOpportunities}`
-                          : "0/0"}
+                        {formatOpportunityBalance(student)}
                       </span>
                     </div>
 
@@ -1347,8 +1357,7 @@ export function OpportunitiesView() {
                 <div>
                   <p className="text-xs text-muted-foreground">فرص محفوظة</p>
                   <p className="font-bold">
-                    {selectedDetailsStudent.opportunities}/
-                    {selectedDetailsStudent.baseOpportunities}
+                    {formatOpportunityBalance(selectedDetailsStudent)}
                   </p>
                 </div>
                 <div>
@@ -1477,8 +1486,8 @@ export function OpportunitiesView() {
                 {search.trim() ? ` • بحث: ${search.trim()}` : ""}
               </p>
               <p className="mt-1 text-xs font-semibold text-primary">
-                المطابقون قبل الاستثناءات: {bulkTotalMatchingCount} • لديهم فصل
-                نشط: {bulkEligibleWithActiveChapterCount}
+                المطابقون قبل الاستثناءات: {bulkTotalMatchingCount} • لديهم مصدر
+                فرص صالح: {bulkEligibleWithActiveChapterCount}
               </p>
               {bulkActionDialog.type === "add" ? (
                 <div className="mt-3 rounded-xl border bg-background/70 p-3">
@@ -1546,10 +1555,20 @@ export function OpportunitiesView() {
                   </label>
                 </div>
               )}
-              {bulkSkippedNoActiveChapterCount > 0 ? (
+              {bulkInvalidOpportunitySourceCount > 0 ? (
                 <p className="mt-2 text-xs font-semibold text-amber-600">
-                  سيتم تجاوز {bulkSkippedNoActiveChapterCount} طالب لأنهم بلا
-                  فصل نشط مرتبط بالدورة.
+                  سيتم تجاوز {bulkInvalidOpportunitySourceCount} طالب لأن مصدر
+                  سقف الفرص غير صالح
+                  {bulkSkippedNoActiveChapterCount > 0
+                    ? ` • بلا فصل نشط: ${bulkSkippedNoActiveChapterCount}`
+                    : ""}
+                  {bulkActiveChapterConflictCount > 0
+                    ? ` • تعارض فصول: ${bulkActiveChapterConflictCount}`
+                    : ""}
+                  {bulkZeroOpportunityLimitCount > 0
+                    ? ` • سقف الفصل صفر: ${bulkZeroOpportunityLimitCount}`
+                    : ""}
+                  .
                 </p>
               ) : null}
               {bulkExcludedDismissedCount > 0 ? (
@@ -1668,11 +1687,7 @@ export function OpportunitiesView() {
             <>
               <p className="text-sm text-muted-foreground">
                 سيتم إعادة تعيين فرص الطالب إلى العدد الأساسي (
-                {Number(
-                  getStudentActiveChapter(selectedActionStudent)?.opportunities ||
-                    selectedActionStudent?.baseOpportunities ||
-                    0,
-                )}
+                {getOpportunityLimit(selectedActionStudent) ?? "غير متاح"}
                 )
               </p>
             </>

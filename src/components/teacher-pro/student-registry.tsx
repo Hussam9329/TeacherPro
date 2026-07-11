@@ -51,6 +51,7 @@ import {
   sanitizePhoneInput,
   toLatinDigits,
 } from "@/lib/format";
+import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import {
   COURSE_TERMS,
   getAvailablePrograms,
@@ -216,9 +217,7 @@ function registryHealthBadges(student: Student) {
  * Chapter health remains visible through the dedicated server snapshot badges.
  */
 function registryOpportunityText(student: Student): string {
-  const base = Number(student.baseOpportunities || 0);
-  if (base <= 0) return "0 / 0";
-  return `${Number(student.opportunities || 0)} / ${base}`;
+  return formatOpportunityBalance(student, { separator: " / " });
 }
 
 const studentDeleteImpactLabels: Array<
@@ -2464,8 +2463,8 @@ export function StudentRegistryView() {
                                   : "تم تغيير نوع الدورة — اختر سياسة التعامل مع الفرص قبل الحفظ"}
                             </p>
                             <p className="mt-1 text-xs leading-6 opacity-90">
-                              رصيد الطالب الحالي: {editOriginalStudent.opportunities}{" "}
-                              / {editOriginalStudent.baseOpportunities}.
+                              رصيد الطالب الحالي:{" "}
+                              {registryOpportunityText(editOriginalStudent)}.
                               {editCourseChanged && (
                                 <>
                                   {" "}الدورة الجديدة:{" "}

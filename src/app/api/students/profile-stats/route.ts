@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
+import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 
 type ExamLite = {
   id: string;
@@ -136,10 +137,9 @@ export async function GET(req: NextRequest) {
 
     if (!student) return validationError("الطالب غير موجود");
 
-    const realActiveChapterLink = await db.courseChapter.findFirst({
-      where: { courseId: student.courseId, active: true, archived: false },
-      select: { id: true },
-    });
+    const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+      student,
+    ]);
 
     const accountableGrades = grades.filter((grade) => {
       if (isExamWithinStudentGracePeriod(student, grade.exam)) return false;
@@ -194,9 +194,18 @@ export async function GET(req: NextRequest) {
       failed,
       graceGrades,
       noDiscountGrades,
-      opportunities: student.opportunities,
-      baseOpportunities: student.baseOpportunities,
-      hasActiveChapter: Boolean(realActiveChapterLink),
+      opportunities: studentWithOpportunity.opportunities,
+      baseOpportunities: studentWithOpportunity.baseOpportunities,
+      opportunityLimit: studentWithOpportunity.opportunityLimit,
+      opportunitySource: studentWithOpportunity.opportunitySource,
+      opportunityLimitSource: studentWithOpportunity.opportunityLimitSource,
+      opportunityHealth: studentWithOpportunity.opportunityHealth,
+      hasActiveChapter: studentWithOpportunity.hasActiveChapter,
+      activeChapterConflictCount:
+        studentWithOpportunity.activeChapterConflictCount,
+      activeChapter: studentWithOpportunity.activeChapter,
+      isOpportunityFull: studentWithOpportunity.isOpportunityFull,
+      isOpportunityOverLimit: studentWithOpportunity.isOpportunityOverLimit,
       deductedMovements,
       deductions: deductedMovements,
       addedMovements,

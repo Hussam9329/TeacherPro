@@ -558,6 +558,7 @@ export interface OpportunityCountSet {
   active: number;
   noActiveChapter: number;
   activeChapterConflicts: number;
+  zeroOpportunityLimit: number;
   overLimit: number;
   fullOpportunities: number;
   belowFullOpportunities: number;
@@ -579,6 +580,9 @@ export interface OpportunityBulkTargetsResponse {
   totalMatching: number;
   eligibleWithActiveChapter: number;
   noActiveChapter: number;
+  activeChapterConflicts: number;
+  zeroOpportunityLimit: number;
+  invalidOpportunitySource: number;
   excludedDismissed: number;
   excludedFullOpportunities: number;
   skipped: number;
@@ -592,6 +596,10 @@ export interface OpportunityBulkAdjustResponse {
   savedStudentNotes: number;
   totalMatching: number;
   eligibleWithActiveChapter: number;
+  noActiveChapter: number;
+  activeChapterConflicts: number;
+  zeroOpportunityLimit: number;
+  invalidOpportunitySource: number;
   skipped: number;
   source: "database";
 }
@@ -672,7 +680,22 @@ export interface StudentProfileStatsResponse {
   noDiscountGrades: number;
   opportunities: number;
   baseOpportunities: number;
+  opportunityLimit: number | null;
+  opportunitySource: "student-record";
+  opportunityLimitSource:
+    | "active-chapter"
+    | "no-active-chapter"
+    | "active-chapter-conflict";
+  opportunityHealth:
+    | "ready"
+    | "zero-limit"
+    | "missing-active-chapter"
+    | "active-chapter-conflict";
   hasActiveChapter: boolean;
+  activeChapterConflictCount: number;
+  activeChapter: { id: string; name: string; opportunities: number } | null;
+  isOpportunityFull: boolean;
+  isOpportunityOverLimit: boolean;
   deductedMovements: number;
   deductions?: number;
   addedMovements: number;

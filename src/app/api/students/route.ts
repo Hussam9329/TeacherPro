@@ -28,6 +28,7 @@ import {
   resolveSubSite,
 } from "@/lib/course-config";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -498,48 +499,9 @@ export async function GET(req: NextRequest) {
     students as unknown as Array<Record<string, unknown>>;
 
   if (opportunityMode && students.length > 0) {
-    const courseIds = Array.from(
-      new Set(students.map((student) => student.courseId)),
-    );
-    const activeLinks = await db.courseChapter.findMany({
-      where: { courseId: { in: courseIds }, active: true, archived: false },
-      select: {
-        courseId: true,
-        chapter: { select: { id: true, name: true, opportunities: true } },
-      },
-    });
-    const activeLinksByCourseId = new Map<string, typeof activeLinks>();
-    for (const link of activeLinks) {
-      const list = activeLinksByCourseId.get(link.courseId) || [];
-      list.push(link);
-      activeLinksByCourseId.set(link.courseId, list);
-    }
-
-    responseStudents = students.map((student) => {
-      const links = activeLinksByCourseId.get(student.courseId) || [];
-      const activeChapter = links.length === 1 ? links[0].chapter : null;
-      const cap = Math.max(
-        0,
-        Math.trunc(
-          Number(activeChapter?.opportunities || student.baseOpportunities || 0),
-        ),
-      );
-
-      return {
-        ...student,
-        hasActiveChapter: links.length === 1 && cap > 0,
-        activeChapterConflictCount: links.length,
-        activeChapter: activeChapter
-          ? {
-              id: activeChapter.id,
-              name: activeChapter.name,
-              opportunities: Number(activeChapter.opportunities || 0),
-            }
-          : null,
-        isOpportunityFull: cap > 0 && Number(student.opportunities || 0) >= cap,
-        isOpportunityOverLimit: cap > 0 && Number(student.opportunities || 0) > cap,
-      };
-    });
+    responseStudents = (await attachStudentOpportunitySnapshots(
+      students,
+    )) as unknown as Array<Record<string, unknown>>;
   }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -833,9 +795,13 @@ export async function POST(req: NextRequest) {
       return createdStudent;
     });
 
+    const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+      student,
+    ]);
+
     return NextResponse.json(
       {
-        student,
+        student: studentWithOpportunity,
         opportunitiesWarning,
         source: "database",
       },
@@ -1193,7 +1159,17 @@ export async function PUT(req: NextRequest) {
       console.warn("[students PUT] recalculation failed for", id, recalcError);
     }
 
-    return NextResponse.json({ student, academicRecalculation });
+    const refreshedStudent =
+      (await db.student.findUnique({ where: { id } })) || student;
+    const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+      refreshedStudent,
+    ]);
+
+    return NextResponse.json({
+      student: studentWithOpportunity,
+      academicRecalculation,
+      source: "database",
+    });
   } catch (error) {
     return getPrismaStudentErrorResponse(error);
   }
@@ -1259,10 +1235,14 @@ export async function DELETE(req: NextRequest) {
       }),
     ]);
 
+    const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+      student,
+    ]);
+
     return NextResponse.json({
       ok: true,
       archived: true,
-      student,
+      student: studentWithOpportunity,
       impact: {
         ...impact,
         counts: {
