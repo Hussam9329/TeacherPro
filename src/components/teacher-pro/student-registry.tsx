@@ -10,6 +10,7 @@ import {
 import {
   studentApi,
   studentStatsApi,
+  courseApi,
   type StudentAcademicUpdateImpactResponse,
   type StudentDeleteImpactResponse,
 } from "@/lib/api";
@@ -814,9 +815,67 @@ export function StudentRegistryView() {
     editDialog.form.courseId !== editOriginalStudent.courseId,
   );
 
-  const editTargetActiveChapter = editDialog.form.courseId
-    ? activeChapterForCourse(editDialog.form.courseId)
-    : null;
+  // الفصل النشط للدورة المستهدفة يُجلب عبر API مخصص بدل الكاش المحلي،
+  // حتى لا تظهر رسالة «الدورة لا تحتوي على فصل نشط» خطأً عندما يكون
+  // الكاش قديماً أو غير محمّل بعد.
+  const [editTargetActiveChapterFromServer, setEditTargetActiveChapterFromServer] =
+    useState<{
+      id: string;
+      name: string;
+      opportunities: number;
+      chapterId: string;
+    } | null>(null);
+  const [editTargetActiveChapterLoading, setEditTargetActiveChapterLoading] =
+    useState(false);
+  const [editTargetActiveChapterConflict, setEditTargetActiveChapterConflict] =
+    useState(false);
+
+  useEffect(() => {
+    const courseId = editDialog.form.courseId;
+    if (!courseId || !editDialog.open) {
+      setEditTargetActiveChapterFromServer(null);
+      setEditTargetActiveChapterConflict(false);
+      return;
+    }
+
+    let cancelled = false;
+    setEditTargetActiveChapterLoading(true);
+    setEditTargetActiveChapterConflict(false);
+
+    courseApi
+      .activeChapterForCourse(courseId)
+      .then((response) => {
+        if (cancelled) return;
+        setEditTargetActiveChapterFromServer(response.activeChapter);
+        setEditTargetActiveChapterConflict(Boolean(response.conflict));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        // fallback إلى الكاش المحلي لو فشل الطلب
+        setEditTargetActiveChapterFromServer(
+          activeChapterForCourse(courseId)
+            ? {
+                id: activeChapterForCourse(courseId)!.id,
+                name: activeChapterForCourse(courseId)!.name,
+                opportunities: Number(
+                  activeChapterForCourse(courseId)!.opportunities || 0,
+                ),
+                chapterId: activeChapterForCourse(courseId)!.id,
+              }
+            : null,
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setEditTargetActiveChapterLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editDialog.form.courseId, editDialog.open]);
+
+  const editTargetActiveChapter = editTargetActiveChapterFromServer;
   const editTargetOpportunities = Number(
     editTargetActiveChapter?.opportunities || 0,
   );

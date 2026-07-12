@@ -321,6 +321,7 @@ interface ApiGetResponse<T> {
 type ApiGetOptions = {
   signal?: AbortSignal;
   quietAbort?: boolean;
+  params?: Record<string, string | number | undefined>;
 };
 
 function isAbortError(error: unknown): boolean {
@@ -336,7 +337,16 @@ async function apiGetResponse<T>(
   options: ApiGetOptions = {},
 ): Promise<ApiGetResponse<T>> {
   try {
-    const res = await fetch(`/api/${endpoint}`, {
+    let url = `/api/${endpoint}`;
+    if (options.params) {
+      const search = new URLSearchParams();
+      for (const [key, value] of Object.entries(options.params)) {
+        if (value !== undefined && value !== null) search.set(key, String(value));
+      }
+      const qs = search.toString();
+      if (qs) url += `?${qs}`;
+    }
+    const res = await fetch(url, {
       credentials: "same-origin",
       signal: options.signal,
     });
@@ -1202,6 +1212,24 @@ export const courseApi = {
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("courses", { id, ...updates }),
   remove: (id: string) => apiDelete("courses", id),
+  /**
+   * يرجع الفصل النشط الوحيد غير المؤرشف للدورة من قاعدة البيانات مباشرةً.
+   * استخدمه في نافذة تعديل الطالب بدل الاعتماد على كاش Zustand المحلي.
+   */
+  activeChapterForCourse: (courseId: string, options: ApiGetOptions = {}) =>
+    apiGet<{
+      courseId: string;
+      hasActiveChapter: boolean;
+      conflict: boolean;
+      activeChapter: {
+        id: string;
+        name: string;
+        opportunities: number;
+        chapterId: string;
+      } | null;
+      source: "database";
+      generatedAt: string;
+    }>("courses/active-chapter", { ...options, params: { courseId } }),
 };
 
 // ─── Chapter API ──────────────────────────────────────────────────────────────
