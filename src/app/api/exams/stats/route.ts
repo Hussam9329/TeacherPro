@@ -4,12 +4,11 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
-import { withFollowupTables } from "@/lib/followup-schema";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import {
   classifyGradeAcademicImpact,
-  dayKey,
   isProtectedGradeKind,
+  studentLeaveAppliesToExam,
 } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 
@@ -140,46 +139,52 @@ export async function GET(req: NextRequest) {
       ],
     };
 
-    const [grades, leaves] = await Promise.all([
-      db.grade.findMany({
+    const grades = (await db.grade.findMany({
+      where: {
+        examId: { in: examIds },
+        student: { is: { status: { not: STUDENT_STATUS_ARCHIVED } } },
+      },
+      select: {
+        id: true,
+        examId: true,
+        studentId: true,
+        status: true,
+        score: true,
+        student: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            accountingGraceDays: true,
+          },
+        },
+      },
+    })) as GradeRow[];
+
+    // إحصائيات الامتحانات يجب ألا تتعطل بالكامل بسبب جدول الإجازات.
+    // لا ننفذ DDL داخل GET؛ الترحيلات هي المسؤولة عن إنشاء المخطط.
+    let leaves: LeaveRow[] = [];
+    try {
+      leaves = (await db.studentLeave.findMany({
         where: {
-          examId: { in: examIds },
+          ...leaveWhere,
           student: { is: { status: { not: STUDENT_STATUS_ARCHIVED } } },
         },
         select: {
-          id: true,
-          examId: true,
           studentId: true,
-          status: true,
-          score: true,
-          student: {
-            select: {
-              id: true,
-              status: true,
-              createdAt: true,
-              accountingGraceDays: true,
-            },
-          },
+          examId: true,
+          leaveType: true,
+          date: true,
+          dateFrom: true,
+          dateTo: true,
         },
-      }) as Promise<GradeRow[]>,
-      withFollowupTables(
-        () => db.studentLeave.findMany({
-          where: {
-            ...leaveWhere,
-            student: { is: { status: { not: STUDENT_STATUS_ARCHIVED } } },
-          },
-          select: {
-            studentId: true,
-            examId: true,
-            leaveType: true,
-            date: true,
-            dateFrom: true,
-            dateTo: true,
-          },
-        }),
-        "ExamStatsStudentLeave",
-      ) as Promise<LeaveRow[]>,
-    ]);
+      })) as LeaveRow[];
+    } catch (leaveError) {
+      console.warn(
+        "[API] Exam stats continued without student leaves because the leave query failed.",
+        leaveError,
+      );
+    }
 
     const examById = new Map(exams.map((exam) => [exam.id, exam]));
     const leavesByStudent = new Map<string, LeaveRow[]>();
@@ -195,8 +200,8 @@ export async function GET(req: NextRequest) {
       if (!exam) return;
       const stat = statsByExamId[grade.examId] || { total: 0, passCount: 0, notPassedCount: 0, protectedCount: 0 };
       stat.total += 1;
-      const relevantLeaves = (leavesByStudent.get(grade.studentId) || []).filter(
-        (leave) => leave.examId === grade.examId || (leave.leaveType === "period" && dayKey(exam.date)),
+      const relevantLeaves = (leavesByStudent.get(grade.studentId) || []).filter((leave) =>
+        studentLeaveAppliesToExam(leave, exam),
       );
       const kind = classifyForExamStats(grade, exam, relevantLeaves);
       if (kind === "pass") stat.passCount += 1;
