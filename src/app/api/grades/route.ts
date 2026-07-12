@@ -430,7 +430,33 @@ export async function POST(req: NextRequest) {
     if (error instanceof AcademicGradeWritebackError) {
       return validationError(error.message, error.status);
     }
-    return routeErrorResponse(error, "تعذر حفظ الدرجة حالياً.");
+    // أرجع تفاصيل الخطأ لسهولة التشخيص
+    const err = error as { code?: string; message?: string; meta?: unknown };
+    console.error("[API] POST /api/grades error:", JSON.stringify({
+      code: err?.code,
+      message: err?.message,
+      meta: err?.meta,
+      stack: (error as Error)?.stack?.split('\n').slice(0, 5),
+    }));
+    // لو خطأ migration غير مطبّق
+    if (err?.code === 'P2021' || err?.code === 'P2022' || String(err?.message || '').includes('does not exist')) {
+      return NextResponse.json(
+        {
+          error: "تعذر حفظ الدرجة لأن ترحيلات قاعدة البيانات الأخيرة غير مطبّقة. شغّل `npm run db:deploy` على الخادم.",
+          code: err?.code,
+          detail: err?.message,
+        },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json(
+      {
+        error: "تعذر حفظ الدرجة حالياً.",
+        code: err?.code,
+        detail: err?.message,
+      },
+      { status: 500 },
+    );
   }
 }
 
