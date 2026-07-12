@@ -37,10 +37,22 @@ run("next", ["build"]);
 // Use a direct, non-pooler URL for DDL when supplied (Neon/Supabase/etc.).
 // Prisma still uses DATABASE_URL at runtime; only the migration command is
 // redirected to DIRECT_URL here.
-const directUrl = String(process.env.DIRECT_URL || "").trim();
+// لو DIRECT_URL غير موجود، نحاول تحويل pooler URL إلى direct تلقائياً.
+function deriveDirectUrl(url) {
+  if (!url) return "";
+  // Neon: -pooler.→ -.
+  let derived = url.replace(/-pooler\./, ".");
+  // Supabase: port 6543 → 5432
+  derived = derived.replace(/:6543\//, ":5432/");
+  // Vercel Postgres: لا يحتاج تحويل
+  return derived;
+}
+
+const directUrl = String(process.env.DIRECT_URL || "").trim() || deriveDirectUrl(databaseUrl);
+console.log(`\n[TeacherPro Deploy] Using migration URL: ${directUrl.replace(/:[^:@]+@/, ":****@")}\n`);
 const migrationEnv = {
   ...process.env,
-  DATABASE_URL: directUrl || databaseUrl,
+  DATABASE_URL: directUrl,
 };
 
 // Vercel publishes only after this whole build command succeeds. Therefore a
