@@ -15,7 +15,11 @@ import {
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
 import { getRequiredTextError } from "@/lib/validation";
-import { normalizeArabicText, isMissingDatabaseObjectError } from "@/lib/route-helpers";
+import {
+  databaseMigrationRequiredResponse,
+  normalizeArabicText,
+  isMissingDatabaseObjectError,
+} from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
 import {
   ARCHIVED_STUDENT_STATUS,
@@ -873,12 +877,8 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     if (isMissingDatabaseObjectError(error)) {
       console.error("[API] /api/students missing database object:", error);
-      return NextResponse.json(
-        {
-          error:
-            "تعذر تسجيل الطالب لأن ترحيلات قاعدة البيانات الأخيرة غير مطبّقة. شغّل `npm run db:deploy` على الخادم ثم أعد المحاولة.",
-        },
-        { status: 503 },
+      return databaseMigrationRequiredResponse(
+        "تعذر تسجيل الطالب لأن إصدار قاعدة البيانات لا يطابق إصدار النظام. أعد نشر آخر نسخة؛ الترحيلات ستُطبّق تلقائياً قبل تشغيلها.",
       );
     }
     return getPrismaStudentErrorResponse(error);
@@ -1448,12 +1448,8 @@ export async function PUT(req: NextRequest) {
     // بدل 500 عام كي يعرف المدير أنه يجب تشغيل npm run db:deploy.
     if (isMissingDatabaseObjectError(error)) {
       console.error("[API] /api/students missing database object:", error);
-      return NextResponse.json(
-        {
-          error:
-            "تعذر حفظ الطالب لأن ترحيلات قاعدة البيانات الأخيرة غير مطبّقة. شغّل `npm run db:deploy` على الخادم ثم أعد المحاولة.",
-        },
-        { status: 503 },
+      return databaseMigrationRequiredResponse(
+        "تعذر حفظ الطالب لأن إصدار قاعدة البيانات لا يطابق إصدار النظام. أعد نشر آخر نسخة؛ الترحيلات ستُطبّق تلقائياً قبل تشغيلها.",
       );
     }
     return getPrismaStudentErrorResponse(error);

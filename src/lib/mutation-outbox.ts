@@ -60,6 +60,35 @@ function generateId(): string {
   return `mut-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function responseIsExplicitlyNonRetryable(res: Response): boolean {
+  const value = String(
+    res.headers.get('x-teacherpro-retryable') || '',
+  ).toLowerCase();
+  return value === '0' || value === 'false' || value === 'no';
+}
+
+function sameQueuedMutation(
+  item: QueuedMutation,
+  input: { endpoint: string; method: 'POST' | 'PUT' | 'DELETE'; payload?: unknown },
+): boolean {
+  if (item.endpoint !== input.endpoint || item.method !== input.method) return false;
+  try {
+    return JSON.stringify(item.payload) === JSON.stringify(input.payload);
+  } catch {
+    return false;
+  }
+}
+
+function dedupeQueuedMutations(items: QueuedMutation[]): QueuedMutation[] {
+  const unique: QueuedMutation[] = [];
+  for (const item of items) {
+    if (!unique.some((existing) => sameQueuedMutation(existing, item))) {
+      unique.push(item);
+    }
+  }
+  return unique;
+}
+
 /**
  * Enqueue a mutation to be sent to the server. If the server is reachable,
  * it will be sent immediately; on failure it stays in the outbox and is
@@ -89,8 +118,11 @@ export async function enqueueMutation(input: {
       });
       return { ok: true };
     }
-    // 4xx (except 408/429) → permanent failure, don't queue.
-    if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+    // Explicit server decision or permanent 4xx → never queue.
+    if (
+      responseIsExplicitlyNonRetryable(res) ||
+      (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429)
+    ) {
       return { ok: false };
     }
     // 5xx/408/429 → transient, queue.
@@ -121,6 +153,10 @@ export function queueOnly(input: {
     attempts: 0,
   };
   const items = readOutbox();
+  const duplicate = items.find((existing) => sameQueuedMutation(existing, input));
+  if (duplicate) {
+    return { ok: false, outboxId: duplicate.id };
+  }
   items.push(item);
   writeOutbox(items);
   return { ok: false, outboxId: item.id };
@@ -136,7 +172,7 @@ let flushInFlight = false;
 export async function flushOutbox(): Promise<number> {
   if (!canUseStorage()) return 0;
   if (flushInFlight) return 0;
-  const items = readOutbox();
+  const items = dedupeQueuedMutations(readOutbox());
   if (items.length === 0) return 0;
 
   flushInFlight = true;
@@ -161,8 +197,13 @@ export async function flushOutbox(): Promise<number> {
           inferTeacherProScopesFromEndpoint(item.endpoint).forEach((scope) => touchedScopes.add(scope));
           continue;
         }
-        // 4xx (except 408/429) → permanent failure, drop.
-        if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
+        // Explicitly non-retryable responses (including schema mismatch)
+        // and permanent 4xx are dropped immediately. This also cleans old
+        // queued requests created by versions that treated every 503 as transient.
+        if (
+          responseIsExplicitlyNonRetryable(res) ||
+          (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429)
+        ) {
           continue;
         }
         // Transient: keep with incremented attempts.

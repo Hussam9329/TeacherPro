@@ -78,6 +78,19 @@ function isTransientHttpStatus(status: number): boolean {
   );
 }
 
+function isTransientHttpResponse(res: Response): boolean {
+  const explicit = String(
+    res.headers.get("x-teacherpro-retryable") || "",
+  ).toLowerCase();
+  if (explicit === "0" || explicit === "false" || explicit === "no") {
+    return false;
+  }
+  if (explicit === "1" || explicit === "true" || explicit === "yes") {
+    return true;
+  }
+  return isTransientHttpStatus(res.status);
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -122,7 +135,7 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
             ok: false,
             error,
             status: res.status,
-            transient: isTransientHttpStatus(res.status),
+            transient: isTransientHttpResponse(res),
           };
         }
         const contentType = res.headers.get("content-type") || "";
@@ -192,7 +205,7 @@ async function apiPut(
             ok: false,
             error,
             status: res.status,
-            transient: isTransientHttpStatus(res.status),
+            transient: isTransientHttpResponse(res),
           };
         }
         const contentType = res.headers.get("content-type") || "";
@@ -267,7 +280,7 @@ async function apiDelete(
             ok: false,
             error,
             status: res.status,
-            transient: isTransientHttpStatus(res.status),
+            transient: isTransientHttpResponse(res),
           };
         }
         const contentType = res.headers.get("content-type") || "";
@@ -1502,7 +1515,7 @@ export const gradeApi = {
           ok: false,
           error,
           status: res.status,
-          transient: isTransientHttpStatus(res.status),
+          transient: isTransientHttpResponse(res),
         };
       }
       const contentType = res.headers.get("content-type") || "";
@@ -1954,7 +1967,7 @@ export const logApi = {
         ok: false,
         error,
         status: res.status,
-        transient: isTransientHttpStatus(res.status),
+        transient: isTransientHttpResponse(res),
       };
     } catch (e) {
       const msg = toUserFriendlyError(
@@ -1982,7 +1995,7 @@ export const logApi = {
           ok: false,
           error,
           status: res.status,
-          transient: isTransientHttpStatus(res.status),
+          transient: isTransientHttpResponse(res),
         };
       }
       return { ok: true };

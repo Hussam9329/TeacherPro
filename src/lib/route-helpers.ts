@@ -4,6 +4,31 @@ export function validationError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
+
+export const DATABASE_MIGRATION_REQUIRED_CODE = 'DATABASE_MIGRATION_REQUIRED';
+
+/**
+ * Schema/version mismatch is operationally a 503, but retrying the same
+ * mutation cannot fix it. The explicit header lets the browser retry layer and
+ * persistent outbox drop the request instead of replaying it on every app load.
+ */
+export function databaseMigrationRequiredResponse(message: string) {
+  return NextResponse.json(
+    {
+      error: message,
+      code: DATABASE_MIGRATION_REQUIRED_CODE,
+      retryable: false,
+    },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'X-TeacherPro-Retryable': '0',
+      },
+    },
+  );
+}
+
 export function requireText(value: unknown, label: string) {
   return String(value ?? '').trim() ? null : `${label}: هذا الحقل مطلوب`;
 }
