@@ -50,10 +50,6 @@ function deriveDirectUrl(url) {
 
 const directUrl = String(process.env.DIRECT_URL || "").trim() || deriveDirectUrl(databaseUrl);
 console.log(`\n[TeacherPro Deploy] Using migration URL: ${directUrl.replace(/:[^:@]+@/, ":****@")}\n`);
-const migrationEnv = {
-  ...process.env,
-  DATABASE_URL: directUrl,
-};
 
 // Vercel publishes only after this whole build command succeeds. Therefore a
 // migration failure keeps the previous deployment active instead of allowing
