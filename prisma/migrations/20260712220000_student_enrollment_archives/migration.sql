@@ -1,4 +1,4 @@
-CREATE TABLE "StudentEnrollmentArchive" (
+CREATE TABLE IF NOT EXISTS "StudentEnrollmentArchive" (
     "id" TEXT NOT NULL,
     "studentId" TEXT NOT NULL,
     "fromCourseId" TEXT NOT NULL,
@@ -15,16 +15,37 @@ CREATE TABLE "StudentEnrollmentArchive" (
     CONSTRAINT "StudentEnrollmentArchive_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "StudentEnrollmentArchive_studentId_createdAt_idx"
+ALTER TABLE "StudentEnrollmentArchive" ADD COLUMN IF NOT EXISTS "studentId" TEXT;
+ALTER TABLE "StudentEnrollmentArchive" ADD COLUMN IF NOT EXISTS "fromCourseId" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "StudentEnrollmentArchive" ADD COLUMN IF NOT EXISTS "fromCourseName" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "StudentEnrollmentArchive" ADD COLUMN IF NOT EXISTS "toCourseId" TEXT;
+ALTER TABLE "StudentEnrollmentArchive" ADD COLUMN IF NOT EXISTS "toCourseName" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "StudentEnrollmentArchive" ADD COLUMN IF NOT EXISTS "resetKind" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "StudentEnrollmentArchive" ADD COLUMN IF NOT EXISTS "reason" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "StudentEnrollmentArchive" ADD COLUMN IF NOT EXISTS "snapshot" TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE "StudentEnrollmentArchive" ADD COLUMN IF NOT EXISTS "createdById" TEXT;
+ALTER TABLE "StudentEnrollmentArchive" ADD COLUMN IF NOT EXISTS "createdByName" TEXT;
+ALTER TABLE "StudentEnrollmentArchive" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+
+CREATE INDEX IF NOT EXISTS "StudentEnrollmentArchive_studentId_createdAt_idx"
 ON "StudentEnrollmentArchive"("studentId", "createdAt");
 
-CREATE INDEX "StudentEnrollmentArchive_fromCourseId_idx"
+CREATE INDEX IF NOT EXISTS "StudentEnrollmentArchive_fromCourseId_idx"
 ON "StudentEnrollmentArchive"("fromCourseId");
 
-CREATE INDEX "StudentEnrollmentArchive_toCourseId_idx"
+CREATE INDEX IF NOT EXISTS "StudentEnrollmentArchive_toCourseId_idx"
 ON "StudentEnrollmentArchive"("toCourseId");
 
-ALTER TABLE "StudentEnrollmentArchive"
-ADD CONSTRAINT "StudentEnrollmentArchive_studentId_fkey"
-FOREIGN KEY ("studentId") REFERENCES "Student"("id")
-ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'StudentEnrollmentArchive_studentId_fkey'
+  ) THEN
+    ALTER TABLE "StudentEnrollmentArchive"
+    ADD CONSTRAINT "StudentEnrollmentArchive_studentId_fkey"
+    FOREIGN KEY ("studentId") REFERENCES "Student"("id")
+    ON DELETE CASCADE ON UPDATE CASCADE NOT VALID;
+  END IF;
+END
+$$;

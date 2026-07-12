@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 
-import { db } from '@/lib/db';
 import { isMissingDatabaseObjectError } from '@/lib/route-helpers';
+import { runSerializedSchemaRepair } from '@/lib/schema-repair-lock';
 
 export function parseCourseIds(value: unknown): string[] {
   const raw = Array.isArray(value)
@@ -49,6 +49,11 @@ const EXAM_COURSE_LINK_STATEMENTS = [
     "courseId" TEXT NOT NULL,
     CONSTRAINT "ExamCourse_pkey" PRIMARY KEY ("id")
   )`,
+  `DELETE FROM "ExamCourse" older
+    USING "ExamCourse" newer
+    WHERE older."examId" = newer."examId"
+      AND older."courseId" = newer."courseId"
+      AND older."id" > newer."id"`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "ExamCourse_examId_courseId_key" ON "ExamCourse"("examId", "courseId")`,
   `CREATE INDEX IF NOT EXISTS "ExamCourse_courseId_idx" ON "ExamCourse"("courseId")`,
   `DELETE FROM "ExamCourse" link
@@ -99,11 +104,7 @@ let ensurePromise: Promise<void> | null = null;
 
 export async function ensureExamCourseLinksSchema(): Promise<void> {
   if (!ensurePromise) {
-    ensurePromise = (async () => {
-      for (const statement of EXAM_COURSE_LINK_STATEMENTS) {
-        await db.$executeRawUnsafe(statement);
-      }
-    })().catch((error) => {
+    ensurePromise = runSerializedSchemaRepair(EXAM_COURSE_LINK_STATEMENTS).catch((error) => {
       ensurePromise = null;
       throw error;
     });

@@ -85,8 +85,11 @@ function warmupDatabase(url) {
   return false;
 }
 
-const GRADE_EXAM_INTEGRITY_MIGRATION =
-  "20260712143000_grade_exam_integrity";
+const RECOVERABLE_IDEMPOTENT_MIGRATIONS = [
+  "20260712143000_grade_exam_integrity",
+  "20260712190000_atomic_student_codes_and_active_chapter_guard",
+  "20260712220000_student_enrollment_archives",
+];
 
 /**
  * The original form of the grade/exam migration referenced Exam scheduling
@@ -157,25 +160,17 @@ const migrationEnv = {
   DATABASE_URL: directUrl,
 };
 
-if (
-  hasUnresolvedKnownMigration(
-    directUrl,
-    GRADE_EXAM_INTEGRITY_MIGRATION,
-  )
-) {
-  console.log(
-    `\n[TeacherPro Deploy] Recovering known interrupted migration: ${GRADE_EXAM_INTEGRITY_MIGRATION}\n`,
-  );
-  run(
-    "prisma",
-    [
-      "migrate",
-      "resolve",
-      "--rolled-back",
-      GRADE_EXAM_INTEGRITY_MIGRATION,
-    ],
-    migrationEnv,
-  );
+for (const migrationName of RECOVERABLE_IDEMPOTENT_MIGRATIONS) {
+  if (hasUnresolvedKnownMigration(directUrl, migrationName)) {
+    console.log(
+      `\n[TeacherPro Deploy] Recovering known interrupted migration: ${migrationName}\n`,
+    );
+    run(
+      "prisma",
+      ["migrate", "resolve", "--rolled-back", migrationName],
+      migrationEnv,
+    );
+  }
 }
 
 // Vercel publishes only after this whole build command succeeds. Therefore a

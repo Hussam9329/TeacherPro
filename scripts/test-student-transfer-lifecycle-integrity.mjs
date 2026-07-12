@@ -24,7 +24,8 @@ check(
   schema.includes("model StudentEnrollmentArchive") &&
     schema.includes("enrollmentArchives StudentEnrollmentArchive[]") &&
     schema.includes("snapshot        String   @db.Text") &&
-    migration.includes('CREATE TABLE "StudentEnrollmentArchive"') &&
+    (migration.includes('CREATE TABLE "StudentEnrollmentArchive"') ||
+      migration.includes('CREATE TABLE IF NOT EXISTS "StudentEnrollmentArchive"')) &&
     migration.includes('FOREIGN KEY ("studentId") REFERENCES "Student"'),
 );
 check(

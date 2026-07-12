@@ -1,6 +1,7 @@
-import { db } from '@/lib/db';
 import { isMissingDatabaseObjectError } from '@/lib/route-helpers';
 import { ensureExamCourseLinksSchema } from '@/lib/exam-course-links';
+import { ensureAcademicSchema } from '@/lib/academic-schema';
+import { runSerializedSchemaRepair } from '@/lib/schema-repair-lock';
 
 const EXAM_SCHEMA_STATEMENTS = [
   `ALTER TABLE "Exam" ADD COLUMN IF NOT EXISTS "noDiscount" BOOLEAN NOT NULL DEFAULT false`,
@@ -19,9 +20,8 @@ let ensureExamSchemaPromise: Promise<void> | null = null;
 export async function ensureExamSchema(): Promise<void> {
   if (!ensureExamSchemaPromise) {
     ensureExamSchemaPromise = (async () => {
-      for (const statement of EXAM_SCHEMA_STATEMENTS) {
-        await db.$executeRawUnsafe(statement);
-      }
+      await ensureAcademicSchema();
+      await runSerializedSchemaRepair(EXAM_SCHEMA_STATEMENTS);
       await ensureExamCourseLinksSchema();
     })().catch((error) => {
       ensureExamSchemaPromise = null;

@@ -23,10 +23,21 @@ const examSchema = read("src/lib/exam-schema.ts");
 const gradeExamMigration = read(
   "prisma/migrations/20260712143000_grade_exam_integrity/migration.sql",
 );
+const missingRuntimeColumnsMigration = read(
+  "prisma/migrations/20260712185000_missing_runtime_columns/migration.sql",
+);
+const academicSchema = read("src/lib/academic-schema.ts");
+const schemaRepairLock = read("src/lib/schema-repair-lock.ts");
+const examStatsRoute = read("src/app/api/exams/stats/route.ts");
 
 check(
   pkg.scripts?.["vercel-build"] === "node scripts/vercel-build.mjs",
   "Vercel uses the guarded deployment runner",
+);
+check(
+  pkg.scripts?.build === "node scripts/vercel-build.mjs" &&
+    typeof pkg.scripts?.["build:app"] === "string",
+  "both default and Vercel builds use the guarded migration runner",
 );
 check(
   buildScript.includes('["prisma", ["migrate", "deploy"]') ||
@@ -40,8 +51,10 @@ check(
 check(
   buildScript.includes("hasUnresolvedKnownMigration") &&
     buildScript.includes("20260712143000_grade_exam_integrity") &&
+    buildScript.includes("20260712190000_atomic_student_codes_and_active_chapter_guard") &&
+    buildScript.includes("20260712220000_student_enrollment_archives") &&
     buildScript.includes('"--rolled-back"'),
-  "deployment safely recovers the known interrupted grade/exam migration",
+  "deployment safely recovers every known interrupted idempotent migration",
 );
 const migrationColumnCreation = gradeExamMigration.indexOf(
   'ADD COLUMN IF NOT EXISTS "scheduledActivateAt"',
@@ -59,6 +72,30 @@ check(
   examSchema.includes('ADD COLUMN IF NOT EXISTS "scheduledActivateAt"') &&
     examSchema.includes('ADD COLUMN IF NOT EXISTS "scheduledDeactivateAt"'),
   "runtime Exam schema repair includes both scheduling columns",
+);
+for (const requiredColumn of [
+  '"baseOpportunities"',
+  '"accountingGraceDays"',
+  '"nameKey"',
+  '"phoneKey"',
+  '"telegramKey"',
+  '"archived"',
+  '"archive"',
+]) {
+  check(
+    missingRuntimeColumnsMigration.includes(`ADD COLUMN IF NOT EXISTS ${requiredColumn}`) &&
+      academicSchema.includes(`ADD COLUMN IF NOT EXISTS ${requiredColumn}`),
+    `missing runtime column ${requiredColumn} is repaired by migration and runtime guard`,
+  );
+}
+check(
+  schemaRepairLock.includes("pg_advisory_xact_lock") &&
+    schemaRepairLock.includes("db.$transaction"),
+  "runtime DDL is serialized across serverless instances",
+);
+check(
+  examStatsRoute.includes("await ensureExamSchema()"),
+  "exam statistics repairs required schema before its first Prisma query",
 );
 check(
   buildScript.indexOf('run("next", ["build"]') <

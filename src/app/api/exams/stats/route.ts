@@ -1,5 +1,6 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
@@ -12,6 +13,7 @@ import {
   isProtectedGradeKind,
 } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
+import { ensureExamSchema } from "@/lib/exam-schema";
 
 type ExamRow = {
   id: string;
@@ -85,6 +87,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    await ensureExamSchema();
     const { searchParams } = new URL(req.url);
     const requestedIds = String(searchParams.get("examIds") || "")
       .split(",")

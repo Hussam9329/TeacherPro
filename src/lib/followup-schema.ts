@@ -1,5 +1,6 @@
-import { db } from "@/lib/db";
 import { isMissingDatabaseObjectError } from "@/lib/route-helpers";
+import { ensureAcademicSchema } from "@/lib/academic-schema";
+import { runSerializedSchemaRepair } from "@/lib/schema-repair-lock";
 
 const FOLLOWUP_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS "StudentLeave" (
@@ -58,6 +59,78 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "StudentLeaveGradeBackup_pkey" PRIMARY KEY ("id")
   )`,
+  `ALTER TABLE "StudentLeaveGradeBackup" ADD COLUMN IF NOT EXISTS "leaveId" TEXT`,
+  `ALTER TABLE "StudentLeaveGradeBackup" ADD COLUMN IF NOT EXISTS "studentId" TEXT`,
+  `ALTER TABLE "StudentLeaveGradeBackup" ADD COLUMN IF NOT EXISTS "examId" TEXT`,
+  `ALTER TABLE "StudentLeaveGradeBackup" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'درجة'`,
+  `ALTER TABLE "StudentLeaveGradeBackup" ADD COLUMN IF NOT EXISTS "score" INTEGER`,
+  `ALTER TABLE "StudentLeaveGradeBackup" ADD COLUMN IF NOT EXISTS "notes" TEXT`,
+  `ALTER TABLE "StudentLeaveGradeBackup" ADD COLUMN IF NOT EXISTS "academicAccountingChecked" BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE "StudentLeaveGradeBackup" ADD COLUMN IF NOT EXISTS "gradeCreatedAt" TIMESTAMP(3)`,
+  `ALTER TABLE "StudentLeaveGradeBackup" ADD COLUMN IF NOT EXISTS "gradeUpdatedAt" TIMESTAMP(3)`,
+  `ALTER TABLE "StudentLeaveGradeBackup" ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP`,
+  // Merge legacy duplicate exam leaves without losing their grade backups.
+  `WITH ranked AS (
+     SELECT "id",
+            FIRST_VALUE("id") OVER (
+              PARTITION BY "studentId", "examId"
+              ORDER BY "createdAt" DESC, "id" DESC
+            ) AS keep_id,
+            ROW_NUMBER() OVER (
+              PARTITION BY "studentId", "examId"
+              ORDER BY "createdAt" DESC, "id" DESC
+            ) AS rn
+     FROM "StudentLeave"
+     WHERE "examId" IS NOT NULL
+   ), duplicate_map AS (
+     SELECT "id" AS duplicate_id, keep_id FROM ranked WHERE rn > 1
+   )
+   DELETE FROM "StudentLeaveGradeBackup" duplicate_backup
+   USING duplicate_map map, "StudentLeaveGradeBackup" kept_backup
+   WHERE duplicate_backup."leaveId" = map.duplicate_id
+     AND kept_backup."leaveId" = map.keep_id
+     AND kept_backup."studentId" = duplicate_backup."studentId"
+     AND kept_backup."examId" = duplicate_backup."examId"`,
+  `WITH ranked AS (
+     SELECT "id",
+            FIRST_VALUE("id") OVER (
+              PARTITION BY "studentId", "examId"
+              ORDER BY "createdAt" DESC, "id" DESC
+            ) AS keep_id,
+            ROW_NUMBER() OVER (
+              PARTITION BY "studentId", "examId"
+              ORDER BY "createdAt" DESC, "id" DESC
+            ) AS rn
+     FROM "StudentLeave"
+     WHERE "examId" IS NOT NULL
+   ), duplicate_map AS (
+     SELECT "id" AS duplicate_id, keep_id FROM ranked WHERE rn > 1
+   )
+   UPDATE "StudentLeaveGradeBackup" backup
+   SET "leaveId" = map.keep_id
+   FROM duplicate_map map
+   WHERE backup."leaveId" = map.duplicate_id`,
+  `WITH ranked AS (
+     SELECT "id", ROW_NUMBER() OVER (
+       PARTITION BY "leaveId", "studentId", "examId"
+       ORDER BY "createdAt" DESC, "id" DESC
+     ) AS rn
+     FROM "StudentLeaveGradeBackup"
+   )
+   DELETE FROM "StudentLeaveGradeBackup" backup
+   USING ranked
+   WHERE backup."id" = ranked."id" AND ranked.rn > 1`,
+  `WITH ranked AS (
+     SELECT "id", ROW_NUMBER() OVER (
+       PARTITION BY "studentId", "examId"
+       ORDER BY "createdAt" DESC, "id" DESC
+     ) AS rn
+     FROM "StudentLeave"
+     WHERE "examId" IS NOT NULL
+   )
+   DELETE FROM "StudentLeave" leave_row
+   USING ranked
+   WHERE leave_row."id" = ranked."id" AND ranked.rn > 1`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "StudentLeave_studentId_examId_key" ON "StudentLeave"("studentId", "examId")`,
   `CREATE INDEX IF NOT EXISTS "StudentLeave_studentId_idx" ON "StudentLeave"("studentId")`,
   `CREATE INDEX IF NOT EXISTS "StudentLeave_examId_idx" ON "StudentLeave"("examId")`,
@@ -96,19 +169,19 @@ const FOLLOWUP_SCHEMA_STATEMENTS = [
   `DO $$
   BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentLeave_studentId_fkey') THEN
-      ALTER TABLE "StudentLeave" ADD CONSTRAINT "StudentLeave_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "Student"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      ALTER TABLE "StudentLeave" ADD CONSTRAINT "StudentLeave_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "Student"("id") ON DELETE CASCADE ON UPDATE CASCADE NOT VALID;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentLeave_examId_fkey') THEN
-      ALTER TABLE "StudentLeave" ADD CONSTRAINT "StudentLeave_examId_fkey" FOREIGN KEY ("examId") REFERENCES "Exam"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      ALTER TABLE "StudentLeave" ADD CONSTRAINT "StudentLeave_examId_fkey" FOREIGN KEY ("examId") REFERENCES "Exam"("id") ON DELETE CASCADE ON UPDATE CASCADE NOT VALID;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentCall_studentId_fkey') THEN
-      ALTER TABLE "StudentCall" ADD CONSTRAINT "StudentCall_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "Student"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      ALTER TABLE "StudentCall" ADD CONSTRAINT "StudentCall_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "Student"("id") ON DELETE CASCADE ON UPDATE CASCADE NOT VALID;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentCall_examId_fkey') THEN
-      ALTER TABLE "StudentCall" ADD CONSTRAINT "StudentCall_examId_fkey" FOREIGN KEY ("examId") REFERENCES "Exam"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      ALTER TABLE "StudentCall" ADD CONSTRAINT "StudentCall_examId_fkey" FOREIGN KEY ("examId") REFERENCES "Exam"("id") ON DELETE CASCADE ON UPDATE CASCADE NOT VALID;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentNote_studentId_fkey') THEN
-      ALTER TABLE "StudentNote" ADD CONSTRAINT "StudentNote_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "Student"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      ALTER TABLE "StudentNote" ADD CONSTRAINT "StudentNote_studentId_fkey" FOREIGN KEY ("studentId") REFERENCES "Student"("id") ON DELETE CASCADE ON UPDATE CASCADE NOT VALID;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'StudentLeaveGradeBackup_leaveId_fkey') THEN
       ALTER TABLE "StudentLeaveGradeBackup" ADD CONSTRAINT "StudentLeaveGradeBackup_leaveId_fkey" FOREIGN KEY ("leaveId") REFERENCES "StudentLeave"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -132,9 +205,8 @@ let ensureFollowupTablesPromise: Promise<void> | null = null;
 export async function ensureFollowupTables(): Promise<void> {
   if (!ensureFollowupTablesPromise) {
     ensureFollowupTablesPromise = (async () => {
-      for (const statement of FOLLOWUP_SCHEMA_STATEMENTS) {
-        await db.$executeRawUnsafe(statement);
-      }
+      await ensureAcademicSchema();
+      await runSerializedSchemaRepair(FOLLOWUP_SCHEMA_STATEMENTS);
     })().catch((error) => {
       ensureFollowupTablesPromise = null;
       throw error;

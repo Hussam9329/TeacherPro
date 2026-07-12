@@ -1,5 +1,5 @@
-import { db } from '@/lib/db';
 import { isMissingDatabaseObjectError } from '@/lib/route-helpers';
+import { runSerializedSchemaRepair } from '@/lib/schema-repair-lock';
 
 const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS "GradeEntryMissingNote" (
@@ -32,11 +32,7 @@ let ensurePromise: Promise<void> | null = null;
 
 export async function ensureGradeEntryMissingNoteSchema(): Promise<void> {
   if (!ensurePromise) {
-    ensurePromise = (async () => {
-      for (const stmt of STATEMENTS) {
-        await db.$executeRawUnsafe(stmt);
-      }
-    })().catch((error) => {
+    ensurePromise = runSerializedSchemaRepair(STATEMENTS).catch((error) => {
       ensurePromise = null;
       throw error;
     });
