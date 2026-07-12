@@ -4,14 +4,17 @@ import { ensureExamCourseLinksSchema } from '@/lib/exam-course-links';
 
 const EXAM_SCHEMA_STATEMENTS = [
   `ALTER TABLE "Exam" ADD COLUMN IF NOT EXISTS "noDiscount" BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE "Exam" ADD COLUMN IF NOT EXISTS "scheduledActivateAt" TIMESTAMP(3)`,
+  `ALTER TABLE "Exam" ADD COLUMN IF NOT EXISTS "scheduledDeactivateAt" TIMESTAMP(3)`,
 ] as const;
 
 let ensureExamSchemaPromise: Promise<void> | null = null;
 
 /**
  * Keeps production databases that missed the latest Prisma migration usable.
- * The noDiscount field is read by Prisma whenever an Exam is selected, so a
- * missing column breaks /api/exams, /api/backup, and any relation including Exam.
+ * These fields are read by Prisma in grade validation and academic
+ * recalculation. Keeping all Exam compatibility columns here lets an older
+ * production database recover before the first Prisma query touches them.
  */
 export async function ensureExamSchema(): Promise<void> {
   if (!ensureExamSchemaPromise) {

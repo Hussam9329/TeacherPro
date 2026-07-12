@@ -1,3 +1,9 @@
+-- This migration reads the scheduling columns below. They must exist here,
+-- before they are referenced; a later migration cannot repair an earlier
+-- failed migration because Prisma stops at the first failure.
+ALTER TABLE "Exam" ADD COLUMN IF NOT EXISTS "scheduledActivateAt" TIMESTAMP(3);
+ALTER TABLE "Exam" ADD COLUMN IF NOT EXISTS "scheduledDeactivateAt" TIMESTAMP(3);
+
 -- Normalize legacy rows so non-numeric grade statuses never retain a hidden score.
 UPDATE "Grade"
 SET "score" = NULL

@@ -1,5 +1,6 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
@@ -395,27 +396,33 @@ export async function POST(req: NextRequest) {
       return validationError("حالة الدرجة غير صحيحة");
     }
 
-    const result = await db.$transaction(async (tx) => {
-      const writeback = await syncAcademicGradeWriteback({
-        tx,
-        studentId,
-        examId,
-        status: body.status,
-        score: body.score,
-        notes: body.notes,
-        academicAccountingChecked: body.academicAccountingChecked,
-        sourceLabel: "تسجيل الدرجات",
-        allowBlankGrade: false,
-        blockOnLeave: true,
-        enforceExamAvailability: true,
-      });
-      if (!writeback) {
-        throw new AcademicGradeWritebackError(
-          "يجب إدخال درجة صحيحة قبل حفظ السجل.",
-        );
-      }
-      return writeback;
-    });
+    const result = await db.$transaction(
+      async (tx) => {
+        const writeback = await syncAcademicGradeWriteback({
+          tx,
+          studentId,
+          examId,
+          status: body.status,
+          score: body.score,
+          notes: body.notes,
+          academicAccountingChecked: body.academicAccountingChecked,
+          sourceLabel: "تسجيل الدرجات",
+          allowBlankGrade: false,
+          blockOnLeave: true,
+          enforceExamAvailability: true,
+        });
+        if (!writeback) {
+          throw new AcademicGradeWritebackError(
+            "يجب إدخال درجة صحيحة قبل حفظ السجل.",
+          );
+        }
+        return writeback;
+      },
+      // Academic writeback deliberately recalculates the student's complete
+      // state. Neon cold starts can exceed Prisma's 5s interactive transaction
+      // default even though the operation is healthy.
+      { maxWait: 15_000, timeout: 30_000 },
+    );
 
     await writeRequestAuditLog(req, "الدرجات", "حفظ درجة وإعادة احتساب الطالب", {
       gradeId: result.grade.id,

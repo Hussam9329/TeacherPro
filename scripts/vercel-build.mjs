@@ -85,6 +85,69 @@ function warmupDatabase(url) {
   return false;
 }
 
+const GRADE_EXAM_INTEGRITY_MIGRATION =
+  "20260712143000_grade_exam_integrity";
+
+/**
+ * The original form of the grade/exam migration referenced Exam scheduling
+ * columns before creating them. If a production deployment already attempted
+ * that file, Prisma records it as failed and refuses every later deployment
+ * with P3009. Recover only that exact, known, idempotent migration; unknown
+ * failed migrations must still stop deployment for manual review.
+ */
+function hasUnresolvedKnownMigration(url, migrationName) {
+  const probe = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `
+        const { Client } = require("pg");
+        const client = new Client({
+          connectionString: process.env.TEACHERPRO_MIGRATION_PROBE_URL,
+          ssl: { rejectUnauthorized: false },
+          connectionTimeoutMillis: 30000,
+        });
+        (async () => {
+          await client.connect();
+          try {
+            const result = await client.query(
+              'SELECT 1 FROM "_prisma_migrations" WHERE migration_name = $1 AND finished_at IS NULL AND rolled_back_at IS NULL LIMIT 1',
+              [process.env.TEACHERPRO_MIGRATION_PROBE_NAME],
+            );
+            process.exitCode = result.rowCount > 0 ? 42 : 0;
+          } catch (error) {
+            if (error && error.code === "42P01") process.exitCode = 0;
+            else throw error;
+          } finally {
+            await client.end();
+          }
+        })().catch((error) => {
+          console.error("migration probe error:", error.message);
+          process.exit(1);
+        });
+      `,
+    ],
+    {
+      stdio: "inherit",
+      shell: false,
+      env: {
+        ...process.env,
+        TEACHERPRO_MIGRATION_PROBE_URL: url,
+        TEACHERPRO_MIGRATION_PROBE_NAME: migrationName,
+      },
+    },
+  );
+
+  if (probe.error) {
+    fail(`Migration recovery probe failed to start: ${probe.error.message}`);
+  }
+  if (probe.status === 42) return true;
+  if (probe.status !== 0) {
+    fail(`Migration recovery probe exited with code ${probe.status ?? "unknown"}.`);
+  }
+  return false;
+}
+
 if (!warmupDatabase(directUrl)) {
   fail("Could not connect to the database after 5 attempts. The deployment is stopped to prevent code/schema divergence. Check DATABASE_URL/DIRECT_URL and database availability.");
 }
@@ -93,6 +156,27 @@ const migrationEnv = {
   ...process.env,
   DATABASE_URL: directUrl,
 };
+
+if (
+  hasUnresolvedKnownMigration(
+    directUrl,
+    GRADE_EXAM_INTEGRITY_MIGRATION,
+  )
+) {
+  console.log(
+    `\n[TeacherPro Deploy] Recovering known interrupted migration: ${GRADE_EXAM_INTEGRITY_MIGRATION}\n`,
+  );
+  run(
+    "prisma",
+    [
+      "migrate",
+      "resolve",
+      "--rolled-back",
+      GRADE_EXAM_INTEGRITY_MIGRATION,
+    ],
+    migrationEnv,
+  );
+}
 
 // Vercel publishes only after this whole build command succeeds. Therefore a
 // migration failure keeps the previous deployment active instead of allowing

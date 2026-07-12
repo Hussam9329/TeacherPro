@@ -1,12 +1,17 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 import type { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/server-auth';
 import { db } from '@/lib/db';
-import { withFollowupTables } from '@/lib/followup-schema';
-import { withGradeEntryMissingNoteSchema } from '@/lib/grade-entry-missing-note-schema';
+import { ensureExamSchema } from '@/lib/exam-schema';
+import { ensureFollowupTables, withFollowupTables } from '@/lib/followup-schema';
+import {
+  ensureGradeEntryMissingNoteSchema,
+  withGradeEntryMissingNoteSchema,
+} from '@/lib/grade-entry-missing-note-schema';
 
 const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
 const PLEDGE_NOTE_KIND = 'تعهد ولي الأمر';
@@ -301,6 +306,13 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
+    // A dashboard request fans out into many concurrent reads. Repair the
+    // compatibility schema first so one missing column cannot reject the
+    // entire Promise.all batch with an opaque 500 response.
+    await ensureExamSchema();
+    await ensureFollowupTables();
+    await ensureGradeEntryMissingNoteSchema();
+
     const today = getTodayBaghdadRange();
 
     const activeChapterLinks = (await db.courseChapter.findMany({
