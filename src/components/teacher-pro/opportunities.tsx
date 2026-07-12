@@ -76,6 +76,11 @@ type OpportunityLogWithRelations = {
   examId?: string | null;
   action: string;
   amount: number;
+  requestedAmount?: number | null;
+  appliedAmount?: number | null;
+  balanceBefore?: number | null;
+  balanceAfter?: number | null;
+  reversalOfLogId?: string | null;
   reason?: string | null;
   date: string;
   chapterId?: string | null;
@@ -1277,7 +1282,14 @@ export function OpportunitiesView() {
               opportunityLogs.slice(0, 20).map((log) => {
                 const student = students.find((s) => s.id === log.studentId);
                 const exam = exams.find((item) => item.id === log.examId);
-                const canUndo = log.action === "إضافة" || log.action === "خصم";
+                const alreadyReversed = opportunityLogs.some((item) => item.reversalOfLogId === log.id);
+                const isReversal = Boolean(log.reversalOfLogId);
+                const isDismissalMovement = String(log.reason || "").trim().startsWith("فصل الطالب:");
+                const canUndo =
+                  (log.action === "إضافة" || log.action === "خصم") &&
+                  !alreadyReversed &&
+                  !isReversal &&
+                  !isDismissalMovement;
                 return (
                   <div
                     key={log.id}
@@ -1307,8 +1319,13 @@ export function OpportunitiesView() {
                               : "secondary"
                         }
                       >
-                        {log.action} {log.amount}
+                        {log.action} {log.appliedAmount ?? log.amount}
                       </Badge>
+                      {(log.requestedAmount != null || log.balanceBefore != null || log.balanceAfter != null) && (
+                        <span className="text-muted-foreground text-xs">
+                          المطلوب {log.requestedAmount ?? log.amount} • المطبق {log.appliedAmount ?? log.amount} • {log.balanceBefore ?? "—"} ← {log.balanceAfter ?? "—"}
+                        </span>
+                      )}
                       <span className="text-muted-foreground text-xs">
                         {log.reason}
                       </span>
@@ -1319,7 +1336,13 @@ export function OpportunitiesView() {
                         disabled={!canUndo}
                         onClick={() => handleUndoLog(log.id)}
                       >
-                        تراجع
+                        {alreadyReversed
+                          ? "تم التراجع"
+                          : isReversal
+                            ? "حركة تراجع"
+                            : isDismissalMovement
+                              ? "حركة فصل"
+                              : "تراجع"}
                       </Button>
                     </div>
                   </div>
@@ -1415,8 +1438,11 @@ export function OpportunitiesView() {
                                   : "secondary"
                             }
                           >
-                            {log.action} {log.amount}
+                            {log.action} {log.appliedAmount ?? log.amount}
                           </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            المطلوب: {log.requestedAmount ?? log.amount} • المطبق: {log.appliedAmount ?? log.amount} • قبل: {log.balanceBefore ?? "—"} • بعد: {log.balanceAfter ?? "—"}
+                          </span>
                           <span className="text-sm font-bold text-foreground">
                             {formatAppDate(log.date)}
                           </span>

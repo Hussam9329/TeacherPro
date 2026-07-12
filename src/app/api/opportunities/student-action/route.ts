@@ -11,271 +11,183 @@ import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
+import { lockStudentsAcademicState } from "@/lib/academic-student-lock-server";
 
-const MANUAL_ACTIONS = new Set(["إضافة", "خصم", "إعادة تعيين"]);
+const REVERSIBLE_MANUAL_ACTIONS = new Set(["إضافة", "خصم"]);
+
+function isReversibleManualOpportunityLog(log: {
+  action: string;
+  reason: string | null;
+  reversalOfLogId: string | null;
+}): boolean {
+  return (
+    REVERSIBLE_MANUAL_ACTIONS.has(log.action) &&
+    !log.reversalOfLogId &&
+    !String(log.reason || "").trim().startsWith("فصل الطالب:")
+  );
+}
 
 type OpportunityStudentAction = "add" | "deduct" | "reset" | "undo";
 
 function normalizeAction(value: unknown): OpportunityStudentAction | null {
-  if (value === "add" || value === "deduct" || value === "reset" || value === "undo") return value;
-  return null;
+  return value === "add" || value === "deduct" || value === "reset" || value === "undo" ? value : null;
 }
 
-function normalizePositiveAmount(value: unknown): number {
+function positiveInteger(value: unknown, label: string): number {
   const numeric = Number(value ?? 1);
-  if (!Number.isFinite(numeric)) return 1;
-  return Math.max(1, Math.trunc(Math.abs(numeric)));
+  if (!Number.isInteger(numeric) || numeric <= 0) throw new Error(`${label} يجب أن يكون عدداً صحيحاً موجباً.`);
+  return numeric;
 }
 
-function normalizeReason(value: unknown, fallback = ""): string {
-  return String(value ?? fallback).trim().slice(0, 2000);
+function text(value: unknown, max = 2000): string {
+  return String(value ?? "").trim().slice(0, max);
 }
 
-async function getSingleActiveChapterForCourse(
-  tx: Prisma.TransactionClient,
-  courseId: string,
-) {
-  const activeLinks = await tx.courseChapter.findMany({
+async function getSingleActiveChapterForCourse(tx: Prisma.TransactionClient, courseId: string) {
+  const links = await tx.courseChapter.findMany({
     where: { courseId, active: true, archived: false },
-    select: {
-      id: true,
-      chapterId: true,
-      chapter: { select: { id: true, name: true, opportunities: true } },
-    },
+    select: { chapter: { select: { id: true, name: true, opportunities: true } } },
     take: 3,
   });
-
-  if (activeLinks.length === 0) {
-    return {
-      ok: false as const,
-      message: "لا يمكن تعديل فرص هذا الطالب لأن دورته لا تحتوي على فصل نشط.",
-      activeLink: null,
-    };
+  if (links.length !== 1 || !links[0].chapter) {
+    throw new Error(links.length === 0
+      ? "لا يمكن تعديل الفرص لأن دورة الطالب لا تحتوي على فصل نشط واحد."
+      : "لا يمكن تعديل الفرص بسبب تعارض الفصول النشطة في دورة الطالب.");
   }
-
-  if (activeLinks.length > 1) {
-    return {
-      ok: false as const,
-      message:
-        "لا يمكن تعديل الفرص لأن هذه الدورة تحتوي على أكثر من فصل نشط. أصلح الفصول أولاً حتى لا تتداخل الحسابات.",
-      activeLink: null,
-    };
-  }
-
-  const activeLink = activeLinks[0];
-  const opportunities = Math.max(0, Math.trunc(Number(activeLink.chapter?.opportunities || 0)));
-  if (!activeLink.chapter || opportunities <= 0) {
-    return {
-      ok: false as const,
-      message:
-        "الفصل النشط لهذه الدورة لا يحتوي على فرص صالحة. عدّل الفصل أو اختر فصلاً صحيحاً قبل إدارة الفرص.",
-      activeLink: null,
-    };
-  }
-
-  return { ok: true as const, message: "", activeLink };
+  const cap = Number(links[0].chapter.opportunities);
+  if (!Number.isInteger(cap) || cap < 0) throw new Error("سقف فرص الفصل النشط غير صالح.");
+  return { ...links[0].chapter, opportunities: cap };
 }
 
-function selectStudentForResponse() {
-  return {
-    id: true,
-    name: true,
-    school: true,
-    gender: true,
-    phone: true,
-    parentPhone: true,
-    telegram: true,
-    courseProgram: true,
-    courseTerm: true,
-    studyType: true,
-    locationScope: true,
-    baghdadMode: true,
-    courseId: true,
-    mainSite: true,
-    subSite: true,
-    code: true,
-    status: true,
-    dismissalType: true,
-    dismissalReason: true,
-    dismissalNotes: true,
-    createdAt: true,
-    opportunities: true,
-    baseOpportunities: true,
-    accountingGraceDays: true,
-  } as const;
-}
+
+type StudentActionResult = {
+  student: Record<string, unknown> & {
+    id: string;
+    name: string;
+    courseId: string;
+    opportunities: number;
+    baseOpportunities: number;
+  };
+  opportunityLog: {
+    requestedAmount: number | null;
+    appliedAmount: number | null;
+    balanceBefore: number | null;
+    balanceAfter: number | null;
+    reversalOfLogId: string | null;
+  };
+  sourceLog: unknown;
+  academicRecalculation: unknown;
+};
+
+const studentSelect = {
+  id: true, name: true, school: true, gender: true, phone: true, parentPhone: true,
+  telegram: true, courseProgram: true, courseTerm: true, studyType: true,
+  locationScope: true, baghdadMode: true, courseId: true, mainSite: true,
+  subSite: true, code: true, status: true, dismissalType: true,
+  dismissalReason: true, dismissalNotes: true, createdAt: true,
+  opportunities: true, baseOpportunities: true, accountingGraceDays: true,
+} as const;
 
 export async function POST(req: NextRequest) {
   const authError = await requirePermission(req, "opportunities.manage");
   if (authError) return authError;
-
-  const rateLimitError = await checkApiRateLimit(
-    req,
-    API_RATE_LIMITS.studentOpportunitySync,
-  );
+  const rateLimitError = await checkApiRateLimit(req, API_RATE_LIMITS.studentOpportunitySync);
   if (rateLimitError) return rateLimitError;
 
   try {
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     const actionType = normalizeAction(body?.actionType);
     if (!actionType) return validationError("نوع إجراء الفرص غير صحيح.");
+    const requestedStudentId = text(body?.studentId, 120);
+    const logId = text(body?.logId, 120);
+    const reason = text(body?.reason);
+    if (actionType !== "undo" && !requestedStudentId) return validationError("تعذر تحديد الطالب المطلوب.");
+    if ((actionType === "add" || actionType === "deduct") && !reason) return validationError("يرجى إدخال سبب حركة الفرص.");
+    if (actionType === "undo" && !logId) return validationError("تعذر تحديد الحركة المطلوب التراجع عنها.");
+    const requestedAmount = actionType === "reset" || actionType === "undo" ? 0 : positiveInteger(body?.amount, "عدد الفرص");
 
-    const studentId = normalizeReason(body?.studentId, "");
-    const logId = normalizeReason(body?.logId, "");
-    const amount = normalizePositiveAmount(body?.amount);
-    const reason = normalizeReason(body?.reason, "");
+    const result = await withFollowupTables<StudentActionResult>(() => db.$transaction(async (tx) => {
+      const sourceLog = actionType === "undo" ? await tx.opportunityLog.findUnique({
+        where: { id: logId },
+        select: { id: true, studentId: true, action: true, amount: true, appliedAmount: true, reason: true, reversalOfLogId: true },
+      }) : null;
+      if (actionType === "undo" && !sourceLog) throw new Error("حركة الفرص المطلوبة غير موجودة.");
+      if (sourceLog && !isReversibleManualOpportunityLog(sourceLog)) {
+        throw new Error(
+          sourceLog.reversalOfLogId
+            ? "لا يمكن التراجع عن حركة تراجع سابقة."
+            : "يمكن التراجع فقط عن الإضافة أو الخصم اليدوي، ولا يمكن عكس حركة الفصل أو الحركة التلقائية.",
+        );
+      }
+      if (sourceLog) {
+        const previousUndo = await tx.opportunityLog.findUnique({ where: { reversalOfLogId: sourceLog.id }, select: { id: true } });
+        if (previousUndo) throw new Error("تم التراجع عن هذه الحركة سابقاً ولا يمكن عكسها مرة ثانية.");
+      }
 
-    if (actionType !== "undo" && !studentId) {
-      return validationError("تعذر تحديد الطالب المطلوب.");
-    }
-    if ((actionType === "add" || actionType === "deduct") && !reason) {
-      return validationError("يرجى إدخال سبب حركة الفرص.");
-    }
-    if (actionType === "undo" && !logId) {
-      return validationError("تعذر تحديد حركة الفرص المطلوب التراجع عنها.");
-    }
+      const studentId = sourceLog?.studentId || requestedStudentId;
+      await lockStudentsAcademicState(tx, [studentId]);
+      const student = await tx.student.findUnique({ where: { id: studentId }, select: { id: true, name: true, code: true, status: true, courseId: true, opportunities: true } });
+      if (!student) throw new Error("الطالب غير موجود أو تم حذفه.");
+      if (student.status === "مؤرشف") throw new Error("لا يمكن تعديل فرص طالب مؤرشف.");
+      const chapter = await getSingleActiveChapterForCourse(tx, student.courseId);
+      const balanceBefore = Math.max(0, Number(student.opportunities || 0));
 
-    const result = await withFollowupTables(
-      async () =>
-        db.$transaction(async (tx) => {
-          const sourceLog = actionType === "undo"
-            ? await tx.opportunityLog.findUnique({
-                where: { id: logId },
-                select: {
-                  id: true,
-                  studentId: true,
-                  action: true,
-                  amount: true,
-                  reason: true,
-                  chapterId: true,
-                  chapterNameSnapshot: true,
-                },
-              })
-            : null;
+      const action = actionType === "add" || (actionType === "undo" && sourceLog?.action === "خصم")
+        ? "إضافة" : actionType === "deduct" || (actionType === "undo" && sourceLog?.action === "إضافة")
+          ? "خصم" : "إعادة تعيين";
+      const desiredAmount = actionType === "reset"
+        ? chapter.opportunities
+        : actionType === "undo"
+          ? Math.max(0, Number(sourceLog?.appliedAmount ?? sourceLog?.amount ?? 0))
+          : requestedAmount;
+      if (actionType === "undo" && desiredAmount <= 0) throw new Error("الحركة الأصلية لم تطبق أي فرق فعلي، لذلك لا يوجد شيء يمكن التراجع عنه.");
 
-          if (actionType === "undo" && !sourceLog) {
-            throw new Error("حركة الفرص المطلوبة غير موجودة أو تم حذفها.");
-          }
-          if (sourceLog && !MANUAL_ACTIONS.has(String(sourceLog.action || ""))) {
-            throw new Error("يمكن التراجع فقط عن الحركات اليدوية من إدارة الفرص.");
-          }
-          if (sourceLog?.action === "إعادة تعيين") {
-            throw new Error("إعادة التعيين لا تُعكس بحركة واحدة آمنة. استخدم إضافة أو خصم موثق بدل التراجع.");
-          }
-
-          const resolvedStudentId = actionType === "undo" ? String(sourceLog!.studentId) : studentId;
-          const student = await tx.student.findUnique({
-            where: { id: resolvedStudentId },
-            select: {
-              id: true,
-              name: true,
-              code: true,
-              status: true,
-              courseId: true,
-            },
-          });
-          if (!student) throw new Error("الطالب غير موجود أو تم حذفه.");
-          if (student.status === "مؤرشف") {
-            throw new Error("لا يمكن تعديل فرص طالب مؤرشف.");
-          }
-
-          const activeChapterResult = await getSingleActiveChapterForCourse(tx, student.courseId);
-          if (!activeChapterResult.ok || !activeChapterResult.activeLink) {
-            throw new Error(activeChapterResult.message);
-          }
-
-          const now = new Date();
-          const action = actionType === "add" || (actionType === "undo" && sourceLog?.action === "خصم")
-            ? "إضافة"
-            : actionType === "deduct" || (actionType === "undo" && sourceLog?.action === "إضافة")
-              ? "خصم"
-              : "إعادة تعيين";
-          const logAmount = actionType === "reset"
-            ? Math.max(
-                0,
-                Math.trunc(
-                  Number(activeChapterResult.activeLink.chapter.opportunities || 0),
-                ),
-              )
-            : actionType === "undo"
-              ? Math.max(1, Math.trunc(Number(sourceLog?.amount || 1)))
-              : amount;
-          const finalReason = actionType === "reset"
+      const created = await tx.opportunityLog.create({
+        data: {
+          studentId, examId: null, action,
+          amount: desiredAmount,
+          requestedAmount: desiredAmount,
+          appliedAmount: null,
+          balanceBefore,
+          balanceAfter: null,
+          reversalOfLogId: sourceLog?.id || null,
+          reason: actionType === "reset"
             ? reason || "إعادة تعيين الفرص من إدارة الفرص"
             : actionType === "undo"
-              ? `تراجع موثق عن ${sourceLog?.action}: ${sourceLog?.reason || "بدون سبب"}`.slice(0, 2000)
-              : reason;
+              ? `تراجع موثق عن ${sourceLog?.action}: ${sourceLog?.reason || "بدون سبب"}`
+              : reason,
+          chapterId: chapter.id,
+          chapterNameSnapshot: chapter.name,
+        },
+      });
 
-          const createdLog = await tx.opportunityLog.create({
-            data: {
-              studentId: resolvedStudentId,
-              examId: null,
-              action,
-              amount: logAmount,
-              reason: finalReason,
-              date: now,
-              chapterId: activeChapterResult.activeLink.chapter.id,
-              chapterNameSnapshot: activeChapterResult.activeLink.chapter.name,
-            },
-          });
+      const academicRecalculation = await recalculateStudentsAcademicState([studentId], { tx });
+      const updatedStudent = await tx.student.findUniqueOrThrow({ where: { id: studentId }, select: studentSelect });
+      const balanceAfter = Math.max(0, Number(updatedStudent.opportunities || 0));
+      const appliedAmount = Math.abs(balanceAfter - balanceBefore);
+      const opportunityLog = await tx.opportunityLog.update({
+        where: { id: created.id },
+        data: {
+          // Addition/deduction logs must describe the actual applied movement. Reset amount remains target balance for engine semantics.
+          ...(action !== "إعادة تعيين" ? { amount: appliedAmount } : {}),
+          appliedAmount,
+          balanceAfter,
+        },
+      });
+      return { student: updatedStudent, opportunityLog, sourceLog, academicRecalculation };
+    }, { isolationLevel: "Serializable" }), "OpportunityStudentAction");
 
-          const academicRecalculation = await recalculateStudentsAcademicState(
-            [resolvedStudentId],
-            { tx },
-          );
-          const updatedStudent = await tx.student.findUnique({
-            where: { id: resolvedStudentId },
-            select: selectStudentForResponse(),
-          });
-
-          return {
-            ok: true,
-            student: updatedStudent,
-            opportunityLog: createdLog,
-            sourceLog,
-            academicRecalculation,
-            source: "database" as const,
-          };
-        }),
-      "OpportunityStudentAction",
-    );
-
-    const [studentWithOpportunity] = result.student
-      ? await attachStudentOpportunitySnapshots([result.student])
-      : [null];
-    const responseResult = {
-      ...result,
-      student: studentWithOpportunity,
-    };
-
-    await writeRequestAuditLog(
-      req,
-      "إدارة الفرص",
-      actionType === "undo"
-        ? "تراجع موثق عن حركة فرص وإعادة احتساب"
-        : actionType === "reset"
-          ? "إعادة تعيين فرص طالب وإعادة احتساب"
-          : actionType === "deduct"
-            ? "خصم فرصة يدوياً وإعادة احتساب"
-            : "إضافة فرصة يدوياً وإعادة احتساب",
-      {
-        actionType,
-        studentId: responseResult.student?.id,
-        studentName: responseResult.student?.name,
-        studentCode: responseResult.student?.code,
-        amount,
-        reason,
-        logId,
-        createdLogId: result.opportunityLog.id,
-        recalculatedStudents: result.academicRecalculation?.students?.length || 0,
-      },
-    );
-
-    return NextResponse.json(responseResult);
+    const [student] = await attachStudentOpportunitySnapshots([result.student]);
+    await writeRequestAuditLog(req, "إدارة الفرص", "تنفيذ حركة فرص ذرية", {
+      actionType, studentId: student.id, studentName: student.name,
+      requestedAmount: result.opportunityLog.requestedAmount,
+      appliedAmount: result.opportunityLog.appliedAmount,
+      balanceBefore: result.opportunityLog.balanceBefore,
+      balanceAfter: result.opportunityLog.balanceAfter,
+      reversalOfLogId: result.opportunityLog.reversalOfLogId,
+    });
+    return NextResponse.json({ ok: true, ...result, student, source: "database" as const });
   } catch (error) {
-    const message = error instanceof Error && error.message
-      ? error.message
-      : "تعذر تنفيذ إجراء الفرص من النظام حالياً.";
-    return routeErrorResponse(error, message);
+    return routeErrorResponse(error, error instanceof Error ? error.message : "تعذر تنفيذ إجراء الفرص.");
   }
 }

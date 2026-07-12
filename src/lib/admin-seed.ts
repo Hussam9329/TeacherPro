@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { hashPassword, verifyPassword } from '@/lib/passwords';
+import { hashPassword, verifyPassword, validatePasswordStrength } from '@/lib/passwords';
 
 const DEFAULT_ADMIN_ID = 'u_admin';
 const DEFAULT_ADMIN_USERNAME = 'admin';
@@ -56,7 +56,7 @@ const ADMIN_FULL_PERMISSIONS = [
   'system.dashboard', 'system.settings', 'backup.view',
   'courses.view', 'courses.add', 'courses.edit', 'courses.delete',
   'chapters.view', 'chapters.add', 'chapters.edit', 'chapters.delete',
-  'students.view', 'students.add', 'students.edit', 'students.delete',
+  'students.view', 'students.add', 'students.edit', 'students.delete', 'students.academicRepair',
   'exams.view', 'exams.add', 'exams.edit', 'exams.delete',
   'grades.view', 'grades.add', 'grades.edit', 'grades.delete',
   'opportunities.view', 'opportunities.manage',
@@ -108,6 +108,13 @@ export async function ensureInitialAdminSeed(): Promise<void> {
   });
 
   const defaultAdminPassword = getDefaultAdminPassword();
+  const passwordPolicy = validatePasswordStrength(defaultAdminPassword, {
+    username: DEFAULT_ADMIN_USERNAME,
+    name: "مدير النظام",
+  });
+  if (!passwordPolicy.ok) {
+    throw new Error(`TEACHERPRO_ADMIN_PASSWORD لا يحقق سياسة الأمان: ${passwordPolicy.message}`);
+  }
 
   // Fresh database: create the admin user.
   if (userCount === 0) {

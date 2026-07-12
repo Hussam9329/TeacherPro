@@ -77,6 +77,23 @@ export function parseBaghdadDateOnly(value?: string | Date | null): Date | null 
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
+/** Strict date-only parser. Rejects malformed and impossible calendar dates instead of normalizing them. */
+export function parseBaghdadDateOnlyStrict(value?: string | Date | null): Date | null {
+  if (!value) return null;
+  const rawKey = typeof value === 'string'
+    ? value.trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/)?.slice(1).join('-') || ''
+    : baghdadDateKey(value);
+  const match = rawKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1900 || year > 2200 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const date = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return date;
+}
+
 export function baghdadTodayKey(now = new Date()): string {
   return baghdadDateKey(now);
 }

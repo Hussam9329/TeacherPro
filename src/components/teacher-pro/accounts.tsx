@@ -633,7 +633,24 @@ function UsersTab() {
   };
 
   const getRoleName = (roleId: string) => roles.find(r => r.id === roleId)?.name || 'غير محدد';
-  const generatePasscode = () => String(Math.floor(100000 + Math.random() * 900000));
+  const generatePasscode = () => {
+    const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const lower = "abcdefghijkmnopqrstuvwxyz";
+    const digits = "23456789";
+    const special = "!@#$%&*?";
+    const all = upper + lower + digits + special;
+    const required = [upper, lower, digits, special].map(
+      (chars) => chars[Math.floor(Math.random() * chars.length)],
+    );
+    while (required.length < 16) {
+      required.push(all[Math.floor(Math.random() * all.length)]);
+    }
+    for (let index = required.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [required[index], required[swapIndex]] = [required[swapIndex], required[index]];
+    }
+    return required.join("");
+  };
 
   const detailsUser = users.find(u => u.id === detailsUserId) || null;
   const detailsUserRole = detailsUser ? roles.find(r => r.id === detailsUser.roleId) : null;
@@ -873,7 +890,7 @@ function UsersTab() {
                 <Label htmlFor="new-password">رمز المرور</Label>
                 <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setNewUser(p => ({ ...p, password: generatePasscode() }))}>توليد رمز</Button>
               </div>
-              <Input id="new-password" name="password" autoComplete="new-password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="أدخل رمزاً أو اضغط توليد رمز" />
+              <Input id="new-password" name="password" autoComplete="new-password" value={newUser.password} onChange={e => setNewUser(p => ({ ...p, password: e.target.value }))} placeholder="12 خانة على الأقل: أحرف وأرقام ورمز خاص" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-role">الدور</Label>

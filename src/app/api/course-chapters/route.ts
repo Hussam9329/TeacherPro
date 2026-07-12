@@ -12,6 +12,7 @@ import {
 } from "@/lib/route-helpers";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { writeRequestAuditLog } from "@/lib/audit-log-server";
 
 class CourseChapterIntegrityError extends Error {
   constructor(message: string) {
@@ -170,6 +171,11 @@ export async function POST(req: NextRequest) {
         chapterId: String(body.chapterId),
       },
       include: { course: true, chapter: true },
+    });
+    await writeRequestAuditLog(req, "الفصول والفرص", "ربط فصل بدورة", {
+      linkId: courseChapter.id,
+      courseId: courseChapter.courseId,
+      chapterId: courseChapter.chapterId,
     });
     return NextResponse.json({ courseChapter }, { status: 201 });
   } catch (error) {
@@ -448,6 +454,15 @@ export async function PUT(req: NextRequest) {
       };
     });
 
+    await writeRequestAuditLog(req, "الفصول والفرص", "تعديل ربط فصل ومزامنة فرص", {
+      linkId: result.courseChapter.id,
+      courseId: result.courseChapter.courseId,
+      chapterId: result.courseChapter.chapterId,
+      active: result.courseChapter.active,
+      archived: result.courseChapter.archived,
+      affectedStudents: result.affectedStudents,
+      syncStudentOpportunities,
+    });
     return NextResponse.json(result);
   } catch (error) {
     return courseChapterMutationError(
@@ -485,6 +500,12 @@ export async function DELETE(req: NextRequest) {
       );
     }
     await db.courseChapter.delete({ where: { id } });
+    await writeRequestAuditLog(req, "الفصول والفرص", "حذف ربط فصل", {
+      linkId: id,
+      courseId: link.courseId,
+      chapterId: link.chapterId,
+      archivedEntries: archiveEntries.length,
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حذف رابط الفصل بالدورة حالياً.");

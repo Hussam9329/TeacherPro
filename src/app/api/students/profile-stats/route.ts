@@ -6,6 +6,8 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
+import { isExamAssignedToStudentCourse } from "@/lib/student-exam-eligibility-server";
+import { splitSelection, studentMatchesExamMainSites } from "@/lib/exam-utils";
 
 type ExamLite = {
   id: string;
@@ -21,10 +23,14 @@ type ExamLite = {
 type StudentLite = {
   id: string;
   courseId: string;
+  status: string;
   createdAt: Date;
   accountingGraceDays: number;
   opportunities: number;
   baseOpportunities: number;
+  mainSite: string | null;
+  subSite: string | null;
+  locationScope: string | null;
 };
 
 type GradeLite = {
@@ -91,16 +97,21 @@ export async function GET(req: NextRequest) {
       leavesCount,
       pledgesCount,
       notesCount,
+      candidateExams,
     ] = await Promise.all([
       db.student.findUnique({
         where: { id: studentId },
         select: {
           id: true,
           courseId: true,
+          status: true,
           createdAt: true,
           accountingGraceDays: true,
           opportunities: true,
           baseOpportunities: true,
+          mainSite: true,
+          subSite: true,
+          locationScope: true,
         },
       }) as Promise<StudentLite | null>,
       db.grade.findMany({
@@ -133,9 +144,27 @@ export async function GET(req: NextRequest) {
       db.studentLeave.count({ where: { studentId } }).catch(() => 0),
       db.studentNote.count({ where: { studentId, kind: "تعهد ولي الأمر" } }).catch(() => 0),
       db.studentNote.count({ where: { studentId } }).catch(() => 0),
+      db.exam.findMany({
+        select: {
+          id: true,
+          courseIds: true,
+          mainSite: true,
+          date: true,
+          active: true,
+          scheduledActivateAt: true,
+          scheduledDeactivateAt: true,
+          examCourses: { select: { courseId: true } },
+        },
+      }),
     ]);
 
     if (!student) return validationError("الطالب غير موجود");
+
+    const applicableExams = candidateExams.filter(
+      (exam) =>
+        isExamAssignedToStudentCourse(student, exam) &&
+        studentMatchesExamMainSites(student, splitSelection(exam.mainSite)),
+    );
 
     const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
       student,
@@ -187,7 +216,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       studentId,
       grades: grades.length,
-      exams: new Set(grades.map((grade) => grade.examId)).size,
+      exams: applicableExams.length,
       absent,
       absences: absent,
       success,

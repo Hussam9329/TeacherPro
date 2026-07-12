@@ -313,6 +313,11 @@ export interface OpportunityLog {
   examId: string;
   action: string;
   amount: number;
+  requestedAmount?: number | null;
+  appliedAmount?: number | null;
+  balanceBefore?: number | null;
+  balanceAfter?: number | null;
+  reversalOfLogId?: string | null;
   reason: string;
   date: string;
   chapterId: string;
@@ -420,6 +425,8 @@ export interface LogClearOptions {
   scopeIds: string[];
   dateFrom?: string;
   dateTo?: string;
+  confirmImpact?: boolean;
+  confirmText?: string;
 }
 
 const LOG_CLEAR_SCOPE_MODULES: Record<
@@ -634,6 +641,13 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
     category: "الطلاب",
     level: "delete",
     description: "حذف طالب من النظام",
+  },
+  {
+    id: "students.academicRepair",
+    label: "الإصلاح الأكاديمي الشامل",
+    category: "الطلاب",
+    level: "manage",
+    description: "معاينة وتنفيذ إعادة احتساب أكاديمية شاملة لكل الطلاب بعد تأكيد مدير.",
   },
   // الامتحانات
   {
@@ -1063,6 +1077,7 @@ const DEFAULT_ROLES: Role[] = [
         p !== "logs.clear" &&
         p !== "logs.restore" &&
         p !== "backup.view" &&
+        p !== "students.academicRepair" &&
         p !== "system.settings",
     ),
   },
@@ -1255,7 +1270,7 @@ interface TeacherState {
     id: string,
     updates: Partial<CorrectionSheet>,
   ) => void;
-  deleteCorrectionSheet: (id: string) => boolean;
+  deleteCorrectionSheet: (id: string, gradeAction?: "keep" | "revoke") => boolean;
 
   addUser: (user: Omit<User, "id">) => void;
   updateUser: (id: string, updates: Partial<Omit<User, "id">>) => void;
@@ -5435,7 +5450,7 @@ export const useTeacherStore = create<TeacherState>()(
           correctionSheetApi.update(id, updates as Record<string, unknown>),
         );
       },
-      deleteCorrectionSheet: (id) => {
+      deleteCorrectionSheet: (id, gradeAction = "keep") => {
         const sheet = get().correctionSheets.find((sh) => sh.id === id);
         if (!sheet) return false;
         set((s) => ({
@@ -5443,10 +5458,10 @@ export const useTeacherStore = create<TeacherState>()(
         }));
         get().logAction(
           "التصحيح الإلكتروني",
-          "حذف ورقة تصحيح",
+          gradeAction === "revoke" ? "حذف ورقة تصحيح وإلغاء الدرجة" : "حذف ورقة تصحيح فقط",
           `${get().studentName(sheet.studentId)} - ${get().userName(sheet.correctorId)}`,
         );
-        syncToServer(get, () => correctionSheetApi.remove(id));
+        syncToServer(get, () => correctionSheetApi.remove(id, gradeAction));
         return true;
       },
 

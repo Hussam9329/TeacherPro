@@ -12,6 +12,8 @@ import { ensureInitialAdminSeed } from '@/lib/admin-seed';
 import { writeSecurityAudit } from '@/lib/security-audit';
 import { ensureLogClearBackupTable, insertLogClearBackup } from '@/lib/log-clear-backups';
 import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
+import { recalculateStudentsAcademicState } from '@/lib/academic-recalculate-server';
+import { lockStudentsAcademicState } from '@/lib/academic-student-lock-server';
 
 const CLEAR_SCOPE_DEFINITIONS = {
   'audit-all': {
@@ -158,6 +160,8 @@ export async function POST(req: NextRequest) {
       scopeIds?: unknown;
       dateFrom?: unknown;
       dateTo?: unknown;
+      confirmImpact?: unknown;
+      confirmText?: unknown;
     };
     const password = String(body.password ?? '').trim();
     if (!password) {
@@ -197,6 +201,12 @@ export async function POST(req: NextRequest) {
     if (!auditWhere && !opportunityWhere) {
       return NextResponse.json({ error: 'لم يتم تحديد سجلات قابلة للتصفير.' }, { status: 400 });
     }
+    if (opportunityWhere && (body.confirmImpact !== true || String(body.confirmText || '').trim() !== 'حذف سجل الفرص وإعادة الاحتساب')) {
+      return NextResponse.json({
+        error: 'سجل الفرص جزء من الحساب الأكاديمي وليس تنظيفاً بصرياً. أكد الحذف وإعادة الاحتساب بكتابة «حذف سجل الفرص وإعادة الاحتساب».',
+        confirmationRequired: true,
+      }, { status: 409 });
+    }
 
     const selectedLabels = scopeIds.map((scope) => CLEAR_SCOPE_DEFINITIONS[scope].label);
     const rangeLabel = dateFrom || dateTo
@@ -207,12 +217,23 @@ export async function POST(req: NextRequest) {
 
     const backupId = `lcb_${Date.now().toString(36)}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
-    const { auditLogsResult, opportunityLogsResult, savedBackupId } = await db.$transaction(async (tx) => {
+    const { auditLogsResult, opportunityLogsResult, savedBackupId, academicRecalculation, studentImpact } = await db.$transaction(async (tx) => {
       const auditLogsToDelete = auditWhere
         ? await tx.auditLog.findMany({ where: auditWhere })
         : [];
       const opportunityLogsToDelete = opportunityWhere
         ? await tx.opportunityLog.findMany({ where: opportunityWhere })
+        : [];
+      const affectedStudentIds: string[] = Array.from(
+        new Set(
+          opportunityLogsToDelete
+            .map((log) => String((log as { studentId?: unknown }).studentId || ""))
+            .filter(Boolean),
+        ),
+      ) as string[];
+      if (affectedStudentIds.length) await lockStudentsAcademicState(tx, affectedStudentIds);
+      const beforeStudents = affectedStudentIds.length
+        ? await tx.student.findMany({ where: { id: { in: affectedStudentIds } }, select: { id: true, opportunities: true, status: true } })
         : [];
 
       const hasBackupRows = auditLogsToDelete.length > 0 || opportunityLogsToDelete.length > 0;
@@ -237,10 +258,20 @@ export async function POST(req: NextRequest) {
       const opportunityLogsResult = opportunityWhere
         ? await tx.opportunityLog.deleteMany({ where: opportunityWhere })
         : { count: 0 };
+      const academicRecalculation = affectedStudentIds.length
+        ? await recalculateStudentsAcademicState(affectedStudentIds, { tx })
+        : null;
+      const afterStudents = affectedStudentIds.length
+        ? await tx.student.findMany({ where: { id: { in: affectedStudentIds } }, select: { id: true, opportunities: true, status: true } })
+        : [];
+      const afterById = new Map(afterStudents.map((student) => [student.id, student]));
+      const studentImpact = beforeStudents.map((before) => ({ before, after: afterById.get(before.id) || null }));
       return {
         auditLogsResult,
         opportunityLogsResult,
         savedBackupId: hasBackupRows ? backupId : null,
+        academicRecalculation,
+        studentImpact,
       };
     });
 
@@ -250,6 +281,8 @@ export async function POST(req: NextRequest) {
       deletedAuditLogs: auditLogsResult.count,
       deletedOpportunityLogs: opportunityLogsResult.count,
       backupId: savedBackupId,
+      affectedStudents: studentImpact,
+      recalculatedStudents: academicRecalculation?.students?.length || 0,
     });
 
     return NextResponse.json({
@@ -262,6 +295,8 @@ export async function POST(req: NextRequest) {
       dateTo: body.dateTo ? String(body.dateTo) : '',
       backupId: savedBackupId,
       canRestore: Boolean(savedBackupId),
+      academicRecalculation,
+      studentImpact,
     });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تصفير السجلات حالياً.');

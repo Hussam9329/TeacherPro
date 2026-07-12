@@ -23,7 +23,9 @@ const api = read("src/lib/api.ts");
 const gradesRoute = read("src/app/api/grades/route.ts");
 const gradeWriteback = read("src/lib/academic-grade-writeback-server.ts");
 const entrySheetRoute = read("src/app/api/grades/entry-sheet/route.ts");
-const profileDialog = read("src/components/teacher-pro/student-profile-dialog.tsx");
+const profileDialog = read(
+  "src/components/teacher-pro/student-profile-dialog.tsx",
+);
 const profileLogRoute = read("src/app/api/students/profile-log/route.ts");
 const profileStatsRoute = read("src/app/api/students/profile-stats/route.ts");
 const pkg = JSON.parse(read("package.json"));
@@ -100,7 +102,7 @@ must(
 );
 
 must(
-  entrySheetRoute.includes("source: \"database\"") &&
+  entrySheetRoute.includes('source: "database"') &&
     entrySheetRoute.includes("courseChapters") &&
     entrySheetRoute.includes("studentLeaves") &&
     entrySheetRoute.includes("opportunityLogs"),
@@ -109,7 +111,9 @@ must(
 );
 
 must(
-  profileDialog.includes('type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "archives" | "timeline"') &&
+  profileDialog.includes(
+    'type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "archives" | "timeline"',
+  ) &&
     profileDialog.includes('label: "المكالمات"') &&
     profileDialog.includes('label: "الإجازات"') &&
     profileDialog.includes('label: "التعهدات"') &&
@@ -137,11 +141,12 @@ must(
 );
 
 must(
-  profileLogRoute.includes("...studentCalls.map((call) => call.examId)") &&
-    profileLogRoute.includes("...studentLeaves.map((leave) => leave.examId)") &&
-    profileLogRoute.includes("...opportunityLogs.map((log) => log.examId)"),
-  "API ملف الطالب يجلب امتحانات الدرجات والمكالمات والإجازات وسجلات الفرص",
-  "لوغ ملف الطالب يجب ألا يعتمد على امتحانات الدرجات فقط.",
+  profileLogRoute.includes("const candidateExams = await db.exam.findMany") &&
+    profileLogRoute.includes("isExamAssignedToStudentCourse") &&
+    profileLogRoute.includes("studentMatchesExamMainSites") &&
+    profileLogRoute.includes("const examStates = []"),
+  "API ملف الطالب يجلب جميع امتحانات دورة وموقع الطالب ويصنف حالتها حتى بلا درجة",
+  "لوغ ملف الطالب يجب ألا يعتمد على امتحانات الدرجات أو السجلات المرتبطة فقط.",
 );
 
 must(
@@ -155,13 +160,16 @@ must(
 );
 
 must(
-  pkg.scripts?.["test:grade-entry-integrity"] === "node scripts/test-grade-entry-integrity.mjs",
+  pkg.scripts?.["test:grade-entry-integrity"] ===
+    "node scripts/test-grade-entry-integrity.mjs",
   "سكريبت test:grade-entry-integrity مضاف إلى package.json",
   "يجب إضافة سكريبت رسمي لاختبار تسجيل الدرجات.",
 );
 
 must(
-  String(pkg.scripts?.["test:side-effects"] || "").includes("test:grade-entry-integrity"),
+  String(pkg.scripts?.["test:side-effects"] || "").includes(
+    "test:grade-entry-integrity",
+  ),
   "اختبار side-effects يشمل تسجيل الدرجات",
   "يجب أن يشمل test:side-effects اختبار تسجيل الدرجات.",
 );

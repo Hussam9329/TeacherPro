@@ -1,6 +1,8 @@
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { lockStudentsAcademicState } from "@/lib/academic-student-lock-server";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import {
   isAutomaticOpportunityLog,
   recalculateAcademicState,
@@ -643,7 +645,14 @@ export async function recalculateStudentsAcademicState(
     };
   }
 
-  const client = options.tx || db;
+  if (!options.tx) {
+    return withSerializableTransaction((tx) =>
+      recalculateStudentsAcademicState(studentIds, { tx }),
+    );
+  }
+
+  const client = options.tx;
+  await lockStudentsAcademicState(options.tx, studentIds);
   await repairAcademicBaselinesForStudents(client, studentIds);
   const state = await loadAcademicStateForStudents(client, studentIds);
   const recalculableStudentIds = state.students

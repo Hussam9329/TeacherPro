@@ -18,6 +18,8 @@ import {
   syncAcademicGradeWriteback,
 } from "@/lib/academic-grade-writeback-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
+import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { lockStudentsAcademicState } from "@/lib/academic-student-lock-server";
 
 function validateCorrectionSheetPayload(body: Record<string, unknown>) {
   const studentError = requireText(body.studentId, "الطالب");
@@ -235,23 +237,40 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const authError = await requirePermission(req, "correction.manage");
   if (authError) return authError;
-
   try {
-    const { searchParams } = new URL(req.url);
+    const searchParams = new URL(req.url).searchParams;
     const id = searchParams.get("id");
+    const gradeAction = searchParams.get("gradeAction");
     if (!id) return validationError("تعذر تحديد ورقة التصحيح المطلوبة");
-    const deleted = await db.correctionSheet.delete({
-      where: { id },
-      select: { id: true, studentId: true, examId: true, status: true },
+    if (gradeAction !== "keep" && gradeAction !== "revoke") {
+      return NextResponse.json({
+        error: "حدد أثر الحذف على الدرجة.",
+        requiresGradeAction: true,
+        options: [
+          { value: "keep", label: "حذف الورقة فقط والإبقاء على الدرجة" },
+          { value: "revoke", label: "حذف الورقة وإلغاء الدرجة وإعادة احتساب الطالب" },
+        ],
+      }, { status: 409 });
+    }
+    const result = await db.$transaction(async (tx) => {
+      const sheet = await tx.correctionSheet.findUnique({ where: { id }, select: { id: true, studentId: true, examId: true, status: true } });
+      if (!sheet) throw new Error("ورقة التصحيح غير موجودة أو تم حذفها.");
+      await lockStudentsAcademicState(tx, [sheet.studentId]);
+      const grade = await tx.grade.findUnique({ where: { studentId_examId: { studentId: sheet.studentId, examId: sheet.examId } }, select: { id: true } });
+      await tx.correctionSheet.delete({ where: { id } });
+      if (gradeAction === "revoke" && grade) await tx.grade.delete({ where: { id: grade.id } });
+      const academicRecalculation = gradeAction === "revoke"
+        ? await recalculateStudentsAcademicState([sheet.studentId], { tx })
+        : null;
+      return { sheet, revokedGradeId: gradeAction === "revoke" ? grade?.id || null : null, academicRecalculation };
+    }, { isolationLevel: "Serializable" });
+    await writeRequestAuditLog(req, "التصحيح الإلكتروني", gradeAction === "revoke" ? "حذف ورقة تصحيح وإلغاء الدرجة" : "حذف ورقة تصحيح فقط", {
+      correctionSheetId: result.sheet.id, studentId: result.sheet.studentId, examId: result.sheet.examId,
+      status: result.sheet.status, gradeAction, revokedGradeId: result.revokedGradeId,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
     });
-    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "حذف ورقة تصحيح", {
-      correctionSheetId: deleted.id,
-      studentId: deleted.studentId,
-      examId: deleted.examId,
-      status: deleted.status,
-    });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, gradeAction, revokedGradeId: result.revokedGradeId, academicRecalculation: result.academicRecalculation });
   } catch (error) {
-    return routeErrorResponse(error, "تعذر حذف ورقة التصحيح حالياً.");
+    return routeErrorResponse(error, error instanceof Error ? error.message : "تعذر حذف ورقة التصحيح حالياً.");
   }
 }

@@ -6,6 +6,8 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { parseStudentEnrollmentArchiveSnapshot } from "@/lib/student-enrollment-archive-server";
+import { evaluateStudentExamEligibility, isExamAssignedToStudentCourse } from "@/lib/student-exam-eligibility-server";
+import { splitSelection, studentMatchesExamMainSites } from "@/lib/exam-utils";
 
 /**
  * ملف الطالب يجب أن يعرض تاريخه الحقيقي من بيانات النظام، وليس من البيانات المؤقتة المحلي.
@@ -29,6 +31,13 @@ export async function GET(req: NextRequest) {
         code: true,
         phone: true,
         parentPhone: true,
+        courseId: true,
+        status: true,
+        createdAt: true,
+        accountingGraceDays: true,
+        mainSite: true,
+        subSite: true,
+        locationScope: true,
       },
     });
     if (!student) return validationError("الطالب غير موجود");
@@ -97,26 +106,104 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    const examIds = Array.from(
-      new Set(
-        [
-          ...grades.map((grade) => grade.examId),
-          ...opportunityLogs.map((log) => log.examId),
-          ...studentLeaves.map((leave) => leave.examId),
-          ...studentCalls.map((call) => call.examId),
-        ]
-          .map((id) => String(id || "").trim())
-          .filter(Boolean),
-      ),
+    // ملف الطالب يعرض كل امتحانات دورته وموقعه، حتى إذا لم توجد درجة بعد.
+    const candidateExams = await db.exam.findMany({
+      include: { examCourses: { select: { courseId: true } } },
+      orderBy: [{ date: "desc" }, { id: "desc" }],
+    });
+    const exams = candidateExams.filter((exam) =>
+      isExamAssignedToStudentCourse(student, exam) &&
+      studentMatchesExamMainSites(student, splitSelection(exam.mainSite)),
     );
-    const exams = examIds.length
-      ? await db.exam.findMany({ where: { id: { in: examIds } } })
-      : [];
+    const examStates = [] as Array<{
+      examId: string;
+      code: string;
+      label: string;
+      reason: string;
+      withinGrace: boolean;
+      hasLeave: boolean;
+      gradeId: string | null;
+      gradeStatus: string | null;
+      score: number | null;
+    }>;
+    type GradeRow = {
+      id: string;
+      examId: string;
+      status: string;
+      score: number | null;
+    };
+    const gradeRows = grades as GradeRow[];
+    const gradeByExamId = new Map<string, GradeRow>(
+      gradeRows.map((grade) => [grade.examId, grade]),
+    );
+    for (const exam of exams) {
+      const eligibility = await evaluateStudentExamEligibility(db, student, exam, {
+        requireActiveChapter: false,
+        checkAvailability: true,
+        checkRegistration: true,
+        checkLeave: true,
+        allowDismissed: true,
+      });
+      const grade = gradeByExamId.get(exam.id);
+      const storedGradeLabel =
+        grade?.status === "غائب"
+          ? "غائب"
+          : grade?.status === "غش"
+            ? "غش"
+            : grade?.status === "درجة" && grade.score !== null
+              ? "ممتحن"
+              : "بلا درجة";
+      const excludedReasonCodes = new Set([
+        "student-leave",
+        "before-registration",
+        "exam-unavailable",
+        "student-archived",
+      ]);
+      const storedGradeIsExcluded = Boolean(
+        grade && excludedReasonCodes.has(eligibility.code),
+      );
+      let label = storedGradeLabel;
+      let reason = grade ? "توجد نتيجة محفوظة لهذا الامتحان." : eligibility.reason;
+      let code = grade ? "graded" : eligibility.code;
+
+      if (grade && storedGradeIsExcluded) {
+        label = `${storedGradeLabel} — غير محتسبة`;
+        reason = `${eligibility.reason} النتيجة محفوظة للمتابعة فقط ولا تغيّر فرص الطالب أو حالته الأكاديمية.`;
+        code = eligibility.code;
+      } else if (grade && eligibility.withinGrace) {
+        label = `${storedGradeLabel} — ضمن السماح`;
+        reason = "النتيجة محفوظة، لكن أثر الخصم محمي بسبب فترة السماح الحالية.";
+        code = "grace-period";
+      } else if (!grade) {
+        if (eligibility.code === "student-leave") label = "مجاز";
+        else if (eligibility.code === "before-registration") label = "سابق للتسجيل";
+        else if (eligibility.code === "exam-unavailable") label = "غير متاح";
+        else if (eligibility.withinGrace) label = "ضمن فترة السماح — بلا درجة";
+      }
+
+      examStates.push({
+        examId: exam.id,
+        code,
+        label,
+        reason,
+        withinGrace: eligibility.withinGrace,
+        hasLeave: eligibility.hasLeave,
+        gradeId: grade?.id || null,
+        gradeStatus: grade?.status || null,
+        score: grade?.score ?? null,
+      });
+    }
 
     return NextResponse.json({
       studentId,
       grades,
       exams,
+      examStates,
+      examSummary: {
+        total: exams.length,
+        withGrade: examStates.filter((state) => state.gradeId).length,
+        withoutGrade: examStates.filter((state) => !state.gradeId).length,
+      },
       opportunityLogs,
       studentLeaves,
       studentCalls,

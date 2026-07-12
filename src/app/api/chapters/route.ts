@@ -13,6 +13,7 @@ import {
 } from "@/lib/route-helpers";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { writeRequestAuditLog } from "@/lib/audit-log-server";
 
 function validateChapterPayload(body: Record<string, unknown>) {
   const nameError = requireText(body.name, "اسم الفصل");
@@ -144,6 +145,11 @@ export async function POST(req: NextRequest) {
         name: String(body.name ?? "").trim(),
         opportunities: Number(body.opportunities || 0),
       },
+    });
+    await writeRequestAuditLog(req, "الفصول والفرص", "إضافة فصل", {
+      chapterId: chapter.id,
+      name: chapter.name,
+      opportunities: chapter.opportunities,
     });
     return NextResponse.json({ chapter }, { status: 201 });
   } catch (error) {
@@ -278,6 +284,14 @@ export async function PUT(req: NextRequest) {
       };
     });
 
+    await writeRequestAuditLog(req, "الفصول والفرص", "تعديل فصل وإعادة احتساب الأثر", {
+      chapterId: result.chapter.id,
+      previousOpportunities: existing.opportunities,
+      nextOpportunities: result.chapter.opportunities,
+      syncStudentOpportunities,
+      syncedStudents: result.syncedStudents,
+    });
+
     return NextResponse.json({
       chapter: result.chapter,
       academicRecalculation: result.academicRecalculation,
@@ -324,7 +338,13 @@ export async function DELETE(req: NextRequest) {
         409,
       );
     }
+    const chapter = await db.chapter.findUnique({ where: { id }, select: { name: true, opportunities: true } });
     await db.chapter.delete({ where: { id } });
+    await writeRequestAuditLog(req, "الفصول والفرص", "حذف فصل غير مرتبط ببيانات", {
+      chapterId: id,
+      name: chapter?.name || "",
+      opportunities: chapter?.opportunities ?? null,
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حذف الفصل حالياً.");

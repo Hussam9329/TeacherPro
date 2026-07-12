@@ -31,6 +31,7 @@ import {
   validateStudentCourseChoices,
 } from "@/lib/course-config";
 import { IRAQI_PROVINCES, normalizeIraqiProvinceName } from "@/lib/iraq";
+import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import {
   ensureExamCourseLinksSchema,
   parseCourseIds,
@@ -475,6 +476,11 @@ export async function POST(req: NextRequest) {
         locationConfig: stringifyJson(body.locationConfig || {}),
       },
     });
+    await writeRequestAuditLog(req, "الدورات", "إضافة دورة", {
+      courseId: course.id,
+      name: course.name,
+      active: course.active,
+    });
     return NextResponse.json({ course }, { status: 201 });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حفظ الدورة حالياً.");
@@ -705,6 +711,14 @@ export async function PUT(req: NextRequest) {
       return { course, syncedStudents, snapshotPlan: executionPlan };
     });
 
+    await writeRequestAuditLog(req, "الدورات", "تعديل دورة ومزامنة إعدادات الطلاب", {
+      courseId: result.course.id,
+      name: result.course.name,
+      configTouched,
+      syncStudentSnapshots,
+      syncedStudents: result.syncedStudents,
+    });
+
     const finalSnapshotPlan = result.snapshotPlan;
     const publicPlan = finalSnapshotPlan
       ? {
@@ -796,6 +810,10 @@ export async function DELETE(req: NextRequest) {
     await db.$transaction(async (tx) => {
       await tx.courseChapter.deleteMany({ where: { courseId: id } });
       await tx.course.delete({ where: { id } });
+    });
+    await writeRequestAuditLog(req, "الدورات", "حذف دورة غير مرتبطة ببيانات", {
+      courseId: id,
+      name: course.name,
     });
     return NextResponse.json({ ok: true });
   } catch (error) {

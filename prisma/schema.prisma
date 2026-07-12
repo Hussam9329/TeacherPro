@@ -147,6 +147,7 @@ model Grade {
   examId            String
   student           Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam              Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  telegramExamSubmissions TelegramExamSubmission[]
 
   @@unique([studentId, examId])
   @@index([examId])
@@ -158,6 +159,11 @@ model OpportunityLog {
   id        String   @id @default(cuid())
   action    String
   amount    Int
+  requestedAmount Int?
+  appliedAmount Int?
+  balanceBefore Int?
+  balanceAfter Int?
+  reversalOfLogId String? @unique
   reason    String?
   date      DateTime @default(now())
   chapterId String?
@@ -294,12 +300,36 @@ model TelegramExamSubmission {
   updatedAt        DateTime @updatedAt
   student          Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam             Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  grade            Grade?   @relation(fields: [gradeId], references: [id], onDelete: SetNull)
+  versions         TelegramExamSubmissionVersion[]
 
   @@unique([studentId, examId])
+  @@index([gradeId])
   @@index([examId])
   @@index([studentId])
   @@index([status])
   @@index([receivedAt])
+}
+
+model TelegramExamSubmissionVersion {
+  id               String   @id @default(cuid())
+  submissionId     String
+  version          Int
+  sourceMessageIds String   @default("[]")
+  pages             String   @default("[]")
+  pageCount         Int      @default(0)
+  status            String   @default("بانتظار التصحيح")
+  notes             String   @default("")
+  telegramUserId    String   @default("")
+  telegramUsername  String   @default("")
+  telegramChatId    String   @default("")
+  submittedAt       DateTime?
+  receivedAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+  submission        TelegramExamSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, version])
+  @@index([submissionId, createdAt])
 }
 
 model StudentLeaveGradeBackup {

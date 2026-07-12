@@ -1,7 +1,6 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { randomUUID } from "crypto";
 import type { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
@@ -20,6 +19,13 @@ import {
   type AcademicServerRecalculationResult,
 } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
+import { parseBaghdadDateOnlyStrict } from "@/lib/baghdad-time";
+import { lockStudentsAcademicState } from "@/lib/academic-student-lock-server";
+import {
+  evaluateStudentExamEligibility,
+  isExamAssignedToStudentCourse,
+} from "@/lib/student-exam-eligibility-server";
+import { studentMatchesExamMainSites, splitSelection } from "@/lib/exam-utils";
 
 function readListPagination(
   req: NextRequest,
@@ -40,13 +46,12 @@ function readListPagination(
   return { page, pageSize, skip: (page - 1) * pageSize };
 }
 
-function dateOrNow(value: unknown): Date {
-  const date = value ? new Date(String(value)) : new Date();
-  return Number.isNaN(date.getTime()) ? new Date() : date;
-}
-
-function dateOnly(value: unknown): string {
-  return dateOrNow(value).toISOString().slice(0, 10);
+function strictDateOnly(value: unknown, label: string): Date {
+  const parsed = parseBaghdadDateOnlyStrict(
+    value instanceof Date ? value : String(value ?? "").trim(),
+  );
+  if (!parsed) throw new Error(`${label} غير صالح. استخدم تاريخاً صحيحاً بصيغة YYYY-MM-DD.`);
+  return parsed;
 }
 
 function dayAfter(value: Date): Date {
@@ -57,24 +62,30 @@ function dayAfter(value: Date): Date {
 
 function normalizeLeavePayload(body: Record<string, unknown>) {
   const leaveType = body.leaveType === "period" ? "period" : "exam";
-  const rawFrom = body.dateFrom ?? body.date;
-  const rawTo = body.dateTo ?? rawFrom;
-  const fromKey = dateOnly(rawFrom);
-  const toKey = dateOnly(rawTo);
-  const dateFrom = dateOrNow(fromKey <= toKey ? fromKey : toKey);
-  const dateTo = dateOrNow(fromKey <= toKey ? toKey : fromKey);
-  const date =
-    leaveType === "period" ? dateFrom : dateOrNow(body.date ?? dateFrom);
+  const studentId = String(body.studentId ?? "").trim();
+  const examId = leaveType === "exam" ? String(body.examId ?? "").trim() : null;
 
+  if (leaveType === "period") {
+    const dateFrom = strictDateOnly(body.dateFrom ?? body.date, "تاريخ بداية الإجازة");
+    const dateTo = strictDateOnly(body.dateTo ?? body.dateFrom ?? body.date, "تاريخ نهاية الإجازة");
+    if (dateFrom.getTime() > dateTo.getTime()) {
+      throw new Error("تاريخ بداية الإجازة يجب أن يسبق أو يساوي تاريخ النهاية.");
+    }
+    return {
+      studentId, examId: null, leaveType,
+      reason: String(body.reason ?? "").trim(),
+      studyType: String(body.studyType ?? ""),
+      date: dateFrom, dateFrom, dateTo,
+      notes: String(body.notes ?? ""),
+    };
+  }
+
+  const date = strictDateOnly(body.date, "تاريخ الإجازة");
   return {
-    studentId: String(body.studentId ?? ""),
-    examId: leaveType === "exam" ? String(body.examId ?? "") : null,
-    leaveType,
+    studentId, examId, leaveType,
     reason: String(body.reason ?? "").trim(),
     studyType: String(body.studyType ?? ""),
-    date,
-    dateFrom,
-    dateTo,
+    date, dateFrom: date, dateTo: date,
     notes: String(body.notes ?? ""),
   };
 }
@@ -162,32 +173,96 @@ function uniqueIds(values: Array<string | null | undefined>): string[] {
   );
 }
 
+type LeaveStudentRow = {
+  id: string;
+  courseId: string;
+  status: string;
+  createdAt: Date;
+  accountingGraceDays: number;
+  mainSite: string | null;
+  subSite: string | null;
+  locationScope: string | null;
+};
+
+async function validateLeaveDomain(
+  tx: Prisma.TransactionClient,
+  data: NormalizedLeavePayload,
+  excludeLeaveId?: string,
+): Promise<LeaveStudentRow> {
+  await lockStudentsAcademicState(tx, [data.studentId]);
+  const student = await tx.student.findUnique({
+    where: { id: data.studentId },
+    select: {
+      id: true, courseId: true, status: true, createdAt: true,
+      accountingGraceDays: true, mainSite: true, subSite: true, locationScope: true,
+    },
+  });
+  if (!student) throw new Error("الطالب المطلوب غير موجود.");
+  if (student.status === "مفصول") {
+    throw new Error("لا يمكن إضافة إجازة لطالب مفصول. أعد تفعيله أولاً.");
+  }
+  if (student.status === "مؤرشف") {
+    throw new Error("لا يمكن إضافة إجازة لملف طالب مؤرشف ومخصص للقراءة فقط.");
+  }
+
+  if (data.leaveType === "period") {
+    const overlap = await tx.studentLeave.findFirst({
+      where: {
+        studentId: data.studentId,
+        leaveType: "period",
+        ...(excludeLeaveId ? { id: { not: excludeLeaveId } } : {}),
+        dateFrom: { lte: data.dateTo },
+        dateTo: { gte: data.dateFrom },
+      },
+      select: { id: true, dateFrom: true, dateTo: true },
+    });
+    if (overlap) {
+      throw new Error("توجد إجازة فترة أخرى متداخلة لهذا الطالب. عدّل الفترة الحالية أو احذف التداخل أولاً.");
+    }
+    return student;
+  }
+
+  const exam = await tx.exam.findUnique({
+    where: { id: String(data.examId || "") },
+    select: {
+      id: true, date: true, courseIds: true, mainSite: true, active: true,
+      scheduledActivateAt: true, scheduledDeactivateAt: true,
+      examCourses: { select: { courseId: true } },
+    },
+  });
+  if (!exam) throw new Error("الامتحان المطلوب غير موجود.");
+  const eligibility = await evaluateStudentExamEligibility(tx, student, exam, {
+    requireActiveChapter: false,
+    checkAvailability: false,
+    checkRegistration: true,
+    checkLeave: false,
+  });
+  if (!eligibility.eligible) throw new Error(eligibility.reason);
+  return student;
+}
+
 async function getAffectedExamIds(
   tx: Prisma.TransactionClient,
   data: NormalizedLeavePayload,
+  student: LeaveStudentRow,
 ): Promise<string[]> {
   if (data.leaveType === "exam") return data.examId ? [data.examId] : [];
   const exams = await tx.exam.findMany({
     where: {
-      date: {
-        gte: data.dateFrom,
-        lt: dayAfter(data.dateTo),
-      },
+      date: { gte: data.dateFrom, lt: dayAfter(data.dateTo) },
     },
-    select: { id: true },
+    select: {
+      id: true, date: true, courseIds: true, mainSite: true, active: true,
+      scheduledActivateAt: true, scheduledDeactivateAt: true,
+      examCourses: { select: { courseId: true } },
+    },
   });
-  return exams.map((exam) => exam.id);
+  return exams
+    .filter((exam) => isExamAssignedToStudentCourse(student, exam))
+    .filter((exam) => studentMatchesExamMainSites(student, splitSelection(exam.mainSite)))
+    .filter((exam) => exam.date.toISOString().slice(0, 10) >= student.createdAt.toISOString().slice(0, 10))
+    .map((exam) => exam.id);
 }
-
-type LeaveGradeBackupRow = {
-  studentId: string;
-  examId: string;
-  status: string;
-  score: number | null;
-  notes: string | null;
-  academicAccountingChecked: boolean;
-  gradeCreatedAt: Date | null;
-};
 
 type RestoredGrade = {
   id: string;
@@ -211,84 +286,90 @@ async function backupGradesForLeave(
   const grades = await tx.grade.findMany({
     where: { studentId, examId: { in: examIds } },
     select: {
-      studentId: true,
-      examId: true,
-      status: true,
-      score: true,
-      notes: true,
-      academicAccountingChecked: true,
-      createdAt: true,
-      updatedAt: true,
+      studentId: true, examId: true, status: true, score: true, notes: true,
+      academicAccountingChecked: true, createdAt: true, updatedAt: true,
     },
   });
 
   for (const grade of grades) {
-    await tx.$executeRaw`
-      INSERT INTO "StudentLeaveGradeBackup" (
-        "id",
-        "leaveId",
-        "studentId",
-        "examId",
-        "status",
-        "score",
-        "notes",
-        "academicAccountingChecked",
-        "gradeCreatedAt",
-        "gradeUpdatedAt"
-      )
-      VALUES (
-        ${`slgb_${randomUUID()}`},
-        ${leaveId},
-        ${grade.studentId},
-        ${grade.examId},
-        ${grade.status},
-        ${grade.score},
-        ${grade.notes},
-        ${grade.academicAccountingChecked},
-        ${grade.createdAt},
-        ${grade.updatedAt}
-      )
-      ON CONFLICT ("leaveId", "studentId", "examId") DO UPDATE SET
-        "status" = EXCLUDED."status",
-        "score" = EXCLUDED."score",
-        "notes" = EXCLUDED."notes",
-        "academicAccountingChecked" = EXCLUDED."academicAccountingChecked",
-        "gradeCreatedAt" = EXCLUDED."gradeCreatedAt",
-        "gradeUpdatedAt" = EXCLUDED."gradeUpdatedAt"
-    `;
+    await tx.studentLeaveGradeBackup.upsert({
+      where: {
+        leaveId_studentId_examId: { leaveId, studentId: grade.studentId, examId: grade.examId },
+      },
+      update: {
+        status: grade.status, score: grade.score, notes: grade.notes,
+        academicAccountingChecked: grade.academicAccountingChecked,
+        gradeCreatedAt: grade.createdAt, gradeUpdatedAt: grade.updatedAt,
+      },
+      create: {
+        leaveId, studentId: grade.studentId, examId: grade.examId,
+        status: grade.status, score: grade.score, notes: grade.notes,
+        academicAccountingChecked: grade.academicAccountingChecked,
+        gradeCreatedAt: grade.createdAt, gradeUpdatedAt: grade.updatedAt,
+      },
+    });
   }
-
   return grades.length;
+}
+
+async function findOtherCoveringLeaveId(
+  tx: Prisma.TransactionClient,
+  leaveId: string,
+  studentId: string,
+  examId: string,
+): Promise<string | null> {
+  const exam = await tx.exam.findUnique({ where: { id: examId }, select: { id: true, date: true } });
+  if (!exam) return null;
+  const start = new Date(`${exam.date.toISOString().slice(0, 10)}T00:00:00.000Z`);
+  const end = dayAfter(start);
+  const other = await tx.studentLeave.findFirst({
+    where: {
+      id: { not: leaveId }, studentId,
+      OR: [
+        { leaveType: "exam", examId },
+        { leaveType: "period", dateFrom: { lt: end }, dateTo: { gte: start } },
+      ],
+    },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return other?.id || null;
 }
 
 async function restoreGradesForLeave(
   tx: Prisma.TransactionClient,
   leaveId: string,
 ): Promise<RestoredGrade[]> {
-  const backups = await tx.$queryRaw<LeaveGradeBackupRow[]>`
-    SELECT
-      "studentId",
-      "examId",
-      "status",
-      "score",
-      "notes",
-      "academicAccountingChecked",
-      "gradeCreatedAt"
-    FROM "StudentLeaveGradeBackup"
-    WHERE "leaveId" = ${leaveId}
-    ORDER BY "createdAt" ASC
-  `;
-
+  const backups = await tx.studentLeaveGradeBackup.findMany({
+    where: { leaveId },
+    orderBy: { createdAt: "asc" },
+  });
   const restoredGrades: RestoredGrade[] = [];
 
   for (const backup of backups) {
-    const restored = await tx.grade.upsert({
-      where: {
-        studentId_examId: {
-          studentId: backup.studentId,
-          examId: backup.examId,
+    const otherLeaveId = await findOtherCoveringLeaveId(
+      tx, leaveId, backup.studentId, backup.examId,
+    );
+    if (otherLeaveId) {
+      await tx.studentLeaveGradeBackup.upsert({
+        where: {
+          leaveId_studentId_examId: {
+            leaveId: otherLeaveId, studentId: backup.studentId, examId: backup.examId,
+          },
         },
-      },
+        update: {},
+        create: {
+          leaveId: otherLeaveId, studentId: backup.studentId, examId: backup.examId,
+          status: backup.status, score: backup.score, notes: backup.notes,
+          academicAccountingChecked: backup.academicAccountingChecked,
+          gradeCreatedAt: backup.gradeCreatedAt, gradeUpdatedAt: backup.gradeUpdatedAt,
+        },
+      });
+      continue;
+    }
+
+    const restored = await tx.grade.upsert({
+      where: { studentId_examId: { studentId: backup.studentId, examId: backup.examId } },
       update: {
         status: backup.status,
         score: backup.status === "درجة" ? backup.score : null,
@@ -296,9 +377,7 @@ async function restoreGradesForLeave(
         academicAccountingChecked: backup.academicAccountingChecked,
       },
       create: {
-        studentId: backup.studentId,
-        examId: backup.examId,
-        status: backup.status,
+        studentId: backup.studentId, examId: backup.examId, status: backup.status,
         score: backup.status === "درجة" ? backup.score : null,
         notes: backup.notes,
         academicAccountingChecked: backup.academicAccountingChecked,
@@ -308,10 +387,7 @@ async function restoreGradesForLeave(
     restoredGrades.push(restored);
   }
 
-  if (backups.length) {
-    await tx.$executeRaw`DELETE FROM "StudentLeaveGradeBackup" WHERE "leaveId" = ${leaveId}`;
-  }
-
+  if (backups.length) await tx.studentLeaveGradeBackup.deleteMany({ where: { leaveId } });
   return restoredGrades;
 }
 
@@ -416,7 +492,8 @@ export async function POST(req: NextRequest) {
     const result = await withFollowupTables<LeaveCreateResult>(
       () =>
         db.$transaction(async (tx) => {
-          const affectedExamIds = await getAffectedExamIds(tx, data);
+          const student = await validateLeaveDomain(tx, data);
+          const affectedExamIds = await getAffectedExamIds(tx, data, student);
           const restoredGrades = await removeDuplicateExamLeavesBeforeSave(
             tx,
             null,
@@ -508,6 +585,16 @@ export async function PUT(req: NextRequest) {
           const nextData = mergeLeavePayload(existingLeave, body);
           const payloadError = validateLeavePayload(nextData);
           if (payloadError) throw new Error(payloadError);
+          await lockStudentsAcademicState(tx, [previousData.studentId, nextData.studentId]);
+          const previousStudent = await tx.student.findUnique({
+            where: { id: previousData.studentId },
+            select: {
+              id: true, courseId: true, status: true, createdAt: true,
+              accountingGraceDays: true, mainSite: true, subSite: true, locationScope: true,
+            },
+          });
+          if (!previousStudent) throw new Error("الطالب المرتبط بالإجازة غير موجود.");
+          const nextStudent = await validateLeaveDomain(tx, nextData, id);
 
           const restoredGrades = await restoreGradesForLeave(tx, id);
           const duplicateRestoredGrades = await removeDuplicateExamLeavesBeforeSave(
@@ -515,8 +602,8 @@ export async function PUT(req: NextRequest) {
             id,
             nextData,
           );
-          const affectedBefore = await getAffectedExamIds(tx, previousData);
-          const affectedAfter = await getAffectedExamIds(tx, nextData);
+          const affectedBefore = await getAffectedExamIds(tx, previousData, previousStudent);
+          const affectedAfter = await getAffectedExamIds(tx, nextData, nextStudent);
 
           const studentLeave = await tx.studentLeave.update({
             where: { id },
@@ -607,6 +694,7 @@ export async function DELETE(req: NextRequest) {
             select: { studentId: true },
           });
           if (!existingLeave) throw new Error("الإجازة المطلوبة غير موجودة");
+          await lockStudentsAcademicState(tx, [existingLeave.studentId]);
           const restoredGrades = await restoreGradesForLeave(tx, id);
           await tx.studentLeave.delete({ where: { id } });
           const academicRecalculation = await recalculateStudentsAcademicState(

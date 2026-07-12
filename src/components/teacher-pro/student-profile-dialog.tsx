@@ -28,6 +28,18 @@ import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "archives" | "timeline";
 
+type StudentExamState = {
+  examId: string;
+  code: string;
+  label: string;
+  reason: string;
+  withinGrace: boolean;
+  hasLeave: boolean;
+  gradeId: string | null;
+  gradeStatus: string | null;
+  score: number | null;
+};
+
 type StudentProfileDialogProps = {
   student: Student | null;
   open: boolean;
@@ -242,8 +254,10 @@ function buildOpportunityTraceRows(
   return [...logs]
     .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.id || "").localeCompare(String(b.id || "")))
     .map((log) => {
-      const before = balance;
-      const amount = Math.max(0, Math.trunc(Number(log.amount || 0)));
+      const storedBefore = Number(log.balanceBefore);
+      const storedAfter = Number(log.balanceAfter);
+      const before = Number.isFinite(storedBefore) ? Math.max(0, Math.trunc(storedBefore)) : balance;
+      const amount = Math.max(0, Math.trunc(Number(log.appliedAmount ?? log.amount ?? 0)));
       const action = String(log.action || "");
       let deltaText = "بدون تغيير مباشر";
 
@@ -261,13 +275,18 @@ function buildOpportunityTraceRows(
         deltaText = `تثبيت فرصة أخيرة: ${balance}`;
       }
 
-      const after = balance;
+      const after = Number.isFinite(storedAfter)
+        ? Math.max(0, Math.trunc(storedAfter))
+        : balance;
+      balance = after;
+      const requested = Math.max(0, Math.trunc(Number(log.requestedAmount ?? log.amount ?? 0)));
+      const applied = Math.max(0, Math.trunc(Number(log.appliedAmount ?? log.amount ?? 0)));
       return {
         log,
         before,
         after,
         deltaText,
-        details: `${log.reason || "—"} | الرصيد قبل: ${before} | التغيير: ${deltaText} | الرصيد بعد: ${after}`,
+        details: `${log.reason || "—"} | المطلوب: ${requested} | المطبق: ${applied} | الرصيد قبل: ${before} | الرصيد بعد: ${after}`,
       };
     });
 }
@@ -297,6 +316,8 @@ export function StudentProfileDialog({
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
   const [databaseGrades, setDatabaseGrades] = useState<Grade[]>([]);
   const [databaseExams, setDatabaseExams] = useState<Exam[]>([]);
+  const [databaseProfileLoaded, setDatabaseProfileLoaded] = useState(false);
+  const [databaseExamStates, setDatabaseExamStates] = useState<StudentExamState[]>([]);
   const [databaseOpportunityLogs, setDatabaseOpportunityLogs] = useState<OpportunityLog[]>([]);
   const [databaseStudentLeaves, setDatabaseStudentLeaves] = useState<StudentLeave[]>([]);
   const [databaseStudentCalls, setDatabaseStudentCalls] = useState<StudentCall[]>([]);
@@ -315,8 +336,20 @@ export function StudentProfileDialog({
   }, []);
 
   const profileExams = useMemo(
-    () => mergeById(exams, databaseExams),
-    [exams, databaseExams],
+    () =>
+      databaseProfileLoaded
+        ? databaseExams
+        : exams.filter(
+            (exam) =>
+              !student ||
+              exam.courseIds.length === 0 ||
+              exam.courseIds.includes(student.courseId),
+          ),
+    [exams, databaseExams, databaseProfileLoaded, student],
+  );
+  const examStateById = useMemo(
+    () => new Map(databaseExamStates.map((state) => [state.examId, state])),
+    [databaseExamStates],
   );
 
   const localStudentGrades = useMemo(
@@ -332,6 +365,11 @@ export function StudentProfileDialog({
       String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")),
     );
   }, [localStudentGrades, databaseGrades]);
+
+  const gradeByExamId = useMemo(
+    () => new Map(studentGrades.map((grade) => [grade.examId, grade])),
+    [studentGrades],
+  );
 
   const studentOpportunities = useMemo(() => {
     if (!student) return [];
@@ -528,6 +566,8 @@ export function StudentProfileDialog({
     if (!open || !student?.id) {
       setDatabaseGrades([]);
       setDatabaseExams([]);
+      setDatabaseProfileLoaded(false);
+      setDatabaseExamStates([]);
       setDatabaseOpportunityLogs([]);
       setDatabaseStudentLeaves([]);
       setDatabaseStudentCalls([]);
@@ -541,7 +581,12 @@ export function StudentProfileDialog({
 
     let cancelled = false;
     const silent = isBackgroundSync();
-    if (!silent) setDatabaseGradesLoading(true);
+    if (!silent) {
+      setDatabaseProfileLoaded(false);
+      setDatabaseExams([]);
+      setDatabaseExamStates([]);
+      setDatabaseGradesLoading(true);
+    }
     if (!silent) setDatabaseGradesError(null);
 
     studentProfileLogApi
@@ -552,6 +597,8 @@ export function StudentProfileDialog({
           if (!silent) {
             setDatabaseGrades([]);
             setDatabaseExams([]);
+            setDatabaseProfileLoaded(false);
+            setDatabaseExamStates([]);
             setDatabaseOpportunityLogs([]);
             setDatabaseStudentLeaves([]);
             setDatabaseStudentCalls([]);
@@ -563,6 +610,8 @@ export function StudentProfileDialog({
         }
         setDatabaseGrades((result.grades || []) as unknown as Grade[]);
         setDatabaseExams((result.exams || []) as unknown as Exam[]);
+        setDatabaseProfileLoaded(true);
+        setDatabaseExamStates((result.examStates || []) as StudentExamState[]);
         setDatabaseOpportunityLogs((result.opportunityLogs || []) as unknown as OpportunityLog[]);
         setDatabaseStudentLeaves((result.studentLeaves || []) as unknown as StudentLeave[]);
         setDatabaseStudentCalls((result.studentCalls || []) as unknown as StudentCall[]);
@@ -574,6 +623,8 @@ export function StudentProfileDialog({
         if (cancelled || silent) return;
         setDatabaseGrades([]);
         setDatabaseExams([]);
+        setDatabaseProfileLoaded(false);
+        setDatabaseExamStates([]);
         setDatabaseOpportunityLogs([]);
         setDatabaseStudentLeaves([]);
         setDatabaseStudentCalls([]);
@@ -787,18 +838,44 @@ export function StudentProfileDialog({
 
             {tab === "exams" && (
               <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                <h4 className="mb-4 text-base font-black sm:text-lg">امتحانات الطالب</h4>
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-base font-black sm:text-lg">كل امتحانات الطالب</h4>
+                    <p className="text-xs text-muted-foreground">تظهر امتحانات الدورة والموقع حتى عندما لا توجد درجة، مع سبب الحالة.</p>
+                  </div>
+                  <Badge variant="outline">{profileExams.length} امتحان</Badge>
+                </div>
                 <div className="grid gap-3 lg:grid-cols-2">
-                  {studentGrades.length === 0 ? <p className="empty-state py-8 lg:col-span-2">{gradesEmptyMessage}</p> : studentGrades.map((grade) => {
-                    const exam = profileExams.find((item) => item.id === grade.examId);
-                    if (!exam) return null;
-                    const withinGrace = isExamWithinStudentGracePeriod(student, exam);
+                  {profileExams.length === 0 ? <p className="empty-state py-8 lg:col-span-2">لا توجد امتحانات مرتبطة بدورة وموقع الطالب</p> : profileExams.map((exam) => {
+                    const grade = gradeByExamId.get(exam.id);
+                    const state = examStateById.get(exam.id);
+                    const withinGrace = state?.withinGrace ?? isExamWithinStudentGracePeriod(student, exam);
                     const withoutDiscount = Boolean(exam.noDiscount);
+                    const label = state?.label || (grade ? grade.status : "بلا درجة");
+                    const destructive = label.startsWith("غائب") || label.startsWith("غش");
+                    const excluded = label.includes("غير محتسبة");
                     return (
-                      <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
-                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{withinGrace && <Badge variant="outline">ضمن السماح</Badge>}{!withinGrace && withoutDiscount && <Badge variant="secondary">بدون خصم</Badge>}<Badge>{grade.status}</Badge></div></div>
-                        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{formatGradeScore(grade, exam, "—")}</b><p>درجة الطالب</p></div></div>
-                        {grade.notes ? <p className="mt-3 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
+                      <div key={exam.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="break-words font-black">{exam.name}</p>
+                            <p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {withinGrace && <Badge variant="outline">ضمن السماح</Badge>}
+                            {!withinGrace && withoutDiscount && <Badge variant="secondary">بدون خصم</Badge>}
+                            <Badge variant={destructive && !excluded ? "destructive" : grade && !excluded ? "default" : "outline"}>{label}</Badge>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                          <div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div>
+                          <div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div>
+                          <div className="rounded-xl bg-muted/60 p-2"><b>{grade ? formatGradeScore(grade, exam, "—") : "—"}</b><p>درجة الطالب</p></div>
+                        </div>
+                        <p className="mt-3 rounded-xl border bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                          {state?.reason || (grade ? "توجد نتيجة محفوظة لهذا الامتحان." : "لم تُسجل نتيجة لهذا الامتحان بعد.")}
+                        </p>
+                        {grade?.notes ? <p className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
                       </div>
                     );
                   })}

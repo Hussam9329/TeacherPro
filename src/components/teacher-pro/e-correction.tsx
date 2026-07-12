@@ -127,6 +127,15 @@ type TelegramExamSubmission = {
   submittedAt?: string | null;
   receivedAt: string;
   updatedAt: string;
+  versions?: Array<{
+    id: string;
+    version: number;
+    pages?: TelegramSubmissionPage[];
+    pageCount: number;
+    status?: string;
+    receivedAt?: string | null;
+    createdAt?: string;
+  }>;
   student?: {
     id: string;
     name: string;
@@ -256,7 +265,13 @@ function TelegramPageImage({
 }
 
 export function ECorrectionView() {
-  const syncKey = useTeacherProSyncKey(["correction", "students", "exams", "grades", "dashboard"]);
+  const syncKey = useTeacherProSyncKey([
+    "correction",
+    "students",
+    "exams",
+    "grades",
+    "dashboard",
+  ]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const beginBotSubmissionsRequest = useLatestRequest();
   const beginCorrectionStatsRequest = useLatestRequest();
@@ -655,16 +670,21 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
   const openDeleteSheetDialog = (sheetId: string) => {
     setDeleteSheetDialog({ open: true, id: sheetId });
   };
-  const handleDeleteSheetConfirm = runDeleteSheetLocked(async () => {
-    const ok = deleteCorrectionSheet(deleteSheetDialog.id);
-    if (ok) {
-      await loadCorrectionStats();
-      toast.success("تم حذف ورقة التصحيح");
-    } else {
-      toast.error("تعذر حذف الورقة");
-    }
-    setDeleteSheetDialog({ open: false, id: "" });
-  });
+  const handleDeleteSheetConfirm = (gradeAction: "keep" | "revoke") =>
+    runDeleteSheetLocked(async () => {
+      const ok = deleteCorrectionSheet(deleteSheetDialog.id, gradeAction);
+      if (ok) {
+        await loadCorrectionStats();
+        toast.success(
+          gradeAction === "revoke"
+            ? "تم حذف الورقة وإلغاء الدرجة وإعادة الاحتساب"
+            : "تم حذف الورقة فقط وبقيت الدرجة معتمدة",
+        );
+      } else {
+        toast.error("تعذر حذف الورقة");
+      }
+      setDeleteSheetDialog({ open: false, id: "" });
+    });
 
   return (
     <div className="space-y-6">
@@ -1385,7 +1405,9 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                   </p>
                 </div>
                 <div className="rounded-2xl border bg-muted/30 p-3">
-                  <p className="text-xs text-muted-foreground">معرف التيليجرام</p>
+                  <p className="text-xs text-muted-foreground">
+                    معرف التيليجرام
+                  </p>
                   <p className="font-medium">
                     {botSubmissionDialog?.student?.telegram ||
                       botSubmissionDialog?.telegramUsername ||
@@ -1418,6 +1440,36 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                     ملاحظات البوت
                   </p>
                   <p>{botSubmissionDialog.notes}</p>
+                </div>
+              )}
+
+              {(botSubmissionDialog?.versions || []).length > 0 && (
+                <div className="rounded-2xl border bg-muted/20 p-3 text-sm">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="font-semibold">الإصدارات المحفوظة</p>
+                    <Badge variant="outline">
+                      {botSubmissionDialog?.versions?.length || 0} إصدار
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {(botSubmissionDialog?.versions || []).map((version) => (
+                      <div
+                        key={version.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-background px-3 py-2"
+                      >
+                        <span className="font-medium">
+                          الإصدار {version.version}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {version.pageCount || version.pages?.length || 0} صفحة
+                          •{" "}
+                          {formatDateTime(
+                            version.receivedAt || version.createdAt,
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -1569,17 +1621,25 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تريد حذف ورقة التصحيح؟
+              اختر بوضوح: حذف الورقة فقط مع إبقاء الدرجة المعتمدة، أو حذف الورقة
+              وإلغاء الدرجة المرتبطة ثم إعادة احتساب الطالب.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDeleteSheetConfirm}
+              onClick={() => void handleDeleteSheetConfirm("keep")}
+              disabled={isDeletingSheet}
+              className="bg-amber-600 text-white hover:bg-amber-700"
+            >
+              {isDeletingSheet ? "جاري الحذف..." : "حذف الورقة فقط"}
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => void handleDeleteSheetConfirm("revoke")}
               disabled={isDeletingSheet}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeletingSheet ? "جاري الحذف..." : "حذف"}
+              {isDeletingSheet ? "جاري الحذف..." : "حذف وإلغاء الدرجة"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

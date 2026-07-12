@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { forbiddenResponse, getAuthPrincipal, requirePermission, unauthorizedResponse, type AuthPrincipal } from '@/lib/server-auth';
 import { db } from '@/lib/db';
-import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { recalculateStudentsAcademicState } from '@/lib/academic-recalculate-server';
 import { confirmationRequiredResponse, isConfirmed, writeAuditLog } from '@/lib/audit-log-server';
 
@@ -99,47 +99,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const auth = await requireOpportunityMutation(req, body);
-    if (auth.error) return auth.error;
-    const studentError = requireText(body.studentId, 'الطالب');
-    if (studentError) return validationError(studentError);
-    const actionError = requireText(body.action, 'نوع الحركة');
-    if (actionError) return validationError(actionError);
-    const action = String(body.action ?? '');
-    const amount = Number(body.amount || 0);
-    const allowsZeroAmount = action === 'فصل تلقائي' || action === 'إعادة تفعيل';
-    if (!Number.isFinite(amount) || amount < 0 || (amount === 0 && !allowsZeroAmount)) return validationError('عدد الفرص يجب أن يكون رقماً أكبر من صفر');
-    const studentId = String(body.studentId);
-    const examId = body.examId ? String(body.examId) : null;
-    const chapterId = body.chapterId ? String(body.chapterId) : null;
-
-    const [student, exam, chapter] = await Promise.all([
-      db.student.findUnique({ where: { id: studentId }, select: { id: true } }),
-      examId ? db.exam.findUnique({ where: { id: examId }, select: { id: true } }) : Promise.resolve(null),
-      chapterId ? db.chapter.findUnique({ where: { id: chapterId }, select: { id: true, name: true } }) : Promise.resolve(null),
-    ]);
-    if (!student) return validationError('الطالب غير موجود أو تم حذفه.', 404);
-    if (examId && !exam) return validationError('الامتحان غير موجود أو تم حذفه.', 404);
-    if (chapterId && !chapter) return validationError('الفصل غير موجود أو تم حذفه.', 404);
-
-    const data = {
-      action,
-      amount,
-      reason: body.reason ? String(body.reason) : null,
-      date: body.date ? new Date(body.date) : new Date(),
-      chapterId,
-      chapterNameSnapshot: chapter?.name || null,
-      studentId,
-      examId,
-    };
-    // Never trust client-provided IDs on create. The server owns primary keys.
-    const log = await db.opportunityLog.create({ data });
-    return NextResponse.json({ log }, { status: 201 });
-  } catch (error) {
-    return routeErrorResponse(error, 'تعذر حفظ حركة الفرص حالياً.');
-  }
+  const auth = await requireOpportunityMutation(req);
+  if (auth.error) return auth.error;
+  return NextResponse.json(
+    {
+      error:
+        "تم إيقاف إنشاء حركات الفرص المباشر. استخدم إجراء الفرص الفردي أو الجماعي ليشتق الخادم الرصيد والحركة الفعلية ويعيد الاحتساب داخل معاملة واحدة.",
+      code: "LEGACY_DIRECT_OPPORTUNITY_LOG_DISABLED",
+    },
+    { status: 410 },
+  );
 }
 
 export async function DELETE(req: NextRequest) {

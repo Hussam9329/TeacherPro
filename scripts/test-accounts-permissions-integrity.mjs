@@ -7,8 +7,11 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 let failed = false;
 const pass = (message) => console.log(`✅ ${message}`);
-const fail = (message) => { failed = true; console.error(`❌ ${message}`); };
-const must = (condition, ok, bad = ok) => condition ? pass(ok) : fail(bad);
+const fail = (message) => {
+  failed = true;
+  console.error(`❌ ${message}`);
+};
+const must = (condition, ok, bad = ok) => (condition ? pass(ok) : fail(bad));
 
 const store = read("src/lib/teacher-store.ts");
 const accounts = read("src/components/teacher-pro/accounts.tsx");
@@ -64,25 +67,37 @@ must(
 must(
   accounts.includes("PermissionsArchitectureTab") &&
     accounts.includes("PAGE_PERMISSION_BLUEPRINT") &&
-    accounts.includes("أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل PERMISSION_CATALOG"),
+    accounts.includes(
+      "أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل PERMISSION_CATALOG",
+    ),
   "إدارة الحسابات تحتوي تبويب هيكلة الصلاحيات مع قاعدة إضافة أي ميزة جديدة",
   "إدارة الحسابات يجب أن تحتوي تبويب يشرح هيكلة الصلاحيات ويجعل أي ميزة جديدة Permission ID واضح.",
 );
 
 must(
-  usersRoute.includes("requirePermissionPrincipal(req, 'accounts.users.add')") &&
-    usersRoute.includes("requirePermissionPrincipal(req, 'accounts.users.edit')") &&
-    usersRoute.includes("requirePermissionPrincipal(req, 'accounts.users.delete')") &&
-    usersRoute.includes("requireAnyPermission(req, ['accounts.view', 'accounts.users.view'])"),
+  usersRoute.includes('"accounts.users.add"') &&
+    usersRoute.includes('"accounts.users.edit"') &&
+    usersRoute.includes('"accounts.users.delete"') &&
+    usersRoute.includes('"accounts.users.view"') &&
+    usersRoute.includes("requirePermissionPrincipal") &&
+    usersRoute.includes("requireAnyPermission"),
   "API المستخدمين يستخدم صلاحيات دقيقة للعرض/الإضافة/التعديل/الحذف",
   "users API يجب أن لا يبقى معتمد فقط على accounts.manage لكل شيء.",
 );
 
 must(
-  rolesRoute.includes("requirePermissionPrincipal(req, 'accounts.roles.add')") &&
-    rolesRoute.includes("requirePermissionPrincipal(req, 'accounts.roles.edit')") &&
-    rolesRoute.includes("requirePermissionPrincipal(req, 'accounts.roles.delete')") &&
-    rolesRoute.includes("requireAnyPermission(req, ['accounts.view', 'accounts.roles.view'])"),
+  rolesRoute.includes(
+    "requirePermissionPrincipal(req, 'accounts.roles.add')",
+  ) &&
+    rolesRoute.includes(
+      "requirePermissionPrincipal(req, 'accounts.roles.edit')",
+    ) &&
+    rolesRoute.includes(
+      "requirePermissionPrincipal(req, 'accounts.roles.delete')",
+    ) &&
+    rolesRoute.includes(
+      "requireAnyPermission(req, ['accounts.view', 'accounts.roles.view'])",
+    ),
   "API الأدوار يستخدم صلاحيات دقيقة للعرض/الإضافة/التعديل/الحذف",
   "roles API يجب أن يستخدم صلاحيات الأدوار الدقيقة.",
 );
@@ -102,7 +117,6 @@ must(
   "accounts/security يجب أن يشمل الصلاحيات الحساسة الجديدة في الفحص.",
 );
 
-
 must(
   store.includes('p !== "accounts.users.delete"') &&
     store.includes('p !== "accounts.permissions.assign"') &&
@@ -113,8 +127,11 @@ must(
 );
 
 must(
-  pkg.scripts["test:accounts-permissions-integrity"] === "node scripts/test-accounts-permissions-integrity.mjs" &&
-    String(pkg.scripts["test:side-effects"] || "").includes("test:accounts-permissions-integrity"),
+  pkg.scripts["test:accounts-permissions-integrity"] ===
+    "node scripts/test-accounts-permissions-integrity.mjs" &&
+    String(pkg.scripts["test:side-effects"] || "").includes(
+      "test:accounts-permissions-integrity",
+    ),
   "اختبار إدارة الحسابات والصلاحيات مربوط داخل test:side-effects",
   "يجب ربط اختبار الحسابات والصلاحيات في package.json و test:side-effects.",
 );

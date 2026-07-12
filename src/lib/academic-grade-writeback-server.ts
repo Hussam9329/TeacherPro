@@ -1,10 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getExamEntryAvailability } from "@/lib/exam-utils";
 import {
   recalculateStudentsAcademicState,
   type AcademicServerRecalculationResult,
 } from "@/lib/academic-recalculate-server";
+import { evaluateStudentExamEligibility } from "@/lib/student-exam-eligibility-server";
+import { lockStudentsAcademicState } from "@/lib/academic-student-lock-server";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
 export type AcademicGradeWritebackStatus = "درجة" | "غائب" | "غش";
 
@@ -116,56 +118,6 @@ export function readAcademicGradeWritebackScore(
   return undefined;
 }
 
-function parseCourseIds(value: string | null | undefined): string[] {
-  try {
-    const parsed = JSON.parse(value || "[]");
-    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
-  } catch {
-    return [];
-  }
-}
-
-function dayStart(value: Date | string | null | undefined): Date | null {
-  const key = String(value || "").slice(0, 10);
-  if (!key) return null;
-  const date = new Date(`${key}T00:00:00.000Z`);
-  return Number.isFinite(date.getTime()) ? date : null;
-}
-
-function dayEndExclusive(value: Date | string | null | undefined): Date | null {
-  const start = dayStart(value);
-  if (!start) return null;
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
-  return end;
-}
-
-async function hasBlockingLeave(
-  client: PrismaClientLike,
-  studentId: string,
-  exam: { id: string; date: Date },
-): Promise<boolean> {
-  const examDayStart = dayStart(exam.date);
-  const examDayEnd = dayEndExclusive(exam.date);
-  const periodWhere: Prisma.StudentLeaveWhereInput[] = [];
-  if (examDayStart && examDayEnd) {
-    periodWhere.push({
-      leaveType: "period",
-      dateFrom: { lt: examDayEnd },
-      dateTo: { gte: examDayStart },
-    });
-  }
-
-  const leave = await client.studentLeave.findFirst({
-    where: {
-      studentId,
-      OR: [{ examId: exam.id }, ...periodWhere],
-    },
-    select: { id: true },
-  });
-  return Boolean(leave);
-}
-
 export async function syncAcademicGradeWriteback(
   input: AcademicGradeWritebackInput,
 ): Promise<AcademicGradeWritebackResult | null> {
@@ -186,11 +138,28 @@ export async function syncAcademicGradeWriteback(
     return null;
   }
 
-  const client = input.tx || db;
+  if (!input.tx) {
+    return withSerializableTransaction((tx) =>
+      syncAcademicGradeWriteback({ ...input, tx }),
+    );
+  }
+
+  const client = input.tx;
+  await lockStudentsAcademicState(input.tx, [studentId]);
+
   const [student, exam] = await Promise.all([
     client.student.findUnique({
       where: { id: studentId },
-      select: { id: true, courseId: true, status: true },
+      select: {
+        id: true,
+        courseId: true,
+        status: true,
+        createdAt: true,
+        accountingGraceDays: true,
+        mainSite: true,
+        subSite: true,
+        locationScope: true,
+      },
     }),
     client.exam.findUnique({
       where: { id: examId },
@@ -199,9 +168,11 @@ export async function syncAcademicGradeWriteback(
         date: true,
         fullMark: true,
         courseIds: true,
+        mainSite: true,
         active: true,
         scheduledActivateAt: true,
         scheduledDeactivateAt: true,
+        examCourses: { select: { courseId: true } },
       },
     }),
   ]);
@@ -217,29 +188,17 @@ export async function syncAcademicGradeWriteback(
       404,
     );
 
-  if (student.status === "مفصول" && !input.allowDismissedExistingGradeCorrection) {
-    throw new AcademicGradeWritebackError(
-      "الطالب مفصول ولا يمكن اعتماد درجة جديدة له. أعد تفعيله أولاً من الإجراء المخصص.",
-    );
-  }
-  if (student.status === "مؤرشف") {
-    throw new AcademicGradeWritebackError(
-      "الطالب مؤرشف ولا يمكن اعتماد درجات على ملفه المقروء فقط.",
-    );
-  }
-
-  if (input.enforceExamAvailability !== false) {
-    const availability = getExamEntryAvailability(exam);
-    if (!availability.available) {
-      throw new AcademicGradeWritebackError(
-        `لا يمكن اعتماد الدرجة: ${availability.reason}`,
-      );
-    }
-  }
-
-  const courseIds = parseCourseIds(exam.courseIds);
-  if (courseIds.length > 0 && !courseIds.includes(student.courseId)) {
-    throw new AcademicGradeWritebackError("الطالب ليس ضمن دورات هذا الامتحان.");
+  const eligibility = await evaluateStudentExamEligibility(client, student, exam, {
+    requireActiveChapter: false,
+    checkAvailability: input.enforceExamAvailability !== false,
+    // A historical pre-registration grade may still be stored for documentation;
+    // the academic engine and profile explain permanently why it is not counted.
+    checkRegistration: false,
+    checkLeave: input.blockOnLeave !== false,
+    allowDismissed: Boolean(input.allowDismissedExistingGradeCorrection),
+  });
+  if (!eligibility.eligible) {
+    throw new AcademicGradeWritebackError(eligibility.reason);
   }
 
   if (status === "درجة") {
@@ -255,18 +214,6 @@ export async function syncAcademicGradeWriteback(
           `الدرجة يجب أن تكون رقماً بين 0 و ${fullMark}`,
         );
       }
-    }
-  }
-
-  if (
-    input.blockOnLeave !== false &&
-    (score !== undefined || status !== "درجة")
-  ) {
-    const blockedByLeave = await hasBlockingLeave(client, studentId, exam);
-    if (blockedByLeave) {
-      throw new AcademicGradeWritebackError(
-        "لا يمكن اعتماد درجة لطالب مجاز من هذا الامتحان.",
-      );
     }
   }
 

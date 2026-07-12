@@ -20,12 +20,20 @@ const registry = read("src/components/teacher-pro/student-registry.tsx");
 const dismissed = read("src/components/teacher-pro/dismissed-students.tsx");
 const followUp = read("src/components/teacher-pro/follow-up.tsx");
 const profile = read("src/components/teacher-pro/student-profile-dialog.tsx");
-const bulkImport = read("src/components/teacher-pro/student-bulk-text-import.tsx");
+const bulkImport = read(
+  "src/components/teacher-pro/student-bulk-text-import.tsx",
+);
 
 check(
-  snapshot.includes("const current = opportunityNumber(student.opportunities)") &&
-    snapshot.includes("const opportunityLimit = activeChapter?.opportunities ?? null") &&
-    !snapshot.includes("activeChapter?.opportunities || student.baseOpportunities"),
+  snapshot.includes(
+    "const current = opportunityNumber(student.opportunities)",
+  ) &&
+    snapshot.includes(
+      "const opportunityLimit = activeChapter?.opportunities ?? null",
+    ) &&
+    !snapshot.includes(
+      "activeChapter?.opportunities || student.baseOpportunities",
+    ),
   "الرصيد الحالي مصدره Student.opportunities والسقف مصدره الفصل النشط فقط",
 );
 check(
@@ -44,7 +52,9 @@ check(
 check(
   balance.includes("formatOpportunityBalance") &&
     balance.includes("getOpportunityLimit") &&
-    balance.includes('return `${current}${separator}${limit === null ? unavailableLimit : limit}`'),
+    balance.includes(
+      "return `${current}${separator}${limit === null ? unavailableLimit : limit}`",
+    ),
   "جميع الواجهات تستطيع استعمال منسق موحد للرصيد والسقف",
 );
 check(
@@ -69,21 +79,24 @@ check(
 );
 check(
   bulkAdjust.includes("attachStudentOpportunitySnapshotsWithClient") &&
-    bulkAdjust.includes('student.opportunityHealth === "ready"') &&
-    bulkAdjust.includes("const activeChapter = student.activeChapter") &&
-    bulkAdjust.includes("const opportunityLimit = opportunitySnapshot?.opportunityLimit") &&
+    bulkAdjust.includes('row.opportunityHealth === "ready"') &&
+    bulkAdjust.includes("student.activeChapter!") &&
+    bulkAdjust.includes("student.isOpportunityFull") &&
     !bulkAdjust.includes("fullOpportunityLimitForStudent"),
   "تنفيذ العمليات الجماعية يستعمل نفس Snapshot داخل transaction مثل المعاينة",
 );
 check(
-  studentAction.includes("activeChapterResult.activeLink.chapter.opportunities") &&
-    !studentAction.includes("student.baseOpportunities || activeChapterResult"),
+  studentAction.includes("getSingleActiveChapterForCourse") &&
+    studentAction.includes("? chapter.opportunities") &&
+    !studentAction.includes("student.baseOpportunities ||"),
   "إعادة تعيين طالب واحد تعتمد على سقف الفصل النشط وليس الأساس المخزن",
 );
 check(
   academicEngine.includes("activeCourseChapterGroups") &&
     academicEngine.includes(".filter(([, links]) => links.length === 1)") &&
-    academicEngine.match(/activeChapter\?\.opportunities \?\? student\.baseOpportunities \?\? 0/g)?.length === 3,
+    academicEngine.match(
+      /activeChapter\?\.opportunities \?\? student\.baseOpportunities \?\? 0/g,
+    )?.length === 3,
   "محرك الاحتساب يفضل الفصل النشط ويمنع اختيار فصل عشوائي عند التعارض",
 );
 check(

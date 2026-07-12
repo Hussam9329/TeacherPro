@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/server-auth";
@@ -25,6 +26,8 @@ import {
   syncAcademicGradeWriteback,
 } from "@/lib/academic-grade-writeback-server";
 import { writeRequestAuditLog, writeSystemAuditLog } from "@/lib/audit-log-server";
+import { loadStudentExamEligibility } from "@/lib/student-exam-eligibility-server";
+import { lockStudentsAcademicState } from "@/lib/academic-student-lock-server";
 
 type IncomingPage = {
   [key: string]: unknown;
@@ -64,6 +67,16 @@ type IncomingPage = {
   downloadedAt?: unknown;
   downloaded_at?: unknown;
 };
+
+class TelegramSubmissionValidationError extends Error {
+  status: number;
+
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = "TelegramSubmissionValidationError";
+    this.status = status;
+  }
+}
 
 function readEnv(name: string): string | undefined {
   return (
@@ -283,6 +296,12 @@ function sanitizePages(value: unknown): Array<Record<string, string | number>> {
   });
 }
 
+function hasUsablePageReference(page: Record<string, string | number>): boolean {
+  return [page.fileId, page.url, page.localPath, page.messageId].some(
+    (value) => String(value ?? "").trim().length > 0,
+  );
+}
+
 function safeJsonStringify(value: unknown, fallback = "[]"): string {
   try {
     return JSON.stringify(value ?? []);
@@ -441,10 +460,21 @@ function resolveSubmissionMatchInfo(
 }
 
 function normalizeSubmission(item: Record<string, unknown>) {
+  const versions = Array.isArray(item.versions)
+    ? item.versions.map((version) => {
+        const row = version as Record<string, unknown>;
+        return {
+          ...row,
+          pages: parseJsonArray(String(row.pages || "[]")),
+          sourceMessageIds: parseJsonArray(String(row.sourceMessageIds || "[]")),
+        };
+      })
+    : [];
   return {
     ...item,
     pages: parseJsonArray(String(item.pages || "[]")),
     sourceMessageIds: parseJsonArray(String(item.sourceMessageIds || "[]")),
+    versions,
   };
 }
 
@@ -487,6 +517,7 @@ export async function GET(req: NextRequest) {
       include: {
         student: true,
         exam: true,
+        versions: { orderBy: [{ version: "desc" }, { createdAt: "desc" }] },
       },
     });
 
@@ -522,176 +553,145 @@ export async function POST(req: NextRequest) {
   try {
     const contentLength = Number(req.headers.get("content-length") || 0);
     if (contentLength && contentLength > MAX_REQUEST_BYTES) {
-      return validationError(
-        `حجم الطلب كبير جداً (${Math.round(contentLength / 1024 / 1024)} MB). الحد الأقصى 1 MB.`,
-      );
+      return validationError(`حجم الطلب كبير جداً. الحد الأقصى 1 MB للبيانات الوصفية.`);
     }
-
     const schemaReady = await ensureTelegramSubmissionSchema();
     if (!schemaReady.ok) {
       resetTelegramSubmissionSchemaEnsureCache();
-      return NextResponse.json(
-        { error: telegramSubmissionSchemaMessage },
-        { status: 503 },
-      );
+      return NextResponse.json({ error: telegramSubmissionSchemaMessage }, { status: 503 });
     }
 
-    const body = await req.json();
+    const body = (await req.json()) as Record<string, unknown>;
     const studentId = textValue(body.studentId, 120);
     const examId = textValue(body.examId, 120);
     if (!studentId) return validationError("studentId مطلوب من البوت.");
     if (!examId) return validationError("examId مطلوب من البوت.");
 
-    const [student, exam] = await Promise.all([
-      db.student.findUnique({ where: { id: studentId } }),
-      db.exam.findUnique({ where: { id: examId } }),
-    ]);
-    if (!student)
+    const incomingPages = Array.isArray(body.pages) ? body.pages
+      : Array.isArray(body.images) ? body.images
+        : Array.isArray(body.files) ? body.files
+          : Array.isArray(body.photos) ? body.photos : [];
+    const pages = sanitizePages(incomingPages).filter(hasUsablePageReference);
+    const pageCount = pages.length;
+    if (pageCount <= 0) {
       return validationError(
-        "الطالب المرسل من البوت غير موجود في TeacherPro.",
-        404,
+        "لا يمكن إنشاء مستلم فارغ. يجب أن تحتوي صفحة واحدة على الأقل على fileId أو رابط أو مسار ملف أو messageId حقيقي.",
       );
-    if (!exam)
-      return validationError(
-        "الامتحان المرسل من البوت غير موجود في TeacherPro.",
-        404,
-      );
+    }
 
-    const incomingPages = Array.isArray(body.pages)
-      ? body.pages
-      : Array.isArray(body.images)
-        ? body.images
-        : Array.isArray(body.files)
-          ? body.files
-          : Array.isArray(body.photos)
-            ? body.photos
-            : [];
-    const pages = sanitizePages(incomingPages);
-    const sourceMessageIds = readStringArray(
-      body.sourceMessageIds || body.messageIds || body.message_ids,
-    );
-    const derivedSourceMessageIds =
-      sourceMessageIds.length > 0
-        ? sourceMessageIds
-        : pages
-            .map((page) => String(page.messageId || "").trim())
-            .filter(Boolean);
-    const incomingTelegramUserId = readIncomingTelegramUserId(
-      body as Record<string, unknown>,
-    );
-    const incomingTelegramUsername = readIncomingTelegramUsername(
-      body as Record<string, unknown>,
-    );
-    const incomingTelegramChatId = readIncomingTelegramChatId(
-      body as Record<string, unknown>,
-    );
+    const eligibilityData = await loadStudentExamEligibility(db, studentId, examId, {
+      requireActiveChapter: true,
+      checkAvailability: true,
+      checkRegistration: true,
+      checkLeave: true,
+    });
+    if (!eligibilityData.student) return validationError("الطالب غير موجود.", 404);
+    if (!eligibilityData.exam) return validationError("الامتحان غير موجود.", 404);
+    if (!eligibilityData.eligibility?.eligible) {
+      return validationError(eligibilityData.eligibility?.reason || "الطالب غير مؤهل لهذا الامتحان.", 409);
+    }
+    const sourceMessageIds = readStringArray(body.sourceMessageIds || body.messageIds || body.message_ids);
+    const derivedSourceMessageIds = sourceMessageIds.length ? sourceMessageIds : pages.map((page) => String(page.messageId || "").trim()).filter(Boolean);
+    const incomingTelegramUserId = readIncomingTelegramUserId(body);
+    const incomingTelegramUsername = readIncomingTelegramUsername(body);
+    const incomingTelegramChatId = readIncomingTelegramChatId(body);
     const submittedAt = parseDateValue(body.submittedAt) || new Date();
-
-    const matchInfo = resolveSubmissionMatchInfo(
-      body as Record<string, unknown>,
-      student,
-    );
-    const requestedSubmissionStatus =
-      textValue(body.status, 120) || "بانتظار التصحيح";
-    const submissionStatus =
-      requestedSubmissionStatus === "مكتمل" &&
-      isManualReviewMatch(matchInfo.matchType)
-        ? "بانتظار التصحيح"
-        : requestedSubmissionStatus;
+    const requestedStatus = textValue(body.status, 120) || "بانتظار التصحيح";
 
     const result = await db.$transaction(async (tx) => {
-      const gradeWriteback = await syncAcademicGradeWriteback({
-        tx,
-        studentId,
-        examId,
-        status: "درجة",
-        score: null,
-        sourceLabel: "مستلم بوت تيليجرام",
-        notes: "تم استلام التسليم من بوت تيليجرام وينتظر التصحيح الإلكتروني.",
-        allowBlankGrade: true,
-        preserveExistingScoreWhenBlank: true,
-        blockOnLeave: false,
+      await lockStudentsAcademicState(tx, [studentId]);
+      const freshEligibilityData = await loadStudentExamEligibility(tx, studentId, examId, {
+        requireActiveChapter: true,
+        checkAvailability: true,
+        checkRegistration: true,
+        checkLeave: true,
       });
-      if (!gradeWriteback) {
-        throw new AcademicGradeWritebackError(
-          "تعذر إنشاء درجة انتظار مرتبطة بمستلم البوت.",
+      if (!freshEligibilityData.student) {
+        throw new TelegramSubmissionValidationError("الطالب غير موجود.", 404);
+      }
+      if (!freshEligibilityData.exam) {
+        throw new TelegramSubmissionValidationError("الامتحان غير موجود.", 404);
+      }
+      if (!freshEligibilityData.eligibility?.eligible) {
+        throw new TelegramSubmissionValidationError(
+          freshEligibilityData.eligibility?.reason || "الطالب غير مؤهل لهذا الامتحان.",
+          409,
         );
       }
-      const grade = gradeWriteback.grade;
+      const freshStudent = await tx.student.findUniqueOrThrow({ where: { id: studentId } });
+      const matchInfo = resolveSubmissionMatchInfo(body, freshStudent);
+      const submissionStatus =
+        requestedStatus === "مكتمل" && isManualReviewMatch(matchInfo.matchType)
+          ? "بانتظار التصحيح"
+          : requestedStatus;
 
-      const submission = await tx.telegramExamSubmission.upsert({
+      const existing = await tx.telegramExamSubmission.findUnique({
         where: { studentId_examId: { studentId, examId } },
-        update: {
-          gradeId: grade.id,
-          telegramUserId: incomingTelegramUserId,
-          telegramUsername: incomingTelegramUsername,
-          telegramChatId: incomingTelegramChatId,
-          matchType: matchInfo.matchType,
-          matchSource: matchInfo.matchSource,
-          matchDetails: matchInfo.matchDetails,
-          sourceMessageIds: safeJsonStringify(derivedSourceMessageIds),
-          pages: safeJsonStringify(pages),
-          pageCount:
-            pages.length ||
-            Math.max(0, Math.trunc(numberValue(body.pageCount, 0))),
-          status: submissionStatus,
-          notes: textValue(body.notes, 4000),
-          submittedAt,
-          receivedAt: new Date(),
-        },
-        create: {
-          studentId,
-          examId,
-          gradeId: grade.id,
-          telegramUserId: incomingTelegramUserId,
-          telegramUsername: incomingTelegramUsername,
-          telegramChatId: incomingTelegramChatId,
-          matchType: matchInfo.matchType,
-          matchSource: matchInfo.matchSource,
-          matchDetails: matchInfo.matchDetails,
-          sourceMessageIds: safeJsonStringify(derivedSourceMessageIds),
-          pages: safeJsonStringify(pages),
-          pageCount:
-            pages.length ||
-            Math.max(0, Math.trunc(numberValue(body.pageCount, 0))),
-          status: submissionStatus,
-          notes: textValue(body.notes, 4000),
-          submittedAt,
-        },
-        include: { student: true, exam: true },
+        select: { id: true, gradeId: true, _count: { select: { versions: true } } },
       });
+      // Remove only the legacy blank Telegram placeholder; never touch an approved grade.
+      if (existing?.gradeId) {
+        const linkedGrade = await tx.grade.findUnique({ where: { id: existing.gradeId }, select: { id: true, status: true, score: true, notes: true } });
+        if (linkedGrade?.status === "درجة" && linkedGrade.score === null && /تيليجرام|بانتظار التصحيح|مستلم بوت/i.test(linkedGrade.notes || "")) {
+          await tx.telegramExamSubmission.update({ where: { id: existing.id }, data: { gradeId: null } });
+          await tx.grade.delete({ where: { id: linkedGrade.id } });
+        }
+      }
 
-      return {
-        submission,
-        grade,
-        academicRecalculation: gradeWriteback?.academicRecalculation || null,
+      const data = {
+        gradeId: null,
+        telegramUserId: incomingTelegramUserId,
+        telegramUsername: incomingTelegramUsername,
+        telegramChatId: incomingTelegramChatId,
+        matchType: matchInfo.matchType,
+        matchSource: matchInfo.matchSource,
+        matchDetails: matchInfo.matchDetails,
+        sourceMessageIds: safeJsonStringify(derivedSourceMessageIds),
+        pages: safeJsonStringify(pages),
+        pageCount,
+        status: submissionStatus,
+        notes: textValue(body.notes, 4000),
+        submittedAt,
+        receivedAt: new Date(),
       };
-    });
+      const submission = existing
+        ? await tx.telegramExamSubmission.update({ where: { id: existing.id }, data, include: { student: true, exam: true } })
+        : await tx.telegramExamSubmission.create({ data: { studentId, examId, ...data }, include: { student: true, exam: true } });
+      const version = (existing?._count.versions || 0) + 1;
+      await tx.telegramExamSubmissionVersion.create({
+        data: {
+          id: `tgver_${randomUUID()}`,
+          submissionId: submission.id,
+          version,
+          sourceMessageIds: data.sourceMessageIds,
+          pages: data.pages,
+          pageCount,
+          status: submissionStatus,
+          notes: data.notes,
+          telegramUserId: incomingTelegramUserId,
+          telegramUsername: incomingTelegramUsername,
+          telegramChatId: incomingTelegramChatId,
+          submittedAt,
+          receivedAt: data.receivedAt,
+        },
+      });
+      const academicRecalculation = await recalculateStudentsAcademicState([studentId], { tx });
+      return { submission, version, academicRecalculation };
+    }, { isolationLevel: "Serializable" });
 
-    await writeSystemAuditLog("التصحيح الإلكتروني", "استلام مستلم تيليجرام وربطه بدرجة", {
-      submissionId: result.submission.id,
-      studentId: result.submission.studentId,
-      examId: result.submission.examId,
-      gradeId: result.grade.id,
-      matchType: result.submission.matchType,
-      status: result.submission.status,
-      pageCount: result.submission.pageCount,
-      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+    await writeSystemAuditLog("التصحيح الإلكتروني", "حفظ إصدار مستلم تيليجرام بدون درجة فارغة", {
+      submissionId: result.submission.id, studentId, examId, version: result.version,
+      matchType: result.submission.matchType, pageCount: result.submission.pageCount,
     }, { userName: "Telegram Bot" });
-
-    return NextResponse.json(
-      {
-        ok: true,
-        submission: normalizeSubmission(
-          result.submission as unknown as Record<string, unknown>,
-        ),
-        grade: result.grade,
-        academicRecalculation: result.academicRecalculation,
-      },
-      { status: 201 },
-    );
+    return NextResponse.json({
+      ok: true,
+      submission: normalizeSubmission(result.submission as unknown as Record<string, unknown>),
+      version: result.version,
+      grade: null,
+      academicRecalculation: result.academicRecalculation,
+    }, { status: 201 });
   } catch (error) {
-    if (error instanceof AcademicGradeWritebackError) {
+    if (error instanceof TelegramSubmissionValidationError) {
       return validationError(error.message, error.status);
     }
     return routeErrorResponse(error, "تعذر استقبال تسليم البوت حالياً.");
@@ -716,35 +716,51 @@ export async function PUT(req: NextRequest) {
     const id = textValue(body.id, 120);
     if (!id) return validationError("تعذر تحديد مستلم البوت المطلوب.");
 
-    const current = await db.telegramExamSubmission.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        studentId: true,
-        examId: true,
-        gradeId: true,
-        matchType: true,
-        status: true,
-      },
-    });
-    if (!current)
-      return validationError("مستلم البوت غير موجود أو تم حذفه.", 404);
-
-    const nextStatus =
-      body.status !== undefined
-        ? textValue(body.status, 120) || "بانتظار التصحيح"
-        : current.status;
-    if (
-      nextStatus === "مكتمل" &&
-      isManualReviewMatch(current.matchType) &&
-      !isTruthyConfirmation(body.confirmManualReview)
-    ) {
-      return validationError(
-        "هذا المستلم يحتاج مراجعة يدوية قبل اعتماده كمكتمل. أكد المراجعة اليدوية ثم أعد المحاولة.",
-      );
-    }
-
     const result = await db.$transaction(async (tx) => {
+      const initial = await tx.telegramExamSubmission.findUnique({
+        where: { id },
+        select: { studentId: true },
+      });
+      if (!initial) {
+        throw new TelegramSubmissionValidationError(
+          "مستلم البوت غير موجود أو تم حذفه.",
+          404,
+        );
+      }
+
+      await lockStudentsAcademicState(tx, [initial.studentId]);
+      const current = await tx.telegramExamSubmission.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          studentId: true,
+          examId: true,
+          gradeId: true,
+          matchType: true,
+          status: true,
+        },
+      });
+      if (!current) {
+        throw new TelegramSubmissionValidationError(
+          "مستلم البوت غير موجود أو تم حذفه.",
+          404,
+        );
+      }
+
+      const nextStatus =
+        body.status !== undefined
+          ? textValue(body.status, 120) || "بانتظار التصحيح"
+          : current.status;
+      if (
+        nextStatus === "مكتمل" &&
+        isManualReviewMatch(current.matchType) &&
+        !isTruthyConfirmation(body.confirmManualReview)
+      ) {
+        throw new TelegramSubmissionValidationError(
+          "هذا المستلم يحتاج مراجعة يدوية قبل اعتماده كمكتمل. أكد المراجعة اليدوية ثم أعد المحاولة.",
+        );
+      }
+
       const data: Record<string, string> = {};
       if (body.status !== undefined) data.status = nextStatus;
       if (body.notes !== undefined) data.notes = textValue(body.notes, 4000);
@@ -797,7 +813,7 @@ export async function PUT(req: NextRequest) {
         grade: gradeWriteback?.grade || null,
         academicRecalculation,
       };
-    });
+    }, { isolationLevel: "Serializable" });
 
     await writeRequestAuditLog(req, "التصحيح الإلكتروني", "تحديث مستلم تيليجرام وربط الدرجة", {
       submissionId: result.submission.id,
@@ -817,6 +833,9 @@ export async function PUT(req: NextRequest) {
       academicRecalculation: result.academicRecalculation,
     });
   } catch (error) {
+    if (error instanceof TelegramSubmissionValidationError) {
+      return validationError(error.message, error.status);
+    }
     if (error instanceof AcademicGradeWritebackError) {
       return validationError(error.message, error.status);
     }
@@ -827,41 +846,39 @@ export async function PUT(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const authError = await requirePermission(req, "correction.manage");
   if (authError) return authError;
-
   try {
     const schemaReady = await ensureTelegramSubmissionSchema();
-    if (!schemaReady.ok) {
-      resetTelegramSubmissionSchemaEnsureCache();
-      return NextResponse.json(
-        { error: telegramSubmissionSchemaMessage },
-        { status: 503 },
-      );
-    }
-
-    const { searchParams } = new URL(req.url);
-    const id = textValue(searchParams.get("id"), 120);
+    if (!schemaReady.ok) return NextResponse.json({ error: telegramSubmissionSchemaMessage }, { status: 503 });
+    const id = textValue(new URL(req.url).searchParams.get("id"), 120);
     if (!id) return validationError("تعذر تحديد مستلم البوت المطلوب.");
-    const deleted = await db.telegramExamSubmission.delete({
-      where: { id },
-      select: {
-        id: true,
-        studentId: true,
-        examId: true,
-        gradeId: true,
-        status: true,
-        matchType: true,
-      },
+
+    const result = await db.$transaction(async (tx) => {
+      const current = await tx.telegramExamSubmission.findUnique({
+        where: { id },
+        select: { id: true, studentId: true, examId: true, gradeId: true, status: true, matchType: true },
+      });
+      if (!current) throw new Error("مستلم البوت غير موجود أو تم حذفه.");
+      await lockStudentsAcademicState(tx, [current.studentId]);
+      let deletedPlaceholderGradeId: string | null = null;
+      if (current.gradeId) {
+        const grade = await tx.grade.findUnique({ where: { id: current.gradeId }, select: { id: true, status: true, score: true, notes: true } });
+        if (grade?.status === "درجة" && grade.score === null && /تيليجرام|بانتظار التصحيح|مستلم بوت/i.test(grade.notes || "")) {
+          await tx.telegramExamSubmission.update({ where: { id }, data: { gradeId: null } });
+          await tx.grade.delete({ where: { id: grade.id } });
+          deletedPlaceholderGradeId = grade.id;
+        }
+      }
+      await tx.telegramExamSubmission.delete({ where: { id } });
+      const academicRecalculation = await recalculateStudentsAcademicState([current.studentId], { tx });
+      return { ...current, deletedPlaceholderGradeId, academicRecalculation };
+    }, { isolationLevel: "Serializable" });
+    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "حذف مستلم تيليجرام وتنظيف الدرجة الفارغة وإعادة الاحتساب", {
+      submissionId: result.id, studentId: result.studentId, examId: result.examId,
+      gradeId: result.gradeId, deletedPlaceholderGradeId: result.deletedPlaceholderGradeId,
+      recalculatedStudents: result.academicRecalculation.students.length,
     });
-    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "حذف مستلم تيليجرام", {
-      submissionId: deleted.id,
-      studentId: deleted.studentId,
-      examId: deleted.examId,
-      gradeId: deleted.gradeId,
-      status: deleted.status,
-      matchType: deleted.matchType,
-    });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, examAvailableAgain: true, deletedPlaceholderGradeId: result.deletedPlaceholderGradeId, academicRecalculation: result.academicRecalculation });
   } catch (error) {
-    return routeErrorResponse(error, "تعذر حذف مستلم البوت حالياً.");
+    return routeErrorResponse(error, error instanceof Error ? error.message : "تعذر حذف مستلم البوت حالياً.");
   }
 }

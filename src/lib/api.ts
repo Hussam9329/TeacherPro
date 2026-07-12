@@ -799,6 +799,18 @@ export interface StudentProfileLogResponse {
   studentId: string;
   grades: Array<Record<string, unknown>>;
   exams?: Array<Record<string, unknown>>;
+  examStates?: Array<{
+    examId: string;
+    code: string;
+    label: string;
+    reason: string;
+    withinGrace: boolean;
+    hasLeave: boolean;
+    gradeId: string | null;
+    gradeStatus: string | null;
+    score: number | null;
+  }>;
+  examSummary?: { total: number; withGrade: number; withoutGrade: number };
   opportunityLogs: Array<Record<string, unknown>>;
   studentLeaves: Array<Record<string, unknown>>;
   studentCalls: Array<Record<string, unknown>>;
@@ -1631,10 +1643,15 @@ export const studentProfileLogApi = {
 };
 
 export const academicRepairApi = {
-  run: () =>
-    apiPost("students/academic-repair", {}) as Promise<
+  preview: () =>
+    apiGet("students/academic-repair") as Promise<
       ApiResult & { data?: AcademicRepairResponse }
     >,
+  run: () =>
+    apiPost("students/academic-repair", {
+      confirmImpact: true,
+      confirmText: "إصلاح أكاديمي شامل",
+    }) as Promise<ApiResult & { data?: AcademicRepairResponse }>,
 };
 
 export const syncVersionApi = {
@@ -1887,7 +1904,8 @@ export const correctionSheetApi = {
   add: (sheet: Record<string, unknown>) => apiPost("correction-sheets", sheet),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("correction-sheets", { id, ...updates }),
-  remove: (id: string) => apiDelete("correction-sheets", id),
+  remove: (id: string, gradeAction: "keep" | "revoke" = "keep") =>
+    apiDelete("correction-sheets", id, { gradeAction }),
 };
 
 // ─── User API ─────────────────────────────────────────────────────────────────

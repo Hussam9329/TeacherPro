@@ -7,7 +7,10 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 let failed = false;
 const must = (condition, ok, bad = ok) => {
   if (condition) console.log(`✅ ${ok}`);
-  else { failed = true; console.error(`❌ ${bad}`); }
+  else {
+    failed = true;
+    console.error(`❌ ${bad}`);
+  }
 };
 
 const gradeRoute = read("src/app/api/grades/route.ts");
@@ -24,7 +27,9 @@ const gradeRecords = read("src/components/teacher-pro/grade-records.tsx");
 const examNew = read("src/components/teacher-pro/exam-new.tsx");
 const examRecords = read("src/components/teacher-pro/exam-records.tsx");
 const leaveRoute = read("src/app/api/student-leaves/route.ts");
-const migration = read("prisma/migrations/20260712143000_grade_exam_integrity/migration.sql");
+const migration = read(
+  "prisma/migrations/20260712143000_grade_exam_integrity/migration.sql",
+);
 const pkg = JSON.parse(read("package.json"));
 
 must(
@@ -52,9 +57,10 @@ must(
 );
 
 must(
-  writeback.includes('student.status === "مفصول"') &&
-    writeback.includes('student.status === "مؤرشف"') &&
-    writeback.includes("courseIds.includes(student.courseId)") &&
+  writeback.includes("evaluateStudentExamEligibility") &&
+    writeback.includes("allowDismissedExistingGradeCorrection") &&
+    writeback.includes("lockStudentsAcademicState") &&
+    writeback.includes("withSerializableTransaction") &&
     correctionRoute.includes("syncAcademicGradeWriteback") &&
     telegramRoute.includes("syncAcademicGradeWriteback"),
   "التصحيح والبوت يخضعان لنفس فحص حالة الطالب والدورة مثل تسجيل الدرجات",
@@ -73,7 +79,7 @@ must(
 
 must(
   writeback.includes('status === "درجة" ? score : null') &&
-    migration.includes('WHERE "status" IN (\'غائب\', \'غش\')') &&
+    migration.includes("WHERE \"status\" IN ('غائب', 'غش')") &&
     migration.includes('"status" = \'درجة\' OR "score" IS NULL') &&
     leaveRoute.includes('backup.status === "درجة" ? backup.score : null'),
   "التحويل إلى غائب أو غش ينظف الدرجة الرقمية مع قيد قاعدة بيانات",
@@ -90,8 +96,8 @@ must(
 );
 
 must(
-  writeback.includes("getExamEntryAvailability(exam)") &&
-    writeback.includes("لا يمكن اعتماد الدرجة") &&
+  writeback.includes("checkAvailability: input.enforceExamAvailability !== false") &&
+    writeback.includes("eligibility.reason") &&
     gradeClassification.includes('"unavailable-exam"') &&
     gradeRecords.includes("غير محتسبة حالياً"),
   "الامتحان المعطل أو المستقبلي يرفض الدرجات ويظهر سبب عدم الاحتساب للقديم",
@@ -125,10 +131,11 @@ must(
 );
 
 must(
-  botRoute.includes("getExamEntryAvailability(exam).available") &&
-    !botRoute.includes("where: { active: true") &&
-    botRoute.includes("isExamOnOrAfterStudentRegistration"),
-  "قائمة امتحانات البوت تستخدم حالة الإتاحة الزمنية الموحدة",
+  botRoute.includes("evaluateStudentExamEligibility") &&
+    botRoute.includes("checkAvailability: true") &&
+    botRoute.includes("checkRegistration: true") &&
+    !botRoute.includes("where: { active: true"),
+  "قائمة امتحانات البوت تستخدم حالة الإتاحة والأهلية الزمنية الموحدة",
   "البوت يجب ألا يعتمد على active:true الخام.",
 );
 
@@ -182,8 +189,11 @@ must(
 );
 
 must(
-  pkg.scripts?.["test:grade-exam-policy-integrity"] === "node scripts/test-grade-exam-policy-integrity.mjs" &&
-    String(pkg.scripts?.["test:side-effects"] || "").includes("test:grade-exam-policy-integrity"),
+  pkg.scripts?.["test:grade-exam-policy-integrity"] ===
+    "node scripts/test-grade-exam-policy-integrity.mjs" &&
+    String(pkg.scripts?.["test:side-effects"] || "").includes(
+      "test:grade-exam-policy-integrity",
+    ),
   "اختبار سياسة الدرجات والامتحانات مضاف للحزمة الشاملة",
   "يجب تشغيل الاختبار الجديد ضمن test:side-effects.",
 );

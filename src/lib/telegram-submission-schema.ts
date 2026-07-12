@@ -118,6 +118,31 @@ async function ensureTelegramSubmissionSchemaNow(): Promise<EnsureResult> {
     await execute(
       `CREATE INDEX IF NOT EXISTS "TelegramExamSubmission_receivedAt_idx" ON "TelegramExamSubmission"("receivedAt");`,
     );
+    await execute(
+      `CREATE INDEX IF NOT EXISTS "TelegramExamSubmission_gradeId_idx" ON "TelegramExamSubmission"("gradeId");`,
+    );
+
+    await execute(`
+      CREATE TABLE IF NOT EXISTS "TelegramExamSubmissionVersion" (
+        "id" TEXT NOT NULL,
+        "submissionId" TEXT NOT NULL,
+        "version" INTEGER NOT NULL,
+        "sourceMessageIds" TEXT NOT NULL DEFAULT '[]',
+        "pages" TEXT NOT NULL DEFAULT '[]',
+        "pageCount" INTEGER NOT NULL DEFAULT 0,
+        "status" TEXT NOT NULL DEFAULT 'بانتظار التصحيح',
+        "notes" TEXT NOT NULL DEFAULT '',
+        "telegramUserId" TEXT NOT NULL DEFAULT '',
+        "telegramUsername" TEXT NOT NULL DEFAULT '',
+        "telegramChatId" TEXT NOT NULL DEFAULT '',
+        "submittedAt" TIMESTAMP(3),
+        "receivedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "TelegramExamSubmissionVersion_pkey" PRIMARY KEY ("id")
+      );
+    `);
+    await execute(`CREATE UNIQUE INDEX IF NOT EXISTS "TelegramExamSubmissionVersion_submissionId_version_key" ON "TelegramExamSubmissionVersion"("submissionId", "version");`);
+    await execute(`CREATE INDEX IF NOT EXISTS "TelegramExamSubmissionVersion_submissionId_createdAt_idx" ON "TelegramExamSubmissionVersion"("submissionId", "createdAt");`);
 
     await execute(`
       DO $$
@@ -141,6 +166,25 @@ async function ensureTelegramSubmissionSchemaNow(): Promise<EnsureResult> {
           ALTER TABLE "TelegramExamSubmission"
             ADD CONSTRAINT "TelegramExamSubmission_examId_fkey"
             FOREIGN KEY ("examId") REFERENCES "Exam"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+        END IF;
+      END $$;
+    `);
+    await execute(`
+      UPDATE "TelegramExamSubmission" submission SET "gradeId" = NULL
+      WHERE "gradeId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Grade" grade WHERE grade."id" = submission."gradeId");
+    `);
+    await execute(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'TelegramExamSubmission_gradeId_fkey') THEN
+          ALTER TABLE "TelegramExamSubmission"
+            ADD CONSTRAINT "TelegramExamSubmission_gradeId_fkey"
+            FOREIGN KEY ("gradeId") REFERENCES "Grade"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'TelegramExamSubmissionVersion_submissionId_fkey') THEN
+          ALTER TABLE "TelegramExamSubmissionVersion"
+            ADD CONSTRAINT "TelegramExamSubmissionVersion_submissionId_fkey"
+            FOREIGN KEY ("submissionId") REFERENCES "TelegramExamSubmission"("id") ON DELETE CASCADE ON UPDATE CASCADE;
         END IF;
       END $$;
     `);

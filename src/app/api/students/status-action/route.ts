@@ -8,6 +8,7 @@ import { ARCHIVED_STUDENT_STATUS } from "@/lib/student-delete-impact";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { lockStudentsAcademicState } from "@/lib/academic-student-lock-server";
 
 type RegistryStatusAction = "dismiss" | "reactivate" | "restore";
 
@@ -69,6 +70,9 @@ export async function POST(req: NextRequest) {
   try {
     if (action === "dismiss") {
       const requestedType = cleanText(body.dismissalType || body.type) || "فصل مؤقت";
+      if (!new Set(["فصل مؤقت", "فصل نهائي"]).has(requestedType)) {
+        return NextResponse.json({ error: "نوع الفصل غير معروف." }, { status: 400 });
+      }
       const reason = cleanText(body.reason);
       const notes = cleanText(body.notes);
       if (!reason) {
@@ -79,8 +83,12 @@ export async function POST(req: NextRequest) {
       }
 
       const result = await withSerializableTransaction(async (tx) => {
+        await lockStudentsAcademicState(tx, [studentId]);
         const student = await tx.student.findUnique({ where: { id: studentId } });
         if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
+        if (student.status === "مفصول") {
+          throw Object.assign(new Error("student already dismissed"), { statusCode: 409, errorKind: "already-dismissed" });
+        }
         if (student.status === ARCHIVED_STUDENT_STATUS) {
           throw Object.assign(new Error("archived student cannot be dismissed"), { statusCode: 409 });
         }
@@ -117,6 +125,10 @@ export async function POST(req: NextRequest) {
                 examId: null,
                 action: "خصم",
                 amount: deductedOpportunities,
+                requestedAmount: deductedOpportunities,
+                appliedAmount: deductedOpportunities,
+                balanceBefore: deductedOpportunities,
+                balanceAfter: 0,
                 reason: `فصل الطالب: ${nextReason}`,
                 chapterId: activeChapter?.id || null,
                 chapterNameSnapshot: activeChapter?.name || null,
@@ -164,6 +176,7 @@ export async function POST(req: NextRequest) {
 
     if (action === "restore") {
       const result = await withSerializableTransaction(async (tx) => {
+        await lockStudentsAcademicState(tx, [studentId]);
         const student = await tx.student.findUnique({ where: { id: studentId } });
         if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
         if (student.status !== ARCHIVED_STUDENT_STATUS) {
@@ -235,13 +248,17 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await withSerializableTransaction(async (tx) => {
+      await lockStudentsAcademicState(tx, [studentId]);
       const student = await tx.student.findUnique({ where: { id: studentId } });
       if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
       if (student.status === ARCHIVED_STUDENT_STATUS) {
         throw Object.assign(new Error("archived student must be restored explicitly"), { statusCode: 409, errorKind: "archived-reactivation" });
       }
+      if (student.status !== "مفصول") {
+        throw Object.assign(new Error("student is not dismissed"), { statusCode: 409, errorKind: "not-dismissed" });
+      }
 
-      const shouldGrantFinalChance = student.status === "مفصول";
+      const shouldGrantFinalChance = true;
       const activeChapter = await getActiveChapterForCourse(tx, student.courseId);
       const previousReason = student.dismissalReason || student.dismissalType || "بدون سبب مسجل";
 
@@ -262,6 +279,10 @@ export async function POST(req: NextRequest) {
           examId: null,
           action: "إعادة تفعيل",
           amount: 0,
+          requestedAmount: 0,
+          appliedAmount: 0,
+          balanceBefore: Math.max(0, Math.trunc(Number(student.opportunities || 0))),
+          balanceAfter: Math.max(0, Math.trunc(Number(student.opportunities || 0))),
           reason: "تثبيت إعادة التفعيل: لا يعاد فصل الطالب بسبب سجلات قديمة، وأي إجراء جديد بعد الفرصة يصبح نهائياً",
           chapterId: activeChapter?.id || null,
           chapterNameSnapshot: activeChapter?.name || null,
@@ -275,6 +296,10 @@ export async function POST(req: NextRequest) {
               examId: null,
               action: "فرصة أخيرة بعد تعهد",
               amount: 1,
+              requestedAmount: 1,
+              appliedAmount: 1,
+              balanceBefore: 0,
+              balanceAfter: 1,
               reason: "إرجاع الطالب بعد إعادة التفعيل بفرصة واحدة فقط",
               chapterId: activeChapter?.id || null,
               chapterNameSnapshot: activeChapter?.name || null,
@@ -330,7 +355,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            errorKind === "archived-reactivation"
+            errorKind === "already-dismissed"
+              ? "الطالب مفصول أصلاً. لا يمكن إنشاء حركة فصل وملاحظة مكررتين."
+              : errorKind === "archived-reactivation"
               ? "الطالب مؤرشف. استخدم إجراء «استعادة من الأرشيف»؛ إعادة تفعيل المفصولين لا تستعيد المؤرشفين."
               : action === "restore"
                 ? "إجراء الاستعادة مخصص للطلاب المؤرشفين فقط."
