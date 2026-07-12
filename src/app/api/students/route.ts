@@ -15,7 +15,7 @@ import {
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
 import { getRequiredTextError } from "@/lib/validation";
-import { normalizeArabicText } from "@/lib/route-helpers";
+import { normalizeArabicText, isMissingDatabaseObjectError } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
 import {
   ARCHIVED_STUDENT_STATUS,
@@ -871,6 +871,16 @@ export async function POST(req: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
+    if (isMissingDatabaseObjectError(error)) {
+      console.error("[API] /api/students missing database object:", error);
+      return NextResponse.json(
+        {
+          error:
+            "تعذر تسجيل الطالب لأن ترحيلات قاعدة البيانات الأخيرة غير مطبّقة. شغّل `npm run db:deploy` على الخادم ثم أعد المحاولة.",
+        },
+        { status: 503 },
+      );
+    }
     return getPrismaStudentErrorResponse(error);
   }
 }
@@ -1433,6 +1443,19 @@ export async function PUT(req: NextRequest) {
       source: "database",
     });
   } catch (error) {
+    // إذا كانت ترحيلات قاعدة البيانات الأخيرة غير مطبّقة (مثل جدول
+    // StudentEnrollmentArchive أو قيود الدرجة/الامتحان)، أعطِ رسالة واضحة
+    // بدل 500 عام كي يعرف المدير أنه يجب تشغيل npm run db:deploy.
+    if (isMissingDatabaseObjectError(error)) {
+      console.error("[API] /api/students missing database object:", error);
+      return NextResponse.json(
+        {
+          error:
+            "تعذر حفظ الطالب لأن ترحيلات قاعدة البيانات الأخيرة غير مطبّقة. شغّل `npm run db:deploy` على الخادم ثم أعد المحاولة.",
+        },
+        { status: 503 },
+      );
+    }
     return getPrismaStudentErrorResponse(error);
   }
 }
