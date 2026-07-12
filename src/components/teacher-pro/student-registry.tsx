@@ -846,6 +846,11 @@ export function StudentRegistryView() {
       .activeChapterForCourse(courseId)
       .then((response) => {
         if (cancelled) return;
+        if (!response) {
+          setEditTargetActiveChapterFromServer(null);
+          setEditTargetActiveChapterConflict(false);
+          return;
+        }
         setEditTargetActiveChapterFromServer(response.activeChapter);
         setEditTargetActiveChapterConflict(Boolean(response.conflict));
       })
