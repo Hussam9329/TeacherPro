@@ -313,9 +313,7 @@ export async function POST(req: NextRequest) {
           kind: "إجراء",
           text: shouldGrantFinalChance
             ? `إعادة تفعيل الطالب ومنحه فرصة واحدة بعد الفصل السابق: ${previousReason}`
-            : student.status === ARCHIVED_STUDENT_STATUS
-              ? "استعادة الطالب من الأرشيف"
-              : "إعادة تفعيل الطالب",
+            : "إعادة تفعيل الطالب",
           sourceType: "student-status-action",
           sourceId: studentId,
         },
