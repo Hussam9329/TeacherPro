@@ -20,6 +20,12 @@ import {
   validateStudentCourseChoices,
 } from "@/lib/course-config";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import {
+  allocateStudentCodes,
+  ensureStudentCodeSequenceReady,
+  retryStudentCodeConflict,
+} from "@/lib/student-code-sequence";
 
 type BulkStudentPayload = {
   name?: unknown;
@@ -88,7 +94,23 @@ function asText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+class BulkStudentIntegrityError extends Error {
+  status: number;
+
+  constructor(message: string, status = 409) {
+    super(message);
+    this.name = "BulkStudentIntegrityError";
+    this.status = status;
+  }
+}
+
 function getPrismaStudentErrorResponse(error: unknown) {
+  if (error instanceof BulkStudentIntegrityError) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: error.status },
+    );
+  }
   const prismaError = error as { code?: string; meta?: { target?: unknown } };
   if (prismaError.code === "P2002") {
     const targetValue = prismaError.meta?.target;
@@ -404,69 +426,168 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const students = await db.$transaction(async (tx) => {
-      const existingCodes = await tx.student.findMany({
-        select: { code: true },
-        where: { code: { startsWith: "BIO-" } },
-      });
-      let nextCodeNumber =
-        existingCodes.reduce((max, student) => {
-          const match = student.code?.match(/^BIO-(\d+)$/);
-          return match ? Math.max(max, Number(match[1])) : max;
-        }, 0) + 1;
-      const createdStudents: unknown[] = [];
-      for (const {
-        payload,
-        phone,
-        parentPhone,
-        telegram,
-        opportunities,
-        graceDays,
-        resolvedSubSite,
-        uniqueKeys,
-      } of normalizedRows) {
-        const code = `BIO-${String(nextCodeNumber).padStart(3, "0")}`;
-        nextCodeNumber += 1;
-        const createdStudent = await tx.student.create({
-          data: {
-            name: asText(payload.name),
-            school: asText(payload.school),
-            gender: asText(payload.gender),
-            phone: sanitizePhoneInput(phone),
-            parentPhone: sanitizePhoneInput(parentPhone),
+    await ensureStudentCodeSequenceReady();
+    const result = await retryStudentCodeConflict(() =>
+      withSerializableTransaction(async (tx) => {
+        // Re-read courses and active chapters inside the creation transaction.
+        // The outer validation is only an early UX check and is never trusted
+        // as the final source during a concurrent course/chapter update.
+        const [freshCourses, freshActiveLinks] = await Promise.all([
+          tx.course.findMany({ where: { id: { in: courseIds } } }),
+          tx.courseChapter.findMany({
+            where: {
+              courseId: { in: courseIds },
+              active: true,
+              archived: false,
+            },
+            include: {
+              chapter: {
+                select: { id: true, name: true, opportunities: true },
+              },
+            },
+            orderBy: { id: "asc" },
+          }),
+        ]);
+        const freshCourseById = new Map(
+          (freshCourses as BulkCourse[]).map((course) => [course.id, course]),
+        );
+        const freshLinksByCourseId = new Map<
+          string,
+          BulkActiveCourseChapter[]
+        >();
+        for (const link of freshActiveLinks as BulkActiveCourseChapter[]) {
+          const bucket = freshLinksByCourseId.get(link.courseId) || [];
+          bucket.push(link);
+          freshLinksByCourseId.set(link.courseId, bucket);
+        }
+
+        const allocatedCodes = await allocateStudentCodes(
+          tx,
+          normalizedRows.length,
+        );
+        const createdStudents: unknown[] = [];
+        const executionWarnings: string[] = [];
+        for (const [
+          rowIndex,
+          {
+            payload,
+            phone,
+            parentPhone,
             telegram,
-            courseProgram: asText(payload.courseProgram) || null,
-            courseTerm:
-              asText(payload.courseProgram) === "كورسات"
-                ? asText(payload.courseTerm) || null
-                : null,
-            studyType: asText(payload.studyType) || null,
-            locationScope: asText(payload.locationScope) || null,
-            baghdadMode: asText(payload.baghdadMode) || null,
-            mainSite: asText(payload.mainSite || payload.locationScope),
-            subSite: resolvedSubSite || asText(payload.subSite),
-            code,
-            status: asText(payload.status) || "نشط",
-            dismissalType: "",
-            dismissalReason: "",
-            dismissalNotes: null,
-            createdAt: payload.createdAt
-              ? new Date(asText(payload.createdAt))
-              : new Date(),
-            opportunities,
-            baseOpportunities: opportunities,
-            accountingGraceDays: graceDays,
-            courseId: asText(payload.courseId),
-            ...uniqueKeys,
+            graceDays,
+            rowNo,
+            uniqueKeys,
           },
-        });
-        createdStudents.push(createdStudent);
-      }
-      return createdStudents;
-    });
+        ] of normalizedRows.entries()) {
+          const courseId = asText(payload.courseId);
+          const course = freshCourseById.get(courseId);
+          if (!course) {
+            throw new BulkStudentIntegrityError(
+              `السطر ${rowNo}: الدورة المحددة لم تعد موجودة. لم يتم تسجيل أي طالب.`,
+              400,
+            );
+          }
+          if (course.active === false) {
+            throw new BulkStudentIntegrityError(
+              `السطر ${rowNo}: هذه الدورة موقوفة عن التسجيل حالياً`,
+              400,
+            );
+          }
+
+          const courseProgram = asText(payload.courseProgram);
+          const courseTerm =
+            courseProgram === "كورسات" ? asText(payload.courseTerm) : "";
+          const studyType = asText(payload.studyType);
+          const locationScope = asText(payload.locationScope);
+          const baghdadMode = asText(payload.baghdadMode);
+          const subSite = asText(payload.subSite);
+          const choiceValidation = validateStudentCourseChoices(course, {
+            courseProgram,
+            courseTerm,
+            studyType,
+            locationScope,
+            baghdadMode,
+            subSite,
+          });
+          if (!choiceValidation.ok) {
+            throw new BulkStudentIntegrityError(
+              `السطر ${rowNo}: ${choiceValidation.error}`,
+              400,
+            );
+          }
+
+          const activeLinks = freshLinksByCourseId.get(courseId) || [];
+          if (activeLinks.length > 1) {
+            throw new BulkStudentIntegrityError(
+              `السطر ${rowNo}: لا يمكن التسجيل لأن هذه الدورة تحتوي أكثر من فصل نشط. لم يتم تسجيل أي طالب.`,
+            );
+          }
+          const activeChapter =
+            activeLinks.length === 1 ? activeLinks[0].chapter : null;
+          const opportunities = activeChapter
+            ? Math.max(0, Math.trunc(Number(activeChapter.opportunities || 0)))
+            : 0;
+          if (!activeChapter) {
+            executionWarnings.push(
+              `السطر ${rowNo}: هذه الدورة لا تحتوي على فصل نشط، الطالب سُجل بدون فرص.`,
+            );
+          } else if (opportunities <= 0) {
+            executionWarnings.push(
+              `السطر ${rowNo}: الفصل النشط "${activeChapter.name || "—"}" فرصه 0، الطالب بدأ بدون فرص.`,
+            );
+          }
+
+          const code = allocatedCodes[rowIndex];
+          const resolvedSubSite = resolveSubSite(
+            course,
+            studyType,
+            locationScope,
+            baghdadMode,
+            subSite,
+          );
+          const createdStudent = await tx.student.create({
+            data: {
+              name: asText(payload.name),
+              school: asText(payload.school),
+              gender: asText(payload.gender),
+              phone: sanitizePhoneInput(phone),
+              parentPhone: sanitizePhoneInput(parentPhone),
+              telegram,
+              courseProgram: courseProgram || null,
+              courseTerm: courseTerm || null,
+              studyType: studyType || null,
+              locationScope: locationScope || null,
+              baghdadMode: baghdadMode || null,
+              mainSite: asText(payload.mainSite || payload.locationScope),
+              subSite: resolvedSubSite || subSite,
+              code,
+              status: asText(payload.status) || "نشط",
+              dismissalType: "",
+              dismissalReason: "",
+              dismissalNotes: null,
+              createdAt: payload.createdAt
+                ? new Date(asText(payload.createdAt))
+                : new Date(),
+              opportunities,
+              baseOpportunities: opportunities,
+              accountingGraceDays: graceDays,
+              courseId,
+              ...uniqueKeys,
+            },
+          });
+          createdStudents.push(createdStudent);
+        }
+        return { students: createdStudents, warnings: executionWarnings };
+      }),
+    );
 
     return NextResponse.json(
-      { students, count: students.length, warnings, source: "database" },
+      {
+        students: result.students,
+        count: result.students.length,
+        warnings: result.warnings,
+        source: "database",
+      },
       { status: 201 },
     );
   } catch (error) {

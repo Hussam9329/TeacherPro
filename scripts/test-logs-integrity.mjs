@@ -7,8 +7,11 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 let failed = false;
 const pass = (message) => console.log(`✅ ${message}`);
-const fail = (message) => { failed = true; console.error(`❌ ${message}`); };
-const must = (condition, ok, bad = ok) => condition ? pass(ok) : fail(bad);
+const fail = (message) => {
+  failed = true;
+  console.error(`❌ ${message}`);
+};
+const must = (condition, ok, bad = ok) => (condition ? pass(ok) : fail(bad));
 
 const logsView = read("src/components/teacher-pro/logs.tsx");
 const logsRoute = read("src/app/api/logs/route.ts");
@@ -17,7 +20,8 @@ const auditDisplay = read("src/lib/audit-log-display.ts");
 const pkg = JSON.parse(read("package.json"));
 
 const logsHasLatestRequestGuard =
-  (logsView.includes("AbortController") && logsView.includes("signal: controller.signal")) ||
+  (logsView.includes("AbortController") &&
+    logsView.includes("signal: controller.signal")) ||
   (logsView.includes("useLatestRequest") &&
     logsView.includes("beginLogsRequest") &&
     logsView.includes("request.isLatest()") &&
@@ -26,7 +30,8 @@ const logsHasLatestRequestGuard =
 must(
   logsView.includes("logApi") &&
     logsHasLatestRequestGuard &&
-    logsView.includes("CountScopeSummary") && logsView.includes("بيانات النظام"),
+    logsView.includes("CountScopeSummary") &&
+    logsView.includes("بيانات النظام"),
   "صفحة السجلات تقرأ من النظام وتلغي الطلبات القديمة",
   "صفحة السجلات يجب أن تقرأ من logApi مع حماية Latest Request لا من كاش Zustand فقط.",
 );
@@ -42,7 +47,7 @@ must(
   api.includes("export type LogListQuery") &&
     api.includes("module: query.module") &&
     api.includes("user: query.user") &&
-    api.includes("apiGet<Pick<ServerData, \"logs\">"),
+    /apiGet<\s*Pick<ServerData, \"logs\">/s.test(api),
   "طبقة API تدعم فلاتر السجلات وخيارات الإلغاء",
   "logApi.list يجب أن يدعم q/module/user/page/pageSize و AbortController.",
 );
@@ -59,11 +64,12 @@ must(
 
 must(
   logsRoute.includes("logs.delete") &&
-    logsRoute.includes("حذف السجلات متاح لمدير النظام صاحب صلاحية حذف السجلات فقط"),
+    logsRoute.includes(
+      "حذف السجلات متاح لمدير النظام صاحب صلاحية حذف السجلات فقط",
+    ),
   "حذف سجل مفرد مقيد بالمدير وصلاحية logs.delete",
   "DELETE /api/logs يجب أن لا يكتفي بقراءة السجلات أو حذف غير مضبوط.",
 );
-
 
 must(
   logsView.includes("ملخص العملية") &&
@@ -83,8 +89,11 @@ must(
 );
 
 must(
-  pkg.scripts["test:logs-integrity"] === "node scripts/test-logs-integrity.mjs" &&
-    String(pkg.scripts["test:side-effects"] || "").includes("test:logs-integrity"),
+  pkg.scripts["test:logs-integrity"] ===
+    "node scripts/test-logs-integrity.mjs" &&
+    String(pkg.scripts["test:side-effects"] || "").includes(
+      "test:logs-integrity",
+    ),
   "اختبار السجلات مربوط داخل test:side-effects",
   "يجب ربط اختبار السجلات داخل package.json.",
 );

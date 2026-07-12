@@ -1,15 +1,16 @@
-import fs from 'node:fs';
+import fs from "node:fs";
 
 const files = {
-  coursesView: 'src/components/teacher-pro/courses.tsx',
-  coursesOverview: 'src/app/api/courses/overview/route.ts',
-  coursesRoute: 'src/app/api/courses/route.ts',
-  api: 'src/lib/api.ts',
-  store: 'src/lib/teacher-store.ts',
-  packageJson: 'package.json',
+  coursesView: "src/components/teacher-pro/courses.tsx",
+  coursesOverview: "src/app/api/courses/overview/route.ts",
+  coursesRoute: "src/app/api/courses/route.ts",
+  api: "src/lib/api.ts",
+  store: "src/lib/teacher-store.ts",
+  packageJson: "package.json",
+  serializableTransaction: "src/lib/serializable-transaction.ts",
 };
 
-const read = (file) => fs.readFileSync(file, 'utf8');
+const read = (file) => fs.readFileSync(file, "utf8");
 const assert = (condition, message) => {
   if (!condition) {
     console.error(`❌ ${message}`);
@@ -25,86 +26,160 @@ const coursesRoute = read(files.coursesRoute);
 const api = read(files.api);
 const store = read(files.store);
 const packageJson = read(files.packageJson);
+const serializableTransaction = read(files.serializableTransaction);
 
 assert(
-  coursesOverview.includes("source: 'database'") && coursesOverview.includes('db.course.findMany') && coursesOverview.includes('db.student.findMany') && coursesOverview.includes('db.exam.findMany'),
-  'تبويبة الدورات تملك API ملخص من قاعدة البيانات يشمل الدورات والطلاب والامتحانات',
+  coursesOverview.includes("source: 'database'") &&
+    coursesOverview.includes("db.course.findMany") &&
+    coursesOverview.includes("db.student.findMany") &&
+    coursesOverview.includes("db.exam.findMany"),
+  "تبويبة الدورات تملك API ملخص من قاعدة البيانات يشمل الدورات والطلاب والامتحانات",
 );
 assert(
-  coursesOverview.includes('deleteSafety') && coursesOverview.includes('canDelete') && coursesOverview.includes('blockers'),
-  'API الدورات يرجع حالة حذف آمنة وأسباب المنع من قاعدة البيانات',
+  coursesOverview.includes("deleteSafety") &&
+    coursesOverview.includes("canDelete") &&
+    coursesOverview.includes("blockers"),
+  "API الدورات يرجع حالة حذف آمنة وأسباب المنع من قاعدة البيانات",
 );
 assert(
-  coursesOverview.includes('activeChapter') && coursesOverview.includes('courseChapter.findMany') && coursesOverview.includes('opportunities'),
-  'API الدورات يرجع الفصل النشط وفرصه لكل دورة',
+  coursesOverview.includes("activeChapter") &&
+    coursesOverview.includes("courseChapter.findMany") &&
+    coursesOverview.includes("opportunities"),
+  "API الدورات يرجع الفصل النشط وفرصه لكل دورة",
 );
 assert(
-  coursesOverview.includes('usage') && coursesOverview.includes('programs') && coursesOverview.includes('studyTypes') && coursesOverview.includes('locations'),
-  'API الدورات يرجع استعمال الطلاب للإعدادات حتى تظهر أثر التعديل للمستخدم',
+  coursesOverview.includes("usage") &&
+    coursesOverview.includes("programs") &&
+    coursesOverview.includes("studyTypes") &&
+    coursesOverview.includes("locations"),
+  "API الدورات يرجع استعمال الطلاب للإعدادات حتى تظهر أثر التعديل للمستخدم",
 );
 assert(
-  api.includes('CourseOverviewResponse') && api.includes('overview: (options: ApiGetOptions = {})') && api.includes('courses/overview'),
-  'طبقة API الأمامية تدعم ملخص الدورات مع AbortController',
+  api.includes("CourseOverviewResponse") &&
+    api.includes("overview: (options: ApiGetOptions = {})") &&
+    api.includes("courses/overview"),
+  "طبقة API الأمامية تدعم ملخص الدورات مع AbortController",
 );
 assert(
-  coursesView.includes('courseApi.overview') && coursesView.includes('new AbortController()') && coursesView.includes('controller.abort()') && coursesView.includes('quietAbort: true'),
-  'صفحة الدورات تلغي طلبات التحميل القديمة ولا تعتمد على طلبات متداخلة',
+  coursesView.includes("courseApi.overview") &&
+    coursesView.includes("new AbortController()") &&
+    coursesView.includes("controller.abort()") &&
+    coursesView.includes("quietAbort: true"),
+  "صفحة الدورات تلغي طلبات التحميل القديمة ولا تعتمد على طلبات متداخلة",
 );
 assert(
-  coursesView.includes('const { loadSectionDataFromServer } = useTeacherStore();') && !coursesView.includes('const { courses, addCourse, updateCourse, toggleCourse, deleteCourse }'),
-  'صفحة الدورات لا تبني القائمة أو العمليات من كاش courses المحلي القديم',
+  coursesView.includes(
+    "const { loadSectionDataFromServer } = useTeacherStore();",
+  ) &&
+    !coursesView.includes(
+      "const { courses, addCourse, updateCourse, toggleCourse, deleteCourse }",
+    ),
+  "صفحة الدورات لا تبني القائمة أو العمليات من كاش courses المحلي القديم",
 );
 assert(
-  coursesView.includes('courseApi.add') && !coursesView.includes('addCourse({') && coursesView.includes('تمت إضافة الدورة من بيانات النظام'),
-  'إضافة الدورة صارت server-first ولا تولد ID محلي وهمي',
+  coursesView.includes("courseApi.add") &&
+    !coursesView.includes("addCourse({") &&
+    coursesView.includes("تمت إضافة الدورة من بيانات النظام"),
+  "إضافة الدورة صارت server-first ولا تولد ID محلي وهمي",
 );
 assert(
-  coursesView.includes('courseApi.update') && !coursesView.includes('toast.success("تم تعديل الدورة")') && coursesView.includes('بعد التحقق من الحفظ'),
-  'تعديل الدورة لا يظهر نجاحاً إلا بعد موافقة الخادم',
+  coursesView.includes("courseApi.update") &&
+    !coursesView.includes('toast.success("تم تعديل الدورة")') &&
+    coursesView.includes("بعد التحقق من الحفظ"),
+  "تعديل الدورة لا يظهر نجاحاً إلا بعد موافقة الخادم",
 );
 assert(
-  coursesView.includes('courseApi.remove') && !coursesView.includes('deleteCourse(deleteDialog.id)') && coursesView.includes('deleteSafety.canDelete'),
-  'حذف الدورة لا يعتمد على كاش ناقص ويستخدم فحص الأثر قبل التنفيذ',
+  coursesView.includes("courseApi.remove") &&
+    !coursesView.includes("deleteCourse(deleteDialog.id)") &&
+    coursesView.includes("deleteSafety.canDelete"),
+  "حذف الدورة لا يعتمد على كاش ناقص ويستخدم فحص الأثر قبل التنفيذ",
 );
 assert(
-  coursesView.includes('إيقاف الدورة عن التسجيل والاختيارات الجديدة') || coursesView.includes('إيقاف الدورة عن التسجيل'),
-  'تعطيل الدورة موضح للمستخدم كإيقاف للاختيارات الجديدة وليس حذفاً أو تغييراً للطلاب الحاليين',
+  coursesView.includes("إيقاف الدورة عن التسجيل والاختيارات الجديدة") ||
+    coursesView.includes("إيقاف الدورة عن التسجيل"),
+  "تعطيل الدورة موضح للمستخدم كإيقاف للاختيارات الجديدة وليس حذفاً أو تغييراً للطلاب الحاليين",
 );
 assert(
-  coursesView.includes('renderLoadingSkeleton') && coursesView.includes('animate-pulse'),
-  'صفحة الدورات تملك Skeleton Loading واضح وسلس',
+  coursesView.includes("renderLoadingSkeleton") &&
+    coursesView.includes("animate-pulse"),
+  "صفحة الدورات تملك Skeleton Loading واضح وسلس",
 );
 assert(
-  coursesView.includes('searchText') && coursesView.includes('statusFilter') && coursesView.includes('deleteFilter'),
-  'صفحة الدورات تملك بحث وفلاتر للحالة وإمكانية الحذف',
+  coursesView.includes("searchText") &&
+    coursesView.includes("statusFilter") &&
+    coursesView.includes("deleteFilter"),
+  "صفحة الدورات تملك بحث وفلاتر للحالة وإمكانية الحذف",
 );
 assert(
-  coursesView.includes('حالة الدورة') && coursesView.includes('حماية الحذف') && coursesView.includes('courseStatusFilterLabels') && coursesView.includes('courseDeleteFilterLabels'),
-  'فلاتر حالة الدورات واضحة ومفصولة بين حالة التسجيل وحماية الحذف',
+  coursesView.includes("حالة الدورة") &&
+    coursesView.includes("حماية الحذف") &&
+    coursesView.includes("courseStatusFilterLabels") &&
+    coursesView.includes("courseDeleteFilterLabels"),
+  "فلاتر حالة الدورات واضحة ومفصولة بين حالة التسجيل وحماية الحذف",
 );
 assert(
-  coursesView.includes('تصفير الفلاتر') && coursesView.includes('filteredStats') && !coursesView.includes('كل الحذف'),
-  'صفحة الدورات تعرض ملخص النتائج المفلترة وتمنع عبارات فلاتر مربكة',
+  coursesView.includes("تصفير الفلاتر") &&
+    coursesView.includes("filteredStats") &&
+    !coursesView.includes("كل الحذف"),
+  "صفحة الدورات تعرض ملخص النتائج المفلترة وتمنع عبارات فلاتر مربكة",
 );
 assert(
-  coursesView.includes('إجمالي الدورات') && coursesView.includes('نشطة للتسجيل') && coursesView.includes('آمنة للحذف'),
-  'صفحة الدورات تعرض إحصائيات عامة واضحة',
+  coursesView.includes("إجمالي الدورات") &&
+    coursesView.includes("نشطة للتسجيل") &&
+    coursesView.includes("آمنة للحذف"),
+  "صفحة الدورات تعرض إحصائيات عامة واضحة",
 );
 assert(
-  store.includes('if (section === "courses")') && store.includes('courseApi.list()') && store.includes('nextState.courses'),
-  'مزامنة قسم الدورات تعيد تحميل الدورات نفسها وليس روابط الفصول فقط',
+  store.includes('if (section === "courses")') &&
+    store.includes("courseApi.list()") &&
+    store.includes("nextState.courses"),
+  "مزامنة قسم الدورات تعيد تحميل الدورات نفسها وليس روابط الفصول فقط",
 );
 assert(
-  coursesRoute.includes('studentConfigImpact') && coursesRoute.includes('Snapshot'),
-  'API تعديل الدورة يوضح أن بيانات الطلاب الحالية Snapshot ولا تتغير تلقائياً',
+  coursesRoute.includes("studentConfigImpact") &&
+    coursesRoute.includes("Snapshot"),
+  "API تعديل الدورة يوضح أن بيانات الطلاب الحالية Snapshot ولا تتغير تلقائياً",
 );
+
+assert(
+  coursesRoute.includes("withSerializableTransaction") &&
+    coursesRoute.includes("freshStudents") &&
+    coursesRoute.includes("executionPlan") &&
+    serializableTransaction.includes("TransactionIsolationLevel.Serializable"),
+  "تنفيذ مزامنة إعدادات الدورة يعيد قراءة الطلاب داخل transaction ذرية ولا يعتمد على المعاينة القديمة",
+);
+
+assert(
+  api.includes("CourseStudentSyncPreview") &&
+    api.includes(
+      "previewUpdate: (id: string, updates: Record<string, unknown>)",
+    ),
+  "طبقة API توفر نوع ومعاينة مزامنة Snapshot للطلاب",
+);
+assert(
+  coursesRoute.includes("buildStudentSnapshotSyncPlan") &&
+    coursesRoute.includes("previewOnly") &&
+    coursesRoute.includes("syncStudentSnapshots") &&
+    coursesRoute.includes("applyStudentSnapshotPlan"),
+  "API تعديل الدورة يحسب أثر الإعدادات ويطبق المزامنة الاختيارية داخل transaction",
+);
+assert(
+  coursesView.includes("courseApi.previewUpdate") &&
+    coursesView.includes("حفظ ومزامنة الطلاب") &&
+    coursesView.includes("مؤرشفون لن يتغيروا") &&
+    !/function courseFormToPayload[\s\S]*?active:\s*true[\s\S]*?function courseToForm/.test(
+      coursesView,
+    ),
+  "واجهة الدورة تعرض معاينة وخيار مزامنة ولا تعيد تفعيل دورة موقوفة أثناء تعديل إعداداتها",
+);
+
 assert(
   packageJson.includes('"test:courses-integrity"'),
-  'يوجد أمر اختبار خاص بسلامة تبويبة الدورات داخل package.json',
+  "يوجد أمر اختبار خاص بسلامة تبويبة الدورات داخل package.json",
 );
 
 if (process.exitCode) {
-  console.error('\nفشل اختبار سلامة تبويبة الدورات. راجع الرسائل أعلاه.');
+  console.error("\nفشل اختبار سلامة تبويبة الدورات. راجع الرسائل أعلاه.");
   process.exit(process.exitCode);
 }
-console.log('\nكل اختبارات سلامة تبويبة الدورات نجحت.');
+console.log("\nكل اختبارات سلامة تبويبة الدورات نجحت.");

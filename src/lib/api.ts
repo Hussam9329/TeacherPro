@@ -325,8 +325,9 @@ type ApiGetOptions = {
 
 function isAbortError(error: unknown): boolean {
   return (
-    error instanceof DOMException && error.name === "AbortError"
-  ) || (error instanceof Error && error.name === "AbortError");
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
 }
 
 async function apiGetResponse<T>(
@@ -367,7 +368,10 @@ async function apiGetResponse<T>(
   }
 }
 
-async function apiGet<T>(endpoint: string, options: ApiGetOptions = {}): Promise<T | null> {
+async function apiGet<T>(
+  endpoint: string,
+  options: ApiGetOptions = {},
+): Promise<T | null> {
   const result = await apiGetResponse<T>(endpoint, [], options);
   return result.ok ? result.data : null;
 }
@@ -667,7 +671,6 @@ export interface PledgeActionResponse {
   source: "database";
 }
 
-
 export interface StudentProfileStatsResponse {
   studentId: string;
   grades: number;
@@ -683,9 +686,7 @@ export interface StudentProfileStatsResponse {
   opportunityLimit: number | null;
   opportunitySource: "student-record";
   opportunityLimitSource:
-    | "active-chapter"
-    | "no-active-chapter"
-    | "active-chapter-conflict";
+    "active-chapter" | "no-active-chapter" | "active-chapter-conflict";
   opportunityHealth:
     | "ready"
     | "zero-limit"
@@ -830,6 +831,67 @@ export interface CourseOverviewResponse {
   generatedAt?: string;
 }
 
+export interface CourseStudentSyncPreview {
+  configTouched: boolean;
+  totalStudents: number;
+  eligibleStudents: number;
+  compatibleStudents: number;
+  blockedStudents: number;
+  skippedArchived: number;
+  studentsToUpdate: number;
+  unchangedStudents: number;
+  fieldChanges: {
+    courseTerm: number;
+    baghdadMode: number;
+    mainSite: number;
+    subSite: number;
+  };
+  blockerSamples: string[];
+  canSync: boolean;
+  canSave: boolean;
+  blockingMessage?: string | null;
+  source: "database";
+}
+
+export interface ChapterOpportunityPreview {
+  chapterId: string;
+  chapterName: string;
+  previousOpportunities: number;
+  nextOpportunities: number;
+  changed: boolean;
+  activeCourses: number;
+  courseIds: string[];
+  courseNames: string[];
+  affectedStudents: number;
+  activeStudents: number;
+  dismissedStudents: number;
+  skippedArchived: number;
+  currentlyAboveNewCap: number;
+  baselinesToChange: number;
+  source: "database";
+}
+
+export interface CourseChapterActionPreview {
+  action: "activate" | "deactivate";
+  courseChapterId: string;
+  course: { id: string; name: string };
+  chapter: { id: string; name: string; opportunities: number };
+  currentActive: boolean;
+  canExecute: boolean;
+  blockingMessage?: string | null;
+  impact: {
+    activeStudents: number;
+    dismissedStudents: number;
+    archivedStudents: number;
+    affectedStudents: number;
+    balancesThatWillBeZeroed: number;
+    archiveEntries: number;
+    otherActiveLinksToDisable: number;
+  };
+  message: string;
+  source: "database";
+}
+
 export interface ExamCreateContextRow {
   id: string;
   course: Record<string, unknown>;
@@ -851,7 +913,6 @@ export interface ExamCreateContextResponse {
     activeStudents: number;
   };
 }
-
 
 export interface ChapterOverviewResponse {
   source: "database";
@@ -1075,6 +1136,8 @@ export const courseApi = {
   overview: (options: ApiGetOptions = {}) =>
     apiGet<CourseOverviewResponse>("courses/overview", options),
   add: (course: Record<string, unknown>) => apiPost("courses", course),
+  previewUpdate: (id: string, updates: Record<string, unknown>) =>
+    apiPut("courses", { id, ...updates, previewOnly: true }),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("courses", { id, ...updates }),
   remove: (id: string) => apiDelete("courses", id),
@@ -1087,6 +1150,8 @@ export const chapterApi = {
     apiGet<ChapterOverviewResponse>("chapters/overview", options),
   add: (chapter: { name: string; opportunities: number }) =>
     apiPost("chapters", chapter),
+  previewUpdate: (id: string, updates: Record<string, unknown>) =>
+    apiPut("chapters", { id, ...updates, previewOnly: true }),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("chapters", { id, ...updates }),
   remove: (id: string, options: { confirmImpact?: boolean } = {}) =>
@@ -1113,11 +1178,22 @@ export const courseChapterApi = {
   }) => apiPost("course-chapters", cc),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("course-chapters", { id, ...updates }),
+  previewAction: (courseChapterId: string, action: "activate" | "deactivate") =>
+    apiPost("course-chapters/activate", {
+      courseChapterId,
+      action,
+      previewOnly: true,
+    }),
   activate: (
     courseChapterId: string,
     action: "activate" | "deactivate",
     options: { confirmImpact: boolean } = { confirmImpact: true },
-  ) => apiPost("course-chapters/activate", { courseChapterId, action, confirmImpact: options.confirmImpact }),
+  ) =>
+    apiPost("course-chapters/activate", {
+      courseChapterId,
+      action,
+      confirmImpact: options.confirmImpact,
+    }),
   remove: (id: string, options: { confirmImpact?: boolean } = {}) =>
     apiDelete("course-chapters", id, {
       confirmImpact: options.confirmImpact ? "1" : undefined,
@@ -1154,7 +1230,8 @@ export interface StudentRegisterContextResponse {
 }
 
 export const studentRegisterApi = {
-  context: () => apiGet<StudentRegisterContextResponse>("students/register-context"),
+  context: () =>
+    apiGet<StudentRegisterContextResponse>("students/register-context"),
 };
 
 export const studentApi = {
@@ -1342,7 +1419,9 @@ export const gradeApi = {
       return {
         ok: true,
         data: responseData,
-        syncScopes: inferTeacherProScopesFromEndpoint(`/api/grades?${params.toString()}`),
+        syncScopes: inferTeacherProScopesFromEndpoint(
+          `/api/grades?${params.toString()}`,
+        ),
       };
     } catch (e) {
       const msg = toUserFriendlyError(
@@ -1422,7 +1501,9 @@ export const pledgeApi = {
     );
   },
   action: (payload: Record<string, unknown>) =>
-    apiPost("student-notes/pledges", payload) as Promise<ApiResult & { data?: PledgeActionResponse }>,
+    apiPost("student-notes/pledges", payload) as Promise<
+      ApiResult & { data?: PledgeActionResponse }
+    >,
 };
 
 export const studentProfileStatsApi = {
@@ -1740,17 +1821,19 @@ export const logApi = {
       page: query.page ?? 1,
       pageSize: query.pageSize ?? 50,
     });
-    return apiGet<Pick<ServerData, "logs"> & {
-      modules?: string[];
-      users?: string[];
-      totalCount?: number;
-      systemTotalCount?: number;
-      page?: number;
-      pageSize?: number;
-      totalPages?: number;
-      hasMore?: boolean;
-      source?: string;
-    }>(`logs${queryString ? `?${queryString}` : ""}`, options);
+    return apiGet<
+      Pick<ServerData, "logs"> & {
+        modules?: string[];
+        users?: string[];
+        totalCount?: number;
+        systemTotalCount?: number;
+        page?: number;
+        pageSize?: number;
+        totalPages?: number;
+        hasMore?: boolean;
+        source?: string;
+      }
+    >(`logs${queryString ? `?${queryString}` : ""}`, options);
   },
   add: async (log: Record<string, unknown>): Promise<ApiResult> => {
     // Use direct fetch instead of apiPost so that 403 responses (server-only

@@ -2,12 +2,27 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTeacherStore, type Course } from "@/lib/teacher-store";
-import { courseApi, type CourseOverviewResponse } from "@/lib/api";
 import {
-  COURSE_PROGRAMS, STUDY_TYPES, LOCATION_SCOPES, BAGHDAD_MODES,
-  type CourseProgram, type StudyType, type LocationScope, type BaghdadMode,
-  type StudyLocationConfig, type CourseLocationConfig, type StudyTypesByProgram,
-  getAvailablePrograms, getAvailableStudyTypes, getCourseLocationConfig, getStudyTypesByProgram,
+  courseApi,
+  type CourseOverviewResponse,
+  type CourseStudentSyncPreview,
+} from "@/lib/api";
+import {
+  COURSE_PROGRAMS,
+  STUDY_TYPES,
+  LOCATION_SCOPES,
+  BAGHDAD_MODES,
+  type CourseProgram,
+  type StudyType,
+  type LocationScope,
+  type BaghdadMode,
+  type StudyLocationConfig,
+  type CourseLocationConfig,
+  type StudyTypesByProgram,
+  getAvailablePrograms,
+  getAvailableStudyTypes,
+  getCourseLocationConfig,
+  getStudyTypesByProgram,
 } from "@/lib/course-config";
 import { BAGHDAD_COURSE_SITES, IRAQI_PROVINCES } from "@/lib/iraq";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,19 +40,39 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/lib/user-toast";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import {
+  useTeacherProBackgroundSyncDetector,
+  useTeacherProSyncKey,
+} from "@/hooks/use-teacherpro-sync";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
-import { BookOpen, Settings, MapPin, GraduationCap, Monitor, Building } from "lucide-react";
+import {
+  BookOpen,
+  Settings,
+  MapPin,
+  GraduationCap,
+  Monitor,
+  Building,
+} from "lucide-react";
 import { EmptyState } from "./ui-kit";
 import { formatAppDate } from "@/lib/format";
 
@@ -83,7 +118,7 @@ function emptyCourseForm(): CourseFormState {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function toggleInArray<T>(arr: T[], item: T): T[] {
-  return arr.includes(item) ? arr.filter(x => x !== item) : [...arr, item];
+  return arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item];
 }
 
 function usesAutoGeneralBaghdad(studyType: StudyType): boolean {
@@ -94,18 +129,27 @@ function usesForcedCustomBaghdad(studyType: StudyType): boolean {
   return studyType === "حضوري";
 }
 
-function normalizeStudyLocationConfig(studyType: StudyType, config: StudyLocationConfig): StudyLocationConfig {
+function normalizeStudyLocationConfig(
+  studyType: StudyType,
+  config: StudyLocationConfig,
+): StudyLocationConfig {
   const nextConfig: StudyLocationConfig = {
     ...config,
     scopes: [...(config.scopes || [])],
   };
 
-  if (usesAutoGeneralBaghdad(studyType) && nextConfig.scopes.includes("بغداد")) {
+  if (
+    usesAutoGeneralBaghdad(studyType) &&
+    nextConfig.scopes.includes("بغداد")
+  ) {
     nextConfig.baghdadMode = "عموم بغداد";
     nextConfig.baghdadSites = undefined;
   }
 
-  if (usesForcedCustomBaghdad(studyType) && nextConfig.scopes.includes("بغداد")) {
+  if (
+    usesForcedCustomBaghdad(studyType) &&
+    nextConfig.scopes.includes("بغداد")
+  ) {
     nextConfig.baghdadMode = "بغداد - مخصص";
     nextConfig.baghdadSites = nextConfig.baghdadSites || [];
   }
@@ -122,7 +166,10 @@ function normalizeCourseLocationConfig(
   for (const studyType of studyTypes) {
     const studyConfig = config[studyType];
     if (studyConfig) {
-      nextConfig[studyType] = normalizeStudyLocationConfig(studyType, studyConfig);
+      nextConfig[studyType] = normalizeStudyLocationConfig(
+        studyType,
+        studyConfig,
+      );
     }
   }
 
@@ -133,13 +180,16 @@ function getStudyTypesFromProgramMap(
   studyTypesByProgram: StudyTypesByProgram,
   programs: CourseProgram[],
 ): StudyType[] {
-  const values = programs.flatMap((program) => studyTypesByProgram[program] || []);
+  const values = programs.flatMap(
+    (program) => studyTypesByProgram[program] || [],
+  );
   return Array.from(new Set(values));
 }
 
 function validateCourseForm(form: CourseFormState): string | null {
   if (!form.name.trim()) return "يرجى إدخال اسم الدورة";
-  if (form.availablePrograms.length === 0) return "يجب اختيار نوع دورة واحد على الأقل";
+  if (form.availablePrograms.length === 0)
+    return "يجب اختيار نوع دورة واحد على الأقل";
 
   for (const program of form.availablePrograms) {
     if ((form.studyTypesByProgram[program] || []).length === 0) {
@@ -155,10 +205,16 @@ function validateCourseForm(form: CourseFormState): string | null {
     if (config.scopes.includes("بغداد") && !config.baghdadMode) {
       return `يجب اختيار نوع بغداد لنوع البرنامج "${studyType}"`;
     }
-    if (config.baghdadMode === "بغداد - مخصص" && (!config.baghdadSites || config.baghdadSites.length === 0)) {
+    if (
+      config.baghdadMode === "بغداد - مخصص" &&
+      (!config.baghdadSites || config.baghdadSites.length === 0)
+    ) {
       return `يجب اختيار موقع واحد على الأقل من مواقع بغداد لنوع البرنامج "${studyType}"`;
     }
-    if (config.scopes.includes("محافظات") && (!config.provinces || config.provinces.length === 0)) {
+    if (
+      config.scopes.includes("محافظات") &&
+      (!config.provinces || config.provinces.length === 0)
+    ) {
       return `يجب اختيار محافظة واحدة على الأقل لنوع البرنامج "${studyType}"`;
     }
   }
@@ -166,7 +222,10 @@ function validateCourseForm(form: CourseFormState): string | null {
   return null;
 }
 
-function formatListSummary(values: string[], emptyText = "لا توجد خيارات محددة"): string {
+function formatListSummary(
+  values: string[],
+  emptyText = "لا توجد خيارات محددة",
+): string {
   if (values.length === 0) return emptyText;
   if (values.length <= 4) return values.join("، ");
   return `${values.slice(0, 4).join("، ")}، +${values.length - 4}`;
@@ -174,7 +233,10 @@ function formatListSummary(values: string[], emptyText = "لا توجد خيار
 
 function buildCourseFormSummary(form: CourseFormState) {
   const courseName = form.name.trim() || "الدورة الجديدة";
-  const normalizedLocationConfig = normalizeCourseLocationConfig(form.locationConfig, form.availableStudyTypes);
+  const normalizedLocationConfig = normalizeCourseLocationConfig(
+    form.locationConfig,
+    form.availableStudyTypes,
+  );
   const programLines = form.availablePrograms.map((program) => {
     const studyTypes = form.studyTypesByProgram[program] || [];
     return `${program}: ${formatListSummary(studyTypes, "لم يتم اختيار نوع دراسة")}`;
@@ -188,13 +250,17 @@ function buildCourseFormSummary(form: CourseFormState) {
       if (config.baghdadMode === "عموم بغداد") {
         parts.push("عموم بغداد");
       } else if (config.baghdadMode === "بغداد - مخصص") {
-        parts.push(`بغداد - مخصص: ${formatListSummary(config.baghdadSites || [], "لم تحدد مواقع بغداد بعد")}`);
+        parts.push(
+          `بغداد - مخصص: ${formatListSummary(config.baghdadSites || [], "لم تحدد مواقع بغداد بعد")}`,
+        );
       } else {
         parts.push("بغداد");
       }
     }
     if (config.scopes.includes("محافظات")) {
-      parts.push(`محافظات: ${formatListSummary(config.provinces || [], "لم تحدد المحافظات بعد")}`);
+      parts.push(
+        `محافظات: ${formatListSummary(config.provinces || [], "لم تحدد المحافظات بعد")}`,
+      );
     }
 
     return `${studyType}: ${parts.length > 0 ? parts.join("، ") : "لم تحدد المواقع بعد"}`;
@@ -223,16 +289,22 @@ function buildLocationSummary(course: Course): string {
     if (sc.scopes.includes("بغداد")) {
       if (sc.baghdadMode === "عموم بغداد") {
         segments.push("عموم بغداد");
-      } else if (sc.baghdadMode === "بغداد - مخصص" && sc.baghdadSites && sc.baghdadSites.length > 0) {
+      } else if (
+        sc.baghdadMode === "بغداد - مخصص" &&
+        sc.baghdadSites &&
+        sc.baghdadSites.length > 0
+      ) {
         segments.push(`بغداد-مخصص(${sc.baghdadSites.join("، ")})`);
       } else {
         segments.push("بغداد");
       }
     }
     if (sc.scopes.includes("محافظات")) {
-      segments.push(sc.provinces && sc.provinces.length > 0
-        ? `محافظات(${sc.provinces.join("، ")})`
-        : "محافظات(غير محددة)");
+      segments.push(
+        sc.provinces && sc.provinces.length > 0
+          ? `محافظات(${sc.provinces.join("، ")})`
+          : "محافظات(غير محددة)",
+      );
     }
     if (segments.length > 0) {
       parts.push(`${st}: ${segments.join("، ")}`);
@@ -260,37 +332,55 @@ function CourseBuilderForm({
   const summary = useMemo(() => buildCourseFormSummary(form), [form]);
 
   const handleProgramToggle = (program: CourseProgram) => {
-    setForm(prev => {
+    setForm((prev) => {
       const nextPrograms = toggleInArray(prev.availablePrograms, program);
-      const nextStudyTypesByProgram: StudyTypesByProgram = { ...prev.studyTypesByProgram };
+      const nextStudyTypesByProgram: StudyTypesByProgram = {
+        ...prev.studyTypesByProgram,
+      };
 
       if (nextPrograms.includes(program)) {
-        nextStudyTypesByProgram[program] = nextStudyTypesByProgram[program] || [];
+        nextStudyTypesByProgram[program] =
+          nextStudyTypesByProgram[program] || [];
       } else {
         delete nextStudyTypesByProgram[program];
       }
 
-      const nextStudyTypes = getStudyTypesFromProgramMap(nextStudyTypesByProgram, nextPrograms);
+      const nextStudyTypes = getStudyTypesFromProgramMap(
+        nextStudyTypesByProgram,
+        nextPrograms,
+      );
       return {
         ...prev,
         availablePrograms: nextPrograms,
         studyTypesByProgram: nextStudyTypesByProgram,
         availableStudyTypes: nextStudyTypes,
-        locationConfig: normalizeCourseLocationConfig(prev.locationConfig, nextStudyTypes),
+        locationConfig: normalizeCourseLocationConfig(
+          prev.locationConfig,
+          nextStudyTypes,
+        ),
       };
     });
   };
 
-  const handleStudyTypeToggle = (program: CourseProgram, studyType: StudyType) => {
-    setForm(prev => {
+  const handleStudyTypeToggle = (
+    program: CourseProgram,
+    studyType: StudyType,
+  ) => {
+    setForm((prev) => {
       const currentProgramTypes = prev.studyTypesByProgram[program] || [];
       const nextProgramTypes = toggleInArray(currentProgramTypes, studyType);
       const nextStudyTypesByProgram: StudyTypesByProgram = {
         ...prev.studyTypesByProgram,
         [program]: nextProgramTypes,
       };
-      const nextStudyTypes = getStudyTypesFromProgramMap(nextStudyTypesByProgram, prev.availablePrograms);
-      const nextConfig = normalizeCourseLocationConfig(prev.locationConfig, nextStudyTypes);
+      const nextStudyTypes = getStudyTypesFromProgramMap(
+        nextStudyTypesByProgram,
+        prev.availablePrograms,
+      );
+      const nextConfig = normalizeCourseLocationConfig(
+        prev.locationConfig,
+        nextStudyTypes,
+      );
 
       if (nextProgramTypes.includes(studyType) && !nextConfig[studyType]) {
         nextConfig[studyType] = { scopes: [] };
@@ -306,10 +396,13 @@ function CourseBuilderForm({
   };
 
   const handleScopeToggle = (studyType: StudyType, scope: LocationScope) => {
-    setForm(prev => {
+    setForm((prev) => {
       const prevStudy = prev.locationConfig[studyType] || { scopes: [] };
       const nextScopes = toggleInArray(prevStudy.scopes, scope);
-      const nextStudy: StudyLocationConfig = { ...prevStudy, scopes: nextScopes };
+      const nextStudy: StudyLocationConfig = {
+        ...prevStudy,
+        scopes: nextScopes,
+      };
 
       // Clean up if scope removed
       if (!nextScopes.includes("بغداد")) {
@@ -339,12 +432,13 @@ function CourseBuilderForm({
 
   const handleBaghdadModeChange = (studyType: StudyType, mode: BaghdadMode) => {
     if (usesForcedCustomBaghdad(studyType) && mode !== "بغداد - مخصص") return;
-    setForm(prev => {
+    setForm((prev) => {
       const prevStudy = prev.locationConfig[studyType] || { scopes: [] };
       const nextStudy: StudyLocationConfig = {
         ...prevStudy,
         baghdadMode: mode,
-        baghdadSites: mode === "بغداد - مخصص" ? (prevStudy.baghdadSites || []) : undefined,
+        baghdadSites:
+          mode === "بغداد - مخصص" ? prevStudy.baghdadSites || [] : undefined,
       };
       return {
         ...prev,
@@ -354,8 +448,11 @@ function CourseBuilderForm({
   };
 
   const handleBaghdadSiteToggle = (studyType: StudyType, site: string) => {
-    setForm(prev => {
-      const prevStudy = prev.locationConfig[studyType] || { scopes: [], baghdadMode: "بغداد - مخصص" as BaghdadMode };
+    setForm((prev) => {
+      const prevStudy = prev.locationConfig[studyType] || {
+        scopes: [],
+        baghdadMode: "بغداد - مخصص" as BaghdadMode,
+      };
       const nextSites = toggleInArray(prevStudy.baghdadSites || [], site);
       return {
         ...prev,
@@ -368,7 +465,7 @@ function CourseBuilderForm({
   };
 
   const handleProvinceToggle = (studyType: StudyType, province: string) => {
-    setForm(prev => {
+    setForm((prev) => {
       const prevStudy = prev.locationConfig[studyType] || { scopes: [] };
       const nextProvinces = toggleInArray(prevStudy.provinces || [], province);
       return {
@@ -382,9 +479,10 @@ function CourseBuilderForm({
   };
 
   const handleSelectAllProvinces = (studyType: StudyType) => {
-    setForm(prev => {
+    setForm((prev) => {
       const prevStudy = prev.locationConfig[studyType] || { scopes: [] };
-      const allSelected = (prevStudy.provinces || []).length === IRAQI_PROVINCES.length;
+      const allSelected =
+        (prevStudy.provinces || []).length === IRAQI_PROVINCES.length;
       return {
         ...prev,
         locationConfig: {
@@ -412,7 +510,9 @@ function CourseBuilderForm({
             id="courseName"
             autoComplete="off"
             value={form.name}
-            onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))}
+            onChange={(e) =>
+              setForm((prev) => ({ ...prev, name: e.target.value }))
+            }
             placeholder="مثال: أحياء السادس - دفعة جديدة"
           />
         </div>
@@ -428,7 +528,10 @@ function CourseBuilderForm({
         </div>
         <div className="flex flex-wrap gap-4">
           {COURSE_PROGRAMS.map((program) => (
-            <label key={program} className="flex items-center gap-2 cursor-pointer">
+            <label
+              key={program}
+              className="flex items-center gap-2 cursor-pointer"
+            >
               <Checkbox
                 checked={form.availablePrograms.includes(program)}
                 onCheckedChange={() => handleProgramToggle(program)}
@@ -460,10 +563,17 @@ function CourseBuilderForm({
                 <CardContent className="px-4 pb-4">
                   <div className="flex flex-wrap gap-4">
                     {STUDY_TYPES.map((st) => (
-                      <label key={`${program}-${st}`} className="flex items-center gap-2 cursor-pointer">
+                      <label
+                        key={`${program}-${st}`}
+                        className="flex items-center gap-2 cursor-pointer"
+                      >
                         <Checkbox
-                          checked={(form.studyTypesByProgram[program] || []).includes(st)}
-                          onCheckedChange={() => handleStudyTypeToggle(program, st)}
+                          checked={(
+                            form.studyTypesByProgram[program] || []
+                          ).includes(st)}
+                          onCheckedChange={() =>
+                            handleStudyTypeToggle(program, st)
+                          }
                         />
                         <span className="text-sm">{st}</span>
                       </label>
@@ -486,7 +596,9 @@ function CourseBuilderForm({
               <span>إعداد المواقع لكل نوع دراسة مستخدم</span>
             </div>
             {form.availableStudyTypes.map((studyType) => {
-              const studyConfig = form.locationConfig[studyType] || { scopes: [] };
+              const studyConfig = form.locationConfig[studyType] || {
+                scopes: [],
+              };
               const isAutoGeneralBaghdad = usesAutoGeneralBaghdad(studyType);
               const isForcedCustomBaghdad = usesForcedCustomBaghdad(studyType);
               return (
@@ -501,10 +613,15 @@ function CourseBuilderForm({
                     {/* Scopes */}
                     <div className="flex flex-wrap gap-4">
                       {LOCATION_SCOPES.map((scope) => (
-                        <label key={scope} className="flex items-center gap-2 cursor-pointer">
+                        <label
+                          key={scope}
+                          className="flex items-center gap-2 cursor-pointer"
+                        >
                           <Checkbox
                             checked={studyConfig.scopes.includes(scope)}
-                            onCheckedChange={() => handleScopeToggle(studyType, scope)}
+                            onCheckedChange={() =>
+                              handleScopeToggle(studyType, scope)
+                            }
                           />
                           <span className="text-sm">{scope}</span>
                         </label>
@@ -512,43 +629,65 @@ function CourseBuilderForm({
                     </div>
 
                     {/* Baghdad options */}
-                    {studyConfig.scopes.includes("بغداد") && !isAutoGeneralBaghdad && (
-                      <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-                        <RadioGroup
-                          value={isForcedCustomBaghdad ? "بغداد - مخصص" : (studyConfig.baghdadMode || "")}
-                          onValueChange={(v) => handleBaghdadModeChange(studyType, v as BaghdadMode)}
-                          className="flex flex-wrap gap-4"
-                        >
-                          {BAGHDAD_MODES.map((mode) => {
-                            const disabled = isForcedCustomBaghdad && mode === "عموم بغداد";
-                            return (
-                              <label
-                                key={mode}
-                                className={`flex items-center gap-2 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
-                              >
-                                <RadioGroupItem value={mode} disabled={disabled} />
-                                <span className="text-sm">{mode}</span>
-                              </label>
-                            );
-                          })}
-                        </RadioGroup>
+                    {studyConfig.scopes.includes("بغداد") &&
+                      !isAutoGeneralBaghdad && (
+                        <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+                          <RadioGroup
+                            value={
+                              isForcedCustomBaghdad
+                                ? "بغداد - مخصص"
+                                : studyConfig.baghdadMode || ""
+                            }
+                            onValueChange={(v) =>
+                              handleBaghdadModeChange(
+                                studyType,
+                                v as BaghdadMode,
+                              )
+                            }
+                            className="flex flex-wrap gap-4"
+                          >
+                            {BAGHDAD_MODES.map((mode) => {
+                              const disabled =
+                                isForcedCustomBaghdad && mode === "عموم بغداد";
+                              return (
+                                <label
+                                  key={mode}
+                                  className={`flex items-center gap-2 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+                                >
+                                  <RadioGroupItem
+                                    value={mode}
+                                    disabled={disabled}
+                                  />
+                                  <span className="text-sm">{mode}</span>
+                                </label>
+                              );
+                            })}
+                          </RadioGroup>
 
-                        {/* Baghdad sites */}
-                        {(isForcedCustomBaghdad || studyConfig.baghdadMode === "بغداد - مخصص") && (
-                          <div className="flex flex-wrap gap-3 pt-1">
-                            {BAGHDAD_COURSE_SITES.map((site) => (
-                              <label key={site} className="flex items-center gap-2 cursor-pointer">
-                                <Checkbox
-                                  checked={(studyConfig.baghdadSites || []).includes(site)}
-                                  onCheckedChange={() => handleBaghdadSiteToggle(studyType, site)}
-                                />
-                                <span className="text-sm">{site}</span>
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                          {/* Baghdad sites */}
+                          {(isForcedCustomBaghdad ||
+                            studyConfig.baghdadMode === "بغداد - مخصص") && (
+                            <div className="flex flex-wrap gap-3 pt-1">
+                              {BAGHDAD_COURSE_SITES.map((site) => (
+                                <label
+                                  key={site}
+                                  className="flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Checkbox
+                                    checked={(
+                                      studyConfig.baghdadSites || []
+                                    ).includes(site)}
+                                    onCheckedChange={() =>
+                                      handleBaghdadSiteToggle(studyType, site)
+                                    }
+                                  />
+                                  <span className="text-sm">{site}</span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                     {/* Provinces */}
                     {studyConfig.scopes.includes("محافظات") && (
@@ -561,17 +700,25 @@ function CourseBuilderForm({
                             size="sm"
                             onClick={() => handleSelectAllProvinces(studyType)}
                           >
-                            {(studyConfig.provinces || []).length === IRAQI_PROVINCES.length
+                            {(studyConfig.provinces || []).length ===
+                            IRAQI_PROVINCES.length
                               ? "إلغاء الكل"
                               : "اختيار الكل"}
                           </Button>
                         </div>
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                           {IRAQI_PROVINCES.map((province) => (
-                            <label key={province} className="flex items-center gap-2 cursor-pointer">
+                            <label
+                              key={province}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
                               <Checkbox
-                                checked={(studyConfig.provinces || []).includes(province)}
-                                onCheckedChange={() => handleProvinceToggle(studyType, province)}
+                                checked={(studyConfig.provinces || []).includes(
+                                  province,
+                                )}
+                                onCheckedChange={() =>
+                                  handleProvinceToggle(studyType, province)
+                                }
                               />
                               <span className="text-sm">{province}</span>
                             </label>
@@ -598,26 +745,40 @@ function CourseBuilderForm({
         </CardHeader>
         <CardContent className="px-4 pb-4 text-sm leading-7 space-y-3">
           <p className="font-medium text-foreground">
-            هذه الدورة تحتوي على {summary.programCount} نوع دورة و {summary.studyTypeCount} نوع دراسة.
+            هذه الدورة تحتوي على {summary.programCount} نوع دورة و{" "}
+            {summary.studyTypeCount} نوع دراسة.
           </p>
           <div className="rounded-xl border bg-background/70 p-3">
-            <p className="mb-1 font-semibold text-foreground">ستظهر للطلاب بهذه الخيارات:</p>
+            <p className="mb-1 font-semibold text-foreground">
+              ستظهر للطلاب بهذه الخيارات:
+            </p>
             {summary.programLines.length > 0 ? (
               <ul className="list-disc space-y-1 pr-5 text-muted-foreground">
-                {summary.programLines.map((line) => <li key={line}>{line}</li>)}
+                {summary.programLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
               </ul>
             ) : (
-              <p className="text-muted-foreground">اختر نوع دورة واحد على الأقل حتى تظهر خيارات التسجيل للطلاب.</p>
+              <p className="text-muted-foreground">
+                اختر نوع دورة واحد على الأقل حتى تظهر خيارات التسجيل للطلاب.
+              </p>
             )}
           </div>
           <div className="rounded-xl border bg-background/70 p-3">
-            <p className="mb-1 font-semibold text-foreground">هذه المواقع مفعلة:</p>
+            <p className="mb-1 font-semibold text-foreground">
+              هذه المواقع مفعلة:
+            </p>
             {summary.locationLines.length > 0 ? (
               <ul className="list-disc space-y-1 pr-5 text-muted-foreground">
-                {summary.locationLines.map((line) => <li key={line}>{line}</li>)}
+                {summary.locationLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
               </ul>
             ) : (
-              <p className="text-muted-foreground">بعد اختيار نوع البرنامج ستظهر هنا المواقع التي ستكون مفعلة في التسجيل.</p>
+              <p className="text-muted-foreground">
+                بعد اختيار نوع البرنامج ستظهر هنا المواقع التي ستكون مفعلة في
+                التسجيل.
+              </p>
             )}
           </div>
         </CardContent>
@@ -628,7 +789,12 @@ function CourseBuilderForm({
       {/* Submit */}
       <Button
         onClick={onSubmit}
-        disabled={submitDisabled || !form.name.trim() || form.availablePrograms.length === 0 || form.availableStudyTypes.length === 0}
+        disabled={
+          submitDisabled ||
+          !form.name.trim() ||
+          form.availablePrograms.length === 0 ||
+          form.availableStudyTypes.length === 0
+        }
         className="w-full"
       >
         {submitDisabled ? "جاري الحفظ..." : submitLabel}
@@ -655,7 +821,9 @@ function normalizeCourseFromApi(course: Record<string, unknown>): Course {
   };
 }
 
-function normalizeOverviewRows(rows: CourseOverviewResponse["rows"] = []): CourseOverviewRow[] {
+function normalizeOverviewRows(
+  rows: CourseOverviewResponse["rows"] = [],
+): CourseOverviewRow[] {
   return rows.map((row) => ({
     ...row,
     course: normalizeCourseFromApi(row.course),
@@ -665,7 +833,6 @@ function normalizeOverviewRows(rows: CourseOverviewResponse["rows"] = []): Cours
 function courseFormToPayload(form: CourseFormState) {
   return {
     name: form.name.trim(),
-    active: true,
     availablePrograms: form.availablePrograms,
     availableStudyTypes: form.availableStudyTypes,
     studyTypesByProgram: form.studyTypesByProgram,
@@ -703,11 +870,18 @@ function courseDeleteBadge(row: CourseOverviewRow) {
 
 export function CoursesView() {
   const { loadSectionDataFromServer } = useTeacherStore();
-  const syncKey = useTeacherProSyncKey(["courses", "chapters", "students", "exams"]);
+  const syncKey = useTeacherProSyncKey([
+    "courses",
+    "chapters",
+    "students",
+    "exams",
+  ]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
 
   const [rows, setRows] = useState<CourseOverviewRow[]>([]);
-  const [stats, setStats] = useState<CourseOverviewResponse["stats"] | null>(null);
+  const [stats, setStats] = useState<CourseOverviewResponse["stats"] | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -717,7 +891,8 @@ export function CoursesView() {
   const [deleteFilter, setDeleteFilter] = useState<CourseDeleteFilter>("all");
 
   // Create form
-  const [createForm, setCreateForm] = useState<CourseFormState>(emptyCourseForm);
+  const [createForm, setCreateForm] =
+    useState<CourseFormState>(emptyCourseForm);
 
   // Edit dialog
   const [editDialog, setEditDialog] = useState<{
@@ -726,6 +901,13 @@ export function CoursesView() {
     form: CourseFormState;
     row: CourseOverviewRow | null;
   }>({ open: false, courseId: "", form: emptyCourseForm(), row: null });
+
+  const [courseSyncDialog, setCourseSyncDialog] = useState<{
+    open: boolean;
+    courseId: string;
+    payload: Record<string, unknown> | null;
+    preview: CourseStudentSyncPreview | null;
+  }>({ open: false, courseId: "", payload: null, preview: null });
 
   // Delete dialog
   const [deleteDialog, setDeleteDialog] = useState<{
@@ -737,30 +919,36 @@ export function CoursesView() {
   }>({ open: false, id: "", courseName: "", confirmText: "", row: null });
 
   // Action locks
-  const { locked: isAddingCourse, runLocked: runAddCourseLocked } = useActionLock();
-  const { locked: isSavingCourse, runLocked: runSaveCourseLocked } = useActionLock();
-  const { locked: isDeletingCourse, runLocked: runDeleteCourseLocked } = useActionLock();
-  const { locked: isTogglingCourse, runLocked: runToggleCourseLocked } = useActionLock();
+  const { locked: isAddingCourse, runLocked: runAddCourseLocked } =
+    useActionLock();
+  const { locked: isSavingCourse, runLocked: runSaveCourseLocked } =
+    useActionLock();
+  const { locked: isApplyingCourseSync, runLocked: runApplyCourseSyncLocked } =
+    useActionLock();
+  const { locked: isDeletingCourse, runLocked: runDeleteCourseLocked } =
+    useActionLock();
+  const { locked: isTogglingCourse, runLocked: runToggleCourseLocked } =
+    useActionLock();
 
-  const refreshOverview = useCallback(async (
-    signal?: AbortSignal,
-    options: { silent?: boolean } = {},
-  ) => {
-    if (!options.silent) setIsLoading(true);
-    if (!options.silent) setLoadError("");
-    const data = await courseApi.overview({ signal, quietAbort: true });
-    if (!data) {
-      if (!signal?.aborted && !options.silent) {
-        setLoadError("تعذر تحميل ملخص الدورات من بيانات النظام.");
-        setIsLoading(false);
+  const refreshOverview = useCallback(
+    async (signal?: AbortSignal, options: { silent?: boolean } = {}) => {
+      if (!options.silent) setIsLoading(true);
+      if (!options.silent) setLoadError("");
+      const data = await courseApi.overview({ signal, quietAbort: true });
+      if (!data) {
+        if (!signal?.aborted && !options.silent) {
+          setLoadError("تعذر تحميل ملخص الدورات من بيانات النظام.");
+          setIsLoading(false);
+        }
+        return;
       }
-      return;
-    }
-    if (signal?.aborted) return;
-    setRows(normalizeOverviewRows(data.rows));
-    setStats(data.stats);
-    setIsLoading(false);
-  }, []);
+      if (signal?.aborted) return;
+      setRows(normalizeOverviewRows(data.rows));
+      setStats(data.stats);
+      setIsLoading(false);
+    },
+    [],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -768,23 +956,28 @@ export function CoursesView() {
     return () => controller.abort();
   }, [refreshOverview, syncKey, isBackgroundSync]);
 
-  const syncCoursesAfterMutation = useCallback(async (reason: string) => {
-    await refreshOverview(undefined, { silent: true });
-    void loadSectionDataFromServer("courses");
-    emitTeacherProDataChanged({
-      source: "local-mutation",
-      reason,
-      scopes: ["courses", "students", "exams", "dashboard"],
-    });
-  }, [loadSectionDataFromServer, refreshOverview]);
+  const syncCoursesAfterMutation = useCallback(
+    async (reason: string) => {
+      await refreshOverview(undefined, { silent: true });
+      void loadSectionDataFromServer("courses");
+      emitTeacherProDataChanged({
+        source: "local-mutation",
+        reason,
+        scopes: ["courses", "students", "exams", "dashboard"],
+      });
+    },
+    [loadSectionDataFromServer, refreshOverview],
+  );
 
   const filteredRows = useMemo(() => {
     const q = debouncedSearchText.trim().toLowerCase();
     return rows.filter((row) => {
       if (statusFilter === "active" && !row.course.active) return false;
       if (statusFilter === "inactive" && row.course.active) return false;
-      if (deleteFilter === "deletable" && !row.deleteSafety.canDelete) return false;
-      if (deleteFilter === "blocked" && row.deleteSafety.canDelete) return false;
+      if (deleteFilter === "deletable" && !row.deleteSafety.canDelete)
+        return false;
+      if (deleteFilter === "blocked" && row.deleteSafety.canDelete)
+        return false;
       if (!q) return true;
       const haystack = [
         row.course.name,
@@ -794,20 +987,29 @@ export function CoursesView() {
         row.activeChapter?.name || "",
         ...row.deleteSafety.blockers,
         ...row.configWarnings,
-      ].join(" ").toLowerCase();
+      ]
+        .join(" ")
+        .toLowerCase();
       return haystack.includes(q);
     });
   }, [debouncedSearchText, deleteFilter, rows, statusFilter]);
 
-  const filteredStats = useMemo(() => ({
-    total: filteredRows.length,
-    active: filteredRows.filter((row) => row.course.active).length,
-    inactive: filteredRows.filter((row) => !row.course.active).length,
-    deletable: filteredRows.filter((row) => row.deleteSafety.canDelete).length,
-    blocked: filteredRows.filter((row) => !row.deleteSafety.canDelete).length,
-  }), [filteredRows]);
+  const filteredStats = useMemo(
+    () => ({
+      total: filteredRows.length,
+      active: filteredRows.filter((row) => row.course.active).length,
+      inactive: filteredRows.filter((row) => !row.course.active).length,
+      deletable: filteredRows.filter((row) => row.deleteSafety.canDelete)
+        .length,
+      blocked: filteredRows.filter((row) => !row.deleteSafety.canDelete).length,
+    }),
+    [filteredRows],
+  );
 
-  const hasActiveFilters = Boolean(debouncedSearchText.trim()) || statusFilter !== "all" || deleteFilter !== "all";
+  const hasActiveFilters =
+    Boolean(debouncedSearchText.trim()) ||
+    statusFilter !== "all" ||
+    deleteFilter !== "all";
 
   // ─── Create course handler ─────────────────────────────────────────────────
   const handleCreate = runAddCourseLocked(async () => {
@@ -817,7 +1019,9 @@ export function CoursesView() {
       return;
     }
     const payload = courseFormToPayload(createForm);
-    const result = await courseApi.add(payload as unknown as Record<string, unknown>);
+    const result = await courseApi.add(
+      payload as unknown as Record<string, unknown>,
+    );
     if (!result.ok) {
       toast.error(result.error || "تعذر إضافة الدورة");
       return;
@@ -838,28 +1042,100 @@ export function CoursesView() {
     });
   };
 
+  const applyCourseUpdate = async (
+    courseId: string,
+    payload: Record<string, unknown>,
+    syncStudentSnapshots: boolean,
+  ) => {
+    const result = await courseApi.update(courseId, {
+      ...payload,
+      syncStudentSnapshots,
+    });
+    if (!result.ok) {
+      toast.error(result.error || "تعذر تعديل الدورة");
+      return false;
+    }
+    const impact = (
+      result.data as {
+        studentConfigImpact?: {
+          affectedStudents?: number;
+          syncedStudents?: number;
+          message?: string;
+        } | null;
+      } | null
+    )?.studentConfigImpact;
+    setCourseSyncDialog({
+      open: false,
+      courseId: "",
+      payload: null,
+      preview: null,
+    });
+    setEditDialog({
+      open: false,
+      courseId: "",
+      form: emptyCourseForm(),
+      row: null,
+    });
+    toast.success(impact?.message || "تم تعديل الدورة بعد التحقق من الحفظ");
+    await syncCoursesAfterMutation(
+      syncStudentSnapshots ? "تعديل ومزامنة إعدادات دورة" : "تعديل دورة",
+    );
+    return true;
+  };
+
   const handleEditSave = runSaveCourseLocked(async () => {
     const validationMessage = validateCourseForm(editDialog.form);
     if (validationMessage) {
       toast.error(validationMessage);
       return;
     }
-    const payload = courseFormToPayload(editDialog.form);
-    const result = await courseApi.update(
-      editDialog.courseId,
-      payload as unknown as Record<string, unknown>,
-    );
+    const payload = courseFormToPayload(editDialog.form) as unknown as Record<
+      string,
+      unknown
+    >;
+    const result = await courseApi.previewUpdate(editDialog.courseId, payload);
     if (!result.ok) {
-      toast.error(result.error || "تعذر تعديل الدورة");
+      toast.error(result.error || "تعذر معاينة أثر تعديل الدورة");
       return;
     }
-    const impact = (result.data as { studentConfigImpact?: { affectedStudents?: number; message?: string } } | null)?.studentConfigImpact;
-    setEditDialog({ open: false, courseId: "", form: emptyCourseForm(), row: null });
-    toast.success(
-      impact?.message || "تم تعديل الدورة بعد التحقق من الحفظ",
-    );
-    await syncCoursesAfterMutation("تعديل دورة");
+    const preview = (
+      result.data as { preview?: CourseStudentSyncPreview } | null
+    )?.preview;
+    if (!preview) {
+      toast.error(
+        "لم يُرجع النظام معاينة موثوقة لأثر التعديل، لذلك لم يتم الحفظ.",
+      );
+      return;
+    }
+    if (!preview.canSave) {
+      toast.error(
+        preview.blockingMessage ||
+          "لا يمكن حفظ هذا التعديل لأنه سيجعل بيانات طلاب حاليين غير صالحة.",
+      );
+      return;
+    }
+    if (preview.configTouched && preview.eligibleStudents > 0) {
+      setCourseSyncDialog({
+        open: true,
+        courseId: editDialog.courseId,
+        payload,
+        preview,
+      });
+      return;
+    }
+    await applyCourseUpdate(editDialog.courseId, payload, false);
   });
+
+  const handleCourseSyncDecision = runApplyCourseSyncLocked(
+    async (syncStudentSnapshots: boolean) => {
+      if (!courseSyncDialog.payload || !courseSyncDialog.courseId) return;
+      await applyCourseUpdate(
+        courseSyncDialog.courseId,
+        courseSyncDialog.payload,
+        syncStudentSnapshots,
+      );
+    },
+  );
 
   // ─── Delete handler ────────────────────────────────────────────────────────
   const openDeleteDialog = (row: CourseOverviewRow) => {
@@ -874,7 +1150,9 @@ export function CoursesView() {
 
   const handleDeleteConfirm = runDeleteCourseLocked(async () => {
     if (!deleteDialog.row?.deleteSafety.canDelete) {
-      toast.error("لا يمكن حذف هذه الدورة لأنها مرتبطة ببيانات. استخدم التعطيل بدل الحذف.");
+      toast.error(
+        "لا يمكن حذف هذه الدورة لأنها مرتبطة ببيانات. استخدم التعطيل بدل الحذف.",
+      );
       return;
     }
     const result = await courseApi.remove(deleteDialog.id);
@@ -883,39 +1161,61 @@ export function CoursesView() {
       return;
     }
     toast.success("تم حذف الدورة بعد التحقق من الحفظ");
-    setDeleteDialog({ open: false, id: "", courseName: "", confirmText: "", row: null });
+    setDeleteDialog({
+      open: false,
+      id: "",
+      courseName: "",
+      confirmText: "",
+      row: null,
+    });
     await syncCoursesAfterMutation("حذف دورة");
   });
 
   // ─── Toggle handler ────────────────────────────────────────────────────────
   const handleToggle = runToggleCourseLocked(async (row: CourseOverviewRow) => {
     const nextActive = !row.course.active;
-    const result = await courseApi.update(row.course.id, { active: nextActive });
+    const result = await courseApi.update(row.course.id, {
+      active: nextActive,
+    });
     if (!result.ok) {
       toast.error(result.error || "تعذر تغيير حالة الدورة");
       return;
     }
-    toast.success(nextActive ? "تم تفعيل الدورة للاختيارات الجديدة" : "تم إيقاف الدورة عن التسجيل والاختيارات الجديدة");
+    toast.success(
+      nextActive
+        ? "تم تفعيل الدورة للاختيارات الجديدة"
+        : "تم إيقاف الدورة عن التسجيل والاختيارات الجديدة",
+    );
     await syncCoursesAfterMutation(nextActive ? "تفعيل دورة" : "تعطيل دورة");
   });
 
   const renderStats = () => (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       <div className="rounded-2xl border bg-card/80 p-4 shadow-sm">
-        <p className="text-xs text-muted-foreground">إجمالي الدورات في النظام</p>
-        <p className="mt-1 text-2xl font-black">{stats?.total ?? rows.length}</p>
+        <p className="text-xs text-muted-foreground">
+          إجمالي الدورات في النظام
+        </p>
+        <p className="mt-1 text-2xl font-black">
+          {stats?.total ?? rows.length}
+        </p>
       </div>
       <div className="rounded-2xl border bg-emerald-500/5 p-4 shadow-sm">
         <p className="text-xs text-muted-foreground">نشطة للتسجيل</p>
-        <p className="mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">{stats?.active ?? 0}</p>
+        <p className="mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">
+          {stats?.active ?? 0}
+        </p>
       </div>
       <div className="rounded-2xl border bg-amber-500/5 p-4 shadow-sm">
         <p className="text-xs text-muted-foreground">موقوفة عن الاختيارات</p>
-        <p className="mt-1 text-2xl font-black text-amber-600 dark:text-amber-400">{stats?.inactive ?? 0}</p>
+        <p className="mt-1 text-2xl font-black text-amber-600 dark:text-amber-400">
+          {stats?.inactive ?? 0}
+        </p>
       </div>
       <div className="rounded-2xl border bg-primary/5 p-4 shadow-sm">
         <p className="text-xs text-muted-foreground">عليها طلاب</p>
-        <p className="mt-1 text-2xl font-black text-primary">{stats?.withStudents ?? 0}</p>
+        <p className="mt-1 text-2xl font-black text-primary">
+          {stats?.withStudents ?? 0}
+        </p>
       </div>
       <div className="rounded-2xl border bg-muted/30 p-4 shadow-sm">
         <p className="text-xs text-muted-foreground">آمنة للحذف</p>
@@ -927,7 +1227,10 @@ export function CoursesView() {
   const renderLoadingSkeleton = () => (
     <div className="grid gap-4 xl:grid-cols-2">
       {[0, 1, 2, 3].map((index) => (
-        <div key={index} className="rounded-3xl border bg-card/80 p-5 shadow-sm">
+        <div
+          key={index}
+          className="rounded-3xl border bg-card/80 p-5 shadow-sm"
+        >
           <div className="flex items-start justify-between gap-3 border-b pb-4">
             <div className="space-y-2">
               <span className="block h-5 w-44 animate-pulse rounded-full bg-muted" />
@@ -964,16 +1267,23 @@ export function CoursesView() {
               <Badge variant={row.course.active ? "default" : "secondary"}>
                 {row.course.active ? "نشطة للتسجيل" : "موقوفة عن الاختيارات"}
               </Badge>
-              <Badge variant={row.deleteSafety.canDelete ? "outline" : "destructive"}>
+              <Badge
+                variant={row.deleteSafety.canDelete ? "outline" : "destructive"}
+              >
                 {courseDeleteBadge(row)}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              أنشئت: {formatAppDate(row.course.createdAt)} — البيانات من بيانات النظام
+              أنشئت: {formatAppDate(row.course.createdAt)} — البيانات من بيانات
+              النظام
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" onClick={() => openEditDialog(row)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => openEditDialog(row)}
+            >
               تعديل
             </Button>
             <Button
@@ -992,7 +1302,9 @@ export function CoursesView() {
             <p className="text-[11px] text-muted-foreground">الطلاب</p>
             <p className="text-xl font-black">{row.counts.students}</p>
             <p className="text-[11px] text-muted-foreground">
-              نشط {row.counts.activeStudents} / مفصول {row.counts.dismissedStudents} / مؤرشف {row.counts.archivedStudents}
+              نشط {row.counts.activeStudents} / مفصول{" "}
+              {row.counts.dismissedStudents} / مؤرشف{" "}
+              {row.counts.archivedStudents}
             </p>
           </div>
           <div className="rounded-2xl border bg-muted/20 p-3">
@@ -1006,26 +1318,41 @@ export function CoursesView() {
             <p className="text-[11px] text-muted-foreground">الفصول</p>
             <p className="text-xl font-black">{row.counts.courseChapters}</p>
             <p className="text-[11px] text-muted-foreground">
-              النشط: {row.activeChapter ? `${row.activeChapter.name} (${row.activeChapter.opportunities} فرص)` : "لا يوجد"}
+              النشط:{" "}
+              {row.activeChapter
+                ? `${row.activeChapter.name} (${row.activeChapter.opportunities} فرص)`
+                : "لا يوجد"}
             </p>
           </div>
           <div className="rounded-2xl border bg-muted/20 p-3">
             <p className="text-[11px] text-muted-foreground">الحذف</p>
-            <p className="text-sm font-black">{row.deleteSafety.canDelete ? "مسموح" : "مرفوض"}</p>
+            <p className="text-sm font-black">
+              {row.deleteSafety.canDelete ? "مسموح" : "مرفوض"}
+            </p>
             <p className="text-[11px] text-muted-foreground">
-              {row.deleteSafety.blockers.length ? row.deleteSafety.blockers.join("، ") : "لا توجد روابط مانعة"}
+              {row.deleteSafety.blockers.length
+                ? row.deleteSafety.blockers.join("، ")
+                : "لا توجد روابط مانعة"}
             </p>
           </div>
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_1fr]">
           <div className="space-y-3 rounded-2xl border bg-muted/15 p-4">
-            <p className="text-xs font-bold text-muted-foreground">إعدادات التسجيل</p>
+            <p className="text-xs font-bold text-muted-foreground">
+              إعدادات التسجيل
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {programs.map((program) => (
-                <Badge key={program} variant="outline" className="whitespace-normal leading-5 text-start">
+                <Badge
+                  key={program}
+                  variant="outline"
+                  className="whitespace-normal leading-5 text-start"
+                >
                   <GraduationCap className="ml-1 size-3" />
-                  {program}: {(studyTypesByProgram[program] || []).join("، ") || "بدون نوع دراسة"}
+                  {program}:{" "}
+                  {(studyTypesByProgram[program] || []).join("، ") ||
+                    "بدون نوع دراسة"}
                 </Badge>
               ))}
             </div>
@@ -1042,24 +1369,38 @@ export function CoursesView() {
           </div>
 
           <div className="space-y-3 rounded-2xl border bg-muted/15 p-4">
-            <p className="text-xs font-bold text-muted-foreground">الأثر الحالي</p>
+            <p className="text-xs font-bold text-muted-foreground">
+              الأثر الحالي
+            </p>
             {studyTypeUsage.length > 0 ? (
               <div className="space-y-1 text-xs text-muted-foreground">
-                <p className="font-bold text-foreground">استخدام أنواع الدراسة</p>
-                {studyTypeUsage.map((item) => <p key={item}>{item}</p>)}
+                <p className="font-bold text-foreground">
+                  استخدام أنواع الدراسة
+                </p>
+                {studyTypeUsage.map((item) => (
+                  <p key={item}>{item}</p>
+                ))}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground">لا يوجد طلاب مرتبطون بهذه الإعدادات حالياً.</p>
+              <p className="text-xs text-muted-foreground">
+                لا يوجد طلاب مرتبطون بهذه الإعدادات حالياً.
+              </p>
             )}
             {locationUsage.length > 0 ? (
               <div className="space-y-1 text-xs text-muted-foreground">
-                <p className="font-bold text-foreground">أكثر المواقع استخداماً</p>
-                {locationUsage.map((item) => <p key={item}>{item}</p>)}
+                <p className="font-bold text-foreground">
+                  أكثر المواقع استخداماً
+                </p>
+                {locationUsage.map((item) => (
+                  <p key={item}>{item}</p>
+                ))}
               </div>
             ) : null}
             {row.configWarnings.length > 0 ? (
               <div className="space-y-1 rounded-xl border border-amber-200/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100">
-                {row.configWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+                {row.configWarnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
               </div>
             ) : null}
           </div>
@@ -1067,7 +1408,8 @@ export function CoursesView() {
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <p className="max-w-2xl text-xs leading-6 text-muted-foreground">
-            {row.deleteSafety.recommendedAction} التعطيل يوقف الدورة عن التسجيل والاختيارات الجديدة فقط ولا يغيّر بيانات الطلاب الحاليين.
+            {row.deleteSafety.recommendedAction} التعطيل يوقف الدورة عن التسجيل
+            والاختيارات الجديدة فقط ولا يغيّر بيانات الطلاب الحاليين.
           </p>
           <Button
             variant="ghost"
@@ -1092,7 +1434,9 @@ export function CoursesView() {
               <h2 className="text-xl font-black">إدارة الدورات</h2>
             </div>
             <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-              هذه الصفحة تقرأ الدورات وأثرها من بيانات النظام: الطلاب، الامتحانات، الفصول، وإمكانية الحذف. أي تعديل لا يظهر كنجاح إلا بعد تأكيد الحفظ.
+              هذه الصفحة تقرأ الدورات وأثرها من بيانات النظام: الطلاب،
+              الامتحانات، الفصول، وإمكانية الحذف. أي تعديل لا يظهر كنجاح إلا بعد
+              تأكيد الحفظ.
             </p>
           </div>
           <Button onClick={() => setShowCreateForm((value) => !value)}>
@@ -1127,7 +1471,9 @@ export function CoursesView() {
         <CardHeader className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>قائمة الدورات</CardTitle>
-            <Badge variant="outline">{filteredRows.length} من {rows.length}</Badge>
+            <Badge variant="outline">
+              {filteredRows.length} من {rows.length}
+            </Badge>
           </div>
           <div className="grid gap-3 lg:grid-cols-[1fr_220px_230px]">
             <Input
@@ -1137,44 +1483,66 @@ export function CoursesView() {
               autoComplete="off"
             />
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">حالة الدورة</Label>
+              <Label className="text-xs text-muted-foreground">
+                حالة الدورة
+              </Label>
               <Select
                 value={statusFilter}
-                onValueChange={(value) => setStatusFilter(value as CourseStatusFilter)}
+                onValueChange={(value) =>
+                  setStatusFilter(value as CourseStatusFilter)
+                }
               >
                 <SelectTrigger className="h-10 rounded-2xl">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(courseStatusFilterLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
+                  {Object.entries(courseStatusFilterLabels).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">حماية الحذف</Label>
+              <Label className="text-xs text-muted-foreground">
+                حماية الحذف
+              </Label>
               <Select
                 value={deleteFilter}
-                onValueChange={(value) => setDeleteFilter(value as CourseDeleteFilter)}
+                onValueChange={(value) =>
+                  setDeleteFilter(value as CourseDeleteFilter)
+                }
               >
                 <SelectTrigger className="h-10 rounded-2xl">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(courseDeleteFilterLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
+                  {Object.entries(courseDeleteFilterLabels).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>
           </div>
           <div className="rounded-2xl border bg-muted/30 p-3 text-xs text-muted-foreground">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" data-count-scope="filtered">المطابقون للفلاتر: {filteredStats.total}</Badge>
+              <Badge variant="outline" data-count-scope="filtered">
+                المطابقون للفلاتر: {filteredStats.total}
+              </Badge>
               <Badge variant="secondary">نشطة: {filteredStats.active}</Badge>
-              <Badge variant="secondary">موقوفة: {filteredStats.inactive}</Badge>
-              <Badge variant="outline">قابلة للحذف: {filteredStats.deletable}</Badge>
+              <Badge variant="secondary">
+                موقوفة: {filteredStats.inactive}
+              </Badge>
+              <Badge variant="outline">
+                قابلة للحذف: {filteredStats.deletable}
+              </Badge>
               <Badge variant="outline">محمية: {filteredStats.blocked}</Badge>
               {hasActiveFilters ? (
                 <Button
@@ -1193,7 +1561,9 @@ export function CoursesView() {
               ) : null}
             </div>
             <p className="mt-2 leading-6">
-              {courseStatusFilterLabels[statusFilter]} — {courseDeleteFilterLabels[deleteFilter]}. هذه الفلاتر للعرض فقط ولا تغيّر حالة أي دورة.
+              {courseStatusFilterLabels[statusFilter]} —{" "}
+              {courseDeleteFilterLabels[deleteFilter]}. هذه الفلاتر للعرض فقط
+              ولا تغيّر حالة أي دورة.
             </p>
           </div>
         </CardHeader>
@@ -1230,15 +1600,26 @@ export function CoursesView() {
           <div className="flex h-full min-h-0 flex-col">
             <DialogHeader className="shrink-0 border-b bg-background/95 px-5 py-5 text-right shadow-sm backdrop-blur md:px-8">
               <div className="mx-auto w-full max-w-6xl space-y-2 pl-10">
-                <DialogTitle className="text-2xl font-black">تعديل الدورة</DialogTitle>
+                <DialogTitle className="text-2xl font-black">
+                  تعديل الدورة
+                </DialogTitle>
                 <DialogDescription>
-                  الحفظ يتم من النظام أولاً. إذا كان التعديل يحذف خياراً يستخدمه طلاب مسجلون، سيتم رفضه برسالة واضحة حتى لا يتغير تصنيف طالب قديم بدون قصد.
+                  الحفظ يتم من النظام أولاً. إذا كان التعديل يحذف خياراً يستخدمه
+                  طلاب مسجلون، سيتم رفضه برسالة واضحة حتى لا يتغير تصنيف طالب
+                  قديم بدون قصد.
                 </DialogDescription>
                 {editDialog.row ? (
                   <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
-                    <div className="rounded-xl border bg-muted/30 p-3">الطلاب: {editDialog.row.counts.students}</div>
-                    <div className="rounded-xl border bg-muted/30 p-3">الامتحانات: {editDialog.row.counts.exams}</div>
-                    <div className="rounded-xl border bg-muted/30 p-3">الفصل النشط: {editDialog.row.activeChapter?.name || "لا يوجد"}</div>
+                    <div className="rounded-xl border bg-muted/30 p-3">
+                      الطلاب: {editDialog.row.counts.students}
+                    </div>
+                    <div className="rounded-xl border bg-muted/30 p-3">
+                      الامتحانات: {editDialog.row.counts.exams}
+                    </div>
+                    <div className="rounded-xl border bg-muted/30 p-3">
+                      الفصل النشط:{" "}
+                      {editDialog.row.activeChapter?.name || "لا يوجد"}
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -1250,7 +1631,10 @@ export function CoursesView() {
                   setForm={(action) =>
                     setEditDialog((prev) => ({
                       ...prev,
-                      form: typeof action === "function" ? action(prev.form) : action,
+                      form:
+                        typeof action === "function"
+                          ? action(prev.form)
+                          : action,
                     }))
                   }
                   onSubmit={handleEditSave}
@@ -1263,14 +1647,124 @@ export function CoursesView() {
         </DialogContent>
       </Dialog>
 
+      {/* ─── Course snapshot synchronization preview ─────────────────────── */}
+      <AlertDialog
+        open={courseSyncDialog.open}
+        onOpenChange={(open) => {
+          if (isApplyingCourseSync) return;
+          setCourseSyncDialog((prev) =>
+            open
+              ? { ...prev, open: true }
+              : { open: false, courseId: "", payload: null, preview: null },
+          );
+        }}
+      >
+        <AlertDialogContent dir="rtl" className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>معاينة أثر تعديل إعدادات الدورة</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4 text-right leading-7">
+                <p>
+                  تم حساب الأثر الآن من بيانات النظام. اختر هل تبقى بيانات
+                  الطلاب القدامى كنسخة تاريخية، أم تتم مزامنتها مع الإعدادات
+                  الجديدة ضمن عملية واحدة.
+                </p>
+                {courseSyncDialog.preview ? (
+                  <>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-xl border bg-muted/35 p-3">
+                        <p className="text-xs text-muted-foreground">
+                          طلاب حاليون
+                        </p>
+                        <p className="text-xl font-black text-foreground">
+                          {courseSyncDialog.preview.eligibleStudents}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border bg-primary/5 p-3">
+                        <p className="text-xs text-muted-foreground">
+                          تحتاج بياناتهم تحديثاً
+                        </p>
+                        <p className="text-xl font-black text-primary">
+                          {courseSyncDialog.preview.studentsToUpdate}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border bg-muted/35 p-3">
+                        <p className="text-xs text-muted-foreground">
+                          مؤرشفون لن يتغيروا
+                        </p>
+                        <p className="text-xl font-black text-foreground">
+                          {courseSyncDialog.preview.skippedArchived}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border bg-muted/25 p-3 text-sm">
+                      <p className="mb-2 font-bold text-foreground">
+                        الحقول التي ستتغير عند اختيار المزامنة:
+                      </p>
+                      <div className="grid gap-1 sm:grid-cols-2">
+                        <p>
+                          الفترة/نوع الدورة:{" "}
+                          {courseSyncDialog.preview.fieldChanges.courseTerm}
+                        </p>
+                        <p>
+                          نمط بغداد:{" "}
+                          {courseSyncDialog.preview.fieldChanges.baghdadMode}
+                        </p>
+                        <p>
+                          الموقع الرئيسي:{" "}
+                          {courseSyncDialog.preview.fieldChanges.mainSite}
+                        </p>
+                        <p>
+                          الموقع الفرعي:{" "}
+                          {courseSyncDialog.preview.fieldChanges.subSite}
+                        </p>
+                      </div>
+                    </div>
+                    {courseSyncDialog.preview.studentsToUpdate === 0 ? (
+                      <p className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-3 text-emerald-800 dark:text-emerald-200">
+                        جميع بيانات الطلاب الحالية متوافقة أصلاً؛ خيار المزامنة
+                        لن يغير أي سجل.
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:justify-start">
+            <AlertDialogCancel disabled={isApplyingCourseSync}>
+              إلغاء التعديل
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isApplyingCourseSync}
+              onClick={() => void handleCourseSyncDecision(false)}
+            >
+              حفظ الإعداد فقط
+            </Button>
+            <AlertDialogAction
+              disabled={
+                isApplyingCourseSync || !courseSyncDialog.preview?.canSync
+              }
+              onClick={() => void handleCourseSyncDecision(true)}
+            >
+              {isApplyingCourseSync ? "جاري الحفظ..." : "حفظ ومزامنة الطلاب"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* ─── Delete Course AlertDialog ───────────────────────────────────── */}
       <AlertDialog
         open={deleteDialog.open}
-        onOpenChange={(open) => setDeleteDialog((prev) => ({
-          ...prev,
-          open,
-          confirmText: open ? prev.confirmText : "",
-        }))}
+        onOpenChange={(open) =>
+          setDeleteDialog((prev) => ({
+            ...prev,
+            open,
+            confirmText: open ? prev.confirmText : "",
+          }))
+        }
       >
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
@@ -1278,25 +1772,41 @@ export function CoursesView() {
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-right leading-7">
                 <p>
-                  الحذف لا يعتمد على بيانات الصفحة المؤقتة. يتم السماح به فقط إذا أكدت بيانات النظام أن الدورة غير مرتبطة بطلاب أو امتحانات.
+                  الحذف لا يعتمد على بيانات الصفحة المؤقتة. يتم السماح به فقط
+                  إذا أكدت بيانات النظام أن الدورة غير مرتبطة بطلاب أو امتحانات.
                 </p>
                 {deleteDialog.row ? (
-                  <div className={`rounded-xl border p-3 ${deleteDialog.row.deleteSafety.canDelete ? "bg-muted/40" : "border-destructive/25 bg-destructive/10 text-destructive"}`}>
-                    <p className="font-bold">{deleteDialog.row.deleteSafety.canDelete ? "هذه الدورة آمنة للحذف" : "لا يمكن حذف هذه الدورة حالياً"}</p>
+                  <div
+                    className={`rounded-xl border p-3 ${deleteDialog.row.deleteSafety.canDelete ? "bg-muted/40" : "border-destructive/25 bg-destructive/10 text-destructive"}`}
+                  >
+                    <p className="font-bold">
+                      {deleteDialog.row.deleteSafety.canDelete
+                        ? "هذه الدورة آمنة للحذف"
+                        : "لا يمكن حذف هذه الدورة حالياً"}
+                    </p>
                     <p className="text-sm">
                       {deleteDialog.row.deleteSafety.blockers.length
                         ? deleteDialog.row.deleteSafety.blockers.join("، ")
                         : "لا توجد روابط مانعة حسب آخر فحص من بيانات النظام."}
                     </p>
-                    <p className="text-sm">{deleteDialog.row.deleteSafety.recommendedAction}</p>
+                    <p className="text-sm">
+                      {deleteDialog.row.deleteSafety.recommendedAction}
+                    </p>
                   </div>
                 ) : null}
                 <div className="space-y-2">
-                  <Label htmlFor="deleteCourseConfirm">اكتب اسم الدورة لتأكيد الحذف النهائي:</Label>
+                  <Label htmlFor="deleteCourseConfirm">
+                    اكتب اسم الدورة لتأكيد الحذف النهائي:
+                  </Label>
                   <Input
                     id="deleteCourseConfirm"
                     value={deleteDialog.confirmText}
-                    onChange={(event) => setDeleteDialog((prev) => ({ ...prev, confirmText: event.target.value }))}
+                    onChange={(event) =>
+                      setDeleteDialog((prev) => ({
+                        ...prev,
+                        confirmText: event.target.value,
+                      }))
+                    }
                     placeholder={deleteDialog.courseName}
                     autoComplete="off"
                     disabled={!deleteDialog.row?.deleteSafety.canDelete}
@@ -1312,7 +1822,8 @@ export function CoursesView() {
               disabled={
                 isDeletingCourse ||
                 !deleteDialog.row?.deleteSafety.canDelete ||
-                deleteDialog.confirmText.trim() !== deleteDialog.courseName.trim()
+                deleteDialog.confirmText.trim() !==
+                  deleteDialog.courseName.trim()
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

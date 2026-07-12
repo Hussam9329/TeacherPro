@@ -29,6 +29,12 @@ import {
 } from "@/lib/course-config";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import {
+  allocateStudentCodes,
+  ensureStudentCodeSequenceReady,
+  retryStudentCodeConflict,
+} from "@/lib/student-code-sequence";
 
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -86,7 +92,23 @@ function stripNonWritableStudentUpdateFields(data: Record<string, unknown>) {
   }
 }
 
+class StudentIntegrityError extends Error {
+  status: number;
+
+  constructor(message: string, status = 409) {
+    super(message);
+    this.name = "StudentIntegrityError";
+    this.status = status;
+  }
+}
+
 function getPrismaStudentErrorResponse(error: unknown) {
+  if (error instanceof StudentIntegrityError) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: error.status },
+    );
+  }
   const prismaError = error as { code?: string; meta?: { target?: unknown } };
   if (prismaError.code === "P2002") {
     const targetValue = prismaError.meta?.target;
@@ -355,7 +377,6 @@ function buildStudentFilterWhere(
   return and;
 }
 
-
 async function buildRegistryIssueWhere(
   searchParams: URLSearchParams,
 ): Promise<Prisma.StudentWhereInput | null> {
@@ -374,7 +395,9 @@ async function buildRegistryIssueWhere(
   }
 
   if (registryIssue === "no-telegram") {
-    return { OR: [{ telegram: null }, { telegram: "" }, { telegramKey: null }] };
+    return {
+      OR: [{ telegram: null }, { telegram: "" }, { telegramKey: null }],
+    };
   }
 
   if (registryIssue === "zero-opportunities") {
@@ -399,7 +422,9 @@ async function buildRegistryIssueWhere(
     const conflictCourseIds = Array.from(grouped.entries())
       .filter(([, links]) => links.length > 1)
       .map(([courseId]) => courseId);
-    return conflictCourseIds.length ? { courseId: { in: conflictCourseIds } } : { id: "__none__" };
+    return conflictCourseIds.length
+      ? { courseId: { in: conflictCourseIds } }
+      : { id: "__none__" };
   }
 
   if (registryIssue === "no-active-chapter") {
@@ -408,17 +433,29 @@ async function buildRegistryIssueWhere(
       .map((course) => course.id)
       .filter((courseId) => {
         const links = grouped.get(courseId) || [];
-        const cap = links.length === 1 ? Number(links[0].chapter.opportunities || 0) : 0;
+        const cap =
+          links.length === 1 ? Number(links[0].chapter.opportunities || 0) : 0;
         return links.length !== 1 || cap <= 0;
       });
-    return noActiveCourseIds.length ? { courseId: { in: noActiveCourseIds } } : { id: "__none__" };
+    return noActiveCourseIds.length
+      ? { courseId: { in: noActiveCourseIds } }
+      : { id: "__none__" };
   }
 
-  if (registryIssue === "opportunity-full" || registryIssue === "opportunity-over-limit") {
+  if (
+    registryIssue === "opportunity-full" ||
+    registryIssue === "opportunity-over-limit"
+  ) {
     const courseCaps = Array.from(grouped.entries())
       .map(([courseId, links]) => ({
         courseId,
-        cap: links.length === 1 ? Math.max(0, Math.trunc(Number(links[0].chapter.opportunities || 0))) : 0,
+        cap:
+          links.length === 1
+            ? Math.max(
+                0,
+                Math.trunc(Number(links[0].chapter.opportunities || 0)),
+              )
+            : 0,
       }))
       .filter((item) => item.cap > 0);
     const or = courseCaps.map(({ courseId, cap }) => ({
@@ -525,25 +562,6 @@ type InitialOpportunitiesResult = {
   error?: string;
 };
 
-function studentCodeNumber(code: string | null | undefined): number {
-  const match = String(code || "").match(/^BIO-(\d+)$/);
-  return match ? Number(match[1]) : 0;
-}
-
-async function getNextStudentCode(
-  tx: Prisma.TransactionClient,
-): Promise<string> {
-  const existingCodes = await tx.student.findMany({
-    select: { code: true },
-    where: { code: { startsWith: "BIO-" } },
-  });
-  const maxCode = existingCodes.reduce(
-    (max, student) => Math.max(max, studentCodeNumber(student.code)),
-    0,
-  );
-  return `BIO-${String(maxCode + 1).padStart(3, "0")}`;
-}
-
 /**
  * النظام هو صاحب القرار النهائي لفرص الطالب عند التسجيل.
  * لا نعتمد نهائياً على opportunities/baseOpportunities القادمة من العميل،
@@ -554,6 +572,7 @@ async function getNextStudentCode(
  */
 async function getInitialOpportunities(
   course: { id: string; name?: string | null } | null,
+  client: typeof db | Prisma.TransactionClient = db,
 ): Promise<InitialOpportunitiesResult> {
   if (!course) {
     return {
@@ -565,7 +584,7 @@ async function getInitialOpportunities(
     };
   }
 
-  const activeCourseChapters = await db.courseChapter.findMany({
+  const activeCourseChapters = await client.courseChapter.findMany({
     where: { courseId: course.id, active: true, archived: false },
     include: { chapter: { select: { name: true, opportunities: true } } },
   });
@@ -720,89 +739,123 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Auto-resolve subSite based on course settings
-  const resolvedSubSite = resolveSubSite(
-    course,
-    String(body.studyType ?? ""),
-    String(body.locationScope ?? ""),
-    String(body.baghdadMode ?? ""),
-    String(body.subSite ?? ""),
-  );
-
-  const initialOpportunitiesResult = await getInitialOpportunities(course);
-  if (initialOpportunitiesResult.error) {
+  const initialOpportunitiesCheck = await getInitialOpportunities(course);
+  if (initialOpportunitiesCheck.error) {
     return NextResponse.json(
-      { error: initialOpportunitiesResult.error },
+      { error: initialOpportunitiesCheck.error },
       { status: 409 },
     );
   }
-  const opportunitiesWarning = initialOpportunitiesResult.warning;
-  const initialOpportunities = {
-    opportunities: initialOpportunitiesResult.opportunities,
-    baseOpportunities: initialOpportunitiesResult.baseOpportunities,
-  };
 
   try {
-    const student = await db.$transaction(async (tx) => {
-      const code = await getNextStudentCode(tx);
-      const createdStudent = await tx.student.create({
-        data: {
-          name: String(body.name ?? "").trim(),
-          school: String(body.school ?? "").trim(),
-          gender: body.gender,
-          phone: sanitizePhoneInput(String(body.phone ?? "")),
-          parentPhone: sanitizePhoneInput(String(body.parentPhone ?? "")),
-          telegram: sanitizeTelegramInput(String(body.telegram ?? "")),
-          courseProgram: body.courseProgram || null,
-          courseTerm:
-            body.courseProgram === "كورسات" ? body.courseTerm || null : null,
-          studyType: body.studyType || null,
-          locationScope: body.locationScope || null,
-          baghdadMode: body.baghdadMode || null,
-          mainSite: body.locationScope || body.mainSite,
-          subSite: resolvedSubSite || body.subSite,
-          // الكود يولّد حصراً من النظام حتى لا يظهر كود وهمي من البيانات المؤقتة المحلي.
-          code,
-          status: "نشط",
-          dismissalType: "",
-          dismissalReason: "",
-          dismissalNotes: body.dismissalNotes
-            ? String(body.dismissalNotes)
-            : null,
-          createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
-          // النظام يحسب الفرص حصراً من الفصل النشط، ولا يثق بأي قيمة مرسلة من العميل.
-          ...initialOpportunities,
-          accountingGraceDays: normalizeGraceDays(body.accountingGraceDays),
-          courseId: body.courseId,
-          ...uniqueKeys,
-        },
-      });
+    await ensureStudentCodeSequenceReady();
+    const created = await retryStudentCodeConflict(() =>
+      withSerializableTransaction(async (tx) => {
+        // Re-read the course and active chapter inside the same serializable
+        // transaction that creates the student. The outer validation is only an
+        // early UX check and is never trusted during a concurrent settings change.
+        const transactionCourse = await tx.course.findUnique({
+          where: { id: String(body.courseId) },
+        });
+        if (!transactionCourse) {
+          throw new StudentIntegrityError(
+            "الدورة المحددة لم تعد موجودة. لم يتم تسجيل الطالب.",
+            400,
+          );
+        }
+        if (transactionCourse.active === false) {
+          throw new StudentIntegrityError(
+            "هذه الدورة موقوفة عن التسجيل حالياً",
+            400,
+          );
+        }
+        const transactionChoiceValidation = validateStudentCourseChoices(
+          transactionCourse,
+          courseChoices,
+        );
+        if (!transactionChoiceValidation.ok) {
+          throw new StudentIntegrityError(
+            transactionChoiceValidation.error,
+            400,
+          );
+        }
+        const transactionSubSite = resolveSubSite(
+          transactionCourse,
+          String(body.studyType ?? ""),
+          String(body.locationScope ?? ""),
+          String(body.baghdadMode ?? ""),
+          String(body.subSite ?? ""),
+        );
+        const initialOpportunitiesResult = await getInitialOpportunities(
+          transactionCourse,
+          tx,
+        );
+        if (initialOpportunitiesResult.error) {
+          throw new StudentIntegrityError(initialOpportunitiesResult.error);
+        }
+        const [code] = await allocateStudentCodes(tx, 1);
+        const createdStudent = await tx.student.create({
+          data: {
+            name: String(body.name ?? "").trim(),
+            school: String(body.school ?? "").trim(),
+            gender: body.gender,
+            phone: sanitizePhoneInput(String(body.phone ?? "")),
+            parentPhone: sanitizePhoneInput(String(body.parentPhone ?? "")),
+            telegram: sanitizeTelegramInput(String(body.telegram ?? "")),
+            courseProgram: body.courseProgram || null,
+            courseTerm:
+              body.courseProgram === "كورسات" ? body.courseTerm || null : null,
+            studyType: body.studyType || null,
+            locationScope: body.locationScope || null,
+            baghdadMode: body.baghdadMode || null,
+            mainSite: body.locationScope || body.mainSite,
+            subSite: transactionSubSite || body.subSite,
+            // PostgreSQL sequence allocation is atomic across all app instances.
+            code,
+            status: "نشط",
+            dismissalType: "",
+            dismissalReason: "",
+            dismissalNotes: body.dismissalNotes
+              ? String(body.dismissalNotes)
+              : null,
+            createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
+            opportunities: initialOpportunitiesResult.opportunities,
+            baseOpportunities: initialOpportunitiesResult.baseOpportunities,
+            accountingGraceDays: normalizeGraceDays(body.accountingGraceDays),
+            courseId: body.courseId,
+            ...uniqueKeys,
+          },
+        });
 
-      await tx.auditLog.create({
-        data: {
-          module: "تسجيل الطلاب",
-          action: "تسجيل طالب",
-          details: `${createdStudent.name} - ${createdStudent.code} - ${course.name}${
-            initialOpportunitiesResult.activeChapterName
-              ? ` - ${initialOpportunitiesResult.activeChapterName}`
-              : ""
-          }`,
-          userId: principal.id,
-          userName: principal.name,
-        },
-      });
+        await tx.auditLog.create({
+          data: {
+            module: "تسجيل الطلاب",
+            action: "تسجيل طالب",
+            details: `${createdStudent.name} - ${createdStudent.code} - ${transactionCourse.name}${
+              initialOpportunitiesResult.activeChapterName
+                ? ` - ${initialOpportunitiesResult.activeChapterName}`
+                : ""
+            }`,
+            userId: principal.id,
+            userName: principal.name,
+          },
+        });
 
-      return createdStudent;
-    });
+        return {
+          student: createdStudent,
+          opportunitiesWarning: initialOpportunitiesResult.warning,
+        };
+      }),
+    );
 
     const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
-      student,
+      created.student,
     ]);
 
     return NextResponse.json(
       {
         student: studentWithOpportunity,
-        opportunitiesWarning,
+        opportunitiesWarning: created.opportunitiesWarning,
         source: "database",
       },
       { status: 201 },
@@ -1055,6 +1108,9 @@ export async function PUT(req: NextRequest) {
     }
   }
 
+  let resetOpportunityHistory = false;
+  let resetTargetCourseId = "";
+
   // كشف تغيير الدورة، نوع البرنامج، أو نوع الدورة. كل واحدة من هذي التغييرات
   // تستوجب قراراً واضحاً من المستخدم: هل يريد اعتبار الطالب جديداً (reset)
   // أو الإبقاء على فرصه (keep)؟
@@ -1122,16 +1178,23 @@ export async function PUT(req: NextRequest) {
       const nextOpportunities = await getInitialOpportunities({
         id: courseForOpp,
       });
+      if (nextOpportunities.error) {
+        return NextResponse.json(
+          { error: nextOpportunities.error },
+          { status: 409 },
+        );
+      }
       data.opportunities = nextOpportunities.opportunities;
       data.baseOpportunities = nextOpportunities.baseOpportunities;
+      resetOpportunityHistory = true;
+      resetTargetCourseId = courseForOpp;
       // امسح حالة الفصل القديمة حتى يبدأ الطالب كصفحة بيضاء في الدورة الجديدة.
       data.status = "نشط";
       data.dismissalType = "";
       data.dismissalReason = "";
       data.dismissalNotes = "";
-      // امسح كل سجلات الفرص القديمة (يدوية + تلقائية) حتى ما يعيد المحرك
-      // احتسابها ويخصم من رصيد الطالب الجديد. هذا هو جوهر "اعتباره طالب جديد".
-      await db.opportunityLog.deleteMany({ where: { studentId: id } });
+      // حذف السجل سيتم داخل نفس transaction التي تنقل الطالب وتعيد احتسابه.
+      // بذلك لا يمكن أن تضيع السجلات إذا فشل تحديث الطالب بعد الحذف.
     }
 
     if (needsTransferPolicy && courseTransferPolicy === "keep") {
@@ -1143,31 +1206,46 @@ export async function PUT(req: NextRequest) {
   }
 
   try {
-    const student = await db.student.update({ where: { id }, data });
+    const result = await withSerializableTransaction(async (tx) => {
+      const transactionData = { ...data };
 
-    // أعِد حساب الحالة الأكاديمية للطالب بعد أي تعديل. هذا يضمن أن الفرص
-    // وحالة الفصل تبقى متزامنة مع بيانات النظام حتى لو كان العميل يرسل
-    // قيماً قديمة أو لو تغيرت إعدادات الدورة/الفصل بشكل غير مباشر.
-    // إعادة الحساب idempotent — لو ما تغير شي، ما تكتب شي.
-    let academicRecalculation: Awaited<
-      ReturnType<typeof recalculateStudentsAcademicState>
-    > | null = null;
-    try {
-      academicRecalculation = await recalculateStudentsAcademicState([id]);
-    } catch (recalcError) {
-      // لا نُفشل التحديث بالكامل إذا فشلت إعادة الحساب — نكتفي بتسجيل الخطأ.
-      console.warn("[students PUT] recalculation failed for", id, recalcError);
-    }
+      if (resetOpportunityHistory) {
+        const nextOpportunities = await getInitialOpportunities(
+          { id: resetTargetCourseId },
+          tx,
+        );
+        if (nextOpportunities.error) {
+          throw new StudentIntegrityError(nextOpportunities.error);
+        }
+        transactionData.opportunities = nextOpportunities.opportunities;
+        transactionData.baseOpportunities = nextOpportunities.baseOpportunities;
+        await tx.opportunityLog.deleteMany({ where: { studentId: id } });
+      }
 
-    const refreshedStudent =
-      (await db.student.findUnique({ where: { id } })) || student;
+      const student = await tx.student.update({
+        where: { id },
+        data: transactionData,
+      });
+
+      // Updating the student, deleting the old opportunity history (for reset),
+      // and recalculating the new academic state are one all-or-nothing unit.
+      const academicRecalculation = await recalculateStudentsAcademicState(
+        [id],
+        { tx },
+      );
+      const refreshedStudent =
+        (await tx.student.findUnique({ where: { id } })) || student;
+
+      return { refreshedStudent, academicRecalculation };
+    });
+
     const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
-      refreshedStudent,
+      result.refreshedStudent,
     ]);
 
     return NextResponse.json({
       student: studentWithOpportunity,
-      academicRecalculation,
+      academicRecalculation: result.academicRecalculation,
       source: "database",
     });
   } catch (error) {
