@@ -12,7 +12,9 @@ export async function runSerializedSchemaRepair(
 ): Promise<void> {
   await db.$transaction(
     async (tx) => {
-      await tx.$queryRawUnsafe(
+      // $executeRawUnsafe (not $queryRawUnsafe) because pg_advisory_xact_lock
+      // returns void and Prisma cannot deserialize a void column.
+      await tx.$executeRawUnsafe(
         `SELECT pg_advisory_xact_lock(${SCHEMA_REPAIR_LOCK_ID})`,
       );
       for (const statement of statements) {
