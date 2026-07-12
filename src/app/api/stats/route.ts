@@ -7,6 +7,7 @@ import { requireAuth } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { withFollowupTables } from '@/lib/followup-schema';
 import { withGradeEntryMissingNoteSchema } from '@/lib/grade-entry-missing-note-schema';
+import { isMissingDatabaseObjectError } from '@/lib/route-helpers';
 
 const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
 const PLEDGE_NOTE_KIND = 'تعهد ولي الأمر';
@@ -423,6 +424,18 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
+    // لو ترحيلات قاعدة البيانات الأخيرة غير مطبّقة (أعمدة OpportunityLog
+    // الجديدة، أو جداول ناقصة)، أعطِ رسالة واضحة بدل 500 عام.
+    if (isMissingDatabaseObjectError(error)) {
+      console.error('[API] /api/stats missing database object:', error);
+      return NextResponse.json(
+        {
+          error:
+            'تعذر تحميل الإحصائيات لأن ترحيلات قاعدة البيانات الأخيرة غير مطبّقة. شغّل `npm run db:deploy` على الخادم ثم أعد المحاولة.',
+        },
+        { status: 503 },
+      );
+    }
     console.error('[API] /api/stats error:', error);
     return NextResponse.json(
       { error: 'تعذر تحميل الإحصائيات والتنبيهات من بيانات النظام حالياً.' },
