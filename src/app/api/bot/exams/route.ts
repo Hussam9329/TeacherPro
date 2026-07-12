@@ -6,6 +6,12 @@ import { db } from "@/lib/db";
 import { requireBotToken } from "@/lib/bot-integration-auth";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
+import {
+  getExamEntryAvailability,
+  isExamOnOrAfterStudentRegistration,
+  splitSelection,
+  studentMatchesExamMainSites,
+} from "@/lib/exam-utils";
 
 function textValue(value: unknown, max = 200): string {
   return String(value ?? "").trim().slice(0, max);
@@ -51,21 +57,43 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as Record<string, unknown>;
     const student = await resolveStudent(body);
     if (!student) return validationError("الطالب غير مرتبط أو غير موجود في TeacherPro.", 404);
+    if (student.status === "مفصول") {
+      return validationError("الطالب مفصول ولا يمكن للبوت اعتماد امتحان أو درجة له قبل إعادة التفعيل.");
+    }
+    if (student.status === "مؤرشف") {
+      return validationError("ملف الطالب مؤرشف ومتاح للقراءة فقط.");
+    }
 
-    const [activeExams, takenGrades, takenSubmissions] = await Promise.all([
-      db.exam.findMany({ where: { active: true }, orderBy: { date: "desc" } }),
+    const [candidateExams, takenGrades, takenSubmissions, activeChapterLinks] = await Promise.all([
+      db.exam.findMany({ orderBy: { date: "desc" } }),
       db.grade.findMany({ where: { studentId: student.id }, select: { examId: true } }),
       db.telegramExamSubmission.findMany({ where: { studentId: student.id }, select: { examId: true } }).catch(() => []),
+      db.courseChapter.findMany({
+        where: { courseId: student.courseId, active: true, archived: false },
+        select: { id: true },
+      }),
     ]);
+
+    if (activeChapterLinks.length !== 1) {
+      return validationError(
+        activeChapterLinks.length === 0
+          ? "دورة الطالب لا تحتوي فصلاً نشطاً، لذلك لا يمكن عرض امتحانات البوت."
+          : "دورة الطالب تحتوي تعارضاً في الفصول النشطة، لذلك تم إيقاف امتحانات البوت لحماية الرصيد.",
+        409,
+      );
+    }
 
     const takenExamIds = new Set([
       ...takenGrades.map((item) => item.examId),
       ...takenSubmissions.map((item) => item.examId),
     ]);
 
-    const exams = activeExams
+    const exams = candidateExams
       .filter((exam) => {
         if (takenExamIds.has(exam.id)) return false;
+        if (!getExamEntryAvailability(exam).available) return false;
+        if (!isExamOnOrAfterStudentRegistration(student, exam)) return false;
+        if (!studentMatchesExamMainSites(student, splitSelection(exam.mainSite))) return false;
         const courseIds = parseCourseIds(exam.courseIds);
         return courseIds.length === 0 || courseIds.includes(student.courseId);
       })
@@ -78,6 +106,7 @@ export async function POST(req: NextRequest) {
         fullMark: exam.fullMark,
         passMark: exam.passMark,
         active: exam.active,
+        availability: getExamEntryAvailability(exam),
       }));
 
     return NextResponse.json({

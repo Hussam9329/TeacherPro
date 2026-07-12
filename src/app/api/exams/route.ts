@@ -5,7 +5,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
-import { parseBaghdadDateTime } from '@/lib/baghdad-time';
+import { parseBaghdadDateOnly, parseBaghdadDateTime } from '@/lib/baghdad-time';
+import { getExamEntryAvailability } from '@/lib/exam-utils';
 import { ensureExamSchema } from '@/lib/exam-schema';
 import { canonicalCourseIds, parseCourseIds, syncExamCourseLinks } from '@/lib/exam-course-links';
 import { recalculateStudentsForExam } from '@/lib/academic-recalculate-server';
@@ -114,16 +115,23 @@ function validateExamPayload(body: Record<string, unknown>) {
     .map((site) => site.trim())
     .filter(Boolean);
   if (selectedMainSites.length === 0) return 'يجب اختيار منطقة واحدة على الأقل';
+  const examDate = parseBaghdadDateOnly(body.date as string | Date | null | undefined);
+  if (!examDate) return 'تاريخ الامتحان غير صحيح';
   const noDiscount = parseBoolean(body.noDiscount);
   const fullMark = Number(body.fullMark ?? 100);
   const passMark = Number(body.passMark ?? 50);
   const discountMark = noDiscount ? 0 : Number(body.discountMark ?? 0);
-  if (![fullMark, passMark, discountMark].every(Number.isFinite)) return 'درجات الامتحان يجب أن تكون أرقاماً صحيحة';
+  if (![fullMark, passMark, discountMark].every((value) => Number.isFinite(value) && Number.isInteger(value))) return 'درجات الامتحان يجب أن تكون أعداداً صحيحة بدون كسور';
   if (fullMark <= 0) return 'الدرجة الكاملة يجب أن تكون أكبر من صفر';
   if (passMark < 0 || passMark > fullMark) return 'درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة';
   if (!noDiscount && (discountMark < 0 || discountMark > fullMark)) return 'درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة';
   if (!noDiscount && String(body.type) !== 'فاينل' && passMark <= discountMark) return 'درجة النجاح يجب أن تكون أكبر من درجة الخصم';
-  if (!noDiscount && String(body.type) !== 'فاينل' && Number(body.opportunitiesPenalty ?? 1) <= 0) return 'خصم الفرص يجب أن يكون أكبر من صفر';
+  const penalty = Number(body.opportunitiesPenalty ?? 1);
+  if (!noDiscount && String(body.type) !== 'فاينل' && (!Number.isInteger(penalty) || penalty <= 0)) return 'خصم الفرص يجب أن يكون عدداً صحيحاً أكبر من صفر';
+  if (!noDiscount && String(body.type) === 'فاينل' && body.dismissalGrade !== null && body.dismissalGrade !== undefined && body.dismissalGrade !== '') {
+    const dismissalGrade = Number(body.dismissalGrade);
+    if (!Number.isInteger(dismissalGrade) || dismissalGrade < 0 || dismissalGrade > fullMark) return 'درجة الفصل يجب أن تكون عدداً صحيحاً بين صفر والدرجة الكاملة';
+  }
   return null;
 }
 
@@ -166,6 +174,12 @@ export async function POST(req: NextRequest) {
       return validationError(`لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${courseProblems.join('، ')}`);
     }
     const noDiscount = parseBoolean(body.noDiscount);
+    const examDate = parseBaghdadDateOnly(body.date as string | Date | null | undefined);
+    if (!examDate) return validationError('تاريخ الامتحان غير صحيح');
+    const scheduledActivateAt = body.scheduledActivateAt ? parseBaghdadDateTime(String(body.scheduledActivateAt)) : null;
+    const scheduledDeactivateAt = body.scheduledDeactivateAt ? parseBaghdadDateTime(String(body.scheduledDeactivateAt)) : null;
+    const requestedActive = body.active === undefined ? true : parseBoolean(body.active);
+    const effectiveStoredActive = Boolean(scheduledActivateAt && scheduledActivateAt > new Date()) ? false : requestedActive;
     const exam = await db.$transaction(async (tx) => {
       const createdExam = await tx.exam.create({
         data: {
@@ -173,16 +187,16 @@ export async function POST(req: NextRequest) {
         type: body.type,
         courseIds: JSON.stringify(parsedCourseIds),
         mainSite: body.mainSite,
-        date: body.date ? new Date(body.date) : new Date(),
+        date: examDate,
         fullMark: Number(body.fullMark || 100),
         passMark: Number(body.passMark || 50),
         discountMark: noDiscount ? 0 : Number(body.discountMark || 0),
         opportunitiesPenalty: noDiscount ? '0' : String(body.opportunitiesPenalty ?? 1),
         dismissalGrade: !noDiscount && String(body.type) === 'فاينل' && body.dismissalGrade !== null && body.dismissalGrade !== undefined ? Number(body.dismissalGrade) : null,
         noDiscount,
-        active: body.active ?? true,
-        scheduledActivateAt: body.scheduledActivateAt ? parseBaghdadDateTime(String(body.scheduledActivateAt)) : null,
-        scheduledDeactivateAt: body.scheduledDeactivateAt ? parseBaghdadDateTime(String(body.scheduledDeactivateAt)) : null,
+        active: effectiveStoredActive,
+        scheduledActivateAt,
+        scheduledDeactivateAt,
         },
       });
       await syncExamCourseLinks(tx, createdExam.id, parsedCourseIds);
@@ -209,8 +223,13 @@ export async function PUT(req: NextRequest) {
 
     const body = await req.json();
     const { id, ...data } = body;
-    for (const obsoleteKey of ["attendance", "attendanceClosed", "groupId"]) {
-      delete data[obsoleteKey];
+    const allowedUpdateKeys = new Set([
+      'name', 'type', 'courseIds', 'mainSite', 'date', 'fullMark', 'passMark',
+      'discountMark', 'opportunitiesPenalty', 'dismissalGrade', 'noDiscount',
+      'active', 'scheduledActivateAt', 'scheduledDeactivateAt',
+    ]);
+    for (const key of Object.keys(data)) {
+      if (!allowedUpdateKeys.has(key)) delete data[key];
     }
     if (!id) return validationError('تعذر تحديد الامتحان المطلوب');
     const existingExam = await db.exam.findUnique({ where: { id } });
@@ -221,7 +240,11 @@ export async function PUT(req: NextRequest) {
       data.name = String(data.name ?? '').trim();
     }
     if (data.courseIds !== undefined) data.courseIds = JSON.stringify(parseCourseIds(data.courseIds));
-    if (data.date !== undefined) data.date = data.date ? new Date(data.date) : new Date();
+    if (data.date !== undefined) {
+      const parsedDate = parseBaghdadDateOnly(data.date as string | Date | null | undefined);
+      if (!parsedDate) return validationError('تاريخ الامتحان غير صحيح');
+      data.date = parsedDate;
+    }
     if (data.fullMark !== undefined) data.fullMark = Number(data.fullMark);
     if (data.passMark !== undefined) data.passMark = Number(data.passMark);
     if (data.discountMark !== undefined) data.discountMark = Number(data.discountMark);
@@ -230,16 +253,21 @@ export async function PUT(req: NextRequest) {
     if (data.noDiscount !== undefined) data.noDiscount = parseBoolean(data.noDiscount);
     if (data.scheduledActivateAt !== undefined) data.scheduledActivateAt = data.scheduledActivateAt ? parseBaghdadDateTime(String(data.scheduledActivateAt)) : null;
     if (data.scheduledDeactivateAt !== undefined) data.scheduledDeactivateAt = data.scheduledDeactivateAt ? parseBaghdadDateTime(String(data.scheduledDeactivateAt)) : null;
+    if (data.active !== undefined) data.active = parseBoolean(data.active);
+    if (data.scheduledActivateAt instanceof Date && data.scheduledActivateAt > new Date()) data.active = false;
 
     const candidateValidationMessage = validateExamPayload({
       name: data.name ?? existingExam.name,
       type: data.type ?? existingExam.type,
       courseIds: data.courseIds ?? existingExam.courseIds,
+      mainSite: data.mainSite ?? existingExam.mainSite,
+      date: data.date ?? existingExam.date,
       fullMark: data.fullMark ?? existingExam.fullMark,
       passMark: data.passMark ?? existingExam.passMark,
       discountMark: data.discountMark ?? existingExam.discountMark,
       opportunitiesPenalty: data.opportunitiesPenalty ?? existingExam.opportunitiesPenalty,
       noDiscount: data.noDiscount ?? existingExam.noDiscount,
+      dismissalGrade: data.dismissalGrade !== undefined ? data.dismissalGrade : existingExam.dismissalGrade,
     });
     if (candidateValidationMessage) return validationError(candidateValidationMessage);
     const candidateCourseIds = parseCourseIds(data.courseIds ?? existingExam.courseIds);
@@ -247,6 +275,22 @@ export async function PUT(req: NextRequest) {
     if (courseProblems.length > 0) {
       return validationError(`لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${courseProblems.join('، ')}`);
     }
+    const candidateExamForAvailability = { ...existingExam, ...data };
+    const wasAvailable = getExamEntryAvailability(existingExam).available;
+    const candidateAvailability = getExamEntryAvailability(candidateExamForAvailability);
+    const candidateHasAutomaticActivation = Boolean(
+      candidateExamForAvailability.active || candidateExamForAvailability.scheduledActivateAt,
+    );
+    if (!wasAvailable && candidateHasAutomaticActivation) {
+      const storedGradeCount = await db.grade.count({ where: { examId: id } });
+      if (storedGradeCount > 0 && !parseBoolean(body.confirmExistingGrades)) {
+        return validationError(
+          `هذا الامتحان غير متاح حالياً ومرتبط بـ ${storedGradeCount} درجة محفوظة. تفعيله الآن أو جدولته قد يجعل هذه الدرجات مؤثرة. راجع الأثر وأكد التفعيل صراحةً.`,
+          409,
+        );
+      }
+    }
+
     const effectiveNoDiscount = Boolean(data.noDiscount ?? existingExam.noDiscount);
     if (effectiveNoDiscount) {
       data.discountMark = 0;
@@ -260,7 +304,10 @@ export async function PUT(req: NextRequest) {
       const exam = await tx.exam.update({ where: { id }, data });
       await syncExamCourseLinks(tx, exam.id, exam.courseIds);
       const academicRecalculation = hasAcademicExamChange(existingExam, exam)
-        ? await recalculateStudentsForExam(exam.id, { tx })
+        ? await recalculateStudentsForExam(exam.id, {
+            tx,
+            periodLeaveDates: [existingExam.date, exam.date],
+          })
         : null;
       return { exam, academicRecalculation };
     });
@@ -269,8 +316,13 @@ export async function PUT(req: NextRequest) {
       examName: result.exam.name,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
       academicChange: Boolean(result.academicRecalculation),
+      availabilityBefore: wasAvailable,
+      availabilityAfter: candidateAvailability.available,
     });
-    return NextResponse.json(result);
+    return NextResponse.json({
+      ...result,
+      availability: candidateAvailability,
+    });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث الامتحان حالياً.');
   }
@@ -287,30 +339,60 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد الامتحان المطلوب');
 
-    const [exam, gradeCount] = await Promise.all([
+    const [
+      exam,
+      gradeCount,
+      leaveCount,
+      callCount,
+      correctionSheetCount,
+      telegramSubmissionCount,
+      opportunityLogCount,
+      missingNoteCount,
+      leaveBackupCount,
+    ] = await Promise.all([
       db.exam.findUnique({ where: { id }, select: { id: true, name: true } }),
       db.grade.count({ where: { examId: id } }),
+      db.studentLeave.count({ where: { examId: id } }),
+      db.studentCall.count({ where: { examId: id } }),
+      db.correctionSheet.count({ where: { examId: id } }),
+      db.telegramExamSubmission.count({ where: { examId: id } }),
+      db.opportunityLog.count({ where: { examId: id } }),
+      db.gradeEntryMissingNote.count({ where: { examId: id } }),
+      db.studentLeaveGradeBackup.count({ where: { examId: id } }),
     ]);
     if (!exam) return validationError('الامتحان المطلوب غير موجود');
-    if (gradeCount > 0) {
-      return validationError(`لا يمكن حذف الامتحان "${exam.name}" لأن عليه ${gradeCount} سجل درجات. عطّل الامتحان بدلاً من حذفه.`);
+
+    const relationCounts = [
+      ['درجات', gradeCount],
+      ['إجازات', leaveCount],
+      ['مكالمات', callCount],
+      ['أوراق تصحيح', correctionSheetCount],
+      ['مستلمات تيليجرام', telegramSubmissionCount],
+      ['حركات فرص', opportunityLogCount],
+      ['ملاحظات إدخال', missingNoteCount],
+      ['نسخ درجات الإجازات', leaveBackupCount],
+    ] as const;
+    const blockers = relationCounts.filter(([, count]) => count > 0);
+    if (blockers.length > 0) {
+      const details = blockers.map(([label, count]) => `${label}: ${count}`).join('، ');
+      return validationError(
+        `لا يمكن حذف الامتحان "${exam.name}" لأنه مرتبط ببيانات محفوظة (${details}). عطّل الامتحان بدلاً من حذفه حتى يبقى التاريخ الأكاديمي سليماً.`,
+        409,
+      );
     }
 
-    const deleted = await db.$transaction(async (tx) => {
-      const correctionSheets = await tx.correctionSheet.deleteMany({ where: { examId: id } });
+    await db.$transaction(async (tx) => {
       await tx.examCourse.deleteMany({ where: { examId: id } });
-      const opportunityLogs = await tx.opportunityLog.deleteMany({ where: { examId: id } });
       await tx.exam.delete({ where: { id } });
-      return { correctionSheets: correctionSheets.count, opportunityLogs: opportunityLogs.count };
     });
-    await writeRequestAuditLog(req, 'الامتحانات', 'حذف امتحان بدون درجات وتنظيف السجلات التابعة', {
+    await writeRequestAuditLog(req, 'الامتحانات', 'حذف امتحان غير مرتبط بأي بيانات', {
       examId: id,
       examName: exam.name,
-      deletedCorrectionSheets: deleted.correctionSheets,
-      deletedOpportunityLogs: deleted.opportunityLogs,
+      affectedStudents: 0,
+      recalculatedStudents: 0,
     });
-    return NextResponse.json({ ok: true, ...deleted });
+    return NextResponse.json({ ok: true, affectedStudents: 0, recalculatedStudents: 0 });
   } catch (error) {
-    return routeErrorResponse(error, 'تعذر حذف الامتحان وسجلاته التابعة حالياً.');
+    return routeErrorResponse(error, 'تعذر حذف الامتحان حالياً.');
   }
 }

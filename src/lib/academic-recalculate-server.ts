@@ -1,3 +1,4 @@
+import { baghdadDateKey } from "@/lib/baghdad-time";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import {
@@ -665,7 +666,10 @@ export async function recalculateStudentsAcademicState(
 
 export async function recalculateStudentsForExam(
   examId: string,
-  options: { tx?: Prisma.TransactionClient } = {},
+  options: {
+    tx?: Prisma.TransactionClient;
+    periodLeaveDates?: Array<Date | string | null | undefined>;
+  } = {},
 ): Promise<AcademicServerRecalculationResult> {
   const trimmedExamId = String(examId || "").trim();
   if (!trimmedExamId) {
@@ -677,12 +681,48 @@ export async function recalculateStudentsForExam(
     };
   }
   const client = options.tx || db;
-  const [grades, leaves, correctionSheets, telegramSubmissions, opportunityLogs] = await Promise.all([
+
+  const periodLeaveWhere: Prisma.StudentLeaveWhereInput[] = [];
+  const periodDayKeys = Array.from(
+    new Set(
+      (options.periodLeaveDates || [])
+        .map((value) =>
+          baghdadDateKey(value),
+        )
+        .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)),
+    ),
+  );
+  for (const key of periodDayKeys) {
+    const dayStart = new Date(`${key}T00:00:00.000Z`);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    periodLeaveWhere.push({
+      leaveType: "period",
+      dateFrom: { lt: dayEnd },
+      dateTo: { gte: dayStart },
+    });
+  }
+
+  const [
+    grades,
+    leaves,
+    calls,
+    correctionSheets,
+    telegramSubmissions,
+    opportunityLogs,
+    leaveGradeBackups,
+  ] = await Promise.all([
     client.grade.findMany({
       where: { examId: trimmedExamId },
       select: { studentId: true },
     }),
     client.studentLeave.findMany({
+      where: {
+        OR: [{ examId: trimmedExamId }, ...periodLeaveWhere],
+      },
+      select: { studentId: true },
+    }),
+    client.studentCall.findMany({
       where: { examId: trimmedExamId },
       select: { studentId: true },
     }),
@@ -698,14 +738,20 @@ export async function recalculateStudentsForExam(
       where: { examId: trimmedExamId },
       select: { studentId: true },
     }),
+    client.studentLeaveGradeBackup.findMany({
+      where: { examId: trimmedExamId },
+      select: { studentId: true },
+    }),
   ]);
   return recalculateStudentsAcademicState(
     [
       ...grades.map((grade) => grade.studentId),
       ...leaves.map((leave) => leave.studentId),
+      ...calls.map((call) => call.studentId),
       ...correctionSheets.map((sheet) => sheet.studentId),
       ...telegramSubmissions.map((submission) => submission.studentId),
       ...opportunityLogs.map((log) => log.studentId),
+      ...leaveGradeBackups.map((backup) => backup.studentId),
     ],
     { tx: options.tx },
   );

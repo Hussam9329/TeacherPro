@@ -1,10 +1,11 @@
-import { parseBaghdadDateTime } from './baghdad-time';
+import { baghdadDateKey, baghdadTodayKey, parseBaghdadDateTime } from './baghdad-time';
 import { MAIN_SITE_OPTIONS, normalizeIraqiProvinceName } from './iraq';
 
 export type ExamLike = {
   active: boolean;
-  scheduledActivateAt?: string | null;
-  scheduledDeactivateAt?: string | null;
+  date?: string | Date | null;
+  scheduledActivateAt?: string | Date | null;
+  scheduledDeactivateAt?: string | Date | null;
 };
 
 export type ExamForGradeRange = {
@@ -23,18 +24,31 @@ export type StudentSiteLike = {
 };
 
 export type StudentRegistrationLike = {
-  createdAt?: string | null;
+  createdAt?: string | Date | null;
 };
 
 export type ExamDateLike = {
-  date?: string | null;
+  date?: string | Date | null;
 };
 
 export type ExamStatusLabel = 'نشط' | 'تفعيل مجدول' | 'تعطيل مجدول' | 'معطل';
 
+export type ExamEntryAvailabilityCode =
+  | 'available'
+  | 'scheduled-activation'
+  | 'inactive'
+  | 'scheduled-deactivation-passed'
+  | 'future-exam-date';
+
+export type ExamEntryAvailability = {
+  available: boolean;
+  code: ExamEntryAvailabilityCode;
+  reason: string;
+};
+
 
 export type StudentGraceLike = {
-  createdAt?: string | null;
+  createdAt?: string | Date | null;
   accountingGraceDays?: number | string | null;
 };
 
@@ -68,9 +82,10 @@ export function splitSelection(value?: string | null): string[] {
     .filter(Boolean);
 }
 
-function parseDateOnly(value?: string | null): Date | null {
+function parseDateOnly(value?: string | Date | null): Date | null {
   if (!value) return null;
-  const match = String(value).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const key = value instanceof Date ? baghdadDateKey(value) : String(value).slice(0, 10);
+  const match = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
   const [, year, month, day] = match;
   const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0));
@@ -87,18 +102,52 @@ export function isExamOnOrAfterStudentRegistration(student: StudentRegistrationL
 export function getExamStatus(exam: ExamLike, now = new Date()): ExamStatusLabel {
   const activateAt = parseBaghdadDateTime(exam.scheduledActivateAt);
   const deactivateAt = parseBaghdadDateTime(exam.scheduledDeactivateAt);
-  const activatedBySchedule = Boolean(activateAt && activateAt <= now);
-  const effectivelyActive = Boolean(exam.active || activatedBySchedule);
 
-  if (!effectivelyActive && activateAt && activateAt > now) return 'تفعيل مجدول';
-  if (effectivelyActive && deactivateAt && deactivateAt > now) return 'تعطيل مجدول';
-  if (effectivelyActive && deactivateAt && deactivateAt <= now) return 'معطل';
-  return effectivelyActive ? 'نشط' : 'معطل';
+  // A future activation is authoritative even if a stale client also sent active=true.
+  if (activateAt && activateAt > now) return 'تفعيل مجدول';
+  if (deactivateAt && deactivateAt <= now) return 'معطل';
+
+  const effectivelyActive = Boolean(exam.active || (activateAt && activateAt <= now));
+  if (!effectivelyActive) return 'معطل';
+  if (deactivateAt && deactivateAt > now) return 'تعطيل مجدول';
+  return 'نشط';
+}
+
+export function getExamEntryAvailability(exam: ExamLike, now = new Date()): ExamEntryAvailability {
+  const status = getExamStatus(exam, now);
+  if (status === 'تفعيل مجدول') {
+    return {
+      available: false,
+      code: 'scheduled-activation',
+      reason: 'الامتحان مفعّل بجدولة مستقبلية ولم يحن وقت التفعيل بعد.',
+    };
+  }
+  if (status === 'معطل') {
+    const deactivateAt = parseBaghdadDateTime(exam.scheduledDeactivateAt);
+    return {
+      available: false,
+      code: deactivateAt && deactivateAt <= now ? 'scheduled-deactivation-passed' : 'inactive',
+      reason: deactivateAt && deactivateAt <= now
+        ? 'انتهى وقت إتاحة الامتحان المجدول.'
+        : 'الامتحان معطل ولا يقبل درجات حالياً.',
+    };
+  }
+
+  const examDay = baghdadDateKey(exam.date);
+  const today = baghdadTodayKey(now);
+  if (examDay && today && examDay > today) {
+    return {
+      available: false,
+      code: 'future-exam-date',
+      reason: `تاريخ الامتحان ${examDay} لم يحن بعد بتوقيت بغداد.`,
+    };
+  }
+
+  return { available: true, code: 'available', reason: 'الامتحان متاح لإدخال الدرجات.' };
 }
 
 export function isExamAvailableForEntry(exam: ExamLike, now = new Date()): boolean {
-  const status = getExamStatus(exam, now);
-  return status === 'نشط' || status === 'تعطيل مجدول';
+  return getExamEntryAvailability(exam, now).available;
 }
 
 export function hasActiveChapterLink(

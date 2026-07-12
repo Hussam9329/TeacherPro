@@ -1,3 +1,6 @@
+import { getExamEntryAvailability } from "@/lib/exam-utils";
+import { baghdadDateKey } from "@/lib/baghdad-time";
+
 export type GradeStatusFilter =
   | "all"
   | "excused"
@@ -16,6 +19,7 @@ export type GradeClassificationKind =
   | "excused"
   | "grace-period"
   | "before-registration"
+  | "unavailable-exam"
   | "cheating"
   | "absent-dismissal"
   | "absent-deducted"
@@ -41,6 +45,9 @@ export type ExamLike = {
   discountMark?: number | null;
   dismissalGrade?: number | null;
   noDiscount?: boolean | null;
+  active?: boolean | null;
+  scheduledActivateAt?: Date | string | null;
+  scheduledDeactivateAt?: Date | string | null;
 };
 
 export type StudentGraceLike = {
@@ -74,10 +81,7 @@ export function parseCourseIds(value: unknown): string[] {
 
 export function dayKey(value: unknown): string {
   if (!value) return "";
-  if (value instanceof Date)
-    return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : "";
-  const text = String(value || "").slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : text;
+  return baghdadDateKey(value as Date | string | null | undefined);
 }
 
 function parseDateOnly(value: unknown): Date | null {
@@ -160,6 +164,12 @@ export function classifyGradeAcademicImpact(
   if (hasStudentLeaveForExam(leaves, exam)) return "excused";
   if (!isGradeEnteredUnified(grade, exam)) return "missing";
   if (student && isExamBeforeStudentRegistration(student, exam)) return "before-registration";
+  if (exam.active !== undefined && !getExamEntryAvailability({
+    active: Boolean(exam.active),
+    date: exam.date,
+    scheduledActivateAt: exam.scheduledActivateAt,
+    scheduledDeactivateAt: exam.scheduledDeactivateAt,
+  }).available) return "unavailable-exam";
   if (student && isExamWithinStudentGracePeriodUnified(student, exam)) return "grace-period";
   if (grade?.status === "غش") return "cheating";
   if (exam.noDiscount) {
@@ -187,7 +197,7 @@ export function classifyGradeAcademicImpact(
 }
 
 export function isProtectedGradeKind(kind: GradeClassificationKind): boolean {
-  return kind === "excused" || kind === "grace-period" || kind === "before-registration" || kind === "missing" || kind === "no-discount-protected";
+  return kind === "excused" || kind === "grace-period" || kind === "before-registration" || kind === "unavailable-exam" || kind === "missing" || kind === "no-discount-protected";
 }
 
 export function gradeMatchesStatusFilterUnified(

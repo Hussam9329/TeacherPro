@@ -255,6 +255,8 @@ export function ExamNewView() {
     const discountMark = isFinalExam || noDiscount
       ? 0
       : Number(state.discountMark);
+    const opportunitiesPenalty = Number(state.opportunitiesPenaltyNum);
+    const dismissalGrade = state.dismissalGrade === "" ? null : Number(state.dismissalGrade);
 
     if (contextLoading) return "انتظر تحميل سياق إضافة الامتحان من بيانات النظام";
     if (contextError) return contextError;
@@ -263,12 +265,13 @@ export function ExamNewView() {
     const blockers = selectedCourseBlockers(contextRows, state.courseIds);
     if (blockers.length > 0) return `لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${blockers.join("، ")}`;
     if (state.mainSites.length === 0) return "يرجى اختيار منطقة واحدة على الأقل أو اختيار الكل";
-    if (![fullMark, passMark, discountMark].every(Number.isFinite)) return "درجات الامتحان يجب أن تكون أرقاماً صحيحة";
+    if (![fullMark, passMark, discountMark].every((value) => Number.isFinite(value) && Number.isInteger(value))) return "درجات الامتحان يجب أن تكون أعداداً صحيحة بدون كسور";
     if (fullMark <= 0) return "الدرجة الكاملة يجب أن تكون أكبر من صفر";
     if (passMark < 0 || passMark > fullMark) return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
     if (!noDiscount && (discountMark < 0 || discountMark > fullMark)) return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
     if (!noDiscount && !isFinalExam && passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
-    if (!noDiscount && !isFinalExam && Number(state.opportunitiesPenaltyNum) <= 0) return "خصم الفرص يجب أن يكون أكبر من صفر";
+    if (!noDiscount && !isFinalExam && (!Number.isInteger(opportunitiesPenalty) || opportunitiesPenalty <= 0)) return "خصم الفرص يجب أن يكون عدداً صحيحاً أكبر من صفر";
+    if (!noDiscount && isFinalExam && dismissalGrade !== null && (!Number.isInteger(dismissalGrade) || dismissalGrade < 0 || dismissalGrade > fullMark)) return "درجة الفصل يجب أن تكون عدداً صحيحاً بين صفر والدرجة الكاملة";
     if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ ووقت التفعيل المجدول";
     return null;
   };
@@ -505,12 +508,13 @@ export function ExamNewView() {
             </div>
           </div>
         </div>
-        <div className="space-y-2"><Label>الدرجة الكاملة</Label><Input type="number" value={numberInputValue(state.fullMark)} onChange={(e) => setState((p) => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
-        <div className="space-y-2"><Label>درجة النجاح</Label><Input type="number" value={numberInputValue(state.passMark)} onChange={(e) => setState((p) => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
+        <div className="space-y-2"><Label>الدرجة الكاملة</Label><Input type="number" step={1} value={numberInputValue(state.fullMark)} onChange={(e) => setState((p) => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
+        <div className="space-y-2"><Label>درجة النجاح</Label><Input type="number" step={1} value={numberInputValue(state.passMark)} onChange={(e) => setState((p) => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
         <div className="space-y-2">
           <Label>درجة الخصم</Label>
           <Input
             type="number"
+            step={1}
             value={isFinalExam || noDiscount ? "" : numberInputValue(state.discountMark)}
             disabled={isFinalExam || noDiscount}
             onChange={(e) => setState((p) => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 0 }))}
@@ -526,6 +530,7 @@ export function ExamNewView() {
           <Input
             type="number"
             min={0}
+            step={1}
             value={isFinalExam || noDiscount ? "" : numberInputValue(state.opportunitiesPenaltyNum)}
             disabled={isFinalExam || noDiscount}
             onChange={(e) => setState((p) => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 0 }))}
@@ -533,7 +538,7 @@ export function ExamNewView() {
           {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ الغياب أو الغش أو درجة الفصل يعالج كفصل مؤقت فقط.</p>}
           {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
         </div>
-        {isFinalExam && <div className="space-y-2"><Label>درجة الفصل</Label><Input type="number" disabled={noDiscount} value={noDiscount ? "" : state.dismissalGrade} onChange={(e) => setState((p) => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} />{noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}</div>}
+        {isFinalExam && <div className="space-y-2"><Label>درجة الفصل</Label><Input type="number" step={1} disabled={noDiscount} value={noDiscount ? "" : state.dismissalGrade} onChange={(e) => setState((p) => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} />{noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}</div>}
         <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4 md:col-span-2 xl:col-span-3">
           <div>
             <h3 className="font-bold">معاينة الحكم قبل الحفظ</h3>

@@ -291,7 +291,7 @@ async function restoreGradesForLeave(
       },
       update: {
         status: backup.status,
-        score: backup.score,
+        score: backup.status === "درجة" ? backup.score : null,
         notes: backup.notes,
         academicAccountingChecked: backup.academicAccountingChecked,
       },
@@ -299,7 +299,7 @@ async function restoreGradesForLeave(
         studentId: backup.studentId,
         examId: backup.examId,
         status: backup.status,
-        score: backup.score,
+        score: backup.status === "درجة" ? backup.score : null,
         notes: backup.notes,
         academicAccountingChecked: backup.academicAccountingChecked,
         ...(backup.gradeCreatedAt ? { createdAt: backup.gradeCreatedAt } : {}),

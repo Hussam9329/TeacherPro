@@ -878,7 +878,10 @@ export function GradeEntryView() {
           if (student.status === "مؤرشف") return false;
           if (!selectedExam.courseIds.includes(student.courseId)) return false;
           if (filterCourseId && student.courseId !== filterCourseId) return false;
-          if (!isExamOnOrAfterStudentRegistration(student, selectedExam))
+          if (
+            !isExamOnOrAfterStudentRegistration(student, selectedExam) &&
+            !hasSavedGradeForExam
+          )
             return false;
           if (!activeChapterCourseIds.has(student.courseId)) return false;
           if (!studentMatchesExamMainSites(student, selectedMainSites))
@@ -1116,11 +1119,12 @@ export function GradeEntryView() {
     if (status === "درجة") {
       if (
         !normalizedScore ||
-        !isScoreInsideExamRange(normalizedScore, selectedExam.fullMark)
+        !isScoreInsideExamRange(normalizedScore, selectedExam.fullMark) ||
+        !Number.isInteger(score)
       ) {
         showGradeEntryNotice(
           "error",
-          `لا تُعد الدرجة مدخلة إلا إذا كانت رقماً بين 0 و ${selectedExam.fullMark}`,
+          `الدرجة يجب أن تكون عدداً صحيحاً بين 0 و ${selectedExam.fullMark} بدون كسور`,
         );
         return;
       }
@@ -1950,6 +1954,8 @@ export function GradeEntryView() {
                       : null;
                   const isSaving = Boolean(savingRows[student.id]);
                   const canEdit = canEditGradeForStudent(student.id);
+                  const examBeforeRegistration =
+                    !isExamOnOrAfterStudentRegistration(student, selectedExam);
                   const rowLocked = Boolean(
                     !leave && entered && !editableRows[student.id],
                   );
@@ -2033,6 +2039,12 @@ export function GradeEntryView() {
                               الحالي.
                             </p>
                           )}
+                        {grade && examBeforeRegistration && (
+                          <p className="mt-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
+                            الدرجة محفوظة للمتابعة فقط ولا تخصم من الطالب لأن
+                            تاريخ الامتحان يسبق تاريخ تسجيله في الدورة.
+                          </p>
+                        )}
                         {leave && (
                           <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-300">
                             الطالب مجاز لهذا الامتحان ولا يمكن إدخال درجة له
@@ -2061,6 +2073,7 @@ export function GradeEntryView() {
                         type={draft.status === "درجة" ? "number" : "text"}
                         min={0}
                         max={selectedExam.fullMark}
+                        step={1}
                         disabled={controlsDisabled || draft.status !== "درجة"}
                         value={
                           !leave

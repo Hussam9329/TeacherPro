@@ -67,7 +67,7 @@ export function gradeMatchesStatusFilter(
   const passMark = Number(exam.passMark || 0);
   const discountMark = Number(exam.discountMark || 0);
   const kind = String(classificationResult?.kind || "");
-  const isNoAccountingKind = ["grace", "before-registration", "excused"].includes(kind);
+  const isNoAccountingKind = ["grace", "before-registration", "unavailable-exam", "excused"].includes(kind);
 
   switch (filter) {
     case "excused":

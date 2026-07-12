@@ -44,7 +44,12 @@ import { formatAppDate } from "@/lib/format";
 import { toLatinDigits } from "@/lib/format";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { formatGradeScore, isGradeEntered } from "@/lib/exam-utils";
+import {
+  formatGradeScore,
+  getExamEntryAvailability,
+  isExamOnOrAfterStudentRegistration,
+  isGradeEntered,
+} from "@/lib/exam-utils";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { CheckCircle2, UserX } from "lucide-react";
@@ -120,7 +125,7 @@ const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
     key: "checked",
     label: "مؤشر المحاسبة",
     value: ({ grade }) =>
-      grade.academicAccountingChecked ? "تمت المحاسبة" : "",
+      grade.academicAccountingChecked ? "تمت مراجعة السجل (لا تغيّر الخصم)" : "",
   },
   { key: "notes", label: "ملاحظات", value: ({ grade }) => grade.notes || "" },
 ];
@@ -456,7 +461,7 @@ export function GradeRecordsView() {
     }
     const result = await gradeApi.update(gradeId, { academicAccountingChecked: checked });
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر حفظ تأشير المحاسبة من النظام.");
+      toast.error(result.error || "تعذر حفظ مراجعة السجل في النظام.");
       return;
     }
     updateServerGradeRow(gradeId, { academicAccountingChecked: checked });
@@ -713,9 +718,10 @@ export function GradeRecordsView() {
       (!Number.isFinite(score) ||
         score === null ||
         score < 0 ||
-        score > exam.fullMark)
+        score > exam.fullMark ||
+        !Number.isInteger(score))
     ) {
-      toast.error(`الدرجة يجب أن تكون بين 0 و ${exam.fullMark}`);
+      toast.error(`الدرجة يجب أن تكون عدداً صحيحاً بين 0 و ${exam.fullMark} بدون كسور`);
       return null;
     }
     return { grade, score };
@@ -1209,6 +1215,17 @@ export function GradeRecordsView() {
                       <span className="break-words">{grade.notes}</span>
                     </div>
                   ) : null}
+                  {!isExamOnOrAfterStudentRegistration(student, exam) && (
+                    <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium leading-5 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
+                      محفوظة للمتابعة فقط ولا تخصم؛ تاريخ الامتحان يسبق تاريخ
+                      تسجيل الطالب في الدورة.
+                    </div>
+                  )}
+                  {!getExamEntryAvailability(exam).available && (
+                    <div className="mt-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-medium leading-5 text-violet-800 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200">
+                      غير محتسبة حالياً: {getExamEntryAvailability(exam).reason}
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-bold">
@@ -1237,10 +1254,15 @@ export function GradeRecordsView() {
                       />
                       <span>
                         {grade.academicAccountingChecked
-                          ? "تمت المحاسبة"
-                          : "تأكيد المحاسبة"}
+                          ? "تمت مراجعة السجل"
+                          : "تعليم السجل كمراجع"}
                       </span>
                     </label>
+                  )}
+                  {cls.kind === "academic-accounting" && (
+                    <span className="text-[10px] text-muted-foreground">
+                      مؤشر متابعة فقط؛ لا يعتمد أو يلغي الخصم.
+                    </span>
                   )}
                   <Button
                     variant="secondary"
@@ -1275,7 +1297,7 @@ export function GradeRecordsView() {
                 <th className="p-3 text-right">الحالة</th>
                 <th className="p-3 text-right">الدرجة</th>
                 <th className="p-3 text-right">محاسبة</th>
-                <th className="p-3 text-right">تأشير المحاسبة</th>
+                <th className="p-3 text-right">مراجعة السجل (لا تؤثر على الخصم)</th>
                 <th className="p-3 text-right">ملاحظات</th>
                 <th className="p-3 text-right">الإجراءات</th>
               </tr>
@@ -1315,6 +1337,16 @@ export function GradeRecordsView() {
                       >
                         {cls.text}
                       </Badge>
+                      {!isExamOnOrAfterStudentRegistration(student, exam) && (
+                        <p className="mt-1 text-[11px] font-medium text-sky-700 dark:text-sky-300">
+                          لا تخصم: الامتحان سابق للتسجيل.
+                        </p>
+                      )}
+                      {!getExamEntryAvailability(exam).available && (
+                        <p className="mt-1 text-[11px] font-medium text-violet-700 dark:text-violet-300">
+                          غير محتسبة: {getExamEntryAvailability(exam).reason}
+                        </p>
+                      )}
                     </td>
                     <td className="p-3">
                       {cls.kind === "academic-accounting" ? (
@@ -1329,7 +1361,7 @@ export function GradeRecordsView() {
                             }
                           />
                           <span>
-                            {grade.academicAccountingChecked ? "تمت" : "لم تتم"}
+                            {grade.academicAccountingChecked ? "تمت المراجعة" : "غير مراجع"}
                           </span>
                         </label>
                       ) : (
@@ -1425,6 +1457,7 @@ export function GradeRecordsView() {
               <Label>الدرجة</Label>
               <Input
                 type={editDialog.status === "درجة" ? "number" : "text"}
+                step={1}
                 disabled={editDialog.status !== "درجة"}
                 value={
                   editDialog.status === "درجة"

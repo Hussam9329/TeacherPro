@@ -175,6 +175,7 @@ function gradeImpactLabel(kind: GradeClassificationKind, grade: Grade, exam?: Ex
   if (!exam) return "تعذر تحديد قاعدة الامتحان لأن الامتحان محذوف.";
   if (kind === "excused") return "لم يتم الخصم: الطالب لديه إجازة تغطي هذا الامتحان.";
   if (kind === "before-registration") return "لم يتم الخصم: الامتحان قبل تاريخ تسجيل الطالب.";
+  if (kind === "unavailable-exam") return "لم يتم الاحتساب: الامتحان غير متاح حالياً بحسب التفعيل أو الموعد.";
   if (kind === "grace-period") return "لم يتم الخصم: الامتحان ضمن فترة السماح المحاسبية للطالب.";
   if (kind === "no-discount-protected") return "لم يتم الخصم: هذا الامتحان مضبوط كـ بدون خصم.";
   if (kind === "missing") return "لا توجد محاسبة لأن الدرجة غير مكتملة.";

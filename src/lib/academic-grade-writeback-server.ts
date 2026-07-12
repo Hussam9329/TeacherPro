@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { getExamEntryAvailability } from "@/lib/exam-utils";
 import {
   recalculateStudentsAcademicState,
   type AcademicServerRecalculationResult,
@@ -46,6 +47,8 @@ export interface AcademicGradeWritebackInput {
   allowBlankGrade?: boolean;
   preserveExistingScoreWhenBlank?: boolean;
   blockOnLeave?: boolean;
+  enforceExamAvailability?: boolean;
+  allowDismissedExistingGradeCorrection?: boolean;
 }
 
 export function normalizeAcademicGradeStatus(
@@ -62,8 +65,15 @@ function parseNumericScore(value: unknown): number | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || String(value).trim() === "") return null;
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return null;
-  return Math.trunc(numeric);
+  if (!Number.isFinite(numeric)) {
+    throw new AcademicGradeWritebackError("يجب إدخال درجة رقمية صحيحة.");
+  }
+  if (!Number.isInteger(numeric)) {
+    throw new AcademicGradeWritebackError(
+      "الدرجات الكسرية غير مدعومة. أدخل عدداً صحيحاً بدون أجزاء عشرية.",
+    );
+  }
+  return numeric;
 }
 
 export function hasAcademicGradeWritebackPayload(
@@ -169,7 +179,8 @@ export async function syncAcademicGradeWriteback(
 
   const status = normalizeAcademicGradeStatus(input.status);
   const scoreWasProvided = input.score !== undefined;
-  const score = parseNumericScore(input.score);
+  // Non-numeric states never consume or validate a stale numeric value from the client.
+  const score = status === "درجة" ? parseNumericScore(input.score) : null;
 
   if (status === "درجة" && score === undefined && !input.allowBlankGrade) {
     return null;
@@ -183,7 +194,15 @@ export async function syncAcademicGradeWriteback(
     }),
     client.exam.findUnique({
       where: { id: examId },
-      select: { id: true, date: true, fullMark: true, courseIds: true },
+      select: {
+        id: true,
+        date: true,
+        fullMark: true,
+        courseIds: true,
+        active: true,
+        scheduledActivateAt: true,
+        scheduledDeactivateAt: true,
+      },
     }),
   ]);
 
@@ -197,6 +216,26 @@ export async function syncAcademicGradeWriteback(
       "الامتحان المرتبط بالدرجة غير موجود.",
       404,
     );
+
+  if (student.status === "مفصول" && !input.allowDismissedExistingGradeCorrection) {
+    throw new AcademicGradeWritebackError(
+      "الطالب مفصول ولا يمكن اعتماد درجة جديدة له. أعد تفعيله أولاً من الإجراء المخصص.",
+    );
+  }
+  if (student.status === "مؤرشف") {
+    throw new AcademicGradeWritebackError(
+      "الطالب مؤرشف ولا يمكن اعتماد درجات على ملفه المقروء فقط.",
+    );
+  }
+
+  if (input.enforceExamAvailability !== false) {
+    const availability = getExamEntryAvailability(exam);
+    if (!availability.available) {
+      throw new AcademicGradeWritebackError(
+        `لا يمكن اعتماد الدرجة: ${availability.reason}`,
+      );
+    }
+  }
 
   const courseIds = parseCourseIds(exam.courseIds);
   if (courseIds.length > 0 && !courseIds.includes(student.courseId)) {
@@ -239,12 +278,13 @@ export async function syncAcademicGradeWriteback(
       : String(input.notes || "");
 
   const shouldWriteScore =
-    scoreWasProvided &&
-    !(
-      input.preserveExistingScoreWhenBlank &&
-      status === "درجة" &&
-      score === null
-    );
+    status !== "درجة" ||
+    (scoreWasProvided &&
+      !(
+        input.preserveExistingScoreWhenBlank &&
+        status === "درجة" &&
+        score === null
+      ));
 
   const grade = await client.grade.upsert({
     where: { studentId_examId: { studentId, examId } },

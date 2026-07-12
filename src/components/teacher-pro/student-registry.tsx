@@ -139,6 +139,7 @@ function academicImpactKindLabel(kind: string): string {
     excused: "إجازة",
     "grace-period": "ضمن السماح",
     "before-registration": "قبل التسجيل",
+    "unavailable-exam": "امتحان غير متاح",
     cheating: "غش",
     "absent-dismissal": "غياب فصل",
     "absent-deducted": "غياب مخصوم",

@@ -7,7 +7,6 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import {
   normalizeArabicText,
-  requireText,
   routeErrorResponse,
   validationError,
 } from "@/lib/route-helpers";
@@ -18,58 +17,10 @@ import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-ser
 import { gradeMatchesStatusFilterUnified } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
-
-async function validateGradePayload(body: Record<string, unknown>) {
-  const studentError = requireText(body.studentId, "الطالب");
-  if (studentError) return studentError;
-  const examError = requireText(body.examId, "الامتحان");
-  if (examError) return examError;
-  if (!["درجة", "غائب", "غش"].includes(String(body.status ?? "")))
-    return "حالة الدرجة غير صحيحة";
-
-  // تحقق أن الطالب موجود فعلاً ضمن قائمة courseIds للامتحان
-  const [exam, student] = await Promise.all([
-    db.exam.findUnique({
-      where: { id: String(body.examId) },
-      select: { id: true, date: true, fullMark: true, courseIds: true },
-    }),
-    db.student.findUnique({
-      where: { id: String(body.studentId) },
-      select: { id: true, courseId: true, status: true, dismissalType: true },
-    }),
-  ]);
-  if (!exam) return "الامتحان غير موجود";
-  if (!student) return "الطالب غير موجود";
-
-  // منع إدخال درجة لطالب مفصول — لا يجوز محاسبته أكاديمياً بعد الفصل.
-  // العميل مسؤول عن تقديم زر "إعادة تفعيل" قبل السماح بإدخال درجات جديدة.
-  if (student.status === "مفصول") {
-    return "الطالب مفصول ولا يمكن إدخال درجات له. أعد تفعيل الطالب أولاً.";
-  }
-
-  let courseIds: string[] = [];
-  try {
-    const parsed = JSON.parse(exam.courseIds || "[]");
-    if (Array.isArray(parsed)) courseIds = parsed.map(String).filter(Boolean);
-  } catch {
-    courseIds = [];
-  }
-  if (courseIds.length > 0 && !courseIds.includes(student.courseId)) {
-    return "الطالب ليس ضمن دورات هذا الامتحان";
-  }
-
-  const leaveMessage = await getGradeBlockedByLeaveMessage(student.id, exam);
-  if (leaveMessage) return leaveMessage;
-
-  if (body.status === "درجة") {
-    const score = Number(body.score);
-    const fullMark = Number(exam.fullMark || 0);
-    if (!Number.isFinite(score) || score < 0 || score > fullMark) {
-      return `الدرجة يجب أن تكون رقماً بين 0 و ${fullMark}`;
-    }
-  }
-  return null;
-}
+import {
+  AcademicGradeWritebackError,
+  syncAcademicGradeWriteback,
+} from "@/lib/academic-grade-writeback-server";
 
 function parsePositiveInt(
   value: string | null,
@@ -209,57 +160,6 @@ const databaseComputedGradeFilters = new Set<GradeStatusFilter>([
 
 function dateKey(value: unknown): string {
   return String(value || "").slice(0, 10);
-}
-
-function startOfUtcDay(value: Date | string | null | undefined): Date | null {
-  const key = dateKey(value);
-  if (!key) return null;
-  const date = new Date(`${key}T00:00:00.000Z`);
-  return Number.isFinite(date.getTime()) ? date : null;
-}
-
-function endOfUtcDayExclusive(
-  value: Date | string | null | undefined,
-): Date | null {
-  const start = startOfUtcDay(value);
-  if (!start) return null;
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
-  return end;
-}
-
-function buildStudentLeaveWhereForExam(
-  studentId: string,
-  exam: { id: string; date?: Date | string | null },
-): Prisma.StudentLeaveWhereInput {
-  const examDayStart = startOfUtcDay(exam.date);
-  const examDayEnd = endOfUtcDayExclusive(exam.date);
-  const periodWhere: Prisma.StudentLeaveWhereInput[] = [];
-
-  if (examDayStart && examDayEnd) {
-    periodWhere.push({
-      leaveType: "period",
-      dateFrom: { lt: examDayEnd },
-      dateTo: { gte: examDayStart },
-    });
-  }
-
-  return {
-    studentId,
-    OR: [{ examId: exam.id }, ...periodWhere],
-  };
-}
-
-async function getGradeBlockedByLeaveMessage(
-  studentId: string,
-  exam: { id: string; date?: Date | string | null },
-): Promise<string | null> {
-  const leave = await db.studentLeave.findFirst({
-    where: buildStudentLeaveWhereForExam(studentId, exam),
-    select: { id: true, leaveType: true, reason: true },
-  });
-  if (!leave) return null;
-  return "لا يمكن إدخال درجة لطالب مجاز.";
 }
 
 function isGradeEnteredForServer(
@@ -485,49 +385,38 @@ export async function POST(req: NextRequest) {
     await ensureExamSchema();
     await ensureFollowupTables();
 
-    const body = await req.json();
-    const validationMessage = await validateGradePayload(body);
-    if (validationMessage) return validationError(validationMessage);
-    const checked =
-      body.academicAccountingChecked === undefined
-        ? undefined
-        : Boolean(body.academicAccountingChecked);
+    const body = (await req.json()) as Record<string, unknown>;
+    const studentId = String(body.studentId || "").trim();
+    const examId = String(body.examId || "").trim();
+    if (!studentId || !examId) {
+      return validationError("تعذر تحديد الطالب أو الامتحان المطلوب.");
+    }
+    if (!["درجة", "غائب", "غش"].includes(String(body.status || ""))) {
+      return validationError("حالة الدرجة غير صحيحة");
+    }
+
     const result = await db.$transaction(async (tx) => {
-      const grade = await tx.grade.upsert({
-        where: {
-          studentId_examId: { studentId: body.studentId, examId: body.examId },
-        },
-        update: {
-          status: body.status,
-          score:
-            body.score === null || body.score === undefined
-              ? null
-              : Number(body.score),
-          notes: body.notes,
-          ...(checked !== undefined
-            ? { academicAccountingChecked: checked }
-            : {}),
-        },
-        create: {
-          // Never trust client-provided IDs on create. Offline/client IDs stay local only;
-          // the server reconciles records by the unique studentId + examId pair.
-          studentId: body.studentId,
-          examId: body.examId,
-          status: body.status,
-          score:
-            body.score === null || body.score === undefined
-              ? null
-              : Number(body.score),
-          notes: body.notes,
-          academicAccountingChecked: Boolean(body.academicAccountingChecked),
-        },
+      const writeback = await syncAcademicGradeWriteback({
+        tx,
+        studentId,
+        examId,
+        status: body.status,
+        score: body.score,
+        notes: body.notes,
+        academicAccountingChecked: body.academicAccountingChecked,
+        sourceLabel: "تسجيل الدرجات",
+        allowBlankGrade: false,
+        blockOnLeave: true,
+        enforceExamAvailability: true,
       });
-      const academicRecalculation = await recalculateStudentsAcademicState(
-        [grade.studentId],
-        { tx },
-      );
-      return { grade, academicRecalculation };
+      if (!writeback) {
+        throw new AcademicGradeWritebackError(
+          "يجب إدخال درجة صحيحة قبل حفظ السجل.",
+        );
+      }
+      return writeback;
     });
+
     await writeRequestAuditLog(req, "الدرجات", "حفظ درجة وإعادة احتساب الطالب", {
       gradeId: result.grade.id,
       studentId: result.grade.studentId,
@@ -538,6 +427,9 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
+    if (error instanceof AcademicGradeWritebackError) {
+      return validationError(error.message, error.status);
+    }
     return routeErrorResponse(error, "تعذر حفظ الدرجة حالياً.");
   }
 }
@@ -550,93 +442,119 @@ export async function PUT(req: NextRequest) {
     await ensureExamSchema();
     await ensureFollowupTables();
 
-    const body = await req.json();
-    const { id, ...data } = body;
-    delete data.accountingChecked;
-
-    const gradeId = String(id || "").trim();
-    const fallbackStudentId = String(data.studentId || "").trim();
-    const fallbackExamId = String(data.examId || "").trim();
-    if (!gradeId && (!fallbackStudentId || !fallbackExamId))
+    const body = (await req.json()) as Record<string, unknown>;
+    const gradeId = String(body.id || "").trim();
+    const lookupStudentId = String(body.studentId || "").trim();
+    const lookupExamId = String(body.examId || "").trim();
+    if (!gradeId && (!lookupStudentId || !lookupExamId)) {
       return validationError("تعذر تحديد الدرجة المطلوبة");
-
-    if (data.academicAccountingChecked !== undefined)
-      data.academicAccountingChecked = Boolean(data.academicAccountingChecked);
-    if (
-      data.status !== undefined &&
-      !["درجة", "غائب", "غش"].includes(String(data.status))
-    )
-      return validationError("حالة الدرجة غير صحيحة");
-    if (data.score !== undefined)
-      data.score = data.score === null ? null : Number(data.score);
-
-    const current = gradeId
-      ? await db.grade.findUnique({
-          where: { id: gradeId },
-          include: { exam: true },
-        })
-      : null;
-    const fallbackCurrent =
-      !current && fallbackStudentId && fallbackExamId
-        ? await db.grade.findUnique({
-            where: {
-              studentId_examId: {
-                studentId: fallbackStudentId,
-                examId: fallbackExamId,
-              },
-            },
-            include: { exam: true },
-          })
-        : null;
-    const targetGrade = current || fallbackCurrent;
-    if (!targetGrade)
-      return validationError("سجل الدرجة غير موجود أو تم حذفه مسبقاً", 404);
-
-    if (data.status === "درجة" || data.score !== undefined) {
-      const nextStatus = String(data.status ?? targetGrade.status);
-      const nextScore =
-        data.score !== undefined ? data.score : targetGrade.score;
-      if (nextStatus === "درجة") {
-        const fullMark = Number(targetGrade.exam.fullMark || 0);
-        if (
-          !Number.isFinite(Number(nextScore)) ||
-          Number(nextScore) < 0 ||
-          Number(nextScore) > fullMark
-        ) {
-          return validationError(
-            `الدرجة يجب أن تكون رقماً بين 0 و ${fullMark}`,
-          );
-        }
-      }
     }
 
-    const leaveMessage = await getGradeBlockedByLeaveMessage(
-      targetGrade.studentId,
-      targetGrade.exam,
-    );
-    if (leaveMessage) return validationError(leaveMessage);
+    const targetGrade = gradeId
+      ? await db.grade.findUnique({ where: { id: gradeId } })
+      : await db.grade.findUnique({
+          where: {
+            studentId_examId: {
+              studentId: lookupStudentId,
+              examId: lookupExamId,
+            },
+          },
+        });
+    if (!targetGrade) {
+      return validationError("سجل الدرجة غير موجود أو تم حذفه مسبقاً", 404);
+    }
+
+    // علاقة الدرجة ثابتة. تعديل السجل لا يجوز أن ينقله إلى طالب أو امتحان آخر.
+    if (
+      body.studentId !== undefined &&
+      String(body.studentId || "").trim() !== targetGrade.studentId
+    ) {
+      return validationError(
+        "لا يمكن نقل الدرجة إلى طالب آخر. احذف السجل وأنشئ درجة جديدة بعد التحقق من الطالب.",
+      );
+    }
+    if (
+      body.examId !== undefined &&
+      String(body.examId || "").trim() !== targetGrade.examId
+    ) {
+      return validationError(
+        "لا يمكن نقل الدرجة إلى امتحان آخر. احذف السجل وأنشئ درجة جديدة بعد التحقق من الامتحان.",
+      );
+    }
+
+    const hasAcademicMutation = body.status !== undefined || body.score !== undefined;
+    const hasMetadataMutation =
+      body.notes !== undefined || body.academicAccountingChecked !== undefined;
+    if (!hasAcademicMutation && !hasMetadataMutation) {
+      return validationError("لا توجد تعديلات صالحة على سجل الدرجة.");
+    }
+
+    if (body.status !== undefined && !["درجة", "غائب", "غش"].includes(String(body.status))) {
+      return validationError("حالة الدرجة غير صحيحة");
+    }
 
     const result = await db.$transaction(async (tx) => {
-      const grade = await tx.grade.update({
-        where: { id: targetGrade.id },
-        data,
+      if (!hasAcademicMutation) {
+        const grade = await tx.grade.update({
+          where: { id: targetGrade.id },
+          data: {
+            ...(body.notes !== undefined ? { notes: String(body.notes || "") } : {}),
+            ...(body.academicAccountingChecked !== undefined
+              ? { academicAccountingChecked: Boolean(body.academicAccountingChecked) }
+              : {}),
+          },
+        });
+        return { grade, academicRecalculation: null };
+      }
+
+      const nextStatus = String(body.status ?? targetGrade.status);
+      const nextScore =
+        nextStatus === "درجة"
+          ? body.score !== undefined
+            ? body.score
+            : targetGrade.score
+          : null;
+      const writeback = await syncAcademicGradeWriteback({
+        tx,
+        studentId: targetGrade.studentId,
+        examId: targetGrade.examId,
+        status: nextStatus,
+        score: nextScore,
+        notes: body.notes !== undefined ? body.notes : targetGrade.notes,
+        academicAccountingChecked:
+          body.academicAccountingChecked !== undefined
+            ? body.academicAccountingChecked
+            : targetGrade.academicAccountingChecked,
+        sourceLabel: "تعديل سجل الدرجات",
+        allowBlankGrade: false,
+        blockOnLeave: true,
+        enforceExamAvailability: true,
+        allowDismissedExistingGradeCorrection: true,
       });
-      const academicRecalculation = await recalculateStudentsAcademicState(
-        [grade.studentId],
-        { tx },
-      );
-      return { grade, academicRecalculation };
+      if (!writeback) {
+        throw new AcademicGradeWritebackError(
+          "يجب إدخال درجة صحيحة قبل حفظ التعديل.",
+        );
+      }
+      return writeback;
     });
+
     await writeRequestAuditLog(req, "الدرجات", "تعديل درجة وإعادة احتساب الطالب", {
       gradeId: result.grade.id,
       studentId: result.grade.studentId,
       examId: result.grade.examId,
       status: result.grade.status,
       score: result.grade.score,
+      relationshipChanged: false,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+      accountingReviewInformationalOnly:
+        body.academicAccountingChecked !== undefined && !hasAcademicMutation,
     });
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof AcademicGradeWritebackError) {
+      return validationError(error.message, error.status);
+    }
     return routeErrorResponse(error, "تعذر تحديث الدرجة حالياً.");
   }
 }
@@ -659,8 +577,8 @@ export async function DELETE(req: NextRequest) {
           where: { examId, status: "غائب" },
           select: { id: true, studentId: true },
         });
-        const studentIds = Array.from(
-          new Set(targetGrades.map((grade) => grade.studentId)),
+        const studentIds: string[] = Array.from(
+          new Set(targetGrades.map((grade: { studentId: string }) => String(grade.studentId))),
         );
         if (targetGrades.length === 0) {
           return {

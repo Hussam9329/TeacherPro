@@ -44,6 +44,7 @@ import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
 import {
   formatGradeScore,
+  getExamEntryAvailability,
   getExamStatus,
   hasActiveChapterLink,
   splitSelection,
@@ -116,32 +117,10 @@ function formatDateTime(value?: string | null) {
 }
 
 function getEntryAvailability(exam: Exam) {
-  const status = getExamStatus(exam);
-  if (status === "نشط") {
-    return {
-      available: true,
-      answer: "نعم",
-      reason: "الامتحان نشط ويظهر في إدخال الدرجات.",
-    };
-  }
-  if (status === "تعطيل مجدول") {
-    return {
-      available: true,
-      answer: "نعم",
-      reason: `نشط حالياً وسيُعطل في ${formatDateTime(exam.scheduledDeactivateAt)}.`,
-    };
-  }
-  if (status === "تفعيل مجدول") {
-    return {
-      available: false,
-      answer: "لا",
-      reason: `لن يظهر في إدخال الدرجات حتى ${formatDateTime(exam.scheduledActivateAt)}.`,
-    };
-  }
+  const availability = getExamEntryAvailability(exam);
   return {
-    available: false,
-    answer: "لا",
-    reason: "الامتحان معطل حالياً ولا يظهر في إدخال الدرجات.",
+    ...availability,
+    answer: availability.available ? "نعم" : "لا",
   };
 }
 
@@ -469,6 +448,10 @@ export function ExamRecordsView() {
     const noDiscount = Boolean(state.noDiscount);
     const discountMark =
       isFinalExam || noDiscount ? 0 : Number(toLatinDigits(state.discountMark));
+    const opportunitiesPenalty = Number(toLatinDigits(state.opportunitiesPenaltyNum));
+    const dismissalGrade = state.dismissalGrade.trim()
+      ? Number(toLatinDigits(state.dismissalGrade))
+      : null;
     if (!state.name.trim()) return "اسم الامتحان مطلوب";
     if (state.courseIds.length === 0) return "اختر دورة واحدة على الأقل";
     const invalidCourses = state.courseIds.filter(
@@ -477,8 +460,8 @@ export function ExamRecordsView() {
     if (invalidCourses.length > 0)
       return `لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourses.map(courseName).join("، ")}`;
     if (state.mainSites.length === 0) return "اختر موقعاً واحداً على الأقل";
-    if (![fullMark, passMark, discountMark].every(Number.isFinite))
-      return "درجات الامتحان يجب أن تكون أرقاماً";
+    if (![fullMark, passMark, discountMark].every((value) => Number.isFinite(value) && Number.isInteger(value)))
+      return "درجات الامتحان يجب أن تكون أعداداً صحيحة بدون كسور";
     if (fullMark <= 0) return "الدرجة الكاملة يجب أن تكون أكبر من صفر";
     if (passMark < 0 || passMark > fullMark)
       return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
@@ -489,9 +472,16 @@ export function ExamRecordsView() {
     if (
       !noDiscount &&
       !isFinalExam &&
-      Number(toLatinDigits(state.opportunitiesPenaltyNum) || 0) <= 0
+      (!Number.isInteger(opportunitiesPenalty) || opportunitiesPenalty <= 0)
     )
-      return "خصم الفرص يجب أن يكون أكبر من صفر";
+      return "خصم الفرص يجب أن يكون عدداً صحيحاً أكبر من صفر";
+    if (
+      !noDiscount &&
+      isFinalExam &&
+      dismissalGrade !== null &&
+      (!Number.isInteger(dismissalGrade) || dismissalGrade < 0 || dismissalGrade > fullMark)
+    )
+      return "درجة الفصل يجب أن تكون عدداً صحيحاً بين صفر والدرجة الكاملة";
     if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt)
       return "حدد تاريخ ووقت التفعيل المجدول";
     if (state.statusMode === "تعطيل مجدول" && !state.scheduledDeactivateAt)
@@ -525,6 +515,21 @@ export function ExamRecordsView() {
                 scheduledDeactivateAt: editDialog.scheduledDeactivateAt,
               };
 
+    const originalExam = exams.find((exam) => exam.id === editDialog.id);
+    const requiresActivationConfirmation = Boolean(
+      originalExam &&
+        !getExamEntryAvailability(originalExam).available &&
+        (editDialog.statusMode === "نشط" || editDialog.statusMode === "تفعيل مجدول"),
+    );
+    if (
+      requiresActivationConfirmation &&
+      !window.confirm(
+        "تنبيه: تفعيل هذا الامتحان أو جدولته قد يجعل الدرجات المحفوظة سابقاً مؤثرة فوراً عند الإتاحة. هل راجعت الدرجات وتؤكد المتابعة؟",
+      )
+    ) {
+      return;
+    }
+
     setExamMutating(editDialog.id, true);
     const result = await examApi.update(editDialog.id, {
       name: editDialog.name.trim(),
@@ -548,6 +553,7 @@ export function ExamRecordsView() {
           ? Number(toLatinDigits(editDialog.dismissalGrade))
           : null,
       noDiscount,
+      confirmExistingGrades: requiresActivationConfirmation,
       ...statusPatch,
     });
     setExamMutating(editDialog.id, false);
@@ -834,6 +840,7 @@ export function ExamRecordsView() {
             <Label>الدرجة الكاملة</Label>
             <Input
               type="number"
+              step={1}
               value={editDialog.fullMark}
               onChange={(e) =>
                 setEditDialog((prev) => ({
@@ -847,6 +854,7 @@ export function ExamRecordsView() {
             <Label>درجة النجاح</Label>
             <Input
               type="number"
+              step={1}
               value={editDialog.passMark}
               onChange={(e) =>
                 setEditDialog((prev) => ({
@@ -895,6 +903,7 @@ export function ExamRecordsView() {
             <Label>درجة الخصم</Label>
             <Input
               type="number"
+              step={1}
               disabled={isFinalExam || noDiscount}
               value={isFinalExam || noDiscount ? "0" : editDialog.discountMark}
               onChange={(e) =>
@@ -927,6 +936,7 @@ export function ExamRecordsView() {
             <Label>خصم الفرص</Label>
             <Input
               type="number"
+              step={1}
               disabled={isFinalExam || noDiscount}
               value={
                 isFinalExam || noDiscount
@@ -956,6 +966,7 @@ export function ExamRecordsView() {
               <Label>درجة الفصل</Label>
               <Input
                 type="number"
+                step={1}
                 disabled={noDiscount}
                 value={noDiscount ? "" : editDialog.dismissalGrade}
                 onChange={(e) =>
@@ -1038,8 +1049,22 @@ export function ExamRecordsView() {
   };
 
   const handleToggleExamActive = async (exam: Exam) => {
+    const enabling = !exam.active;
+    if (
+      enabling &&
+      !window.confirm(
+        "تنبيه: تفعيل هذا الامتحان قد يجعل الدرجات المحفوظة سابقاً مؤثرة مباشرة. هل راجعت الدرجات وتؤكد التفعيل؟",
+      )
+    ) {
+      return;
+    }
     setExamMutating(exam.id, true);
-    const result = await examApi.update(exam.id, { active: !exam.active });
+    const result = await examApi.update(exam.id, {
+      active: enabling,
+      scheduledActivateAt: "",
+      scheduledDeactivateAt: "",
+      confirmExistingGrades: enabling,
+    });
     setExamMutating(exam.id, false);
     if (!result.ok || result.queued) {
       toast.error(result.error || "تعذر تغيير حالة الامتحان من النظام.");

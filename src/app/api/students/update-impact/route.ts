@@ -34,6 +34,7 @@ const protectedKinds = new Set<GradeClassificationKind>([
   "excused",
   "grace-period",
   "before-registration",
+  "unavailable-exam",
   "no-discount-protected",
 ]);
 

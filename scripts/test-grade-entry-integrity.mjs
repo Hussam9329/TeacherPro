@@ -21,6 +21,7 @@ function must(condition, okMessage, failMessage = okMessage) {
 const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
 const api = read("src/lib/api.ts");
 const gradesRoute = read("src/app/api/grades/route.ts");
+const gradeWriteback = read("src/lib/academic-grade-writeback-server.ts");
 const entrySheetRoute = read("src/app/api/grades/entry-sheet/route.ts");
 const profileDialog = read("src/components/teacher-pro/student-profile-dialog.tsx");
 const profileLogRoute = read("src/app/api/students/profile-log/route.ts");
@@ -80,12 +81,14 @@ must(
 );
 
 must(
-  gradesRoute.includes("tx.grade.upsert") &&
-    gradesRoute.includes("recalculateStudentsAcademicState") &&
+  gradesRoute.includes("syncAcademicGradeWriteback") &&
+    gradesRoute.includes("db.$transaction") &&
     gradesRoute.includes("writeRequestAuditLog") &&
-    gradesRoute.includes("studentId_examId"),
-  "API حفظ الدرجة يستخدم upsert داخل transaction مع إعادة احتساب وتدقيق",
-  "API الدرجات يجب أن يحسم التكرار وإعادة الاحتساب والتدقيق من الخادم.",
+    gradeWriteback.includes("client.grade.upsert") &&
+    gradeWriteback.includes("recalculateStudentsAcademicState") &&
+    gradeWriteback.includes("studentId_examId"),
+  "API حفظ الدرجة يستخدم العقدة الموحدة داخل transaction مع upsert وإعادة احتساب وتدقيق",
+  "API الدرجات يجب أن يحسم التكرار وإعادة الاحتساب والتدقيق من العقدة الخادمية الموحدة.",
 );
 
 must(

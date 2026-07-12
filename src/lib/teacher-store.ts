@@ -42,6 +42,7 @@ import {
 import { normalizeIraqiProvinceName } from "./iraq";
 import {
   formatGradeScore,
+  getExamEntryAvailability,
   isExamAvailableForEntry,
   isExamOnOrAfterStudentRegistration,
   isGradeEntered,
@@ -3405,10 +3406,12 @@ export const useTeacherStore = create<TeacherState>()(
           return { text: "مجاز", type: "info", kind: "excused" };
         if (!grade || !isGradeEntered(grade, exam))
           return { text: "غير مسجل", type: "neutral", kind: "missing" };
+        if (student && !isExamOnOrAfterStudentRegistration(student, exam))
+          return { text: "قبل التسجيل", type: "info", kind: "before-registration" };
+        if (!getExamEntryAvailability(exam).available)
+          return { text: "غير محتسب", type: "info", kind: "unavailable-exam" };
         if (student && isExamWithinStudentGracePeriod(student, exam))
           return { text: "ضمن السماح", type: "info", kind: "grace" };
-        if (student && !isExamOnOrAfterStudentRegistration(student, exam))
-          return { text: "غير محتسب", type: "info", kind: "grace" };
         if (grade.status === "غش")
           return { text: "غش", type: "danger", kind: "cheat" };
         if (exam.noDiscount) {

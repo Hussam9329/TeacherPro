@@ -15,7 +15,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:baseline:existing": "prisma migrate resolve --applied 20260605000000_course_builder_availability && prisma migrate resolve --applied 20260608000000_study_types_by_program && prisma migrate resolve --applied 20260608010000_remove_financial_attendance && prisma migrate resolve --applied 20260608050000_academic_opportunity_accounting && prisma migrate resolve --applied 20260608193000_dismissal_notes_followup_filters",
     "test:calls-integrity": "node scripts/test-calls-integrity.mjs",
-    "test:side-effects": "npm run test:calls-integrity && npm run test:courses-integrity && npm run test:chapters-integrity && npm run test:opportunities-integrity && npm run test:opportunity-source-integrity && npm run test:student-register-integrity && npm run test:bulk-register-integrity && npm run test:student-registry-integrity && npm run test:student-transfer-lifecycle-integrity && npm run test:dismissed-students-integrity && npm run test:exam-new-integrity && npm run test:grade-entry-integrity && npm run test:exam-records-integrity && npm run test:grade-records-integrity && npm run test:missing-students-notes-integrity && npm run test:student-leaves-integrity && npm run test:pledges-integrity && npm run test:accounts-permissions-integrity && npm run test:logs-integrity && npm run test:admin-log-reset-integrity && npm run test:smart-sync-integrity && npm run test:language-ux-integrity",
+    "test:side-effects": "npm run test:calls-integrity && npm run test:courses-integrity && npm run test:chapters-integrity && npm run test:opportunities-integrity && npm run test:opportunity-source-integrity && npm run test:student-register-integrity && npm run test:bulk-register-integrity && npm run test:student-registry-integrity && npm run test:student-transfer-lifecycle-integrity && npm run test:dismissed-students-integrity && npm run test:exam-new-integrity && npm run test:grade-entry-integrity && npm run test:exam-records-integrity && npm run test:grade-records-integrity && npm run test:missing-students-notes-integrity && npm run test:student-leaves-integrity && npm run test:pledges-integrity && npm run test:accounts-permissions-integrity && npm run test:logs-integrity && npm run test:admin-log-reset-integrity && npm run test:smart-sync-integrity && npm run test:language-ux-integrity && npm run test:grade-exam-policy-integrity",
     "test:courses-integrity": "node scripts/test-courses-integrity.mjs",
     "test:chapters-integrity": "node scripts/test-chapters-integrity.mjs",
     "test:opportunities-integrity": "node scripts/test-opportunities-integrity.mjs",
@@ -42,7 +42,8 @@
     "test:smart-sync-integrity": "node scripts/test-smart-sync-integrity.mjs",
     "test:language-ux-integrity": "node scripts/test-language-ux-integrity.mjs",
     "test:opportunity-source-integrity": "node scripts/test-opportunity-source-integrity.mjs",
-    "test:student-transfer-lifecycle-integrity": "node scripts/test-student-transfer-lifecycle-integrity.mjs"
+    "test:student-transfer-lifecycle-integrity": "node scripts/test-student-transfer-lifecycle-integrity.mjs",
+    "test:grade-exam-policy-integrity": "node scripts/test-grade-exam-policy-integrity.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1080.0",

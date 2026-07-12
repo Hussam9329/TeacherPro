@@ -48,6 +48,39 @@ export function parseBaghdadDateTime(value?: string | Date | null): Date | null 
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
+
+/** Return the civil calendar day in Baghdad (YYYY-MM-DD).
+ * Date-only strings are treated as Baghdad calendar dates, not as server-local time. */
+export function baghdadDateKey(value?: string | Date | null): string {
+  if (!value) return '';
+  if (typeof value === 'string') {
+    const raw = value.trim();
+    const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/);
+    if (dateOnly && !hasExplicitOffset(raw)) {
+      return `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]}`;
+    }
+  }
+
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (!Number.isFinite(date.getTime())) return '';
+  const baghdad = new Date(date.getTime() + BAGHDAD_OFFSET_MS);
+  return `${baghdad.getUTCFullYear()}-${pad(baghdad.getUTCMonth() + 1)}-${pad(baghdad.getUTCDate())}`;
+}
+
+/** Store an exam calendar date as UTC midnight while preserving the Baghdad civil day. */
+export function parseBaghdadDateOnly(value?: string | Date | null): Date | null {
+  const key = baghdadDateKey(value);
+  const match = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0));
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
+export function baghdadTodayKey(now = new Date()): string {
+  return baghdadDateKey(now);
+}
+
 /** Convert any stored instant to a datetime-local value in Baghdad time. */
 export function toBaghdadDateTimeLocal(value?: string | Date | null): string {
   if (!value) return '';
