@@ -3,12 +3,13 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { db } from "@/lib/db";
 import { requirePermissionPrincipal } from "@/lib/server-auth";
 import { ARCHIVED_STUDENT_STATUS } from "@/lib/student-delete-impact";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
+import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
-type RegistryStatusAction = "dismiss" | "reactivate";
+type RegistryStatusAction = "dismiss" | "reactivate" | "restore";
 
 function cleanText(value: unknown): string {
   return String(value ?? "").trim();
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  if (action !== "dismiss" && action !== "reactivate") {
+  if (action !== "dismiss" && action !== "reactivate" && action !== "restore") {
     return NextResponse.json(
       { error: "إجراء حالة الطالب غير معروف" },
       { status: 400 },
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const result = await db.$transaction(async (tx) => {
+      const result = await withSerializableTransaction(async (tx) => {
         const student = await tx.student.findUnique({ where: { id: studentId } });
         if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
         if (student.status === ARCHIVED_STUDENT_STATUS) {
@@ -161,9 +162,84 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const result = await db.$transaction(async (tx) => {
+    if (action === "restore") {
+      const result = await withSerializableTransaction(async (tx) => {
+        const student = await tx.student.findUnique({ where: { id: studentId } });
+        if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
+        if (student.status !== ARCHIVED_STUDENT_STATUS) {
+          throw Object.assign(new Error("student is not archived"), { statusCode: 409 });
+        }
+
+        const activeChapter = await getActiveChapterForCourse(tx, student.courseId);
+        const baseline = Math.max(0, Math.trunc(Number(activeChapter?.opportunities || 0)));
+        await tx.student.update({
+          where: { id: studentId },
+          data: {
+            status: "نشط",
+            dismissalType: "",
+            dismissalReason: "",
+            dismissalNotes: "",
+            opportunities: baseline,
+            baseOpportunities: baseline,
+          },
+        });
+
+        const academicRecalculation = await recalculateStudentsAcademicState(
+          [studentId],
+          { tx },
+        );
+        const updatedStudent = await tx.student.findUniqueOrThrow({
+          where: { id: studentId },
+        });
+        const studentNote = await tx.studentNote.create({
+          data: {
+            studentId,
+            kind: "استعادة",
+            text: activeChapter
+              ? `استعادة الطالب من الأرشيف وإعادة احتساب ملفه حسب الفصل النشط: ${activeChapter.name}`
+              : "استعادة الطالب من الأرشيف بدون فصل نشط؛ بدأ برصيد 0 لحين تفعيل فصل",
+            sourceType: "student-archive-restore",
+            sourceId: studentId,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            module: "سجل الطلاب",
+            action: "استعادة طالب من الأرشيف",
+            details: `${student.name} - ${student.code} - رصيد ${updatedStudent.opportunities}/${updatedStudent.baseOpportunities}`,
+            userId: principal.id,
+            userName: principal.name,
+          },
+        });
+        return {
+          student: updatedStudent,
+          studentNotes: [studentNote],
+          opportunityLogs: academicRecalculation.automaticOpportunityLogs,
+          academicRecalculation,
+          warning: activeChapter
+            ? null
+            : "لا يوجد فصل نشط للدورة؛ تمت الاستعادة برصيد 0.",
+        };
+      });
+
+      const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
+        result.student,
+      ]);
+      return NextResponse.json({
+        ok: true,
+        action,
+        ...result,
+        student: studentWithOpportunity,
+        source: "database",
+      });
+    }
+
+    const result = await withSerializableTransaction(async (tx) => {
       const student = await tx.student.findUnique({ where: { id: studentId } });
       if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
+      if (student.status === ARCHIVED_STUDENT_STATUS) {
+        throw Object.assign(new Error("archived student must be restored explicitly"), { statusCode: 409, errorKind: "archived-reactivation" });
+      }
 
       const shouldGrantFinalChance = student.status === "مفصول";
       const activeChapter = await getActiveChapterForCourse(tx, student.courseId);
@@ -250,8 +326,16 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     const err = error as { statusCode?: number; message?: string };
     if (err.statusCode === 409) {
+      const errorKind = (error as { errorKind?: string }).errorKind;
       return NextResponse.json(
-        { error: "لا يمكن فصل طالب مؤرشف. استعده أولاً ثم نفّذ الإجراء المطلوب." },
+        {
+          error:
+            errorKind === "archived-reactivation"
+              ? "الطالب مؤرشف. استخدم إجراء «استعادة من الأرشيف»؛ إعادة تفعيل المفصولين لا تستعيد المؤرشفين."
+              : action === "restore"
+                ? "إجراء الاستعادة مخصص للطلاب المؤرشفين فقط."
+                : "لا يمكن فصل طالب مؤرشف. استعده أولاً ثم نفّذ الإجراء المطلوب.",
+        },
         { status: 409 },
       );
     }

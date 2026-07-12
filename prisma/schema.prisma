@@ -85,6 +85,7 @@ model Student {
   correctionSheets CorrectionSheet[]
   telegramExamSubmissions TelegramExamSubmission[]
   studentLeaveGradeBackups StudentLeaveGradeBackup[]
+  enrollmentArchives StudentEnrollmentArchive[]
 
   @@index([courseId])
   @@index([status])
@@ -320,6 +321,27 @@ model StudentLeaveGradeBackup {
   @@unique([leaveId, studentId, examId])
   @@index([leaveId])
   @@index([studentId, examId])
+}
+
+
+model StudentEnrollmentArchive {
+  id              String   @id @default(cuid())
+  studentId       String
+  fromCourseId    String
+  fromCourseName  String   @default("")
+  toCourseId      String?
+  toCourseName    String   @default("")
+  resetKind       String
+  reason          String   @default("")
+  snapshot        String   @db.Text
+  createdById     String?
+  createdByName   String?
+  createdAt       DateTime @default(now())
+  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+  @@index([fromCourseId])
+  @@index([toCourseId])
 }
 
 model Role {

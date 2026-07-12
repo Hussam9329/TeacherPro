@@ -105,7 +105,7 @@ must(
 );
 
 must(
-  statusActionRoute.includes("db.$transaction") &&
+  (statusActionRoute.includes("db.$transaction") || statusActionRoute.includes("withSerializableTransaction")) &&
     statusActionRoute.includes('action !== "dismiss" && action !== "reactivate"') &&
     statusActionRoute.includes("فرصة أخيرة بعد تعهد") &&
     statusActionRoute.includes("auditLog.create"),

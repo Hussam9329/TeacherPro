@@ -4,7 +4,6 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import {
   requireAnyPermission,
-  requirePermission,
   requirePermissionPrincipal,
 } from "@/lib/server-auth";
 import { db } from "@/lib/db";
@@ -30,6 +29,8 @@ import {
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { archiveAndResetStudentEnrollment } from "@/lib/student-enrollment-archive-server";
+import { buildStudentAcademicImpactToken } from "@/lib/student-academic-impact-token";
 import {
   allocateStudentCodes,
   ensureStudentCodeSequenceReady,
@@ -65,6 +66,15 @@ const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
   "nameKey",
   "phoneKey",
   "telegramKey",
+  // Academic balances are owned by the opportunities/academic engine only.
+  "opportunities",
+  "baseOpportunities",
+  // Status and dismissal transitions are owned by status-action. Keeping them
+  // out of generic profile edits prevents accidental unarchive/reactivation.
+  "status",
+  "dismissalType",
+  "dismissalReason",
+  "dismissalNotes",
   // Prisma relation objects that may be present after GET /api/students include: { course: true }
   "course",
   "grades",
@@ -866,20 +876,39 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const authError = await requirePermission(req, "students.edit");
-  if (authError) return authError;
+  const principalOrError = await requirePermissionPrincipal(
+    req,
+    "students.edit",
+  );
+  if (principalOrError instanceof NextResponse) return principalOrError;
+  const principal = principalOrError;
 
-  const body = await req.json();
-  const { id, courseTransferPolicy: rawCourseTransferPolicy, ...data } = body;
+  const body = await req.json().catch(() => ({}));
+  const {
+    id,
+    courseTransferPolicy: rawCourseTransferPolicy,
+    academicImpactConfirmed: rawAcademicImpactConfirmed,
+    academicImpactPreviewToken: rawAcademicImpactPreviewToken,
+    ...rawData
+  } = body;
+  const data: any = { ...rawData };
   stripNonWritableStudentUpdateFields(data);
+  // Preserve only the user-requested fields before derived course values are
+  // normalized. The transaction recalculates those derived values against the
+  // latest course configuration instead of trusting an earlier read.
+  const requestedData: Record<string, unknown> = { ...data };
   const courseTransferPolicy = normalizeCourseTransferPolicy(
     rawCourseTransferPolicy,
   );
-  if (!id)
+  const academicImpactConfirmed = rawAcademicImpactConfirmed === true;
+  const academicImpactPreviewToken = String(rawAcademicImpactPreviewToken || "").trim();
+
+  if (!id) {
     return NextResponse.json(
       { error: "تعذر تحديد الطالب المطلوب" },
       { status: 400 },
     );
+  }
   if (
     rawCourseTransferPolicy !== undefined &&
     rawCourseTransferPolicy !== null &&
@@ -889,11 +918,22 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "سياسة نقل الطالب غير واضحة. اختر: اعتباره طالب جديد للدورة أو الإبقاء على فرصه كما هي.",
+          "سياسة التغيير غير واضحة. اختر: طالب جديد أو الإبقاء على ملفه الحالي.",
       },
       { status: 400 },
     );
   }
+
+  const currentStudent = await db.student.findUnique({
+    where: { id: String(id) },
+  });
+  if (!currentStudent) {
+    return NextResponse.json(
+      { error: "تعذر العثور على الطالب المطلوب. حدّث الصفحة ثم حاول مرة أخرى." },
+      { status: 404 },
+    );
+  }
+
   if (data.name !== undefined) {
     const nameError = getRequiredTextError(
       String(data.name ?? ""),
@@ -923,320 +963,461 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: parentPhoneError }, { status: 400 });
     data.parentPhone = sanitizePhoneInput(String(data.parentPhone ?? ""));
   }
-  if (data.telegram !== undefined)
+  if (data.telegram !== undefined) {
     data.telegram = sanitizeTelegramInput(String(data.telegram ?? ""));
+  }
   if (data.accountingGraceDays !== undefined) {
     const graceDaysError = validateGraceDays(data.accountingGraceDays);
     if (graceDaysError)
       return NextResponse.json({ error: graceDaysError }, { status: 400 });
     data.accountingGraceDays = normalizeGraceDays(data.accountingGraceDays);
   }
+  if (data.createdAt !== undefined) {
+    const parsedCreatedAt = new Date(String(data.createdAt || ""));
+    if (!Number.isFinite(parsedCreatedAt.getTime())) {
+      return NextResponse.json(
+        { error: "تاريخ تسجيل الطالب غير صالح" },
+        { status: 400 },
+      );
+    }
+    data.createdAt = parsedCreatedAt;
+  }
+
+  const mergedIdentity = {
+    id: String(id),
+    name: data.name ?? currentStudent.name,
+    phone: data.phone ?? currentStudent.phone,
+    telegram: data.telegram ?? currentStudent.telegram,
+  };
   if (
     data.name !== undefined ||
     data.phone !== undefined ||
     data.telegram !== undefined
   ) {
-    // Use targeted queries instead of loading all students
-    const current = await db.student.findUnique({
-      where: { id },
-      select: { name: true, phone: true, telegram: true },
-    });
-    const {
-      nameKey: updateNameKey,
-      phoneKey: updatePhoneKey,
-      telegramKey: updateTelegramKey,
-    } = getStudentUniqueKeys({
-      name: data.name ?? current?.name,
-      phone: data.phone ?? current?.phone,
-      telegram: data.telegram ?? current?.telegram,
-    });
-    const updateDuplicateConditions: Record<string, string>[] = [];
-    if (updateNameKey)
-      updateDuplicateConditions.push({ nameKey: updateNameKey });
-    if (updatePhoneKey)
-      updateDuplicateConditions.push({ phoneKey: updatePhoneKey });
-    if (updateTelegramKey)
-      updateDuplicateConditions.push({ telegramKey: updateTelegramKey });
-    const duplicateSource = updateDuplicateConditions.length
+    const identityKeys = getStudentUniqueKeys(mergedIdentity);
+    const duplicateConditions: Record<string, string>[] = [];
+    if (identityKeys.nameKey)
+      duplicateConditions.push({ nameKey: identityKeys.nameKey });
+    if (identityKeys.phoneKey)
+      duplicateConditions.push({ phoneKey: identityKeys.phoneKey });
+    if (identityKeys.telegramKey)
+      duplicateConditions.push({ telegramKey: identityKeys.telegramKey });
+    const duplicateSource = duplicateConditions.length
       ? await db.student.findMany({
-          where: { OR: updateDuplicateConditions },
+          where: { OR: duplicateConditions },
           select: { id: true, name: true, phone: true, telegram: true },
           take: 10,
         })
       : [];
     const duplicateMessage = getStudentDuplicateMessage(
       duplicateSource,
-      {
-        id,
-        name: data.name ?? current?.name,
-        phone: data.phone ?? current?.phone,
-        telegram: data.telegram ?? current?.telegram,
-      },
-      id,
+      mergedIdentity,
+      String(id),
     );
-    if (duplicateMessage)
+    if (duplicateMessage) {
       return NextResponse.json({ error: duplicateMessage }, { status: 409 });
+    }
+    if (data.name !== undefined) data.nameKey = identityKeys.nameKey;
+    if (data.phone !== undefined) data.phoneKey = identityKeys.phoneKey;
+    if (data.telegram !== undefined)
+      data.telegramKey = identityKeys.telegramKey;
   }
-  const updateUniqueKeys = getStudentUniqueKeys({
-    name: data.name ?? undefined,
-    phone: data.phone ?? undefined,
-    telegram: data.telegram ?? undefined,
+
+  const targetCourseId = String(
+    data.courseId ?? currentStudent.courseId,
+  ).trim();
+  const targetCourse = await db.course.findUnique({
+    where: { id: targetCourseId },
   });
-  if (data.name !== undefined) data.nameKey = updateUniqueKeys.nameKey;
-  if (data.phone !== undefined) data.phoneKey = updateUniqueKeys.phoneKey;
-  if (data.telegram !== undefined)
-    data.telegramKey = updateUniqueKeys.telegramKey;
-
-  if (data.createdAt !== undefined)
-    data.createdAt = data.createdAt ? new Date(data.createdAt) : new Date();
-  if (data.opportunities !== undefined) {
-    data.opportunities = Number(data.opportunities);
-    // Clamp opportunities to the active chapter's baseOpportunities for this
-    // student's course. This prevents the client from writing values above
-    // the cap (e.g. due to stale cache or a stale bulk operation that ran
-    // before a chapter change). The clamp applies whenever opportunities is
-    // explicitly being written, regardless of which course it is.
-    const courseIdForClamp =
-      String(data.courseId || "").trim() ||
-      (
-        await db.student.findUnique({
-          where: { id },
-          select: { courseId: true },
-        })
-      )?.courseId;
-    if (courseIdForClamp) {
-      const activeLink = await db.courseChapter.findFirst({
-        where: { courseId: courseIdForClamp, active: true, archived: false },
-        select: { chapterId: true },
-      });
-      if (activeLink) {
-        const chapter = await db.chapter.findUnique({
-          where: { id: activeLink.chapterId },
-          select: { opportunities: true },
-        });
-        const chapterOpp = Number(chapter?.opportunities || 0);
-        if (chapterOpp > 0) {
-          data.opportunities = Math.min(
-            Math.max(0, Math.trunc(data.opportunities)),
-            chapterOpp,
-          );
-          // Keep baseOpportunities aligned with the active chapter.
-          data.baseOpportunities = chapterOpp;
-        }
-      }
-    }
+  if (!targetCourse) {
+    return NextResponse.json(
+      { error: "الدورة المحددة غير موجودة" },
+      { status: 400 },
+    );
   }
-  if (data.baseOpportunities !== undefined)
-    data.baseOpportunities = Number(data.baseOpportunities);
+  if (targetCourse.active === false && targetCourseId !== currentStudent.courseId) {
+    return NextResponse.json(
+      { error: "الدورة الجديدة موقوفة عن التسجيل حالياً" },
+      { status: 400 },
+    );
+  }
 
-  // If course-related fields are being updated, validate against course settings
-  if (
-    data.courseProgram !== undefined ||
-    data.courseTerm !== undefined ||
-    data.studyType !== undefined ||
-    data.locationScope !== undefined ||
-    data.baghdadMode !== undefined ||
-    data.subSite !== undefined ||
-    data.courseId !== undefined
-  ) {
-    const targetCourseId =
-      data.courseId !== undefined
-        ? data.courseId
-        : (
-            await db.student.findUnique({
-              where: { id },
-              select: { courseId: true },
-            })
-          )?.courseId;
+  const nextCourseProgram = String(
+    data.courseProgram ?? currentStudent.courseProgram ?? "",
+  );
+  const nextCourseTerm =
+    nextCourseProgram === "كورسات"
+      ? String(data.courseTerm ?? currentStudent.courseTerm ?? "")
+      : "";
+  const nextStudyType = String(
+    data.studyType ?? currentStudent.studyType ?? "",
+  );
+  const nextLocationScope = String(
+    data.locationScope ?? currentStudent.locationScope ?? "",
+  );
+  const nextBaghdadMode = String(
+    data.baghdadMode ?? currentStudent.baghdadMode ?? "",
+  );
+  const requestedSubSite = String(data.subSite ?? currentStudent.subSite ?? "");
+  const nextSubSite =
+    resolveSubSite(
+      targetCourse,
+      nextStudyType,
+      nextLocationScope,
+      nextBaghdadMode,
+      requestedSubSite,
+    ) || requestedSubSite;
 
-    if (targetCourseId) {
-      const course = await db.course.findUnique({
-        where: { id: String(targetCourseId) },
-      });
-      if (!course) {
-        return NextResponse.json(
-          { error: "الدورة المحددة غير موجودة" },
-          { status: 400 },
-        );
-      }
+  const choiceValidation = validateStudentCourseChoices(targetCourse, {
+    courseProgram: nextCourseProgram,
+    courseTerm: nextCourseTerm,
+    studyType: nextStudyType,
+    locationScope: nextLocationScope,
+    baghdadMode: nextBaghdadMode,
+    subSite: nextSubSite,
+  });
+  if (!choiceValidation.ok) {
+    return NextResponse.json(
+      { error: choiceValidation.error },
+      { status: 400 },
+    );
+  }
+  if (data.courseTerm !== undefined || data.courseProgram !== undefined) {
+    data.courseTerm = nextCourseTerm;
+  }
+  if (data.subSite !== undefined || data.studyType !== undefined || data.locationScope !== undefined || data.baghdadMode !== undefined || data.courseId !== undefined) {
+    data.subSite = nextSubSite;
+  }
+
+  const normalized = (value: unknown) => String(value ?? "").trim();
+  const courseChanged = targetCourseId !== currentStudent.courseId;
+  const sameCourseContextChanged =
+    !courseChanged &&
+    [
+      [nextCourseProgram, currentStudent.courseProgram],
+      [nextCourseTerm, currentStudent.courseTerm],
+      [nextStudyType, currentStudent.studyType],
+      [nextLocationScope, currentStudent.locationScope],
+      [nextBaghdadMode, currentStudent.baghdadMode],
+      [String(data.mainSite ?? currentStudent.mainSite ?? ""), currentStudent.mainSite],
+      [nextSubSite, currentStudent.subSite],
+    ].some(([nextValue, currentValue]) =>
+      normalized(nextValue) !== normalized(currentValue),
+    );
+
+  if (courseChanged && courseTransferPolicy !== "reset") {
+    return NextResponse.json(
       {
-        const current = await db.student.findUnique({
-          where: { id },
-          select: {
-            courseProgram: true,
-            courseTerm: true,
-            studyType: true,
-            locationScope: true,
-            baghdadMode: true,
-            subSite: true,
-          },
-        });
-
-        const courseChoices = {
-          courseProgram: data.courseProgram ?? current?.courseProgram,
-          courseTerm:
-            data.courseProgram === "كورسات"
-              ? (data.courseTerm ?? current?.courseTerm)
-              : null,
-          studyType: data.studyType ?? current?.studyType,
-          locationScope: data.locationScope ?? current?.locationScope,
-          baghdadMode: data.baghdadMode ?? current?.baghdadMode,
-          subSite: data.subSite ?? current?.subSite,
-        };
-
-        const choiceValidation = validateStudentCourseChoices(
-          course,
-          courseChoices,
-        );
-        if (!choiceValidation.ok) {
-          return NextResponse.json(
-            { error: choiceValidation.error },
-            { status: 400 },
-          );
-        }
-
-        // Auto-resolve subSite
-        const resolvedSubSite = resolveSubSite(
-          course,
-          String(courseChoices.studyType ?? ""),
-          String(courseChoices.locationScope ?? ""),
-          String(courseChoices.baghdadMode ?? ""),
-          String(courseChoices.subSite ?? ""),
-        );
-        if (resolvedSubSite) data.subSite = resolvedSubSite;
-      }
-    }
+        error:
+          "النقل إلى دورة مختلفة يبدأ ملفاً جديداً دائماً. اختر «نقل كطالب جديد»؛ لا يمكن إبقاء درجات أو فرص الدورة السابقة فعالة.",
+        requiresNewEnrollmentReset: true,
+      },
+      { status: 409 },
+    );
+  }
+  if (sameCourseContextChanged && !courseTransferPolicy) {
+    return NextResponse.json(
+      {
+        error:
+          "تغيير نوع الدراسة/الدورة/الموقع داخل نفس الدورة يحتاج اختياراً واضحاً: الإبقاء على الملف كما هو أو البدء كطالب جديد.",
+        requiresTransferPolicy: true,
+      },
+      { status: 409 },
+    );
   }
 
-  let resetOpportunityHistory = false;
-  let resetTargetCourseId = "";
+  const resetEnrollment =
+    courseChanged ||
+    (sameCourseContextChanged && courseTransferPolicy === "reset");
+  const requestedCreatedAt =
+    data.createdAt instanceof Date ? data.createdAt : currentStudent.createdAt;
+  const requestedGraceDays =
+    data.accountingGraceDays !== undefined
+      ? Number(data.accountingGraceDays)
+      : Number(currentStudent.accountingGraceDays || 0);
+  const registrationDateChanged =
+    requestedCreatedAt.toISOString().slice(0, 10) !==
+    currentStudent.createdAt.toISOString().slice(0, 10);
+  const graceDaysChanged =
+    requestedGraceDays !== Number(currentStudent.accountingGraceDays || 0);
 
-  // كشف تغيير الدورة، نوع البرنامج، أو نوع الدورة. كل واحدة من هذي التغييرات
-  // تستوجب قراراً واضحاً من المستخدم: هل يريد اعتبار الطالب جديداً (reset)
-  // أو الإبقاء على فرصه (keep)؟
-  const fieldsRequiringTransferPolicy =
-    data.courseId !== undefined ||
-    data.studyType !== undefined ||
-    data.courseProgram !== undefined;
-
-  if (fieldsRequiringTransferPolicy) {
-    const currentStudent = await db.student.findUnique({
-      where: { id },
-      select: {
-        courseId: true,
-        opportunities: true,
-        baseOpportunities: true,
-        studyType: true,
-        courseProgram: true,
+  if (
+    !resetEnrollment &&
+    (registrationDateChanged || graceDaysChanged) &&
+    (!academicImpactConfirmed || !academicImpactPreviewToken)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "تغيير تاريخ التسجيل أو فترة السماح قد يعيد تفسير الدرجات والخصومات القديمة. اعرض الأثر ثم أكد الحفظ.",
+        requiresAcademicImpactPreview: true,
       },
-    });
-    if (!currentStudent) {
-      return NextResponse.json(
-        {
-          error:
-            "تعذر العثور على الطالب المطلوب. حدّث الصفحة ثم حاول مرة أخرى.",
-        },
-        { status: 404 },
-      );
-    }
-
-    const targetCourseId = String(data.courseId ?? "").trim();
-    const courseChanged =
-      data.courseId !== undefined &&
-      Boolean(targetCourseId) &&
-      targetCourseId !== currentStudent.courseId;
-
-    const studyTypeChanged =
-      data.studyType !== undefined &&
-      Boolean(data.studyType) &&
-      String(data.studyType) !== String(currentStudent.studyType ?? "");
-
-    const courseProgramChanged =
-      data.courseProgram !== undefined &&
-      Boolean(data.courseProgram) &&
-      String(data.courseProgram) !== String(currentStudent.courseProgram ?? "");
-
-    const needsTransferPolicy =
-      courseChanged || studyTypeChanged || courseProgramChanged;
-
-    if (needsTransferPolicy && !courseTransferPolicy) {
-      const reasons: string[] = [];
-      if (courseChanged) reasons.push("الدورة");
-      if (studyTypeChanged) reasons.push("نوع البرنامج");
-      if (courseProgramChanged) reasons.push("نوع الدورة");
-      return NextResponse.json(
-        {
-          error: `تغيير ${reasons.join("، ")} يحتاج قراراً واضحاً: هل تريد اعتباره طالباً جديداً بفرص الفصل النشط، أم الإبقاء على فرصه وسجله كما هي؟`,
-        },
-        { status: 400 },
-      );
-    }
-
-    if (needsTransferPolicy && courseTransferPolicy === "reset") {
-      // استخدم الدورة المستهدفة (سواء كانت موجودة أو جديدة) لاحتساب الفرص.
-      const courseForOpp = targetCourseId || currentStudent.courseId;
-      const nextOpportunities = await getInitialOpportunities({
-        id: courseForOpp,
-      });
-      if (nextOpportunities.error) {
-        return NextResponse.json(
-          { error: nextOpportunities.error },
-          { status: 409 },
-        );
-      }
-      data.opportunities = nextOpportunities.opportunities;
-      data.baseOpportunities = nextOpportunities.baseOpportunities;
-      resetOpportunityHistory = true;
-      resetTargetCourseId = courseForOpp;
-      // امسح حالة الفصل القديمة حتى يبدأ الطالب كصفحة بيضاء في الدورة الجديدة.
-      data.status = "نشط";
-      data.dismissalType = "";
-      data.dismissalReason = "";
-      data.dismissalNotes = "";
-      // حذف السجل سيتم داخل نفس transaction التي تنقل الطالب وتعيد احتسابه.
-      // بذلك لا يمكن أن تضيع السجلات إذا فشل تحديث الطالب بعد الحذف.
-    }
-
-    if (needsTransferPolicy && courseTransferPolicy === "keep") {
-      // Keep means a pure settings transfer. Do not let stale client
-      // values rewrite the student's current opportunity balance.
-      delete data.opportunities;
-      delete data.baseOpportunities;
-    }
+      { status: 409 },
+    );
   }
 
   try {
     const result = await withSerializableTransaction(async (tx) => {
-      const transactionData = { ...data };
+      const lockedStudent = await tx.student.findUnique({
+        where: { id: String(id) },
+      });
+      if (!lockedStudent) {
+        throw new StudentIntegrityError(
+          "تعذر العثور على الطالب المطلوب. حدّث الصفحة ثم حاول مرة أخرى.",
+          404,
+        );
+      }
+      const transactionTargetCourseId = String(
+        requestedData.courseId ?? lockedStudent.courseId,
+      ).trim();
+      const transactionCourse = await tx.course.findUnique({
+        where: { id: transactionTargetCourseId },
+      });
+      if (!transactionCourse) {
+        throw new StudentIntegrityError("الدورة المحددة لم تعد موجودة", 400);
+      }
 
-      if (resetOpportunityHistory) {
+      const transactionCourseChanged =
+        transactionTargetCourseId !== lockedStudent.courseId;
+      if (transactionCourseChanged && transactionCourse.active === false) {
+        throw new StudentIntegrityError(
+          "الدورة الجديدة موقوفة عن التسجيل حالياً",
+          400,
+        );
+      }
+      if (transactionCourseChanged && courseTransferPolicy !== "reset") {
+        throw new StudentIntegrityError(
+          "النقل إلى دورة مختلفة يجب أن ينفذ كطالب جديد.",
+        );
+      }
+
+      const transactionCourseProgram = String(
+        requestedData.courseProgram ?? lockedStudent.courseProgram ?? "",
+      );
+      const transactionCourseTerm =
+        transactionCourseProgram === "كورسات"
+          ? String(requestedData.courseTerm ?? lockedStudent.courseTerm ?? "")
+          : "";
+      const transactionStudyType = String(
+        requestedData.studyType ?? lockedStudent.studyType ?? "",
+      );
+      const transactionLocationScope = String(
+        requestedData.locationScope ?? lockedStudent.locationScope ?? "",
+      );
+      const transactionBaghdadMode = String(
+        requestedData.baghdadMode ?? lockedStudent.baghdadMode ?? "",
+      );
+      const transactionRequestedSubSite = String(
+        requestedData.subSite ?? lockedStudent.subSite ?? "",
+      );
+      const transactionSubSite =
+        resolveSubSite(
+          transactionCourse,
+          transactionStudyType,
+          transactionLocationScope,
+          transactionBaghdadMode,
+          transactionRequestedSubSite,
+        ) || transactionRequestedSubSite;
+
+      const transactionChoiceValidation = validateStudentCourseChoices(
+        transactionCourse,
+        {
+          courseProgram: transactionCourseProgram,
+          courseTerm: transactionCourseTerm,
+          studyType: transactionStudyType,
+          locationScope: transactionLocationScope,
+          baghdadMode: transactionBaghdadMode,
+          subSite: transactionSubSite,
+        },
+      );
+      if (!transactionChoiceValidation.ok) {
+        throw new StudentIntegrityError(
+          transactionChoiceValidation.error,
+          400,
+        );
+      }
+
+      const transactionData: any = { ...data };
+      transactionData.courseId = transactionTargetCourseId;
+      if (
+        requestedData.courseTerm !== undefined ||
+        requestedData.courseProgram !== undefined
+      ) {
+        transactionData.courseTerm = transactionCourseTerm;
+      }
+      if (
+        requestedData.subSite !== undefined ||
+        requestedData.studyType !== undefined ||
+        requestedData.locationScope !== undefined ||
+        requestedData.baghdadMode !== undefined ||
+        requestedData.courseId !== undefined
+      ) {
+        transactionData.subSite = transactionSubSite;
+      }
+      let archiveSummary: Awaited<
+        ReturnType<typeof archiveAndResetStudentEnrollment>
+      > | null = null;
+      let academicRecalculation: Awaited<
+        ReturnType<typeof recalculateStudentsAcademicState>
+      > | null = null;
+      const transactionSameCourseContextChanged =
+        !transactionCourseChanged &&
+        [
+          [transactionCourseProgram, lockedStudent.courseProgram],
+          [transactionCourseTerm, lockedStudent.courseTerm],
+          [transactionStudyType, lockedStudent.studyType],
+          [transactionLocationScope, lockedStudent.locationScope],
+          [transactionBaghdadMode, lockedStudent.baghdadMode],
+          [
+            String(requestedData.mainSite ?? lockedStudent.mainSite ?? ""),
+            lockedStudent.mainSite,
+          ],
+          [transactionSubSite, lockedStudent.subSite],
+        ].some(([nextValue, currentValue]) =>
+          normalized(nextValue) !== normalized(currentValue),
+        );
+      if (transactionSameCourseContextChanged && !courseTransferPolicy) {
+        throw new StudentIntegrityError(
+          "تغيير إعدادات الطالب داخل الدورة يحتاج اختيار الإبقاء أو البدء كطالب جديد.",
+        );
+      }
+      const transactionResetEnrollment =
+        transactionCourseChanged ||
+        (transactionSameCourseContextChanged && courseTransferPolicy === "reset");
+      const transactionKeepEnrollment =
+        transactionSameCourseContextChanged && courseTransferPolicy === "keep";
+
+      if (
+        lockedStudent.status === ARCHIVED_STUDENT_STATUS &&
+        (transactionResetEnrollment || transactionSameCourseContextChanged)
+      ) {
+        throw new StudentIntegrityError(
+          "الطالب مؤرشف. استعده من إجراء «استعادة من الأرشيف» أولاً؛ تعديل الملف لا يعيد تفعيله ولا ينقله.",
+          409,
+        );
+      }
+
+      if (transactionResetEnrollment) {
+        const resetKind = transactionCourseChanged
+          ? "course-transfer"
+          : "same-course-new-student";
+        archiveSummary = await archiveAndResetStudentEnrollment(tx, {
+          studentId: String(id),
+          targetCourseId: transactionTargetCourseId,
+          resetKind,
+          reason: transactionCourseChanged
+            ? `نقل الطالب من دورة ${lockedStudent.courseId} إلى دورة ${transactionTargetCourseId} وبدء ملف جديد`
+            : "اختيار اعتبار الطالب جديداً بعد تغيير إعداداته داخل الدورة نفسها",
+          createdById: principal.id,
+          createdByName: principal.name,
+        });
         const nextOpportunities = await getInitialOpportunities(
-          { id: resetTargetCourseId },
+          transactionCourse,
           tx,
         );
         if (nextOpportunities.error) {
           throw new StudentIntegrityError(nextOpportunities.error);
         }
+        transactionData.courseId = transactionTargetCourseId;
         transactionData.opportunities = nextOpportunities.opportunities;
         transactionData.baseOpportunities = nextOpportunities.baseOpportunities;
-        await tx.opportunityLog.deleteMany({ where: { studentId: id } });
+        transactionData.status = "نشط";
+        transactionData.dismissalType = "";
+        transactionData.dismissalReason = "";
+        transactionData.dismissalNotes = "";
+        // الطالب الجديد يبدأ من لحظة النقل/إعادة البداية؛ هذا يمنع امتحانات
+        // الملف القديم من العودة إلى التأثير مستقبلاً.
+        transactionData.createdAt = new Date();
+      } else if (transactionKeepEnrollment) {
+        // No recalculation and no balance rewrite. "Keep" is literal.
+        delete transactionData.opportunities;
+        delete transactionData.baseOpportunities;
+      }
+
+      const transactionRequestedCreatedAt =
+        transactionData.createdAt instanceof Date
+          ? transactionData.createdAt
+          : lockedStudent.createdAt;
+      const transactionRequestedGraceDays =
+        transactionData.accountingGraceDays !== undefined
+          ? Number(transactionData.accountingGraceDays)
+          : Number(lockedStudent.accountingGraceDays || 0);
+      const transactionRegistrationDateChanged =
+        transactionRequestedCreatedAt.toISOString().slice(0, 10) !==
+        lockedStudent.createdAt.toISOString().slice(0, 10);
+      const transactionGraceDaysChanged =
+        transactionRequestedGraceDays !==
+        Number(lockedStudent.accountingGraceDays || 0);
+      const transactionAcademicInputsChanged =
+        transactionRegistrationDateChanged || transactionGraceDaysChanged;
+
+      if (
+        lockedStudent.status === ARCHIVED_STUDENT_STATUS &&
+        transactionAcademicInputsChanged
+      ) {
+        throw new StudentIntegrityError(
+          "تاريخ التسجيل وفترة السماح لا يُعدلان لطالب مؤرشف. استعد الطالب أولاً بإجراء الاستعادة المخصص.",
+          409,
+        );
+      }
+
+      if (!transactionResetEnrollment && transactionAcademicInputsChanged) {
+        if (!academicImpactConfirmed || !academicImpactPreviewToken) {
+          throw new StudentIntegrityError(
+            "تغيير تاريخ التسجيل أو فترة السماح يحتاج معاينة أثر مؤكدة قبل الحفظ.",
+            409,
+          );
+        }
+        const currentPreviewToken = await buildStudentAcademicImpactToken(tx, {
+          studentId: String(id),
+          proposedCreatedAt: transactionRequestedCreatedAt,
+          proposedGraceDays: transactionRequestedGraceDays,
+        });
+        if (currentPreviewToken !== academicImpactPreviewToken) {
+          throw new StudentIntegrityError(
+            "تغيرت بيانات الطالب الأكاديمية بعد المعاينة. أعد عرض الأثر ثم أكد الحفظ من جديد.",
+            409,
+          );
+        }
       }
 
       const student = await tx.student.update({
-        where: { id },
+        where: { id: String(id) },
         data: transactionData,
       });
 
-      // Updating the student, deleting the old opportunity history (for reset),
-      // and recalculating the new academic state are one all-or-nothing unit.
-      const academicRecalculation = await recalculateStudentsAcademicState(
-        [id],
-        { tx },
-      );
-      const refreshedStudent =
-        (await tx.student.findUnique({ where: { id } })) || student;
+      if (!transactionResetEnrollment && transactionAcademicInputsChanged) {
+        academicRecalculation = await recalculateStudentsAcademicState(
+          [String(id)],
+          { tx },
+        );
+      }
 
-      return { refreshedStudent, academicRecalculation };
+      await tx.auditLog.create({
+        data: {
+          module: "سجل الطلاب",
+          action: transactionResetEnrollment
+            ? transactionCourseChanged
+              ? "نقل طالب وبدء ملف جديد"
+              : "إعادة بدء الطالب داخل الدورة"
+            : transactionKeepEnrollment
+              ? "تعديل إعدادات الطالب مع إبقاء الملف"
+              : "تعديل بيانات طالب",
+          details: `${student.name} - ${student.code} - ${archiveSummary ? `أرشيف ${archiveSummary.archiveId}` : "بدون تصفير"}`,
+          userId: principal.id,
+          userName: principal.name,
+        },
+      });
+
+      const refreshedStudent =
+        (await tx.student.findUnique({ where: { id: String(id) } })) || student;
+      return {
+        refreshedStudent,
+        academicRecalculation,
+        archiveSummary,
+        resetApplied: transactionResetEnrollment,
+        keepApplied: transactionKeepEnrollment,
+      };
     });
 
     const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
@@ -1246,6 +1427,9 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({
       student: studentWithOpportunity,
       academicRecalculation: result.academicRecalculation,
+      enrollmentArchive: result.archiveSummary,
+      resetApplied: result.resetApplied,
+      keepApplied: result.keepApplied,
       source: "database",
     });
   } catch (error) {

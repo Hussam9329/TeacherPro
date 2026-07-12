@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
+import { parseStudentEnrollmentArchiveSnapshot } from "@/lib/student-enrollment-archive-server";
 
 /**
  * ملف الطالب يجب أن يعرض تاريخه الحقيقي من بيانات النظام، وليس من البيانات المؤقتة المحلي.
@@ -31,6 +32,12 @@ export async function GET(req: NextRequest) {
       },
     });
     if (!student) return validationError("الطالب غير موجود");
+
+    const enrollmentArchives = await db.studentEnrollmentArchive.findMany({
+      where: { studentId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    const currentEnrollmentStartedAt = enrollmentArchives[0]?.createdAt || null;
 
     const [
       grades,
@@ -63,6 +70,9 @@ export async function GET(req: NextRequest) {
       }),
       db.auditLog.findMany({
         where: {
+          ...(currentEnrollmentStartedAt
+            ? { time: { gte: currentEnrollmentStartedAt } }
+            : {}),
           OR: [
             { details: { contains: student.id, mode: "insensitive" as const } },
             { details: { contains: student.code, mode: "insensitive" as const } },
@@ -112,6 +122,20 @@ export async function GET(req: NextRequest) {
       studentCalls,
       studentNotes,
       logs: auditLogs,
+      enrollmentArchives: enrollmentArchives.map((archive) => ({
+        id: archive.id,
+        studentId: archive.studentId,
+        fromCourseId: archive.fromCourseId,
+        fromCourseName: archive.fromCourseName,
+        toCourseId: archive.toCourseId,
+        toCourseName: archive.toCourseName,
+        resetKind: archive.resetKind,
+        reason: archive.reason,
+        createdById: archive.createdById,
+        createdByName: archive.createdByName,
+        createdAt: archive.createdAt,
+        snapshot: parseStudentEnrollmentArchiveSnapshot(archive.snapshot),
+      })),
       source: "database" as const,
       generatedAt: new Date().toISOString(),
     });

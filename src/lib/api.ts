@@ -712,6 +712,66 @@ export interface StudentProfileStatsResponse {
   generatedAt?: string;
 }
 
+export interface StudentAcademicUpdateImpactResponse {
+  studentId: string;
+  studentName: string;
+  requiresConfirmation: boolean;
+  changes: { dateChanged: boolean; graceChanged: boolean };
+  current: { createdAt: string; accountingGraceDays: number };
+  proposed: { createdAt: string; accountingGraceDays: number };
+  impact: {
+    totalGrades: number;
+    changedGrades: number;
+    becameProtected: number;
+    becameChargeable: number;
+    movedBeforeRegistration: number;
+    returnedAfterRegistration: number;
+    movedIntoGrace: number;
+    leftGrace: number;
+    sample: Array<{
+      examId: string;
+      examName: string;
+      examDate: string;
+      before: string;
+      after: string;
+    }>;
+  };
+  previewToken: string;
+  projection: {
+    current: {
+      opportunities: number;
+      status: string;
+      dismissalType: string;
+      dismissalReason: string;
+      automaticOpportunityLogs: number;
+    };
+    projected: {
+      opportunities: number;
+      status: string;
+      dismissalType: string;
+      dismissalReason: string;
+      automaticOpportunityLogs: number;
+    };
+  } | null;
+  source: "database";
+  generatedAt?: string;
+}
+
+export interface StudentEnrollmentArchiveRecord {
+  id: string;
+  studentId: string;
+  fromCourseId: string;
+  fromCourseName: string;
+  toCourseId?: string | null;
+  toCourseName: string;
+  resetKind: string;
+  reason: string;
+  createdById?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+  snapshot: Record<string, unknown>;
+}
+
 export interface StudentProfileLogResponse {
   studentId: string;
   grades: Array<Record<string, unknown>>;
@@ -721,6 +781,7 @@ export interface StudentProfileLogResponse {
   studentCalls: Array<Record<string, unknown>>;
   studentNotes: Array<Record<string, unknown>>;
   logs: Array<Record<string, unknown>>;
+  enrollmentArchives?: StudentEnrollmentArchiveRecord[];
   source: "database";
   generatedAt?: string;
 }
@@ -1263,6 +1324,10 @@ export const studentApi = {
   add: (student: Record<string, unknown>) => apiPost("students", student),
   statusAction: (payload: Record<string, unknown>) =>
     apiPost("students/status-action", payload),
+  updateImpact: (payload: Record<string, unknown>) =>
+    apiPost("students/update-impact", payload) as Promise<
+      ApiResult & { data?: StudentAcademicUpdateImpactResponse }
+    >,
   listAll: async (
     query: StudentListQuery = {},
   ): Promise<StudentListResponse | null> => {

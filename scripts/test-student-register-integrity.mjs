@@ -25,6 +25,7 @@ const migration = read(
 );
 const packageJson = JSON.parse(read("package.json"));
 const serializableTransaction = read("src/lib/serializable-transaction.ts");
+const enrollmentArchiveHelper = read("src/lib/student-enrollment-archive-server.ts");
 
 assert(
   registerView.includes("studentRegisterApi.context()"),
@@ -116,14 +117,13 @@ assert(
   "السيرفر يعيد قراءة الفصل النشط داخل نفس transaction ويحسب فرص البداية منه",
 );
 assert(
-  studentsRoute.includes(
-    "await tx.opportunityLog.deleteMany({ where: { studentId: id } })",
-  ) &&
+  studentsRoute.includes("archiveAndResetStudentEnrollment(tx") &&
     studentsRoute.includes("const student = await tx.student.update") &&
-    !studentsRoute.includes(
-      "await db.opportunityLog.deleteMany({ where: { studentId: id } })",
-    ),
-  "نقل الطالب كطالب جديد يحذف سجل الفرص ويحدّث الطالب داخل transaction واحدة",
+    enrollmentArchiveHelper.includes("opportunityLog.deleteMany") &&
+    enrollmentArchiveHelper.includes("grade.deleteMany") &&
+    enrollmentArchiveHelper.includes("studentEnrollmentArchive.create") &&
+    !studentsRoute.includes("await db.opportunityLog.deleteMany"),
+  "نقل الطالب كطالب جديد يؤرشف الملف كاملاً ويصفّر إجراءاته ويحدّثه داخل transaction واحدة",
 );
 assert(
   packageJson.scripts?.["test:student-register-integrity"] ===

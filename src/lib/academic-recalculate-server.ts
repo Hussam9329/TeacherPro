@@ -506,6 +506,128 @@ async function persistAcademicRecalculation(
   };
 }
 
+function applyPreviewAcademicBaseline(
+  state: AcademicStateInput,
+  studentId: string,
+): AcademicStateInput {
+  const student = state.students.find((item) => item.id === studentId);
+  if (!student) return state;
+  const activeLinks = state.courseChapters.filter(
+    (link) =>
+      link.courseId === student.courseId && link.active && !link.archived,
+  );
+  if (activeLinks.length !== 1) return state;
+  const chapter = state.chapters.find(
+    (item) => item.id === activeLinks[0].chapterId,
+  );
+  if (!chapter) return state;
+  const expectedBase = Math.max(
+    0,
+    Math.trunc(Number(chapter.opportunities || 0)),
+  );
+  if (student.baseOpportunities === expectedBase) return state;
+  return {
+    ...state,
+    students: state.students.map((item) =>
+      item.id === studentId
+        ? { ...item, baseOpportunities: expectedBase }
+        : item,
+    ),
+  };
+}
+
+export interface StudentAcademicUpdatePreview {
+  studentId: string;
+  current: {
+    createdAt: string;
+    accountingGraceDays: number;
+    opportunities: number;
+    status: string;
+    dismissalType: string;
+    dismissalReason: string;
+    automaticOpportunityLogs: number;
+  };
+  projected: {
+    createdAt: string;
+    accountingGraceDays: number;
+    opportunities: number;
+    status: string;
+    dismissalType: string;
+    dismissalReason: string;
+    automaticOpportunityLogs: number;
+  };
+}
+
+/** Pure database-backed preview. It runs the same academic engine used by save,
+ * but never persists students or logs. */
+export async function previewStudentAcademicUpdate(
+  studentId: string,
+  changes: { createdAt?: Date; accountingGraceDays?: number },
+  options: { tx?: Prisma.TransactionClient } = {},
+): Promise<StudentAcademicUpdatePreview | null> {
+  const trimmedId = String(studentId || "").trim();
+  if (!trimmedId) return null;
+  const client = options.tx || db;
+  const loadedState = await loadAcademicStateForStudents(client, [trimmedId]);
+  const state = applyPreviewAcademicBaseline(loadedState, trimmedId);
+  const storedStudent = state.students.find((student) => student.id === trimmedId);
+  if (!storedStudent) return null;
+
+  const currentResult = recalculateAcademicState(state, new Set([trimmedId]));
+  const calculatedCurrent =
+    currentResult.students.find((student) => student.id === trimmedId) ||
+    storedStudent;
+
+  const projectedStudent = {
+    ...storedStudent,
+    ...(changes.createdAt
+      ? { createdAt: dateString(changes.createdAt) }
+      : {}),
+    ...(changes.accountingGraceDays !== undefined
+      ? { accountingGraceDays: Math.min(30, Math.max(0, Math.trunc(Number(changes.accountingGraceDays || 0)))) }
+      : {}),
+  };
+  const projectedState: AcademicStateInput = {
+    ...state,
+    students: state.students.map((student) =>
+      student.id === trimmedId ? projectedStudent : student,
+    ),
+  };
+  const projectedResult = recalculateAcademicState(
+    projectedState,
+    new Set([trimmedId]),
+  );
+  const calculatedProjected =
+    projectedResult.students.find((student) => student.id === trimmedId) ||
+    projectedStudent;
+
+  return {
+    studentId: trimmedId,
+    current: {
+      createdAt: storedStudent.createdAt,
+      accountingGraceDays: storedStudent.accountingGraceDays,
+      opportunities: calculatedCurrent.opportunities,
+      status: calculatedCurrent.status,
+      dismissalType: calculatedCurrent.dismissalType || "",
+      dismissalReason: calculatedCurrent.dismissalReason || "",
+      automaticOpportunityLogs: currentResult.opportunityLogs.filter(
+        (log) => log.studentId === trimmedId && isAutomaticOpportunityLog(log),
+      ).length,
+    },
+    projected: {
+      createdAt: projectedStudent.createdAt,
+      accountingGraceDays: projectedStudent.accountingGraceDays,
+      opportunities: calculatedProjected.opportunities,
+      status: calculatedProjected.status,
+      dismissalType: calculatedProjected.dismissalType || "",
+      dismissalReason: calculatedProjected.dismissalReason || "",
+      automaticOpportunityLogs: projectedResult.opportunityLogs.filter(
+        (log) => log.studentId === trimmedId && isAutomaticOpportunityLog(log),
+      ).length,
+    },
+  };
+}
+
 export async function recalculateStudentsAcademicState(
   rawStudentIds: Array<string | null | undefined>,
   options: { tx?: Prisma.TransactionClient } = {},

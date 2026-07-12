@@ -10,6 +10,7 @@ import {
 import {
   studentApi,
   studentStatsApi,
+  type StudentAcademicUpdateImpactResponse,
   type StudentDeleteImpactResponse,
 } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
@@ -70,7 +71,6 @@ import {
 import {
   getRequiredTextError,
   searchAny,
-  TEXT_ONLY_PATTERN,
 } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
 import {
@@ -132,6 +132,28 @@ const studentExportColumns: ExportColumn<any>[] = [
 type RegistryViewMode = "cards" | "table";
 
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
+
+function academicImpactKindLabel(kind: string): string {
+  const labels: Record<string, string> = {
+    missing: "غير مكتملة",
+    excused: "إجازة",
+    "grace-period": "ضمن السماح",
+    "before-registration": "قبل التسجيل",
+    cheating: "غش",
+    "absent-dismissal": "غياب فصل",
+    "absent-deducted": "غياب مخصوم",
+    discounted: "درجة مخصومة",
+    "academic-accounting": "محاسبة أكاديمية",
+    dismissal: "درجة فصل",
+    failed: "راسب",
+    passed: "ناجح",
+    "full-mark": "درجة كاملة",
+    "no-discount-protected": "بدون خصم",
+  };
+  return labels[kind] || kind || "—";
+}
+
+
 
 type RegistryIssueFilter =
   | ""
@@ -370,22 +392,6 @@ function ContactLink({
   );
 }
 
-function StudentFileItem({
-  label,
-  children,
-  className = "",
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={className}>
-      <span className="text-muted-foreground">{label}:</span>{" "}
-      <strong>{children}</strong>
-    </div>
-  );
-}
 
 function looksLikeTelegramIdentifierSearch(query: string): boolean {
   const trimmed = toLatinDigits(query).trim();
@@ -580,6 +586,14 @@ export function StudentRegistryView() {
   const [courseTransferPolicy, setCourseTransferPolicy] = useState<
     CourseTransferPolicy | ""
   >("");
+  const [courseTransferPolicySignature, setCourseTransferPolicySignature] =
+    useState("");
+  const [academicImpactPreview, setAcademicImpactPreview] =
+    useState<StudentAcademicUpdateImpactResponse | null>(null);
+  const [academicImpactPreviewSignature, setAcademicImpactPreviewSignature] =
+    useState("");
+  const [academicImpactConfirmed, setAcademicImpactConfirmed] = useState(false);
+  const [academicImpactLoading, setAcademicImpactLoading] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     id: "",
@@ -819,22 +833,66 @@ export function StudentRegistryView() {
     [editAvailablePrograms, editDialog.form.courseProgram],
   );
 
-  // كشف تغيير نوع البرنامج أو نوع الدورة — نعاملهما بنفس سياسة نقل الطالب
-  // المستخدمة عند تغيير الدورة: إما اعتباره طالباً جديداً (reset) أو الإبقاء
-  // على فرصه (keep). السبب: تغيير نوع البرنامج/الدورة قد يعني أن الطالب بدأ
-  // مساراً جديداً، فيحق للمستخدم اختيار ما إذا كانت الفرص تُعاد ضبطها.
   const editStudyTypeChanged = Boolean(
     editOriginalStudent &&
-    editDialog.form.studyType &&
-    editDialog.form.studyType !== editOriginalStudent.studyType,
+    editDialog.form.studyType !== String(editOriginalStudent.studyType || ""),
   );
   const editCourseProgramChanged = Boolean(
     editOriginalStudent &&
-    editEffectiveCourseProgram &&
-    editEffectiveCourseProgram !== editOriginalStudent.courseProgram,
+    editEffectiveCourseProgram !== String(editOriginalStudent.courseProgram || ""),
   );
-  const editNeedsTransferPolicy =
-    editCourseChanged || editStudyTypeChanged || editCourseProgramChanged;
+  const editCourseTermChanged = Boolean(
+    editOriginalStudent &&
+    editDialog.form.courseTerm !== String(editOriginalStudent.courseTerm || ""),
+  );
+  const editLocationChanged = Boolean(
+    editOriginalStudent &&
+    (
+      editDialog.form.locationScope !== String(editOriginalStudent.locationScope || "") ||
+      editDialog.form.baghdadMode !== String(editOriginalStudent.baghdadMode || "") ||
+      editDialog.form.subSite !== String(editOriginalStudent.subSite || "")
+    ),
+  );
+  const editSameCourseContextChanged =
+    !editCourseChanged &&
+    (editStudyTypeChanged ||
+      editCourseProgramChanged ||
+      editCourseTermChanged ||
+      editLocationChanged);
+  const editNeedsTransferPolicy = editCourseChanged || editSameCourseContextChanged;
+  const editTransferSignature = JSON.stringify([
+    editDialog.form.courseId,
+    editEffectiveCourseProgram,
+    editDialog.form.courseTerm,
+    editDialog.form.studyType,
+    editDialog.form.locationScope,
+    editDialog.form.baghdadMode,
+    editDialog.form.subSite,
+  ]);
+  const effectiveCourseTransferPolicy =
+    courseTransferPolicySignature === editTransferSignature
+      ? courseTransferPolicy
+      : "";
+  const editRegistrationDateChanged = Boolean(
+    editOriginalStudent &&
+    editDialog.form.createdAt !== String(editOriginalStudent.createdAt || "").slice(0, 10),
+  );
+  const editGraceDaysChanged = Boolean(
+    editOriginalStudent &&
+    Number(editDialog.form.accountingGraceDays || 0) !==
+      Number(editOriginalStudent.accountingGraceDays || 0),
+  );
+  const editAcademicImpactSignature = `${editDialog.id}|${editDialog.form.createdAt}|${Number(editDialog.form.accountingGraceDays || 0)}`;
+  const resetWillStartNewFile =
+    editNeedsTransferPolicy && effectiveCourseTransferPolicy === "reset";
+  const editNeedsAcademicImpactPreview =
+    !resetWillStartNewFile &&
+    (editRegistrationDateChanged || editGraceDaysChanged);
+  const hasCurrentAcademicImpactPreview =
+    academicImpactPreviewSignature === editAcademicImpactSignature &&
+    Boolean(academicImpactPreview);
+  const effectiveAcademicImpactConfirmed =
+    hasCurrentAcademicImpactPreview && academicImpactConfirmed;
 
   const editAvailableStudyTypes = useMemo(
     () =>
@@ -977,6 +1035,7 @@ export function StudentRegistryView() {
     editDialog.form.courseProgram,
     editDialog.form.studyType,
     editDialog.form.locationScope,
+    editDialog.form.baghdadMode,
     editDialog.form.subSite,
     isEditOutOfCountry,
     editAvailablePrograms,
@@ -988,6 +1047,10 @@ export function StudentRegistryView() {
   const openEditDialog = (student: Student) => {
     setEditOriginalStudent(student);
     setCourseTransferPolicy("");
+    setCourseTransferPolicySignature("");
+    setAcademicImpactPreview(null);
+    setAcademicImpactPreviewSignature("");
+    setAcademicImpactConfirmed(false);
     setEditDialog({
       open: true,
       id: student.id,
@@ -1036,8 +1099,10 @@ export function StudentRegistryView() {
     const missing = requiredChecks.find(([ok]) => !ok);
     if (missing) return missing[1];
 
-    if (editNeedsTransferPolicy && !courseTransferPolicy) {
-      return "عند نقل الطالب إلى دورة أخرى أو تغيير نوع البرنامج/الدورة يجب اختيار طريقة التعامل مع الفرص";
+    if (editNeedsTransferPolicy && !effectiveCourseTransferPolicy) {
+      return editCourseChanged
+        ? "نقل الطالب إلى دورة جديدة يحتاج تأكيد بدء ملف جديد وتصفير الإجراءات الحالية"
+        : "عند تغيير نوع البرنامج/الكورس/الموقع داخل نفس الدورة اختر الإبقاء على الملف أو البدء كطالب جديد";
     }
 
     // Course settings-based validation
@@ -1107,19 +1172,44 @@ export function StudentRegistryView() {
     }
 
     const form = editDialog.form;
+
+    if (editNeedsAcademicImpactPreview && !effectiveAcademicImpactConfirmed) {
+      if (!hasCurrentAcademicImpactPreview) {
+        setAcademicImpactLoading(true);
+        const previewResult = await studentApi.updateImpact({
+          studentId: editDialog.id,
+          createdAt: form.createdAt,
+          accountingGraceDays: Number(form.accountingGraceDays || 0),
+        });
+        setAcademicImpactLoading(false);
+        if (!previewResult.ok || !previewResult.data) {
+          toast.error(previewResult.error || "تعذر معاينة أثر التغيير الأكاديمي");
+          return;
+        }
+        setAcademicImpactPreview(previewResult.data);
+        setAcademicImpactPreviewSignature(editAcademicImpactSignature);
+        setAcademicImpactConfirmed(false);
+        toast.warning("راجع أثر تغيير التاريخ/فترة السماح ثم أكّد الحفظ.");
+        return;
+      }
+      toast.warning("يجب تأكيد أثر تغيير التاريخ أو فترة السماح قبل الحفظ.");
+      return;
+    }
+
     const transferUpdates = editNeedsTransferPolicy
       ? {
-          courseTransferPolicy: courseTransferPolicy as CourseTransferPolicy,
-          ...(courseTransferPolicy === "reset"
-            ? {
-                opportunities: editTargetOpportunities,
-                baseOpportunities: editTargetOpportunities,
-              }
-            : {}),
+          courseTransferPolicy:
+            effectiveCourseTransferPolicy as CourseTransferPolicy,
         }
       : {};
     const result = await studentApi.update(editDialog.id, {
       ...transferUpdates,
+      academicImpactConfirmed:
+        editNeedsAcademicImpactPreview && effectiveAcademicImpactConfirmed,
+      academicImpactPreviewToken:
+        editNeedsAcademicImpactPreview && hasCurrentAcademicImpactPreview
+          ? academicImpactPreview?.previewToken || ""
+          : "",
       name: form.name.trim(),
       school: form.school.trim(),
       gender: form.gender,
@@ -1165,9 +1255,18 @@ export function StudentRegistryView() {
     setEditDialog({ open: false, id: "", form: emptyEditForm });
     setEditOriginalStudent(null);
     setCourseTransferPolicy("");
+    setCourseTransferPolicySignature("");
+    setAcademicImpactPreview(null);
+    setAcademicImpactPreviewSignature("");
+    setAcademicImpactConfirmed(false);
     setServerRefreshKey((value) => value + 1);
     toast.success("تم تعديل بيانات الطالب", {
-      description: "تم تحديث جميع حقول الطالب بنجاح",
+      description:
+        effectiveCourseTransferPolicy === "reset"
+          ? "تم حفظ الملف السابق للقراءة فقط وبدء ملف نظيف للطالب."
+          : effectiveCourseTransferPolicy === "keep"
+            ? "تم تعديل الإعدادات مع إبقاء الدرجات والفرص والإجراءات كما هي حرفياً."
+            : "تم تحديث بيانات الطالب بنجاح.",
     });
   });
 
@@ -1280,10 +1379,6 @@ export function StudentRegistryView() {
     ? filtered
     : localFiltered.slice((page - 1) * pageSize, page * pageSize);
   const registryServerUnavailable = Boolean(serverStudentsError && !serverStudents);
-  const dismissedStudents = students.filter(
-    (student) => student.status === "مفصول",
-  );
-
   const handleDismiss = runStatusActionLocked(async () => {
     if (!dismissDialog.student) return;
     if (registryServerUnavailable) {
@@ -1331,12 +1426,16 @@ export function StudentRegistryView() {
       return;
     }
     const student = students.find((item) => item.id === studentId);
+    const isArchived = student?.status === ARCHIVED_STUDENT_STATUS;
     const result = await studentApi.statusAction({
-      action: "reactivate",
+      action: isArchived ? "restore" : "reactivate",
       studentId,
     });
     if (!result.ok) {
-      toast.error(result.error || "تعذر إعادة تفعيل الطالب");
+      toast.error(
+        result.error ||
+          (isArchived ? "تعذر استعادة الطالب من الأرشيف" : "تعذر إعادة تفعيل الطالب"),
+      );
       return;
     }
     const updatedStudent = (result.data as { student?: Student } | null)?.student;
@@ -1370,11 +1469,6 @@ export function StudentRegistryView() {
     courseName: courseName(student.courseId),
     locationText: `${student.locationScope || student.mainSite || ""} - ${student.subSite || ""}`,
   }));
-
-  const studentOppLogs = (studentId: string) =>
-    opportunityLogs.filter((l) => l.studentId === studentId);
-  const studentGrades = (studentId: string) =>
-    grades.filter((g) => g.studentId === studentId);
 
   const fetchStudentExportRows = async () => {
     const params = new URLSearchParams();
@@ -2457,80 +2551,60 @@ export function StudentRegistryView() {
                           <div>
                             <p className="font-black">
                               {editCourseChanged
-                                ? "تم تغيير دورة الطالب — اختر سياسة نقل الفرص قبل الحفظ"
-                                : editStudyTypeChanged
-                                  ? "تم تغيير نوع البرنامج — اختر سياسة التعامل مع الفرص قبل الحفظ"
-                                  : "تم تغيير نوع الدورة — اختر سياسة التعامل مع الفرص قبل الحفظ"}
+                                ? "نقل إلى دورة جديدة — سيبدأ الطالب بملف نظيف"
+                                : "تغيير داخل نفس الدورة — اختر طريقة التعامل مع الملف"}
                             </p>
                             <p className="mt-1 text-xs leading-6 opacity-90">
-                              رصيد الطالب الحالي:{" "}
-                              {registryOpportunityText(editOriginalStudent)}.
-                              {editCourseChanged && (
-                                <>
-                                  {" "}الدورة الجديدة:{" "}
-                                  {editDialog.form.courseId
-                                    ? courseName(editDialog.form.courseId)
-                                    : "—"}
-                                  .
-                                </>
-                              )}
-                              {editStudyTypeChanged && (
-                                <>
-                                  {" "}نوع البرنامج الجديد: {editDialog.form.studyType}.
-                                </>
-                              )}
-                              {editCourseProgramChanged && (
-                                <>
-                                  {" "}نوع الدورة الجديد: {editEffectiveCourseProgram}.
-                                </>
-                              )}
+                              رصيد الطالب الحالي: {registryOpportunityText(editOriginalStudent)}.
+                              {editCourseChanged
+                                ? ` سيتم حفظ كل درجاته وفرصه وإجازاته ومكالماته وملاحظاته الحالية داخل ملف سابق للقراءة فقط، ثم تصفير الملف الحي وبدء التسجيل في ${courseName(editDialog.form.courseId)}.`
+                                : " يمكنك إبقاء كل الدرجات والفرص والإجراءات حرفياً كما هي، أو أرشفتها والبدء كطالب جديد داخل الدورة نفسها."}
                             </p>
                           </div>
                         </div>
 
                         <RadioGroup
-                          value={courseTransferPolicy}
-                          onValueChange={(value) =>
-                            setCourseTransferPolicy(
-                              value as CourseTransferPolicy,
-                            )
-                          }
-                          className="grid gap-3 md:grid-cols-2"
+                          value={effectiveCourseTransferPolicy}
+                          onValueChange={(value) => {
+                            setCourseTransferPolicy(value as CourseTransferPolicy);
+                            setCourseTransferPolicySignature(editTransferSignature);
+                            setAcademicImpactConfirmed(false);
+                          }}
+                          className={`grid gap-3 ${editCourseChanged ? "" : "md:grid-cols-2"}`}
                         >
                           <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-background/80 p-3 text-foreground shadow-sm transition hover:border-primary/50">
                             <RadioGroupItem value="reset" className="mt-1" />
                             <span>
                               <span className="block font-bold">
-                                اعتباره طالب جديد للدورة بفرص كاملة
+                                {editCourseChanged
+                                  ? "تأكيد النقل كطالب جديد"
+                                  : "اعتباره طالباً جديداً داخل الدورة"}
                               </span>
                               <span className="mt-1 block text-xs leading-6 text-muted-foreground">
-                                سيتم ضبط فرصه إلى {editTargetOpportunities} /{" "}
-                                {editTargetOpportunities}
-                                حسب الفصل النشط للدورة الجديدة. سجلاته القديمة
-                                تبقى محفوظة.
+                                يُحفظ الملف الحالي للقراءة فقط، ثم تُزال الدرجات والخصومات والإجازات والمكالمات والملاحظات وأوراق التصحيح من الملف الحي. يبدأ برصيد {editTargetOpportunities} / {editTargetOpportunities} وتاريخ تسجيل جديد لحظة الحفظ.
                               </span>
                             </span>
                           </label>
 
-                          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-background/80 p-3 text-foreground shadow-sm transition hover:border-primary/50">
-                            <RadioGroupItem value="keep" className="mt-1" />
-                            <span>
-                              <span className="block font-bold">
-                                الإبقاء على نفس فرصه وبياناته كما هي
+                          {!editCourseChanged && (
+                            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-background/80 p-3 text-foreground shadow-sm transition hover:border-primary/50">
+                              <RadioGroupItem value="keep" className="mt-1" />
+                              <span>
+                                <span className="block font-bold">
+                                  الإبقاء على الملف كما هو حرفياً
+                                </span>
+                                <span className="mt-1 block text-xs leading-6 text-muted-foreground">
+                                  تتغير خيارات نوع البرنامج/الكورس/الموقع فقط. لا يعاد احتساب الرصيد، ولا تُقيّد الفرص بسقف جديد، ولا تتغير الدرجات أو الخصومات أو الحالة الأكاديمية.
+                                </span>
                               </span>
-                              <span className="mt-1 block text-xs leading-6 text-muted-foreground">
-                                سيتم تغيير الدورة والخيارات التابعة فقط، بدون
-                                تعديل الفرص أو رصيد الفصل الحالي.
-                              </span>
-                            </span>
-                          </label>
+                            </label>
+                          )}
                         </RadioGroup>
 
-                        {courseTransferPolicy === "reset" &&
+                        {effectiveCourseTransferPolicy === "reset" &&
                           !editTargetActiveChapter && (
                             <p className="mt-3 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
-                              تنبيه: الدورة الجديدة لا تحتوي على فصل نشط، لذلك
-                              سيصبح رصيد الطالب 0 / 0 إذا اعتبرته طالباً جديداً.
+                              تنبيه: الدورة لا تحتوي على فصل نشط، لذلك سيبدأ الملف الجديد برصيد 0 / 0.
                             </p>
                           )}
                       </div>
@@ -2818,6 +2892,58 @@ export function StudentRegistryView() {
                       </p>
                     </div>
                   </div>
+
+                  {editNeedsAcademicImpactPreview && (
+                    <div className="mt-4 rounded-2xl border border-orange-300 bg-orange-50 p-4 text-sm text-orange-950 dark:border-orange-500/50 dark:bg-orange-950/20 dark:text-orange-100">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black">تغيير التاريخ أو فترة السماح يعيد تفسير الامتحانات القديمة</p>
+                          {!hasCurrentAcademicImpactPreview ? (
+                            <p className="mt-1 text-xs leading-6 opacity-90">
+                              عند الضغط على حفظ سيعرض النظام الأثر الفعلي من بيانات النظام أولاً، ولن يحفظ التغيير قبل تأكيدك.
+                            </p>
+                          ) : academicImpactPreview ? (
+                            <div className="mt-3 space-y-3">
+                              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground"><p className="text-xs text-muted-foreground">درجات تغير تفسيرها</p><p className="mt-1 text-xl font-black">{academicImpactPreview.impact.changedGrades}</p></div>
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground"><p className="text-xs text-muted-foreground">أصبحت محمية</p><p className="mt-1 text-xl font-black">{academicImpactPreview.impact.becameProtected}</p></div>
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground"><p className="text-xs text-muted-foreground">عادت للمحاسبة</p><p className="mt-1 text-xl font-black">{academicImpactPreview.impact.becameChargeable}</p></div>
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground"><p className="text-xs text-muted-foreground">الرصيد المتوقع</p><p className="mt-1 text-xl font-black">{academicImpactPreview.projection?.current.opportunities ?? "—"} ← {academicImpactPreview.projection?.projected.opportunities ?? "—"}</p></div>
+                              </div>
+                              {academicImpactPreview.projection && (
+                                <p className="rounded-xl bg-background/80 p-3 text-xs leading-6 text-foreground">
+                                  الحالة المتوقعة: {academicImpactPreview.projection.current.status} ← {academicImpactPreview.projection.projected.status}
+                                  {academicImpactPreview.projection.projected.dismissalReason ? ` — ${academicImpactPreview.projection.projected.dismissalReason}` : ""}
+                                </p>
+                              )}
+                              {academicImpactPreview.impact.sample.length > 0 && (
+                                <div className="max-h-48 space-y-2 overflow-y-auto">
+                                  {academicImpactPreview.impact.sample.map((item) => (
+                                    <div key={item.examId} className="rounded-xl bg-background/80 p-3 text-xs text-foreground">
+                                      <p className="font-bold">{item.examName} — {formatAppDate(item.examDate)}</p>
+                                      <p className="mt-1 text-muted-foreground">{academicImpactKindLabel(item.before)} ← {academicImpactKindLabel(item.after)}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <Button
+                                type="button"
+                                variant={academicImpactConfirmed ? "default" : "outline"}
+                                onClick={() => setAcademicImpactConfirmed((value) => !value)}
+                                className="rounded-xl"
+                              >
+                                {academicImpactConfirmed
+                                  ? "تم تأكيد الأثر — يمكن الحفظ"
+                                  : "أؤكد تطبيق هذا الأثر عند الحفظ"}
+                              </Button>
+                            </div>
+                          ) : null}
+                          {academicImpactLoading && <p className="mt-2 text-xs font-bold">جاري حساب الأثر من بيانات النظام…</p>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </section>
               </div>
             </div>

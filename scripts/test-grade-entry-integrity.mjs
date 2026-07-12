@@ -106,7 +106,7 @@ must(
 );
 
 must(
-  profileDialog.includes('type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "timeline"') &&
+  profileDialog.includes('type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "archives" | "timeline"') &&
     profileDialog.includes('label: "المكالمات"') &&
     profileDialog.includes('label: "الإجازات"') &&
     profileDialog.includes('label: "التعهدات"') &&

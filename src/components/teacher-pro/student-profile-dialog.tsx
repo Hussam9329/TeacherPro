@@ -18,6 +18,7 @@ import { formatGradeScore, isExamWithinStudentGracePeriod } from "@/lib/exam-uti
 import {
   studentProfileLogApi,
   studentProfileStatsApi,
+  type StudentEnrollmentArchiveRecord,
   type StudentProfileStatsResponse,
 } from "@/lib/api";
 import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib/grade-classification";
@@ -25,7 +26,7 @@ import { ArrowRightIcon } from "lucide-react";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity-balance";
 
-type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "timeline";
+type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "archives" | "timeline";
 
 type StudentProfileDialogProps = {
   student: Student | null;
@@ -45,6 +46,33 @@ type StudentProfileDialogProps = {
   isStudentCurrentlyInGrace: (student: Student) => boolean;
   graceEndDate: (student: Student) => string;
 };
+
+
+function archiveSnapshotList(
+  archive: StudentEnrollmentArchiveRecord,
+  key: string,
+): Array<Record<string, any>> {
+  const value = (archive.snapshot as Record<string, any> | undefined)?.[key];
+  return Array.isArray(value) ? value : [];
+}
+
+function archiveSnapshotCounts(
+  archive: StudentEnrollmentArchiveRecord,
+): Record<string, number> {
+  const raw = (archive.snapshot as Record<string, any> | undefined)?.counts;
+  if (!raw || typeof raw !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(raw).map(([key, value]) => [key, Number(value || 0)]),
+  );
+}
+
+function archiveSnapshotObject(
+  archive: StudentEnrollmentArchiveRecord,
+  key: string,
+): Record<string, any> {
+  const value = (archive.snapshot as Record<string, any> | undefined)?.[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
 
 function ContactLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
@@ -273,6 +301,9 @@ export function StudentProfileDialog({
   const [databaseStudentCalls, setDatabaseStudentCalls] = useState<StudentCall[]>([]);
   const [databaseStudentNotes, setDatabaseStudentNotes] = useState<StudentNote[]>([]);
   const [databaseLogs, setDatabaseLogs] = useState<LogEntry[]>([]);
+  const [databaseEnrollmentArchives, setDatabaseEnrollmentArchives] = useState<
+    StudentEnrollmentArchiveRecord[]
+  >([]);
   const [databaseGradesLoading, setDatabaseGradesLoading] = useState(false);
   const [databaseGradesError, setDatabaseGradesError] = useState<string | null>(null);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
@@ -501,6 +532,7 @@ export function StudentProfileDialog({
       setDatabaseStudentCalls([]);
       setDatabaseStudentNotes([]);
       setDatabaseLogs([]);
+      setDatabaseEnrollmentArchives([]);
       setDatabaseGradesLoading(false);
       setDatabaseGradesError(null);
       return;
@@ -535,6 +567,7 @@ export function StudentProfileDialog({
         setDatabaseStudentCalls((result.studentCalls || []) as unknown as StudentCall[]);
         setDatabaseStudentNotes((result.studentNotes || []) as unknown as StudentNote[]);
         setDatabaseLogs((result.logs || []) as unknown as LogEntry[]);
+        setDatabaseEnrollmentArchives(result.enrollmentArchives || []);
       })
       .catch(() => {
         if (cancelled || silent) return;
@@ -545,6 +578,7 @@ export function StudentProfileDialog({
         setDatabaseStudentCalls([]);
         setDatabaseStudentNotes([]);
         setDatabaseLogs([]);
+        setDatabaseEnrollmentArchives([]);
         setDatabaseGradesError("تعذر تحميل لوغ الطالب الكامل من النظام حالياً.");
       })
       .finally(() => {
@@ -601,6 +635,7 @@ export function StudentProfileDialog({
     { id: "followup", label: "التعهدات", value: pledgesCount, hint: "تعهدات ولي الأمر" },
     { id: "actions", label: "فصل/إعادة تفعيل", value: `${dismissalsCount}/${reactivationsCount}`, hint: "مسار حالة الطالب" },
     { id: "actions", label: "الملاحظات", value: notesCount, hint: "ملاحظات وإجراءات" },
+    { id: "archives", label: "الملفات السابقة", value: databaseEnrollmentArchives.length, hint: "أرشيف قراءة فقط قبل النقل أو إعادة البداية" },
     { id: "timeline", label: "السجل الزمني", value: timelineCount, hint: "كل حركة مرتبطة بالطالب" },
     { id: "exams", label: "الامتحانات", value: examCount, hint: "عدد الامتحانات" },
     { id: "grades", label: "ضمن السماح", value: graceGradeCount, hint: "درجات مسجلة بدون خصم" },
@@ -869,6 +904,184 @@ export function StudentProfileDialog({
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {tab === "archives" && (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-sky-300/60 bg-sky-500/10 p-4 text-sm shadow-sm sm:rounded-3xl sm:p-5">
+                  <h4 className="font-black text-sky-800 dark:text-sky-200">الملفات السابقة — للقراءة فقط</h4>
+                  <p className="mt-1 leading-6 text-muted-foreground">
+                    هذه الملفات جُمّدت قبل نقل الطالب إلى دورة جديدة أو قبل اختياره كطالب جديد. لا تدخل درجاتها أو فرصها أو إجراءاتها في ملفه الحالي.
+                  </p>
+                </div>
+                {databaseEnrollmentArchives.length === 0 ? (
+                  <p className="empty-state py-10">لا توجد ملفات سابقة مؤرشفة لهذا الطالب</p>
+                ) : (
+                  databaseEnrollmentArchives.map((archive) => {
+                    const counts = archiveSnapshotCounts(archive);
+                    const oldGrades = archiveSnapshotList(archive, "grades");
+                    const oldOpportunities = archiveSnapshotList(archive, "opportunityLogs");
+                    const oldLeaves = archiveSnapshotList(archive, "studentLeaves");
+                    const oldCalls = archiveSnapshotList(archive, "studentCalls");
+                    const oldNotes = archiveSnapshotList(archive, "studentNotes");
+                    const oldCorrectionSheets = archiveSnapshotList(archive, "correctionSheets");
+                    const oldTelegramSubmissions = archiveSnapshotList(archive, "telegramExamSubmissions");
+                    const oldLeaveGradeBackups = archiveSnapshotList(archive, "studentLeaveGradeBackups");
+                    const oldAuditLogs = archiveSnapshotList(archive, "auditLogs");
+                    const oldStudent = archiveSnapshotObject(archive, "student");
+                    const oldFollowups: Array<Record<string, any> & { _kind: string }> = [
+                      ...oldLeaves.map((item) => ({ ...item, _kind: "إجازة" })),
+                      ...oldCalls.map((item) => ({ ...item, _kind: "مكالمة" })),
+                    ];
+                    return (
+                      <article key={archive.id} className="rounded-2xl border bg-card/90 p-4 shadow-sm sm:rounded-3xl sm:p-5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant="outline">قراءة فقط</Badge>
+                              <Badge variant="secondary">
+                                {archive.resetKind === "course-transfer" ? "نقل إلى دورة جديدة" : "بدء جديد داخل الدورة"}
+                              </Badge>
+                            </div>
+                            <h5 className="mt-3 text-base font-black sm:text-lg">
+                              {archive.fromCourseName || archive.fromCourseId || "دورة سابقة"}
+                              {archive.toCourseName ? ` ← ${archive.toCourseName}` : ""}
+                            </h5>
+                            <p className="mt-1 text-xs leading-6 text-muted-foreground">{archive.reason || "أرشفة ملف الطالب السابق"}</p>
+                          </div>
+                          <div className="text-left text-xs text-muted-foreground">
+                            <p>{formatAppDate(archive.createdAt)}</p>
+                            {archive.createdByName && <p className="mt-1">بواسطة: {archive.createdByName}</p>}
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                          <InfoBox label="كود الملف السابق" value={oldStudent.code || "—"} />
+                          <InfoBox label="الحالة السابقة" value={oldStudent.status || "—"} />
+                          <InfoBox label="البرنامج/الدورة" value={[oldStudent.courseProgram, oldStudent.courseTerm].filter(Boolean).join(" — ") || "—"} />
+                          <InfoBox label="أسلوب الدراسة" value={oldStudent.studyType || "—"} />
+                          <InfoBox label="الموقع السابق" value={[oldStudent.locationScope || oldStudent.mainSite, oldStudent.subSite].filter(Boolean).join(" — ") || "—"} />
+                          <InfoBox label="الرصيد السابق" value={`${Number(oldStudent.opportunities || 0)}/${Number(oldStudent.baseOpportunities || 0)}`} />
+                          <InfoBox label="تاريخ بداية الملف" value={formatAppDate(oldStudent.createdAt)} />
+                          <InfoBox label="السماح السابق" value={`${Number(oldStudent.accountingGraceDays || 0)} يوم`} />
+                          <InfoBox label="هاتف الطالب" value={oldStudent.phone || "—"} />
+                          <InfoBox label="هاتف ولي الأمر" value={oldStudent.parentPhone || "—"} />
+                          <InfoBox label="معرف تيليجرام" value={oldStudent.telegram || "—"} />
+                          <InfoBox label="المدرسة" value={oldStudent.school || "—"} />
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+                          <InfoBox label="الدرجات" value={counts.grades || 0} />
+                          <InfoBox label="حركات الفرص" value={counts.opportunityLogs || 0} />
+                          <InfoBox label="الإجازات" value={counts.studentLeaves || 0} />
+                          <InfoBox label="المكالمات" value={counts.studentCalls || 0} />
+                          <InfoBox label="الملاحظات" value={counts.studentNotes || 0} />
+                          <InfoBox label="أوراق التصحيح" value={counts.correctionSheets || 0} />
+                          <InfoBox label="مستلمات تيليجرام" value={counts.telegramExamSubmissions || 0} />
+                          <InfoBox label="نسخ درجات الإجازات" value={counts.studentLeaveGradeBackups || 0} />
+                          <InfoBox label="سجلات النظام" value={counts.auditLogs || 0} />
+                        </div>
+
+                        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                          <details className="rounded-2xl border bg-muted/30 p-3">
+                            <summary className="cursor-pointer font-black">الدرجات القديمة ({oldGrades.length})</summary>
+                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                              {oldGrades.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد درجات</p> : oldGrades.map((grade) => (
+                                <div key={String(grade.id)} className="rounded-xl bg-background p-3 text-xs">
+                                  <p className="font-bold">{grade.exam?.name || "امتحان"} — {grade.status || "—"} {grade.score !== null && grade.score !== undefined ? `(${grade.score})` : ""}</p>
+                                  <p className="mt-1 text-muted-foreground">{formatAppDate(grade.exam?.date || grade.updatedAt || grade.createdAt)}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                          <details className="rounded-2xl border bg-muted/30 p-3">
+                            <summary className="cursor-pointer font-black">الفرص والإجراءات القديمة ({oldOpportunities.length})</summary>
+                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                              {oldOpportunities.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد حركات</p> : oldOpportunities.map((log) => (
+                                <div key={String(log.id)} className="rounded-xl bg-background p-3 text-xs">
+                                  <p className="font-bold">{log.action || "حركة"} {log.amount ? `— ${log.amount}` : ""}</p>
+                                  <p className="mt-1 break-words text-muted-foreground">{log.reason || "—"} — {formatAppDate(log.date)}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                          <details className="rounded-2xl border bg-muted/30 p-3">
+                            <summary className="cursor-pointer font-black">الإجازات والمكالمات ({oldLeaves.length + oldCalls.length})</summary>
+                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                              {oldFollowups.map((item) => (
+                                <div key={`${item._kind}-${String(item.id)}`} className="rounded-xl bg-background p-3 text-xs">
+                                  <p className="font-bold">{item._kind} — {item.exam?.name || item.status || "بدون امتحان"}</p>
+                                  <p className="mt-1 break-words text-muted-foreground">{item.reason || item.notes || item.status || "—"}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                          <details className="rounded-2xl border bg-muted/30 p-3">
+                            <summary className="cursor-pointer font-black">الملاحظات القديمة ({oldNotes.length})</summary>
+                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                              {oldNotes.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد ملاحظات</p> : oldNotes.map((note) => (
+                                <div key={String(note.id)} className="rounded-xl bg-background p-3 text-xs">
+                                  <p className="font-bold">{note.kind || "ملاحظة"} — {formatAppDate(note.date)}</p>
+                                  <p className="mt-1 break-words text-muted-foreground">{note.text || "—"}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                          <details className="rounded-2xl border bg-muted/30 p-3">
+                            <summary className="cursor-pointer font-black">أوراق التصحيح القديمة ({oldCorrectionSheets.length})</summary>
+                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                              {oldCorrectionSheets.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد أوراق تصحيح</p> : oldCorrectionSheets.map((sheet) => (
+                                <div key={String(sheet.id)} className="rounded-xl bg-background p-3 text-xs">
+                                  <p className="font-bold">{sheet.exam?.name || "امتحان"} — {sheet.status || "—"}</p>
+                                  <p className="mt-1 break-words text-muted-foreground">
+                                    المصحح: {sheet.corrector?.name || sheet.corrector?.username || "—"} — أخطاء التصحيح: {Number(sheet.correctionErrors || 0)} — أخطاء الجمع: {Number(sheet.sumErrors || 0)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                          <details className="rounded-2xl border bg-muted/30 p-3">
+                            <summary className="cursor-pointer font-black">مستلمات تيليجرام القديمة ({oldTelegramSubmissions.length})</summary>
+                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                              {oldTelegramSubmissions.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد مستلمات تيليجرام</p> : oldTelegramSubmissions.map((submission) => (
+                                <div key={String(submission.id)} className="rounded-xl bg-background p-3 text-xs">
+                                  <p className="font-bold">{submission.exam?.name || "امتحان"} — {submission.status || "—"}</p>
+                                  <p className="mt-1 break-words text-muted-foreground">
+                                    الصفحات: {Number(submission.pageCount || 0)} — المطابقة: {submission.matchType || "—"} — الاستلام: {formatAppDate(submission.receivedAt || submission.submittedAt)}
+                                  </p>
+                                  {submission.notes ? <p className="mt-1 break-words text-muted-foreground">{submission.notes}</p> : null}
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                          <details className="rounded-2xl border bg-muted/30 p-3">
+                            <summary className="cursor-pointer font-black">نسخ درجات الإجازات القديمة ({oldLeaveGradeBackups.length})</summary>
+                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                              {oldLeaveGradeBackups.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد نسخ درجات</p> : oldLeaveGradeBackups.map((backup) => (
+                                <div key={String(backup.id)} className="rounded-xl bg-background p-3 text-xs">
+                                  <p className="font-bold">{backup.exam?.name || "امتحان"} — {backup.status || "—"} {backup.score !== null && backup.score !== undefined ? `(${backup.score})` : ""}</p>
+                                  <p className="mt-1 break-words text-muted-foreground">{backup.notes || "بدون ملاحظات"} — {formatAppDate(backup.gradeUpdatedAt || backup.gradeCreatedAt || backup.createdAt)}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                          <details className="rounded-2xl border bg-muted/30 p-3">
+                            <summary className="cursor-pointer font-black">سجلات النظام القديمة ({oldAuditLogs.length})</summary>
+                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                              {oldAuditLogs.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد سجلات نظام</p> : oldAuditLogs.map((log) => (
+                                <div key={String(log.id)} className="rounded-xl bg-background p-3 text-xs">
+                                  <p className="font-bold">{log.module || "النظام"} — {log.action || "إجراء"}</p>
+                                  <p className="mt-1 break-words text-muted-foreground">{log.details || "—"} — {formatAppDate(log.time)}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
               </div>
             )}
 
