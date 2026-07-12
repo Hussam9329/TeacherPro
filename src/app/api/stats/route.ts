@@ -435,9 +435,20 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('[API] /api/stats error:', error);
+    const err = error as { code?: string; message?: string; meta?: unknown };
+    console.error('[API] /api/stats error:', JSON.stringify({
+      code: err?.code,
+      message: err?.message,
+      meta: err?.meta,
+      stack: (error as Error)?.stack?.split('\n').slice(0, 8),
+    }));
     return NextResponse.json(
-      { error: 'تعذر تحميل الإحصائيات والتنبيهات من بيانات النظام حالياً.' },
+      {
+        error: 'تعذر تحميل الإحصائيات والتنبيهات من بيانات النظام حالياً.',
+        code: err?.code,
+        detail: err?.message,
+        meta: err?.meta,
+      },
       { status: 500 },
     );
   }
