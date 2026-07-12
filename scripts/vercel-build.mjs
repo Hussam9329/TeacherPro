@@ -58,4 +58,40 @@ const migrationEnv = {
 // Vercel publishes only after this whole build command succeeds. Therefore a
 // migration failure keeps the previous deployment active instead of allowing
 // code and database schema to diverge.
-run("prisma", ["migrate", "deploy"], migrationEnv);
+// Neon pools auto-suspend after ~5 min of inactivity, so the first migration
+// attempt may time out on pg_advisory_lock while the DB wakes up. Retry up
+// to 3 times with a longer timeout before giving up.
+const migrationEnv = {
+  ...process.env,
+  DATABASE_URL: directUrl,
+  // Give Neon time to wake up + run DDL.
+  MIGRATE_TIMEOUT: "120000",
+};
+
+let migrationOk = false;
+let lastMigrationError = "";
+for (let attempt = 1; attempt <= 3 && !migrationOk; attempt += 1) {
+  if (attempt > 1) {
+    console.log(`\n[TeacherPro Deploy] Retrying migration (attempt ${attempt}/3)...\n`);
+    // Give Neon a moment to finish waking up.
+    spawnSync("sleep", ["3"], { stdio: "inherit" });
+  }
+  console.log(`\n[TeacherPro Deploy] prisma migrate deploy (attempt ${attempt}/3)\n`);
+  const result = spawnSync(localBinary("prisma"), ["migrate", "deploy"], {
+    stdio: "inherit",
+    env: migrationEnv,
+    shell: false,
+  });
+  if (result.status === 0) {
+    migrationOk = true;
+    break;
+  }
+  lastMigrationError = `prisma migrate deploy exited with code ${result.status ?? "unknown"}`;
+  if (result.error) {
+    lastMigrationError = `prisma failed to start: ${result.error.message}`;
+  }
+}
+
+if (!migrationOk) {
+  fail(`${lastMigrationError}. Deployment stopped before incompatible code could go live.`);
+}

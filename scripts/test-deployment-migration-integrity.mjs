@@ -25,8 +25,7 @@ check(
   "Vercel uses the guarded deployment runner",
 );
 check(
-  buildScript.includes('["prisma", ["migrate", "deploy"]') ||
-    buildScript.includes('run("prisma", ["migrate", "deploy"]'),
+  buildScript.includes('["migrate", "deploy"]'),
   "deployment runs prisma migrate deploy",
 );
 check(
@@ -35,7 +34,7 @@ check(
 );
 check(
   buildScript.indexOf('run("next", ["build"]') <
-    buildScript.indexOf('run("prisma", ["migrate", "deploy"]'),
+    buildScript.indexOf('["migrate", "deploy"]'),
   "application compiles before the production database is changed",
 );
 check(
