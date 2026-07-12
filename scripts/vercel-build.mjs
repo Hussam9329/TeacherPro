@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import process from "node:process";
+import { URL } from "node:url";
 
 function fail(message) {
   console.error(`\n[TeacherPro Deploy] ${message}\n`);
@@ -37,10 +38,60 @@ run("next", ["build"]);
 // Use a direct, non-pooler URL for DDL when supplied (Neon/Supabase/etc.).
 // Prisma still uses DATABASE_URL at runtime; only the migration command is
 // redirected to DIRECT_URL here.
-const directUrl = String(process.env.DIRECT_URL || "").trim();
+// لو DIRECT_URL غير موجود، نحاول تحويل pooler URL إلى direct تلقائياً.
+function deriveDirectUrl(url) {
+  if (!url) return "";
+  // Neon: -pooler.→ -.
+  let derived = url.replace(/-pooler\./, ".");
+  // Supabase: port 6543 → 5432
+  derived = derived.replace(/:6543\//, ":5432/");
+  // Vercel Postgres: لا يحتاج تحويل
+  return derived;
+}
+
+const directUrl = String(process.env.DIRECT_URL || "").trim() || deriveDirectUrl(databaseUrl);
+console.log(`\n[TeacherPro Deploy] Using migration URL: ${directUrl.replace(/:[^:@]+@/, ":****@")}\n`);
+
+// Neon auto-suspends idle databases after ~5 min. The first connection takes
+// longer than the 10s pg_advisory_lock timeout, so we warm up the DB with a
+// trivial SELECT 1 before running migrations. We retry the warmup a few times
+// because Neon can take 10-20s to fully wake.
+function warmupDatabase(url) {
+  const maxAttempts = 5;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    console.log(`\n[TeacherPro Deploy] Warming up database (attempt ${attempt}/${maxAttempts})...\n`);
+    const result = spawnSync("node", ["-e", `
+      const { Client } = require('pg');
+      const client = new Client({ connectionString: process.argv[1], ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 30000 });
+      client.connect()
+        .then(() => client.query('SELECT 1'))
+        .then(() => client.end())
+        .then(() => { console.log('warmup ok'); process.exit(0); })
+        .catch((err) => { console.error('warmup error:', err.message); process.exit(1); });
+    `, url], {
+      stdio: "inherit",
+      env: process.env,
+      shell: false,
+    });
+    if (result.status === 0) {
+      console.log(`\n[TeacherPro Deploy] Database warmed up successfully.\n`);
+      return true;
+    }
+    if (attempt < maxAttempts) {
+      console.log(`\n[TeacherPro Deploy] Warmup failed, waiting 3s before retry...\n`);
+      spawnSync("sleep", ["3"], { stdio: "inherit" });
+    }
+  }
+  return false;
+}
+
+if (!warmupDatabase(directUrl)) {
+  fail("Could not connect to the database after 5 attempts. The deployment is stopped to prevent code/schema divergence. Check DATABASE_URL/DIRECT_URL and database availability.");
+}
+
 const migrationEnv = {
   ...process.env,
-  DATABASE_URL: directUrl || databaseUrl,
+  DATABASE_URL: directUrl,
 };
 
 // Vercel publishes only after this whole build command succeeds. Therefore a
