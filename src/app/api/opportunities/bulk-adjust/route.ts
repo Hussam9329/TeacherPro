@@ -703,6 +703,16 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json(result);
   } catch (error) {
+    // Q78 FIX: Validation errors (invalid status/dismissalType) should
+    // return 400, not 500. routeErrorResponse treats unknown errors as 500.
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      message.includes("قيمة الحالة") ||
+      message.includes("قيمة نوع الفصل") ||
+      message.includes("غير صالحة")
+    ) {
+      return validationError(message, 400);
+    }
     return routeErrorResponse(error, "تعذر حفظ تحديث الفرص الجماعي حالياً.");
   }
 }
