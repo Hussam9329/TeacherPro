@@ -18,6 +18,8 @@ import {
   syncAcademicGradeWriteback,
 } from "@/lib/academic-grade-writeback-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
+import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
 function validateCorrectionSheetPayload(body: Record<string, unknown>) {
   const studentError = requireText(body.studentId, "الطالب");
@@ -119,7 +121,8 @@ export async function POST(req: NextRequest) {
         "توجد ورقة تصحيح مسجلة لهذا الطالب في نفس الامتحان",
         409,
       );
-    const result = await db.$transaction(async (tx) => {
+    // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
+    const result = await withSerializableTransaction(async (tx) => {
       const correctionSheet = await tx.correctionSheet.create({
         data: correctionSheetCreateData(body),
       });
@@ -186,7 +189,8 @@ export async function PUT(req: NextRequest) {
     if (!current)
       return validationError("ورقة التصحيح غير موجودة أو تم حذفها.", 404);
 
-    const result = await db.$transaction(async (tx) => {
+    // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
+    const result = await withSerializableTransaction(async (tx) => {
       const correctionSheet = await tx.correctionSheet.update({
         where: { id: String(id) },
         data: correctionSheetUpdateData(body),
@@ -240,17 +244,79 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) return validationError("تعذر تحديد ورقة التصحيح المطلوبة");
-    const deleted = await db.correctionSheet.delete({
+
+    // Q90 FIX: Allow caller to choose whether to also delete the Grade
+    // produced by this correction sheet. Previously, deleting a sheet
+    // left the Grade orphaned — the student kept a score they never
+    // actually earned, and any opportunity deduction caused by that
+    // score remained in effect.
+    //
+    // Default: deleteGrade=true (safe default — most callers want to
+    // undo the entire effect of the correction sheet). Pass
+    // deleteGrade=false to keep the grade (e.g. when the sheet was
+    // duplicated but the grade itself is correct).
+    const deleteGradeRaw = searchParams.get("deleteGrade");
+    const deleteGrade = deleteGradeRaw === null ? true : deleteGradeRaw !== "false";
+
+    // Fetch the sheet first (before deleting) so we know the
+    // studentId/examId to look up the Grade.
+    const sheet = await db.correctionSheet.findUnique({
       where: { id },
       select: { id: true, studentId: true, examId: true, status: true },
     });
-    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "حذف ورقة تصحيح", {
-      correctionSheetId: deleted.id,
-      studentId: deleted.studentId,
-      examId: deleted.examId,
-      status: deleted.status,
+    if (!sheet) {
+      return validationError("ورقة التصحيح غير موجودة أو تم حذفها مسبقاً.", 404);
+    }
+
+    // Use a transaction so sheet deletion + grade deletion + recalc
+    // are atomic. If any step fails, nothing is committed.
+    // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
+    const result = await withSerializableTransaction(async (tx) => {
+      // 1. Delete the correction sheet
+      await tx.correctionSheet.delete({ where: { id: sheet.id } });
+
+      let gradeDeleted = false;
+      let recalculatedStudents = 0;
+
+      // 2. Optionally delete the associated Grade
+      if (deleteGrade) {
+        const deletedGrade = await tx.grade.deleteMany({
+          where: { studentId: sheet.studentId, examId: sheet.examId },
+        });
+        gradeDeleted = deletedGrade.count > 0;
+      }
+
+      // 3. Re-run academic recalculation for the affected student so
+      //    opportunity balances and dismissal status reflect the
+      //    (possibly removed) grade. This is safe even if no grade
+      //    was deleted — it just re-derives state from current data.
+      if (gradeDeleted) {
+        const recalc = await recalculateStudentsAcademicState(
+          [sheet.studentId],
+          { tx },
+        );
+        recalculatedStudents = recalc.students.length;
+      }
+
+      return { gradeDeleted, recalculatedStudents };
     });
-    return NextResponse.json({ ok: true });
+
+    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "حذف ورقة تصحيح", {
+      correctionSheetId: sheet.id,
+      studentId: sheet.studentId,
+      examId: sheet.examId,
+      status: sheet.status,
+      deleteGrade,
+      gradeDeleted: result.gradeDeleted,
+      recalculatedStudents: result.recalculatedStudents,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      deleteGrade,
+      gradeDeleted: result.gradeDeleted,
+      recalculatedStudents: result.recalculatedStudents,
+    });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حذف ورقة التصحيح حالياً.");
   }

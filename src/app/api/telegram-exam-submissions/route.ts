@@ -17,6 +17,7 @@ import {
 import { sanitizePhoneInput } from "@/lib/format";
 import { sanitizeTelegramInput } from "@/lib/student-utils";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import {
   AcademicGradeWritebackError,
   hasAcademicGradeWritebackPayload,
@@ -599,7 +600,8 @@ export async function POST(req: NextRequest) {
         ? "بانتظار التصحيح"
         : requestedSubmissionStatus;
 
-    const result = await db.$transaction(async (tx) => {
+    // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
+    const result = await withSerializableTransaction(async (tx) => {
       const gradeWriteback = await syncAcademicGradeWriteback({
         tx,
         studentId,
@@ -744,7 +746,8 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const result = await db.$transaction(async (tx) => {
+    // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
+    const result = await withSerializableTransaction(async (tx) => {
       const data: Record<string, string> = {};
       if (body.status !== undefined) data.status = nextStatus;
       if (body.notes !== undefined) data.notes = textValue(body.notes, 4000);
@@ -841,7 +844,13 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = textValue(searchParams.get("id"), 120);
     if (!id) return validationError("تعذر تحديد مستلم البوت المطلوب.");
-    const deleted = await db.telegramExamSubmission.delete({
+
+    // Q87 FIX: Fetch the submission FIRST so we know which Grade to clean up.
+    // Previously, deleting a submission left the placeholder Grade (status="درجة"
+    // with score=null) in place — this blocked the exam from re-appearing in
+    // the bot's available exams list (takenExamIds includes it), AND left the
+    // student with an orphaned empty grade that confused correctors.
+    const submission = await db.telegramExamSubmission.findUnique({
       where: { id },
       select: {
         id: true,
@@ -852,15 +861,71 @@ export async function DELETE(req: NextRequest) {
         matchType: true,
       },
     });
-    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "حذف مستلم تيليجرام", {
-      submissionId: deleted.id,
-      studentId: deleted.studentId,
-      examId: deleted.examId,
-      gradeId: deleted.gradeId,
-      status: deleted.status,
-      matchType: deleted.matchType,
+    if (!submission) {
+      return validationError("مستلم البوت غير موجود أو تم حذفه مسبقاً.", 404);
+    }
+
+    // Q87 FIX: Allow caller to choose whether to also delete the placeholder
+    // Grade created when the submission was received.
+    // Default: deleteGrade=true (safe — most callers want to fully undo the
+    // submission so the student can re-take the exam).
+    // Pass deleteGrade=false to keep the grade (e.g. when the grade has been
+    // manually corrected and only the submission record should be removed).
+    const deleteGradeRaw = searchParams.get("deleteGrade");
+    const deleteGrade = deleteGradeRaw === null ? true : deleteGradeRaw !== "false";
+
+    // Atomic: delete submission + (optionally) grade + recalc student
+    // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
+    const result = await withSerializableTransaction(async (tx) => {
+      // 1. Delete the submission
+      await tx.telegramExamSubmission.delete({ where: { id: submission.id } });
+
+      let gradeDeleted = false;
+      let recalculatedStudents = 0;
+
+      // 2. Optionally delete the placeholder Grade.
+      // We delete by (studentId, examId) rather than by gradeId because
+      // gradeId in the submission may be stale (e.g. grade was already
+      // deleted via /api/grades). deleteMany is idempotent.
+      if (deleteGrade) {
+        const deletedGrade = await tx.grade.deleteMany({
+          where: { studentId: submission.studentId, examId: submission.examId },
+        });
+        gradeDeleted = deletedGrade.count > 0;
+      }
+
+      // 3. Re-run academic recalculation for the affected student so
+      //    opportunity balances and dismissal status reflect the
+      //    (possibly removed) grade. Safe even if no grade was deleted.
+      if (gradeDeleted) {
+        const recalc = await recalculateStudentsAcademicState(
+          [submission.studentId],
+          { tx },
+        );
+        recalculatedStudents = recalc.students.length;
+      }
+
+      return { gradeDeleted, recalculatedStudents };
     });
-    return NextResponse.json({ ok: true });
+
+    await writeRequestAuditLog(req, "التصحيح الإلكتروني", "حذف مستلم تيليجرام", {
+      submissionId: submission.id,
+      studentId: submission.studentId,
+      examId: submission.examId,
+      gradeId: submission.gradeId,
+      status: submission.status,
+      matchType: submission.matchType,
+      deleteGrade,
+      gradeDeleted: result.gradeDeleted,
+      recalculatedStudents: result.recalculatedStudents,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      deleteGrade,
+      gradeDeleted: result.gradeDeleted,
+      recalculatedStudents: result.recalculatedStudents,
+    });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حذف مستلم البوت حالياً.");
   }

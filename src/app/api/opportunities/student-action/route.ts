@@ -4,13 +4,13 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/server-auth";
-import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withFollowupTables } from "@/lib/followup-schema";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
 const MANUAL_ACTIONS = new Set(["إضافة", "خصم", "إعادة تعيين"]);
 
@@ -135,9 +135,10 @@ export async function POST(req: NextRequest) {
       return validationError("تعذر تحديد حركة الفرص المطلوب التراجع عنها.");
     }
 
+    // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
     const result = await withFollowupTables(
       async () =>
-        db.$transaction(async (tx) => {
+        withSerializableTransaction(async (tx) => {
           const sourceLog = actionType === "undo"
             ? await tx.opportunityLog.findUnique({
                 where: { id: logId },

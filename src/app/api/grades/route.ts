@@ -22,6 +22,7 @@ import {
   AcademicGradeWritebackError,
   syncAcademicGradeWriteback,
 } from "@/lib/academic-grade-writeback-server";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
 function parsePositiveInt(
   value: string | null,
@@ -396,7 +397,12 @@ export async function POST(req: NextRequest) {
       return validationError("حالة الدرجة غير صحيحة");
     }
 
-    const result = await db.$transaction(
+    // Q100 FIX: Use SERIALIZABLE isolation with retry to prevent concurrent
+    // recalculation conflicts. Two parallel writes to the same student
+    // (e.g. teacher edits a grade while admin adds an opportunity) would
+    // otherwise race in READ COMMITTED and the last writer wins, silently
+    // corrupting the student's opportunity balance and dismissal status.
+    const result = await withSerializableTransaction(
       async (tx) => {
         const writeback = await syncAcademicGradeWriteback({
           tx,
@@ -418,10 +424,6 @@ export async function POST(req: NextRequest) {
         }
         return writeback;
       },
-      // Academic writeback deliberately recalculates the student's complete
-      // state. Neon cold starts can exceed Prisma's 5s interactive transaction
-      // default even though the operation is healthy.
-      { maxWait: 15_000, timeout: 30_000 },
     );
 
     await writeRequestAuditLog(req, "الدرجات", "حفظ درجة وإعادة احتساب الطالب", {
@@ -526,7 +528,8 @@ export async function PUT(req: NextRequest) {
       return validationError("حالة الدرجة غير صحيحة");
     }
 
-    const result = await db.$transaction(async (tx) => {
+    // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
+    const result = await withSerializableTransaction(async (tx) => {
       if (!hasAcademicMutation) {
         const grade = await tx.grade.update({
           where: { id: targetGrade.id },
@@ -605,7 +608,8 @@ export async function DELETE(req: NextRequest) {
     const status = searchParams.get("status");
 
     if (examId && status === "غائب" && !studentId && !id) {
-      const result = await db.$transaction(async (tx) => {
+      // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
+      const result = await withSerializableTransaction(async (tx) => {
         const targetGrades = await tx.grade.findMany({
           where: { examId, status: "غائب" },
           select: { id: true, studentId: true },
@@ -645,7 +649,8 @@ export async function DELETE(req: NextRequest) {
     }
 
     if (id) {
-      const result = await db.$transaction(async (tx) => {
+      // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
+      const result = await withSerializableTransaction(async (tx) => {
         const targetGrade = await tx.grade.findUnique({
           where: { id },
           select: { id: true, studentId: true },
@@ -675,7 +680,8 @@ export async function DELETE(req: NextRequest) {
       }
     }
     if (studentId && examId) {
-      const result = await db.$transaction(async (tx) => {
+      // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
+      const result = await withSerializableTransaction(async (tx) => {
         const targetGrade = await tx.grade.findUnique({
           where: { studentId_examId: { studentId, examId } },
           select: { id: true, studentId: true },

@@ -293,6 +293,14 @@ async function handleFilterBasedBulkAdjust(
         }> = [];
 
         const appliedStudentIds: string[] = [];
+        // Q76 FIX: Track which students need explicit status update to "نشط".
+        // Previously, reactivateDismissedOnAdd only created a StudentNote but
+        // left student.status === "مفصول". The subsequent recalculate then
+        // saw the student as still dismissed (manualDismissal) and kept them
+        // dismissed — making the UI label say "إعادة تفعيل" while the
+        // student's actual status remained "مفصل". This was visually
+        // misleading and blocked the student from further academic activity.
+        const reactivationStudentIds: string[] = [];
         for (const student of targetRows) {
           const activeChapter = student.activeChapter;
           if (!activeChapter) continue;
@@ -311,6 +319,8 @@ async function handleFilterBasedBulkAdjust(
             reactivateDismissedOnAdd &&
             student.status === "مفصول"
           ) {
+            // Q76 FIX: mark this student for explicit status update below.
+            reactivationStudentIds.push(student.id);
             studentNotes.push({
               studentId: student.id,
               kind: "إجراء",
@@ -328,6 +338,37 @@ async function handleFilterBasedBulkAdjust(
           await tx.studentNote.createMany({ data: group });
         }
 
+        // Q76 FIX: Explicitly flip status from "مفصول" → "نشط" for
+        // reactivated students, AND clear the dismissal fields so
+        // recalculateStudentsAcademicState doesn't treat them as
+        // manualDismissal. We also create an OpportunityLog entry of
+        // action="إعادة تفعيل" so the academic engine's
+        // hasIndependentManualReactivation guard recognizes this as a
+        // legitimate reactivation source (see academic-engine.ts).
+        if (reactivationStudentIds.length > 0) {
+          await tx.student.updateMany({
+            where: { id: { in: reactivationStudentIds } },
+            data: {
+              status: "نشط",
+              dismissalType: null,
+              dismissalReason: null,
+              dismissalNotes: null,
+            },
+          });
+          const reactivationLogs = reactivationStudentIds.map((studentId) => ({
+            studentId,
+            action: "إعادة تفعيل",
+            amount: 0,
+            reason: "تثبيت إعادة التفعيل بعد إضافة فرصة جماعية",
+            date: now,
+            chapterId: null,
+            chapterNameSnapshot: null,
+          }));
+          for (const group of chunks(reactivationLogs)) {
+            await tx.opportunityLog.createMany({ data: group });
+          }
+        }
+
         const academicRecalculation = appliedStudentIds.length
           ? await recalculateStudentsAcademicState(appliedStudentIds, { tx })
           : null;
@@ -337,6 +378,7 @@ async function handleFilterBasedBulkAdjust(
           updatedStudents,
           savedOpportunityLogs: opportunityLogs.length,
           savedStudentNotes: studentNotes.length,
+          reactivatedStudents: reactivationStudentIds.length,
           totalMatching,
           eligibleWithActiveChapter: eligibleRows.length,
           noActiveChapter,
