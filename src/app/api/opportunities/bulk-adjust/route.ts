@@ -14,6 +14,7 @@ import {
 } from "@/lib/opportunity-filters-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
+import { isValidStudentStatus, isValidDismissalType } from "@/lib/student-status-enums";
 import {
   globalImpactConfirmationResponse,
   isConfirmedImpact,
@@ -88,23 +89,37 @@ function chunks<T>(items: T[], size = 250): T[][] {
 
 function normalizeStudentUpdates(value: unknown) {
   return asArray<StudentUpdatePayload>(value)
-    .map((item) => ({
-      id: String(item.id ?? "").trim(),
-      opportunities: normalizeNonNegativeInt(item.opportunities),
-      status: item.status !== undefined ? String(item.status ?? "") : undefined,
-      dismissalType:
-        item.dismissalType !== undefined
-          ? String(item.dismissalType ?? "")
-          : undefined,
-      dismissalReason:
-        item.dismissalReason !== undefined
-          ? String(item.dismissalReason ?? "")
-          : undefined,
-      dismissalNotes:
-        item.dismissalNotes !== undefined
-          ? String(item.dismissalNotes ?? "")
-          : undefined,
-    }))
+    .map((item) => {
+      // Q78 FIX: Validate status and dismissalType against enum values.
+      // Reject unknown values like "موقوف" or "فصل تجريبي" at the entry point.
+      const rawStatus = item.status !== undefined ? String(item.status ?? "") : undefined;
+      if (rawStatus !== undefined && !isValidStudentStatus(rawStatus)) {
+        throw new Error(
+          `قيمة الحالة "${rawStatus}" غير صالحة. القيم المسموح بها: نشط، مفصول، مؤرشف.`,
+        );
+      }
+      const rawDismissalType =
+        item.dismissalType !== undefined ? String(item.dismissalType ?? "") : undefined;
+      if (rawDismissalType !== undefined && !isValidDismissalType(rawDismissalType)) {
+        throw new Error(
+          `قيمة نوع الفصل "${rawDismissalType}" غير صالحة. القيم المسموح بها: فصل مؤقت، فصل نهائي، أو فارغ.`,
+        );
+      }
+      return {
+        id: String(item.id ?? "").trim(),
+        opportunities: normalizeNonNegativeInt(item.opportunities),
+        status: rawStatus,
+        dismissalType: rawDismissalType,
+        dismissalReason:
+          item.dismissalReason !== undefined
+            ? String(item.dismissalReason ?? "")
+            : undefined,
+        dismissalNotes:
+          item.dismissalNotes !== undefined
+            ? String(item.dismissalNotes ?? "")
+            : undefined,
+      };
+    })
     .filter((item) => item.id);
 }
 

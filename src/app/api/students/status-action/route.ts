@@ -8,6 +8,7 @@ import { ARCHIVED_STUDENT_STATUS } from "@/lib/student-delete-impact";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { validateDismissalType, STUDENT_STATUS_DISMISSED } from "@/lib/student-status-enums";
 
 type RegistryStatusAction = "dismiss" | "reactivate" | "restore";
 
@@ -78,11 +79,36 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Q78 FIX: Validate dismissalType against the allowed enum values.
+      // Reject unknown values like "موقوف" or "فصل تجريبي".
+      let validatedType: "فصل مؤقت" | "فصل نهائي";
+      try {
+        const vt = validateDismissalType(requestedType);
+        validatedType = vt || "فصل مؤقت";
+      } catch (validationErr) {
+        return NextResponse.json(
+          { error: validationErr instanceof Error ? validationErr.message : "قيمة نوع الفصل غير صالحة." },
+          { status: 400 },
+        );
+      }
+
       const result = await withSerializableTransaction(async (tx) => {
         const student = await tx.student.findUnique({ where: { id: studentId } });
         if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
         if (student.status === ARCHIVED_STUDENT_STATUS) {
           throw Object.assign(new Error("archived student cannot be dismissed"), { statusCode: 409 });
+        }
+
+        // Q79 FIX: Prevent dismissing an already-dismissed student.
+        // Previously, dismissing a dismissed student created duplicate
+        // deduction logs (second with amount 0) and duplicate dismissal
+        // notes, and could auto-promote "فصل مؤقت" to "فصل نهائي"
+        // unintentionally if a "فرصة أخيرة بعد تعهد" log existed.
+        if (student.status === STUDENT_STATUS_DISMISSED) {
+          throw Object.assign(
+            new Error("الطالب مفصول مسبقاً. لا يمكن تكرار إجراء الفصل. استخدم إعادة التفعيل أو الاستعادة حسب الحاجة."),
+            { statusCode: 409, code: "ALREADY_DISMISSED" },
+          );
         }
 
         const hasFinalChance = Boolean(
@@ -91,9 +117,9 @@ export async function POST(req: NextRequest) {
             select: { id: true },
           }),
         );
-        const nextType = hasFinalChance && requestedType === "فصل مؤقت" ? "فصل نهائي" : requestedType;
+        const nextType = hasFinalChance && validatedType === "فصل مؤقت" ? "فصل نهائي" : validatedType;
         const nextReason =
-          hasFinalChance && requestedType === "فصل مؤقت"
+          hasFinalChance && validatedType === "فصل مؤقت"
             ? `عدم الالتزام بالتعهد السابق - ${reason}`
             : reason;
         const deductedOpportunities = Math.max(0, Math.trunc(Number(student.opportunities || 0)));

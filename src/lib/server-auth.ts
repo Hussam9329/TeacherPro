@@ -261,6 +261,11 @@ const SERVER_PERMISSION_EQUIVALENTS: Record<string, string[]> = {
   // Backup: view (export) and restore are separate permissions (Q91+Q92 fix)
   "backup.view": [],
   "backup.restore": [],
+
+  // Q96 FIX: System maintenance is a separate high-privilege permission.
+  // It must be granted explicitly — it does NOT alias to students.edit.
+  "system.maintenance": [],
+  "system.settings": [],
 };
 
 function hasPermission(principal: AuthPrincipal, permission: string): boolean {

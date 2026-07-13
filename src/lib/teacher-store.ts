@@ -555,6 +555,13 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
     level: "manage",
     description: "استعادة بيانات النظام من نسخة احتياطية (عملية حساسة تستبدل أو تدمج البيانات)",
   },
+  {
+    id: "system.maintenance",
+    label: "صيانة النظام الشاملة",
+    category: "النظام",
+    level: "manage",
+    description: "تشغيل أدوات الصيانة الجماعية (إعادة الاحتساب الأكاديمي الشامل، إصلاح الفرص، ضبط السقوف)",
+  },
   // الدورات
   {
     id: "courses.view",

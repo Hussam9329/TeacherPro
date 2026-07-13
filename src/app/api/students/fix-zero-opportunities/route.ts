@@ -33,7 +33,8 @@ function readMode(req: NextRequest): Mode {
  * Admin-only. Returns per-course details + global recalculation summary.
  */
 export async function PATCH(req: NextRequest) {
-  const authError = await requirePermission(req, "students.edit");
+  // Q96 FIX: Use dedicated system.maintenance permission (was students.edit).
+  const authError = await requirePermission(req, "system.maintenance");
   if (authError) return authError;
 
   const mode = readMode(req);

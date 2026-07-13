@@ -197,6 +197,8 @@ export async function POST(req: NextRequest) {
               code: true,
               status: true,
               courseId: true,
+              opportunities: true,
+              baseOpportunities: true,
             },
           });
           if (!student) throw new Error("الطالب غير موجود أو تم حذفه.");
@@ -215,23 +217,72 @@ export async function POST(req: NextRequest) {
             : actionType === "deduct" || (actionType === "undo" && sourceLog?.action === "إضافة")
               ? "خصم"
               : "إعادة تعيين";
-          const logAmount = actionType === "reset"
-            ? Math.max(
-                0,
-                Math.trunc(
-                  Number(activeChapterResult.activeLink.chapter.opportunities || 0),
-                ),
-              )
-            : actionType === "undo"
-              ? Math.max(1, Math.trunc(Number(sourceLog?.amount || 1)))
-              : amount;
-          // Q75 FIX: Embed the source log ID in the reason text as a marker
-          // `[undo-ref:${sourceLog.id}]` so we can detect prior undos later.
+
+          // Q72+Q73+Q74 FIX: Log the ACTUAL applied amount, not the requested.
+          // Previously, the log recorded the user's requested amount even if
+          // clamping reduced it (e.g. add 5 to a student capped at 1 logged
+          // "5" but the balance only went up by 1). This made the audit trail
+          // contradict the actual balance.
+          //
+          // Compute the actual applied amount:
+          //   - add: capped at (baseOpportunities - opportunities) — can't exceed ceiling
+          //   - deduct: capped at opportunities — can't go below 0
+          //   - reset: the new ceiling (no clamping needed, but we record
+          //     before/after/delta in the reason for auditability)
+          //   - undo: same as add/deduct based on the source action
+          const currentOpportunities = Math.max(0, Math.trunc(Number(student.opportunities || 0)));
+          const ceiling = Math.max(0, Math.trunc(Number(student.baseOpportunities || 0)));
+          const chapterCeiling = Math.max(
+            0,
+            Math.trunc(Number(activeChapterResult.activeLink.chapter.opportunities || 0)),
+          );
+
+          let logAmount: number;
+          let actualAppliedAmount: number;
+          const balanceBefore: number = currentOpportunities;
+          let balanceAfter: number;
+
+          if (actionType === "reset") {
+            logAmount = chapterCeiling;
+            actualAppliedAmount = chapterCeiling - currentOpportunities; // delta (can be negative if current > ceiling)
+            balanceAfter = chapterCeiling;
+          } else if (actionType === "undo") {
+            const undoAmount = Math.max(1, Math.trunc(Number(sourceLog?.amount || 1)));
+            logAmount = undoAmount;
+            if (action === "إضافة") {
+              // Undo of a deduct = add back, capped at ceiling
+              actualAppliedAmount = Math.min(undoAmount, Math.max(0, ceiling - currentOpportunities));
+              balanceAfter = Math.min(ceiling, currentOpportunities + actualAppliedAmount);
+            } else {
+              // Undo of an add = deduct, capped at current
+              actualAppliedAmount = Math.min(undoAmount, currentOpportunities);
+              balanceAfter = Math.max(0, currentOpportunities - actualAppliedAmount);
+            }
+          } else if (actionType === "add") {
+            logAmount = Math.max(0, Math.trunc(Number(amount || 0)));
+            actualAppliedAmount = Math.min(logAmount, Math.max(0, ceiling - currentOpportunities));
+            balanceAfter = Math.min(ceiling, currentOpportunities + actualAppliedAmount);
+          } else {
+            // deduct
+            logAmount = Math.max(0, Math.trunc(Number(amount || 0)));
+            actualAppliedAmount = Math.min(logAmount, currentOpportunities);
+            balanceAfter = Math.max(0, currentOpportunities - actualAppliedAmount);
+          }
+
+          // Q74 FIX: For reset, embed before/after/delta in the reason text
+          // so the audit trail shows the actual change (not just the target).
+          // For add/deduct, embed the actual applied amount when it differs
+          // from the requested amount (i.e. clamping occurred).
+          // Q75 FIX: For undo, embed [undo-ref:${sourceLog.id}] marker so we
+          // can detect prior undos and prevent double-undo.
           const finalReason = actionType === "reset"
-            ? reason || "إعادة تعيين الفرص من إدارة الفرص"
+            ? (reason || "إعادة تعيين الفرص من إدارة الفرص") +
+              ` [قبل: ${balanceBefore} → بعد: ${balanceAfter}، فرق: ${actualAppliedAmount >= 0 ? "+" : ""}${actualAppliedAmount}]`
             : actionType === "undo"
               ? `تراجع موثق عن ${sourceLog?.action}: ${sourceLog?.reason || "بدون سبب"} [undo-ref:${sourceLog?.id}]`.slice(0, 2000)
-              : reason;
+              : (logAmount !== actualAppliedAmount
+                ? `${reason || ""} [مطلوب: ${logAmount}، مطبّق: ${actualAppliedAmount}، قبل: ${balanceBefore} → بعد: ${balanceAfter}]`
+                : reason);
 
           const createdLog = await tx.opportunityLog.create({
             data: {

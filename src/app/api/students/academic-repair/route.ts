@@ -26,7 +26,12 @@ function readBatchSize(req: NextRequest): number {
  * لا يكرر الخصومات لأن سجلات النظام التلقائية تُستبدل من جديد في كل تشغيل.
  */
 export async function PATCH(req: NextRequest) {
-  const authError = await requirePermission(req, "students.edit");
+  // Q96 FIX: Use dedicated system.maintenance permission instead of
+  // students.edit. Previously, any user with students.edit (a per-student
+  // edit permission) could trigger a system-wide recalculation of ALL
+  // students — violating least-privilege. Now requires explicit
+  // system.maintenance permission (admin role has it by default).
+  const authError = await requirePermission(req, "system.maintenance");
   if (authError) return authError;
 
   const rateLimitError = await checkApiRateLimit(

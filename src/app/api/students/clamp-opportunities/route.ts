@@ -23,7 +23,8 @@ import { db } from "@/lib/db";
  * fixed.
  */
 export async function PATCH(req: NextRequest) {
-  const authError = await requirePermission(req, "students.edit");
+  // Q96 FIX: Use dedicated system.maintenance permission (was students.edit).
+  const authError = await requirePermission(req, "system.maintenance");
   if (authError) return authError;
 
   try {
