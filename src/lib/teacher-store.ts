@@ -548,6 +548,13 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
     level: "manage",
     description: "تحميل نسخة احتياطية كاملة من بيانات النظام",
   },
+  {
+    id: "backup.restore",
+    label: "استعادة النسخة الاحتياطية",
+    category: "النظام",
+    level: "manage",
+    description: "استعادة بيانات النظام من نسخة احتياطية (عملية حساسة تستبدل أو تدمج البيانات)",
+  },
   // الدورات
   {
     id: "courses.view",
@@ -1063,6 +1070,7 @@ const DEFAULT_ROLES: Role[] = [
         p !== "logs.clear" &&
         p !== "logs.restore" &&
         p !== "backup.view" &&
+        p !== "backup.restore" &&
         p !== "system.settings",
     ),
   },
