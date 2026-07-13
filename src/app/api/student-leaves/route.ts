@@ -74,12 +74,14 @@ function normalizeLeavePayload(body: Record<string, unknown>) {
   const leaveType = body.leaveType === "period" ? "period" : "exam";
   const rawFrom = body.dateFrom ?? body.date;
   const rawTo = body.dateTo ?? rawFrom;
-  // Q64 FIX: Use parseDateStrict for user-supplied dates so invalid
-  // values throw instead of being silently replaced with today.
-  const fromKey = dateOnly(rawFrom);
-  const toKey = dateOnly(rawTo);
-  const dateFrom = parseDateStrict(fromKey <= toKey ? fromKey : toKey);
-  const dateTo = parseDateStrict(fromKey <= toKey ? toKey : fromKey);
+  // Q64 FIX: Validate user-supplied dates strictly. Previously dateOnly()
+  // used dateOrNow() which silently replaced invalid dates with today.
+  // Now we parse strictly and let invalid dates throw.
+  const fromDate = parseDateStrict(rawFrom);
+  const toDate = parseDateStrict(rawTo);
+  // Ensure dateFrom <= dateTo (swap if needed)
+  const dateFrom = fromDate <= toDate ? fromDate : toDate;
+  const dateTo = fromDate <= toDate ? toDate : fromDate;
   const date =
     leaveType === "period" ? dateFrom : parseDateStrict(body.date ?? dateFrom);
 
