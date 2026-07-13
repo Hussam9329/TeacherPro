@@ -53,7 +53,7 @@ function getDefaultAdminPassword(): string {
 }
 
 const ADMIN_FULL_PERMISSIONS = [
-  'system.dashboard', 'system.settings', 'backup.view',
+  'system.dashboard', 'system.settings', 'backup.view', 'backup.restore',
   'courses.view', 'courses.add', 'courses.edit', 'courses.delete',
   'chapters.view', 'chapters.add', 'chapters.edit', 'chapters.delete',
   'students.view', 'students.add', 'students.edit', 'students.delete',

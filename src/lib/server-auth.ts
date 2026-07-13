@@ -179,39 +179,88 @@ export function clearAuthCookie(res: NextResponse): void {
   });
 }
 
+// ============================================================================
+// Permission aliases — IMPORTANT: read the security note below before editing.
+// ----------------------------------------------------------------------------
+// Q89 SECURITY FIX: Previously, many `*.add`/`*.edit`/`*.delete` permissions
+// were aliased to the same `page.*.view` token as their `*.view` counterpart.
+// This meant any user granted "view" permission on a page implicitly received
+// add/edit/delete permissions too — a privilege escalation vulnerability.
+//
+// Fix: aliases now follow a strict rule:
+//   - `page.*.view` tokens only grant VIEW access (UI rendering, GET handlers)
+//   - `*.add`/`*.edit`/`*.delete`/`*.manage` permissions must be granted
+//     EXPLICITLY in the user's role. They have NO aliases to view tokens.
+//   - The ONLY exception is when a "manage" permission genuinely implies
+//     "view" (e.g. accounts.manage implies accounts.view) — but never the
+//     reverse.
+//
+// Migration impact:
+//   - The default admin role (role_admin) already grants all permissions
+//     explicitly via admin-seed.ts, so admin access is unaffected.
+//   - Custom roles that relied on the old alias behavior (granting only
+//     `page.courses.view` and expecting edit access) will lose edit access.
+//     Operators must update these roles in the accounts UI to grant
+//     `courses.add`/`courses.edit`/`courses.delete` explicitly.
+//   - This is intentional — the old behavior was a security hole.
+// ============================================================================
 const SERVER_PERMISSION_EQUIVALENTS: Record<string, string[]> = {
   "system.dashboard": ["page.dashboard.view"],
+
+  // Courses: view-only alias; add/edit/delete must be granted explicitly
   "courses.view": ["page.courses.view"],
-  "courses.add": ["page.courses.view"],
-  "courses.edit": ["page.courses.view"],
-  "courses.delete": ["page.courses.view"],
+  "courses.add": [],
+  "courses.edit": [],
+  "courses.delete": [],
+
+  // Chapters: view-only alias; add/edit/delete must be granted explicitly
   "chapters.view": ["page.chapters.view"],
-  "chapters.add": ["page.chapters.view"],
-  "chapters.edit": ["page.chapters.view"],
-  "chapters.delete": ["page.chapters.view"],
+  "chapters.add": [],
+  "chapters.edit": [],
+  "chapters.delete": [],
+
+  // Students: view-only alias; add/edit/delete must be granted explicitly
   "students.view": ["page.student-registry.view", "page.dismissed-students.view"],
   "students.add": ["page.student-register.view", "page.student-bulk-import.view"],
   "students.edit": ["students.dismiss", "students.reactivate"],
   "students.delete": [],
+
+  // Exams: view-only alias; add/edit/delete must be granted explicitly
   "exams.view": ["page.exam-records.view"],
   "exams.add": ["page.exam-new.view"],
-  "exams.edit": ["page.exam-records.view"],
-  "exams.delete": ["page.exam-records.view"],
+  "exams.edit": [],
+  "exams.delete": [],
+
+  // Grades: view-only alias; add/edit/delete must be granted explicitly
   "grades.view": ["page.grade-records.view", "page.missing-students-notes.view"],
   "grades.add": ["page.grade-entry.view"],
-  "grades.edit": ["page.grade-records.view"],
-  "grades.delete": ["page.grade-records.view"],
+  "grades.edit": [],
+  "grades.delete": [],
+
+  // Opportunities: manage does NOT alias to view anymore (Q89 fix)
   "opportunities.view": ["page.opportunities.view"],
-  "opportunities.manage": ["page.opportunities.view"],
+  "opportunities.manage": [],
+
+  // Follow-up: view-only alias; manage must be granted explicitly
   "follow-up.view": ["page.follow-up-calls.view", "page.follow-up-leaves.view", "page.follow-up-pledges.view"],
   "follow-up.manage": ["follow-up.calls.manage", "follow-up.leaves.manage", "follow-up.pledges.manage"],
+
+  // Correction: manage does NOT alias to view anymore (Q89 fix)
   "correction.view": ["page.e-correction.view"],
-  "correction.manage": ["page.e-correction.view"],
+  "correction.manage": [],
+
+  // Accounts: view-only alias; manage must be granted explicitly
   "accounts.view": ["page.accounts.view", "accounts.users.view", "accounts.roles.view", "accounts.security.view"],
   "accounts.manage": ["accounts.users.add", "accounts.users.edit", "accounts.users.delete", "accounts.roles.add", "accounts.roles.edit", "accounts.roles.delete", "accounts.permissions.manage"],
+
+  // Logs: view-only alias; clear/restore must be granted explicitly
   "logs.view": ["page.logs.view", "logs.export"],
   "logs.clear": ["page.admin-log-reset.manage"],
   "logs.restore": ["page.admin-log-reset.manage"],
+
+  // Backup: view (export) and restore are separate permissions (Q91+Q92 fix)
+  "backup.view": [],
+  "backup.restore": [],
 };
 
 function hasPermission(principal: AuthPrincipal, permission: string): boolean {
