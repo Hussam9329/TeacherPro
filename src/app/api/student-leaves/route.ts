@@ -557,6 +557,20 @@ export async function POST(req: NextRequest) {
       { status: 201 },
     );
   } catch (error) {
+    // Q65/Q68 FIX: Errors thrown inside the transaction (validation errors
+    // with Arabic messages) should return 400, not 500. routeErrorResponse
+    // treats any non-Prisma error as 500, so we intercept validation
+    // messages here.
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      message.includes("غير تابع لدورة الطالب") ||
+      message.includes("تتداخل") ||
+      message.includes("لا يمكن إضافة إجازة لطالب مؤرشف") ||
+      message.includes("الطالب غير موجود") ||
+      message.includes("لا يمكن تعديل إجازة لطالب مؤرشف")
+    ) {
+      return validationError(message, 400);
+    }
     return routeErrorResponse(error, "تعذر حفظ الإجازة حالياً.");
   }
 }
@@ -732,6 +746,17 @@ export async function PUT(req: NextRequest) {
     });
     return NextResponse.json(result);
   } catch (error) {
+    // Q65/Q68 FIX: validation errors should return 400, not 500.
+    const message = error instanceof Error ? error.message : String(error);
+    if (
+      message.includes("غير تابع لدورة الطالب") ||
+      message.includes("تتداخل") ||
+      message.includes("لا يمكن إضافة إجازة لطالب مؤرشف") ||
+      message.includes("الطالب غير موجود") ||
+      message.includes("لا يمكن تعديل إجازة لطالب مؤرشف")
+    ) {
+      return validationError(message, 400);
+    }
     return routeErrorResponse(error, "تعذر تحديث الإجازة حالياً.");
   }
 }
