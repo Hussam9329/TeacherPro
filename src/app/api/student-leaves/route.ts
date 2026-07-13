@@ -20,6 +20,7 @@ import {
   type AcademicServerRecalculationResult,
 } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
+import { parseCourseIds } from "@/lib/exam-course-links";
 
 function readListPagination(
   req: NextRequest,
@@ -416,6 +417,84 @@ export async function POST(req: NextRequest) {
     const result = await withFollowupTables<LeaveCreateResult>(
       () =>
         db.$transaction(async (tx) => {
+          // Q68 FIX: Verify the exam belongs to the student's course.
+          // Previously, an admin could create a leave for a student in
+          // course A on an exam that belongs to course B. The leave was
+          // saved, hid a non-existent grade, and caused confusing behavior
+          // on restore. Now we reject this upfront.
+          if (data.leaveType === "exam" && data.examId) {
+            const student = await tx.student.findUnique({
+              where: { id: data.studentId },
+              select: { id: true, courseId: true, status: true },
+            });
+            if (!student) {
+              throw new Error("الطالب غير موجود أو تم حذفه.");
+            }
+            if (student.status === "مؤرشف") {
+              throw new Error("لا يمكن إضافة إجازة لطالب مؤرشف.");
+            }
+            // Check the exam belongs to the student's course via ExamCourse
+            const link = await tx.examCourse.findFirst({
+              where: { examId: data.examId, courseId: student.courseId },
+              select: { id: true },
+            });
+            if (!link) {
+              // Fallback: check legacy courseIds JSON field on Exam
+              const exam = await tx.exam.findUnique({
+                where: { id: data.examId },
+                select: { courseIds: true },
+              });
+              const courseIds = parseCourseIds(exam?.courseIds);
+              if (!courseIds.includes(student.courseId)) {
+                throw new Error(
+                  "الامتحان غير تابع لدورة الطالب الحالية. لا يمكن إنشاء إجازة لامتحان من دورة أخرى.",
+                );
+              }
+            }
+          } else {
+            // For period leaves: still verify the student exists and is not archived
+            const student = await tx.student.findUnique({
+              where: { id: data.studentId },
+              select: { id: true, status: true },
+            });
+            if (!student) {
+              throw new Error("الطالب غير موجود أو تم حذفه.");
+            }
+            if (student.status === "مؤرشف") {
+              throw new Error("لا يمكن إضافة إجازة لطالب مؤرشف.");
+            }
+          }
+
+          // Q65 FIX: Prevent overlapping period leaves for the same student.
+          // Previously, the system allowed creating (1-10) and (5-15) for
+          // the same student. Both hid grades for the overlapping exams,
+          // and deleting one caused restore issues (the backup of the
+          // second was empty because the grade was already deleted).
+          // Now we reject if any existing period leave for this student
+          // overlaps with the new period [dateFrom, dateTo].
+          if (data.leaveType === "period") {
+            const overlapping = await tx.studentLeave.findFirst({
+              where: {
+                studentId: data.studentId,
+                leaveType: "period",
+                // Overlap: existing.dateFrom <= new.dateTo AND existing.dateTo >= new.dateFrom
+                AND: [
+                  { dateFrom: { lte: data.dateTo } },
+                  { dateTo: { gte: data.dateFrom } },
+                ],
+              },
+              select: { id: true, dateFrom: true, dateTo: true, reason: true },
+            });
+            if (overlapping) {
+              const fmt = (d: Date | null) => d ? new Date(d).toISOString().slice(0, 10) : '?';
+              throw new Error(
+                `يوجد إجازة فترة سابقة لهذا الطالب تتداخل مع التاريخ المحدد ` +
+                `(${fmt(overlapping.dateFrom)} إلى ${fmt(overlapping.dateTo)}). ` +
+                `لا يمكن إنشاء إجازتي فترة متداخلتين للطالب نفسه.`,
+              );
+            }
+          }
+
           const affectedExamIds = await getAffectedExamIds(tx, data);
           const restoredGrades = await removeDuplicateExamLeavesBeforeSave(
             tx,
@@ -508,6 +587,72 @@ export async function PUT(req: NextRequest) {
           const nextData = mergeLeavePayload(existingLeave, body);
           const payloadError = validateLeavePayload(nextData);
           if (payloadError) throw new Error(payloadError);
+
+          // Q68 FIX (PUT): Verify the exam belongs to the student's course.
+          if (nextData.leaveType === "exam" && nextData.examId) {
+            const student = await tx.student.findUnique({
+              where: { id: nextData.studentId },
+              select: { id: true, courseId: true, status: true },
+            });
+            if (!student) {
+              throw new Error("الطالب غير موجود أو تم حذفه.");
+            }
+            if (student.status === "مؤرشف") {
+              throw new Error("لا يمكن تعديل إجازة لطالب مؤرشف.");
+            }
+            const link = await tx.examCourse.findFirst({
+              where: { examId: nextData.examId, courseId: student.courseId },
+              select: { id: true },
+            });
+            if (!link) {
+              const exam = await tx.exam.findUnique({
+                where: { id: nextData.examId },
+                select: { courseIds: true },
+              });
+              const courseIds = parseCourseIds(exam?.courseIds);
+              if (!courseIds.includes(student.courseId)) {
+                throw new Error(
+                  "الامتحان غير تابع لدورة الطالب الحالية. لا يمكن إنشاء إجازة لامتحان من دورة أخرى.",
+                );
+              }
+            }
+          } else {
+            const student = await tx.student.findUnique({
+              where: { id: nextData.studentId },
+              select: { id: true, status: true },
+            });
+            if (!student) {
+              throw new Error("الطالب غير موجود أو تم حذفه.");
+            }
+            if (student.status === "مؤرشف") {
+              throw new Error("لا يمكن تعديل إجازة لطالب مؤرشف.");
+            }
+          }
+
+          // Q65 FIX (PUT): Prevent overlapping period leaves for the same student.
+          // Exclude the current leave being edited from the overlap check.
+          if (nextData.leaveType === "period") {
+            const overlapping = await tx.studentLeave.findFirst({
+              where: {
+                studentId: nextData.studentId,
+                leaveType: "period",
+                id: { not: id },
+                AND: [
+                  { dateFrom: { lte: nextData.dateTo } },
+                  { dateTo: { gte: nextData.dateFrom } },
+                ],
+              },
+              select: { id: true, dateFrom: true, dateTo: true, reason: true },
+            });
+            if (overlapping) {
+              const fmt = (d: Date | null) => d ? new Date(d).toISOString().slice(0, 10) : '?';
+              throw new Error(
+                `يوجد إجازة فترة سابقة لهذا الطالب تتداخل مع التاريخ المحدد ` +
+                `(${fmt(overlapping.dateFrom)} إلى ${fmt(overlapping.dateTo)}). ` +
+                `لا يمكن إنشاء إجازتي فترة متداخلتين للطالب نفسه.`,
+              );
+            }
+          }
 
           const restoredGrades = await restoreGradesForLeave(tx, id);
           const duplicateRestoredGrades = await removeDuplicateExamLeavesBeforeSave(

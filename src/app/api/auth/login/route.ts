@@ -6,6 +6,7 @@ import { ensureInitialAdminSeed } from '@/lib/admin-seed';
 import { db } from '@/lib/db';
 import { findUserByUsername, setAuthCookie, toAuthPrincipal } from '@/lib/server-auth';
 import { hashPassword, isPasswordHash, verifyPassword } from '@/lib/passwords';
+import { isPasswordAcceptable } from '@/lib/password-policy';
 import {
   checkLoginRateLimit,
   clearLoginFailures,
@@ -81,7 +82,21 @@ export async function POST(req: NextRequest) {
       },
     }).catch((error) => console.warn('[security-audit] login audit failed:', error));
 
-    const res = NextResponse.json({ user: toAuthPrincipal(user) });
+    // Q98 FIX: After successful login, expose a `passwordWeak` flag so the
+    // UI can prompt the user to change their password. We do NOT block login
+    // — that would lock out users who set weak passwords before the policy
+    // existed. They can still log in, but will be encouraged to update.
+    const principal = toAuthPrincipal(user);
+    const passwordWeak = !isPasswordAcceptable(password);
+    const res = NextResponse.json({
+      user: principal,
+      passwordWeak,
+      passwordPolicy: {
+        minLength: 8,
+        requiresLetter: true,
+        requiresDigit: true,
+      },
+    });
     await setAuthCookie(res, user.id);
     return res;
   } catch (error) {

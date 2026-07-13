@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAnyPermission, requirePermission, requirePermissionPrincipal, type AuthPrincipal } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { normalizePasswordForStorage } from '@/lib/passwords';
+import { validatePasswordPolicy } from '@/lib/password-policy';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { writeSecurityAudit } from '@/lib/security-audit';
 
@@ -183,6 +184,12 @@ export async function POST(req: NextRequest) {
     const password = readPasswordInput(body);
     if (!password) return validationError('يرجى إدخال رمز المرور');
 
+    // Q98 FIX: Enforce password strength policy on user creation.
+    const passwordCheck = validatePasswordPolicy(password);
+    if (!passwordCheck.ok) {
+      return validationError(passwordCheck.reason);
+    }
+
     const user = await db.appUser.create({
       data: {
         username: String(body.username ?? '').trim(),
@@ -257,7 +264,14 @@ export async function PUT(req: NextRequest) {
     if (updateData.permissions !== undefined) updateData.permissions = normalizePermissions(updateData.permissions);
 
     const passwordInput = typeof password === 'string' ? password.trim() : typeof passwordHash === 'string' ? passwordHash.trim() : '';
-    if (passwordInput) updateData.passwordHash = await normalizePasswordForStorage(passwordInput);
+    if (passwordInput) {
+      // Q98 FIX: Enforce password strength policy on password change.
+      const passwordCheck = validatePasswordPolicy(passwordInput);
+      if (!passwordCheck.ok) {
+        return validationError(passwordCheck.reason);
+      }
+      updateData.passwordHash = await normalizePasswordForStorage(passwordInput);
+    }
 
     const user = await db.appUser.update({ where: { id }, data: updateData, select: safeUserSelect() });
     await writeSecurityAudit(principal, 'تعديل مستخدم', {

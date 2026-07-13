@@ -164,6 +164,30 @@ export async function POST(req: NextRequest) {
             throw new Error("إعادة التعيين لا تُعكس بحركة واحدة آمنة. استخدم إضافة أو خصم موثق بدل التراجع.");
           }
 
+          // Q75 FIX: Prevent double-undo. Before creating an undo log,
+          // search for any existing OpportunityLog for the same student
+          // whose reason contains the marker `[undo-ref:${sourceLog.id}]`.
+          // If found, the source log has already been reversed — refuse.
+          //
+          // We embed the source log ID in the undo log's reason text so we
+          // can detect prior undos without requiring a schema migration
+          // (no new column needed). The marker is stable and searchable.
+          if (actionType === "undo" && sourceLog) {
+            const undoMarker = `[undo-ref:${sourceLog.id}]`;
+            const priorUndo = await tx.opportunityLog.findFirst({
+              where: {
+                studentId: sourceLog.studentId,
+                reason: { contains: undoMarker },
+              },
+              select: { id: true, date: true, reason: true },
+            });
+            if (priorUndo) {
+              throw new Error(
+                "تم التراجع عن هذه الحركة مسبقاً. لا يمكن التراجع عن الحركة نفسها أكثر من مرة.",
+              );
+            }
+          }
+
           const resolvedStudentId = actionType === "undo" ? String(sourceLog!.studentId) : studentId;
           const student = await tx.student.findUnique({
             where: { id: resolvedStudentId },
@@ -201,10 +225,12 @@ export async function POST(req: NextRequest) {
             : actionType === "undo"
               ? Math.max(1, Math.trunc(Number(sourceLog?.amount || 1)))
               : amount;
+          // Q75 FIX: Embed the source log ID in the reason text as a marker
+          // `[undo-ref:${sourceLog.id}]` so we can detect prior undos later.
           const finalReason = actionType === "reset"
             ? reason || "إعادة تعيين الفرص من إدارة الفرص"
             : actionType === "undo"
-              ? `تراجع موثق عن ${sourceLog?.action}: ${sourceLog?.reason || "بدون سبب"}`.slice(0, 2000)
+              ? `تراجع موثق عن ${sourceLog?.action}: ${sourceLog?.reason || "بدون سبب"} [undo-ref:${sourceLog?.id}]`.slice(0, 2000)
               : reason;
 
           const createdLog = await tx.opportunityLog.create({
