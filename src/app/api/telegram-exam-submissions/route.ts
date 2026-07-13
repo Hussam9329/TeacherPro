@@ -602,29 +602,108 @@ export async function POST(req: NextRequest) {
 
     // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
     const result = await withSerializableTransaction(async (tx) => {
-      const gradeWriteback = await syncAcademicGradeWriteback({
-        tx,
-        studentId,
-        examId,
-        status: "درجة",
-        score: null,
-        sourceLabel: "مستلم بوت تيليجرام",
-        notes: "تم استلام التسليم من بوت تيليجرام وينتظر التصحيح الإلكتروني.",
-        allowBlankGrade: true,
-        preserveExistingScoreWhenBlank: true,
-        blockOnLeave: false,
+      // Q70 FIX: Check if the student has a leave for this exam BEFORE
+      // creating a placeholder grade. Previously, blockOnLeave: false
+      // allowed creating a placeholder grade (status="درجة", score=null)
+      // even for excused students. This confused correctors (showing
+      // both "إجازة" and "مستلم بانتظار التصحيح" for the same exam)
+      // and created orphaned grade records.
+      //
+      // Now: if the student is excused from this exam, skip grade
+      // creation entirely. The submission record is still saved (so
+      // the admin knows the student tried to submit), but no grade
+      // is created. The submission's gradeId stays null.
+      let gradeWriteback: { grade: { id: string; studentId: string; examId: string; status: string; score: number | null } | null; academicRecalculation?: { students: Array<{ id: string }> } | null } | null = null;
+      let skippedDueToLeave = false;
+
+      // Check for exam-specific leave
+      const examLeave = await tx.studentLeave.findFirst({
+        where: { studentId, examId, leaveType: "exam" },
+        select: { id: true },
       });
+      // Check for period leave covering the exam date
+      let periodLeaveCovering: { id: string } | null = null;
+      if (!examLeave) {
+        const exam = await tx.exam.findUnique({
+          where: { id: examId },
+          select: { date: true },
+        });
+        if (exam) {
+          periodLeaveCovering = await tx.studentLeave.findFirst({
+            where: {
+              studentId,
+              leaveType: "period",
+              dateFrom: { lte: exam.date },
+              dateTo: { gte: exam.date },
+            },
+            select: { id: true },
+          });
+        }
+      }
+
+      if (examLeave || periodLeaveCovering) {
+        // Student is excused — skip grade creation, but still save
+        // the submission record below (with gradeId = null).
+        skippedDueToLeave = true;
+        gradeWriteback = { grade: null, academicRecalculation: null };
+      } else {
+        gradeWriteback = await syncAcademicGradeWriteback({
+          tx,
+          studentId,
+          examId,
+          status: "درجة",
+          score: null,
+          sourceLabel: "مستلم بوت تيليجرام",
+          notes: "تم استلام التسليم من بوت تيليجرام وينتظر التصحيح الإلكتروني.",
+          allowBlankGrade: true,
+          preserveExistingScoreWhenBlank: true,
+          blockOnLeave: true, // Q70: redundant safety — we already checked above
+        }) as { grade: { id: string; studentId: string; examId: string; status: string; score: number | null } | null; academicRecalculation?: { students: Array<{ id: string }> } | null };
+      }
       if (!gradeWriteback) {
         throw new AcademicGradeWritebackError(
           "تعذر إنشاء درجة انتظار مرتبطة بمستلم البوت.",
         );
       }
       const grade = gradeWriteback.grade;
+      // Q70: grade may be null if student is excused from this exam.
+      // In that case, gradeId is null — submission is saved without
+      // a linked grade, so correctors don't see a confusing "بانتظار
+      // التصحيح" entry for an excused student.
+      const gradeId = grade?.id ?? null;
+
+      // Q86 FIX: Before upserting (which overwrites pages), snapshot
+      // the existing submission's pages/sourceMessageIds into a version
+      // record. This preserves the previous submission so it can be
+      // recovered if the re-submission was a mistake.
+      const existingSubmission = await tx.telegramExamSubmission.findUnique({
+        where: { studentId_examId: { studentId, examId } },
+        select: {
+          id: true,
+          pages: true,
+          sourceMessageIds: true,
+          pageCount: true,
+          status: true,
+        },
+      });
+      if (existingSubmission) {
+        await tx.telegramSubmissionVersion.create({
+          data: {
+            submissionId: existingSubmission.id,
+            studentId,
+            examId,
+            pages: existingSubmission.pages,
+            sourceMessageIds: existingSubmission.sourceMessageIds,
+            pageCount: existingSubmission.pageCount,
+            status: existingSubmission.status,
+          },
+        });
+      }
 
       const submission = await tx.telegramExamSubmission.upsert({
         where: { studentId_examId: { studentId, examId } },
         update: {
-          gradeId: grade.id,
+          gradeId,
           telegramUserId: incomingTelegramUserId,
           telegramUsername: incomingTelegramUsername,
           telegramChatId: incomingTelegramChatId,
@@ -636,7 +715,7 @@ export async function POST(req: NextRequest) {
           pageCount:
             pages.length ||
             Math.max(0, Math.trunc(numberValue(body.pageCount, 0))),
-          status: submissionStatus,
+          status: skippedDueToLeave ? "مجاز من الامتحان" : submissionStatus,
           notes: textValue(body.notes, 4000),
           submittedAt,
           receivedAt: new Date(),
@@ -644,7 +723,7 @@ export async function POST(req: NextRequest) {
         create: {
           studentId,
           examId,
-          gradeId: grade.id,
+          gradeId,
           telegramUserId: incomingTelegramUserId,
           telegramUsername: incomingTelegramUsername,
           telegramChatId: incomingTelegramChatId,
@@ -656,7 +735,7 @@ export async function POST(req: NextRequest) {
           pageCount:
             pages.length ||
             Math.max(0, Math.trunc(numberValue(body.pageCount, 0))),
-          status: submissionStatus,
+          status: skippedDueToLeave ? "مجاز من الامتحان" : submissionStatus,
           notes: textValue(body.notes, 4000),
           submittedAt,
         },
@@ -674,7 +753,8 @@ export async function POST(req: NextRequest) {
       submissionId: result.submission.id,
       studentId: result.submission.studentId,
       examId: result.submission.examId,
-      gradeId: result.grade.id,
+      gradeId: result.grade?.id ?? null,
+      gradeSkippedDueToLeave: !result.grade,
       matchType: result.submission.matchType,
       status: result.submission.status,
       pageCount: result.submission.pageCount,

@@ -147,6 +147,8 @@ model Grade {
   examId            String
   student           Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam              Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  // Q88 FIX: back-relation for TelegramExamSubmission.gradeId FK.
+  telegramSubmissions TelegramExamSubmission[]
 
   @@unique([studentId, examId])
   @@index([examId])
@@ -294,12 +296,34 @@ model TelegramExamSubmission {
   updatedAt        DateTime @updatedAt
   student          Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam             Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  // Q88 FIX: real FK to Grade with ON DELETE SET NULL.
+  grade            Grade?   @relation(fields: [gradeId], references: [id], onDelete: SetNull)
+  // Q86 FIX: back-relation for submission version snapshots.
+  versions         TelegramSubmissionVersion[]
 
   @@unique([studentId, examId])
   @@index([examId])
   @@index([studentId])
   @@index([status])
   @@index([receivedAt])
+}
+
+// Q86 FIX: Preserves previous submission page snapshots so that
+// re-submitting exam papers doesn't lose the original pages.
+model TelegramSubmissionVersion {
+  id               String   @id @default(cuid())
+  submissionId     String
+  studentId        String
+  examId           String
+  pages            String   @default("[]")
+  sourceMessageIds String   @default("[]")
+  pageCount        Int      @default(0)
+  status           String   @default("")
+  capturedAt       DateTime @default(now())
+  submission       TelegramExamSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([studentId, examId])
 }
 
 model StudentLeaveGradeBackup {

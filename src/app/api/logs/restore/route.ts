@@ -15,6 +15,7 @@ import {
   type LogClearBackupRow,
 } from '@/lib/log-clear-backups';
 import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
+import { recalculateStudentsAcademicState } from '@/lib/academic-recalculate-server';
 
 function safeDate(value: unknown): Date {
   const parsed = value instanceof Date ? value : new Date(String(value || ''));
@@ -159,7 +160,23 @@ export async function POST(req: NextRequest) {
         WHERE "id" = ${backup.id} AND "restoredAt" IS NULL
       `;
 
-      return { restoredAuditLogs, restoredOpportunityLogs };
+      // Q93 FIX: After restoring opportunity logs, re-run academic
+      // recalculation for all affected students so their opportunity
+      // balances and dismissal status reflect the restored logs.
+      // Previously, restored logs appeared in the list but
+      // student.opportunities and student.status were not updated.
+      let academicRecalculation: { students: Array<{ id: string }> } | null = null;
+      if (opportunityData.length > 0) {
+        const affectedStudentIds = [...new Set(opportunityData.map((log) => log.studentId))];
+        if (affectedStudentIds.length > 0) {
+          academicRecalculation = await recalculateStudentsAcademicState(
+            affectedStudentIds,
+            { tx },
+          ) as { students: Array<{ id: string }> } | null;
+        }
+      }
+
+      return { restoredAuditLogs, restoredOpportunityLogs, academicRecalculation };
     });
 
     await writeSecurityAudit(principal, 'استعادة آخر تصفير للسجلات', {
@@ -167,6 +184,7 @@ export async function POST(req: NextRequest) {
       originalRange: backup.rangeLabel,
       restoredAuditLogs: result.restoredAuditLogs.count,
       restoredOpportunityLogs: result.restoredOpportunityLogs.count,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
     });
 
     return NextResponse.json({
@@ -175,6 +193,7 @@ export async function POST(req: NextRequest) {
       restored: result.restoredAuditLogs.count + result.restoredOpportunityLogs.count,
       restoredAuditLogs: result.restoredAuditLogs.count,
       restoredOpportunityLogs: result.restoredOpportunityLogs.count,
+      recalculatedStudents: result.academicRecalculation?.students?.length || 0,
       skippedOpportunityLogs: opportunityLogs.length - opportunityData.length,
     });
   } catch (error) {

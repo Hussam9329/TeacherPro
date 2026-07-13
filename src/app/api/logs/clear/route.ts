@@ -11,6 +11,7 @@ import { routeErrorResponse } from '@/lib/route-helpers';
 import { ensureInitialAdminSeed } from '@/lib/admin-seed';
 import { writeSecurityAudit } from '@/lib/security-audit';
 import { ensureLogClearBackupTable, insertLogClearBackup } from '@/lib/log-clear-backups';
+import { recalculateStudentsAcademicState } from '@/lib/academic-recalculate-server';
 import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
 
 const CLEAR_SCOPE_DEFINITIONS = {
@@ -207,7 +208,7 @@ export async function POST(req: NextRequest) {
 
     const backupId = `lcb_${Date.now().toString(36)}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
 
-    const { auditLogsResult, opportunityLogsResult, savedBackupId } = await db.$transaction(async (tx) => {
+    const { auditLogsResult, opportunityLogsResult, savedBackupId, recalculatedStudents } = await db.$transaction(async (tx) => {
       const auditLogsToDelete = auditWhere
         ? await tx.auditLog.findMany({ where: auditWhere })
         : [];
@@ -237,10 +238,33 @@ export async function POST(req: NextRequest) {
       const opportunityLogsResult = opportunityWhere
         ? await tx.opportunityLog.deleteMany({ where: opportunityWhere })
         : { count: 0 };
+
+      // Q94 FIX: After deleting opportunity logs, re-run academic
+      // recalculation for all affected students so their opportunity
+      // balances reflect the deleted logs. Without this, students could
+      // end up with stale balances that contradict the (now reduced)
+      // log history. The recalc derives the balance from the remaining
+      // logs, so deleting logs that caused deductions restores those
+      // deductions' effect.
+      let recalculatedStudents = 0;
+      if (opportunityLogsResult.count > 0 && opportunityLogsToDelete.length > 0) {
+        const affectedStudentIds = [...new Set(
+          opportunityLogsToDelete.map((log) => log.studentId).filter(Boolean) as string[]
+        )];
+        if (affectedStudentIds.length > 0) {
+          const recalc = await recalculateStudentsAcademicState(
+            affectedStudentIds,
+            { tx },
+          );
+          recalculatedStudents = recalc.students.length;
+        }
+      }
+
       return {
         auditLogsResult,
         opportunityLogsResult,
         savedBackupId: hasBackupRows ? backupId : null,
+        recalculatedStudents,
       };
     });
 
@@ -249,6 +273,7 @@ export async function POST(req: NextRequest) {
       range: rangeLabel,
       deletedAuditLogs: auditLogsResult.count,
       deletedOpportunityLogs: opportunityLogsResult.count,
+      recalculatedStudents,
       backupId: savedBackupId,
     });
 
@@ -257,6 +282,7 @@ export async function POST(req: NextRequest) {
       deleted: auditLogsResult.count + opportunityLogsResult.count,
       deletedAuditLogs: auditLogsResult.count,
       deletedOpportunityLogs: opportunityLogsResult.count,
+      recalculatedStudents,
       scopeIds,
       dateFrom: body.dateFrom ? String(body.dateFrom) : '',
       dateTo: body.dateTo ? String(body.dateTo) : '',

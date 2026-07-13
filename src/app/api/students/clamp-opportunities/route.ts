@@ -64,15 +64,23 @@ export async function PATCH(req: NextRequest) {
     // 3. لكل دورة فيها فصل نشط، ابحث عن الطلاب الذين فرصهم تتجاوز سقف الفصل
     //    واضبطهم على السقف. الفصل نفسه قد يحدد 0 فرص (مثل دورة الإعفاء)،
     //    وفي هذه الحالة لا نلمس الطلاب لأن 0 سقف فعلي لهم.
+    //
+    // Q97 FIX: Exclude archived students. Archived students' opportunity
+    // balances are historical snapshots that should never be modified.
+    // Previously, clamp-opportunities modified archived students too,
+    // breaking the integrity of the archive (the archived balance no
+    // longer matched what the student had when archived).
     for (const link of activeLinks) {
       const chapterOpp = chapterOppById.get(link.chapterId) ?? 0;
 
-      // ابحث عن الطلاب الذين فرصهم تتجاوز السقف المسموح به.
+      // ابحث عن الطلاب النشطين فقط الذين فرصهم تتجاوز السقف المسموح به.
       // شرط opportunities > chapterOpp يلتقط فقط المتجاوزين فعلاً.
+      // شرط status !== "مؤرشف" يحمي لقطات الأرشيف (Q97).
       const update = await db.student.updateMany({
         where: {
           courseId: link.courseId,
           opportunities: { gt: chapterOpp },
+          status: { not: "مؤرشف" },
         },
         data: {
           opportunities: chapterOpp,

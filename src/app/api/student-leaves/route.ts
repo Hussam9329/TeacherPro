@@ -41,6 +41,20 @@ function readListPagination(
   return { page, pageSize, skip: (page - 1) * pageSize };
 }
 
+// Q64 FIX: Previously dateOrNow silently replaced invalid dates with
+// today's date. Now we throw so the caller can return a 400 error.
+function parseDateStrict(value: unknown): Date {
+  if (!value || value === null) throw new Error("التاريخ مطلوب.");
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`تاريخ غير صالح: "${String(value)}". أرسل تاريخاً صالحاً بصيغة ISO 8601 (YYYY-MM-DD).`);
+  }
+  return date;
+}
+
+// dateOrNow is kept for backward compat with existing code that legitimately
+// falls back to today (e.g. internal default). For user-supplied dates, use
+// parseDateStrict.
 function dateOrNow(value: unknown): Date {
   const date = value ? new Date(String(value)) : new Date();
   return Number.isNaN(date.getTime()) ? new Date() : date;
@@ -60,12 +74,14 @@ function normalizeLeavePayload(body: Record<string, unknown>) {
   const leaveType = body.leaveType === "period" ? "period" : "exam";
   const rawFrom = body.dateFrom ?? body.date;
   const rawTo = body.dateTo ?? rawFrom;
+  // Q64 FIX: Use parseDateStrict for user-supplied dates so invalid
+  // values throw instead of being silently replaced with today.
   const fromKey = dateOnly(rawFrom);
   const toKey = dateOnly(rawTo);
-  const dateFrom = dateOrNow(fromKey <= toKey ? fromKey : toKey);
-  const dateTo = dateOrNow(fromKey <= toKey ? toKey : fromKey);
+  const dateFrom = parseDateStrict(fromKey <= toKey ? fromKey : toKey);
+  const dateTo = parseDateStrict(fromKey <= toKey ? toKey : fromKey);
   const date =
-    leaveType === "period" ? dateFrom : dateOrNow(body.date ?? dateFrom);
+    leaveType === "period" ? dateFrom : parseDateStrict(body.date ?? dateFrom);
 
   return {
     studentId: String(body.studentId ?? ""),
@@ -433,6 +449,12 @@ export async function POST(req: NextRequest) {
             if (student.status === "مؤرشف") {
               throw new Error("لا يمكن إضافة إجازة لطالب مؤرشف.");
             }
+            // Q69 FIX: Also reject dismissed students. A dismissed student
+            // should not receive leaves — they're not actively participating.
+            // Reactivate them first if needed.
+            if (student.status === "مفصول") {
+              throw new Error("لا يمكن إضافة إجازة لطالب مفصول. أعد تفعيله أولاً ثم أنشئ الإجازة.");
+            }
             // Check the exam belongs to the student's course via ExamCourse
             const link = await tx.examCourse.findFirst({
               where: { examId: data.examId, courseId: student.courseId },
@@ -462,6 +484,10 @@ export async function POST(req: NextRequest) {
             }
             if (student.status === "مؤرشف") {
               throw new Error("لا يمكن إضافة إجازة لطالب مؤرشف.");
+            }
+            // Q69 FIX: Also reject dismissed students for period leaves.
+            if (student.status === "مفصول") {
+              throw new Error("لا يمكن إضافة إجازة لطالب مفصول. أعد تفعيله أولاً ثم أنشئ الإجازة.");
             }
           }
 
@@ -566,8 +592,11 @@ export async function POST(req: NextRequest) {
       message.includes("غير تابع لدورة الطالب") ||
       message.includes("تتداخل") ||
       message.includes("لا يمكن إضافة إجازة لطالب مؤرشف") ||
+      message.includes("لا يمكن إضافة إجازة لطالب مفصول") ||
       message.includes("الطالب غير موجود") ||
-      message.includes("لا يمكن تعديل إجازة لطالب مؤرشف")
+      message.includes("لا يمكن تعديل إجازة لطالب مؤرشف") ||
+      message.includes("لا يمكن تعديل إجازة لطالب مفصول") ||
+      message.includes("تاريخ غير صالح")
     ) {
       return validationError(message, 400);
     }
@@ -614,6 +643,10 @@ export async function PUT(req: NextRequest) {
             if (student.status === "مؤرشف") {
               throw new Error("لا يمكن تعديل إجازة لطالب مؤرشف.");
             }
+            // Q69 FIX: Also reject dismissed students on PUT.
+            if (student.status === "مفصول") {
+              throw new Error("لا يمكن تعديل إجازة لطالب مفصول. أعد تفعيله أولاً.");
+            }
             const link = await tx.examCourse.findFirst({
               where: { examId: nextData.examId, courseId: student.courseId },
               select: { id: true },
@@ -640,6 +673,10 @@ export async function PUT(req: NextRequest) {
             }
             if (student.status === "مؤرشف") {
               throw new Error("لا يمكن تعديل إجازة لطالب مؤرشف.");
+            }
+            // Q69 FIX: Also reject dismissed students on PUT (period leaves).
+            if (student.status === "مفصول") {
+              throw new Error("لا يمكن تعديل إجازة لطالب مفصول. أعد تفعيله أولاً.");
             }
           }
 
@@ -746,14 +783,17 @@ export async function PUT(req: NextRequest) {
     });
     return NextResponse.json(result);
   } catch (error) {
-    // Q65/Q68 FIX: validation errors should return 400, not 500.
+    // Q65/Q68/Q69 FIX: validation errors should return 400, not 500.
     const message = error instanceof Error ? error.message : String(error);
     if (
       message.includes("غير تابع لدورة الطالب") ||
       message.includes("تتداخل") ||
       message.includes("لا يمكن إضافة إجازة لطالب مؤرشف") ||
+      message.includes("لا يمكن إضافة إجازة لطالب مفصول") ||
       message.includes("الطالب غير موجود") ||
-      message.includes("لا يمكن تعديل إجازة لطالب مؤرشف")
+      message.includes("لا يمكن تعديل إجازة لطالب مؤرشف") ||
+      message.includes("لا يمكن تعديل إجازة لطالب مفصول") ||
+      message.includes("تاريخ غير صالح")
     ) {
       return validationError(message, 400);
     }
