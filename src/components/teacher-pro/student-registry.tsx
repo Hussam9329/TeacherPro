@@ -2340,9 +2340,9 @@ export function StudentRegistryView() {
       >
         <DialogContent
           dir="rtl"
-          className="teacherpro-fullscreen-dialog left-0 top-0 h-dvh max-h-dvh w-dvw max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:max-w-none sm:rounded-none sm:p-0"
+          className="teacherpro-fullscreen-dialog left-0 top-0 flex h-dvh max-h-dvh w-dvw max-w-none flex-col translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:max-w-none sm:rounded-none sm:p-0"
         >
-          <DialogHeader className="border-b border-border/70 bg-gradient-to-l from-primary/12 via-background to-muted/50 px-6 py-5 pr-16 text-right">
+          <DialogHeader className="shrink-0 border-b border-border/70 bg-gradient-to-l from-primary/12 via-background to-muted/50 px-6 py-5 pr-16 text-right">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <DialogTitle className="text-2xl font-black tracking-tight text-gradient-brand">
@@ -2362,7 +2362,7 @@ export function StudentRegistryView() {
             </div>
           </DialogHeader>
 
-          <div className="app-scrollbar h-[calc(100dvh-10.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] overflow-y-auto p-4 md:p-6">
+          <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
             <div className="grid gap-5 lg:grid-cols-[0.9fr_1.6fr]">
               <aside className="space-y-4">
                 <div className="rounded-[1.75rem] border border-primary/20 bg-primary/5 p-4 shadow-sm">
@@ -3014,7 +3014,7 @@ export function StudentRegistryView() {
             </div>
           </div>
 
-          <DialogFooter className="border-t border-border/70 bg-muted/30 px-4 py-4 sm:justify-between md:px-6">
+          <DialogFooter className="shrink-0 border-t border-border/70 bg-muted/30 px-4 py-4 sm:justify-between md:px-6">
             <p className="hidden text-xs text-muted-foreground sm:block">
               راجع الحقول المطلوبة قبل حفظ التعديل.
             </p>
