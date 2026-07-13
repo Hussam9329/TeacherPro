@@ -1178,6 +1178,335 @@ function SecurityTab() {
   );
 }
 
+// ─── Backup Tab ──────────────────────────────────────────────────────────────
+
+type BackupRecordCounts = {
+  courses?: number; chapters?: number; courseChapters?: number;
+  students?: number; exams?: number; examCourses?: number;
+  grades?: number; opportunityLogs?: number;
+  studentLeaves?: number; studentCalls?: number; studentNotes?: number;
+  correctionSheets?: number; users?: number; roles?: number; logs?: number;
+  telegramExamSubmissions?: number; studentLeaveGradeBackups?: number;
+  studentEnrollmentArchives?: number; gradeEntryMissingNotes?: number;
+  permissionCatalog?: number;
+};
+
+type BackupExport = {
+  version: number;
+  exportedAt: string;
+  tableCount?: number;
+  recordCounts?: BackupRecordCounts;
+  [key: string]: unknown;
+};
+
+type RestoreResponse = {
+  ok?: boolean;
+  mode?: string;
+  backupVersion?: number;
+  beforeCounts?: Record<string, number>;
+  afterCounts?: Record<string, number>;
+  inserted?: Record<string, number>;
+  updated?: Record<string, number>;
+  skipped?: Record<string, number>;
+  errors?: Array<{ table: string; message: string; sample?: unknown }>;
+  restoredAt?: string;
+  error?: string;
+  code?: string;
+};
+
+function BackupTab() {
+  const [exporting, setExporting] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreMode, setRestoreMode] = useState<'merge' | 'replace'>('merge');
+  const [confirmText, setConfirmText] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [parsedBackup, setParsedBackup] = useState<BackupExport | null>(null);
+  const [parseError, setParseError] = useState('');
+  const [restoreResult, setRestoreResult] = useState<RestoreResponse | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [exportLocked, setExportLocked] = useState(false);
+
+  // ─── Export backup ──────────────────────────────────────────────────────
+  const handleExport = useCallback(async () => {
+    if (exportLocked) return;
+    setExportLocked(true);
+    setExporting(true);
+    try {
+      const res = await fetch('/api/backup', { credentials: 'same-origin' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error || 'تعذر تصدير النسخة الاحتياطية');
+      }
+      const data = (await res.json()) as BackupExport;
+      const jsonStr = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `teacherpro-backup-${date}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('تم تصدير النسخة الاحتياطية بنجاح');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'تعذر تصدير النسخة الاحتياطية');
+    } finally {
+      setExporting(false);
+      setExportLocked(false);
+    }
+  }, [exportLocked]);
+
+  // ─── Parse selected file ────────────────────────────────────────────────
+  const handleFileSelect = useCallback(async (file: File | null) => {
+    setSelectedFile(file);
+    setParsedBackup(null);
+    setParseError('');
+    setRestoreResult(null);
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as BackupExport;
+      if (!parsed || typeof parsed !== 'object' || !parsed.version) {
+        throw new Error('الملف لا يحتوي على نسخة احتياطية صالحة (حقل version مفقود)');
+      }
+      setParsedBackup(parsed);
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : 'تعذر قراءة الملف كـ JSON صالح');
+    }
+  }, []);
+
+  // ─── Restore backup ─────────────────────────────────────────────────────
+  const handleRestore = useCallback(async () => {
+    if (!parsedBackup) {
+      toast.error('يرجى اختيار ملف نسخة احتياطية صالح أولاً');
+      return;
+    }
+    if (confirmText !== 'RESTORE') {
+      toast.error('يرجى كتابة كلمة RESTORE لتأكيد العملية');
+      return;
+    }
+    setRestoring(true);
+    setRestoreResult(null);
+    try {
+      const res = await fetch('/api/backup', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          version: parsedBackup.version,
+          mode: restoreMode,
+          confirm: 'RESTORE',
+          backup: parsedBackup,
+        }),
+      });
+      const data = (await res.json()) as RestoreResponse;
+      if (!res.ok) {
+        throw new Error(data.error || `تعذر إكمال الاستعادة (${res.status})`);
+      }
+      setRestoreResult(data);
+      toast.success('تمت الاستعادة بنجاح. قد تحتاج الصفحات لإعادة التحميل لرؤية البيانات المحدّثة.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'تعذر إكمال الاستعادة');
+    } finally {
+      setRestoring(false);
+      setConfirmText('');
+    }
+  }, [parsedBackup, confirmText, restoreMode]);
+
+  const recordCountEntries = parsedBackup?.recordCounts
+    ? Object.entries(parsedBackup.recordCounts).filter(([, v]) => typeof v === 'number' && v > 0)
+    : [];
+
+  return (
+    <div className="space-y-4">
+      {/* Export section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">تصدير نسخة احتياطية</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            يقوم النظام بتصدير جميع الجداول التشغيلية (20 جدولاً) بما فيها:
+            الطلاب، الدورات، الفصول، الدرجات، الفرص، الإجازات، المكالمات،
+            مستلمات تيليجرام، أوراق التصحيح، أرشيف التسجيل، نسخ درجات الإجازات،
+            وسجلات التدقيق كاملةً.
+          </p>
+          <Button onClick={handleExport} disabled={exporting || exportLocked}>
+            {exporting ? 'جارٍ التصدير...' : 'تصدير النسخة الاحتياطية (JSON)'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Restore section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">استعادة نسخة احتياطية</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900 leading-relaxed">
+            <strong>⚠️ تحذير:</strong> الاستعادة عملية حساسة قد تستبدل أو تدمج البيانات الحالية.
+            يُنصح بشدة بأخذ نسخة احتياطية جديدة قبل الاستعادة، واختبارها على بيئة Preview أولاً.
+          </div>
+
+          {/* File picker */}
+          <div className="space-y-2">
+            <Label>اختر ملف النسخة الاحتياطية (.json)</Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={(e) => void handleFileSelect(e.target.files?.[0] ?? null)}
+              className="block w-full text-sm text-muted-foreground file:ml-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground file:cursor-pointer hover:file:bg-primary/90"
+            />
+            {selectedFile && (
+              <p className="text-xs text-muted-foreground">
+                الملف: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+              </p>
+            )}
+          </div>
+
+          {/* Parse error */}
+          {parseError && (
+            <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive">
+              {parseError}
+            </div>
+          )}
+
+          {/* Parsed backup summary */}
+          {parsedBackup && (
+            <div className="rounded-md bg-muted/50 border p-3 space-y-2">
+              <div className="flex items-center gap-3 text-sm">
+                <Badge variant="outline">الإصدار: {parsedBackup.version}</Badge>
+                <Badge variant="outline">الجداول: {parsedBackup.tableCount ?? '؟'}</Badge>
+                {parsedBackup.exportedAt && (
+                  <span className="text-xs text-muted-foreground">
+                    تاريخ التصدير: {new Date(parsedBackup.exportedAt).toLocaleString('ar-IQ')}
+                  </span>
+                )}
+              </div>
+              {recordCountEntries.length > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  <strong>السجلات:</strong>{' '}
+                  {recordCountEntries.map(([k, v]) => `${k}=${v}`).join(' • ')}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Mode selection */}
+          {parsedBackup && (
+            <div className="space-y-2">
+              <Label>وضع الاستعادة</Label>
+              <Select value={restoreMode} onValueChange={(v) => setRestoreMode(v as 'merge' | 'replace')}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="merge">
+                    دمج (merge) — إضافة وتحديث السجلات بدون حذف الموجود
+                  </SelectItem>
+                  <SelectItem value="replace">
+                    استبدال (replace) — تفريغ الجداول قبل الاستيراد (مدمر!)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              {restoreMode === 'replace' && (
+                <p className="text-xs text-destructive leading-relaxed">
+                  ⚠️ وضع الاستبدال يحذف كل البيانات غير الموجودة في النسخة. قد يكون محظوراً في بيئة الإنتاج.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Confirmation input */}
+          {parsedBackup && (
+            <div className="space-y-2">
+              <Label>تأكيد العملية — اكتب <code className="bg-muted px-1.5 py-0.5 rounded">RESTORE</code> بالأحرف اللاتينية الكبيرة</Label>
+              <Input
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="RESTORE"
+                dir="ltr"
+                className="text-center font-mono"
+                disabled={restoring}
+              />
+            </div>
+          )}
+
+          {/* Restore button */}
+          <Button
+            onClick={handleRestore}
+            disabled={restoring || !parsedBackup || confirmText !== 'RESTORE'}
+            variant={restoreMode === 'replace' ? 'destructive' : 'default'}
+          >
+            {restoring
+              ? 'جارٍ الاستعادة... (قد يستغرق دقائق)'
+              : restoreMode === 'replace'
+              ? 'استعادة بوضع الاستبدال (مدمر)'
+              : 'استعادة بوضع الدمج'}
+          </Button>
+
+          {/* Restore result */}
+          {restoreResult && (
+            <div className="rounded-md bg-emerald-50 border border-emerald-200 p-4 space-y-3 text-sm">
+              <div className="font-semibold text-emerald-900">
+                ✅ تمت الاستعادة بنجاح
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+                {restoreResult.inserted && Object.entries(restoreResult.inserted).filter(([, v]) => v > 0).length > 0 && (
+                  <div>
+                    <div className="font-semibold text-emerald-700">إضافات جديدة:</div>
+                    <ul className="mt-1 space-y-0.5">
+                      {Object.entries(restoreResult.inserted).filter(([, v]) => v > 0).map(([k, v]) => (
+                        <li key={k}>{k}: {v}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {restoreResult.updated && Object.entries(restoreResult.updated).filter(([, v]) => v > 0).length > 0 && (
+                  <div>
+                    <div className="font-semibold text-emerald-700">تحديثات:</div>
+                    <ul className="mt-1 space-y-0.5">
+                      {Object.entries(restoreResult.updated).filter(([, v]) => v > 0).map(([k, v]) => (
+                        <li key={k}>{k}: {v}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {restoreResult.skipped && Object.entries(restoreResult.skipped).filter(([, v]) => v > 0).length > 0 && (
+                  <div>
+                    <div className="font-semibold text-muted-foreground">تخطّيات:</div>
+                    <ul className="mt-1 space-y-0.5">
+                      {Object.entries(restoreResult.skipped).filter(([, v]) => v > 0).map(([k, v]) => (
+                        <li key={k}>{k}: {v}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              {restoreResult.errors && restoreResult.errors.length > 0 && (
+                <div className="text-xs text-amber-700">
+                  <strong>أخطاء (تم تجاوزها):</strong>
+                  <ul className="mt-1 space-y-0.5">
+                    {restoreResult.errors.slice(0, 5).map((e, i) => (
+                      <li key={i}>{e.table}: {e.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                يُنصح بإعادة تحميل الصفحة لرؤية البيانات المُحدّثة في كل الأقسام.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Main Accounts View ──────────────────────────────────────────────────────
 
 export function AccountsView() {
@@ -1193,6 +1522,7 @@ export function AccountsView() {
           <TabsTrigger value="users" className="flex-1">المستخدمين</TabsTrigger>
           <TabsTrigger value="roles" className="flex-1">الأدوار والصلاحيات</TabsTrigger>
           <TabsTrigger value="security" className="flex-1">الأمان</TabsTrigger>
+          <TabsTrigger value="backup" className="flex-1">النسخ الاحتياطي</TabsTrigger>
           <TabsTrigger value="architecture" className="flex-1">هيكلة الصلاحيات</TabsTrigger>
         </TabsList>
         <TabsContent value="users" className="mt-4">
@@ -1203,6 +1533,9 @@ export function AccountsView() {
         </TabsContent>
         <TabsContent value="security" className="mt-4">
           <SecurityTab />
+        </TabsContent>
+        <TabsContent value="backup" className="mt-4">
+          <BackupTab />
         </TabsContent>
         <TabsContent value="architecture" className="mt-4">
           <PermissionsArchitectureTab />
