@@ -902,9 +902,13 @@ export function TeacherProLayout() {
 
     serverVersionCheckRef.current = checkServerVersion;
     void checkServerVersion({ force: true });
+    // Performance: 12s interval (was 10s). The sync/version endpoint now
+    // uses a single SQL query instead of 19, so each poll is ~5x cheaper.
+    // 12s gives a small additional reduction in DB load while keeping
+    // near-real-time change detection (only 2s slower than before).
     const interval = window.setInterval(
       () => void checkServerVersion(),
-      10_000,
+      12_000,
     );
     const onWake = () => void checkServerVersion({ force: true });
     const unsubscribeLocalMutation = subscribeTeacherProLocalMutation(() => {
