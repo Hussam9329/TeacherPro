@@ -826,26 +826,22 @@ export function TeacherProLayout() {
     return () => window.removeEventListener(TEACHERPRO_SYNC_STATUS_EVENT, onStatus);
   }, []);
 
-  // Small non-blocking notice only when an external refresh is deliberately
-  // held because the user is editing/scrolling.
+  // Background sync notifications are intentionally suppressed. Updates
+  // are applied silently in the background — the user never sees a toast
+  // or banner saying "توجد تحديثات جديدة". The sync system (smart-sync)
+  // still defers updates while the user is actively editing/scrolling,
+  // but it does so silently and applies them automatically when the user
+  // pauses. No user interaction is required.
+  //
+  // The event listeners for PENDING/SETTLED are kept (so the sync system's
+  // internal state machine stays consistent) but they no longer show any UI.
   useEffect(() => {
-    const onPending = () => {
-      toast("توجد تحديثات جديدة", {
-        id: "teacherpro-smart-sync-pending",
-        description: "تم تأجيل تطبيقها حتى لا يتغير النموذج أو الجدول أثناء عملك.",
-        duration: 8000,
-        action: {
-          label: "تطبيق الآن",
-          onClick: requestTeacherProSyncNow,
-        },
-      });
-    };
-    const onSettled = () => toast.dismiss("teacherpro-smart-sync-pending");
-    window.addEventListener(TEACHERPRO_SYNC_PENDING_EVENT, onPending);
-    window.addEventListener(TEACHERPRO_SYNC_SETTLED_EVENT, onSettled);
+    const noop = () => {};
+    window.addEventListener(TEACHERPRO_SYNC_PENDING_EVENT, noop);
+    window.addEventListener(TEACHERPRO_SYNC_SETTLED_EVENT, noop);
     return () => {
-      window.removeEventListener(TEACHERPRO_SYNC_PENDING_EVENT, onPending);
-      window.removeEventListener(TEACHERPRO_SYNC_SETTLED_EVENT, onSettled);
+      window.removeEventListener(TEACHERPRO_SYNC_PENDING_EVENT, noop);
+      window.removeEventListener(TEACHERPRO_SYNC_SETTLED_EVENT, noop);
     };
   }, []);
 
@@ -1419,27 +1415,9 @@ export function TeacherProLayout() {
                       : `${TEACHERPRO_ACTION_COPY.failed} · ${TEACHERPRO_ACTION_COPY.retry}`}
                 </Badge>
               ) : null}
-              {syncStatus.status !== "idle" ? (
-                <Badge
-                  variant={syncStatus.status === "error" ? "destructive" : "outline"}
-                  className="hidden items-center gap-1.5 sm:flex"
-                  aria-live="polite"
-                >
-                  <span
-                    className={cn(
-                      "size-1.5 rounded-full bg-current",
-                      syncStatus.status === "refreshing" && "animate-pulse",
-                    )}
-                  />
-                  {syncStatus.status === "pending"
-                    ? "توجد تحديثات جديدة"
-                    : syncStatus.status === "refreshing"
-                      ? "جارٍ التحديث"
-                      : syncStatus.status === "synced"
-                        ? "تمت المزامنة"
-                        : "تعذر التحديث"}
-                </Badge>
-              ) : null}
+              {/* Sync status badge removed — updates are now silent.
+                  The sync system still works in the background; it just
+                  doesn't show a visible indicator to the user. */}
               <Button
                 variant="outline"
                 size="icon"
