@@ -74,6 +74,7 @@ model Student {
   opportunities   Int      @default(0)
   baseOpportunities Int    @default(0)
   accountingGraceDays Int   @default(0)
+  gracePeriodStartDate DateTime?
   createdAt       DateTime @default(now())
   courseId        String
   course          Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)

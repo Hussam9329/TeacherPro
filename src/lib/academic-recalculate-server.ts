@@ -61,6 +61,7 @@ function mapStudent(student: {
   baseOpportunities: number;
   createdAt: Date;
   accountingGraceDays: number;
+  gracePeriodStartDate?: Date | null;
 }): AcademicStudent {
   return {
     id: student.id,
@@ -73,6 +74,7 @@ function mapStudent(student: {
     baseOpportunities: Number(student.baseOpportunities || 0),
     createdAt: dateString(student.createdAt),
     accountingGraceDays: Number(student.accountingGraceDays || 0),
+    gracePeriodStartDate: student.gracePeriodStartDate ? dateString(student.gracePeriodStartDate) : null,
   };
 }
 
@@ -347,6 +349,7 @@ async function loadAcademicStateForStudents(
         baseOpportunities: true,
         createdAt: true,
         accountingGraceDays: true,
+        gracePeriodStartDate: true,
       },
     }),
     client.grade.findMany({

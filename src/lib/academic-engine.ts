@@ -48,16 +48,34 @@ function normalizeGraceDaysValue(value: unknown): number {
 }
 
 export function isExamWithinStudentGraceWindow(
-  student: Pick<AcademicStudent, "createdAt" | "accountingGraceDays">,
+  student: Pick<AcademicStudent, "createdAt" | "accountingGraceDays" | "gracePeriodStartDate">,
   exam: Pick<AcademicExam, "date">,
 ): boolean {
   const graceDays = normalizeGraceDaysValue(student.accountingGraceDays);
-  if (graceDays <= 0) return false;
+
+  // If admin set a manual grace period (gracePeriodStartDate), use it
+  // as the start of the grace window. The window is
+  // [gracePeriodStartDate, gracePeriodStartDate + graceDays).
+  if (student.gracePeriodStartDate && graceDays > 0) {
+    const start = parseDateOnly(student.gracePeriodStartDate);
+    const examDate = parseDateOnly(exam.date);
+    if (!start || !examDate) return false;
+    const endExclusive = new Date(start);
+    endExclusive.setDate(endExclusive.getDate() + graceDays);
+    return examDate >= start && examDate < endExclusive;
+  }
+
+  // Automatic 3-day grace from registration for ALL students.
+  // Even if accountingGraceDays == 0, every new student gets 3 days
+  // of automatic protection from their registration date.
+  // If accountingGraceDays > 0 (but no gracePeriodStartDate = old data
+  // before migration), use the larger of 3 or accountingGraceDays.
+  const effectiveGraceDays = Math.max(3, graceDays);
   const start = parseDateOnly(student.createdAt);
   const examDate = parseDateOnly(exam.date);
   if (!start || !examDate) return false;
   const endExclusive = new Date(start);
-  endExclusive.setDate(endExclusive.getDate() + graceDays);
+  endExclusive.setDate(endExclusive.getDate() + effectiveGraceDays);
   return examDate >= start && examDate < endExclusive;
 }
 

@@ -191,7 +191,7 @@ export async function syncAcademicGradeWriteback(
   const [student, exam] = await Promise.all([
     client.student.findUnique({
       where: { id: studentId },
-      select: { id: true, courseId: true, status: true, createdAt: true, accountingGraceDays: true },
+      select: { id: true, courseId: true, status: true, createdAt: true, accountingGraceDays: true, gracePeriodStartDate: true },
     }),
     client.exam.findUnique({
       where: { id: examId },
@@ -291,6 +291,7 @@ export async function syncAcademicGradeWriteback(
   // grace period — only "غائب" is blocked.
   const studentCreatedAtStr = student.createdAt.toISOString();
   const examDateStr = exam.date.toISOString();
+  const studentGraceStartStr = student.gracePeriodStartDate ? student.gracePeriodStartDate.toISOString() : null;
 
   if (
     status === "غائب" &&
@@ -309,13 +310,13 @@ export async function syncAcademicGradeWriteback(
   if (
     status === "غائب" &&
     isExamWithinStudentGraceWindow(
-      { createdAt: studentCreatedAtStr, accountingGraceDays: student.accountingGraceDays },
+      { createdAt: studentCreatedAtStr, accountingGraceDays: student.accountingGraceDays, gracePeriodStartDate: studentGraceStartStr },
       { date: examDateStr },
     )
   ) {
     throw new AcademicGradeWritebackError(
-      "لا يمكن تسجيل غياب لهذا الطالب في هذا الامتحان لأنه ضمن فترة السماح المحاسبية للطالب. " +
-      "فترة السماح تحمي الطالب من المحاسبة على الامتحات التي تسبق أو تتزامن مع بداية تسجيله.",
+      "لا يمكن تسجيل غياب لهذا الطالب في هذا الامتحان لأنه ضمن فترة السماح. " +
+      "فترة السماح تحمي الطالب من المحاسبة على الامتحانات خلالها.",
       409,
     );
   }

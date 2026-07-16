@@ -79,6 +79,8 @@ const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
   "dismissalType",
   "dismissalReason",
   "dismissalNotes",
+  // gracePeriodStartDate is set by the backend only (when graceDays changes)
+  "gracePeriodStartDate",
   // Prisma relation objects that may be present after GET /api/students include: { course: true }
   "course",
   "grades",
@@ -980,7 +982,17 @@ export async function PUT(req: NextRequest) {
     const graceDaysError = validateGraceDays(data.accountingGraceDays);
     if (graceDaysError)
       return NextResponse.json({ error: graceDaysError }, { status: 400 });
-    data.accountingGraceDays = normalizeGraceDays(data.accountingGraceDays);
+    const requestedGraceDays = normalizeGraceDays(data.accountingGraceDays);
+    data.accountingGraceDays = requestedGraceDays;
+    // GRACE PERIOD START DATE: When the admin sets grace days > 0,
+    // the grace period starts from NOW (not from registration date).
+    // When the admin sets grace days = 0, clear the start date
+    // (student goes back to automatic 3-day from registration only).
+    if (requestedGraceDays > 0) {
+      data.gracePeriodStartDate = new Date();
+    } else {
+      data.gracePeriodStartDate = null;
+    }
   }
   if (data.createdAt !== undefined) {
     const parsedCreatedAt = new Date(String(data.createdAt || ""));

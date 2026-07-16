@@ -28,6 +28,7 @@ export interface AcademicStudent {
   baseOpportunities: number;
   createdAt: string;
   accountingGraceDays: number;
+  gracePeriodStartDate?: string | null;
 }
 
 export interface AcademicExam {
