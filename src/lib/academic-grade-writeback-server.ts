@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getExamEntryAvailability } from "@/lib/exam-utils";
+import { getExamEntryAvailability, isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
 import {
   recalculateStudentsAcademicState,
   type AcademicServerRecalculationResult,
@@ -271,29 +271,46 @@ export async function syncAcademicGradeWriteback(
     }
   }
 
-  // GRACE PERIOD PROTECTION: If the exam falls within the student's
-  // grace period (accountingGraceDays from createdAt), block any grade
-  // entry that would cause a penalty — specifically "غائب" (absence).
-  // The academic engine already SKIPS grace-period grades during
-  // recalculation, but without this block the grade is still SAVED,
-  // which:
-  //   1. Shows up in the grade list (confusing for teachers)
-  //   2. Triggers call-list inclusion (the student gets called about
-  //      an absence that shouldn't count)
-  //   3. May trigger manual deductions if an admin sees the absence
+  // GRACE PERIOD & PRE-REGISTRATION PROTECTION:
   //
-  // By blocking the grade entry itself, we prevent the problem at the
-  // source. Teachers cannot mark a student "غائب" for an exam that
-  // happened during their grace period.
+  // 1. PRE-REGISTRATION: If the exam date is BEFORE the student's
+  //    registration date (createdAt), block ALL grade entries (درجة,
+  //    غائب, غش). The student wasn't enrolled when the exam happened,
+  //    so no grade should exist.
+  //
+  // 2. GRACE PERIOD: If the exam falls within the student's grace
+  //    period (accountingGraceDays from createdAt), block "غائب"
+  //    (absence) entries. The academic engine already skips grace-period
+  //    grades during recalculation, but without this block the grade is
+  //    still SAVED, which:
+  //      - Shows up in the grade list (confusing for teachers)
+  //      - Triggers call-list inclusion
+  //      - May trigger manual deductions
   //
   // "درجة" (actual score) and "غش" (cheating) are still allowed during
-  // grace period — only "غائب" is blocked, because absence during grace
-  // is explicitly protected by the system's own rules.
+  // grace period — only "غائب" is blocked.
+  const studentCreatedAtStr = student.createdAt.toISOString();
+  const examDateStr = exam.date.toISOString();
+
+  if (
+    status === "غائب" &&
+    !isExamOnOrAfterStudentRegistration(
+      { createdAt: studentCreatedAtStr },
+      { date: examDateStr },
+    )
+  ) {
+    throw new AcademicGradeWritebackError(
+      "لا يمكن تسجيل غياب لهذا الطالب في هذا الامتحان لأن الامتحان أقدم من تاريخ تسجيل الطالب. " +
+      "الطالب لم يكن مسجلاً في النظام عند إجراء هذا الامتحان.",
+      409,
+    );
+  }
+
   if (
     status === "غائب" &&
     isExamWithinStudentGraceWindow(
-      { createdAt: student.createdAt.toISOString(), accountingGraceDays: student.accountingGraceDays },
-      { date: exam.date.toISOString() },
+      { createdAt: studentCreatedAtStr, accountingGraceDays: student.accountingGraceDays },
+      { date: examDateStr },
     )
   ) {
     throw new AcademicGradeWritebackError(
