@@ -5,6 +5,7 @@ import {
   recalculateStudentsAcademicState,
   type AcademicServerRecalculationResult,
 } from "@/lib/academic-recalculate-server";
+import { isExamWithinStudentGraceWindow } from "@/lib/academic-engine";
 
 export type AcademicGradeWritebackStatus = "درجة" | "غائب" | "غش";
 
@@ -190,7 +191,7 @@ export async function syncAcademicGradeWriteback(
   const [student, exam] = await Promise.all([
     client.student.findUnique({
       where: { id: studentId },
-      select: { id: true, courseId: true, status: true },
+      select: { id: true, courseId: true, status: true, createdAt: true, accountingGraceDays: true },
     }),
     client.exam.findUnique({
       where: { id: examId },
@@ -268,6 +269,38 @@ export async function syncAcademicGradeWriteback(
         "لا يمكن اعتماد درجة لطالب مجاز من هذا الامتحان.",
       );
     }
+  }
+
+  // GRACE PERIOD PROTECTION: If the exam falls within the student's
+  // grace period (accountingGraceDays from createdAt), block any grade
+  // entry that would cause a penalty — specifically "غائب" (absence).
+  // The academic engine already SKIPS grace-period grades during
+  // recalculation, but without this block the grade is still SAVED,
+  // which:
+  //   1. Shows up in the grade list (confusing for teachers)
+  //   2. Triggers call-list inclusion (the student gets called about
+  //      an absence that shouldn't count)
+  //   3. May trigger manual deductions if an admin sees the absence
+  //
+  // By blocking the grade entry itself, we prevent the problem at the
+  // source. Teachers cannot mark a student "غائب" for an exam that
+  // happened during their grace period.
+  //
+  // "درجة" (actual score) and "غش" (cheating) are still allowed during
+  // grace period — only "غائب" is blocked, because absence during grace
+  // is explicitly protected by the system's own rules.
+  if (
+    status === "غائب" &&
+    isExamWithinStudentGraceWindow(
+      { createdAt: student.createdAt.toISOString(), accountingGraceDays: student.accountingGraceDays },
+      { date: exam.date.toISOString() },
+    )
+  ) {
+    throw new AcademicGradeWritebackError(
+      "لا يمكن تسجيل غياب لهذا الطالب في هذا الامتحان لأنه ضمن فترة السماح المحاسبية للطالب. " +
+      "فترة السماح تحمي الطالب من المحاسبة على الامتحات التي تسبق أو تتزامن مع بداية تسجيله.",
+      409,
+    );
   }
 
   const notes =
