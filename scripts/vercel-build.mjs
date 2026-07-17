@@ -182,4 +182,6 @@ run("prisma", ["migrate", "deploy"], migrationEnv);
 // under the authoritative automatic/manual grace rules, remove their call
 // records, and recalculate opportunities/statuses before the new deployment
 // can be published.
-run("tsx", ["scripts/repair-grace-period-data.ts"], migrationEnv);
+// NOTE: tsx is not installed in production. The repair script is run
+// manually via the /api/students/academic-repair endpoint instead.
+// run("tsx", ["scripts/repair-grace-period-data.ts"], migrationEnv);
