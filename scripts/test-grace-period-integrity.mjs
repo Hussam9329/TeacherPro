@@ -17,7 +17,7 @@ const stats = read("src/app/api/student-calls/stats/route.ts");
 const leaves = read("src/app/api/student-leaves/route.ts");
 const repair = read("scripts/repair-grace-period-data.ts");
 const repairHelper = read("src/lib/grace-period-repair-server.ts");
-const deploy = read("scripts/vercel-build.mjs");
+const academicRepair = read("src/app/api/students/academic-repair/route.ts");
 const schemaGuard = read("src/lib/academic-schema.ts");
 
 check(
@@ -70,10 +70,11 @@ check(
     repair.includes("withSerializableTransaction"),
 );
 check(
-  "النشر يشغل الإصلاح بعد migration وقبل نجاح البناء النهائي",
-  deploy.indexOf('run("prisma", ["migrate", "deploy"]') >= 0 &&
-    deploy.indexOf('run("tsx", ["scripts/repair-grace-period-data.ts"]') >
-      deploy.indexOf('run("prisma", ["migrate", "deploy"]'),
+  "الإصلاح الإداري الشامل يحذف الغياب المحمي قبل إعادة الاحتساب",
+  academicRepair.includes("removeProtectedAbsencesForStudents") &&
+    academicRepair.includes('where: { status: "غائب" }') &&
+    academicRepair.includes("deletedGrades") &&
+    academicRepair.includes("deletedCalls"),
 );
 check(
   "حارس قاعدة البيانات يضيف عمود بدء السماح عند الحاجة",

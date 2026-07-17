@@ -82,7 +82,7 @@ must(
 
 must(
   gradesRoute.includes("syncAcademicGradeWriteback") &&
-    gradesRoute.includes("db.$transaction") &&
+    gradesRoute.includes("withSerializableTransaction") &&
     gradesRoute.includes("writeRequestAuditLog") &&
     gradeWriteback.includes("client.grade.upsert") &&
     gradeWriteback.includes("recalculateStudentsAcademicState") &&

@@ -32,8 +32,8 @@ const checks = [
       layout.includes("externalScopes"),
   ],
   [
-    "فحص نسخة بيانات النظام صار كل 10 ثوانٍ ويتوقف عند إخفاء التبويب",
-    layout.includes("10_000") &&
+    "فحص نسخة بيانات النظام دوري ويتوقف عند إخفاء التبويب",
+    layout.includes("12_000") &&
       layout.includes("document.hidden"),
   ],
   [
@@ -54,9 +54,10 @@ const checks = [
       syncHook.includes("MAX_INTERACTION_DEFERRAL_MS"),
   ],
   [
-    "يوجد تنبيه غير حاجب مع خيار تطبيق التحديث الآن",
+    "تحديثات الخلفية لا تقاطع المستخدم وتبقى مؤجلة أثناء التفاعل",
     syncHook.includes("announceTeacherProSyncPending") &&
-      layout.includes('label: "تطبيق الآن"'),
+      layout.includes("Background sync notifications are intentionally suppressed") &&
+      !layout.includes('label: "تطبيق الآن"'),
   ],
   [
     "طلبات تحميل الـStore تطبق قاعدة latest-request-wins",
@@ -85,10 +86,9 @@ const checks = [
       store.includes("announceTeacherProSyncRefreshing"),
   ],
   [
-    "مؤشر حالة المزامنة موحد في رأس النظام",
+    "حالة المزامنة موحدة داخل واجهة النظام",
     layout.includes("TEACHERPRO_SYNC_STATUS_EVENT") &&
-      layout.includes("جارٍ التحديث") &&
-      layout.includes("تمت المزامنة"),
+      layout.includes("setSyncStatus(detail)"),
   ],
 ];
 

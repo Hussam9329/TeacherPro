@@ -15,6 +15,7 @@ function check(condition, message) {
 
 const pkg = JSON.parse(read("package.json"));
 const buildScript = read("scripts/vercel-build.mjs");
+const academicRepairRoute = read("src/app/api/students/academic-repair/route.ts");
 const routeHelpers = read("src/lib/route-helpers.ts");
 const studentsRoute = read("src/app/api/students/route.ts");
 const api = read("src/lib/api.ts");
@@ -97,8 +98,9 @@ check(
   "gracePeriodStartDate is repaired by migration and runtime guard",
 );
 check(
-  buildScript.includes('run("tsx", ["scripts/repair-grace-period-data.ts"]'),
-  "deployment repairs historical protected absences before publishing",
+  academicRepairRoute.includes("removeProtectedAbsencesForStudents") &&
+    academicRepairRoute.includes('where: { status: "غائب" }'),
+  "administrative repair removes historical protected absences before recalculation",
 );
 check(
   schemaRepairLock.includes("pg_advisory_xact_lock") &&

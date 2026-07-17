@@ -38,7 +38,7 @@ check(
   'تفاصيل الطالب تجلب سجل الفرص من قاعدة البيانات حسب الطالب ولا تكتفي بسجل الصفحة الحالي',
 );
 check(
-  studentActionRoute.includes('db.$transaction') &&
+  studentActionRoute.includes('withSerializableTransaction') &&
     studentActionRoute.includes('recalculateStudentsAcademicState') &&
     studentActionRoute.includes('getSingleActiveChapterForCourse') &&
     studentActionRoute.includes('writeRequestAuditLog'),

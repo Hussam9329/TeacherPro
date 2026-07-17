@@ -7,6 +7,9 @@ import { routeErrorResponse } from "@/lib/route-helpers";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { recalculateAllStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { db } from "@/lib/db";
+import { removeProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
 function readBatchSize(req: NextRequest): number {
   const raw = new URL(req.url).searchParams.get("batchSize");
@@ -41,19 +44,41 @@ export async function PATCH(req: NextRequest) {
   if (rateLimitError) return rateLimitError;
 
   try {
+    // Historical protected absences must be removed before recalculation.
+    // Recalculation alone ignores their penalty, but leaves the invalid grade
+    // visible and able to reappear in related screens.
+    const batchSize = readBatchSize(req);
+    const rows = await db.grade.findMany({
+      where: { status: "غائب" },
+      distinct: ["studentId"],
+      select: { studentId: true },
+    });
+    let deletedGrades = 0;
+    let deletedCalls = 0;
+    for (let index = 0; index < rows.length; index += batchSize) {
+      const studentIds = rows.slice(index, index + batchSize).map((row) => row.studentId);
+      const repair = await withSerializableTransaction((tx) =>
+        removeProtectedAbsencesForStudents(tx, studentIds),
+      );
+      deletedGrades += repair.deletedGrades;
+      deletedCalls += repair.deletedCalls;
+    }
+
     const result = await recalculateAllStudentsAcademicState({
-      batchSize: readBatchSize(req),
+      batchSize,
     });
 
     await writeRequestAuditLog(
       req,
       "الطلاب",
       "إصلاح أكاديمي شامل وإعادة احتساب كل الطلاب",
-      result,
+      { ...result, deletedGrades, deletedCalls },
     );
 
     return NextResponse.json({
       ...result,
+      deletedGrades,
+      deletedCalls,
       message:
         result.recalculatedStudents > 0
           ? `تمت إعادة احتساب ${result.recalculatedStudents} طالب حسب القواعد الحالية.`
