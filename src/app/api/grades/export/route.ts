@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/server-auth";
@@ -167,21 +168,11 @@ function isExamWithinGracePeriod(
   student: {
     createdAt?: Date | string | null;
     accountingGraceDays?: number | null;
+    gracePeriodStartDate?: Date | string | null;
   },
   exam: { date?: Date | string | null },
 ): boolean {
-  const days = Math.max(
-    0,
-    Math.trunc(Number(student.accountingGraceDays || 0)),
-  );
-  if (days <= 0) return false;
-  const start = new Date(`${dateKey(student.createdAt)}T00:00:00.000Z`);
-  const examDate = new Date(`${dateKey(exam.date)}T00:00:00.000Z`);
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(examDate.getTime()))
-    return false;
-  const endExclusive = new Date(start);
-  endExclusive.setUTCDate(endExclusive.getUTCDate() + days);
-  return examDate >= start && examDate < endExclusive;
+  return isExamWithinStudentGraceWindow(student, exam);
 }
 
 function leaveAppliesToExam(

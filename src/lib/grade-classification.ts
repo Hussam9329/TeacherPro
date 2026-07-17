@@ -1,5 +1,6 @@
 import { getExamEntryAvailability } from "@/lib/exam-utils";
 import { baghdadDateKey } from "@/lib/baghdad-time";
+import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 
 export type GradeStatusFilter =
   | "all"
@@ -53,6 +54,7 @@ export type ExamLike = {
 export type StudentGraceLike = {
   createdAt?: Date | string | null;
   accountingGraceDays?: number | null;
+  gracePeriodStartDate?: Date | string | null;
 };
 
 export type StudentLeaveLike = {
@@ -93,12 +95,6 @@ function parseDateOnly(value: unknown): Date | null {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
-function normalizeGraceDays(value: unknown): number {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.min(30, Math.max(0, Math.trunc(numeric)));
-}
-
 export function isGradeEnteredUnified(
   grade: GradeLike | null | undefined,
   exam: Pick<ExamLike, "fullMark"> | null | undefined,
@@ -125,14 +121,7 @@ export function isExamWithinStudentGracePeriodUnified(
   student: StudentGraceLike,
   exam: Pick<ExamLike, "date">,
 ): boolean {
-  const days = normalizeGraceDays(student.accountingGraceDays);
-  if (days <= 0) return false;
-  const start = parseDateOnly(student.createdAt);
-  const examDate = parseDateOnly(exam.date);
-  if (!start || !examDate) return false;
-  const endExclusive = new Date(start);
-  endExclusive.setUTCDate(endExclusive.getUTCDate() + days);
-  return examDate >= start && examDate < endExclusive;
+  return isExamWithinStudentGraceWindow(student, exam);
 }
 
 export function studentLeaveAppliesToExam(

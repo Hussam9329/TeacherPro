@@ -126,10 +126,10 @@ assert(
 assert(
   candidates.includes('badges: callBadgesForGrade') &&
     candidates.includes('غائب وتم الخصم') &&
-    candidates.includes('غائب بدون خصم: فترة سماح') &&
-    candidates.includes('غائب بدون خصم: إجازة') &&
+    !candidates.includes('غائب بدون خصم: فترة سماح') &&
+    !candidates.includes('غائب بدون خصم: إجازة') &&
     candidates.includes('غائب بدون خصم: الامتحان بدون خصم'),
-  'API المكالمات يرجع Badges واضحة تشرح هل الغياب خُصم أو حُمي من الخصم وسبب الحماية',
+  'API المكالمات لا يحوّل غياب السماح/الإجازة إلى بطاقة اتصال، ويشرح الحالات المحاسبية الحقيقية فقط',
 );
 assert(
   candidates.includes('filter === "discounted"') &&
@@ -140,10 +140,16 @@ assert(
 );
 assert(
   candidates.includes('filter === "absent"') &&
-    candidates.includes('hasAbsentStatus(grade)') &&
+    candidates.includes('return kind === "absent"') &&
     stats.includes('filter === "absent"') &&
-    stats.includes('hasAbsentStatus(grade)'),
-  'فلتر الغائبين يعتمد على حالة الغياب الفعلية مع ترك الـ Badges تشرح الخصم أو الحماية',
+    stats.includes('return kind === "absent"'),
+  'فلتر الغائبين يعتمد على التصنيف الأكاديمي الموحد ويستبعد الغياب المحمي',
+);
+assert(
+  candidates.includes('gracePeriodStartDate: true') &&
+    stats.includes('gracePeriodStartDate: true') &&
+    candidates.includes('NON_DISPLAY_CALL_KINDS.has(kind)'),
+  'المكالمات تجلب تاريخ بدء السماح اليدوي وتستبعد التصنيفات المحمية من العرض',
 );
 assert(
   followUp.includes('renderCallImpactBadges') &&

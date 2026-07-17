@@ -21,6 +21,8 @@ import {
 } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { parseCourseIds } from "@/lib/exam-course-links";
+import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
+import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 
 function readListPagination(
   req: NextRequest,
@@ -299,8 +301,45 @@ async function restoreGradesForLeave(
   `;
 
   const restoredGrades: RestoredGrade[] = [];
+  const studentIds = uniqueIds(backups.map((backup) => backup.studentId));
+  const examIds = uniqueIds(backups.map((backup) => backup.examId));
+  const [students, exams] = await Promise.all([
+    studentIds.length
+      ? tx.student.findMany({
+          where: { id: { in: studentIds } },
+          select: {
+            id: true,
+            createdAt: true,
+            accountingGraceDays: true,
+            gracePeriodStartDate: true,
+          },
+        })
+      : [],
+    examIds.length
+      ? tx.exam.findMany({
+          where: { id: { in: examIds } },
+          select: { id: true, date: true },
+        })
+      : [],
+  ]);
+  const studentById = new Map(students.map((student) => [student.id, student] as const));
+  const examById = new Map(exams.map((exam) => [exam.id, exam] as const));
 
   for (const backup of backups) {
+    const student = studentById.get(backup.studentId);
+    const exam = examById.get(backup.examId);
+    // حذف الإجازة لا يجوز أن يعيد غياباً كان غير صالح أصلاً: قبل تسجيل
+    // الطالب أو ضمن السماح التلقائي/اليدوي. بقية الحالات (درجة/غش) تبقى
+    // قابلة للاستعادة لأن السماح يمنع العقوبة لا إدخال النتيجة.
+    if (
+      backup.status === "غائب" &&
+      student &&
+      exam &&
+      (!isExamOnOrAfterStudentRegistration(student, exam) ||
+        isExamWithinStudentGraceWindow(student, exam))
+    ) {
+      continue;
+    }
     const restored = await tx.grade.upsert({
       where: {
         studentId_examId: {

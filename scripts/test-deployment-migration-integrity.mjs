@@ -27,6 +27,9 @@ const missingRuntimeColumnsMigration = read(
   "prisma/migrations/20260712185000_missing_runtime_columns/migration.sql",
 );
 const academicSchema = read("src/lib/academic-schema.ts");
+const gracePeriodMigration = read(
+  "prisma/migrations/20260713220000_grace_period_start_date/migration.sql",
+);
 const schemaRepairLock = read("src/lib/schema-repair-lock.ts");
 const examStatsRoute = read("src/app/api/exams/stats/route.ts");
 
@@ -88,6 +91,15 @@ for (const requiredColumn of [
     `missing runtime column ${requiredColumn} is repaired by migration and runtime guard`,
   );
 }
+check(
+  gracePeriodMigration.includes('ADD COLUMN IF NOT EXISTS "gracePeriodStartDate"') &&
+    academicSchema.includes('ADD COLUMN IF NOT EXISTS "gracePeriodStartDate"'),
+  "gracePeriodStartDate is repaired by migration and runtime guard",
+);
+check(
+  buildScript.includes('run("tsx", ["scripts/repair-grace-period-data.ts"]'),
+  "deployment repairs historical protected absences before publishing",
+);
 check(
   schemaRepairLock.includes("pg_advisory_xact_lock") &&
     schemaRepairLock.includes("db.$transaction"),

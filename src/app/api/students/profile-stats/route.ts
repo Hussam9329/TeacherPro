@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
+import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 
 type ExamLite = {
   id: string;
@@ -23,6 +24,7 @@ type StudentLite = {
   courseId: string;
   createdAt: Date;
   accountingGraceDays: number;
+  gracePeriodStartDate: Date | null;
   opportunities: number;
   baseOpportunities: number;
 };
@@ -41,32 +43,6 @@ function dayKey(value: Date | string | null | undefined): string {
   const date = new Date(value);
   if (Number.isFinite(date.getTime())) return date.toISOString().slice(0, 10);
   return String(value).slice(0, 10);
-}
-
-function normalizeGraceDays(value: unknown): number {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.min(30, Math.max(0, Math.trunc(numeric)));
-}
-
-function parseDateOnly(value: Date | string | null | undefined): Date | null {
-  const key = dayKey(value);
-  const match = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return null;
-  const [, year, month, day] = match;
-  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0));
-  return Number.isFinite(date.getTime()) ? date : null;
-}
-
-function isExamWithinStudentGracePeriod(student: StudentLite, exam: ExamLite): boolean {
-  const days = normalizeGraceDays(student.accountingGraceDays);
-  if (days <= 0) return false;
-  const start = parseDateOnly(student.createdAt);
-  const examDate = parseDateOnly(exam.date);
-  if (!start || !examDate) return false;
-  const endExclusive = new Date(start);
-  endExclusive.setUTCDate(endExclusive.getUTCDate() + days);
-  return examDate >= start && examDate < endExclusive;
 }
 
 /**
@@ -99,6 +75,7 @@ export async function GET(req: NextRequest) {
           courseId: true,
           createdAt: true,
           accountingGraceDays: true,
+          gracePeriodStartDate: true,
           opportunities: true,
           baseOpportunities: true,
         },
@@ -142,7 +119,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     const accountableGrades = grades.filter((grade) => {
-      if (isExamWithinStudentGracePeriod(student, grade.exam)) return false;
+      if (isExamWithinStudentGraceWindow(student, grade.exam)) return false;
       if (grade.exam.noDiscount) return false;
       return true;
     });
@@ -161,9 +138,9 @@ export async function GET(req: NextRequest) {
         ? score < passMark
         : score > discountMark && score < passMark;
     }).length;
-    const graceGrades = grades.filter((grade) => isExamWithinStudentGracePeriod(student, grade.exam)).length;
+    const graceGrades = grades.filter((grade) => isExamWithinStudentGraceWindow(student, grade.exam)).length;
     const noDiscountGrades = grades.filter(
-      (grade) => !isExamWithinStudentGracePeriod(student, grade.exam) && grade.exam.noDiscount,
+      (grade) => !isExamWithinStudentGraceWindow(student, grade.exam) && grade.exam.noDiscount,
     ).length;
     const deductedMovements = opportunityLogs.filter(
       (log) => log.action === "خصم" || log.action === "خصم تلقائي",

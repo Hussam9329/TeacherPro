@@ -1,5 +1,12 @@
 import { baghdadDateKey, baghdadTodayKey, parseBaghdadDateTime } from './baghdad-time';
 import { MAIN_SITE_OPTIONS, normalizeIraqiProvinceName } from './iraq';
+import {
+  getStudentGraceWindow,
+  isExamWithinStudentGraceWindow,
+  normalizeGraceDays,
+  type ExamDateLike as UnifiedExamDateLike,
+  type StudentGraceLike as UnifiedStudentGraceLike,
+} from './student-grace';
 
 export type ExamLike = {
   active: boolean;
@@ -27,10 +34,6 @@ export type StudentRegistrationLike = {
   createdAt?: string | Date | null;
 };
 
-export type ExamDateLike = {
-  date?: string | Date | null;
-};
-
 export type ExamStatusLabel = 'نشط' | 'تفعيل مجدول' | 'تعطيل مجدول' | 'معطل';
 
 export type ExamEntryAvailabilityCode =
@@ -47,32 +50,14 @@ export type ExamEntryAvailability = {
 };
 
 
-export type StudentGraceLike = {
-  createdAt?: string | Date | null;
-  accountingGraceDays?: number | string | null;
-};
+export type { ExamDateLike, StudentGraceLike } from './student-grace';
+export { getStudentGraceWindow, normalizeGraceDays };
 
-export function normalizeGraceDays(value: unknown): number {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.min(30, Math.max(0, Math.trunc(numeric)));
-}
-
-export function getStudentGraceWindow(student: StudentGraceLike): { start: Date; endExclusive: Date; days: number } | null {
-  const days = normalizeGraceDays(student.accountingGraceDays);
-  if (days <= 0) return null;
-  const start = parseDateOnly(student.createdAt);
-  if (!start) return null;
-  const endExclusive = new Date(start);
-  endExclusive.setUTCDate(endExclusive.getUTCDate() + days);
-  return { start, endExclusive, days };
-}
-
-export function isExamWithinStudentGracePeriod(student: StudentGraceLike, exam: ExamDateLike): boolean {
-  const window = getStudentGraceWindow(student);
-  const examDate = parseDateOnly(exam.date);
-  if (!window || !examDate) return false;
-  return examDate >= window.start && examDate < window.endExclusive;
+export function isExamWithinStudentGracePeriod(
+  student: UnifiedStudentGraceLike,
+  exam: UnifiedExamDateLike,
+): boolean {
+  return isExamWithinStudentGraceWindow(student, exam);
 }
 
 export function splitSelection(value?: string | null): string[] {
@@ -92,7 +77,7 @@ function parseDateOnly(value?: string | Date | null): Date | null {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
-export function isExamOnOrAfterStudentRegistration(student: StudentRegistrationLike, exam: ExamDateLike): boolean {
+export function isExamOnOrAfterStudentRegistration(student: StudentRegistrationLike, exam: UnifiedExamDateLike): boolean {
   const registeredAt = parseDateOnly(student.createdAt);
   const examDate = parseDateOnly(exam.date);
   if (!registeredAt || !examDate) return true;

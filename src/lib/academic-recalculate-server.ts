@@ -545,6 +545,7 @@ export interface StudentAcademicUpdatePreview {
   current: {
     createdAt: string;
     accountingGraceDays: number;
+    gracePeriodStartDate: string | null;
     opportunities: number;
     status: string;
     dismissalType: string;
@@ -554,6 +555,7 @@ export interface StudentAcademicUpdatePreview {
   projected: {
     createdAt: string;
     accountingGraceDays: number;
+    gracePeriodStartDate: string | null;
     opportunities: number;
     status: string;
     dismissalType: string;
@@ -566,7 +568,11 @@ export interface StudentAcademicUpdatePreview {
  * but never persists students or logs. */
 export async function previewStudentAcademicUpdate(
   studentId: string,
-  changes: { createdAt?: Date; accountingGraceDays?: number },
+  changes: {
+    createdAt?: Date;
+    accountingGraceDays?: number;
+    gracePeriodStartDate?: Date | null;
+  },
   options: { tx?: Prisma.TransactionClient } = {},
 ): Promise<StudentAcademicUpdatePreview | null> {
   const trimmedId = String(studentId || "").trim();
@@ -590,6 +596,13 @@ export async function previewStudentAcademicUpdate(
     ...(changes.accountingGraceDays !== undefined
       ? { accountingGraceDays: Math.min(30, Math.max(0, Math.trunc(Number(changes.accountingGraceDays || 0)))) }
       : {}),
+    ...(changes.gracePeriodStartDate !== undefined
+      ? {
+          gracePeriodStartDate: changes.gracePeriodStartDate
+            ? dateString(changes.gracePeriodStartDate)
+            : null,
+        }
+      : {}),
   };
   const projectedState: AcademicStateInput = {
     ...state,
@@ -610,6 +623,7 @@ export async function previewStudentAcademicUpdate(
     current: {
       createdAt: storedStudent.createdAt,
       accountingGraceDays: storedStudent.accountingGraceDays,
+      gracePeriodStartDate: storedStudent.gracePeriodStartDate || null,
       opportunities: calculatedCurrent.opportunities,
       status: calculatedCurrent.status,
       dismissalType: calculatedCurrent.dismissalType || "",
@@ -621,6 +635,7 @@ export async function previewStudentAcademicUpdate(
     projected: {
       createdAt: projectedStudent.createdAt,
       accountingGraceDays: projectedStudent.accountingGraceDays,
+      gracePeriodStartDate: projectedStudent.gracePeriodStartDate || null,
       opportunities: calculatedProjected.opportunities,
       status: calculatedProjected.status,
       dismissalType: calculatedProjected.dismissalType || "",

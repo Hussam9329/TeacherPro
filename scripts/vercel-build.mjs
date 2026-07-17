@@ -177,3 +177,9 @@ for (const migrationName of RECOVERABLE_IDEMPOTENT_MIGRATIONS) {
 // migration failure keeps the previous deployment active instead of allowing
 // code and database schema to diverge.
 run("prisma", ["migrate", "deploy"], migrationEnv);
+
+// Idempotent production repair: remove historical absences that are invalid
+// under the authoritative automatic/manual grace rules, remove their call
+// records, and recalculate opportunities/statuses before the new deployment
+// can be published.
+run("tsx", ["scripts/repair-grace-period-data.ts"], migrationEnv);

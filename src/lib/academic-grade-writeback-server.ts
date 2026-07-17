@@ -5,7 +5,7 @@ import {
   recalculateStudentsAcademicState,
   type AcademicServerRecalculationResult,
 } from "@/lib/academic-recalculate-server";
-import { isExamWithinStudentGraceWindow } from "@/lib/academic-engine";
+import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 
 export type AcademicGradeWritebackStatus = "درجة" | "غائب" | "غش";
 

@@ -42,6 +42,10 @@ import {
   getOpportunityLimit,
   getOpportunityProgressPercent,
 } from "@/lib/opportunity-balance";
+import {
+  getStudentGraceWindow,
+  isStudentCurrentlyInGrace as isStudentCurrentlyInGraceUnified,
+} from "@/lib/student-grace";
 
 const opportunityExportColumns: ExportColumn<any>[] = [
   { key: "student", label: "الطالب", value: (s) => s.name || "" },
@@ -474,32 +478,19 @@ export function OpportunitiesView() {
   };
 
   const graceEndDate = (student: Student): string => {
-    const start = new Date(
-      `${String(student.createdAt || "").slice(0, 10)}T00:00:00`,
-    );
-    const days = Number(student.accountingGraceDays || 0);
-    if (!Number.isFinite(start.getTime()) || days <= 0)
+    const graceWindow = getStudentGraceWindow(student);
+    if (!graceWindow)
       return formatAppDate(
         student.createdAt,
         String(student.createdAt || "").slice(0, 10) || "-",
       );
-    const end = new Date(start);
-    end.setDate(end.getDate() + days - 1);
+    const end = new Date(graceWindow.endExclusive);
+    end.setUTCDate(end.getUTCDate() - 1);
     return formatAppDate(end);
   };
 
   const isStudentCurrentlyInGrace = (student: Student): boolean => {
-    const days = Number(student.accountingGraceDays || 0);
-    if (days <= 0) return false;
-    const start = new Date(
-      `${String(student.createdAt || "").slice(0, 10)}T00:00:00`,
-    );
-    const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00`);
-    const endExclusive = new Date(start);
-    endExclusive.setDate(endExclusive.getDate() + days);
-    return (
-      Number.isFinite(start.getTime()) && today >= start && today < endExclusive
-    );
+    return isStudentCurrentlyInGraceUnified(student);
   };
 
   const cleanOpportunityReason = (reason: string | null | undefined) => {

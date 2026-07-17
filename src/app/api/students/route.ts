@@ -40,6 +40,11 @@ import {
   ensureStudentCodeSequenceReady,
   retryStudentCodeConflict,
 } from "@/lib/student-code-sequence";
+import {
+  normalizeGracePeriodStartMode,
+  resolveManualGraceStartDate,
+} from "@/lib/student-grace";
+import { removeProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
 
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -688,6 +693,38 @@ export async function POST(req: NextRequest) {
   const graceDaysError = validateGraceDays(body.accountingGraceDays);
   if (graceDaysError)
     return NextResponse.json({ error: graceDaysError }, { status: 400 });
+  const gracePeriodStartMode = normalizeGracePeriodStartMode(
+    body.gracePeriodStartMode,
+  );
+  if (
+    body.gracePeriodStartMode !== undefined &&
+    body.gracePeriodStartMode !== null &&
+    body.gracePeriodStartMode !== "" &&
+    !gracePeriodStartMode
+  ) {
+    return NextResponse.json(
+      { error: "مصدر بدء فترة السماح غير واضح. اختر تاريخ التسجيل أو اليوم." },
+      { status: 400 },
+    );
+  }
+
+  const registrationDate = body.createdAt
+    ? new Date(body.createdAt)
+    : new Date();
+  if (!Number.isFinite(registrationDate.getTime())) {
+    return NextResponse.json(
+      { error: "تاريخ إضافة الطالب غير صالح" },
+      { status: 400 },
+    );
+  }
+  const manualGraceDays = normalizeGraceDays(body.accountingGraceDays);
+  const manualGraceStartDate =
+    manualGraceDays > 0
+      ? resolveManualGraceStartDate({
+          mode: gracePeriodStartMode || "registration",
+          createdAt: registrationDate,
+        })
+      : null;
 
   // Use targeted queries on indexed columns instead of loading all students
   const { nameKey, phoneKey, telegramKey } = getStudentUniqueKeys({
@@ -834,10 +871,11 @@ export async function POST(req: NextRequest) {
             dismissalNotes: body.dismissalNotes
               ? String(body.dismissalNotes)
               : null,
-            createdAt: body.createdAt ? new Date(body.createdAt) : new Date(),
+            createdAt: registrationDate,
             opportunities: initialOpportunitiesResult.opportunities,
             baseOpportunities: initialOpportunitiesResult.baseOpportunities,
-            accountingGraceDays: normalizeGraceDays(body.accountingGraceDays),
+            accountingGraceDays: manualGraceDays,
+            gracePeriodStartDate: manualGraceStartDate,
             courseId: body.courseId,
             ...uniqueKeys,
           },
@@ -901,6 +939,7 @@ export async function PUT(req: NextRequest) {
     courseTransferPolicy: rawCourseTransferPolicy,
     academicImpactConfirmed: rawAcademicImpactConfirmed,
     academicImpactPreviewToken: rawAcademicImpactPreviewToken,
+    gracePeriodStartMode: rawGracePeriodStartMode,
     ...rawData
   } = body;
   const data: any = { ...rawData };
@@ -914,6 +953,9 @@ export async function PUT(req: NextRequest) {
   );
   const academicImpactConfirmed = rawAcademicImpactConfirmed === true;
   const academicImpactPreviewToken = String(rawAcademicImpactPreviewToken || "").trim();
+  const gracePeriodStartMode = normalizeGracePeriodStartMode(
+    rawGracePeriodStartMode,
+  );
 
   if (!id) {
     return NextResponse.json(
@@ -931,6 +973,20 @@ export async function PUT(req: NextRequest) {
       {
         error:
           "سياسة التغيير غير واضحة. اختر: طالب جديد أو الإبقاء على ملفه الحالي.",
+      },
+      { status: 400 },
+    );
+  }
+  if (
+    rawGracePeriodStartMode !== undefined &&
+    rawGracePeriodStartMode !== null &&
+    rawGracePeriodStartMode !== "" &&
+    !gracePeriodStartMode
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "مصدر بدء فترة السماح غير واضح. اختر البدء من تاريخ التسجيل أو من اليوم.",
       },
       { status: 400 },
     );
@@ -1003,6 +1059,34 @@ export async function PUT(req: NextRequest) {
       );
     }
     data.createdAt = parsedCreatedAt;
+  }
+  if (data.accountingGraceDays !== undefined) {
+    const graceDaysError = validateGraceDays(data.accountingGraceDays);
+    if (graceDaysError)
+      return NextResponse.json({ error: graceDaysError }, { status: 400 });
+
+    const requestedGraceDays = normalizeGraceDays(data.accountingGraceDays);
+    const currentGraceDays = Number(currentStudent.accountingGraceDays || 0);
+    const graceDaysChanged = requestedGraceDays !== currentGraceDays;
+    data.accountingGraceDays = requestedGraceDays;
+
+    if (requestedGraceDays <= 0) {
+      // إلغاء السماح اليدوي يعيد الطالب فقط إلى سماح الطالب الجديد التلقائي.
+      if (graceDaysChanged || currentStudent.gracePeriodStartDate) {
+        data.gracePeriodStartDate = null;
+      }
+    } else if (graceDaysChanged || gracePeriodStartMode) {
+      // لا نعيد تشغيل السماح عند تعديل الاسم/الهاتف لأن الواجهة ترسل عدد
+      // الأيام دائماً. تاريخ البدء يتغير فقط عند تغيير الأيام أو اختيار
+      // مصدر بدء صريح من المستخدم.
+      data.gracePeriodStartDate = resolveManualGraceStartDate({
+        mode: gracePeriodStartMode || "now",
+        createdAt:
+          data.createdAt instanceof Date
+            ? data.createdAt
+            : currentStudent.createdAt,
+      });
+    }
   }
 
   const mergedIdentity = {
@@ -1162,10 +1246,17 @@ export async function PUT(req: NextRequest) {
     currentStudent.createdAt.toISOString().slice(0, 10);
   const graceDaysChanged =
     requestedGraceDays !== Number(currentStudent.accountingGraceDays || 0);
+  const requestedGraceStartDate =
+    data.gracePeriodStartDate !== undefined
+      ? data.gracePeriodStartDate
+      : currentStudent.gracePeriodStartDate;
+  const graceStartDateChanged =
+    String(requestedGraceStartDate?.toISOString?.() || "").slice(0, 10) !==
+    String(currentStudent.gracePeriodStartDate?.toISOString?.() || "").slice(0, 10);
 
   if (
     !resetEnrollment &&
-    (registrationDateChanged || graceDaysChanged) &&
+    (registrationDateChanged || graceDaysChanged || graceStartDateChanged) &&
     (!academicImpactConfirmed || !academicImpactPreviewToken)
   ) {
     return NextResponse.json(
@@ -1370,8 +1461,17 @@ export async function PUT(req: NextRequest) {
       const transactionGraceDaysChanged =
         transactionRequestedGraceDays !==
         Number(lockedStudent.accountingGraceDays || 0);
+      const transactionRequestedGraceStartDate =
+        transactionData.gracePeriodStartDate !== undefined
+          ? transactionData.gracePeriodStartDate
+          : lockedStudent.gracePeriodStartDate;
+      const transactionGraceStartDateChanged =
+        String(transactionRequestedGraceStartDate?.toISOString?.() || "").slice(0, 10) !==
+        String(lockedStudent.gracePeriodStartDate?.toISOString?.() || "").slice(0, 10);
       const transactionAcademicInputsChanged =
-        transactionRegistrationDateChanged || transactionGraceDaysChanged;
+        transactionRegistrationDateChanged ||
+        transactionGraceDaysChanged ||
+        transactionGraceStartDateChanged;
 
       if (
         lockedStudent.status === ARCHIVED_STUDENT_STATUS &&
@@ -1394,6 +1494,7 @@ export async function PUT(req: NextRequest) {
           studentId: String(id),
           proposedCreatedAt: transactionRequestedCreatedAt,
           proposedGraceDays: transactionRequestedGraceDays,
+          proposedGraceStartDate: transactionRequestedGraceStartDate,
         });
         if (currentPreviewToken !== academicImpactPreviewToken) {
           throw new StudentIntegrityError(
@@ -1409,6 +1510,7 @@ export async function PUT(req: NextRequest) {
       });
 
       if (!transactionResetEnrollment && transactionAcademicInputsChanged) {
+        await removeProtectedAbsencesForStudents(tx, [String(id)]);
         academicRecalculation = await recalculateStudentsAcademicState(
           [String(id)],
           { tx },

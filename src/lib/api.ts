@@ -740,8 +740,16 @@ export interface StudentAcademicUpdateImpactResponse {
   studentName: string;
   requiresConfirmation: boolean;
   changes: { dateChanged: boolean; graceChanged: boolean };
-  current: { createdAt: string; accountingGraceDays: number };
-  proposed: { createdAt: string; accountingGraceDays: number };
+  current: {
+    createdAt: string;
+    accountingGraceDays: number;
+    gracePeriodStartDate?: string | null;
+  };
+  proposed: {
+    createdAt: string;
+    accountingGraceDays: number;
+    gracePeriodStartDate?: string | null;
+  };
   impact: {
     totalGrades: number;
     changedGrades: number;

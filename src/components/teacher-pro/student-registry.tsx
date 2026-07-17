@@ -14,6 +14,11 @@ import {
   type StudentAcademicUpdateImpactResponse,
   type StudentDeleteImpactResponse,
 } from "@/lib/api";
+import {
+  getStudentGraceWindow,
+  isStudentCurrentlyInGrace as isStudentCurrentlyInGraceUnified,
+  type GracePeriodStartMode,
+} from "@/lib/student-grace";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -349,32 +354,19 @@ function isValidGraceDays(value: string): boolean {
 }
 
 function graceEndDate(student: Student): string {
-  const start = new Date(
-    `${String(student.createdAt || "").slice(0, 10)}T00:00:00`,
-  );
-  const days = Number(student.accountingGraceDays || 0);
-  if (!Number.isFinite(start.getTime()) || days <= 0)
+  const graceWindow = getStudentGraceWindow(student);
+  if (!graceWindow)
     return formatAppDate(
       student.createdAt,
       String(student.createdAt || "").slice(0, 10) || "-",
     );
-  const end = new Date(start);
-  end.setDate(end.getDate() + days - 1);
+  const end = new Date(graceWindow.endExclusive);
+  end.setUTCDate(end.getUTCDate() - 1);
   return formatAppDate(end);
 }
 
 function isStudentCurrentlyInGrace(student: Student): boolean {
-  const days = Number(student.accountingGraceDays || 0);
-  if (days <= 0) return false;
-  const start = new Date(
-    `${String(student.createdAt || "").slice(0, 10)}T00:00:00`,
-  );
-  const today = new Date(`${new Date().toISOString().slice(0, 10)}T00:00:00`);
-  const endExclusive = new Date(start);
-  endExclusive.setDate(endExclusive.getDate() + days);
-  return (
-    Number.isFinite(start.getTime()) && today >= start && today < endExclusive
-  );
+  return isStudentCurrentlyInGraceUnified(student);
 }
 
 function ContactLink({
@@ -596,6 +588,9 @@ export function StudentRegistryView() {
     useState("");
   const [academicImpactConfirmed, setAcademicImpactConfirmed] = useState(false);
   const [academicImpactLoading, setAcademicImpactLoading] = useState(false);
+  const [gracePeriodStartMode, setGracePeriodStartMode] = useState<
+    GracePeriodStartMode | ""
+  >("");
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     id: "",
@@ -947,7 +942,7 @@ export function StudentRegistryView() {
     Number(editDialog.form.accountingGraceDays || 0) !==
       Number(editOriginalStudent.accountingGraceDays || 0),
   );
-  const editAcademicImpactSignature = `${editDialog.id}|${editDialog.form.createdAt}|${Number(editDialog.form.accountingGraceDays || 0)}`;
+  const editAcademicImpactSignature = `${editDialog.id}|${editDialog.form.createdAt}|${Number(editDialog.form.accountingGraceDays || 0)}|${gracePeriodStartMode}`;
   const resetWillStartNewFile =
     editNeedsTransferPolicy && effectiveCourseTransferPolicy === "reset";
   const editNeedsAcademicImpactPreview =
@@ -1116,6 +1111,7 @@ export function StudentRegistryView() {
     setAcademicImpactPreview(null);
     setAcademicImpactPreviewSignature("");
     setAcademicImpactConfirmed(false);
+    setGracePeriodStartMode("");
     setEditDialog({
       open: true,
       id: student.id,
@@ -1124,6 +1120,12 @@ export function StudentRegistryView() {
   };
 
   const updateEditForm = (key: keyof StudentEditForm, value: string) => {
+    if (key === "accountingGraceDays") {
+      setGracePeriodStartMode("");
+      setAcademicImpactPreview(null);
+      setAcademicImpactPreviewSignature("");
+      setAcademicImpactConfirmed(false);
+    }
     setEditDialog((prev) => ({
       ...prev,
       form: { ...prev.form, [key]: toLatinDigits(value) },
@@ -1237,14 +1239,34 @@ export function StudentRegistryView() {
     }
 
     const form = editDialog.form;
+    let resolvedGracePeriodStartMode = gracePeriodStartMode;
+    if (
+      editGraceDaysChanged &&
+      Number(form.accountingGraceDays || 0) > 0 &&
+      !resolvedGracePeriodStartMode
+    ) {
+      resolvedGracePeriodStartMode = window.confirm(
+        "هل تريد بدء فترة السماح من تاريخ تسجيل الطالب؟\n\nموافق: من تاريخ التسجيل.\nإلغاء: من اليوم الذي وضعت فيه فترة السماح.",
+      )
+        ? "registration"
+        : "now";
+      setGracePeriodStartMode(resolvedGracePeriodStartMode);
+    }
+    const resolvedAcademicImpactSignature = `${editDialog.id}|${form.createdAt}|${Number(form.accountingGraceDays || 0)}|${resolvedGracePeriodStartMode}`;
+    const hasResolvedAcademicImpactPreview =
+      academicImpactPreviewSignature === resolvedAcademicImpactSignature &&
+      Boolean(academicImpactPreview);
+    const resolvedAcademicImpactConfirmed =
+      hasResolvedAcademicImpactPreview && academicImpactConfirmed;
 
-    if (editNeedsAcademicImpactPreview && !effectiveAcademicImpactConfirmed) {
-      if (!hasCurrentAcademicImpactPreview) {
+    if (editNeedsAcademicImpactPreview && !resolvedAcademicImpactConfirmed) {
+      if (!hasResolvedAcademicImpactPreview) {
         setAcademicImpactLoading(true);
         const previewResult = await studentApi.updateImpact({
           studentId: editDialog.id,
           createdAt: form.createdAt,
           accountingGraceDays: Number(form.accountingGraceDays || 0),
+          gracePeriodStartMode: resolvedGracePeriodStartMode || undefined,
         });
         setAcademicImpactLoading(false);
         if (!previewResult.ok || !previewResult.data) {
@@ -1252,7 +1274,7 @@ export function StudentRegistryView() {
           return;
         }
         setAcademicImpactPreview(previewResult.data);
-        setAcademicImpactPreviewSignature(editAcademicImpactSignature);
+        setAcademicImpactPreviewSignature(resolvedAcademicImpactSignature);
         setAcademicImpactConfirmed(false);
         toast.warning("راجع أثر تغيير التاريخ/فترة السماح ثم أكّد الحفظ.");
         return;
@@ -1270,9 +1292,9 @@ export function StudentRegistryView() {
     const result = await studentApi.update(editDialog.id, {
       ...transferUpdates,
       academicImpactConfirmed:
-        editNeedsAcademicImpactPreview && effectiveAcademicImpactConfirmed,
+        editNeedsAcademicImpactPreview && resolvedAcademicImpactConfirmed,
       academicImpactPreviewToken:
-        editNeedsAcademicImpactPreview && hasCurrentAcademicImpactPreview
+        editNeedsAcademicImpactPreview && hasResolvedAcademicImpactPreview
           ? academicImpactPreview?.previewToken || ""
           : "",
       name: form.name.trim(),
@@ -1300,6 +1322,7 @@ export function StudentRegistryView() {
             : ""),
       createdAt: form.createdAt,
       accountingGraceDays: Number(form.accountingGraceDays || 0),
+      gracePeriodStartMode: resolvedGracePeriodStartMode || undefined,
     });
 
     if (!result.ok) {
@@ -1324,6 +1347,7 @@ export function StudentRegistryView() {
     setAcademicImpactPreview(null);
     setAcademicImpactPreviewSignature("");
     setAcademicImpactConfirmed(false);
+    setGracePeriodStartMode("");
     setServerRefreshKey((value) => value + 1);
     toast.success("تم تعديل بيانات الطالب", {
       description:

@@ -38,6 +38,7 @@ type DbStudentLite = {
   studyType: string | null;
   createdAt: Date;
   accountingGraceDays: number;
+  gracePeriodStartDate: Date | null;
 };
 
 type DbGradeLite = {
@@ -146,7 +147,6 @@ function callGradeKind(
   leaves: DbLeaveLite[] = [],
 ) {
   const impactKind = classifyCallImpact(grade, exam, student, leaves);
-  if (hasAbsentStatus(grade)) return "absent";
   return gradeKindForCalls(impactKind);
 }
 
@@ -168,13 +168,13 @@ function gradeMatchesStatusFilter(
 ): boolean {
   if (!grade) return false;
   const impactKind = classifyCallImpact(grade, exam, student, leaves);
-  const kind = hasAbsentStatus(grade) ? "absent" : gradeKindForCalls(impactKind);
-  if (filter === "all") return hasAbsentStatus(grade) || (kind !== "missing" && kind !== "protected");
-  if (filter === "absent") return hasAbsentStatus(grade);
+  const kind = gradeKindForCalls(impactKind);
+  if (filter === "all") return kind !== "missing" && kind !== "protected";
+  if (filter === "absent") return kind === "absent";
   if (filter === "discounted") return isDeductedImpact(impactKind);
   if (filter === "passed") return kind === "passed" || kind === "full";
   if (filter === "failed") {
-    return !hasAbsentStatus(grade) && !isDeductedImpact(impactKind) && (kind === "failed" || kind === "academic-accounting");
+    return !isDeductedImpact(impactKind) && (kind === "failed" || kind === "academic-accounting");
   }
   return kind === filter;
 }
@@ -280,6 +280,7 @@ export async function GET(req: NextRequest) {
               studyType: true,
               createdAt: true,
               accountingGraceDays: true,
+              gracePeriodStartDate: true,
             },
           }),
           db.grade.findMany({

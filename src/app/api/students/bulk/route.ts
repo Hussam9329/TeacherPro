@@ -26,6 +26,7 @@ import {
   ensureStudentCodeSequenceReady,
   retryStudentCodeConflict,
 } from "@/lib/student-code-sequence";
+import { resolveManualGraceStartDate } from "@/lib/student-grace";
 
 type BulkStudentPayload = {
   name?: unknown;
@@ -545,6 +546,9 @@ export async function POST(req: NextRequest) {
             baghdadMode,
             subSite,
           );
+          const registrationDate = payload.createdAt
+            ? new Date(asText(payload.createdAt))
+            : new Date();
           const createdStudent = await tx.student.create({
             data: {
               name: asText(payload.name),
@@ -565,12 +569,17 @@ export async function POST(req: NextRequest) {
               dismissalType: "",
               dismissalReason: "",
               dismissalNotes: null,
-              createdAt: payload.createdAt
-                ? new Date(asText(payload.createdAt))
-                : new Date(),
+              createdAt: registrationDate,
               opportunities,
               baseOpportunities: opportunities,
               accountingGraceDays: graceDays,
+              gracePeriodStartDate:
+                graceDays > 0
+                  ? resolveManualGraceStartDate({
+                      mode: "registration",
+                      createdAt: registrationDate,
+                    })
+                  : null,
               courseId,
               ...uniqueKeys,
             },

@@ -3,6 +3,8 @@ import {
   isGradeEntered,
   isExamOnOrAfterStudentRegistration,
 } from "./exam-utils";
+export { isExamWithinStudentGraceWindow } from "./student-grace";
+import { isExamWithinStudentGraceWindow } from "./student-grace";
 import type {
   AcademicChapter,
   AcademicCourseChapter,
@@ -33,50 +35,6 @@ function dayKey(value: string | Date | null | undefined): string {
       ? value.toISOString().slice(0, 10)
       : "";
   return String(value || "").slice(0, 10);
-}
-
-function parseDateOnly(value: string | undefined | null): Date | null {
-  if (!value) return null;
-  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function normalizeGraceDaysValue(value: unknown): number {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.min(30, Math.max(0, Math.trunc(numeric)));
-}
-
-export function isExamWithinStudentGraceWindow(
-  student: Pick<AcademicStudent, "createdAt" | "accountingGraceDays" | "gracePeriodStartDate">,
-  exam: Pick<AcademicExam, "date">,
-): boolean {
-  const graceDays = normalizeGraceDaysValue(student.accountingGraceDays);
-
-  // If admin set a manual grace period (gracePeriodStartDate), use it
-  // as the start of the grace window. The window is
-  // [gracePeriodStartDate, gracePeriodStartDate + graceDays).
-  if (student.gracePeriodStartDate && graceDays > 0) {
-    const start = parseDateOnly(student.gracePeriodStartDate);
-    const examDate = parseDateOnly(exam.date);
-    if (!start || !examDate) return false;
-    const endExclusive = new Date(start);
-    endExclusive.setDate(endExclusive.getDate() + graceDays);
-    return examDate >= start && examDate < endExclusive;
-  }
-
-  // Automatic 3-day grace from registration for ALL students.
-  // Even if accountingGraceDays == 0, every new student gets 3 days
-  // of automatic protection from their registration date.
-  // If accountingGraceDays > 0 (but no gracePeriodStartDate = old data
-  // before migration), use the larger of 3 or accountingGraceDays.
-  const effectiveGraceDays = Math.max(3, graceDays);
-  const start = parseDateOnly(student.createdAt);
-  const examDate = parseDateOnly(exam.date);
-  if (!start || !examDate) return false;
-  const endExclusive = new Date(start);
-  endExclusive.setDate(endExclusive.getDate() + effectiveGraceDays);
-  return examDate >= start && examDate < endExclusive;
 }
 
 export function isRuleManagedDismissal(

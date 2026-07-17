@@ -11,6 +11,10 @@ import { previewStudentAcademicUpdate } from "@/lib/academic-recalculate-server"
 import { buildStudentAcademicImpactToken } from "@/lib/student-academic-impact-token";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
+import {
+  normalizeGracePeriodStartMode,
+  resolveManualGraceStartDate,
+} from "@/lib/student-grace";
 
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -46,6 +50,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const studentId = String(body.studentId || body.id || "").trim();
     if (!studentId) return validationError("تعذر تحديد الطالب المطلوب");
+    const gracePeriodStartMode = normalizeGracePeriodStartMode(
+      body.gracePeriodStartMode,
+    );
+    if (
+      body.gracePeriodStartMode !== undefined &&
+      body.gracePeriodStartMode !== null &&
+      body.gracePeriodStartMode !== "" &&
+      !gracePeriodStartMode
+    ) {
+      return validationError(
+        "مصدر بدء فترة السماح غير واضح. اختر تاريخ التسجيل أو اليوم.",
+      );
+    }
 
     // Build the human-readable impact, engine projection, and confirmation
     // token from one SERIALIZABLE snapshot. A preview can therefore never mix
@@ -58,6 +75,7 @@ export async function POST(req: NextRequest) {
           name: true,
           createdAt: true,
           accountingGraceDays: true,
+          gracePeriodStartDate: true,
         },
       });
       if (!student) {
@@ -81,8 +99,20 @@ export async function POST(req: NextRequest) {
           : normalizeGraceDays(body.accountingGraceDays);
 
       const dateChanged = dayKey(proposedCreatedAt) !== dayKey(student.createdAt);
-      const graceChanged =
+      const graceDaysChanged =
         proposedGraceDays !== Number(student.accountingGraceDays || 0);
+      const proposedGraceStartDate =
+        proposedGraceDays <= 0
+          ? null
+          : graceDaysChanged || gracePeriodStartMode
+            ? resolveManualGraceStartDate({
+                mode: gracePeriodStartMode || "now",
+                createdAt: proposedCreatedAt,
+              })
+            : student.gracePeriodStartDate;
+      const graceStartChanged =
+        dayKey(proposedGraceStartDate) !== dayKey(student.gracePeriodStartDate);
+      const graceChanged = graceDaysChanged || graceStartChanged;
 
       const [grades, leaves, projection, previewToken] = await Promise.all([
         tx.grade.findMany({
@@ -96,6 +126,7 @@ export async function POST(req: NextRequest) {
           {
             createdAt: proposedCreatedAt,
             accountingGraceDays: proposedGraceDays,
+            gracePeriodStartDate: proposedGraceStartDate,
           },
           { tx },
         ),
@@ -103,16 +134,19 @@ export async function POST(req: NextRequest) {
           studentId,
           proposedCreatedAt,
           proposedGraceDays,
+          proposedGraceStartDate,
         }),
       ]);
 
       const currentStudent = {
         createdAt: student.createdAt,
         accountingGraceDays: student.accountingGraceDays,
+        gracePeriodStartDate: student.gracePeriodStartDate,
       };
       const projectedStudent = {
         createdAt: proposedCreatedAt,
         accountingGraceDays: proposedGraceDays,
+        gracePeriodStartDate: proposedGraceStartDate,
       };
 
       const changes = grades
@@ -167,10 +201,12 @@ export async function POST(req: NextRequest) {
         current: {
           createdAt: dayKey(student.createdAt),
           accountingGraceDays: Number(student.accountingGraceDays || 0),
+          gracePeriodStartDate: dayKey(student.gracePeriodStartDate),
         },
         proposed: {
           createdAt: dayKey(proposedCreatedAt),
           accountingGraceDays: proposedGraceDays,
+          gracePeriodStartDate: dayKey(proposedGraceStartDate),
         },
         impact: {
           totalGrades: grades.length,

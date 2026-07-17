@@ -50,6 +50,7 @@ import {
 import { toBaghdadDateTimeLocal } from "./baghdad-time";
 import { formatAppDate, toLatinDigits } from "./format";
 import { recalculateAcademicState } from "./academic-engine";
+import { isExamWithinStudentGraceWindow } from "./student-grace";
 import {
   announceTeacherProSyncError,
   announceTeacherProSyncRefreshing,
@@ -119,6 +120,7 @@ export interface Student {
   opportunities: number;
   baseOpportunities: number;
   accountingGraceDays: number;
+  gracePeriodStartDate?: string | null;
   /** Server-side snapshot used by إدارة الفرص so actions never depend on stale course-chapter cache. */
   hasActiveChapter?: boolean;
   activeChapterConflictCount?: number;
@@ -141,7 +143,10 @@ export interface Student {
 
 export type CourseTransferPolicy = "reset" | "keep";
 
-export type StudentUpdatePayload = Partial<Omit<Student, "id" | "code">> & {
+export type StudentUpdatePayload = Partial<
+  Omit<Student, "id" | "code" | "gracePeriodStartDate">
+> & {
+  gracePeriodStartMode?: "registration" | "now";
   /**
    * Required only when courseId changes from one course to another.
    * - reset: treat the student as new in the target course and grant the
@@ -1406,6 +1411,9 @@ function normalizeStudentRecord(st: Record<string, unknown>): Student {
         ? undefined
         : Boolean(st.isOpportunityOverLimit),
     accountingGraceDays: normalizeGraceDaysValue(st.accountingGraceDays),
+    gracePeriodStartDate: st.gracePeriodStartDate
+      ? String(st.gracePeriodStartDate).slice(0, 10)
+      : null,
     dismissalNotes: String(st.dismissalNotes || ""),
     createdAt: st.createdAt ? String(st.createdAt).slice(0, 10) : todayISO(),
     courseProgram: String(st.courseProgram || ""),
@@ -1646,17 +1654,13 @@ function parseDateOnly(value: string | undefined | null): Date | null {
 }
 
 function isExamWithinStudentGracePeriod(
-  student: Pick<Student, "createdAt" | "accountingGraceDays">,
+  student: Pick<
+    Student,
+    "createdAt" | "accountingGraceDays" | "gracePeriodStartDate"
+  >,
   exam: Pick<Exam, "date">,
 ): boolean {
-  const graceDays = normalizeGraceDaysValue(student.accountingGraceDays);
-  if (graceDays <= 0) return false;
-  const start = parseDateOnly(student.createdAt);
-  const examDate = parseDateOnly(exam.date);
-  if (!start || !examDate) return false;
-  const endExclusive = new Date(start);
-  endExclusive.setDate(endExclusive.getDate() + graceDays);
-  return examDate >= start && examDate < endExclusive;
+  return isExamWithinStudentGraceWindow(student, exam);
 }
 
 function isAutomaticOpportunityLog(log: OpportunityLog): boolean {

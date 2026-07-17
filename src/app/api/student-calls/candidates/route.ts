@@ -59,6 +59,7 @@ type DbStudentLite = {
   opportunities: number;
   baseOpportunities: number;
   accountingGraceDays: number;
+  gracePeriodStartDate: Date | null;
   createdAt: Date;
   courseId: string;
 };
@@ -207,8 +208,8 @@ function callKindForGrade(
   leaves: DbLeaveLite[] = [],
 ): CallKind {
   const impactKind = classifyCallImpact(grade, exam, student, leaves);
-  // الغياب يبقى غياباً في فلاتر المكالمات حتى لو كان محمياً من الخصم؛ الـ Badges تشرح سبب الخصم/الحماية.
-  if (hasAbsentStatus(grade)) return "absent";
+  // التصنيف الأكاديمي هو المرجع الوحيد. الغياب المحمي بالسماح/الإجازة
+  // لا يتحول إلى مرشح مكالمة لمجرد بقاء سجل قديم في قاعدة البيانات.
   return gradeKindForCalls(impactKind);
 }
 
@@ -266,23 +267,13 @@ function callBadgesForGrade(args: {
         },
       ];
     }
-    if (impactKind === "grace-period" || impactKind === "before-registration") {
-      return [
-        {
-          label: "غائب بدون خصم: فترة سماح",
-          tone: "safe",
-          detail: "الطالب داخل فترة السماح أو الامتحان قبل تاريخ تسجيله.",
-        },
-      ];
-    }
-    if (impactKind === "excused") {
-      return [
-        {
-          label: "غائب بدون خصم: إجازة",
-          tone: "safe",
-          detail: "توجد إجازة أو عذر معتمد يغطي تاريخ هذا الامتحان.",
-        },
-      ];
+    if (
+      impactKind === "grace-period" ||
+      impactKind === "before-registration" ||
+      impactKind === "excused"
+    ) {
+      // Invariant: protected absences are excluded before cards are built.
+      return [];
     }
     if (impactKind === "no-discount-protected" || exam.noDiscount) {
       return [
@@ -345,12 +336,12 @@ function gradeMatchesStatusFilter(
   impactKind: GradeClassificationKind,
   grade?: DbGradeLite,
 ): boolean {
-  if (filter === "all") return hasAbsentStatus(grade) || !NON_DISPLAY_CALL_KINDS.has(kind);
-  if (filter === "absent") return hasAbsentStatus(grade);
+  if (filter === "all") return !NON_DISPLAY_CALL_KINDS.has(kind);
+  if (filter === "absent") return kind === "absent";
   if (filter === "discounted") return isDeductedImpact(impactKind);
   if (filter === "passed") return kind === "passed" || kind === "full";
   if (filter === "failed") {
-    return !hasAbsentStatus(grade) && !isDeductedImpact(impactKind) && (kind === "failed" || kind === "academic-accounting");
+    return !isDeductedImpact(impactKind) && (kind === "failed" || kind === "academic-accounting");
   }
   return kind === filter;
 }
@@ -415,7 +406,7 @@ function buildGradeItem(args: {
 }) {
   const { grade, exam, student, leaves } = args;
   const impactKind = classifyCallImpact(grade, exam, student, leaves);
-  const kind = hasAbsentStatus(grade) ? "absent" : gradeKindForCalls(impactKind);
+  const kind = gradeKindForCalls(impactKind);
   return {
     id: `grade:${grade.id}`,
     callKey: `grade:${grade.id}`,
@@ -532,6 +523,7 @@ export async function GET(req: NextRequest) {
             opportunities: true,
             baseOpportunities: true,
             accountingGraceDays: true,
+            gracePeriodStartDate: true,
             createdAt: true,
             courseId: true,
           },
@@ -591,7 +583,7 @@ export async function GET(req: NextRequest) {
       if (!student || student.status === "مؤرشف") return [];
       const leaves = leavesForExam(selectedLeavesByStudentId, student.id, exam);
       const impactKind = classifyCallImpact(grade, exam, student, leaves);
-      const kind = hasAbsentStatus(grade) ? "absent" : gradeKindForCalls(impactKind);
+      const kind = gradeKindForCalls(impactKind);
       if (!gradeMatchesStatusFilter(statusFilter, kind, impactKind, grade)) return [];
       const values = searchableValues({ student, grade, exam, kind });
       if (generalSearch && !includesSearch(generalSearch, values)) return [];
@@ -690,6 +682,14 @@ export async function GET(req: NextRequest) {
           const itemExam = courseExamById.get(itemGrade.examId);
           if (!itemExam) return [];
           const leaves = leavesForExam(leavesByStudentId, student.id, itemExam);
+          const impactKind = classifyCallImpact(
+            itemGrade,
+            itemExam,
+            authoritativeStudent,
+            leaves,
+          );
+          const kind = gradeKindForCalls(impactKind);
+          if (NON_DISPLAY_CALL_KINDS.has(kind)) return [];
           return [
             buildGradeItem({
               grade: itemGrade,

@@ -675,6 +675,15 @@ export function StudentRegisterView() {
         return;
       }
 
+      const gracePeriodStartMode =
+        accountingGraceDays > 0
+          ? window.confirm(
+              "هل تريد بدء فترة السماح من تاريخ تسجيل الطالب؟\n\nموافق: من تاريخ التسجيل.\nإلغاء: من اليوم الذي وضعت فيه فترة السماح.",
+            )
+            ? "registration"
+            : "now"
+          : undefined;
+
       const result = await studentApi.add({
         name: form.name.trim(),
         school: form.school.trim(),
@@ -692,6 +701,7 @@ export function StudentRegisterView() {
         subSite: effectiveSubSite,
         createdAt: form.createdAt,
         accountingGraceDays,
+        gracePeriodStartMode,
       });
 
       if (!result.ok) {
