@@ -1099,8 +1099,8 @@ export function StudentBulkTextImportView() {
                         </Badge>
                       </div>
 
-                      <div className="max-h-[420px] overflow-auto">
-                        <table className="w-full min-w-[980px] text-right text-sm">
+                      <div className="table-wrap max-h-[420px] overflow-auto">
+                        <table className="responsive-table min-w-[980px] text-right text-sm">
                           <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                             <tr className="border-b">
                               <th className="p-3">السطر</th>

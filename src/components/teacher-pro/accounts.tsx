@@ -1145,8 +1145,8 @@ function SecurityTab() {
           <CardTitle className="text-base">آخر تدقيق للحسابات والصلاحيات</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+          <div className="table-wrap">
+            <table className="responsive-table min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b text-xs text-muted-foreground">
                   <th className="p-2 text-right">الوقت</th>
