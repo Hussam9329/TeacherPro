@@ -1185,7 +1185,7 @@ export function ExamRecordsView() {
         return (
           <Card
             key={exam.id}
-            className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10"
+            className="transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-xl hover:shadow-primary/10"
           >
             <CardHeader className="pb-2">
               <div className="flex items-start justify-between gap-3">

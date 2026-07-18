@@ -431,7 +431,7 @@ function RolesTab() {
           const userCount = users.filter(u => u.roleId === role.id).length;
           const displayedRolePermissions = role.id === 'role_admin' ? PERMISSION_CATALOG.map(p => p.id) : role.permissions;
           return (
-            <Card key={role.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10">
+            <Card key={role.id} className="transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-xl hover:shadow-primary/10">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>
@@ -667,7 +667,7 @@ function UsersTab() {
           const isAdminUser = user.username.trim().toLowerCase() === 'admin' || user.roleId === 'role_admin';
           const displayedUserPermissions = isAdminUser ? PERMISSION_CATALOG.map(p => p.id) : user.permissions;
           return (
-            <Card key={user.id} className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10">
+            <Card key={user.id} className="transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-xl hover:shadow-primary/10">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>

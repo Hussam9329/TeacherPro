@@ -267,11 +267,16 @@
   }
 
   .surface-card {
-    @apply rounded-2xl border bg-card/90 shadow-sm backdrop-blur-xl transition-all duration-200;
+    @apply rounded-2xl border bg-card/90 shadow-sm backdrop-blur-xl transition-[border-color,box-shadow,background-color] duration-200;
     box-shadow: var(--shadow-card);
   }
 
-  .surface-card:hover {
+  .surface-card:is(a, button, [role="button"], [data-interactive="true"]) {
+    cursor: pointer;
+    transition-property: transform, border-color, box-shadow, background-color;
+  }
+
+  .surface-card:is(a, button, [role="button"], [data-interactive="true"]):hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-soft);
   }
@@ -706,7 +711,7 @@
   }
 
   .list-row {
-    @apply rounded-2xl border bg-card/80 p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg;
+    @apply rounded-2xl border bg-card/80 p-3 shadow-sm transition-[border-color,box-shadow,background-color] duration-200 hover:border-primary/30 hover:shadow-lg;
   }
 
   .empty-state {
