@@ -47,6 +47,7 @@ import {
   ChevronDown,
   ChevronLeft,
   KeyRound,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,6 +159,20 @@ const sectionDescriptions: Partial<Record<SectionId, string>> = {
   accounts: "إدارة المستخدمين والأدوار والصلاحيات وإعدادات الأمان.",
   logs: "مراجعة سجل العمليات والتغييرات المنفذة داخل النظام.",
 };
+const sectionsWithPageSearch = new Set<SectionId>([
+  "missing-students-notes",
+  "student-registry",
+  "dismissed-students",
+  "grade-entry",
+  "exam-records",
+  "grade-records",
+  "opportunities",
+  "e-correction",
+  "follow-up-calls",
+  "follow-up-leaves",
+  "follow-up-pledges",
+  "logs",
+]);
 const sectionIds = new Set<SectionId>(menuItems.map((item) => item.id));
 
 const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
@@ -1492,6 +1507,33 @@ export function TeacherProLayout() {
               {/* Sync status badge removed — updates are now silent.
                   The sync system still works in the background; it just
                   doesn't show a visible indicator to the user. */}
+              {sectionsWithPageSearch.has(currentSection) ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 gap-2 rounded-full px-2.5 sm:px-3"
+                  title="الانتقال إلى بحث الصفحة (Ctrl+F)"
+                  aria-label="الانتقال إلى خانة البحث في الصفحة الحالية"
+                  onClick={() => {
+                    window.dispatchEvent(
+                      new KeyboardEvent("keydown", {
+                        key: "f",
+                        code: "KeyF",
+                        ctrlKey: true,
+                        bubbles: true,
+                        cancelable: true,
+                      }),
+                    );
+                  }}
+                >
+                  <Search className="size-4" />
+                  <span className="hidden text-xs font-bold md:inline">بحث الصفحة</span>
+                  <kbd className="hidden rounded-md border border-border/70 bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground xl:inline">
+                    Ctrl F
+                  </kbd>
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 size="icon"
