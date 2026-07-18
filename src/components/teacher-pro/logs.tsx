@@ -174,16 +174,16 @@ export function LogsView() {
 
   return (
     <div className="space-y-4">
-      <Card>
+      <Card className="tp-filter-card">
         <CardHeader className="pb-2">
           <CardTitle>السجلات</CardTitle>
           <p className="text-sm text-muted-foreground">
             سجل واضح يشرح ما حدث ومن نفّذه. المعرّفات والبيانات البرمجية مخفية افتراضياً، ويمكن فتحها للتدقيق التقني فقط.
           </p>
         </CardHeader>
-        <CardContent className="space-y-3 p-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-4 lg:grid-cols-6">
-            <div className="space-y-1">
+        <CardContent className="tp-filter-content space-y-3">
+          <div className="tp-filter-grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="logs-module" className="text-xs">الوحدة</Label>
               <Select
                 name="module"
@@ -200,7 +200,7 @@ export function LogsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="logs-user" className="text-xs">المستخدم</Label>
               <Select
                 name="userId"
@@ -217,7 +217,7 @@ export function LogsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1 md:col-span-2">
+            <div className="tp-filter-field tp-filter-search md:col-span-2">
               <Label htmlFor="logs-search" className="text-xs">بحث</Label>
               <Input
                 id="logs-search"
@@ -231,7 +231,7 @@ export function LogsView() {
                 placeholder="بحث بالإجراء، التفاصيل، الوحدة، المستخدم"
               />
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-meta">
               <Label htmlFor="logs-page-size" className="text-xs">عدد الصفوف</Label>
               <Select
                 value={String(pageSize)}
@@ -246,7 +246,7 @@ export function LogsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-end gap-2">
+            <div className="tp-filter-actions">
               <Button variant="outline" onClick={resetFilters}>مسح</Button>
               <ExportDialog
                 rows={logs}

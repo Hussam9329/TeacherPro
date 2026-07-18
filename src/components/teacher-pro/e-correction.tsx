@@ -719,8 +719,8 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
 
         {/* Sheets Tab */}
         <TabsContent value="sheets" className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div className="space-y-1">
+          <div className="tp-filter-card tp-filter-grid grid-cols-1 p-4 md:grid-cols-3">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="ecorrection-course" className="text-xs">
                 الدورة
               </Label>
@@ -741,7 +741,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="ecorrection-exam" className="text-xs">
                 الامتحان
               </Label>
@@ -763,7 +763,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="ecorrection-status" className="text-xs">
                 الحالة
               </Label>
@@ -1037,8 +1037,8 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
             </Card>
           )}
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-            <div className="space-y-1">
+          <div className="tp-filter-card tp-filter-grid grid-cols-1 p-4 md:grid-cols-5">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="bot-course" className="text-xs">
                 الدورة
               </Label>
@@ -1061,7 +1061,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="bot-exam" className="text-xs">
                 الامتحان
               </Label>
@@ -1082,7 +1082,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="bot-status" className="text-xs">
                 الحالة
               </Label>
@@ -1104,7 +1104,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-search">
               <Label htmlFor="bot-search" className="text-xs">
                 بحث
               </Label>
@@ -1118,7 +1118,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
                 autoComplete="off"
               />
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-actions">
               <Label className="text-xs">تحديث</Label>
               <Button
                 variant="outline"

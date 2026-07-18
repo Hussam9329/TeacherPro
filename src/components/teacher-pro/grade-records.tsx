@@ -895,10 +895,10 @@ export function GradeRecordsView() {
         pageCount={paged.length}
       />
 
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
-            <div className="space-y-1 2xl:col-span-2">
+      <Card className="tp-filter-card">
+        <CardContent className="tp-filter-content">
+          <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
+            <div className="tp-filter-field tp-filter-search 2xl:col-span-2">
               <Label htmlFor="grade-records-search" className="text-xs">
                 بحث الطالب
               </Label>
@@ -914,7 +914,7 @@ export function GradeRecordsView() {
                 placeholder="اسم / كود / تيليجرام / امتحان"
               />
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="grade-records-course" className="text-xs">
                 الدورة
               </Label>
@@ -938,7 +938,7 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="grade-records-program" className="text-xs">
                 نوع الدورة
               </Label>
@@ -963,7 +963,7 @@ export function GradeRecordsView() {
               </Select>
             </div>
             {filterCourseProgram === "كورسات" && (
-              <div className="space-y-1">
+              <div className="tp-filter-field tp-filter-primary">
                 <Label htmlFor="grade-records-term" className="text-xs">
                   الكورس
                 </Label>
@@ -988,7 +988,7 @@ export function GradeRecordsView() {
                 </Select>
               </div>
             )}
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="grade-records-study-type" className="text-xs">
                 نوع البرنامج
               </Label>
@@ -1012,7 +1012,7 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="grade-records-exam" className="text-xs">
                 الامتحان
               </Label>
@@ -1036,7 +1036,7 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="grade-records-status" className="text-xs">
                 حالة الدرجة
               </Label>
@@ -1059,7 +1059,7 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="grade-records-letter" className="text-xs">
                 فلترة الاسم أبجدياً
               </Label>
@@ -1083,7 +1083,7 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-meta">
               <Label htmlFor="grade-records-view" className="text-xs">
                 طريقة العرض
               </Label>
@@ -1100,7 +1100,7 @@ export function GradeRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-actions">
               <span className="text-xs font-medium">تصدير</span>
               <ExportDialog
                 title="تصدير سجل الدرجات"

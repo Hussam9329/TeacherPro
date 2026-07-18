@@ -1626,10 +1626,10 @@ export function StudentRegistryView() {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
-            <div className="space-y-1">
+      <Card className="tp-filter-card">
+        <CardContent className="tp-filter-content">
+          <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="registry-course" className="text-xs">
                 الدورة
               </Label>
@@ -1654,7 +1654,7 @@ export function StudentRegistryView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="registry-program" className="text-xs">
                 نوع الدورة
               </Label>
@@ -1680,7 +1680,7 @@ export function StudentRegistryView() {
               </Select>
             </div>
             {filterCourseProgram === "كورسات" && (
-              <div className="space-y-1">
+              <div className="tp-filter-field tp-filter-primary">
                 <Label htmlFor="registry-term" className="text-xs">
                   الكورس
                 </Label>
@@ -1706,7 +1706,7 @@ export function StudentRegistryView() {
                 </Select>
               </div>
             )}
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="registry-study-type" className="text-xs">
                 نوع البرنامج
               </Label>
@@ -1731,7 +1731,7 @@ export function StudentRegistryView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="registry-location" className="text-xs">
                 المحافظة / الموقع
               </Label>
@@ -1756,7 +1756,7 @@ export function StudentRegistryView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="registry-status" className="text-xs">
                 الحالة
               </Label>
@@ -1779,7 +1779,7 @@ export function StudentRegistryView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="registry-issue" className="text-xs">
                 مشاكل/صحة الطالب
               </Label>
@@ -1806,7 +1806,7 @@ export function StudentRegistryView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1 2xl:col-span-2">
+            <div className="tp-filter-field tp-filter-search 2xl:col-span-2">
               <Label htmlFor="registry-search" className="text-xs">
                 بحث
               </Label>
@@ -1823,7 +1823,7 @@ export function StudentRegistryView() {
                 placeholder="اسم / كود / تيليجرام / هاتف"
               />
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-meta">
               <Label htmlFor="registry-view" className="text-xs">
                 طريقة العرض
               </Label>
@@ -1840,7 +1840,7 @@ export function StudentRegistryView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-actions">
               <span className="text-xs font-medium">تصدير</span>
               <ExportDialog
                 title="تصدير سجل الطلاب"

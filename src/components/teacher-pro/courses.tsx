@@ -1467,7 +1467,7 @@ export function CoursesView() {
         </Card>
       ) : null}
 
-      <Card className="rounded-3xl shadow-sm">
+      <Card className="tp-filter-card rounded-3xl shadow-sm">
         <CardHeader className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>قائمة الدورات</CardTitle>
@@ -1475,14 +1475,15 @@ export function CoursesView() {
               {filteredRows.length} من {rows.length}
             </Badge>
           </div>
-          <div className="grid gap-3 lg:grid-cols-[1fr_220px_230px]">
+          <div className="tp-filter-grid lg:grid-cols-[minmax(0,1fr)_220px_230px]">
             <Input
+              className="tp-filter-search h-11 rounded-2xl"
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               placeholder="بحث باسم الدورة، النوع، الموقع، الفصل أو سبب منع الحذف..."
               autoComplete="off"
             />
-            <div className="space-y-1.5">
+            <div className="tp-filter-field tp-filter-primary">
               <Label className="text-xs text-muted-foreground">
                 حالة الدورة
               </Label>
@@ -1506,7 +1507,7 @@ export function CoursesView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label className="text-xs text-muted-foreground">
                 حماية الحذف
               </Label>
@@ -1531,7 +1532,7 @@ export function CoursesView() {
               </Select>
             </div>
           </div>
-          <div className="rounded-2xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+          <div className="tp-filter-summary">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline" data-count-scope="filtered">
                 المطابقون للفلاتر: {filteredStats.total}

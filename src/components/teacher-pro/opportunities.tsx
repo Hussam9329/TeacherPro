@@ -777,13 +777,13 @@ export function OpportunitiesView() {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <Card>
+      <Card className="tp-filter-card">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">فلاتر إدارة الفرص</CardTitle>
         </CardHeader>
-        <CardContent className="p-4 pt-2">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-            <div className="space-y-1">
+        <CardContent className="tp-filter-content pt-2">
+          <div className="tp-filter-grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="opp-course" className="text-xs font-bold">
                 الدورة
               </Label>
@@ -808,7 +808,7 @@ export function OpportunitiesView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="opp-status" className="text-xs font-bold">
                 حالة الطالب
               </Label>
@@ -836,7 +836,7 @@ export function OpportunitiesView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="opp-count" className="text-xs font-bold">
                 عدد الفرص
               </Label>
@@ -856,7 +856,7 @@ export function OpportunitiesView() {
                 placeholder="كل الأعداد أو اكتب رقماً"
               />
             </div>
-            <div className="space-y-1 xl:col-span-2">
+            <div className="tp-filter-field tp-filter-search xl:col-span-2">
               <Label htmlFor="opp-search" className="text-xs font-bold">
                 بحث عن طالب
               </Label>
@@ -873,7 +873,7 @@ export function OpportunitiesView() {
                 placeholder="اسم الطالب / الكود / الهاتف / المدرسة"
               />
             </div>
-            <div className="flex items-end gap-2">
+            <div className="tp-filter-actions">
               <Button
                 variant="outline"
                 className="h-10 flex-1"

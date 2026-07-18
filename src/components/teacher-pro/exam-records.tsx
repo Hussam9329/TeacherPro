@@ -1340,10 +1340,10 @@ export function ExamRecordsView() {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
-            <div className="space-y-1">
+      <Card className="tp-filter-card">
+        <CardContent className="tp-filter-content">
+          <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="exam-records-course" className="text-xs">
                 الدورة
               </Label>
@@ -1364,7 +1364,7 @@ export function ExamRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="exam-records-type" className="text-xs">
                 نوع الامتحان
               </Label>
@@ -1383,7 +1383,7 @@ export function ExamRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="exam-records-status" className="text-xs">
                 حالة الامتحان
               </Label>
@@ -1405,7 +1405,7 @@ export function ExamRecordsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1 lg:col-span-2">
+            <div className="tp-filter-field tp-filter-search lg:col-span-2">
               <Label htmlFor="exam-records-search" className="text-xs">
                 بحث
               </Label>
@@ -1418,7 +1418,7 @@ export function ExamRecordsView() {
                 placeholder="اسم الامتحان / التاريخ / الدورة / الحالة"
               />
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-meta">
               <Label htmlFor="exam-records-view" className="text-xs">
                 طريقة العرض
               </Label>

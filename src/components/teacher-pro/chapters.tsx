@@ -855,14 +855,16 @@ export function ChaptersView() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid gap-3 lg:grid-cols-[1.2fr_220px_220px_auto]">
+      <Card className="tp-filter-card">
+        <CardContent className="tp-filter-content">
+          <div className="tp-filter-grid lg:grid-cols-[minmax(0,1.2fr)_220px_220px_auto]">
             <Input
+              className="tp-filter-search h-11 rounded-2xl"
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               placeholder="بحث باسم الدورة أو الفصل"
             />
+            <div className="tp-filter-field tp-filter-primary">
             <Select
               value={courseFilter}
               onValueChange={(value) => setCourseFilter(value as CourseFilter)}
@@ -880,6 +882,8 @@ export function ChaptersView() {
                 )}
               </SelectContent>
             </Select>
+            </div>
+            <div className="tp-filter-field tp-filter-secondary">
             <Select
               value={chapterFilter}
               onValueChange={(value) =>
@@ -899,15 +903,16 @@ export function ChaptersView() {
                 )}
               </SelectContent>
             </Select>
+            </div>
             <Button
               variant="outline"
               onClick={resetFilters}
-              className="rounded-full"
+              className="tp-filter-action h-11 rounded-2xl"
             >
               تصفير الفلاتر
             </Button>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <div className="tp-filter-summary mt-3">
             <Badge variant="outline" data-count-scope="filtered">
               المطابقون للفلاتر: {filteredCourseStats.total}
             </Badge>

@@ -683,13 +683,13 @@ export function DismissedStudentsView() {
 
       {renderStatusBanner()}
 
-      <Card>
+      <Card className="tp-filter-card">
         <CardHeader>
           <CardTitle>الطلاب المفصولون</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
-            <div className="space-y-1">
+        <CardContent className="tp-filter-content space-y-3">
+          <div className="tp-filter-grid grid-cols-1 md:grid-cols-6">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="dismissed-course" className="text-xs">
                 الدورة
               </Label>
@@ -712,7 +712,7 @@ export function DismissedStudentsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="dismissed-type" className="text-xs">
                 نوع الفصل
               </Label>
@@ -735,7 +735,7 @@ export function DismissedStudentsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="dismissed-notes" className="text-xs">
                 الملاحظات
               </Label>
@@ -753,7 +753,7 @@ export function DismissedStudentsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="dismissed-pledge" className="text-xs">
                 التعهد
               </Label>
@@ -771,7 +771,7 @@ export function DismissedStudentsView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1 md:col-span-2">
+            <div className="tp-filter-field tp-filter-search md:col-span-2">
               <Label htmlFor="dismissed-search" className="text-xs">
                 بحث ذكي
               </Label>
@@ -784,7 +784,7 @@ export function DismissedStudentsView() {
                 placeholder="اسم / كود / سبب / ملاحظات / تيليجرام"
               />
             </div>
-            <div className="space-y-1">
+            <div className="tp-filter-field tp-filter-meta">
               <Label htmlFor="dismissed-view" className="text-xs">
                 طريقة العرض
               </Label>

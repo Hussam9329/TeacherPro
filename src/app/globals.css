@@ -285,6 +285,82 @@
     @apply rounded-2xl border bg-card/80 p-4 shadow-sm backdrop-blur-xl;
   }
 
+  /* TeacherPro filter layout -------------------------------------------------
+     A visual-only system for keeping search, scope, status and actions in a
+     predictable order across all data pages. No filtering logic lives here. */
+  .tp-filter-card {
+    @apply overflow-hidden rounded-3xl border-primary/15 bg-card/90 shadow-sm;
+  }
+
+  .tp-filter-card > [data-slot="card-header"] {
+    @apply border-b border-border/70 bg-muted/20 pb-4;
+  }
+
+  .tp-filter-content {
+    @apply p-4 md:p-5;
+  }
+
+  .tp-filter-grid {
+    @apply grid items-end gap-3;
+  }
+
+  .tp-filter-field {
+    @apply min-w-0 space-y-1.5;
+  }
+
+  .tp-filter-field > label,
+  .tp-filter-field > span:first-child {
+    @apply block text-xs font-bold text-foreground/75;
+  }
+
+  .tp-filter-field input,
+  .tp-filter-field [role="combobox"] {
+    @apply h-11 rounded-2xl bg-background;
+  }
+
+  .tp-filter-search {
+    order: -40;
+  }
+
+  .tp-filter-primary {
+    order: -30;
+  }
+
+  .tp-filter-secondary {
+    order: -20;
+  }
+
+  .tp-filter-meta {
+    order: 10;
+  }
+
+  .tp-filter-action {
+    order: 20;
+  }
+
+  .tp-filter-actions {
+    order: 20;
+    @apply flex min-w-0 items-end gap-2;
+  }
+
+  .tp-filter-actions > * {
+    min-width: 0;
+  }
+
+  .tp-filter-summary {
+    @apply flex flex-wrap items-center gap-2 rounded-2xl border border-dashed bg-muted/25 p-3 text-xs text-muted-foreground;
+  }
+
+  @media (max-width: 639px) {
+    .tp-filter-actions {
+      @apply flex-col items-stretch;
+    }
+
+    .tp-filter-actions > * {
+      width: 100%;
+    }
+  }
+
   .soft-panel {
     @apply rounded-2xl border bg-muted/50 p-4;
   }

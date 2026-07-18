@@ -1552,8 +1552,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-[1fr_220px]">
-          <div className="space-y-1">
+        <div className="tp-filter-card tp-filter-grid grid-cols-1 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="tp-filter-field tp-filter-search">
             <Label htmlFor="leave-search" className="text-xs">
               بحث في الإجازات
             </Label>
@@ -1564,7 +1564,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               placeholder="اسم / كود / هاتف / تيليجرام / امتحان / سبب / ملاحظة"
             />
           </div>
-          <div className="space-y-1">
+          <div className="tp-filter-field tp-filter-secondary">
             <Label htmlFor="leave-type-filter" className="text-xs">
               نوع الإجازة
             </Label>
@@ -2391,7 +2391,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
       {view === "calls" && (
         <div className="space-y-4">
-          <Card>
+          <Card className="tp-filter-card">
             <CardHeader>
               <CardTitle>المكالمات المرتبطة بسجل الدرجات</CardTitle>
               <p className="text-sm text-muted-foreground">
@@ -2399,9 +2399,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 الدورة حسب الامتحان المختار وحالة الدرجة.
               </p>
             </CardHeader>
-            <CardContent className="space-y-4 p-4">
-              <div className="grid gap-3 md:grid-cols-6">
-                <div className="space-y-2">
+            <CardContent className="tp-filter-content space-y-4">
+              <div className="tp-filter-grid grid-cols-1 md:grid-cols-6">
+                <div className="tp-filter-field tp-filter-primary">
                   <Label>الدورة</Label>
                   <Select
                     value={callCourseId || "__none__"}
@@ -2422,7 +2422,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
+                <div className="tp-filter-field tp-filter-primary">
                   <Label>الامتحان</Label>
                   <Select
                     value={callExamId || "__none__"}
@@ -2447,7 +2447,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
+                <div className="tp-filter-field tp-filter-secondary">
                   <Label>حالة الطالب في الامتحان</Label>
                   <Select
                     value={callStatusFilter}
@@ -2469,7 +2469,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2 md:col-span-2">
+                <div className="tp-filter-field tp-filter-search md:col-span-2">
                   <Label>بحث عام قبل الفرز</Label>
                   <Input
                     id="follow-up-calls-general-search"
@@ -2483,7 +2483,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     placeholder="اسم / كود / هاتف / تيليجرام / مدرسة / امتحان / درجة"
                   />
                 </div>
-                <div className="space-y-2 md:col-span-2">
+                <div className="tp-filter-field tp-filter-search md:col-span-2">
                   <Label>بحث داخل الفرز</Label>
                   <Input
                     id="follow-up-calls-filter-search"
@@ -2498,7 +2498,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     placeholder="بحث داخل نتائج الدورة والامتحان"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="tp-filter-field tp-filter-actions">
                   <Label>تصدير</Label>
                   {callExamSelected ? (
                     <ExportDialog
@@ -2699,9 +2699,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             </div>
           )}
 
-          <Card>
-            <CardContent className="grid gap-3 p-4 md:grid-cols-3">
-              <div className="space-y-2">
+          <Card className="tp-filter-card">
+            <CardContent className="tp-filter-content tp-filter-grid grid-cols-1 md:grid-cols-3">
+              <div className="tp-filter-field tp-filter-primary">
                 <Label>فرز الفصل</Label>
                 <Select
                   value={pledgeTypeFilter}
@@ -2719,7 +2719,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
+              <div className="tp-filter-field tp-filter-secondary">
                 <Label>حالة التعهد</Label>
                 <Select
                   value={pledgeStatusFilter}
@@ -2740,7 +2740,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
+              <div className="tp-filter-field tp-filter-search">
                 <Label>بحث</Label>
                 <Input
                   id="follow-up-pledges-search"

@@ -1600,13 +1600,13 @@ export function GradeEntryView() {
         </DialogContent>
       </Dialog>
 
-      <Card>
+      <Card className="tp-filter-card">
         <CardHeader>
           <CardTitle>تسجيل الدرجات</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
-            <div className="space-y-2">
+        <CardContent className="tp-filter-content">
+          <div className="tp-filter-grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+            <div className="tp-filter-field tp-filter-primary">
               <Label htmlFor="grade-entry-course">اسم الدورة</Label>
               <Select
                 value={filterCourseId || "all"}
@@ -1626,7 +1626,7 @@ export function GradeEntryView() {
               </Select>
             </div>
 
-            <div className="space-y-2 lg:col-span-2">
+            <div className="tp-filter-field tp-filter-primary lg:col-span-2">
               <Label htmlFor="grade-entry-exam">اختر الامتحان</Label>
               <Select
                 name="examId"
@@ -1646,7 +1646,7 @@ export function GradeEntryView() {
               </Select>
             </div>
 
-            <div className="space-y-2">
+            <div className="tp-filter-field tp-filter-secondary">
               <Label htmlFor="grade-entry-status-filter">حالة الدرجة</Label>
               <Select
                 value={filterStatus || "all"}
