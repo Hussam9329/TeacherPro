@@ -439,7 +439,7 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
   };
 
   return (
-    <div className="app-bg min-h-dvh flex items-center justify-center bg-background p-4" dir="rtl">
+    <div className="app-bg tp-readable-ui min-h-dvh flex items-center justify-center bg-background p-4" dir="rtl">
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,rgba(147,51,234,0.18),transparent_32rem)]" />
       <div className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-border/70 bg-card/95 shadow-2xl backdrop-blur-xl">
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-primary via-fuchsia-500 to-indigo-500" />
@@ -1111,7 +1111,7 @@ export function TeacherProLayout() {
 
   if (!authChecked) {
     return (
-      <div className="app-bg flex min-h-dvh items-center justify-center bg-background p-6" dir="rtl">
+      <div className="app-bg tp-readable-ui flex min-h-dvh items-center justify-center bg-background p-6" dir="rtl">
         <div className="w-full max-w-md">
           <LoadingState
             title="جاري التحقق من الجلسة..."
@@ -1127,7 +1127,7 @@ export function TeacherProLayout() {
   }
 
   return (
-    <div className="app-bg flex h-dvh overflow-hidden bg-background" dir="rtl">
+    <div className="app-bg tp-readable-ui flex h-dvh overflow-hidden bg-background" dir="rtl">
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"

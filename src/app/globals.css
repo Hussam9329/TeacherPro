@@ -393,6 +393,39 @@
     }
   }
 
+
+  /* TeacherPro readable typography ------------------------------------------
+     Raises only the legacy 10/11px helper text to the existing 12px small-text
+     baseline and improves line rhythm. No content, component or behavior changes. */
+  .tp-readable-ui {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  .tp-readable-ui [class*="text-[10px]"],
+  .tp-readable-ui [class*="text-[11px]"] {
+    font-size: 0.75rem !important;
+    line-height: 1.35rem !important;
+  }
+
+  .tp-readable-ui :is(.text-xs, [class*="text-[10px]"], [class*="text-[11px]"]) {
+    line-height: 1.35rem;
+  }
+
+  .tp-readable-ui [data-teacherpro-active-content="true"] :is(p, li, dd, dt) {
+    text-wrap: pretty;
+  }
+
+  .tp-readable-ui [data-teacherpro-active-content="true"] :is(th, td) {
+    font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: 639px) {
+    .tp-readable-ui [data-teacherpro-active-content="true"] :is(p, li, dd, dt) {
+      line-height: 1.6;
+    }
+  }
+
   /* TeacherPro long-form layout --------------------------------------------
      Visual grouping only: fields, values, validation, submit handlers and
      responsive grid definitions remain owned by the original screens. */
