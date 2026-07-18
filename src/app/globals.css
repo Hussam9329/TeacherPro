@@ -304,6 +304,38 @@
     @apply grid items-end gap-3;
   }
 
+  /* Dense filter groups are split into clear visual stages without changing
+     their markup, values, handlers or responsive column definitions. */
+  .tp-filter-grid:has(> .tp-filter-secondary):has(> :nth-child(4))::before,
+  .tp-filter-grid:has(> .tp-filter-secondary):has(> :nth-child(4))::after {
+    grid-column: 1 / -1;
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    border-radius: 0.875rem;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.6875rem;
+    font-weight: 800;
+    line-height: 1.25rem;
+  }
+
+  .tp-filter-grid:has(> .tp-filter-secondary):has(> :nth-child(4))::before {
+    content: "الفلاتر الأساسية";
+    order: -50;
+    border: 1px solid oklch(0.62 0.21 300 / 0.16);
+    background: oklch(0.62 0.21 300 / 0.07);
+    color: var(--foreground);
+  }
+
+  .tp-filter-grid:has(> .tp-filter-secondary):has(> :nth-child(4))::after {
+    content: "فلاتر إضافية";
+    order: -25;
+    margin-top: 0.125rem;
+    border: 1px dashed var(--border);
+    background: oklch(0.55 0.04 296 / 0.045);
+    color: var(--muted-foreground);
+  }
+
   .tp-filter-field {
     @apply min-w-0 space-y-1.5;
   }
