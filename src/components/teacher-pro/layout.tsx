@@ -45,6 +45,7 @@ import {
   X,
   LogOut,
   ChevronDown,
+  ChevronLeft,
   KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -135,6 +136,28 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
 const familyItemIds = new Set<SectionId>(
   menuFamilies.flatMap((family) => family.itemIds),
 );
+
+const sectionDescriptions: Partial<Record<SectionId, string>> = {
+  dashboard: "ملخص سريع لحالة الطلاب والامتحانات والتنبيهات الإدارية.",
+  "missing-students-notes": "مراجعة ملاحظات الطلاب غير الموجودين أثناء إدخال الدرجات.",
+  courses: "إنشاء الدورات ومراجعة إعداداتها وحالتها التشغيلية.",
+  chapters: "تنظيم الفصول وربطها بالدورات ومتابعة حالة الفرص.",
+  "student-register": "إضافة طالب جديد وربطه بالدورة والبرنامج والموقع المناسب.",
+  "student-registry": "البحث في ملفات الطلاب ومراجعة بياناتهم وحالتهم.",
+  "student-bulk-import": "إضافة مجموعة طلاب بعد لصق البيانات ومراجعتها قبل الحفظ.",
+  "dismissed-students": "متابعة حالات الفصل والتعهدات وإعادة التفعيل.",
+  "exam-new": "إنشاء امتحان وتحديد الدورات والمواقع وقواعد الدرجات.",
+  "grade-entry": "إدخال درجات الطلاب ومتابعة حالات الحفظ والغياب.",
+  "exam-records": "مراجعة الامتحانات السابقة وإعداداتها وحالتها.",
+  "grade-records": "البحث في سجل الدرجات ومراجعة النتائج المسجلة.",
+  opportunities: "متابعة فرص الطلاب وتنفيذ الإضافة أو الخصم بضوابط النظام.",
+  "e-correction": "مراجعة أوراق التصحيح والمستلمات ونتائج التدقيق.",
+  "follow-up-calls": "تنظيم اتصالات المتابعة وتسجيل نتائج المكالمات.",
+  "follow-up-leaves": "إدارة إجازات الطلاب ومراجعة الفترات المسجلة.",
+  "follow-up-pledges": "متابعة التعهدات المرتبطة بحالات الفصل وإعادة التفعيل.",
+  accounts: "إدارة المستخدمين والأدوار والصلاحيات وإعدادات الأمان.",
+  logs: "مراجعة سجل العمليات والتغييرات المنفذة داخل النظام.",
+};
 const sectionIds = new Set<SectionId>(menuItems.map((item) => item.id));
 
 const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
@@ -1063,6 +1086,13 @@ export function TeacherProLayout() {
       ? sectionComponents[currentSection] || DashboardView
       : DashboardView;
   const currentMenu = menuItems.find((m) => m.id === currentSection);
+  const currentMenuFamily = menuFamilies.find((family) =>
+    family.itemIds.includes(currentSection),
+  );
+  const CurrentMenuIcon = currentMenu?.icon || LayoutDashboard;
+  const currentPageDescription =
+    sectionDescriptions[currentSection] ||
+    "إدارة ذكية وسريعة للطلاب والامتحانات والفرص.";
 
   if (!authChecked) {
     return (
@@ -1389,32 +1419,56 @@ export function TeacherProLayout() {
       </aside>
 
       <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="sticky top-0 z-30 border-b border-border/70 bg-background/75 backdrop-blur-xl supports-[backdrop-filter]:bg-background/65">
-          <div className="flex items-center justify-between gap-2 px-3 py-2 md:px-6 md:py-3">
-            <div className="flex items-center gap-2 md:gap-3">
+        <header className="sticky top-0 z-30 border-b border-border/70 bg-background/90 shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-background/78">
+          <div className="flex min-h-[4.5rem] items-center justify-between gap-3 px-3 py-2.5 md:min-h-[5.5rem] md:px-6 md:py-3">
+            <div className="flex min-w-0 flex-1 items-center gap-2.5 md:gap-3.5">
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden shrink-0"
+                className="shrink-0 lg:hidden"
                 onClick={toggleSidebar}
               >
-                <Menu className="w-5 h-5" />
+                <Menu className="h-5 w-5" />
               </Button>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="hidden sm:inline-flex shrink-0">
-                    {currentMenu?.sub || "نظرة عامة"}
-                  </Badge>
-                  <h2 className="font-black text-base md:text-xl tracking-tight text-gradient-brand truncate">
+
+              <div className="hidden size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/[0.08] text-primary shadow-sm sm:flex md:size-12">
+                <CurrentMenuIcon className="size-5 md:size-[1.375rem]" />
+              </div>
+
+              <div className="min-w-0 flex-1 text-right">
+                <div className="mb-0.5 hidden items-center gap-1.5 text-[11px] font-semibold text-muted-foreground md:flex">
+                  <span>TeacherPro</span>
+                  <ChevronLeft className="size-3.5 opacity-45" />
+                  {currentMenuFamily ? (
+                    <>
+                      <span>{currentMenuFamily.title}</span>
+                      <ChevronLeft className="size-3.5 opacity-45" />
+                    </>
+                  ) : null}
+                  <span className="truncate text-foreground/75">
+                    {currentMenu?.title || "لوحة النظام"}
+                  </span>
+                </div>
+
+                <div className="flex min-w-0 items-center gap-2">
+                  <h2 className="truncate text-base font-black tracking-tight text-gradient-brand md:text-xl">
                     {currentMenu?.title || "لوحة النظام"}
                   </h2>
+                  <Badge
+                    variant="outline"
+                    className="hidden h-6 shrink-0 border-border/80 bg-muted/35 px-2 text-[10px] font-bold text-muted-foreground sm:inline-flex"
+                  >
+                    {currentMenu?.sub || "نظرة عامة"}
+                  </Badge>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5 hidden md:block">
-                  إدارة ذكية وسريعة للطلاب والامتحانات والفرص
+
+                <p className="mt-0.5 truncate text-[11px] leading-5 text-muted-foreground sm:text-xs">
+                  {currentPageDescription}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               {actionStatus.status !== "idle" ? (
                 <Badge
                   variant={actionStatus.status === "failed" ? "destructive" : "outline"}
@@ -1442,15 +1496,18 @@ export function TeacherProLayout() {
                 variant="outline"
                 size="icon"
                 onClick={toggleTheme}
-                className="rounded-full shrink-0"
+                className="shrink-0 rounded-full"
               >
                 {theme === "dark" ? (
-                  <Sun className="w-4 h-4" />
+                  <Sun className="h-4 w-4" />
                 ) : (
-                  <Moon className="w-4 h-4" />
+                  <Moon className="h-4 w-4" />
                 )}
               </Button>
-              <Badge variant="secondary" className="hidden sm:flex shrink-0">
+              <Badge
+                variant="secondary"
+                className="hidden max-w-44 shrink-0 truncate px-3 sm:flex"
+              >
                 {user?.name || "غير مسجل"}
               </Badge>
             </div>
