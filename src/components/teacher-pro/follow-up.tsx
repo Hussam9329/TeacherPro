@@ -2064,7 +2064,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   ملاحظات المكالمات
                 </Label>
                 <span className="text-[11px] text-muted-foreground">
-                  ملاحظة ثابتة لهذا الطالب داخل تبويبة المكالمات
+                  حفظ تلقائي عند مغادرة الحقل، أو حفظ مباشر من الزر
                 </span>
               </div>
               <textarea
@@ -2080,18 +2080,27 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 placeholder="دوّن ملاحظة مختصرة وواضحة تخص تواصل هذا الطالب أو ولي أمره"
               />
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>
+                <span
+                  className={`tp-save-indicator ${
+                    callSavingKeys[noteSavingKey]
+                      ? "tp-save-indicator--saving"
+                      : Object.prototype.hasOwnProperty.call(callNoteDrafts, row.student.id)
+                        ? "tp-save-indicator--pending"
+                        : "tp-save-indicator--saved"
+                  }`}
+                >
                   {callSavingKeys[noteSavingKey]
-                    ? "جاري حفظ الملاحظة..."
+                    ? "جارٍ حفظ الملاحظة..."
                     : Object.prototype.hasOwnProperty.call(callNoteDrafts, row.student.id)
-                      ? "توجد ملاحظة غير محفوظة"
+                      ? "تعديل غير محفوظ — سيُحفظ عند مغادرة الحقل"
                       : "محفوظة من بيانات النظام"}
                 </span>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-8 rounded-full px-3 text-[11px]"
+                  className="tp-save-manual-button h-8 rounded-full px-3 text-[11px]"
+                  title="حفظ الملاحظة مباشرة"
                   disabled={Boolean(callSavingKeys[noteSavingKey])}
                   onClick={() => void saveCallStudentNote(row, noteValue)}
                 >

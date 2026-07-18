@@ -1503,19 +1503,26 @@ export function StudentRegisterView() {
             </section>
 
             <div className="tp-form-actions flex flex-col gap-3 rounded-3xl border bg-muted/35 p-4 md:flex-row md:items-center md:justify-between">
-              <div
-                className={`flex items-start gap-2 text-sm leading-6 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "font-bold text-destructive" : "text-muted-foreground"}`}
-              >
-                <AlertCircle
-                  className={`mt-0.5 h-4 w-4 shrink-0 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "text-destructive" : "text-primary"}`}
-                />
-                <span>
-                  {selectedCourseHasChapterConflict
-                    ? "التسجيل موقوف لهذه الدورة لأن فيها أكثر من فصل نشط."
-                    : selectedCourseHasNoActiveChapter
-                      ? "تنبيه قبل الحفظ: هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص."
-                      : "راجع بيانات الطالب والدورة قبل الحفظ. الحفظ النهائي يتم من بيانات النظام."}
+              <div className="min-w-0 space-y-2">
+                <span className="tp-save-indicator tp-save-indicator--local">
+                  {hasDraftData
+                    ? "المسودة محفوظة تلقائيًا على هذا الجهاز"
+                    : "تبدأ المسودة التلقائية بعد إدخال البيانات"}
                 </span>
+                <div
+                  className={`flex items-start gap-2 text-sm leading-6 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "font-bold text-destructive" : "text-muted-foreground"}`}
+                >
+                  <AlertCircle
+                    className={`mt-0.5 h-4 w-4 shrink-0 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "text-destructive" : "text-primary"}`}
+                  />
+                  <span>
+                    {selectedCourseHasChapterConflict
+                      ? "التسجيل موقوف لهذه الدورة لأن فيها أكثر من فصل نشط."
+                      : selectedCourseHasNoActiveChapter
+                        ? "تنبيه قبل الحفظ: هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص."
+                        : "راجع بيانات الطالب والدورة قبل الحفظ. الحفظ النهائي يتم من بيانات النظام."}
+                  </span>
+                </div>
               </div>
               <Button
                 type="submit"

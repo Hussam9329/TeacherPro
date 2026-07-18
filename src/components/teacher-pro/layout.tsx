@@ -1487,16 +1487,17 @@ export function TeacherProLayout() {
               {actionStatus.status !== "idle" ? (
                 <Badge
                   variant={actionStatus.status === "failed" ? "destructive" : "outline"}
-                  className="hidden items-center gap-1.5 sm:flex"
+                  className={cn(
+                    "tp-save-indicator hidden sm:inline-flex",
+                    actionStatus.status === "saving" && "tp-save-indicator--saving",
+                    actionStatus.status === "saved" && "tp-save-indicator--saved",
+                  )}
                   aria-live="polite"
                   title={actionStatus.description}
                 >
-                  <span
-                    className={cn(
-                      "size-1.5 rounded-full bg-current",
-                      actionStatus.status === "saving" && "animate-pulse",
-                    )}
-                  />
+                  <span className="hidden border-l border-current/20 pl-1.5 text-[10px] opacity-70 xl:inline">
+                    حالة الحفظ
+                  </span>
                   {actionStatus.status === "saving"
                     ? TEACHERPRO_ACTION_COPY.saving
                     : actionStatus.status === "saved"

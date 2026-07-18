@@ -1764,8 +1764,8 @@ export function GradeEntryView() {
                 className="min-h-[140px] w-full resize-y rounded-2xl border bg-background px-4 py-3 text-sm leading-6 outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/25"
               />
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>
-                  محفوظة محلياً لهذا الامتحان فقط حتى لو تم تحديث الصفحة.
+                <span className="tp-save-indicator tp-save-indicator--local">
+                  حفظ تلقائي محلي لهذا الامتحان حتى بعد تحديث الصفحة
                 </span>
                 <span>{selectedExamEntryNotes.length} حرف</span>
               </div>
@@ -1813,7 +1813,9 @@ export function GradeEntryView() {
               className="min-h-[120px] w-full resize-y rounded-2xl border border-input bg-background px-4 py-3 text-sm leading-7 shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
             />
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-              <span>يتم الحفظ تلقائياً لكل امتحان على حدة.</span>
+              <span className="tp-save-indicator tp-save-indicator--local">
+                حفظ تلقائي محلي لكل امتحان على حدة
+              </span>
               {missingStudentsNote.trim() && (
                 <span>{missingStudentsNote.trim().length} حرف</span>
               )}
@@ -1861,6 +1863,26 @@ export function GradeEntryView() {
             </div>
           </CardHeader>
           <CardContent>
+            <div className="tp-save-guide mb-4" aria-label="طريقة حفظ درجات الطلاب">
+              <div className="tp-save-guide__item" data-save-mode="automatic">
+                <span className="tp-save-guide__marker" aria-hidden="true" />
+                <span>
+                  <span className="tp-save-guide__title">الحفظ التلقائي</span>
+                  <span className="tp-save-guide__description">
+                    تُحفظ الدرجة أو الملاحظة عند مغادرة الحقل، وتُحفظ الحالة مباشرة عند اختيارها.
+                  </span>
+                </span>
+              </div>
+              <div className="tp-save-guide__item" data-save-mode="manual">
+                <span className="tp-save-guide__marker" aria-hidden="true" />
+                <span>
+                  <span className="tp-save-guide__title">الحفظ اليدوي</span>
+                  <span className="tp-save-guide__description">
+                    استخدم «حفظ الآن» لتثبيت بيانات الصف مباشرة دون انتظار مغادرة الحقل.
+                  </span>
+                </span>
+              </div>
+            </div>
             {entrySheetLoading && (
               <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
                 جاري تحميل ورقة إدخال الدرجات من بيانات النظام...
@@ -1964,7 +1986,14 @@ export function GradeEntryView() {
                   return (
                     <div
                       key={student.id}
-                      className="teacherpro-heavy-row grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]"
+                      className="teacherpro-heavy-row tp-save-row grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]"
+                      data-save-state={
+                        isSaving
+                          ? "saving"
+                          : savedRows[student.id] || entered
+                            ? "saved"
+                            : "idle"
+                      }
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -2186,10 +2215,14 @@ export function GradeEntryView() {
                           </Badge>
                         )}
                         <Badge
-                          variant={
-                            savedRows[student.id] ? "default" : "outline"
-                          }
-                          className="text-[10px]"
+                          variant="outline"
+                          className={`tp-save-indicator ${
+                            isSaving
+                              ? "tp-save-indicator--saving"
+                              : savedRows[student.id] || entered
+                                ? "tp-save-indicator--saved"
+                                : ""
+                          }`}
                         >
                           {isSaving
                             ? "جاري الحفظ"
@@ -2215,10 +2248,12 @@ export function GradeEntryView() {
                         ) : (
                           <Button
                             size="sm"
+                            className="tp-save-manual-button"
+                            title="حفظ بيانات هذا الطالب مباشرة"
                             onClick={() => void saveGrade(student.id)}
                             disabled={Boolean(leave) || !canEdit || isSaving}
                           >
-                            {isSaving ? "حفظ..." : "حفظ"}
+                            {isSaving ? "جارٍ الحفظ..." : "حفظ الآن"}
                           </Button>
                         )}
                       </div>
