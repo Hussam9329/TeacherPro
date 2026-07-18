@@ -373,7 +373,7 @@ export function ExamNewView() {
 
   const renderStatusControls = (state: ExamFormState, setState: (updater: (prev: ExamFormState) => ExamFormState) => void, prefix: string) => (
     <>
-      <div className="space-y-2">
+      <div className="tp-form-field tp-form-status space-y-2">
         <Label htmlFor={`${prefix}-status`}>حالة الامتحان</Label>
         <Select
           value={state.statusMode}
@@ -393,7 +393,7 @@ export function ExamNewView() {
         <p className="text-xs text-muted-foreground">تعطيل الامتحان المجدول يتم من سجل الامتحانات بعد إضافة الامتحان.</p>
       </div>
       {state.statusMode === "تفعيل مجدول" && (
-        <div className="space-y-2">
+        <div className="tp-form-field space-y-2">
           <Label htmlFor={`${prefix}-activate`}>تاريخ ووقت التفعيل</Label>
           <Input
             id={`${prefix}-activate`}
@@ -415,12 +415,12 @@ export function ExamNewView() {
     const judgmentPreview = buildJudgmentPreview(state);
 
     return (
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <div className="space-y-2">
+      <div className="tp-exam-form-grid grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="tp-form-field space-y-2">
           <Label htmlFor={`${prefix}-name`}>اسم الامتحان</Label>
           <Input id={`${prefix}-name`} value={state.name} onChange={(e) => setState((p) => ({ ...p, name: e.target.value }))} required placeholder="الامتحان الأول - الفصل الأول" />
         </div>
-        <div className="space-y-2">
+        <div className="tp-form-field space-y-2">
           <Label htmlFor={`${prefix}-type`}>نوع الامتحان</Label>
           <Select value={state.type} onValueChange={(v) => setState((p) => {
             const nextType = v as ExamFormState["type"];
@@ -441,7 +441,7 @@ export function ExamNewView() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
+        <div className="tp-form-field space-y-2">
           <Label htmlFor={`${prefix}-date`}>تاريخ الامتحان</Label>
           <DateInput
             id={`${prefix}-date`}
@@ -455,11 +455,11 @@ export function ExamNewView() {
             }))}
           />
         </div>
-        <div className="space-y-2 md:col-span-2 xl:col-span-1">
+        <div className="tp-form-field tp-form-field-tall space-y-2 md:col-span-2 xl:col-span-1">
           <Label>الدورات</Label>
           {renderCourseSelector(state, setState, `${prefix}-all-courses`)}
         </div>
-        <div className="space-y-2">
+        <div className="tp-form-field tp-form-field-tall space-y-2">
           <Label>الموقع الرئيسي</Label>
           <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-3">
             <div className="flex items-center gap-2 border-b pb-2">
@@ -484,7 +484,7 @@ export function ExamNewView() {
             </p>
           )}
         </div>
-        <div className="space-y-2 rounded-lg border border-dashed p-3 md:col-span-2 xl:col-span-3">
+        <div className="tp-form-policy space-y-2 rounded-lg border border-dashed p-3 md:col-span-2 xl:col-span-3">
           <div className="flex items-start gap-2">
             <Checkbox
               id={`${prefix}-no-discount`}
@@ -508,9 +508,9 @@ export function ExamNewView() {
             </div>
           </div>
         </div>
-        <div className="space-y-2"><Label>الدرجة الكاملة</Label><Input type="number" step={1} value={numberInputValue(state.fullMark)} onChange={(e) => setState((p) => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
-        <div className="space-y-2"><Label>درجة النجاح</Label><Input type="number" step={1} value={numberInputValue(state.passMark)} onChange={(e) => setState((p) => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
-        <div className="space-y-2">
+        <div className="tp-form-field space-y-2"><Label>الدرجة الكاملة</Label><Input type="number" step={1} value={numberInputValue(state.fullMark)} onChange={(e) => setState((p) => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
+        <div className="tp-form-field space-y-2"><Label>درجة النجاح</Label><Input type="number" step={1} value={numberInputValue(state.passMark)} onChange={(e) => setState((p) => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
+        <div className="tp-form-field space-y-2">
           <Label>درجة الخصم</Label>
           <Input
             type="number"
@@ -525,7 +525,7 @@ export function ExamNewView() {
             <p className="text-xs text-destructive">درجة النجاح يجب أن تكون أكبر من درجة الخصم.</p>
           )}
         </div>
-        <div className="space-y-2">
+        <div className="tp-form-field space-y-2">
           <Label>خصم الفرص</Label>
           <Input
             type="number"
@@ -538,8 +538,8 @@ export function ExamNewView() {
           {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ الغياب أو الغش أو درجة الفصل يعالج كفصل مؤقت فقط.</p>}
           {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
         </div>
-        {isFinalExam && <div className="space-y-2"><Label>درجة الفصل</Label><Input type="number" step={1} disabled={noDiscount} value={noDiscount ? "" : state.dismissalGrade} onChange={(e) => setState((p) => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} />{noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}</div>}
-        <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4 md:col-span-2 xl:col-span-3">
+        {isFinalExam && <div className="tp-form-field space-y-2"><Label>درجة الفصل</Label><Input type="number" step={1} disabled={noDiscount} value={noDiscount ? "" : state.dismissalGrade} onChange={(e) => setState((p) => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} />{noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}</div>}
+        <div className="tp-form-preview space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4 md:col-span-2 xl:col-span-3">
           <div>
             <h3 className="font-bold">معاينة الحكم قبل الحفظ</h3>
             <p className="text-xs text-muted-foreground">هذه المعاينة توضح كيف سيتعامل النظام مع الدرجات والغياب والغش حسب القيم الحالية.</p>
@@ -584,9 +584,9 @@ export function ExamNewView() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="tp-long-form tp-exam-form space-y-4">
             {renderFormFields(form, setForm, "exam")}
-            <Button type="submit" disabled={isAddingExam || contextLoading || Boolean(contextError)} className="w-full">
+            <Button type="submit" disabled={isAddingExam || contextLoading || Boolean(contextError)} className="tp-form-submit w-full">
               {isAddingExam ? "جاري الإضافة..." : "إضافة الامتحان"}
             </Button>
           </form>

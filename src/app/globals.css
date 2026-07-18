@@ -393,6 +393,150 @@
     }
   }
 
+  /* TeacherPro long-form layout --------------------------------------------
+     Visual grouping only: fields, values, validation, submit handlers and
+     responsive grid definitions remain owned by the original screens. */
+  .tp-long-form {
+    @apply min-w-0 space-y-6;
+  }
+
+  .tp-form-section {
+    position: relative;
+    isolation: isolate;
+    @apply border-border/80 bg-card/95 shadow-sm;
+  }
+
+  .tp-form-section::before {
+    content: "";
+    position: absolute;
+    inset-block: 1rem;
+    inset-inline-start: 0;
+    width: 0.2rem;
+    border-radius: 999px;
+    background: linear-gradient(180deg, oklch(0.68 0.22 300 / 0.82), oklch(0.58 0.17 265 / 0.28));
+    pointer-events: none;
+  }
+
+  .tp-form-grid {
+    @apply gap-x-5 gap-y-4;
+  }
+
+  .tp-form-grid > * {
+    min-width: 0;
+    @apply rounded-2xl border border-border/70 bg-background/55 p-4;
+    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .tp-form-grid > *:focus-within {
+    border-color: oklch(0.62 0.21 300 / 0.42);
+    background: color-mix(in oklch, var(--background) 92%, var(--primary) 8%);
+    box-shadow: 0 0 0 3px oklch(0.62 0.21 300 / 0.08);
+  }
+
+  .tp-form-grid > * > label:first-child,
+  .tp-form-field > label:first-child {
+    @apply text-sm font-extrabold text-foreground;
+  }
+
+  .tp-form-actions {
+    @apply border-primary/15 bg-card/95 shadow-sm;
+  }
+
+  .tp-exam-form-grid {
+    @apply items-start gap-x-4 gap-y-4;
+  }
+
+  .tp-exam-form-grid::before {
+    content: "بيانات الامتحان ونطاق الطلاب";
+    grid-column: 1 / -1;
+    @apply rounded-2xl border border-primary/15 bg-primary/5 px-4 py-2 text-xs font-black text-foreground;
+  }
+
+  .tp-exam-form-grid > .tp-form-field {
+    min-width: 0;
+    height: 100%;
+    @apply rounded-2xl border border-border/70 bg-background/55 p-4;
+    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .tp-exam-form-grid > .tp-form-field:focus-within {
+    border-color: oklch(0.62 0.21 300 / 0.42);
+    background: color-mix(in oklch, var(--background) 92%, var(--primary) 8%);
+    box-shadow: 0 0 0 3px oklch(0.62 0.21 300 / 0.08);
+  }
+
+  .tp-exam-form-grid > .tp-form-field-tall {
+    @apply bg-muted/15;
+  }
+
+  .tp-exam-form-grid > .tp-form-policy {
+    position: relative;
+    @apply mt-2 rounded-2xl border-primary/20 bg-primary/5 p-4 pt-11;
+  }
+
+  .tp-exam-form-grid > .tp-form-policy::before {
+    content: "سياسة المحاسبة والخصم";
+    position: absolute;
+    inset-inline: 1rem;
+    top: 0.7rem;
+    @apply border-b border-primary/15 pb-2 text-xs font-black text-foreground;
+  }
+
+  .tp-exam-form-grid > .tp-form-preview {
+    @apply mt-2 rounded-2xl p-4 md:p-5;
+  }
+
+  .tp-exam-form-grid > .tp-form-status {
+    position: relative;
+    @apply mt-2 pt-11;
+  }
+
+  .tp-exam-form-grid > .tp-form-status::before {
+    content: "التفعيل والنشر";
+    position: absolute;
+    inset-inline: 1rem;
+    top: 0.7rem;
+    @apply border-b border-border/70 pb-2 text-xs font-black text-foreground;
+  }
+
+  .tp-form-submit {
+    @apply min-h-12 rounded-2xl text-base font-black shadow-md shadow-primary/15;
+  }
+
+  @media (max-width: 639px) {
+    .tp-long-form {
+      @apply space-y-4;
+    }
+
+    .tp-form-section {
+      border-radius: 1.25rem;
+      padding: 1rem;
+    }
+
+    .tp-form-section::before {
+      inset-block: 0.85rem;
+    }
+
+    .tp-form-grid {
+      @apply gap-3;
+    }
+
+    .tp-form-grid > *,
+    .tp-exam-form-grid > .tp-form-field {
+      border-radius: 1rem;
+      padding: 0.875rem;
+    }
+
+    .tp-form-actions {
+      @apply items-stretch;
+    }
+
+    .tp-form-actions [data-slot="button"],
+    .tp-form-submit {
+      width: 100%;
+    }
+  }
+
   .soft-panel {
     @apply rounded-2xl border bg-muted/50 p-4;
   }

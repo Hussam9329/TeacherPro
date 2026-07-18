@@ -779,7 +779,7 @@ export function StudentRegisterView() {
           <form
             onSubmit={handleSubmit}
             autoComplete="off"
-            className="space-y-6"
+            className="tp-long-form space-y-6"
           >
             <StepProgress steps={formSteps} />
 
@@ -820,14 +820,14 @@ export function StudentRegisterView() {
               </div>
             )}
 
-            <section className="surface-card p-5 md:p-6">
+            <section className="surface-card tp-form-section p-5 md:p-6">
               <SectionTitle
                 icon={BookOpen}
                 title="تفاصيل الدورة"
                 description="اختيار الدورة يحدد المواقع المتاحة تلقائياً."
               />
 
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div className="tp-form-grid grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label
                     htmlFor="reg-courseId"
@@ -962,7 +962,7 @@ export function StudentRegisterView() {
 
               {/* ── Course Program ── */}
               {form.courseId && courseAvailablePrograms.length > 1 && (
-                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="tp-form-grid mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label
                       htmlFor="reg-courseProgram"
@@ -1006,7 +1006,7 @@ export function StudentRegisterView() {
 
               {/* ── Course Term (only if كورسات) ── */}
               {effectiveCourseProgram === "كورسات" && (
-                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="tp-form-grid mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label
                       htmlFor="reg-courseTerm"
@@ -1049,7 +1049,7 @@ export function StudentRegisterView() {
 
               {/* ── Study Type ── */}
               {form.courseId && courseAvailableStudyTypes.length > 0 && (
-                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="tp-form-grid mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label
                       htmlFor="reg-studyType"
@@ -1091,7 +1091,7 @@ export function StudentRegisterView() {
 
               {/* ── Location Scope ── */}
               {form.studyType && courseLocationScopes.length > 0 && (
-                <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="tp-form-grid mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label
                       htmlFor="reg-locationScope"
@@ -1215,13 +1215,13 @@ export function StudentRegisterView() {
                 )}
             </section>
 
-            <section className="surface-card p-5 md:p-6">
+            <section className="surface-card tp-form-section p-5 md:p-6">
               <SectionTitle
                 icon={User}
                 title="بيانات الطالب"
                 description="المعلومات الأساسية المطلوبة لإنشاء ملف الطالب."
               />
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div className="tp-form-grid grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label
                     htmlFor="reg-name"
@@ -1417,13 +1417,13 @@ export function StudentRegisterView() {
               </div>
             </section>
 
-            <section className="surface-card p-5 md:p-6">
+            <section className="surface-card tp-form-section p-5 md:p-6">
               <SectionTitle
                 icon={CalendarDays}
                 title="إعدادات التسجيل"
                 description="حدد تاريخ تسجيل الطالب وعدد أيام السماح التي لا يُحاسَب خلالها على الامتحانات أو الإخفاقات."
               />
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div className="tp-form-grid grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label
                     htmlFor="reg-createdAt"
@@ -1502,7 +1502,7 @@ export function StudentRegisterView() {
               </div>
             </section>
 
-            <div className="flex flex-col gap-3 rounded-3xl border bg-muted/35 p-4 md:flex-row md:items-center md:justify-between">
+            <div className="tp-form-actions flex flex-col gap-3 rounded-3xl border bg-muted/35 p-4 md:flex-row md:items-center md:justify-between">
               <div
                 className={`flex items-start gap-2 text-sm leading-6 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "font-bold text-destructive" : "text-muted-foreground"}`}
               >
