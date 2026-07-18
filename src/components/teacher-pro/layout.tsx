@@ -454,7 +454,7 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
             </Button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="tp-validation-form space-y-4">
             <div className="space-y-2">
               <Label htmlFor="login-username">اسم المستخدم</Label>
               <Input

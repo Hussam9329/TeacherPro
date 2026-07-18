@@ -1369,7 +1369,7 @@ function BackupTab() {
 
           {/* Parse error */}
           {parseError && (
-            <div className="rounded-md bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive">
+            <div className="tp-field-feedback tp-field-feedback-error">
               {parseError}
             </div>
           )}

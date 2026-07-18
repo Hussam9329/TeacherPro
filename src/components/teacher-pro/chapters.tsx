@@ -937,7 +937,7 @@ export function ChaptersView() {
           <CardContent className="space-y-6">
             <form
               onSubmit={handleAddChapter}
-              className="space-y-3 rounded-2xl border bg-muted/20 p-4"
+              className="tp-validation-form space-y-3 rounded-2xl border bg-muted/20 p-4"
             >
               <p className="font-bold">إضافة فصل منهجي</p>
               <div className="space-y-2">
@@ -977,7 +977,7 @@ export function ChaptersView() {
 
             <form
               onSubmit={handleAttachChapter}
-              className="space-y-3 rounded-2xl border bg-muted/20 p-4"
+              className="tp-validation-form space-y-3 rounded-2xl border bg-muted/20 p-4"
             >
               <p className="font-bold">ربط فصل بدورة</p>
               <div className="space-y-2">

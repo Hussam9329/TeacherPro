@@ -584,7 +584,7 @@ export function ExamNewView() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="tp-long-form tp-exam-form space-y-4">
+          <form onSubmit={handleSubmit} className="tp-validation-form tp-long-form tp-exam-form space-y-4">
             {renderFormFields(form, setForm, "exam")}
             <Button type="submit" disabled={isAddingExam || contextLoading || Boolean(contextError)} className="tp-form-submit w-full">
               {isAddingExam ? "جاري الإضافة..." : "إضافة الامتحان"}

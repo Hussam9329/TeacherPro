@@ -779,7 +779,7 @@ export function StudentRegisterView() {
           <form
             onSubmit={handleSubmit}
             autoComplete="off"
-            className="tp-long-form space-y-6"
+            className="tp-validation-form tp-long-form space-y-6"
           >
             <StepProgress steps={formSteps} />
 
@@ -1346,7 +1346,7 @@ export function StudentRegisterView() {
                     />
                   </div>
                   {duplicateTelegramStudent && (
-                    <p className="text-xs font-bold text-destructive">
+                    <p className="tp-field-feedback tp-field-feedback-warning">
                       تنبيه محلي: معرف التيليجرام موجود في البيانات المؤقتة للطالب{" "}
                       {duplicateTelegramStudent.name}. النظام سيفحص نهائياً عند
                       الحفظ.
@@ -1379,7 +1379,7 @@ export function StudentRegisterView() {
                     />
                   </div>
                   {duplicatePhoneStudent && (
-                    <p className="text-xs font-bold text-destructive">
+                    <p className="tp-field-feedback tp-field-feedback-warning">
                       تنبيه محلي: رقم الهاتف موجود في البيانات المؤقتة للطالب{" "}
                       {duplicatePhoneStudent.name}. النظام سيفحص نهائياً عند
                       الحفظ.

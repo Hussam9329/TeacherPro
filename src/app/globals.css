@@ -958,3 +958,125 @@ button[data-slot="button"][class*="text-destructive"] svg {
     overscroll-behavior: contain;
   }
 }
+
+/* TeacherPro field validation feedback --------------------------------------
+   Presentation only: browser constraints, server messages, submit handlers and
+   validation rules remain unchanged. The styles appear only after the browser
+   marks a constrained control as user-invalid or a screen renders an existing
+   feedback message with the shared feedback classes. */
+@layer components {
+  .tp-validation-form {
+    --tp-validation-surface: color-mix(in oklch, var(--destructive) 7%, var(--background));
+    --tp-validation-border: color-mix(in oklch, var(--destructive) 48%, var(--border));
+    --tp-validation-ring: color-mix(in oklch, var(--destructive) 18%, transparent);
+  }
+
+  @supports selector(input:user-invalid) {
+    .tp-validation-form :is(
+      input[data-slot="input"],
+      input[type="date"],
+      input[type="radio"],
+      textarea[data-slot="textarea"]
+    ):user-invalid {
+      border-color: var(--tp-validation-border) !important;
+      background: var(--tp-validation-surface) !important;
+      box-shadow: 0 0 0 3px var(--tp-validation-ring) !important;
+    }
+
+    .tp-validation-form input[type="radio"]:user-invalid {
+      outline: 2px solid var(--tp-validation-border);
+      outline-offset: 2px;
+      box-shadow: none !important;
+    }
+
+    .tp-validation-form .space-y-2:has(:is(
+      input[data-slot="input"],
+      input[type="date"],
+      input[type="radio"],
+      textarea[data-slot="textarea"]
+    ):user-invalid) > label:first-child {
+      color: var(--destructive);
+    }
+
+    .tp-validation-form .space-y-2:not(:has(> .tp-field-feedback)):has(:is(
+      input[data-slot="input"],
+      input[type="date"],
+      input[type="radio"],
+      textarea[data-slot="textarea"]
+    ):user-invalid)::after {
+      content: "راجع قيمة هذا الحقل قبل الحفظ";
+      display: flex;
+      width: fit-content;
+      max-width: 100%;
+      align-items: center;
+      gap: 0.45rem;
+      margin-top: 0.5rem;
+      padding: 0.4rem 0.65rem;
+      border: 1px solid color-mix(in oklch, var(--destructive) 28%, var(--border));
+      border-radius: 0.75rem;
+      background: color-mix(in oklch, var(--destructive) 7%, transparent);
+      color: var(--destructive);
+      font-size: 0.75rem;
+      font-weight: 800;
+      line-height: 1.45;
+    }
+  }
+
+  .tp-validation-form [aria-invalid="true"] {
+    border-color: var(--tp-validation-border) !important;
+    background: var(--tp-validation-surface) !important;
+    box-shadow: 0 0 0 3px var(--tp-validation-ring) !important;
+  }
+
+  .tp-field-feedback {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid;
+    border-radius: 0.9rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    line-height: 1.65;
+  }
+
+  .tp-field-feedback::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 0.42rem;
+    height: 0.42rem;
+    margin-top: 0.42rem;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 0 0.22rem color-mix(in oklch, currentColor 14%, transparent);
+  }
+
+  .tp-field-feedback-error {
+    border-color: color-mix(in oklch, var(--destructive) 32%, var(--border));
+    background: color-mix(in oklch, var(--destructive) 8%, transparent);
+    color: var(--destructive);
+  }
+
+  .tp-field-feedback-warning {
+    border-color: oklch(0.76 0.16 72 / 0.42);
+    background: oklch(0.83 0.14 78 / 0.11);
+    color: oklch(0.53 0.15 58);
+  }
+
+  .dark .tp-field-feedback-warning {
+    border-color: oklch(0.76 0.16 72 / 0.34);
+    background: oklch(0.58 0.12 65 / 0.16);
+    color: oklch(0.83 0.14 78);
+  }
+
+  @media (max-width: 639px) {
+    .tp-field-feedback {
+      padding: 0.6rem 0.7rem;
+      border-radius: 0.8rem;
+      font-size: 0.72rem;
+    }
+  }
+}
