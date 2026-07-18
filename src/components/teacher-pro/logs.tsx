@@ -173,8 +173,8 @@ export function LogsView() {
   };
 
   return (
-    <div className="space-y-4">
-      <Card className="tp-filter-card">
+    <div className="space-y-4 tp-logs-page">
+      <Card className="tp-filter-card tp-logs-page__filters">
         <CardHeader className="pb-2">
           <CardTitle>السجلات</CardTitle>
           <p className="text-sm text-muted-foreground">

@@ -1502,7 +1502,7 @@ export function GradeEntryView() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="tp-grade-entry-page space-y-6">
       {gradeEntryNotice && (
         <div className="pointer-events-none fixed right-4 top-4 z-[100] w-[calc(100vw-2rem)] max-w-sm print:hidden sm:right-6 sm:top-6">
           <div

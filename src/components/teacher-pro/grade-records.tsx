@@ -870,7 +870,7 @@ export function GradeRecordsView() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="tp-grade-records-page space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <StatCard
           label="طلاب لديهم درجات مسجلة"

@@ -1511,8 +1511,8 @@ function BackupTab() {
 
 export function AccountsView() {
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-6 tp-accounts-page">
+      <div className="tp-accounts-page__intro">
         <h2 className="text-xl font-bold">إدارة الحسابات</h2>
         <p className="text-sm text-muted-foreground">إدارة المستخدمين والأدوار والصلاحيات</p>
       </div>

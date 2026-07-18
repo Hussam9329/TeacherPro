@@ -1339,7 +1339,7 @@ export function ExamRecordsView() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="tp-exam-records-page space-y-4">
       <Card className="tp-filter-card">
         <CardContent className="tp-filter-content">
           <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6">

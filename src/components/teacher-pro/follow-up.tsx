@@ -2269,8 +2269,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }
 
   return (
-    <div className="space-y-5">
-      <Card className="overflow-hidden">
+    <div className={`space-y-5 tp-follow-up-page tp-follow-up-page--${view}`}>
+      <Card className="overflow-hidden tp-follow-up-page__intro">
         <div className="h-1 bg-gradient-to-l from-primary via-fuchsia-500 to-indigo-500" />
         <CardHeader>
           <CardTitle>{viewTitles[view].title}</CardTitle>

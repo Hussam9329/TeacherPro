@@ -775,7 +775,7 @@ export function OpportunitiesView() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="tp-opportunities-page space-y-4">
       {/* Filters */}
       <Card className="tp-filter-card">
         <CardHeader className="pb-2">
