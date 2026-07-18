@@ -515,13 +515,27 @@ export function TeacherProLayout() {
   }, []);
 
   const [openFamilies, setOpenFamilies] = useState<Record<string, boolean>>(() => {
-    // Open all families by default
-    const initial: Record<string, boolean> = {};
-    menuFamilies.forEach((family) => {
-      initial[family.title] = true;
-    });
-    return initial;
+    const activeFamily = menuFamilies.find((family) =>
+      family.itemIds.includes(currentSection),
+    );
+    return Object.fromEntries(
+      menuFamilies.map((family) => [
+        family.title,
+        family.title === activeFamily?.title,
+      ]),
+    );
   });
+
+  useEffect(() => {
+    const activeFamily = menuFamilies.find((family) =>
+      family.itemIds.includes(currentSection),
+    );
+    if (!activeFamily) return;
+    setOpenFamilies((previous) => {
+      if (previous[activeFamily.title]) return previous;
+      return { ...previous, [activeFamily.title]: true };
+    });
+  }, [currentSection]);
 
   const toggleFamily = (title: string) => {
     React.startTransition(() => {
@@ -1078,17 +1092,17 @@ export function TeacherProLayout() {
 
       <aside
         className={cn(
-          "fixed lg:static inset-y-0 right-0 z-50 w-[19rem] h-dvh lg:h-auto bg-sidebar text-sidebar-foreground border-l border-sidebar-border flex flex-col transition-transform duration-300 overflow-hidden shadow-2xl lg:shadow-none",
+          "fixed lg:static inset-y-0 right-0 z-50 h-dvh w-[min(19rem,calc(100vw-1rem))] lg:h-auto lg:w-[18rem] bg-sidebar text-sidebar-foreground border-l border-sidebar-border flex flex-col transition-transform duration-300 overflow-hidden shadow-2xl lg:shadow-none",
           sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
         )}
       >
         <div className="absolute inset-0 pointer-events-none sidebar-aura" />
 
-        <div className="relative p-4 border-b border-sidebar-border">
+        <div className="relative border-b border-sidebar-border p-3.5">
           <div className="flex items-center gap-3">
             <div className="flex-1">
               <h1
-                className="text-2xl font-extrabold tracking-tight md:text-3xl"
+                className="text-xl font-extrabold tracking-tight md:text-2xl"
                 style={{
                   background:
                     "linear-gradient(135deg, oklch(0.75 0.18 300), oklch(0.88 0.14 288), oklch(0.80 0.12 255))",
@@ -1100,7 +1114,7 @@ export function TeacherProLayout() {
               >
                 TeacherPro
               </h1>
-              <p className="text-xs text-sidebar-foreground/60">
+              <p className="text-[11px] leading-5 text-sidebar-foreground/55">
                 واجهة تعليمية احترافية
               </p>
             </div>
@@ -1113,16 +1127,16 @@ export function TeacherProLayout() {
               <X className="w-5 h-5" />
             </Button>
           </div>
-          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-sidebar-border bg-white/[0.04] px-3 py-2">
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-sidebar-border bg-white/[0.04] px-2.5 py-2">
             <div
-              className={`size-2.5 rounded-full ${dbConnected ? "bg-green-500 shadow-[0_0_18px_rgba(34,197,94,0.5)]" : dbLoading ? "bg-yellow-500 animate-pulse" : "bg-red-500 shadow-[0_0_18px_rgba(239,68,68,0.5)]"}`}
+              className={`size-2 rounded-full ${dbConnected ? "bg-green-500 shadow-[0_0_18px_rgba(34,197,94,0.5)]" : dbLoading ? "bg-yellow-500 animate-pulse" : "bg-red-500 shadow-[0_0_18px_rgba(239,68,68,0.5)]"}`}
             />
-            <p className="text-sm font-semibold text-sidebar-foreground truncate">
+            <p className="truncate text-sm font-semibold text-sidebar-foreground">
               {user?.name || "غير مسجل"}
             </p>
             <Badge
               variant="secondary"
-              className="text-[10px] bg-white/10 text-sidebar-foreground border-white/10"
+              className="h-5 border-white/10 bg-white/10 px-1.5 text-[10px] text-sidebar-foreground"
             >
               {user?.role || "-"}
             </Badge>
@@ -1130,7 +1144,7 @@ export function TeacherProLayout() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+              className="h-7 w-7 shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
               title="تسجيل الخروج"
               onClick={() => {
                 logout();
@@ -1141,17 +1155,17 @@ export function TeacherProLayout() {
             </Button>
           </div>
           {!dbLoading && !dbConnected && (
-            <div className="mt-3 rounded-2xl border border-amber-300/30 bg-amber-500/10 px-3 py-2 text-xs leading-6 text-amber-100">
+            <div className="mt-2 rounded-xl border border-amber-300/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-5 text-amber-100">
               أنت تعمل محلياً؛ البيانات قد لا تُحفظ في النظام.
             </div>
           )}
         </div>
 
         <div
-          className="app-scrollbar relative flex-1 overflow-y-auto overscroll-contain py-3"
+          className="app-scrollbar relative flex-1 overflow-y-auto overscroll-contain py-2.5"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
-          <nav className="space-y-3 px-3">
+          <nav className="space-y-2 px-2.5">
             {dashboardMenuItem &&
               (() => {
                 const item = dashboardMenuItem;
@@ -1163,7 +1177,7 @@ export function TeacherProLayout() {
                     href={sectionHref(item.id)}
                     onClick={(event) => handleSectionLinkClick(event, item.id)}
                     className={cn(
-                      "relative w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm transition-all duration-200 group text-right",
+                      "relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-right text-sm transition-all duration-200 group",
                       isActive
                         ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20"
                         : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-[-2px]",
@@ -1171,7 +1185,7 @@ export function TeacherProLayout() {
                   >
                     <span
                       className={cn(
-                        "flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors",
+                        "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
                         isActive
                           ? "bg-white/16"
                           : "bg-white/[0.04] group-hover:bg-white/[0.08]",
@@ -1186,11 +1200,13 @@ export function TeacherProLayout() {
                         )}
                       />
                     </span>
-                    <div className="flex-1 text-right">
-                      <div className="font-medium">{item.title}</div>
+                    <div className="min-w-0 flex-1 text-right">
+                      <div className="truncate font-semibold leading-5">
+                        {item.title}
+                      </div>
                       <div
                         className={cn(
-                          "text-[10px]",
+                          "truncate text-[10px] leading-4",
                           isActive
                             ? "text-sidebar-primary-foreground/70"
                             : "text-sidebar-foreground/40",
@@ -1212,25 +1228,25 @@ export function TeacherProLayout() {
               return (
                 <div
                   key={family.title}
-                  className="rounded-3xl border border-sidebar-border/70 bg-white/[0.025] p-2 shadow-sm"
+                  className="rounded-2xl border border-sidebar-border/60 bg-white/[0.02] p-1.5"
                 >
                   <button
                     type="button"
                     onClick={() => toggleFamily(family.title)}
                     aria-expanded={isFamilyOpen}
                     className={cn(
-                      "w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm transition-all duration-200 text-right group",
+                      "flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-right text-sm transition-all duration-200 group",
                       hasActiveItem
                         ? "bg-sidebar-primary/15 text-sidebar-foreground"
                         : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                     )}
                   >
-                    <span className="flex-1 text-right font-black">
+                    <span className="flex-1 text-right font-bold">
                       {family.title}
                     </span>
                     <Badge
                       variant="secondary"
-                      className="text-[10px] bg-white/10 text-sidebar-foreground border-white/10"
+                      className="h-5 border-white/10 bg-white/10 px-1.5 text-[10px] text-sidebar-foreground"
                     >
                       {family.items.length}
                     </Badge>
@@ -1243,7 +1259,7 @@ export function TeacherProLayout() {
                   </button>
 
                   {isFamilyOpen && (
-                    <div className="mt-2 space-y-1.5">
+                    <div className="mr-2 mt-1.5 space-y-1 border-r border-sidebar-border/50 pr-2">
                       {family.items.map((item) => {
                         const Icon = item.icon;
                         const isActive = currentSection === item.id;
@@ -1255,15 +1271,15 @@ export function TeacherProLayout() {
                               handleSectionLinkClick(event, item.id)
                             }
                             className={cn(
-                              "relative w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm transition-all duration-200 group text-right",
+                              "relative flex w-full items-center gap-2.5 rounded-xl border border-transparent px-2.5 py-2 text-right text-sm transition-all duration-200 group",
                               isActive
-                                ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20"
+                                ? "border-sidebar-primary/30 bg-sidebar-primary text-sidebar-primary-foreground shadow-md shadow-primary/15"
                                 : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-[-2px]",
                             )}
                           >
                             <span
                               className={cn(
-                                "flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors",
+                                "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
                                 isActive
                                   ? "bg-white/16"
                                   : "bg-white/[0.04] group-hover:bg-white/[0.08]",
@@ -1278,11 +1294,13 @@ export function TeacherProLayout() {
                                 )}
                               />
                             </span>
-                            <div className="flex-1 text-right">
-                              <div className="font-medium">{item.title}</div>
+                            <div className="min-w-0 flex-1 text-right">
+                              <div className="truncate font-semibold leading-5">
+                                {item.title}
+                              </div>
                               <div
                                 className={cn(
-                                  "text-[10px]",
+                                  "truncate text-[10px] leading-4",
                                   isActive
                                     ? "text-sidebar-primary-foreground/70"
                                     : "text-sidebar-foreground/40",
@@ -1309,7 +1327,7 @@ export function TeacherProLayout() {
                   href={sectionHref(item.id)}
                   onClick={(event) => handleSectionLinkClick(event, item.id)}
                   className={cn(
-                    "relative w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-sm transition-all duration-200 group text-right",
+                    "relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-right text-sm transition-all duration-200 group",
                     isActive
                       ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-primary/20"
                       : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:translate-x-[-2px]",
@@ -1317,7 +1335,7 @@ export function TeacherProLayout() {
                 >
                   <span
                     className={cn(
-                      "flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors",
+                      "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
                       isActive
                         ? "bg-white/16"
                         : "bg-white/[0.04] group-hover:bg-white/[0.08]",
@@ -1332,8 +1350,10 @@ export function TeacherProLayout() {
                       )}
                     />
                   </span>
-                  <div className="flex-1 text-right">
-                    <div className="font-medium">{item.title}</div>
+                  <div className="min-w-0 flex-1 text-right">
+                    <div className="truncate font-semibold leading-5">
+                      {item.title}
+                    </div>
                     <div
                       className={cn(
                         "text-[10px]",
@@ -1351,11 +1371,11 @@ export function TeacherProLayout() {
           </nav>
         </div>
 
-        <div className="relative border-t border-sidebar-border bg-black/[0.08] p-3 shrink-0">
+        <div className="relative shrink-0 border-t border-sidebar-border bg-black/[0.08] p-2.5">
           <Button
             variant="ghost"
             size="sm"
-            className="w-full justify-start rounded-2xl text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="h-9 w-full justify-start rounded-xl text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             onClick={toggleTheme}
           >
             {theme === "dark" ? (
