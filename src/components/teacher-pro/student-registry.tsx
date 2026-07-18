@@ -3188,7 +3188,11 @@ export function StudentRegistryView() {
             >
               إلغاء
             </Button>
-            <Button variant="destructive" onClick={handleDismiss}>
+            <Button
+              variant="destructive"
+              className="border-red-600 bg-red-600 text-white shadow-sm shadow-red-600/20 hover:border-red-700 hover:bg-red-700 hover:text-white dark:border-red-600 dark:bg-red-600 dark:text-white dark:hover:border-red-500 dark:hover:bg-red-500"
+              onClick={handleDismiss}
+            >
               تأكيد الفصل
             </Button>
           </DialogFooter>

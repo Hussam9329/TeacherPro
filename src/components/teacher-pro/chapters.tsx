@@ -1237,6 +1237,7 @@ export function ChaptersView() {
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
             <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteChapterConfirm}
               disabled={
                 isDeletingChapter ||
@@ -1274,6 +1275,7 @@ export function ChaptersView() {
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
             <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteLinkConfirm}
               disabled={
                 isDeletingLink || !deleteLinkDialog.link?.deleteSafety.canDelete
