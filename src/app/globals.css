@@ -426,6 +426,50 @@
     }
   }
 
+  /* TeacherPro keyboard and assistive-technology access ---------------------
+     Adds visible keyboard focus and a skip link without changing click,
+     navigation, permissions or form behavior. */
+  .tp-skip-link {
+    position: fixed;
+    inset-block-start: 0.75rem;
+    inset-inline-start: 0.75rem;
+    z-index: 100;
+    transform: translateY(-180%);
+    border: 2px solid var(--primary);
+    border-radius: 0.875rem;
+    background: var(--background);
+    color: var(--foreground);
+    padding: 0.65rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 800;
+    box-shadow: var(--shadow-soft);
+    transition: transform 140ms ease;
+  }
+
+  .tp-skip-link:focus-visible {
+    transform: translateY(0);
+  }
+
+  .tp-readable-ui :is(a, button, input, textarea, select, [role="button"], [role="combobox"], [role="tab"]):focus-visible {
+    outline: 3px solid color-mix(in oklch, var(--ring) 78%, transparent);
+    outline-offset: 3px;
+  }
+
+  #teacherpro-main-content {
+    scroll-margin-block-start: 6rem;
+  }
+
+  @media (prefers-contrast: more) {
+    .tp-readable-ui {
+      --border: color-mix(in oklch, var(--foreground) 32%, var(--background));
+      --muted-foreground: color-mix(in oklch, var(--foreground) 76%, var(--background));
+    }
+
+    .tp-readable-ui :is(a, button, input, textarea, select, [role="button"], [role="combobox"], [role="tab"]):focus-visible {
+      outline-width: 4px;
+    }
+  }
+
   /* TeacherPro long-form layout --------------------------------------------
      Visual grouping only: fields, values, validation, submit handlers and
      responsive grid definitions remain owned by the original screens. */

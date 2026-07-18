@@ -449,7 +449,14 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
               <h1 className="text-3xl font-extrabold text-gradient-brand">TeacherPro</h1>
               <p className="mt-1 text-sm text-muted-foreground">تسجيل دخول مدير النظام</p>
             </div>
-            <Button variant="outline" size="icon" className="rounded-full" onClick={toggleTheme} type="button">
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-full"
+              onClick={toggleTheme}
+              type="button"
+              aria-label={theme === "dark" ? "تفعيل الوضع الصباحي" : "تفعيل الوضع الليلي"}
+            >
               {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>
           </div>
@@ -1128,6 +1135,9 @@ export function TeacherProLayout() {
 
   return (
     <div className="app-bg tp-readable-ui flex h-dvh overflow-hidden bg-background" dir="rtl">
+      <a className="tp-skip-link" href="#teacherpro-main-content">
+        تجاوز إلى المحتوى الرئيسي
+      </a>
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
@@ -1136,6 +1146,7 @@ export function TeacherProLayout() {
       )}
 
       <aside
+        aria-label="التنقل الرئيسي"
         className={cn(
           "fixed lg:static inset-y-0 right-0 z-50 h-dvh w-[min(19rem,calc(100vw-1rem))] lg:h-auto lg:w-[18rem] bg-sidebar text-sidebar-foreground border-l border-sidebar-border flex flex-col transition-transform duration-300 overflow-hidden shadow-2xl lg:shadow-none",
           sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
@@ -1168,6 +1179,7 @@ export function TeacherProLayout() {
               size="icon"
               className="lg:hidden text-sidebar-foreground hover:bg-sidebar-accent"
               onClick={() => setSidebarOpen(false)}
+              aria-label="إغلاق القائمة الجانبية"
             >
               <X className="w-5 h-5" />
             </Button>
@@ -1191,6 +1203,7 @@ export function TeacherProLayout() {
               size="icon"
               className="h-7 w-7 shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
               title="تسجيل الخروج"
+              aria-label="تسجيل الخروج"
               onClick={() => {
                 logout();
                 toast.success("تم تسجيل الخروج");
@@ -1210,7 +1223,7 @@ export function TeacherProLayout() {
           className="app-scrollbar relative flex-1 overflow-y-auto overscroll-contain py-2.5"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
-          <nav className="space-y-2 px-2.5">
+          <nav className="space-y-2 px-2.5" aria-label="صفحات النظام">
             {dashboardMenuItem &&
               (() => {
                 const item = dashboardMenuItem;
@@ -1221,6 +1234,7 @@ export function TeacherProLayout() {
                     key={item.id}
                     href={sectionHref(item.id)}
                     onClick={(event) => handleSectionLinkClick(event, item.id)}
+                    aria-current={isActive ? "page" : undefined}
                     className={cn(
                       "relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-right text-sm transition-all duration-200 group",
                       isActive
@@ -1315,6 +1329,7 @@ export function TeacherProLayout() {
                             onClick={(event) =>
                               handleSectionLinkClick(event, item.id)
                             }
+                            aria-current={isActive ? "page" : undefined}
                             className={cn(
                               "relative flex w-full items-center gap-2.5 rounded-xl border border-transparent px-2.5 py-2 text-right text-sm transition-all duration-200 group",
                               isActive
@@ -1371,6 +1386,7 @@ export function TeacherProLayout() {
                   key={item.id}
                   href={sectionHref(item.id)}
                   onClick={(event) => handleSectionLinkClick(event, item.id)}
+                  aria-current={isActive ? "page" : undefined}
                   className={cn(
                     "relative flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-right text-sm transition-all duration-200 group",
                     isActive
@@ -1433,7 +1449,10 @@ export function TeacherProLayout() {
         </div>
       </aside>
 
-      <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <main
+        className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        aria-label="محتوى TeacherPro"
+      >
         <header className="sticky top-0 z-30 border-b border-border/70 bg-background/90 shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-background/78">
           <div className="flex min-h-[4.5rem] items-center justify-between gap-3 px-3 py-2.5 md:min-h-[5.5rem] md:px-6 md:py-3">
             <div className="flex min-w-0 flex-1 items-center gap-2.5 md:gap-3.5">
@@ -1442,6 +1461,7 @@ export function TeacherProLayout() {
                 size="icon"
                 className="shrink-0 lg:hidden"
                 onClick={toggleSidebar}
+                aria-label="فتح القائمة الجانبية"
               >
                 <Menu className="h-5 w-5" />
               </Button>
@@ -1540,6 +1560,7 @@ export function TeacherProLayout() {
                 size="icon"
                 onClick={toggleTheme}
                 className="shrink-0 rounded-full"
+                aria-label={theme === "dark" ? "تفعيل الوضع الصباحي" : "تفعيل الوضع الليلي"}
               >
                 {theme === "dark" ? (
                   <Sun className="h-4 w-4" />
@@ -1564,7 +1585,9 @@ export function TeacherProLayout() {
         )}
 
         <div
+          id="teacherpro-main-content"
           ref={mainScrollRef}
+          tabIndex={-1}
           className="app-scrollbar flex-1 overflow-y-auto overscroll-contain p-3 md:p-6 xl:p-8"
         >
           <div className="content-container space-y-4 md:space-y-6" data-teacherpro-active-content="true" data-teacherpro-section={currentSection}>
