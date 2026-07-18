@@ -123,6 +123,18 @@
   --shadow-soft: 0 18px 50px oklch(0.42 0.12 300 / 0.10);
   --shadow-card: 0 12px 36px oklch(0.30 0.08 300 / 0.08);
   --shadow-ring: 0 0 0 4px oklch(0.62 0.21 300 / 0.16);
+  --status-success-fg: oklch(0.43 0.14 152);
+  --status-success-bg: oklch(0.96 0.035 152);
+  --status-success-border: oklch(0.74 0.10 152);
+  --status-warning-fg: oklch(0.48 0.13 72);
+  --status-warning-bg: oklch(0.97 0.045 82);
+  --status-warning-border: oklch(0.78 0.11 76);
+  --status-danger-fg: oklch(0.50 0.20 25);
+  --status-danger-bg: oklch(0.96 0.035 25);
+  --status-danger-border: oklch(0.76 0.12 25);
+  --status-info-fg: oklch(0.45 0.14 245);
+  --status-info-bg: oklch(0.96 0.03 245);
+  --status-info-border: oklch(0.75 0.10 245);
 }
 
 .dark {
@@ -166,6 +178,18 @@
   --shadow-soft: 0 22px 70px oklch(0.03 0.02 292 / 0.50);
   --shadow-card: 0 16px 44px oklch(0.02 0.02 292 / 0.38);
   --shadow-ring: 0 0 0 4px oklch(0.72 0.22 300 / 0.22);
+  --status-success-fg: oklch(0.78 0.14 152);
+  --status-success-bg: oklch(0.24 0.055 152);
+  --status-success-border: oklch(0.52 0.10 152);
+  --status-warning-fg: oklch(0.84 0.13 82);
+  --status-warning-bg: oklch(0.25 0.055 76);
+  --status-warning-border: oklch(0.55 0.11 76);
+  --status-danger-fg: oklch(0.80 0.15 25);
+  --status-danger-bg: oklch(0.24 0.06 25);
+  --status-danger-border: oklch(0.54 0.12 25);
+  --status-info-fg: oklch(0.80 0.12 245);
+  --status-info-bg: oklch(0.24 0.05 245);
+  --status-info-border: oklch(0.54 0.10 245);
 }
 
 @layer base {
@@ -468,6 +492,69 @@
     .tp-readable-ui :is(a, button, input, textarea, select, [role="button"], [role="combobox"], [role="tab"]):focus-visible {
       outline-width: 4px;
     }
+  }
+
+  /* TeacherPro semantic status colors ---------------------------------------
+     Maps legacy shade variants to four stable meanings: success, warning,
+     danger and information. Values, conditions and component behavior stay intact. */
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="text-emerald-"], [class*="text-green-"]) {
+    color: var(--status-success-fg) !important;
+  }
+
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="bg-emerald-"], [class*="bg-green-"]) {
+    background-color: var(--status-success-bg) !important;
+  }
+
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="border-emerald-"], [class*="border-green-"]) {
+    border-color: var(--status-success-border) !important;
+  }
+
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="text-amber-"], [class*="text-yellow-"], [class*="text-orange-"]) {
+    color: var(--status-warning-fg) !important;
+  }
+
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="bg-amber-"], [class*="bg-yellow-"], [class*="bg-orange-"]) {
+    background-color: var(--status-warning-bg) !important;
+  }
+
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="border-amber-"], [class*="border-yellow-"], [class*="border-orange-"]) {
+    border-color: var(--status-warning-border) !important;
+  }
+
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="text-red-"], [class*="text-rose-"]) {
+    color: var(--status-danger-fg) !important;
+  }
+
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="bg-red-"], [class*="bg-rose-"]) {
+    background-color: var(--status-danger-bg) !important;
+  }
+
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="border-red-"], [class*="border-rose-"]) {
+    border-color: var(--status-danger-border) !important;
+  }
+
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="text-sky-"], [class*="text-blue-"], [class*="text-cyan-"]) {
+    color: var(--status-info-fg) !important;
+  }
+
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="bg-sky-"], [class*="bg-blue-"], [class*="bg-cyan-"]) {
+    background-color: var(--status-info-bg) !important;
+  }
+
+  :is(.tp-semantic-colors, [data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-sonner-toast])
+    :is([class*="border-sky-"], [class*="border-blue-"], [class*="border-cyan-"]) {
+    border-color: var(--status-info-border) !important;
   }
 
   /* TeacherPro long-form layout --------------------------------------------
