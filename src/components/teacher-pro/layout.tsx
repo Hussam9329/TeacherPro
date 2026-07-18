@@ -439,20 +439,20 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
   };
 
   return (
-    <div className="app-bg tp-readable-ui tp-semantic-colors min-h-dvh flex items-center justify-center bg-background p-4" dir="rtl">
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top,rgba(147,51,234,0.18),transparent_32rem)]" />
-      <div className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-border/70 bg-card/95 shadow-2xl backdrop-blur-xl">
-        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-primary via-fuchsia-500 to-indigo-500" />
-        <div className="p-7 space-y-6">
-          <div className="flex items-center justify-between gap-3">
+    <div className="app-bg tp-readable-ui tp-semantic-colors tp-login-screen" dir="rtl">
+      <div className="tp-login-backdrop" />
+      <div className="tp-login-card">
+        <div className="tp-login-card__accent" />
+        <div className="tp-login-card__content">
+          <div className="tp-login-header">
             <div>
-              <h1 className="text-3xl font-extrabold text-gradient-brand">TeacherPro</h1>
-              <p className="mt-1 text-sm text-muted-foreground">تسجيل دخول مدير النظام</p>
+              <h1 className="tp-login-title text-gradient-brand">TeacherPro</h1>
+              <p className="tp-login-subtitle">تسجيل دخول مدير النظام</p>
             </div>
             <Button
               variant="outline"
               size="icon"
-              className="rounded-full"
+              className="tp-login-theme"
               onClick={toggleTheme}
               type="button"
               aria-label={theme === "dark" ? "تفعيل الوضع الصباحي" : "تفعيل الوضع الليلي"}
@@ -461,8 +461,8 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
             </Button>
           </div>
 
-          <form onSubmit={handleSubmit} className="tp-validation-form space-y-4">
-            <div className="space-y-2">
+          <form onSubmit={handleSubmit} className="tp-validation-form tp-login-form">
+            <div className="tp-login-field">
               <Label htmlFor="login-username">اسم المستخدم</Label>
               <Input
                 id="login-username"
@@ -470,10 +470,10 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 placeholder="اسم المستخدم"
-                className="h-12 rounded-2xl"
+                className="tp-login-input"
               />
             </div>
-            <div className="space-y-2">
+            <div className="tp-login-field">
               <Label htmlFor="login-password">الرمز</Label>
               <Input
                 id="login-password"
@@ -482,16 +482,16 @@ function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="الرمز"
-                className="h-12 rounded-2xl"
+                className="tp-login-input"
               />
             </div>
-            <Button type="submit" className="h-12 w-full rounded-2xl text-base font-bold" disabled={loading}>
+            <Button type="submit" className="tp-login-submit" disabled={loading}>
               <KeyRound className="ml-2 h-4 w-4" />
               {loading ? "جاري الدخول..." : "دخول للنظام"}
             </Button>
           </form>
 
-          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-xs leading-6 text-muted-foreground">
+          <div className="tp-login-help">
             للحصول على حساب تواصل مع مدير النظام.
           </div>
         </div>
@@ -1115,6 +1115,35 @@ export function TeacherProLayout() {
   const currentPageDescription =
     sectionDescriptions[currentSection] ||
     "إدارة ذكية وسريعة للطلاب والامتحانات والفرص.";
+  const connectionVisualStatus = dbLoading
+    ? "loading"
+    : !dbConnected
+      ? "offline"
+      : syncStatus.status === "error"
+        ? "error"
+        : syncStatus.status === "pending" || syncStatus.status === "refreshing"
+          ? "syncing"
+          : "online";
+  const connectionVisualLabel =
+    connectionVisualStatus === "loading"
+      ? "جاري الاتصال"
+      : connectionVisualStatus === "offline"
+        ? "غير متصل"
+        : connectionVisualStatus === "error"
+          ? "تعذر المزامنة"
+          : connectionVisualStatus === "syncing"
+            ? "جاري المزامنة"
+            : "متصل";
+  const connectionVisualDescription =
+    connectionVisualStatus === "offline"
+      ? "الاتصال بالنظام غير متاح؛ قد تبقى التغييرات محفوظة محليًا حتى عودة الاتصال."
+      : connectionVisualStatus === "error"
+        ? syncStatus.message || "تعذر إكمال مزامنة البيانات مع النظام."
+        : connectionVisualStatus === "syncing"
+          ? "تتم مزامنة البيانات الحالية مع النظام في الخلفية."
+          : connectionVisualStatus === "loading"
+            ? "يجري التحقق من الاتصال ببيانات النظام."
+            : "الاتصال مستقر والبيانات متاحة من النظام.";
 
   if (!authChecked) {
     return (
@@ -1186,7 +1215,13 @@ export function TeacherProLayout() {
           </div>
           <div className="mt-3 flex items-center gap-2 rounded-xl border border-sidebar-border bg-white/[0.04] px-2.5 py-2">
             <div
-              className={`size-2 rounded-full ${dbConnected ? "bg-green-500 shadow-[0_0_18px_rgba(34,197,94,0.5)]" : dbLoading ? "bg-yellow-500 animate-pulse" : "bg-red-500 shadow-[0_0_18px_rgba(239,68,68,0.5)]"}`}
+              className={cn(
+                "tp-connection-dot",
+                `tp-connection-dot--${connectionVisualStatus}`,
+              )}
+              role="status"
+              aria-label={connectionVisualLabel}
+              title={connectionVisualDescription}
             />
             <p className="truncate text-sm font-semibold text-sidebar-foreground">
               {user?.name || "غير مسجل"}
@@ -1214,7 +1249,7 @@ export function TeacherProLayout() {
           </div>
           {!dbLoading && !dbConnected && (
             <div className="mt-2 rounded-xl border border-amber-300/30 bg-amber-500/10 px-2.5 py-1.5 text-[11px] leading-5 text-amber-100">
-              أنت تعمل محلياً؛ البيانات قد لا تُحفظ في النظام.
+              غير متصل بالنظام؛ قد تبقى التغييرات محليًا حتى عودة الاتصال.
             </div>
           )}
         </div>
@@ -1504,6 +1539,18 @@ export function TeacherProLayout() {
             </div>
 
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <div
+                className={cn(
+                  "tp-connection-badge",
+                  `tp-connection-badge--${connectionVisualStatus}`,
+                )}
+                role="status"
+                aria-live="polite"
+                title={connectionVisualDescription}
+              >
+                <span className="tp-connection-badge__dot" aria-hidden="true" />
+                <span className="hidden lg:inline">{connectionVisualLabel}</span>
+              </div>
               {actionStatus.status !== "idle" ? (
                 <Badge
                   variant={actionStatus.status === "failed" ? "destructive" : "outline"}
@@ -1580,7 +1627,7 @@ export function TeacherProLayout() {
 
         {!dbLoading && !dbConnected && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100 md:px-6">
-            أنت تعمل محلياً؛ البيانات قد لا تُحفظ في النظام. تأكد من الاتصال بالنظام قبل الاعتماد على التغييرات.
+            غير متصل بالنظام. قد تبقى التغييرات محفوظة محليًا حتى عودة الاتصال؛ تحقق من حالة الاتصال قبل إغلاق النظام.
           </div>
         )}
 

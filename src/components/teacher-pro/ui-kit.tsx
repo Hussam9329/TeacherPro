@@ -141,17 +141,22 @@ export function LoadingState({
   description?: string;
 }) {
   return (
-    <div className="rounded-2xl border bg-card/85 p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+    <div
+      className="tp-loading-state"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <div className="tp-loading-state__layout">
+        <div className="tp-loading-state__icon" aria-hidden="true">
           <Loader2 className="size-5 animate-spin" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-bold text-foreground">{title}</p>
-          <p className="mt-1 text-xs leading-6 text-muted-foreground">{description}</p>
-          <div className="mt-3 space-y-2">
-            <div className="h-3 w-full animate-pulse rounded-full bg-muted" />
-            <div className="h-3 w-2/3 animate-pulse rounded-full bg-muted" />
+          <p className="tp-loading-state__title">{title}</p>
+          <p className="tp-loading-state__description">{description}</p>
+          <div className="tp-loading-state__skeleton" aria-hidden="true">
+            <div className="tp-loading-state__line w-full" />
+            <div className="tp-loading-state__line w-2/3" />
           </div>
         </div>
       </div>
