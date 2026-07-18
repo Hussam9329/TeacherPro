@@ -872,9 +872,9 @@ export function StudentBulkTextImportView() {
   };
 
   return (
-    <div className="section-stack mx-auto max-w-7xl">
-      <Card className="gap-0 overflow-hidden py-0">
-        <CardHeader className="relative overflow-hidden border-b bg-card/70 p-5 md:p-6">
+    <div className="section-stack tp-bulk-import mx-auto max-w-7xl">
+      <Card className="tp-bulk-import__shell gap-0 overflow-hidden py-0">
+        <CardHeader className="tp-bulk-import__hero relative overflow-hidden border-b bg-card/70 p-5 md:p-6">
           <div className="absolute inset-inline-start-0 top-0 h-28 w-28 rounded-full bg-primary/20 blur-3xl" />
           <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-3">
@@ -894,8 +894,8 @@ export function StudentBulkTextImportView() {
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-6 p-4 md:p-6 lg:p-8">
-          <section className="surface-card p-5 md:p-6">
+        <CardContent className="tp-bulk-import__content space-y-6 p-4 md:p-6 lg:p-8">
+          <section className="surface-card tp-bulk-import__input p-5 md:p-6">
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h3 className="text-lg font-black">مربع الإدخال</h3>
@@ -979,7 +979,7 @@ export function StudentBulkTextImportView() {
           </section>
 
           {previewDone && (
-            <section className="surface-card p-5 md:p-6">
+            <section className="surface-card tp-bulk-import__preview p-5 md:p-6">
               <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h3 className="text-lg font-black">نتيجة المعاينة</h3>

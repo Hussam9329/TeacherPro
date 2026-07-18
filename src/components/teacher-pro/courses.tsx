@@ -1190,7 +1190,7 @@ export function CoursesView() {
   });
 
   const renderStats = () => (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="tp-courses__stats grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       <div className="rounded-2xl border bg-card/80 p-4 shadow-sm">
         <p className="text-xs text-muted-foreground">
           إجمالي الدورات في النظام
@@ -1225,7 +1225,7 @@ export function CoursesView() {
   );
 
   const renderLoadingSkeleton = () => (
-    <div className="grid gap-4 xl:grid-cols-2">
+    <div className="tp-courses__loading grid gap-4 xl:grid-cols-2">
       {[0, 1, 2, 3].map((index) => (
         <div
           key={index}
@@ -1258,9 +1258,9 @@ export function CoursesView() {
     return (
       <div
         key={row.id}
-        className="rounded-3xl border bg-card/90 p-5 shadow-sm transition-colors hover:border-primary/25"
+        className="tp-course-card rounded-3xl border bg-card/90 p-5 shadow-sm transition-colors hover:border-primary/25"
       >
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
+        <div className="tp-course-card__header flex flex-wrap items-start justify-between gap-3 border-b pb-4">
           <div className="min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <b className="text-lg leading-tight">{row.course.name}</b>
@@ -1278,7 +1278,7 @@ export function CoursesView() {
               النظام
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="tp-course-card__actions flex flex-wrap gap-2">
             <Button
               variant="secondary"
               size="sm"
@@ -1297,7 +1297,7 @@ export function CoursesView() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="tp-course-card__metrics mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-2xl border bg-muted/20 p-3">
             <p className="text-[11px] text-muted-foreground">الطلاب</p>
             <p className="text-xl font-black">{row.counts.students}</p>
@@ -1337,8 +1337,8 @@ export function CoursesView() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-          <div className="space-y-3 rounded-2xl border bg-muted/15 p-4">
+        <div className="tp-course-card__details mt-4 grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+          <div className="tp-course-card__config space-y-3 rounded-2xl border bg-muted/15 p-4">
             <p className="text-xs font-bold text-muted-foreground">
               إعدادات التسجيل
             </p>
@@ -1368,7 +1368,7 @@ export function CoursesView() {
             )}
           </div>
 
-          <div className="space-y-3 rounded-2xl border bg-muted/15 p-4">
+          <div className="tp-course-card__impact space-y-3 rounded-2xl border bg-muted/15 p-4">
             <p className="text-xs font-bold text-muted-foreground">
               الأثر الحالي
             </p>
@@ -1406,7 +1406,7 @@ export function CoursesView() {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <div className="tp-course-card__footer mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
           <p className="max-w-2xl text-xs leading-6 text-muted-foreground">
             {row.deleteSafety.recommendedAction} التعطيل يوقف الدورة عن التسجيل
             والاختيارات الجديدة فقط ولا يغيّر بيانات الطلاب الحاليين.
@@ -1425,8 +1425,8 @@ export function CoursesView() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-3xl border bg-card/90 p-5 shadow-sm">
+    <div className="tp-courses space-y-6">
+      <div className="tp-courses__intro rounded-3xl border bg-card/90 p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
@@ -1448,7 +1448,7 @@ export function CoursesView() {
       {renderStats()}
 
       {showCreateForm ? (
-        <Card className="rounded-3xl border-primary/20 shadow-sm">
+        <Card className="tp-courses__create rounded-3xl border-primary/20 shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BookOpen className="size-5 text-primary" />
@@ -1467,7 +1467,7 @@ export function CoursesView() {
         </Card>
       ) : null}
 
-      <Card className="tp-filter-card rounded-3xl shadow-sm">
+      <Card className="tp-courses__list tp-filter-card rounded-3xl shadow-sm">
         <CardHeader className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle>قائمة الدورات</CardTitle>
@@ -1582,7 +1582,7 @@ export function CoursesView() {
               description="غيّر البحث أو الفلاتر، أو أضف دورة جديدة من زر الإضافة أعلاه."
             />
           ) : (
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div className="tp-courses__grid grid gap-4 xl:grid-cols-2">
               {filteredRows.map(renderCourseCard)}
             </div>
           )}

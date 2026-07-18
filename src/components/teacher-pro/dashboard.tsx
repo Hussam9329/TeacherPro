@@ -165,8 +165,8 @@ export function DashboardView() {
   const alerts = stats?.alerts ?? [];
 
   return (
-    <div className="section-stack">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="section-stack tp-dashboard">
+      <div className="tp-dashboard__kpis grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpiCards.map((card) => (
           <StatCard
             key={card.label}
@@ -179,28 +179,7 @@ export function DashboardView() {
         ))}
       </div>
 
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-background text-primary">
-              <Database className="size-5" />
-            </div>
-            <div>
-              <p className="font-black">مصدر أرقام اللوحة: بيانات النظام</p>
-              <p className="mt-1 text-xs leading-6 text-muted-foreground">
-                لا يتم حساب بطاقات الرئيسية من بيانات الطلاب المؤقتة أو الصفحات المحملة جزئياً. آخر تحديث: {statsLoading ? "جاري التحميل" : formatStatsTime(stats?.generatedAt)}
-              </p>
-              {statsError && <p className="mt-1 text-xs font-bold text-destructive">{statsError}</p>}
-            </div>
-          </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => void loadStats({ background: true })} disabled={statsLoading}>
-            <RefreshCw className={cn("ml-2 size-4", statsLoading && "animate-spin")} />
-            تحديث من بيانات النظام
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="overflow-hidden">
+      <Card className="tp-dashboard__alerts overflow-hidden">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -273,7 +252,7 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden border-amber-200/70 bg-gradient-to-l from-amber-50 to-background dark:border-amber-900/50 dark:from-amber-950/30 dark:to-background">
+      <Card className="tp-dashboard__missing overflow-hidden border-amber-200/70 bg-gradient-to-l from-amber-50 to-background dark:border-amber-900/50 dark:from-amber-950/30 dark:to-background">
         <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
             <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
@@ -297,7 +276,7 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="tp-dashboard__activity">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <div>
             <CardTitle className="text-base">آخر الفعاليات</CardTitle>
@@ -348,6 +327,27 @@ export function DashboardView() {
               ))
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="tp-dashboard__source border-primary/20 bg-primary/5">
+        <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between xl:flex-col xl:items-stretch">
+          <div className="flex items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-background text-primary">
+              <Database className="size-5" />
+            </div>
+            <div>
+              <p className="font-black">مصدر أرقام اللوحة: بيانات النظام</p>
+              <p className="mt-1 text-xs leading-6 text-muted-foreground">
+                لا يتم حساب بطاقات الرئيسية من بيانات الطلاب المؤقتة أو الصفحات المحملة جزئياً. آخر تحديث: {statsLoading ? "جاري التحميل" : formatStatsTime(stats?.generatedAt)}
+              </p>
+              {statsError && <p className="mt-1 text-xs font-bold text-destructive">{statsError}</p>}
+            </div>
+          </div>
+          <Button type="button" variant="outline" size="sm" className="xl:w-full" onClick={() => void loadStats({ background: true })} disabled={statsLoading}>
+            <RefreshCw className={cn("ml-2 size-4", statsLoading && "animate-spin")} />
+            تحديث من بيانات النظام
+          </Button>
         </CardContent>
       </Card>
     </div>

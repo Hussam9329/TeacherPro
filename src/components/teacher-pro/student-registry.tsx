@@ -1625,8 +1625,8 @@ export function StudentRegistryView() {
   }
 
   return (
-    <div className="space-y-4">
-      <Card className="tp-filter-card">
+    <div className="tp-student-registry space-y-4">
+      <Card className="tp-filter-card tp-student-registry__filters">
         <CardContent className="tp-filter-content">
           <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
             <div className="tp-filter-field tp-filter-primary">
@@ -1856,7 +1856,7 @@ export function StudentRegistryView() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="tp-student-registry__stats grid grid-cols-1 gap-3 md:grid-cols-3">
         <Card className="bg-card/80">
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
@@ -1918,7 +1918,7 @@ export function StudentRegistryView() {
         </Card>
       </div>
 
-      <div className="space-y-2">
+      <div className="tp-student-registry__results space-y-2">
         <CountScopeSummary
           subject="الطلاب"
           systemTotal={studentsSystemTotal ?? "…"}
@@ -1998,7 +1998,7 @@ export function StudentRegistryView() {
           }
         />
       ) : viewMode === "cards" ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="tp-student-registry__cards grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {paged.map((student) => (
             <Card
               key={student.id}

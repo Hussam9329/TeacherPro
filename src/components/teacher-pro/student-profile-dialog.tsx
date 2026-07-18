@@ -646,13 +646,13 @@ export function StudentProfileDialog({
   const profileContent = (
     <section
       dir="rtl"
-      className="fixed inset-0 z-[999] flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden bg-background text-foreground"
+      className="tp-student-profile fixed inset-0 z-[999] flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden bg-background text-foreground"
       aria-labelledby="student-profile-title"
       role="dialog"
       aria-modal="true"
     >
       <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background">
-        <div className="sticky top-0 z-30 shrink-0 border-b bg-background/95 p-4 text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-6">
+        <div className="tp-student-profile__header sticky top-0 z-30 shrink-0 border-b bg-background/95 p-4 text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-6">
           <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -689,9 +689,9 @@ export function StudentProfileDialog({
           </div>
         </div>
 
-        <div ref={contentScrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 lg:p-6 [scrollbar-gutter:stable]">
+        <div ref={contentScrollRef} className="tp-student-profile__content min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 lg:p-6 [scrollbar-gutter:stable]">
           <div className="space-y-4 sm:space-y-5">
-            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
+            <div className="tp-student-profile__nav grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
               {cards.map((item) => (
                 <button
                   key={`${item.id}-${item.label}`}

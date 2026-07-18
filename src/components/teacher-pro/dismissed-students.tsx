@@ -623,8 +623,8 @@ export function DismissedStudentsView() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="tp-dismissed-students space-y-4">
+      <div className="tp-dismissed-students__stats grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard
           label="إجمالي المفصولين في النظام"
           value={dismissedStatsLoading ? "..." : systemDismissedStats.total}
@@ -683,7 +683,7 @@ export function DismissedStudentsView() {
 
       {renderStatusBanner()}
 
-      <Card className="tp-filter-card">
+      <Card className="tp-filter-card tp-dismissed-students__filters">
         <CardHeader>
           <CardTitle>الطلاب المفصولون</CardTitle>
         </CardHeader>
@@ -819,7 +819,7 @@ export function DismissedStudentsView() {
       </Card>
 
       {viewMode === "cards" ? (
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <div className="tp-dismissed-students__cards grid grid-cols-1 gap-3 xl:grid-cols-2">
           {dismissedStudents.map((student) => {
             const reactivating = Boolean(reactivatingIds[student.id]);
             return (

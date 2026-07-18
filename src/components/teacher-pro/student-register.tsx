@@ -731,9 +731,9 @@ export function StudentRegisterView() {
   );
 
   return (
-    <div className="section-stack mx-auto max-w-7xl">
-      <Card className="gap-0 overflow-hidden py-0">
-        <CardHeader className="relative overflow-hidden border-b bg-card/70 p-5 md:p-6">
+    <div className="tp-register section-stack mx-auto max-w-7xl">
+      <Card className="tp-register__shell gap-0 overflow-hidden py-0">
+        <CardHeader className="tp-register__hero relative overflow-hidden border-b bg-card/70 p-5 md:p-6">
           <div className="absolute inset-inline-start-0 top-0 h-28 w-28 rounded-full bg-primary/20 blur-3xl" />
           <div className="absolute inset-inline-end-0 bottom-0 h-24 w-36 rounded-full bg-primary/10 blur-3xl" />
           <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -742,7 +742,7 @@ export function StudentRegisterView() {
                 <UserPlus className="size-7" />
               </div>
               <div>
-                <CardTitle className="text-2xl font-black tracking-tight text-gradient-brand md:text-3xl">
+                <CardTitle className="text-xl font-black tracking-tight text-gradient-brand md:text-2xl">
                   إضافة طالب جديد
                 </CardTitle>
                 <CardDescription className="mt-2 leading-6">
@@ -753,7 +753,7 @@ export function StudentRegisterView() {
           </div>
         </CardHeader>
 
-        <CardContent className="p-4 md:p-6 lg:p-8">
+        <CardContent className="tp-register__content p-4 md:p-6 lg:p-8">
           {contextLoading ? (
             <LoadingState
               title="جاري تحميل سياق التسجيل من بيانات النظام..."
@@ -779,12 +779,14 @@ export function StudentRegisterView() {
           <form
             onSubmit={handleSubmit}
             autoComplete="off"
-            className="tp-validation-form tp-long-form space-y-6"
+            className="tp-register__form tp-validation-form tp-long-form space-y-6"
           >
-            <StepProgress steps={formSteps} />
+            <div className="tp-register__progress">
+              <StepProgress steps={formSteps} />
+            </div>
 
             {registerContext && (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="tp-register__context-stats grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-2xl border bg-background/70 p-4">
                   <p className="text-xs font-bold text-muted-foreground">
                     الدورات النشطة
@@ -820,7 +822,7 @@ export function StudentRegisterView() {
               </div>
             )}
 
-            <section className="surface-card tp-form-section p-5 md:p-6">
+            <section className="tp-register__section surface-card tp-form-section p-5 md:p-6">
               <SectionTitle
                 icon={BookOpen}
                 title="تفاصيل الدورة"
@@ -1215,7 +1217,7 @@ export function StudentRegisterView() {
                 )}
             </section>
 
-            <section className="surface-card tp-form-section p-5 md:p-6">
+            <section className="tp-register__section surface-card tp-form-section p-5 md:p-6">
               <SectionTitle
                 icon={User}
                 title="بيانات الطالب"
@@ -1417,7 +1419,7 @@ export function StudentRegisterView() {
               </div>
             </section>
 
-            <section className="surface-card tp-form-section p-5 md:p-6">
+            <section className="tp-register__section surface-card tp-form-section p-5 md:p-6">
               <SectionTitle
                 icon={CalendarDays}
                 title="إعدادات التسجيل"
@@ -1502,7 +1504,7 @@ export function StudentRegisterView() {
               </div>
             </section>
 
-            <div className="tp-form-actions flex flex-col gap-3 rounded-3xl border bg-muted/35 p-4 md:flex-row md:items-center md:justify-between">
+            <div className="tp-register__actions tp-form-actions flex flex-col gap-3 rounded-3xl border bg-muted/35 p-4 md:flex-row md:items-center md:justify-between">
               <div className="min-w-0 space-y-2">
                 <span className="tp-save-indicator tp-save-indicator--local">
                   {hasDraftData

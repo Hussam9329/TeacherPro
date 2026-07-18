@@ -559,13 +559,13 @@ export function ExamNewView() {
   };
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
+    <div className="tp-exam-new space-y-6">
+      <Card className="tp-exam-new__shell">
+        <CardHeader className="tp-exam-new__header">
           <CardTitle>إضافة امتحان جديد</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <CardContent className="tp-exam-new__content space-y-4">
+          <div className="tp-exam-new__stats grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className="rounded-2xl border bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">الدورات الصالحة</p>
               <p className="text-2xl font-black">{contextLoading ? "..." : selectableCourses.length}</p>
@@ -584,7 +584,7 @@ export function ExamNewView() {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="tp-validation-form tp-long-form tp-exam-form space-y-4">
+          <form onSubmit={handleSubmit} className="tp-validation-form tp-long-form tp-exam-form tp-exam-new__form space-y-4">
             {renderFormFields(form, setForm, "exam")}
             <Button type="submit" disabled={isAddingExam || contextLoading || Boolean(contextError)} className="tp-form-submit w-full">
               {isAddingExam ? "جاري الإضافة..." : "إضافة الامتحان"}

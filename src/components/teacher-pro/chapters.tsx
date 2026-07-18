@@ -602,7 +602,7 @@ export function ChaptersView() {
   );
 
   const renderCourseRow = (row: CourseRow) => (
-    <Card key={row.id} className="overflow-hidden border bg-card/90 shadow-sm">
+    <Card key={row.id} className="tp-chapters__course-row overflow-hidden border bg-card/90 shadow-sm">
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -646,7 +646,7 @@ export function ChaptersView() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="tp-chapters__course-stats grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {statCard(
             "الطلاب",
             row.counts.students,
@@ -692,7 +692,7 @@ export function ChaptersView() {
               {row.links.map((link) => (
                 <div
                   key={link.id}
-                  className={`rounded-2xl border p-3 ${link.active ? "border-primary bg-primary/5" : "bg-muted/20"}`}
+                  className={`tp-chapters__link rounded-2xl border p-3 ${link.active ? "border-primary bg-primary/5" : "bg-muted/20"}`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
@@ -744,7 +744,7 @@ export function ChaptersView() {
   );
 
   const renderChapterRow = (row: ChapterRow) => (
-    <div key={row.id} className="rounded-2xl border bg-card/80 p-4 shadow-sm">
+    <div key={row.id} className="tp-chapters__chapter-row rounded-2xl border bg-card/80 p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -805,8 +805,8 @@ export function ChaptersView() {
   const hasActiveChapters = totalCourses - withoutActive > 0;
 
   return (
-    <div className="space-y-6">
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-background">
+    <div className="tp-chapters space-y-6">
+      <Card className="tp-chapters__overview border-primary/20 bg-gradient-to-br from-primary/5 to-background">
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -828,7 +828,7 @@ export function ChaptersView() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="tp-chapters__stats grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {statCard(
               "إجمالي الدورات في النظام",
               overview?.stats.courses ?? "—",
@@ -848,14 +848,14 @@ export function ChaptersView() {
             {statCard("طلاب 0/0", repairCount)}
           </div>
 
-          <div className="rounded-2xl border border-dashed bg-muted/25 p-3 text-xs text-muted-foreground">
+          <div className="tp-chapters__rule rounded-2xl border border-dashed bg-muted/25 p-3 text-xs text-muted-foreground">
             أي تفعيل أو إلغاء تفعيل يعرض أثره قبل التنفيذ، ويتم من النظام داخل
             عملية واحدة حتى لا يظهر أكثر من فصل نشط لنفس الدورة.
           </div>
         </CardContent>
       </Card>
 
-      <Card className="tp-filter-card">
+      <Card className="tp-chapters__filters tp-filter-card">
         <CardContent className="tp-filter-content">
           <div className="tp-filter-grid lg:grid-cols-[minmax(0,1.2fr)_220px_220px_auto]">
             <Input
@@ -929,15 +929,15 @@ export function ChaptersView() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <Card>
+      <div className="tp-chapters__workspace grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+        <Card className="tp-chapters__operations">
           <CardHeader>
             <CardTitle>إضافة وربط الفصول</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <form
               onSubmit={handleAddChapter}
-              className="tp-validation-form space-y-3 rounded-2xl border bg-muted/20 p-4"
+              className="tp-chapters__form tp-chapters__form--create tp-validation-form space-y-3 rounded-2xl border bg-muted/20 p-4"
             >
               <p className="font-bold">إضافة فصل منهجي</p>
               <div className="space-y-2">
@@ -977,7 +977,7 @@ export function ChaptersView() {
 
             <form
               onSubmit={handleAttachChapter}
-              className="tp-validation-form space-y-3 rounded-2xl border bg-muted/20 p-4"
+              className="tp-chapters__form tp-chapters__form--attach tp-validation-form space-y-3 rounded-2xl border bg-muted/20 p-4"
             >
               <p className="font-bold">ربط فصل بدورة</p>
               <div className="space-y-2">
@@ -1019,7 +1019,7 @@ export function ChaptersView() {
               </Button>
             </form>
 
-            <div className="rounded-2xl border border-amber-500/35 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-100">
+            <div className="tp-chapters__maintenance rounded-2xl border border-amber-500/35 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-100">
               <p className="font-black">إصلاح شامل لفرص الطلاب المعطوبة</p>
               <p className="mt-1 leading-6">
                 يصلح الطلاب النشطين والمفصلين في الدورات ذات الفصل النشط: 0/0،
@@ -1044,7 +1044,7 @@ export function ChaptersView() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="tp-chapters__library">
           <CardHeader>
             <CardTitle>مكتبة الفصول</CardTitle>
           </CardHeader>
@@ -1060,8 +1060,8 @@ export function ChaptersView() {
         </Card>
       </div>
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-2">
+      <div className="tp-chapters__status space-y-4">
+        <div className="tp-chapters__status-header flex items-center justify-between gap-2">
           <h3 className="text-lg font-black">حالة الدورات والفصول</h3>
           <p className="text-xs text-muted-foreground">
             كل الأرقام من بيانات النظام.

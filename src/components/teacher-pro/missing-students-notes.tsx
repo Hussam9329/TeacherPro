@@ -184,7 +184,7 @@ export function MissingStudentsNotesView() {
   };
 
   return (
-    <div className="section-stack">
+    <div className="section-stack tp-missing-notes">
       <AlertDialog open={Boolean(deleteDialogNote)} onOpenChange={(open) => !open && setDeleteDialogNote(null)}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
@@ -205,7 +205,7 @@ export function MissingStudentsNotesView() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <div className="tp-missing-notes__intro flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 className="text-2xl font-black tracking-tight">الطلاب غير الموجودين</h2>
           <p className="mt-1 text-sm leading-7 text-muted-foreground">
@@ -215,7 +215,7 @@ export function MissingStudentsNotesView() {
         <Button type="button" variant="outline" onClick={() => setSection("grade-entry")}>فتح تسجيل الدرجات</Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+      <div className="tp-missing-notes__stats grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="عدد الملاحظات"
           value={statValue(databaseStats?.total)}
@@ -247,24 +247,24 @@ export function MissingStudentsNotesView() {
       </div>
 
       {notesLoading ? (
-        <div className="rounded-2xl border bg-muted/40 p-3 text-sm text-muted-foreground">
+        <div className="tp-missing-notes__status rounded-2xl border bg-muted/40 p-3 text-sm text-muted-foreground">
           جاري تحميل ملاحظات الطلاب غير الموجودين من بيانات النظام...
         </div>
       ) : null}
 
       {notesError ? (
-        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
+        <div className="tp-missing-notes__status rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive">
           {notesError}
         </div>
       ) : (
-        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
+        <div className="tp-missing-notes__status rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
           القائمة والإحصائيات من بيانات النظام، والحذف لا يتم إلا بعد تأكيد الحفظ.
         </div>
       )}
 
-      <Card>
+      <Card className="tp-missing-notes__list">
         <CardHeader className="gap-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="tp-missing-notes__list-header flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <CardTitle>سجل ملاحظات مدخلي الدرجات</CardTitle>
               <p className="mt-1 text-xs leading-6 text-muted-foreground">
@@ -306,7 +306,7 @@ export function MissingStudentsNotesView() {
                 return (
                   <div
                     key={note.id}
-                    className="rounded-3xl border bg-card p-4 shadow-sm"
+                    className="tp-missing-notes__item rounded-3xl border bg-card p-4 shadow-sm"
                   >
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                       <div className="min-w-0 flex-1">
@@ -315,7 +315,7 @@ export function MissingStudentsNotesView() {
                           <h3 className="text-base font-black">{currentExam?.name || note.examName}</h3>
                           {note.userName ? <Badge variant="outline">المدخل: {note.userName}</Badge> : null}
                         </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <div className="tp-missing-notes__meta mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                           <span>تاريخ الامتحان: {examDate ? formatAppDate(examDate, examDate) : "غير محدد"}</span>
                           <span>آخر تحديث: {formatDateTime(note.updatedAt)}</span>
                         </div>
@@ -331,7 +331,7 @@ export function MissingStudentsNotesView() {
                         حذف الملاحظة
                       </Button>
                     </div>
-                    <div className="mt-4 whitespace-pre-wrap rounded-2xl border bg-muted/30 p-4 text-sm leading-8">
+                    <div className="tp-missing-notes__text mt-4 whitespace-pre-wrap rounded-2xl border bg-muted/30 p-4 text-sm leading-8">
                       {note.text}
                     </div>
                   </div>
