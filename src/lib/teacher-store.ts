@@ -47,7 +47,7 @@ import {
   isExamOnOrAfterStudentRegistration,
   isGradeEntered,
 } from "./exam-utils";
-import { toBaghdadDateTimeLocal } from "./baghdad-time";
+import { baghdadDateKey, baghdadTodayKey, toBaghdadDateTimeLocal } from "./baghdad-time";
 import { formatAppDate, toLatinDigits } from "./format";
 import { recalculateAcademicState } from "./academic-engine";
 import { isExamWithinStudentGraceWindow } from "./student-grace";
@@ -139,6 +139,7 @@ export interface Student {
     | "active-chapter-conflict";
   isOpportunityFull?: boolean;
   isOpportunityOverLimit?: boolean;
+  mutationToken?: string;
 }
 
 export type CourseTransferPolicy = "reset" | "keep";
@@ -298,6 +299,7 @@ export interface Exam {
   active: boolean;
   scheduledActivateAt?: string;
   scheduledDeactivateAt?: string;
+  mutationToken?: string;
 }
 
 export interface Grade {
@@ -1307,7 +1309,7 @@ function uid(prefix = "id"): string {
 }
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return baghdadTodayKey();
 }
 
 function normalizeDateTimeValue(value: unknown): string {
@@ -1412,10 +1414,12 @@ function normalizeStudentRecord(st: Record<string, unknown>): Student {
         : Boolean(st.isOpportunityOverLimit),
     accountingGraceDays: normalizeGraceDaysValue(st.accountingGraceDays),
     gracePeriodStartDate: st.gracePeriodStartDate
-      ? String(st.gracePeriodStartDate).slice(0, 10)
+      ? baghdadDateKey(st.gracePeriodStartDate as string | Date)
       : null,
     dismissalNotes: String(st.dismissalNotes || ""),
-    createdAt: st.createdAt ? String(st.createdAt).slice(0, 10) : todayISO(),
+    createdAt: st.createdAt
+      ? baghdadDateKey(st.createdAt as string | Date) || todayISO()
+      : todayISO(),
     courseProgram: String(st.courseProgram || ""),
     courseTerm: String(st.courseTerm || ""),
     studyType: String(st.studyType || ""),
@@ -1430,8 +1434,12 @@ function normalizeGradeRecord(g: Record<string, unknown>): Grade {
     status: sanitizeGradeStatus(g.status),
     score: g.score === null || g.score === undefined ? null : Number(g.score),
     academicAccountingChecked: Boolean(g.academicAccountingChecked),
-    createdAt: g.createdAt ? String(g.createdAt).slice(0, 10) : todayISO(),
-    updatedAt: g.updatedAt ? String(g.updatedAt).slice(0, 10) : todayISO(),
+    createdAt: g.createdAt
+      ? baghdadDateKey(g.createdAt as string | Date) || todayISO()
+      : todayISO(),
+    updatedAt: g.updatedAt
+      ? baghdadDateKey(g.updatedAt as string | Date) || todayISO()
+      : todayISO(),
   } as Grade;
 }
 
@@ -2083,7 +2091,7 @@ function latestStudentLogDate(
 ): string {
   const dates = logs
     .filter(predicate)
-    .map((log) => String(log.date || "").slice(0, 10))
+    .map((log) => dayKey(log.date))
     .filter(Boolean)
     .sort();
   return dates.length ? dates[dates.length - 1] : "";
@@ -2125,12 +2133,7 @@ function latestManualDismissalDateForStudent(
 }
 
 function dayKey(value: string | Date | null | undefined): string {
-  if (!value) return "";
-  if (value instanceof Date)
-    return Number.isFinite(value.getTime())
-      ? value.toISOString().slice(0, 10)
-      : "";
-  return String(value || "").slice(0, 10);
+  return baghdadDateKey(value);
 }
 
 function normalizeLeaveType(value: unknown): StudentLeaveType {
@@ -2817,7 +2820,7 @@ export const useTeacherStore = create<TeacherState>()(
             (c: Record<string, unknown>) => ({
               ...c,
               createdAt: c.createdAt
-                ? String(c.createdAt).slice(0, 10)
+                ? baghdadDateKey(c.createdAt as string | Date) || todayISO()
                 : todayISO(),
               active: c.active !== undefined ? Boolean(c.active) : true,
               availablePrograms: parseJsonArray<string>(c.availablePrograms),
@@ -2880,7 +2883,9 @@ export const useTeacherStore = create<TeacherState>()(
                 scheduledDeactivateAt: normalizeDateTimeValue(
                   ex.scheduledDeactivateAt,
                 ),
-                date: ex.date ? String(ex.date).slice(0, 10) : todayISO(),
+                date: ex.date
+                  ? baghdadDateKey(ex.date as string | Date) || todayISO()
+                  : todayISO(),
               };
             },
           ) as Exam[];
@@ -2898,7 +2903,9 @@ export const useTeacherStore = create<TeacherState>()(
                 (ol: Record<string, unknown>) => ({
                   ...ol,
                   amount: Number(ol.amount || 0),
-                  date: ol.date ? String(ol.date).slice(0, 10) : todayISO(),
+                  date: ol.date
+                    ? baghdadDateKey(ol.date as string | Date) || todayISO()
+                    : todayISO(),
                 }),
               ) as OpportunityLog[])
             : get().opportunityLogs;
@@ -2908,17 +2915,17 @@ export const useTeacherStore = create<TeacherState>()(
                 normalizeStudentLeave({
                   ...leave,
                   date: leave.date
-                    ? String(leave.date).slice(0, 10)
+                    ? baghdadDateKey(leave.date as string | Date) || todayISO()
                     : todayISO(),
                   dateFrom: leave.dateFrom
-                    ? String(leave.dateFrom).slice(0, 10)
+                    ? baghdadDateKey(leave.dateFrom as string | Date) || todayISO()
                     : leave.date
-                      ? String(leave.date).slice(0, 10)
+                      ? baghdadDateKey(leave.date as string | Date) || todayISO()
                       : todayISO(),
                   dateTo: leave.dateTo
-                    ? String(leave.dateTo).slice(0, 10)
+                    ? baghdadDateKey(leave.dateTo as string | Date) || todayISO()
                     : leave.date
-                      ? String(leave.date).slice(0, 10)
+                      ? baghdadDateKey(leave.date as string | Date) || todayISO()
                       : todayISO(),
                 }),
               )
@@ -2934,7 +2941,7 @@ export const useTeacherStore = create<TeacherState>()(
                 completed: Boolean(call.completed),
                 completedAt: call.completedAt ? String(call.completedAt) : "",
                 createdAt: call.createdAt
-                  ? String(call.createdAt).slice(0, 10)
+                  ? baghdadDateKey(call.createdAt as string | Date) || todayISO()
                   : todayISO(),
                 notes: String(call.notes || ""),
               })) as StudentCall[])
@@ -2951,9 +2958,11 @@ export const useTeacherStore = create<TeacherState>()(
                 dismissalType: String(note.dismissalType || ""),
                 dismissalReason: String(note.dismissalReason || ""),
                 dismissalDate: note.dismissalDate
-                  ? String(note.dismissalDate).slice(0, 10)
+                  ? baghdadDateKey(note.dismissalDate as string | Date)
                   : "",
-                date: note.date ? String(note.date).slice(0, 10) : todayISO(),
+                date: note.date
+                  ? baghdadDateKey(note.date as string | Date) || todayISO()
+                  : todayISO(),
               })) as StudentNote[])
             : get().studentNotes;
 
@@ -3097,7 +3106,9 @@ export const useTeacherStore = create<TeacherState>()(
             if (data?.courses) {
               const serverCourses = data.courses.map((c: Record<string, unknown>) => ({
                 ...c,
-                createdAt: c.createdAt ? String(c.createdAt).slice(0, 10) : todayISO(),
+                createdAt: c.createdAt
+                  ? baghdadDateKey(c.createdAt as string | Date) || todayISO()
+                  : todayISO(),
                 active: c.active !== undefined ? Boolean(c.active) : true,
                 availablePrograms: parseJsonArray<string>(c.availablePrograms),
                 availableStudyTypes: getAvailableStudyTypes(c),
@@ -3145,7 +3156,9 @@ export const useTeacherStore = create<TeacherState>()(
                 (ol: Record<string, unknown>) => ({
                   ...ol,
                   amount: Number(ol.amount || 0),
-                  date: ol.date ? String(ol.date).slice(0, 10) : todayISO(),
+                  date: ol.date
+                    ? baghdadDateKey(ol.date as string | Date) || todayISO()
+                    : todayISO(),
                 }),
               ) as OpportunityLog[];
             }
@@ -3171,17 +3184,17 @@ export const useTeacherStore = create<TeacherState>()(
                   normalizeStudentLeave({
                     ...leave,
                     date: leave.date
-                      ? String(leave.date).slice(0, 10)
+                      ? baghdadDateKey(leave.date as string | Date) || todayISO()
                       : todayISO(),
                     dateFrom: leave.dateFrom
-                      ? String(leave.dateFrom).slice(0, 10)
+                      ? baghdadDateKey(leave.dateFrom as string | Date) || todayISO()
                       : leave.date
-                        ? String(leave.date).slice(0, 10)
+                        ? baghdadDateKey(leave.date as string | Date) || todayISO()
                         : todayISO(),
                     dateTo: leave.dateTo
-                      ? String(leave.dateTo).slice(0, 10)
+                      ? baghdadDateKey(leave.dateTo as string | Date) || todayISO()
                       : leave.date
-                        ? String(leave.date).slice(0, 10)
+                        ? baghdadDateKey(leave.date as string | Date) || todayISO()
                         : todayISO(),
                   }),
               );
@@ -3197,7 +3210,7 @@ export const useTeacherStore = create<TeacherState>()(
                   completed: Boolean(call.completed),
                   completedAt: call.completedAt ? String(call.completedAt) : "",
                   createdAt: call.createdAt
-                    ? String(call.createdAt).slice(0, 10)
+                    ? baghdadDateKey(call.createdAt as string | Date) || todayISO()
                     : todayISO(),
                   notes: String(call.notes || ""),
                 }),
@@ -3215,9 +3228,11 @@ export const useTeacherStore = create<TeacherState>()(
                   dismissalType: String(note.dismissalType || ""),
                   dismissalReason: String(note.dismissalReason || ""),
                   dismissalDate: note.dismissalDate
-                    ? String(note.dismissalDate).slice(0, 10)
+                    ? baghdadDateKey(note.dismissalDate as string | Date)
                     : "",
-                  date: note.date ? String(note.date).slice(0, 10) : todayISO(),
+                  date: note.date
+                    ? baghdadDateKey(note.date as string | Date) || todayISO()
+                    : todayISO(),
                 }),
               ) as StudentNote[];
             }
@@ -4339,7 +4354,10 @@ export const useTeacherStore = create<TeacherState>()(
         }));
         get().logAction("الامتحانات", "تعديل امتحان", exam?.name || id);
         syncToServer(get, () =>
-          examApi.update(id, updates as Record<string, unknown>),
+          examApi.update(id, {
+            ...updates as Record<string, unknown>,
+            expectedMutationToken: exam?.mutationToken || "",
+          }),
         );
         if (affectedStudentIds.length > 0)
           get().recalculateAcademicEffects(affectedStudentIds);
@@ -4360,7 +4378,12 @@ export const useTeacherStore = create<TeacherState>()(
         // active يعني الظهور للإدخال/التصحيح فقط، وليس إدخال أو إخراج الامتحان
         // من الحساب الأكاديمي. لذلك لا نعيد احتساب الطلاب هنا حتى لا تنتج
         // آثار عالمية أو رجفة واجهة من زر إظهار/إخفاء بسيط.
-        syncToServer(get, () => examApi.update(id, { active: !exam?.active }));
+        syncToServer(get, () =>
+          examApi.update(id, {
+            active: !exam?.active,
+            expectedMutationToken: exam?.mutationToken || "",
+          }),
+        );
       },
       deleteExam: (id) => {
         const state = get();
@@ -4584,6 +4607,9 @@ export const useTeacherStore = create<TeacherState>()(
           () =>
             gradeApi.update(id, {
               ...updates,
+              ...(existingGrade?.updatedAt?.includes("T")
+                ? { expectedUpdatedAt: existingGrade.updatedAt }
+                : {}),
               ...(existingGrade
                 ? {
                     studentId: existingGrade.studentId,

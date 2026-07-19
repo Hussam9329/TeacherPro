@@ -23,6 +23,8 @@ import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { parseCourseIds } from "@/lib/exam-course-links";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
+import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
 function readListPagination(
   req: NextRequest,
@@ -63,7 +65,7 @@ function dateOrNow(value: unknown): Date {
 }
 
 function dateOnly(value: unknown): string {
-  return dateOrNow(value).toISOString().slice(0, 10);
+  return baghdadDateKey(dateOrNow(value)) || baghdadTodayKey();
 }
 
 function dayAfter(value: Date): Date {
@@ -175,6 +177,17 @@ function validateLeavePayload(data: NormalizedLeavePayload) {
   const reasonError = requireText(data.reason, "سبب الإجازة");
   if (reasonError) return reasonError;
   return null;
+}
+
+function leaveAcademicScopeKey(data: NormalizedLeavePayload): string {
+  return JSON.stringify({
+    studentId: data.studentId,
+    examId: data.examId || "",
+    leaveType: data.leaveType,
+    date: baghdadDateKey(data.date),
+    dateFrom: baghdadDateKey(data.dateFrom),
+    dateTo: baghdadDateKey(data.dateTo),
+  });
 }
 
 function uniqueIds(values: Array<string | null | undefined>): string[] {
@@ -390,7 +403,7 @@ type LeaveUpdateResult = {
   restoredGradeCount: number;
   affectedBefore: string[];
   affectedAfter: string[];
-  academicRecalculation: AcademicServerRecalculationResult;
+  academicRecalculation: AcademicServerRecalculationResult | null;
 };
 
 type LeaveDeleteResult = {
@@ -473,7 +486,7 @@ export async function POST(req: NextRequest) {
 
     const result = await withFollowupTables<LeaveCreateResult>(
       () =>
-        db.$transaction(async (tx) => {
+        withSerializableTransaction(async (tx) => {
           // Q68 FIX: Verify the exam belongs to the student's course.
           // Previously, an admin could create a leave for a student in
           // course A on an exam that belongs to course B. The leave was
@@ -553,7 +566,7 @@ export async function POST(req: NextRequest) {
               select: { id: true, dateFrom: true, dateTo: true, reason: true },
             });
             if (overlapping) {
-              const fmt = (d: Date | null) => d ? new Date(d).toISOString().slice(0, 10) : '?';
+              const fmt = (d: Date | null) => d ? baghdadDateKey(d) : '?';
               throw new Error(
                 `يوجد إجازة فترة سابقة لهذا الطالب تتداخل مع التاريخ المحدد ` +
                 `(${fmt(overlapping.dateFrom)} إلى ${fmt(overlapping.dateTo)}). ` +
@@ -657,7 +670,7 @@ export async function PUT(req: NextRequest) {
 
     const result = await withFollowupTables<LeaveUpdateResult>(
       () =>
-        db.$transaction(async (tx) => {
+        withSerializableTransaction(async (tx) => {
           const existingLeave = await tx.studentLeave.findUnique({
             where: { id },
             include: {
@@ -737,13 +750,37 @@ export async function PUT(req: NextRequest) {
               select: { id: true, dateFrom: true, dateTo: true, reason: true },
             });
             if (overlapping) {
-              const fmt = (d: Date | null) => d ? new Date(d).toISOString().slice(0, 10) : '?';
+              const fmt = (d: Date | null) => d ? baghdadDateKey(d) : '?';
               throw new Error(
                 `يوجد إجازة فترة سابقة لهذا الطالب تتداخل مع التاريخ المحدد ` +
                 `(${fmt(overlapping.dateFrom)} إلى ${fmt(overlapping.dateTo)}). ` +
                 `لا يمكن إنشاء إجازتي فترة متداخلتين للطالب نفسه.`,
               );
             }
+          }
+
+          const academicScopeChanged =
+            leaveAcademicScopeKey(previousData) !==
+            leaveAcademicScopeKey(nextData);
+          if (!academicScopeChanged) {
+            const studentLeave = await tx.studentLeave.update({
+              where: { id },
+              data: {
+                reason: nextData.reason,
+                studyType: nextData.studyType,
+                notes: nextData.notes,
+              },
+              include: { student: true, exam: true },
+            });
+            return {
+              studentLeave,
+              backedUpGrades: 0,
+              restoredGrades: [],
+              restoredGradeCount: 0,
+              affectedBefore: [],
+              affectedAfter: [],
+              academicRecalculation: null,
+            };
           }
 
           const restoredGrades = await restoreGradesForLeave(tx, id);
@@ -852,7 +889,7 @@ export async function DELETE(req: NextRequest) {
     if (!id) return validationError("تعذر تحديد الإجازة المطلوبة");
     const result = await withFollowupTables<LeaveDeleteResult>(
       () =>
-        db.$transaction(async (tx) => {
+        withSerializableTransaction(async (tx) => {
           const existingLeave = await tx.studentLeave.findUnique({
             where: { id },
             select: { studentId: true },

@@ -45,6 +45,29 @@ import {
   resolveManualGraceStartDate,
 } from "@/lib/student-grace";
 import { removeProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
+import { baghdadDateKey } from "@/lib/baghdad-time";
+import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
+
+function studentMutationToken(student: Record<string, unknown>): string {
+  const fields = [
+    "id", "name", "nameKey", "school", "gender", "phone", "phoneKey",
+    "parentPhone", "telegram", "telegramKey", "courseProgram", "courseTerm",
+    "studyType", "locationScope", "baghdadMode", "mainSite", "subSite",
+    "code", "status", "dismissalType", "dismissalReason", "dismissalNotes",
+    "createdAt", "opportunities", "baseOpportunities", "accountingGraceDays",
+    "gracePeriodStartDate", "courseId",
+  ];
+  return buildMutationPreviewToken(
+    `student-edit:${String(student.id || "")}`,
+    Object.fromEntries(fields.map((field) => [field, student[field]])),
+  );
+}
+
+function withStudentMutationToken<T extends Record<string, unknown>>(
+  student: T,
+): T & { mutationToken: string } {
+  return { ...student, mutationToken: studentMutationToken(student) };
+}
 
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -565,7 +588,7 @@ export async function GET(req: NextRequest) {
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   return NextResponse.json({
-    students: responseStudents,
+    students: responseStudents.map((student) => withStudentMutationToken(student)),
     totalCount,
     page,
     pageSize,
@@ -908,7 +931,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       {
-        student: studentWithOpportunity,
+        student: withStudentMutationToken(
+          studentWithOpportunity as unknown as Record<string, unknown>,
+        ),
         opportunitiesWarning: created.opportunitiesWarning,
         source: "database",
       },
@@ -939,6 +964,9 @@ export async function PUT(req: NextRequest) {
     courseTransferPolicy: rawCourseTransferPolicy,
     academicImpactConfirmed: rawAcademicImpactConfirmed,
     academicImpactPreviewToken: rawAcademicImpactPreviewToken,
+    academicImpactPreviewGraceStartDate:
+      rawAcademicImpactPreviewGraceStartDate,
+    expectedMutationToken: rawExpectedMutationToken,
     gracePeriodStartMode: rawGracePeriodStartMode,
     ...rawData
   } = body;
@@ -953,6 +981,21 @@ export async function PUT(req: NextRequest) {
   );
   const academicImpactConfirmed = rawAcademicImpactConfirmed === true;
   const academicImpactPreviewToken = String(rawAcademicImpactPreviewToken || "").trim();
+  const academicImpactPreviewGraceStartDate =
+    rawAcademicImpactPreviewGraceStartDate === undefined ||
+    rawAcademicImpactPreviewGraceStartDate === null ||
+    rawAcademicImpactPreviewGraceStartDate === ""
+      ? null
+      : new Date(String(rawAcademicImpactPreviewGraceStartDate));
+  if (
+    academicImpactPreviewGraceStartDate &&
+    !Number.isFinite(academicImpactPreviewGraceStartDate.getTime())
+  ) {
+    return NextResponse.json(
+      { error: "تاريخ بدء السماح القادم من المعاينة غير صالح" },
+      { status: 400 },
+    );
+  }
   const gracePeriodStartMode = normalizeGracePeriodStartMode(
     rawGracePeriodStartMode,
   );
@@ -1063,13 +1106,18 @@ export async function PUT(req: NextRequest) {
       // لا نعيد تشغيل السماح عند تعديل الاسم/الهاتف لأن الواجهة ترسل عدد
       // الأيام دائماً. تاريخ البدء يتغير فقط عند تغيير الأيام أو اختيار
       // مصدر بدء صريح من المستخدم.
-      data.gracePeriodStartDate = resolveManualGraceStartDate({
-        mode: gracePeriodStartMode || "now",
-        createdAt:
-          data.createdAt instanceof Date
-            ? data.createdAt
-            : currentStudent.createdAt,
-      });
+      data.gracePeriodStartDate =
+        academicImpactConfirmed &&
+        academicImpactPreviewToken &&
+        academicImpactPreviewGraceStartDate
+          ? academicImpactPreviewGraceStartDate
+          : resolveManualGraceStartDate({
+              mode: gracePeriodStartMode || "now",
+              createdAt:
+                data.createdAt instanceof Date
+                  ? data.createdAt
+                  : currentStudent.createdAt,
+            });
     }
   }
 
@@ -1226,8 +1274,8 @@ export async function PUT(req: NextRequest) {
       ? Number(data.accountingGraceDays)
       : Number(currentStudent.accountingGraceDays || 0);
   const registrationDateChanged =
-    requestedCreatedAt.toISOString().slice(0, 10) !==
-    currentStudent.createdAt.toISOString().slice(0, 10);
+    baghdadDateKey(requestedCreatedAt) !==
+    baghdadDateKey(currentStudent.createdAt);
   const graceDaysChanged =
     requestedGraceDays !== Number(currentStudent.accountingGraceDays || 0);
   const requestedGraceStartDate =
@@ -1235,8 +1283,8 @@ export async function PUT(req: NextRequest) {
       ? data.gracePeriodStartDate
       : currentStudent.gracePeriodStartDate;
   const graceStartDateChanged =
-    String(requestedGraceStartDate?.toISOString?.() || "").slice(0, 10) !==
-    String(currentStudent.gracePeriodStartDate?.toISOString?.() || "").slice(0, 10);
+    baghdadDateKey(requestedGraceStartDate) !==
+    baghdadDateKey(currentStudent.gracePeriodStartDate);
 
   if (
     !resetEnrollment &&
@@ -1262,6 +1310,19 @@ export async function PUT(req: NextRequest) {
         throw new StudentIntegrityError(
           "تعذر العثور على الطالب المطلوب. حدّث الصفحة ثم حاول مرة أخرى.",
           404,
+        );
+      }
+      const expectedMutationToken = String(rawExpectedMutationToken || "").trim();
+      if (
+        expectedMutationToken &&
+        expectedMutationToken !==
+          studentMutationToken(
+            lockedStudent as unknown as Record<string, unknown>,
+          )
+      ) {
+        throw new StudentIntegrityError(
+          "تغير سجل الطالب بعد فتحه للتعديل. تم إيقاف الحفظ قبل أي كتابة؛ حدّث السجل وراجع التغييرات ثم حاول مجدداً.",
+          409,
         );
       }
       const transactionTargetCourseId = String(
@@ -1440,8 +1501,8 @@ export async function PUT(req: NextRequest) {
           ? Number(transactionData.accountingGraceDays)
           : Number(lockedStudent.accountingGraceDays || 0);
       const transactionRegistrationDateChanged =
-        transactionRequestedCreatedAt.toISOString().slice(0, 10) !==
-        lockedStudent.createdAt.toISOString().slice(0, 10);
+        baghdadDateKey(transactionRequestedCreatedAt) !==
+        baghdadDateKey(lockedStudent.createdAt);
       const transactionGraceDaysChanged =
         transactionRequestedGraceDays !==
         Number(lockedStudent.accountingGraceDays || 0);
@@ -1450,8 +1511,8 @@ export async function PUT(req: NextRequest) {
           ? transactionData.gracePeriodStartDate
           : lockedStudent.gracePeriodStartDate;
       const transactionGraceStartDateChanged =
-        String(transactionRequestedGraceStartDate?.toISOString?.() || "").slice(0, 10) !==
-        String(lockedStudent.gracePeriodStartDate?.toISOString?.() || "").slice(0, 10);
+        baghdadDateKey(transactionRequestedGraceStartDate) !==
+        baghdadDateKey(lockedStudent.gracePeriodStartDate);
       const transactionAcademicInputsChanged =
         transactionRegistrationDateChanged ||
         transactionGraceDaysChanged ||
@@ -1533,7 +1594,9 @@ export async function PUT(req: NextRequest) {
     ]);
 
     return NextResponse.json({
-      student: studentWithOpportunity,
+      student: withStudentMutationToken(
+        studentWithOpportunity as unknown as Record<string, unknown>,
+      ),
       academicRecalculation: result.academicRecalculation,
       enrollmentArchive: result.archiveSummary,
       resetApplied: result.resetApplied,
@@ -1621,7 +1684,9 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       archived: true,
-      student: studentWithOpportunity,
+      student: withStudentMutationToken(
+        studentWithOpportunity as unknown as Record<string, unknown>,
+      ),
       impact: {
         ...impact,
         counts: {

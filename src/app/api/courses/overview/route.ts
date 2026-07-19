@@ -14,10 +14,11 @@ import {
   type StudyType,
 } from '@/lib/course-config';
 import { ensureExamCourseLinksSchema, parseCourseIds } from '@/lib/exam-course-links';
+import { baghdadDateKey, baghdadTodayKey } from '@/lib/baghdad-time';
 
 function dateOnly(value: Date | string | null | undefined): string {
-  if (!value) return new Date().toISOString().slice(0, 10);
-  return new Date(value).toISOString().slice(0, 10);
+  if (!value) return baghdadTodayKey();
+  return baghdadDateKey(value) || baghdadTodayKey();
 }
 
 function mapCountKey(map: Map<string, number>, key: string | null | undefined): void {
@@ -28,6 +29,17 @@ function mapCountKey(map: Map<string, number>, key: string | null | undefined): 
 
 function mapToObject(map: Map<string, number>): Record<string, number> {
   return Object.fromEntries(Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0], 'ar')));
+}
+
+function archivedBalanceCount(value: unknown): number {
+  const source = String(value || '[]').trim();
+  try {
+    const parsed = JSON.parse(source);
+    if (!Array.isArray(parsed)) return source === '[]' ? 0 : 1;
+    return parsed.length;
+  } catch {
+    return source && source !== '[]' ? 1 : 0;
+  }
 }
 
 function normalizeCourse(course: Record<string, unknown>) {
@@ -155,6 +167,7 @@ export async function GET(req: NextRequest) {
       total: number;
       active: number;
       archived: number;
+      archivedBalances: number;
       activeChapter: { id: string; name: string; opportunities: number } | null;
     }>();
     for (const link of courseChapters) {
@@ -162,6 +175,7 @@ export async function GET(req: NextRequest) {
         total: 0,
         active: 0,
         archived: 0,
+        archivedBalances: 0,
         activeChapter: null,
       };
       bucket.total += 1;
@@ -174,6 +188,7 @@ export async function GET(req: NextRequest) {
         };
       }
       if (link.archived) bucket.archived += 1;
+      bucket.archivedBalances += archivedBalanceCount(link.archive);
       chapterStatsByCourse.set(link.courseId, bucket);
     }
 
@@ -193,11 +208,15 @@ export async function GET(req: NextRequest) {
         total: 0,
         active: 0,
         archived: 0,
+        archivedBalances: 0,
         activeChapter: null,
       };
       const deleteBlockers: string[] = [];
       if (studentStats.total > 0) deleteBlockers.push(`${studentStats.total} طالب مرتبط`);
       if (examStats.total > 0) deleteBlockers.push(`${examStats.total} امتحان مرتبط`);
+      if (chapterStats.archivedBalances > 0) {
+        deleteBlockers.push(`${chapterStats.archivedBalances} رصيد طالب مؤرشف`);
+      }
       const configWarnings = summarizeCourseWarnings({
         active: normalizedCourse.active,
         studentCount: studentStats.total,

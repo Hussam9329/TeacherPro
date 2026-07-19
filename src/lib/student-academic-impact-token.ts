@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 
 type PrismaClientLike = typeof db | Prisma.TransactionClient;
 
 function dayKey(value: Date | string): string {
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : "";
+  return baghdadDateKey(value);
 }
 
 /**

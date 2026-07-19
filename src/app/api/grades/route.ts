@@ -24,6 +24,7 @@ import {
   syncAcademicGradeWriteback,
 } from "@/lib/academic-grade-writeback-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 
 function parsePositiveInt(
   value: string | null,
@@ -161,8 +162,17 @@ const databaseComputedGradeFilters = new Set<GradeStatusFilter>([
   "has-grade",
 ]);
 
+class GradeWriteConflictError extends Error {
+  constructor() {
+    super(
+      "تغيرت الدرجة بعد فتحها للتعديل. تم إيقاف الحفظ قبل أي كتابة؛ حدّث السجل وراجع القيمة الجديدة.",
+    );
+    this.name = "GradeWriteConflictError";
+  }
+}
+
 function dateKey(value: unknown): string {
-  return String(value || "").slice(0, 10);
+  return baghdadDateKey(value as Date | string | null | undefined);
 }
 
 function isGradeEnteredForServer(
@@ -395,6 +405,20 @@ export async function POST(req: NextRequest) {
     // corrupting the student's opportunity balance and dismissal status.
     const result = await withSerializableTransaction(
       async (tx) => {
+        const existingGrade = await tx.grade.findUnique({
+          where: { studentId_examId: { studentId, examId } },
+          select: { updatedAt: true },
+        });
+        const expectedUpdatedAt = String(body.expectedUpdatedAt || "").trim();
+        const expectMissing = body.expectMissing === true;
+        if (
+          (expectMissing && existingGrade) ||
+          (expectedUpdatedAt &&
+            (!existingGrade ||
+              existingGrade.updatedAt.toISOString() !== expectedUpdatedAt))
+        ) {
+          throw new GradeWriteConflictError();
+        }
         const writeback = await syncAcademicGradeWriteback({
           tx,
           studentId,
@@ -427,6 +451,12 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
+    if (error instanceof GradeWriteConflictError) {
+      return NextResponse.json(
+        { error: error.message, requiresFreshGrade: true },
+        { status: 409 },
+      );
+    }
     if (error instanceof AcademicGradeWritebackError) {
       return validationError(error.message, error.status);
     }
@@ -521,9 +551,25 @@ export async function PUT(req: NextRequest) {
 
     // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
     const result = await withSerializableTransaction(async (tx) => {
+      const freshTargetGrade = await tx.grade.findUnique({
+        where: { id: targetGrade.id },
+      });
+      if (!freshTargetGrade) {
+        throw new AcademicGradeWritebackError(
+          "سجل الدرجة لم يعد موجوداً. حدّث الصفحة ثم حاول مجدداً.",
+          404,
+        );
+      }
+      const expectedUpdatedAt = String(body.expectedUpdatedAt || "").trim();
+      if (
+        expectedUpdatedAt &&
+        freshTargetGrade.updatedAt.toISOString() !== expectedUpdatedAt
+      ) {
+        throw new GradeWriteConflictError();
+      }
       if (!hasAcademicMutation) {
         const grade = await tx.grade.update({
-          where: { id: targetGrade.id },
+          where: { id: freshTargetGrade.id },
           data: {
             ...(body.notes !== undefined ? { notes: String(body.notes || "") } : {}),
             ...(body.academicAccountingChecked !== undefined
@@ -534,24 +580,24 @@ export async function PUT(req: NextRequest) {
         return { grade, academicRecalculation: null };
       }
 
-      const nextStatus = String(body.status ?? targetGrade.status);
+      const nextStatus = String(body.status ?? freshTargetGrade.status);
       const nextScore =
         nextStatus === "درجة"
           ? body.score !== undefined
             ? body.score
-            : targetGrade.score
+            : freshTargetGrade.score
           : null;
       const writeback = await syncAcademicGradeWriteback({
         tx,
-        studentId: targetGrade.studentId,
-        examId: targetGrade.examId,
+        studentId: freshTargetGrade.studentId,
+        examId: freshTargetGrade.examId,
         status: nextStatus,
         score: nextScore,
-        notes: body.notes !== undefined ? body.notes : targetGrade.notes,
+        notes: body.notes !== undefined ? body.notes : freshTargetGrade.notes,
         academicAccountingChecked:
           body.academicAccountingChecked !== undefined
             ? body.academicAccountingChecked
-            : targetGrade.academicAccountingChecked,
+            : freshTargetGrade.academicAccountingChecked,
         sourceLabel: "تعديل سجل الدرجات",
         allowBlankGrade: false,
         blockOnLeave: true,
@@ -579,6 +625,12 @@ export async function PUT(req: NextRequest) {
     });
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof GradeWriteConflictError) {
+      return NextResponse.json(
+        { error: error.message, requiresFreshGrade: true },
+        { status: 409 },
+      );
+    }
     if (error instanceof AcademicGradeWritebackError) {
       return validationError(error.message, error.status);
     }

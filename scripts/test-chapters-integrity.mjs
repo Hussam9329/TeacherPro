@@ -107,9 +107,10 @@ assert(
 );
 assert(
   courseChaptersRoute.includes("parseArchiveEntries(link.archive)") &&
-    courseChaptersRoute.includes("confirmImpact") &&
+    courseChaptersRoute.includes("const archiveCount =") &&
+    !courseChaptersRoute.includes("confirmImpact && archiveEntries.length") &&
     courseChaptersRoute.includes("أرشيف فرص"),
-  "حذف ربط الفصل محمي إذا كان مفعلًا أو يحمل أرشيف فرص",
+  "حذف ربط الفصل محمي دائماً إذا كان مفعلًا أو يحمل أرشيف فرص",
 );
 assert(
   chaptersRoute.includes("linkedCourseChapters") &&

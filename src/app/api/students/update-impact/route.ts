@@ -15,6 +15,7 @@ import {
   normalizeGracePeriodStartMode,
   resolveManualGraceStartDate,
 } from "@/lib/student-grace";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -28,9 +29,7 @@ function validDate(value: unknown): Date | null {
 }
 
 function dayKey(value: Date | string | null | undefined): string {
-  if (!value) return "";
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : "";
+  return baghdadDateKey(value);
 }
 
 const protectedKinds = new Set<GradeClassificationKind>([

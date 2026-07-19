@@ -459,8 +459,13 @@ export function GradeRecordsView() {
       toast.error("التأشير متاح فقط لحالة محاسبة رسوب");
       return;
     }
-    const result = await gradeApi.update(gradeId, { academicAccountingChecked: checked });
+    const currentGrade = gradeForAction(gradeId);
+    const result = await gradeApi.update(gradeId, {
+      academicAccountingChecked: checked,
+      expectedUpdatedAt: currentGrade?.updatedAt || "",
+    });
     if (!result.ok || result.queued) {
+      if (result.status === 409) setServerRefreshKey((key) => key + 1);
       toast.error(result.error || "تعذر حفظ مراجعة السجل في النظام.");
       return;
     }
@@ -741,9 +746,11 @@ export function GradeRecordsView() {
       score,
       notes: editDialog.notes,
       academicAccountingChecked: false,
+      expectedUpdatedAt: grade.updatedAt || "",
     });
 
     if (!result.ok || result.queued) {
+      if (result.status === 409) setServerRefreshKey((key) => key + 1);
       toast.error(result.error || "تعذر تعديل الدرجة من النظام.");
       return;
     }

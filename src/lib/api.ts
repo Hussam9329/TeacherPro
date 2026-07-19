@@ -2,6 +2,7 @@ import {
   beginTeacherProInteractionBlocker,
   inferTeacherProScopesFromEndpoint,
 } from "./teacherpro-sync";
+import { mutationCanBeReplayed } from "./mutation-replay-policy";
 
 /**
  * TeacherPro — API Service Layer
@@ -66,6 +67,7 @@ export interface ApiResult {
   queued?: boolean;
   data?: unknown;
   syncScopes?: string[];
+  outcomeUnknown?: boolean;
 }
 
 function isTransientHttpStatus(status: number): boolean {
@@ -117,7 +119,7 @@ async function retryTransientMutation(
 async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
   const releaseBlocker = beginTeacherProInteractionBlocker("api-post");
   try {
-    const result = await retryTransientMutation(async () => {
+    const runOnce = async (): Promise<ApiResult> => {
       try {
         const res = await fetch(`/api/${endpoint}`, {
           method: "POST",
@@ -126,6 +128,7 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
           body: JSON.stringify(data),
         });
         if (!res.ok) {
+          const errorData = await res.clone().json().catch(() => null);
           const error = await readApiError(
             res,
             `تعذر حفظ البيانات (رمز ${res.status})`,
@@ -136,6 +139,7 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
             error,
             status: res.status,
             transient: isTransientHttpResponse(res),
+            data: errorData,
           };
         }
         const contentType = res.headers.get("content-type") || "";
@@ -154,11 +158,15 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
         console.warn(`[API] POST /api/${endpoint} network error:`, e);
         return { ok: false, error: msg, status: 0, transient: true };
       }
-    });
+    };
+    const replaySafe = mutationCanBeReplayed(`/api/${endpoint}`, "POST", data);
+    const result = replaySafe
+      ? await retryTransientMutation(runOnce)
+      : await runOnce();
 
     // If all retries exhausted on a transient failure, queue to outbox
     // so the mutation survives page reloads and is retried when network returns.
-    if (!result.ok && result.transient) {
+    if (!result.ok && result.transient && replaySafe) {
       try {
         const { queueOnly } = require("./mutation-outbox");
         queueOnly({
@@ -175,6 +183,14 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
         // mutation-outbox not available (SSR); return as-is.
       }
     }
+    if (!result.ok && result.transient && !replaySafe) {
+      return {
+        ...result,
+        outcomeUnknown: true,
+        error:
+          "انقطع الاتصال أثناء عملية غير قابلة للتكرار بأمان. حدّث البيانات للتحقق هل نُفذت، ثم أعدها يدوياً فقط إذا لم تظهر.",
+      };
+    }
     return result;
   } finally {
     releaseBlocker();
@@ -187,7 +203,7 @@ async function apiPut(
 ): Promise<ApiResult> {
   const releaseBlocker = beginTeacherProInteractionBlocker("api-put");
   try {
-    const result = await retryTransientMutation(async () => {
+    const runOnce = async (): Promise<ApiResult> => {
       try {
         const res = await fetch(`/api/${endpoint}`, {
           method: "PUT",
@@ -196,6 +212,7 @@ async function apiPut(
           body: JSON.stringify(data),
         });
         if (!res.ok) {
+          const errorData = await res.clone().json().catch(() => null);
           const error = await readApiError(
             res,
             `تعذر تحديث البيانات (رمز ${res.status})`,
@@ -206,6 +223,7 @@ async function apiPut(
             error,
             status: res.status,
             transient: isTransientHttpResponse(res),
+            data: errorData,
           };
         }
         const contentType = res.headers.get("content-type") || "";
@@ -224,9 +242,13 @@ async function apiPut(
         console.warn(`[API] PUT /api/${endpoint} network error:`, e);
         return { ok: false, error: msg, status: 0, transient: true };
       }
-    });
+    };
+    const replaySafe = mutationCanBeReplayed(`/api/${endpoint}`, "PUT", data);
+    const result = replaySafe
+      ? await retryTransientMutation(runOnce)
+      : await runOnce();
 
-    if (!result.ok && result.transient) {
+    if (!result.ok && result.transient && replaySafe) {
       try {
         const { queueOnly } = require("./mutation-outbox");
         queueOnly({
@@ -242,6 +264,14 @@ async function apiPut(
       } catch {
         // SSR; return as-is.
       }
+    }
+    if (!result.ok && result.transient && !replaySafe) {
+      return {
+        ...result,
+        outcomeUnknown: true,
+        error:
+          "انقطع الاتصال بعد إرسال تعديل محمي من التكرار. حدّث البيانات للتحقق من النتيجة؛ لا تعِد الحفظ قبل المراجعة.",
+      };
     }
     return result;
   } finally {
@@ -264,13 +294,14 @@ async function apiDelete(
     const queryString = params.toString();
     const fullEndpoint = `/api/${endpoint}?${queryString}`;
 
-    const result = await retryTransientMutation(async () => {
+    const runOnce = async (): Promise<ApiResult> => {
       try {
         const res = await fetch(fullEndpoint, {
           method: "DELETE",
           credentials: "same-origin",
         });
         if (!res.ok) {
+          const errorData = await res.clone().json().catch(() => null);
           const error = await readApiError(
             res,
             `تعذر حذف السجل (رمز ${res.status})`,
@@ -281,6 +312,7 @@ async function apiDelete(
             error,
             status: res.status,
             transient: isTransientHttpResponse(res),
+            data: errorData,
           };
         }
         const contentType = res.headers.get("content-type") || "";
@@ -299,9 +331,13 @@ async function apiDelete(
         console.warn(`[API] DELETE /api/${endpoint} network error:`, e);
         return { ok: false, error: msg, status: 0, transient: true };
       }
-    });
+    };
+    const replaySafe = mutationCanBeReplayed(fullEndpoint, "DELETE");
+    const result = replaySafe
+      ? await retryTransientMutation(runOnce)
+      : await runOnce();
 
-    if (!result.ok && result.transient) {
+    if (!result.ok && result.transient && replaySafe) {
       try {
         const { queueOnly } = require("./mutation-outbox");
         queueOnly({
@@ -316,6 +352,14 @@ async function apiDelete(
       } catch {
         // SSR; return as-is.
       }
+    }
+    if (!result.ok && result.transient && !replaySafe) {
+      return {
+        ...result,
+        outcomeUnknown: true,
+        error:
+          "انقطع الاتصال أثناء الحذف، لذلك لا يمكن تأكيد النتيجة بأمان. حدّث البيانات للتحقق قبل تكرار الحذف.",
+      };
     }
     return result;
   } finally {
@@ -614,6 +658,7 @@ export interface OpportunityBulkTargetsResponse {
   excludedFullOpportunities: number;
   skipped: number;
   targetCount: number;
+  previewToken: string;
   source: "database";
 }
 
@@ -942,6 +987,7 @@ export interface CourseStudentSyncPreview {
   canSync: boolean;
   canSave: boolean;
   blockingMessage?: string | null;
+  previewToken: string;
   source: "database";
 }
 
@@ -960,6 +1006,7 @@ export interface ChapterOpportunityPreview {
   skippedArchived: number;
   currentlyAboveNewCap: number;
   baselinesToChange: number;
+  previewToken: string;
   source: "database";
 }
 
@@ -981,6 +1028,7 @@ export interface CourseChapterActionPreview {
     otherActiveLinksToDisable: number;
   };
   message: string;
+  previewToken: string;
   source: "database";
 }
 
@@ -1297,12 +1345,13 @@ export const courseChapterApi = {
   activate: (
     courseChapterId: string,
     action: "activate" | "deactivate",
-    options: { confirmImpact: boolean } = { confirmImpact: true },
+    options: { confirmImpact: boolean; previewToken: string },
   ) =>
     apiPost("course-chapters/activate", {
       courseChapterId,
       action,
       confirmImpact: options.confirmImpact,
+      previewToken: options.previewToken,
     }),
   remove: (id: string, options: { confirmImpact?: boolean } = {}) =>
     apiDelete("course-chapters", id, {
@@ -1677,6 +1726,7 @@ export const opportunityStatsApi = {
       actionType?: "add" | "deduct";
       excludeDismissed?: boolean;
       excludeFullOpportunities?: boolean;
+      reactivateDismissedOnAdd?: boolean;
     } = {},
   ) => {
     const queryString = buildQueryString({
@@ -1693,6 +1743,10 @@ export const opportunityStatsApi = {
         query.excludeFullOpportunities === undefined
           ? undefined
           : String(query.excludeFullOpportunities),
+      reactivateDismissedOnAdd:
+        query.reactivateDismissedOnAdd === undefined
+          ? undefined
+          : String(query.reactivateDismissedOnAdd),
     });
     return apiGet<OpportunityBulkTargetsResponse>(
       `opportunities/bulk-targets${queryString ? `?${queryString}` : ""}`,
@@ -1710,6 +1764,7 @@ export const opportunityStatsApi = {
     excludeFullOpportunities?: boolean;
     reactivateDismissedOnAdd?: boolean;
     confirmImpact?: boolean;
+    previewToken?: string;
   }) =>
     apiPost("opportunities/bulk-adjust", {
       mode: "filter",
@@ -1839,10 +1894,29 @@ export const opportunityLogApi = {
     opportunityLogs?: Array<Record<string, unknown>>;
     studentNotes?: Array<Record<string, unknown>>;
   }) => apiPost("opportunities/bulk-adjust", payload),
-  remove: (id: string, options: { confirmImpact?: boolean } = {}) =>
-    apiDelete("opportunity-logs", id, {
-      confirmImpact: options.confirmImpact ? "1" : undefined,
-    }),
+  remove: async (
+    id: string,
+    options: { confirmImpact?: boolean; previewToken?: string } = {},
+  ) => {
+    if (options.previewToken) {
+      return apiDelete("opportunity-logs", id, {
+        confirmImpact: options.confirmImpact ? "1" : undefined,
+        previewToken: options.previewToken,
+      });
+    }
+    const previewResult = await apiDelete("opportunity-logs", id);
+    if (!options.confirmImpact || previewResult.status !== 409) {
+      return previewResult;
+    }
+    const previewToken = String(
+      (previewResult.data as { previewToken?: unknown } | null)?.previewToken || "",
+    );
+    if (!previewToken) return previewResult;
+    return apiDelete("opportunity-logs", id, {
+      confirmImpact: "1",
+      previewToken,
+    });
+  },
 };
 
 // ─── Follow-up API ───────────────────────────────────────────────────────────

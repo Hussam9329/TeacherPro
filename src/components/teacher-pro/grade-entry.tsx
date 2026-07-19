@@ -264,6 +264,7 @@ export function GradeEntryView() {
   >([]);
   const [entrySheetLoading, setEntrySheetLoading] = useState(false);
   const [entrySheetError, setEntrySheetError] = useState<string | null>(null);
+  const [entrySheetRefreshKey, setEntrySheetRefreshKey] = useState(0);
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const missingStudentsNoteLoadedRef = useRef("");
   const {
@@ -369,7 +370,7 @@ export function GradeEntryView() {
     return () => {
       controller.abort();
     };
-  }, [selectedExamId, exams, mergeStudentsCache, mergeGradesCache, syncKey, isBackgroundSync]);
+  }, [selectedExamId, exams, mergeStudentsCache, mergeGradesCache, syncKey, isBackgroundSync, entrySheetRefreshKey]);
 
   const availableProgramsForFilter = useMemo(
     () =>
@@ -1063,6 +1064,7 @@ export function GradeEntryView() {
     setSavingRows((prev) => ({ ...prev, [studentId]: false }));
 
     if (!result.ok || result.queued) {
+      if (result.status === 409) setEntrySheetRefreshKey((key) => key + 1);
       showGradeEntryNotice(
         "error",
         result.error || "تعذر حذف الدرجة من بيانات النظام. لم يتم تغيير ورقة الإدخال.",
@@ -1147,12 +1149,15 @@ export function GradeEntryView() {
     }
 
     setSavingRows((prev) => ({ ...prev, [studentId]: true }));
+    const currentGrade = getGrade(studentId);
     const result = await gradeApi.add({
       studentId,
       examId: selectedExam.id,
       status,
       score,
       notes: draft.notes,
+      expectedUpdatedAt: currentGrade?.updatedAt || "",
+      expectMissing: !currentGrade,
     });
     setSavingRows((prev) => ({ ...prev, [studentId]: false }));
 
@@ -1421,6 +1426,7 @@ export function GradeEntryView() {
           status: "غائب",
           score: null,
           notes: draft.notes,
+          expectMissing: true,
         });
         return { student, draft, result };
       }),
@@ -1436,6 +1442,9 @@ export function GradeEntryView() {
 
     const successful = results.filter(({ result }) => result.ok && !result.queued);
     const failed = results.filter(({ result }) => !result.ok || result.queued);
+    if (failed.some(({ result }) => result.status === 409)) {
+      setEntrySheetRefreshKey((key) => key + 1);
+    }
     const nextDrafts: Record<string, DraftGrade> = {};
     const nextSavedRows: Record<string, string> = {};
     const nextEditableRows: Record<string, boolean> = {};

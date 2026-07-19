@@ -6,7 +6,11 @@ import { forbiddenResponse, getAuthPrincipal, requirePermission, unauthorizedRes
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { recalculateStudentsAcademicState } from '@/lib/academic-recalculate-server';
-import { confirmationRequiredResponse, isConfirmed, writeAuditLog } from '@/lib/audit-log-server';
+import { isConfirmed, writeAuditLog } from '@/lib/audit-log-server';
+import { withSerializableTransaction } from '@/lib/serializable-transaction';
+import { buildMutationPreviewToken } from '@/lib/mutation-preview-token';
+import { buildStudentAcademicImpactToken } from '@/lib/student-academic-impact-token';
+import type { Prisma } from '@prisma/client';
 
 function hasPermission(principal: AuthPrincipal, permission: string): boolean {
   return principal.isAdmin || principal.permissions.includes(permission);
@@ -36,6 +40,50 @@ function canManageAutomaticAcademicEffects(principal: AuthPrincipal): boolean {
     'exams.delete',
     'opportunities.manage',
   ]);
+}
+
+type OpportunityLogClient = typeof db | Prisma.TransactionClient;
+
+async function buildOpportunityLogDeletePreview(
+  client: OpportunityLogClient,
+  id: string,
+) {
+  const log = await client.opportunityLog.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      studentId: true,
+      examId: true,
+      action: true,
+      amount: true,
+      reason: true,
+      date: true,
+      chapterId: true,
+      student: {
+        select: {
+          name: true,
+          code: true,
+          createdAt: true,
+          accountingGraceDays: true,
+          gracePeriodStartDate: true,
+        },
+      },
+    },
+  });
+  if (!log) return null;
+  const academicImpactToken = await buildStudentAcademicImpactToken(client, {
+    studentId: log.studentId,
+    proposedCreatedAt: log.student.createdAt,
+    proposedGraceDays: log.student.accountingGraceDays,
+    proposedGraceStartDate: log.student.gracePeriodStartDate,
+  });
+  return {
+    log,
+    previewToken: buildMutationPreviewToken(`opportunity-log-delete:${id}`, {
+      log,
+      academicImpactToken,
+    }),
+  };
 }
 
 async function requireOpportunityMutation(req: NextRequest, payload?: { action?: unknown; reason?: unknown } | null) {
@@ -150,49 +198,38 @@ export async function DELETE(req: NextRequest) {
 
     const principal = await getAuthPrincipal(req);
     if (!principal) return unauthorizedResponse();
-
-    const existingLog = await db.opportunityLog.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        studentId: true,
-        examId: true,
-        action: true,
-        amount: true,
-        reason: true,
-        date: true,
-        chapterId: true,
-        student: { select: { name: true, code: true } },
-      },
-    });
-    if (!existingLog) return NextResponse.json({ ok: true, notFound: true });
-
-    if (!hasPermission(principal, 'opportunities.manage')) {
-      if (!isAutomaticOpportunityPayload(existingLog) || !canManageAutomaticAcademicEffects(principal)) {
-        return forbiddenResponse();
+    const submittedPreviewToken = String(searchParams.get('previewToken') || '').trim();
+    const confirmed = isConfirmed(searchParams.get('confirmImpact'));
+    const result = await withSerializableTransaction(async (tx) => {
+      const preview = await buildOpportunityLogDeletePreview(tx, id);
+      if (!preview) return { notFound: true } as const;
+      const existingLog = preview.log;
+      if (
+        !hasPermission(principal, 'opportunities.manage') &&
+        (!isAutomaticOpportunityPayload(existingLog) ||
+          !canManageAutomaticAcademicEffects(principal))
+      ) {
+        return { forbidden: true } as const;
       }
-    }
-
-    const isImpactfulLog = ['خصم', 'إضافة', 'إعادة تعيين', 'إعادة تفعيل', 'خصم تلقائي', 'فصل تلقائي'].includes(String(existingLog.action || ''))
-      || Number(existingLog.amount || 0) > 0
-      || isAutomaticOpportunityPayload(existingLog);
-    if (isImpactfulLog && !isConfirmed(searchParams.get('confirmImpact'))) {
-      return confirmationRequiredResponse(
-        'حذف حركة الفرص قد يغير حالة الطالب وفرصه. أكد العملية ليتم الحذف وإعادة الاحتساب.',
-        {
-          student: existingLog.student?.name || existingLog.studentId,
-          code: existingLog.student?.code,
-          action: existingLog.action,
-          amount: existingLog.amount,
-          reason: existingLog.reason,
-          examId: existingLog.examId,
-        },
-      );
-    }
-
-    const result = await db.$transaction(async (tx) => {
+      const isImpactfulLog =
+        ['خصم', 'إضافة', 'إعادة تعيين', 'إعادة تفعيل', 'خصم تلقائي', 'فصل تلقائي']
+          .includes(String(existingLog.action || '')) ||
+        Number(existingLog.amount || 0) > 0 ||
+        isAutomaticOpportunityPayload(existingLog);
+      if (
+        isImpactfulLog &&
+        (!confirmed || submittedPreviewToken !== preview.previewToken)
+      ) {
+        return {
+          previewConflict: {
+            previewToken: preview.previewToken,
+            requiresFreshPreview: Boolean(submittedPreviewToken),
+            log: existingLog,
+          },
+        } as const;
+      }
       const deleted = await tx.opportunityLog.deleteMany({ where: { id } });
-      const academicRecalculation = deleted.count > 0
+      const academicRecalculation = deleted.count > 0 && isImpactfulLog
         ? await recalculateStudentsAcademicState([existingLog.studentId], { tx })
         : null;
       await writeAuditLog(
@@ -213,6 +250,30 @@ export async function DELETE(req: NextRequest) {
       );
       return { ok: true, deleted: deleted.count, studentIds: [existingLog.studentId], academicRecalculation };
     });
+    if ('notFound' in result) return NextResponse.json({ ok: true, notFound: true });
+    if ('forbidden' in result) return forbiddenResponse();
+    if ('previewConflict' in result && result.previewConflict) {
+      const { previewToken, requiresFreshPreview, log } = result.previewConflict;
+      return NextResponse.json(
+        {
+          error: requiresFreshPreview
+            ? 'تغيرت حالة الطالب الأكاديمية بعد معاينة الحذف. راجع الأثر ثم أكد من جديد.'
+            : 'حذف حركة الفرص قد يغير حالة الطالب وفرصه. أكد العملية بعد مراجعة الأثر.',
+          requiresConfirmation: true,
+          requiresFreshPreview,
+          previewToken,
+          details: {
+            student: log.student.name || log.studentId,
+            code: log.student.code,
+            action: log.action,
+            amount: log.amount,
+            reason: log.reason,
+            examId: log.examId,
+          },
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(result);
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حذف حركة الفرص حالياً.');

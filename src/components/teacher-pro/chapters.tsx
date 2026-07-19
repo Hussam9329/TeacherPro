@@ -377,12 +377,17 @@ export function ChaptersView() {
   const applyChapterUpdate = async (
     payload: { name: string; opportunities: number },
     syncStudentOpportunities: boolean,
+    previewToken: string,
   ) => {
     const result = await chapterApi.update(editChapterDialog.id, {
       ...payload,
       syncStudentOpportunities,
+      previewToken,
     });
     if (!result.ok) {
+      if (result.status === 409) {
+        setChapterSyncDialog({ open: false, payload: null, preview: null });
+      }
       toast.error(result.error || "تعذر تعديل الفصل");
       return false;
     }
@@ -424,18 +429,27 @@ export function ChaptersView() {
       const preview = (
         previewResult.data as { preview?: ChapterOpportunityPreview } | null
       )?.preview;
+      if (!preview) {
+        toast.error("لم يُرجع النظام معاينة موثوقة، لذلك لم يتم الحفظ.");
+        return;
+      }
       if (preview?.changed && preview.affectedStudents > 0) {
         setChapterSyncDialog({ open: true, payload, preview });
         return;
       }
-      await applyChapterUpdate(payload, false);
+      await applyChapterUpdate(payload, false, preview.previewToken);
     })();
   };
 
   const handleChapterSyncDecision = async (sync: boolean) => {
     await runApplyChapterSyncLocked(async () => {
       if (!chapterSyncDialog.payload) return;
-      await applyChapterUpdate(chapterSyncDialog.payload, sync);
+      if (!chapterSyncDialog.preview) return;
+      await applyChapterUpdate(
+        chapterSyncDialog.payload,
+        sync,
+        chapterSyncDialog.preview.previewToken,
+      );
     })();
   };
 
@@ -516,8 +530,15 @@ export function ChaptersView() {
       }
       const result = await courseChapterApi.activate(link.id, action, {
         confirmImpact: true,
+        previewToken: actionPreview.previewToken,
       });
       if (!result.ok) {
+        if (result.status === 409) {
+          setActionPreview(null);
+          setActionPreviewError(
+            "تغيرت البيانات بعد المعاينة. أغلق النافذة وافتح الإجراء من جديد لمراجعة الأثر الحالي.",
+          );
+        }
         toast.error(result.error || "تعذر تنفيذ إجراء الفصل");
         return;
       }

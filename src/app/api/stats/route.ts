@@ -12,6 +12,7 @@ import {
   ensureGradeEntryMissingNoteSchema,
   withGradeEntryMissingNoteSchema,
 } from '@/lib/grade-entry-missing-note-schema';
+import { baghdadDateKey } from '@/lib/baghdad-time';
 
 const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
 const PLEDGE_NOTE_KIND = 'تعهد ولي الأمر';
@@ -86,11 +87,7 @@ function splitSelection(value?: string | null): string[] {
 }
 
 function dateKey(value: Date | string | null | undefined): string {
-  if (!value) return '';
-  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : '';
-  const date = new Date(value);
-  if (Number.isFinite(date.getTime())) return date.toISOString().slice(0, 10);
-  return String(value).slice(0, 10);
+  return baghdadDateKey(value);
 }
 
 function dayAfter(value: Date): Date {

@@ -13,6 +13,14 @@ import {
 } from "@/lib/route-helpers";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
+
+class ChapterPreviewConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ChapterPreviewConflictError";
+  }
+}
 
 function validateChapterPayload(body: Record<string, unknown>) {
   const nameError = requireText(body.name, "اسم الفصل");
@@ -32,6 +40,7 @@ async function buildOpportunityImpact(
   chapterId: string,
   nextOpportunities: number,
   client: typeof db | Prisma.TransactionClient = db,
+  proposedName?: string,
 ) {
   const chapter = await client.chapter.findUnique({
     where: { id: chapterId },
@@ -41,7 +50,11 @@ async function buildOpportunityImpact(
 
   const activeLinks = await client.courseChapter.findMany({
     where: { chapterId, active: true, archived: false },
-    select: { courseId: true, course: { select: { name: true } } },
+    select: {
+      id: true,
+      courseId: true,
+      course: { select: { id: true, name: true } },
+    },
   });
   const courseIds = Array.from(
     new Set(activeLinks.map((link) => link.courseId)),
@@ -91,6 +104,28 @@ async function buildOpportunityImpact(
     baselinesToChange: nonArchivedStudents.filter(
       (student) => Number(student.baseOpportunities || 0) !== nextOpportunities,
     ).length,
+    previewToken: buildMutationPreviewToken("chapter-opportunity-update", {
+      proposed: {
+        name: proposedName ?? chapter.name,
+        opportunities: nextOpportunities,
+      },
+      chapter,
+      activeLinks: activeLinks
+        .map((link) => ({
+          id: link.id,
+          courseId: link.courseId,
+          course: link.course,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
+      students: students
+        .map((student) => ({
+          id: student.id,
+          status: student.status,
+          opportunities: student.opportunities,
+          baseOpportunities: student.baseOpportunities,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
+    }),
     source: "database" as const,
   };
 }
@@ -162,6 +197,7 @@ export async function PUT(req: NextRequest) {
 
     const previewOnly = body.previewOnly === true;
     const syncStudentOpportunities = body.syncStudentOpportunities === true;
+    const previewToken = String(body.previewToken || "").trim();
     const existing = await db.chapter.findUnique({
       where: { id: String(id) },
       select: { id: true, name: true, opportunities: true },
@@ -194,15 +230,26 @@ export async function PUT(req: NextRequest) {
     const opportunityImpact = await buildOpportunityImpact(
       String(id),
       nextOpportunities,
+      db,
+      data.name ?? existing.name,
     );
     if (!opportunityImpact) return validationError("الفصل غير موجود", 404);
 
     if (previewOnly) {
+      const freshPreview = await withSerializableTransaction((tx) =>
+        buildOpportunityImpact(
+          String(id),
+          nextOpportunities,
+          tx,
+          data.name ?? existing.name,
+        ),
+      );
+      if (!freshPreview) return validationError("الفصل غير موجود", 404);
       return NextResponse.json({
-        preview: opportunityImpact,
+        preview: freshPreview,
         message:
-          opportunityImpact.changed && opportunityImpact.affectedStudents > 0
-            ? `سيتأثر ${opportunityImpact.affectedStudents} طالب في ${opportunityImpact.activeCourses} دورة مفعلة.`
+          freshPreview.changed && freshPreview.affectedStudents > 0
+            ? `سيتأثر ${freshPreview.affectedStudents} طالب في ${freshPreview.activeCourses} دورة مفعلة.`
             : "لا يوجد طلاب يحتاجون مزامنة بسبب هذا التعديل.",
       });
     }
@@ -220,6 +267,23 @@ export async function PUT(req: NextRequest) {
     }
 
     const result = await withSerializableTransaction(async (tx) => {
+      const currentImpact = await buildOpportunityImpact(
+        String(id),
+        nextOpportunities,
+        tx,
+        data.name ?? existing.name,
+      );
+      if (!currentImpact) {
+        throw new ChapterPreviewConflictError("الفصل غير موجود");
+      }
+      if (
+        body.opportunities !== undefined &&
+        (!previewToken || previewToken !== currentImpact.previewToken)
+      ) {
+        throw new ChapterPreviewConflictError(
+          "تغير الفصل أو الطلاب المتأثرون بعد المعاينة. تم إيقاف الحفظ قبل أي تعديل؛ أعد المعاينة ثم أكد من جديد.",
+        );
+      }
       const chapter = await tx.chapter.update({
         where: { id: String(id) },
         data,
@@ -295,6 +359,9 @@ export async function PUT(req: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof ChapterPreviewConflictError) {
+      return validationError(error.message, 409);
+    }
     return routeErrorResponse(error, "تعذر تحديث الفصل حالياً.");
   }
 }
@@ -307,24 +374,35 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) return validationError("تعذر تحديد الفصل المطلوب");
-    const [activeLinks, linkedCourseChapters, linkedOpportunityLogs] =
-      await Promise.all([
-        db.courseChapter.count({ where: { chapterId: id, active: true } }),
-        db.courseChapter.count({ where: { chapterId: id } }),
-        db.opportunityLog.count({ where: { chapterId: id } }),
-      ]);
-    if (activeLinks > 0)
+    const result = await withSerializableTransaction(async (tx) => {
+      const [chapter, activeLinks, linkedCourseChapters, linkedOpportunityLogs] =
+        await Promise.all([
+          tx.chapter.findUnique({ where: { id }, select: { id: true } }),
+          tx.courseChapter.count({ where: { chapterId: id, active: true } }),
+          tx.courseChapter.count({ where: { chapterId: id } }),
+          tx.opportunityLog.count({ where: { chapterId: id } }),
+        ]);
+      if (!chapter) return { notFound: true } as const;
+      if (activeLinks > 0) return { activeLinks } as const;
+      if (linkedCourseChapters > 0 || linkedOpportunityLogs > 0) {
+        return { linkedCourseChapters, linkedOpportunityLogs } as const;
+      }
+      await tx.chapter.delete({ where: { id } });
+      return { deleted: true } as const;
+    });
+    if ('notFound' in result)
+      return validationError("الفصل غير موجود", 404);
+    if ('activeLinks' in result)
       return validationError(
         "لا يمكن حذف فصل مفعل حالياً. ألغِ تفعيله أولاً.",
         409,
       );
-    if (linkedCourseChapters > 0 || linkedOpportunityLogs > 0) {
+    if ('linkedCourseChapters' in result) {
       return validationError(
-        `لا يمكن حذف الفصل لأنه مرتبط بـ ${linkedCourseChapters} ربط دورة و ${linkedOpportunityLogs} سجل فرص. احذف الروابط أو راجع الأثر قبل الحذف.`,
+        `لا يمكن حذف الفصل لأنه مرتبط بـ ${result.linkedCourseChapters} ربط دورة و ${result.linkedOpportunityLogs} سجل فرص. احذف الروابط أو راجع الأثر قبل الحذف.`,
         409,
       );
     }
-    await db.chapter.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حذف الفصل حالياً.");

@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { withFollowupTables } from "@/lib/followup-schema";
@@ -218,7 +219,7 @@ function searchableValues(
     student.status,
     student.studyType,
     exam.name,
-    exam.date?.toISOString?.().slice(0, 10),
+    baghdadDateKey(exam.date),
     grade?.status,
     grade?.notes,
     score,

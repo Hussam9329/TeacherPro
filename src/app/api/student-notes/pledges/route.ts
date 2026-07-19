@@ -7,6 +7,8 @@ import { requirePermission, requirePermissionPrincipal } from "@/lib/server-auth
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { Prisma } from "@prisma/client";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
+import { baghdadDateKey } from "@/lib/baghdad-time";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
@@ -26,9 +28,7 @@ function cleanText(value: unknown): string {
 }
 
 function dayKey(value: Date | string | null | undefined): string {
-  if (!value) return "";
-  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : "";
-  return String(value || "").slice(0, 10);
+  return baghdadDateKey(value);
 }
 
 function normalizeDismissalText(value: string | null | undefined): string {
@@ -412,7 +412,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "remove-pledge") {
-      const result = await db.$transaction(async (tx) => {
+      const result = await withSerializableTransaction(async (tx) => {
         const student = await tx.student.findUnique({ where: { id: studentId } });
         if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
 
@@ -476,7 +476,7 @@ export async function POST(req: NextRequest) {
         date: dismissalDate || dayKey(new Date()),
       });
 
-    const result = await db.$transaction(async (tx) => {
+    const result = await withSerializableTransaction(async (tx) => {
       const student = await tx.student.findUnique({ where: { id: studentId } });
       if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
       if (student.status === ARCHIVED_STUDENT_STATUS) {

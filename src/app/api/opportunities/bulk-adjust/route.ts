@@ -7,11 +7,7 @@ import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withFollowupTables } from "@/lib/followup-schema";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
-import {
-  buildOpportunityFilters,
-  composeStudentWhere,
-  normalizeBoolean,
-} from "@/lib/opportunity-filters-server";
+import { normalizeBoolean } from "@/lib/opportunity-filters-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { isValidStudentStatus, isValidDismissalType } from "@/lib/student-status-enums";
@@ -21,6 +17,8 @@ import {
   riskyBulkOpportunityTargetCount,
 } from "@/lib/global-side-effects-safety";
 import { attachStudentOpportunitySnapshotsWithClient } from "@/lib/student-opportunity-snapshot-server";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { buildBulkOpportunityPreview } from "@/lib/bulk-opportunity-preview-server";
 
 type StudentUpdatePayload = {
   id?: unknown;
@@ -192,64 +190,33 @@ async function handleFilterBasedBulkAdjust(
     false,
   );
 
-  const filters = buildOpportunityFilters({
+  const previewInput = {
     courseId: normalizeText(body.courseId, 120),
     status: normalizeText(body.status, 120),
     opportunityCount: normalizeText(body.opportunityCount, 40),
     q: normalizeText(body.q, 300),
-  });
+    actionType,
+    excludeDismissed,
+    excludeFullOpportunities,
+    reactivateDismissedOnAdd,
+  } as const;
+  const submittedPreviewToken = normalizeText(body.previewToken, 200);
 
   const result = await withFollowupTables(
     async () =>
-      db.$transaction(async (tx) => {
-        const candidateRows = await tx.student.findMany({
-          where: composeStudentWhere(filters),
-          select: {
-            id: true,
-            status: true,
-            opportunities: true,
-            baseOpportunities: true,
-            courseId: true,
-          },
-        });
-        const totalMatching = candidateRows.length;
-        const snapshots =
-          await attachStudentOpportunitySnapshotsWithClient<
-            (typeof candidateRows)[number]
-          >(tx, candidateRows);
-        const eligibleRows = snapshots.filter(
-          (student) => student.opportunityHealth === "ready",
-        );
-        const noActiveChapter = snapshots.filter(
-          (student) => student.opportunityHealth === "missing-active-chapter",
-        ).length;
-        const activeChapterConflicts = snapshots.filter(
-          (student) => student.opportunityHealth === "active-chapter-conflict",
-        ).length;
-        const zeroOpportunityLimit = snapshots.filter(
-          (student) => student.opportunityHealth === "zero-limit",
-        ).length;
-        const invalidOpportunitySource =
-          noActiveChapter + activeChapterConflicts + zeroOpportunityLimit;
-
-        const targetRows = eligibleRows.filter((student) => {
-          if (excludeDismissed && student.status === "مفصول") return false;
-          if (
-            actionType === "add" &&
-            student.status === "مفصول" &&
-            !reactivateDismissedOnAdd
-          ) {
-            return false;
-          }
-          if (
-            actionType === "deduct" &&
-            excludeFullOpportunities &&
-            student.isOpportunityFull
-          ) {
-            return false;
-          }
-          return true;
-        });
+      withSerializableTransaction(async (tx) => {
+        const preview = await buildBulkOpportunityPreview(tx, previewInput);
+        const {
+          targetRows,
+          totalMatching,
+          eligibleWithActiveChapter,
+          noActiveChapter,
+          activeChapterConflicts,
+          zeroOpportunityLimit,
+          invalidOpportunitySource,
+          targetCount,
+          previewToken,
+        } = preview;
 
         if (!targetRows.length) {
           return {
@@ -257,7 +224,7 @@ async function handleFilterBasedBulkAdjust(
             savedOpportunityLogs: 0,
             savedStudentNotes: 0,
             totalMatching,
-            eligibleWithActiveChapter: eligibleRows.length,
+            eligibleWithActiveChapter,
             noActiveChapter,
             activeChapterConflicts,
             zeroOpportunityLimit,
@@ -268,19 +235,34 @@ async function handleFilterBasedBulkAdjust(
           };
         }
 
-        const targetCount = targetRows.length;
-        const confirmed = isConfirmedImpact(body.confirmImpact);
-        if (riskyBulkOpportunityTargetCount(targetCount) && !confirmed) {
+        if (!submittedPreviewToken || submittedPreviewToken !== previewToken) {
           return {
-            confirmationRequired: true,
+            previewConflict: true,
             totalMatching,
-            eligibleWithActiveChapter: eligibleRows.length,
+            eligibleWithActiveChapter,
             noActiveChapter,
             activeChapterConflicts,
             zeroOpportunityLimit,
             invalidOpportunitySource,
             targetCount,
-            skipped: Math.max(0, totalMatching - targetCount),
+            skipped: preview.skipped,
+            previewToken,
+          };
+        }
+
+        const confirmed = isConfirmedImpact(body.confirmImpact);
+        if (riskyBulkOpportunityTargetCount(targetCount) && !confirmed) {
+          return {
+            confirmationRequired: true,
+            totalMatching,
+            eligibleWithActiveChapter,
+            noActiveChapter,
+            activeChapterConflicts,
+            zeroOpportunityLimit,
+            invalidOpportunitySource,
+            targetCount,
+            skipped: preview.skipped,
+            previewToken,
           };
         }
 
@@ -395,19 +377,36 @@ async function handleFilterBasedBulkAdjust(
           savedStudentNotes: studentNotes.length,
           reactivatedStudents: reactivationStudentIds.length,
           totalMatching,
-          eligibleWithActiveChapter: eligibleRows.length,
+          eligibleWithActiveChapter,
           noActiveChapter,
           activeChapterConflicts,
           zeroOpportunityLimit,
           invalidOpportunitySource,
           skipped: Math.max(0, totalMatching - appliedStudentIds.length),
           targetCount,
+          previewToken,
           requiresConfirmation: riskyBulkOpportunityTargetCount(targetCount),
           academicRecalculation,
         };
       }),
     "BulkOpportunityAdjustByFilter",
   );
+
+  if ("previewConflict" in result && result.previewConflict) {
+    return NextResponse.json(
+      {
+        error:
+          "تغيّر نطاق الطلاب أو أرصدتهم بعد المعاينة. تم إيقاف العملية قبل أي تعديل؛ راجع العدد ثم أكد من جديد.",
+        requiresFreshPreview: true,
+        details: {
+          totalMatching: result.totalMatching,
+          targetCount: result.targetCount,
+          skipped: result.skipped,
+        },
+      },
+      { status: 409 },
+    );
+  }
 
   if ("confirmationRequired" in result && result.confirmationRequired) {
     return globalImpactConfirmationResponse(

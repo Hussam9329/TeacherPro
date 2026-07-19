@@ -69,7 +69,7 @@ export function splitSelection(value?: string | null): string[] {
 
 function parseDateOnly(value?: string | Date | null): Date | null {
   if (!value) return null;
-  const key = value instanceof Date ? baghdadDateKey(value) : String(value).slice(0, 10);
+  const key = baghdadDateKey(value);
   const match = key.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
   const [, year, month, day] = match;

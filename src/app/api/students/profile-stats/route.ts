@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 
 type ExamLite = {
   id: string;
@@ -38,11 +39,7 @@ type GradeLite = {
 };
 
 function dayKey(value: Date | string | null | undefined): string {
-  if (!value) return "";
-  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : "";
-  const date = new Date(value);
-  if (Number.isFinite(date.getTime())) return date.toISOString().slice(0, 10);
-  return String(value).slice(0, 10);
+  return baghdadDateKey(value);
 }
 
 /**

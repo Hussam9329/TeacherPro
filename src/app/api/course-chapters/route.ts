@@ -468,23 +468,33 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) return validationError("تعذر تحديد رابط الفصل بالدورة");
-    const link = await db.courseChapter.findUnique({ where: { id } });
-    if (!link)
+    const result = await withSerializableTransaction(async (tx) => {
+      const link = await tx.courseChapter.findUnique({ where: { id } });
+      if (!link) return { notFound: true } as const;
+      if (link.active) return { active: true } as const;
+      const archiveEntries = parseArchiveEntries(link.archive);
+      const rawArchive = String(link.archive || "[]").trim();
+      const archiveCount =
+        archiveEntries.length || (rawArchive && rawArchive !== "[]" ? 1 : 0);
+      if (archiveCount > 0) {
+        return { archiveCount } as const;
+      }
+      await tx.courseChapter.delete({ where: { id } });
+      return { deleted: true } as const;
+    });
+    if ('notFound' in result)
       return validationError("رابط الفصل غير موجود أو تم حذفه مسبقاً", 404);
-    if (link.active)
+    if ('active' in result)
       return validationError(
         "لا يمكن حذف ربط فصل مفعل. ألغِ التفعيل أولاً.",
         409,
       );
-    const archiveEntries = parseArchiveEntries(link.archive);
-    const confirmImpact = searchParams.get("confirmImpact") === "1";
-    if (archiveEntries.length > 0 && !confirmImpact) {
+    if ('archiveCount' in result && typeof result.archiveCount === "number") {
       return validationError(
-        `لا يمكن حذف هذا الربط لأنه يحتوي أرشيف فرص لـ ${archiveEntries.length} طالب. راجع الأثر أولاً.`,
+        `لا يمكن حذف هذا الربط لأنه يحتوي أرشيف فرص لـ ${result.archiveCount} طالب. راجع الأثر أولاً.`,
         409,
       );
     }
-    await db.courseChapter.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حذف رابط الفصل بالدورة حالياً.");

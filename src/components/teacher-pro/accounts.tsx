@@ -21,6 +21,7 @@ import {
   useTeacherProBackgroundSyncDetector,
   useTeacherProSyncKey,
 } from '@/hooks/use-teacherpro-sync';
+import { baghdadTodayKey } from '@/lib/baghdad-time';
 
 // ─── Permission categories for grouping ──────────────────────────────────────
 
@@ -1242,7 +1243,7 @@ function BackupTab() {
       const blob = new Blob([jsonStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const date = new Date().toISOString().slice(0, 10);
+      const date = baghdadTodayKey();
       a.href = url;
       a.download = `teacherpro-backup-${date}.json`;
       document.body.appendChild(a);

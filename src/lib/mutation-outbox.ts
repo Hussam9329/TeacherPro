@@ -1,4 +1,9 @@
-import { emitTeacherProDataChanged, inferTeacherProScopesFromEndpoint } from "./teacherpro-sync";
+import {
+  announceTeacherProSyncError,
+  emitTeacherProDataChanged,
+  inferTeacherProScopesFromEndpoint,
+} from "./teacherpro-sync";
+import { mutationCanBeReplayed } from "./mutation-replay-policy";
 
 /**
  * Generic client-side outbox for any server mutation that may fail due to
@@ -30,8 +35,16 @@ export type QueuedMutation = {
 };
 
 const OUTBOX_KEY = 'teacherpro-mutation-outbox-v1';
+const FAILED_OUTBOX_KEY = 'teacherpro-mutation-outbox-failed-v1';
 const MAX_OUTBOX = 1000;
+const MAX_FAILED_OUTBOX = 100;
 const MAX_ATTEMPTS = 5;
+
+export type FailedQueuedMutation = QueuedMutation & {
+  failedAt: number;
+  status?: number;
+  error: string;
+};
 
 function canUseStorage(): boolean {
   return typeof window !== 'undefined' && Boolean(window.localStorage);
@@ -54,6 +67,41 @@ function writeOutbox(items: QueuedMutation[]): void {
   } catch (error) {
     console.warn('[MutationOutbox] failed to write:', error);
   }
+}
+
+function recordFailedMutation(
+  item: QueuedMutation,
+  error: string,
+  status?: number,
+): void {
+  if (!canUseStorage()) return;
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(FAILED_OUTBOX_KEY) || '[]',
+    );
+    const failed = Array.isArray(parsed) ? parsed as FailedQueuedMutation[] : [];
+    failed.push({ ...item, failedAt: Date.now(), status, error });
+    window.localStorage.setItem(
+      FAILED_OUTBOX_KEY,
+      JSON.stringify(failed.slice(-MAX_FAILED_OUTBOX)),
+    );
+  } catch (storageError) {
+    console.warn('[MutationOutbox] failed to preserve rejected mutation:', storageError);
+  }
+}
+
+async function responseErrorMessage(res: Response): Promise<string> {
+  const fallback = `رفض الخادم الطلب المؤجل (رمز ${res.status})`;
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const body = await res.clone().json().catch(() => null) as {
+      error?: unknown;
+      message?: unknown;
+    } | null;
+    const message = String(body?.error ?? body?.message ?? '').trim();
+    return message || fallback;
+  }
+  return (await res.clone().text().catch(() => '')).trim() || fallback;
 }
 
 function generateId(): string {
@@ -130,6 +178,13 @@ export async function enqueueMutation(input: {
     // network error → queue.
   }
 
+  if (!mutationCanBeReplayed(endpoint, method, payload)) {
+    announceTeacherProSyncError(
+      'تعذر التحقق من عملية غير قابلة للتكرار بأمان. حدّث البيانات قبل إعادة تنفيذها يدوياً.',
+    );
+    return { ok: false };
+  }
+
   return queueOnly(input);
 }
 
@@ -181,8 +236,19 @@ export async function flushOutbox(): Promise<number> {
   try {
     const remaining: QueuedMutation[] = [];
     for (const item of items) {
+      if (!mutationCanBeReplayed(item.endpoint, item.method, item.payload)) {
+        const message =
+          'أوقف النظام إعادة طلب قديم غير قابل للتكرار بأمان لتجنب مضاعفة البيانات.';
+        recordFailedMutation(item, message);
+        announceTeacherProSyncError(
+          `${message} حدّث البيانات وتحقق من النتيجة قبل تكرار العملية يدوياً.`,
+        );
+        continue;
+      }
       if (item.attempts >= MAX_ATTEMPTS) {
-        // Drop exhausted items to avoid unbounded growth.
+        const message = 'تعذر تنفيذ تعديل مؤجل بعد عدة محاولات. راجع الاتصال وأعد العملية.';
+        recordFailedMutation(item, message);
+        announceTeacherProSyncError(message);
         continue;
       }
       try {
@@ -204,6 +270,11 @@ export async function flushOutbox(): Promise<number> {
           responseIsExplicitlyNonRetryable(res) ||
           (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429)
         ) {
+          const message = await responseErrorMessage(res);
+          recordFailedMutation(item, message, res.status);
+          announceTeacherProSyncError(
+            `لم يُنفذ تعديل مؤجل: ${message} حدّث البيانات وكرر العملية يدوياً عند الحاجة.`,
+          );
           continue;
         }
         // Transient: keep with incremented attempts.
@@ -237,6 +308,18 @@ export async function flushOutbox(): Promise<number> {
 
 export function getPendingMutationCount(): number {
   return readOutbox().length;
+}
+
+export function getFailedMutationCount(): number {
+  if (!canUseStorage()) return 0;
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(FAILED_OUTBOX_KEY) || '[]',
+    );
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
 }
 
 // Auto-flush on online/visibility events.

@@ -1046,12 +1046,22 @@ export function CoursesView() {
     courseId: string,
     payload: Record<string, unknown>,
     syncStudentSnapshots: boolean,
+    previewToken: string,
   ) => {
     const result = await courseApi.update(courseId, {
       ...payload,
       syncStudentSnapshots,
+      previewToken,
     });
     if (!result.ok) {
+      if (result.status === 409) {
+        setCourseSyncDialog({
+          open: false,
+          courseId: "",
+          payload: null,
+          preview: null,
+        });
+      }
       toast.error(result.error || "تعذر تعديل الدورة");
       return false;
     }
@@ -1123,7 +1133,12 @@ export function CoursesView() {
       });
       return;
     }
-    await applyCourseUpdate(editDialog.courseId, payload, false);
+    await applyCourseUpdate(
+      editDialog.courseId,
+      payload,
+      false,
+      preview.previewToken,
+    );
   });
 
   const handleCourseSyncDecision = runApplyCourseSyncLocked(
@@ -1133,6 +1148,7 @@ export function CoursesView() {
         courseSyncDialog.courseId,
         courseSyncDialog.payload,
         syncStudentSnapshots,
+        courseSyncDialog.preview?.previewToken || "",
       );
     },
   );

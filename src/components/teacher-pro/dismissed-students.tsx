@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { toast } from "@/lib/user-toast";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 import { CountScopeSummary, StatCard } from "./ui-kit";
 import {
   Users,
@@ -72,9 +73,7 @@ type DismissalDetail = {
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 
 function dayKey(value: string | Date | null | undefined): string {
-  if (!value) return "";
-  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : "";
-  return String(value || "").slice(0, 10);
+  return baghdadDateKey(value);
 }
 
 function normalizeDismissalText(value: string | null | undefined): string {

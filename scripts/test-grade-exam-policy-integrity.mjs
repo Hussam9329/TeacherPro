@@ -99,9 +99,11 @@ must(
 );
 
 must(
-  examRoute.includes("confirmExistingGrades") &&
+  examRoute.includes("activationPreviewToken") &&
+    examRoute.includes("requiresActivationConfirmation") &&
+    examRoute.includes("storedGrades") &&
     examRoute.includes("درجة محفوظة") &&
-    examRecords.includes("قد يجعل الدرجات المحفوظة سابقاً مؤثرة") &&
+    examRecords.includes("updateExamWithActivationConfirmation") &&
     migration.includes("Quarantine legacy grades") &&
     migration.includes('"scheduledActivateAt" = NULL'),
   "الدرجات القديمة في الامتحانات المستقبلية تُحجر ولا تتفعّل لاحقاً بلا تأكيد صريح",
@@ -109,7 +111,7 @@ must(
 );
 
 must(
-  examRoute.includes("mainSite: data.mainSite ?? existingExam.mainSite") &&
+  examRoute.includes("const candidateExam = { ...existingExam, ...data }") &&
     examRoute.includes("candidateValidationMessage"),
   "تعديل الامتحان يمرر mainSite الحقيقي إلى التحقق ولا يُرفض دائماً",
   "يجب إصلاح نقص mainSite في validateExamPayload أثناء التعديل.",
@@ -119,7 +121,7 @@ must(
   examUtils.includes("A future activation is authoritative") &&
     examUtils.includes("if (activateAt && activateAt > now)") &&
     examRoute.includes("effectiveStoredActive") &&
-    examRoute.includes("data.active = false"),
+    examRoute.includes("normalizedPatch.active = false"),
   "التفعيل المستقبلي يبقي الامتحان غير متاح حتى يحين موعده",
   "active=true لا يجوز أن يتجاوز scheduledActivateAt المستقبلي.",
 );

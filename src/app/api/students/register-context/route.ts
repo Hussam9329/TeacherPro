@@ -13,10 +13,11 @@ import {
   type CourseLocationConfig,
   type StudyType,
 } from "@/lib/course-config";
+import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
 
 function dateOnly(value: Date | string | null | undefined): string {
-  if (!value) return new Date().toISOString().slice(0, 10);
-  return new Date(value).toISOString().slice(0, 10);
+  if (!value) return baghdadTodayKey();
+  return baghdadDateKey(value) || baghdadTodayKey();
 }
 
 function normalizeCourse(course: Record<string, unknown>) {

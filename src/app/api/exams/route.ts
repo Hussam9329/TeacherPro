@@ -11,6 +11,9 @@ import { ensureExamSchema } from '@/lib/exam-schema';
 import { canonicalCourseIds, parseCourseIds, syncExamCourseLinks } from '@/lib/exam-course-links';
 import { recalculateStudentsForExam } from '@/lib/academic-recalculate-server';
 import { writeRequestAuditLog } from '@/lib/audit-log-server';
+import type { Prisma } from '@prisma/client';
+import { buildMutationPreviewToken } from '@/lib/mutation-preview-token';
+import { withSerializableTransaction } from '@/lib/serializable-transaction';
 
 function parseBoolean(value: unknown): boolean {
   return value === true || value === 'true' || value === '1' || value === 1;
@@ -23,7 +26,6 @@ function canonicalDateTime(value: unknown): string {
 }
 
 function academicExamSnapshot(exam: {
-  name?: unknown;
   type?: unknown;
   courseIds?: unknown;
   date?: unknown;
@@ -38,7 +40,6 @@ function academicExamSnapshot(exam: {
   scheduledDeactivateAt?: unknown;
 }): Record<string, string> {
   return {
-    name: String(exam.name ?? ''),
     type: String(exam.type ?? ''),
     courseIds: canonicalCourseIds(exam.courseIds),
     date: canonicalDateTime(exam.date),
@@ -60,13 +61,22 @@ function hasAcademicExamChange(before: unknown, after: unknown): boolean {
   return Object.keys(beforeSnapshot).some((key) => beforeSnapshot[key] !== afterSnapshot[key]);
 }
 
+function examMutationToken(exam: Record<string, unknown>): string {
+  return buildMutationPreviewToken(`exam-edit:${String(exam.id || '')}`, exam);
+}
 
 
-async function courseSelectionProblems(courseIds: string[]): Promise<string[]> {
+
+type CourseValidationClient = Pick<Prisma.TransactionClient, 'course' | 'courseChapter'>;
+
+async function courseSelectionProblems(
+  client: CourseValidationClient,
+  courseIds: string[],
+): Promise<string[]> {
   const uniqueCourseIds = Array.from(new Set(courseIds.filter(Boolean)));
   if (uniqueCourseIds.length === 0) return [];
 
-  const courses = await db.course.findMany({
+  const courses = await client.course.findMany({
     where: { id: { in: uniqueCourseIds } },
     select: { id: true, name: true, active: true },
   }) as Array<{ id: string; name: string; active: boolean }>;
@@ -74,7 +84,7 @@ async function courseSelectionProblems(courseIds: string[]): Promise<string[]> {
     courses.map((course) => [course.id, course]),
   );
 
-  const activeLinks = await db.courseChapter.findMany({
+  const activeLinks = await client.courseChapter.findMany({
     where: { courseId: { in: uniqueCourseIds }, active: true, archived: false },
     select: { courseId: true },
   }) as Array<{ courseId: string }>;
@@ -148,11 +158,25 @@ export async function GET(req: NextRequest) {
         db.exam.findMany({ orderBy: { date: 'desc' }, skip, take: limit }),
         db.exam.count(),
       ]);
-      return NextResponse.json({ exams, total, page, limit, totalPages: Math.ceil(total / limit) });
+      return NextResponse.json({
+        exams: exams.map((exam) => ({
+          ...exam,
+          mutationToken: examMutationToken(exam as unknown as Record<string, unknown>),
+        })),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      });
     }
     // Default: return all exams WITHOUT grades (grades fetched separately via /api/grades)
     const exams = await db.exam.findMany({ orderBy: { date: 'desc' } });
-    return NextResponse.json({ exams });
+    return NextResponse.json({
+      exams: exams.map((exam) => ({
+        ...exam,
+        mutationToken: examMutationToken(exam as unknown as Record<string, unknown>),
+      })),
+    });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل الامتحانات حالياً.');
   }
@@ -169,7 +193,7 @@ export async function POST(req: NextRequest) {
     const validationMessage = validateExamPayload(body);
     if (validationMessage) return validationError(validationMessage);
     const parsedCourseIds = parseCourseIds(body.courseIds);
-    const courseProblems = await courseSelectionProblems(parsedCourseIds);
+    const courseProblems = await courseSelectionProblems(db, parsedCourseIds);
     if (courseProblems.length > 0) {
       return validationError(`لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${courseProblems.join('، ')}`);
     }
@@ -208,7 +232,16 @@ export async function POST(req: NextRequest) {
       courseIds: parsedCourseIds,
       active: exam.active,
     });
-    return NextResponse.json({ exam, source: 'database' }, { status: 201 });
+    return NextResponse.json(
+      {
+        exam: {
+          ...exam,
+          mutationToken: examMutationToken(exam as unknown as Record<string, unknown>),
+        },
+        source: 'database',
+      },
+      { status: 201 },
+    );
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حفظ الامتحان حالياً.');
   }
@@ -222,85 +255,117 @@ export async function PUT(req: NextRequest) {
     await ensureExamSchema();
 
     const body = await req.json();
-    const { id, ...data } = body;
+    const {
+      id,
+      activationPreviewToken,
+      expectedMutationToken,
+      confirmExistingGrades: _legacyConfirmExistingGrades,
+      ...rawPatch
+    } = body;
+    const normalizedPatch = { ...rawPatch };
     const allowedUpdateKeys = new Set([
       'name', 'type', 'courseIds', 'mainSite', 'date', 'fullMark', 'passMark',
       'discountMark', 'opportunitiesPenalty', 'dismissalGrade', 'noDiscount',
       'active', 'scheduledActivateAt', 'scheduledDeactivateAt',
     ]);
-    for (const key of Object.keys(data)) {
-      if (!allowedUpdateKeys.has(key)) delete data[key];
+    for (const key of Object.keys(normalizedPatch)) {
+      if (!allowedUpdateKeys.has(key)) delete normalizedPatch[key];
     }
     if (!id) return validationError('تعذر تحديد الامتحان المطلوب');
-    const existingExam = await db.exam.findUnique({ where: { id } });
-    if (!existingExam) return validationError('الامتحان المطلوب غير موجود');
-    if (data.name !== undefined) {
-      const nameError = requireText(data.name, 'اسم الامتحان');
+    if (normalizedPatch.name !== undefined) {
+      const nameError = requireText(normalizedPatch.name, 'اسم الامتحان');
       if (nameError) return validationError(nameError);
-      data.name = String(data.name ?? '').trim();
+      normalizedPatch.name = String(normalizedPatch.name ?? '').trim();
     }
-    if (data.courseIds !== undefined) data.courseIds = JSON.stringify(parseCourseIds(data.courseIds));
-    if (data.date !== undefined) {
-      const parsedDate = parseBaghdadDateOnly(data.date as string | Date | null | undefined);
+    if (normalizedPatch.courseIds !== undefined) normalizedPatch.courseIds = JSON.stringify(parseCourseIds(normalizedPatch.courseIds));
+    if (normalizedPatch.date !== undefined) {
+      const parsedDate = parseBaghdadDateOnly(normalizedPatch.date as string | Date | null | undefined);
       if (!parsedDate) return validationError('تاريخ الامتحان غير صحيح');
-      data.date = parsedDate;
+      normalizedPatch.date = parsedDate;
     }
-    if (data.fullMark !== undefined) data.fullMark = Number(data.fullMark);
-    if (data.passMark !== undefined) data.passMark = Number(data.passMark);
-    if (data.discountMark !== undefined) data.discountMark = Number(data.discountMark);
-    if (data.opportunitiesPenalty !== undefined) data.opportunitiesPenalty = String(data.opportunitiesPenalty);
-    if (data.dismissalGrade !== undefined) data.dismissalGrade = data.dismissalGrade === null || data.dismissalGrade === "" ? null : Number(data.dismissalGrade);
-    if (data.noDiscount !== undefined) data.noDiscount = parseBoolean(data.noDiscount);
-    if (data.scheduledActivateAt !== undefined) data.scheduledActivateAt = data.scheduledActivateAt ? parseBaghdadDateTime(String(data.scheduledActivateAt)) : null;
-    if (data.scheduledDeactivateAt !== undefined) data.scheduledDeactivateAt = data.scheduledDeactivateAt ? parseBaghdadDateTime(String(data.scheduledDeactivateAt)) : null;
-    if (data.active !== undefined) data.active = parseBoolean(data.active);
-    if (data.scheduledActivateAt instanceof Date && data.scheduledActivateAt > new Date()) data.active = false;
+    if (normalizedPatch.fullMark !== undefined) normalizedPatch.fullMark = Number(normalizedPatch.fullMark);
+    if (normalizedPatch.passMark !== undefined) normalizedPatch.passMark = Number(normalizedPatch.passMark);
+    if (normalizedPatch.discountMark !== undefined) normalizedPatch.discountMark = Number(normalizedPatch.discountMark);
+    if (normalizedPatch.opportunitiesPenalty !== undefined) normalizedPatch.opportunitiesPenalty = String(normalizedPatch.opportunitiesPenalty);
+    if (normalizedPatch.dismissalGrade !== undefined) normalizedPatch.dismissalGrade = normalizedPatch.dismissalGrade === null || normalizedPatch.dismissalGrade === "" ? null : Number(normalizedPatch.dismissalGrade);
+    if (normalizedPatch.noDiscount !== undefined) normalizedPatch.noDiscount = parseBoolean(normalizedPatch.noDiscount);
+    if (normalizedPatch.scheduledActivateAt !== undefined) normalizedPatch.scheduledActivateAt = normalizedPatch.scheduledActivateAt ? parseBaghdadDateTime(String(normalizedPatch.scheduledActivateAt)) : null;
+    if (normalizedPatch.scheduledDeactivateAt !== undefined) normalizedPatch.scheduledDeactivateAt = normalizedPatch.scheduledDeactivateAt ? parseBaghdadDateTime(String(normalizedPatch.scheduledDeactivateAt)) : null;
+    if (normalizedPatch.active !== undefined) normalizedPatch.active = parseBoolean(normalizedPatch.active);
+    if (normalizedPatch.scheduledActivateAt instanceof Date && normalizedPatch.scheduledActivateAt > new Date()) normalizedPatch.active = false;
 
-    const candidateValidationMessage = validateExamPayload({
-      name: data.name ?? existingExam.name,
-      type: data.type ?? existingExam.type,
-      courseIds: data.courseIds ?? existingExam.courseIds,
-      mainSite: data.mainSite ?? existingExam.mainSite,
-      date: data.date ?? existingExam.date,
-      fullMark: data.fullMark ?? existingExam.fullMark,
-      passMark: data.passMark ?? existingExam.passMark,
-      discountMark: data.discountMark ?? existingExam.discountMark,
-      opportunitiesPenalty: data.opportunitiesPenalty ?? existingExam.opportunitiesPenalty,
-      noDiscount: data.noDiscount ?? existingExam.noDiscount,
-      dismissalGrade: data.dismissalGrade !== undefined ? data.dismissalGrade : existingExam.dismissalGrade,
-    });
-    if (candidateValidationMessage) return validationError(candidateValidationMessage);
-    const candidateCourseIds = parseCourseIds(data.courseIds ?? existingExam.courseIds);
-    const courseProblems = await courseSelectionProblems(candidateCourseIds);
-    if (courseProblems.length > 0) {
-      return validationError(`لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${courseProblems.join('، ')}`);
-    }
-    const candidateExamForAvailability = { ...existingExam, ...data };
-    const wasAvailable = getExamEntryAvailability(existingExam).available;
-    const candidateAvailability = getExamEntryAvailability(candidateExamForAvailability);
-    const candidateHasAutomaticActivation = Boolean(
-      candidateExamForAvailability.active || candidateExamForAvailability.scheduledActivateAt,
-    );
-    if (!wasAvailable && candidateHasAutomaticActivation) {
-      const storedGradeCount = await db.grade.count({ where: { examId: id } });
-      if (storedGradeCount > 0 && !parseBoolean(body.confirmExistingGrades)) {
-        return validationError(
-          `هذا الامتحان غير متاح حالياً ومرتبط بـ ${storedGradeCount} درجة محفوظة. تفعيله الآن أو جدولته قد يجعل هذه الدرجات مؤثرة. راجع الأثر وأكد التفعيل صراحةً.`,
-          409,
-        );
+    const result = await withSerializableTransaction(async (tx) => {
+      const existingExam = await tx.exam.findUnique({ where: { id } });
+      if (!existingExam) {
+        return { validationMessage: 'الامتحان المطلوب غير موجود' } as const;
       }
-    }
+      const currentMutationToken = examMutationToken(
+        existingExam as unknown as Record<string, unknown>,
+      );
+      if (
+        String(expectedMutationToken || '').trim() &&
+        String(expectedMutationToken).trim() !== currentMutationToken
+      ) {
+        return { editConflict: true } as const;
+      }
+      const data = { ...normalizedPatch };
+      const effectiveNoDiscount = Boolean(data.noDiscount ?? existingExam.noDiscount);
+      if (effectiveNoDiscount) {
+        data.discountMark = 0;
+        data.opportunitiesPenalty = '0';
+        data.dismissalGrade = null;
+      } else if (String(data.type ?? existingExam.type) !== 'فاينل') {
+        data.dismissalGrade = null;
+      }
 
-    const effectiveNoDiscount = Boolean(data.noDiscount ?? existingExam.noDiscount);
-    if (effectiveNoDiscount) {
-      data.discountMark = 0;
-      data.opportunitiesPenalty = '0';
-      data.dismissalGrade = null;
-    } else if (String(data.type ?? existingExam.type) !== 'فاينل') {
-      data.dismissalGrade = null;
-    }
+      const candidateExam = { ...existingExam, ...data };
+      const candidateValidationMessage = validateExamPayload(candidateExam);
+      if (candidateValidationMessage) {
+        return { validationMessage: candidateValidationMessage } as const;
+      }
+      const candidateCourseIds = parseCourseIds(candidateExam.courseIds);
+      const courseProblems = await courseSelectionProblems(tx, candidateCourseIds);
+      if (courseProblems.length > 0) {
+        return {
+          validationMessage: `لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${courseProblems.join('، ')}`,
+        } as const;
+      }
 
-    const result = await db.$transaction(async (tx) => {
+      const wasAvailable = getExamEntryAvailability(existingExam).available;
+      const candidateAvailability = getExamEntryAvailability(candidateExam);
+      const candidateHasAutomaticActivation = Boolean(
+        candidateExam.active || candidateExam.scheduledActivateAt,
+      );
+      if (!wasAvailable && candidateHasAutomaticActivation) {
+        const storedGrades = await tx.grade.findMany({
+          where: { examId: id },
+          select: {
+            id: true,
+            studentId: true,
+            status: true,
+            score: true,
+            updatedAt: true,
+          },
+          orderBy: { id: 'asc' },
+        });
+        if (storedGrades.length > 0) {
+          const previewToken = buildMutationPreviewToken(`exam-activation:${id}`, {
+            current: existingExam,
+            proposed: candidateExam,
+            grades: storedGrades,
+          });
+          if (String(activationPreviewToken || '') !== previewToken) {
+            return {
+              activationConflict: {
+                previewToken,
+                storedGradeCount: storedGrades.length,
+                requiresFreshPreview: Boolean(activationPreviewToken),
+              },
+            } as const;
+          }
+        }
+      }
+
       const exam = await tx.exam.update({ where: { id }, data });
       await syncExamCourseLinks(tx, exam.id, exam.courseIds);
       const academicRecalculation = hasAcademicExamChange(existingExam, exam)
@@ -309,19 +374,61 @@ export async function PUT(req: NextRequest) {
             periodLeaveDates: [existingExam.date, exam.date],
           })
         : null;
-      return { exam, academicRecalculation };
+      return {
+        exam,
+        academicRecalculation,
+        availability: candidateAvailability,
+        wasAvailable,
+      } as const;
     });
+    if ('validationMessage' in result && result.validationMessage) {
+      return validationError(result.validationMessage);
+    }
+    if ('activationConflict' in result && result.activationConflict) {
+      const { previewToken, storedGradeCount, requiresFreshPreview } = result.activationConflict;
+      return NextResponse.json(
+        {
+          error: requiresFreshPreview
+            ? `تغيرت درجات الامتحان أو حالته بعد التأكيد. راجع الأثر الجديد (${storedGradeCount} درجة) وأكد مرة أخرى.`
+            : `هذا الامتحان غير متاح حالياً ومرتبط بـ ${storedGradeCount} درجة محفوظة. تفعيله الآن أو جدولته قد يجعل هذه الدرجات مؤثرة.`,
+          requiresActivationConfirmation: true,
+          requiresFreshPreview,
+          previewToken,
+          storedGradeCount,
+        },
+        { status: 409 },
+      );
+    }
+    if ('editConflict' in result && result.editConflict) {
+      return NextResponse.json(
+        {
+          error:
+            'تغير الامتحان بعد فتحه للتعديل. تم إيقاف الحفظ قبل أي كتابة؛ حدّث البيانات وراجع التغييرات ثم حاول مجدداً.',
+          requiresFreshExam: true,
+        },
+        { status: 409 },
+      );
+    }
+    if (!result.exam || !result.availability) {
+      throw new Error('تعذر تثبيت نتيجة تحديث الامتحان');
+    }
     await writeRequestAuditLog(req, 'الامتحانات', 'تعديل امتحان وإعادة احتساب المتأثرين', {
       examId: result.exam.id,
       examName: result.exam.name,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
       academicChange: Boolean(result.academicRecalculation),
-      availabilityBefore: wasAvailable,
-      availabilityAfter: candidateAvailability.available,
+      availabilityBefore: result.wasAvailable,
+      availabilityAfter: result.availability.available,
     });
     return NextResponse.json({
-      ...result,
-      availability: candidateAvailability,
+      exam: {
+        ...result.exam,
+        mutationToken: examMutationToken(
+          result.exam as unknown as Record<string, unknown>,
+        ),
+      },
+      academicRecalculation: result.academicRecalculation,
+      availability: result.availability,
     });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحديث الامتحان حالياً.');
@@ -339,55 +446,58 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد الامتحان المطلوب');
 
-    const [
-      exam,
-      gradeCount,
-      leaveCount,
-      callCount,
-      correctionSheetCount,
-      telegramSubmissionCount,
-      opportunityLogCount,
-      missingNoteCount,
-      leaveBackupCount,
-    ] = await Promise.all([
-      db.exam.findUnique({ where: { id }, select: { id: true, name: true } }),
-      db.grade.count({ where: { examId: id } }),
-      db.studentLeave.count({ where: { examId: id } }),
-      db.studentCall.count({ where: { examId: id } }),
-      db.correctionSheet.count({ where: { examId: id } }),
-      db.telegramExamSubmission.count({ where: { examId: id } }),
-      db.opportunityLog.count({ where: { examId: id } }),
-      db.gradeEntryMissingNote.count({ where: { examId: id } }),
-      db.studentLeaveGradeBackup.count({ where: { examId: id } }),
-    ]);
-    if (!exam) return validationError('الامتحان المطلوب غير موجود');
-
-    const relationCounts = [
-      ['درجات', gradeCount],
-      ['إجازات', leaveCount],
-      ['مكالمات', callCount],
-      ['أوراق تصحيح', correctionSheetCount],
-      ['مستلمات تيليجرام', telegramSubmissionCount],
-      ['حركات فرص', opportunityLogCount],
-      ['ملاحظات إدخال', missingNoteCount],
-      ['نسخ درجات الإجازات', leaveBackupCount],
-    ] as const;
-    const blockers = relationCounts.filter(([, count]) => count > 0);
-    if (blockers.length > 0) {
-      const details = blockers.map(([label, count]) => `${label}: ${count}`).join('، ');
+    const result = await withSerializableTransaction(async (tx) => {
+      const [
+        exam,
+        gradeCount,
+        leaveCount,
+        callCount,
+        correctionSheetCount,
+        telegramSubmissionCount,
+        opportunityLogCount,
+        missingNoteCount,
+        leaveBackupCount,
+      ] = await Promise.all([
+        tx.exam.findUnique({ where: { id }, select: { id: true, name: true } }),
+        tx.grade.count({ where: { examId: id } }),
+        tx.studentLeave.count({ where: { examId: id } }),
+        tx.studentCall.count({ where: { examId: id } }),
+        tx.correctionSheet.count({ where: { examId: id } }),
+        tx.telegramExamSubmission.count({ where: { examId: id } }),
+        tx.opportunityLog.count({ where: { examId: id } }),
+        tx.gradeEntryMissingNote.count({ where: { examId: id } }),
+        tx.studentLeaveGradeBackup.count({ where: { examId: id } }),
+      ]);
+      if (!exam) return { notFound: true } as const;
+      const relationCounts = [
+        ['درجات', gradeCount],
+        ['إجازات', leaveCount],
+        ['مكالمات', callCount],
+        ['أوراق تصحيح', correctionSheetCount],
+        ['مستلمات تيليجرام', telegramSubmissionCount],
+        ['حركات فرص', opportunityLogCount],
+        ['ملاحظات إدخال', missingNoteCount],
+        ['نسخ درجات الإجازات', leaveBackupCount],
+      ] as const;
+      const blockers = relationCounts.filter(([, count]) => count > 0);
+      if (blockers.length > 0) {
+        return { exam, blockers } as const;
+      }
+      await tx.examCourse.deleteMany({ where: { examId: id } });
+      await tx.exam.delete({ where: { id } });
+      return { exam, deleted: true } as const;
+    });
+    if ('notFound' in result) return validationError('الامتحان المطلوب غير موجود');
+    if ('blockers' in result && result.blockers) {
+      const details = result.blockers.map(([label, count]) => `${label}: ${count}`).join('، ');
       return validationError(
-        `لا يمكن حذف الامتحان "${exam.name}" لأنه مرتبط ببيانات محفوظة (${details}). عطّل الامتحان بدلاً من حذفه حتى يبقى التاريخ الأكاديمي سليماً.`,
+        `لا يمكن حذف الامتحان "${result.exam.name}" لأنه مرتبط ببيانات محفوظة (${details}). عطّل الامتحان بدلاً من حذفه حتى يبقى التاريخ الأكاديمي سليماً.`,
         409,
       );
     }
-
-    await db.$transaction(async (tx) => {
-      await tx.examCourse.deleteMany({ where: { examId: id } });
-      await tx.exam.delete({ where: { id } });
-    });
     await writeRequestAuditLog(req, 'الامتحانات', 'حذف امتحان غير مرتبط بأي بيانات', {
       examId: id,
-      examName: exam.name,
+      examName: result.exam.name,
       affectedStudents: 0,
       recalculatedStudents: 0,
     });

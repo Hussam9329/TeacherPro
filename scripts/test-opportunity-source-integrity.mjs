@@ -12,6 +12,7 @@ const candidates = read("src/app/api/student-calls/candidates/route.ts");
 const stats = read("src/app/api/opportunities/stats/route.ts");
 const bulkTargets = read("src/app/api/opportunities/bulk-targets/route.ts");
 const bulkAdjust = read("src/app/api/opportunities/bulk-adjust/route.ts");
+const bulkPreview = read("src/lib/bulk-opportunity-preview-server.ts");
 const studentAction = read("src/app/api/opportunities/student-action/route.ts");
 const academicEngine = read("src/lib/academic-engine.ts");
 const academicServer = read("src/lib/academic-recalculate-server.ts");
@@ -61,18 +62,20 @@ check(
   "عدادات الفرص تقارن الرصيد بالسقف الموحد ولا تستعمل قيمة أساس قديمة",
 );
 check(
-  bulkTargets.includes("attachStudentOpportunitySnapshots") &&
-    bulkTargets.includes('student.opportunityHealth === "ready"') &&
-    bulkTargets.includes("student.isOpportunityFull") &&
-    bulkTargets.includes("invalidOpportunitySource"),
+  bulkTargets.includes("buildBulkOpportunityPreview") &&
+    bulkPreview.includes("attachStudentOpportunitySnapshotsWithClient") &&
+    bulkPreview.includes('student.opportunityHealth === "ready"') &&
+    bulkPreview.includes("student.isOpportunityFull") &&
+    bulkPreview.includes("invalidOpportunitySource"),
   "معاينة العمليات الجماعية تستبعد كل طالب بلا مصدر سقف صالح وتشرح السبب",
 );
 check(
-  bulkAdjust.includes("attachStudentOpportunitySnapshotsWithClient") &&
-    bulkAdjust.includes('student.opportunityHealth === "ready"') &&
+  bulkAdjust.includes("buildBulkOpportunityPreview") &&
+    bulkPreview.includes('student.opportunityHealth === "ready"') &&
+    bulkPreview.includes("activeChapter: student.activeChapter") &&
+    bulkPreview.includes("opportunityLimit: student.opportunityLimit") &&
     bulkAdjust.includes("const activeChapter = student.activeChapter") &&
-    bulkAdjust.includes("const opportunityLimit = opportunitySnapshot?.opportunityLimit") &&
-    !bulkAdjust.includes("fullOpportunityLimitForStudent"),
+    !bulkPreview.includes("fullOpportunityLimitForStudent"),
   "تنفيذ العمليات الجماعية يستعمل نفس Snapshot داخل transaction مثل المعاينة",
 );
 check(

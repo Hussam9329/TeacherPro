@@ -61,6 +61,7 @@ import {
 import { useActionLock } from "@/hooks/use-action-lock";
 import { StepProgress, LoadingState, EmptyState } from "./ui-kit";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
+import { baghdadTodayKey } from "@/lib/baghdad-time";
 import {
   AlertCircle,
   BookOpen,
@@ -113,14 +114,14 @@ type StudentCreateResponse = {
 };
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return baghdadTodayKey();
 }
 
 function calculateGracePeriodEnd(dateISO: string, days: number): string {
   if (!dateISO || days <= 0) return "";
-  const date = new Date(`${dateISO}T00:00:00`);
+  const date = new Date(`${dateISO}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) return "";
-  date.setDate(date.getDate() + days - 1);
+  date.setUTCDate(date.getUTCDate() + days - 1);
   return date.toISOString().slice(0, 10);
 }
 

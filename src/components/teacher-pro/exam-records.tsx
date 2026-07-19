@@ -37,6 +37,7 @@ import {
 import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import {
+  baghdadTodayKey,
   formatBaghdadDateTime,
   toBaghdadDateTimeLocal,
 } from "@/lib/baghdad-time";
@@ -52,7 +53,7 @@ import {
 } from "@/lib/exam-utils";
 import { searchAny } from "@/lib/validation";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { examApi, examStatsApi, type ExamRecordStat } from "@/lib/api";
+import { examApi, examStatsApi, type ApiResult, type ExamRecordStat } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 
@@ -127,12 +128,12 @@ function getEntryAvailability(exam: Exam) {
 function defaultDeactivateDateTime(exam: Exam) {
   return (
     toDateTimeLocalValue(exam.scheduledDeactivateAt) ||
-    `${exam.date || new Date().toISOString().slice(0, 10)}T08:00`
+    `${exam.date || baghdadTodayKey()}T08:00`
   );
 }
 
 function defaultDateTimeForDate(date: string) {
-  return `${date || new Date().toISOString().slice(0, 10)}T08:00`;
+  return `${date || baghdadTodayKey()}T08:00`;
 }
 
 function toggleSelection(values: string[], value: string): string[] {
@@ -154,7 +155,7 @@ function emptyEditState(): FullExamEditState {
     type: "يومي",
     courseIds: [],
     mainSites: [],
-    date: new Date().toISOString().slice(0, 10),
+    date: baghdadTodayKey(),
     fullMark: "100",
     passMark: "60",
     discountMark: "45",
@@ -418,7 +419,7 @@ export function ExamRecordsView() {
       type: exam.type,
       courseIds: [...exam.courseIds],
       mainSites: splitSelection(exam.mainSite),
-      date: exam.date || new Date().toISOString().slice(0, 10),
+      date: exam.date || baghdadTodayKey(),
       fullMark: String(exam.fullMark),
       passMark: String(exam.passMark),
       discountMark: String(exam.discountMark),
@@ -489,6 +490,50 @@ export function ExamRecordsView() {
     return null;
   };
 
+  const updateExamWithActivationConfirmation = async (
+    examId: string,
+    patch: Record<string, unknown>,
+  ): Promise<ApiResult | null> => {
+    const guardedPatch = {
+      ...patch,
+      expectedMutationToken:
+        exams.find((exam) => exam.id === examId)?.mutationToken || "",
+    };
+    const initialResult = await examApi.update(examId, guardedPatch);
+    const conflict = (initialResult.data || {}) as {
+      requiresActivationConfirmation?: boolean;
+      previewToken?: string;
+      storedGradeCount?: number;
+    };
+    if (
+      initialResult.status !== 409 ||
+      !conflict.requiresActivationConfirmation ||
+      !conflict.previewToken
+    ) {
+      if (
+        initialResult.status === 409 &&
+        Boolean((initialResult.data as { requiresFreshExam?: boolean } | null)?.requiresFreshExam)
+      ) {
+        await loadFromServer();
+      }
+      return initialResult;
+    }
+    const storedGradeCount = Math.max(0, Number(conflict.storedGradeCount || 0));
+    if (
+      !window.confirm(
+        `تنبيه: الامتحان مرتبط بـ ${storedGradeCount} درجة محفوظة، وقد تصبح مؤثرة عند التفعيل. هل راجعت هذا الأثر وتؤكد المتابعة؟`,
+      )
+    ) {
+      return null;
+    }
+    const confirmedResult = await examApi.update(examId, {
+      ...guardedPatch,
+      activationPreviewToken: conflict.previewToken,
+    });
+    if (confirmedResult.status === 409) await loadFromServer();
+    return confirmedResult;
+  };
+
   const handleEditExam = async () => {
     const error = validateEditExam(editDialog);
     if (error) return toast.error(error);
@@ -515,23 +560,8 @@ export function ExamRecordsView() {
                 scheduledDeactivateAt: editDialog.scheduledDeactivateAt,
               };
 
-    const originalExam = exams.find((exam) => exam.id === editDialog.id);
-    const requiresActivationConfirmation = Boolean(
-      originalExam &&
-        !getExamEntryAvailability(originalExam).available &&
-        (editDialog.statusMode === "نشط" || editDialog.statusMode === "تفعيل مجدول"),
-    );
-    if (
-      requiresActivationConfirmation &&
-      !window.confirm(
-        "تنبيه: تفعيل هذا الامتحان أو جدولته قد يجعل الدرجات المحفوظة سابقاً مؤثرة فوراً عند الإتاحة. هل راجعت الدرجات وتؤكد المتابعة؟",
-      )
-    ) {
-      return;
-    }
-
     setExamMutating(editDialog.id, true);
-    const result = await examApi.update(editDialog.id, {
+    const result = await updateExamWithActivationConfirmation(editDialog.id, {
       name: editDialog.name.trim(),
       type: editDialog.type,
       courseIds: editDialog.courseIds,
@@ -553,11 +583,11 @@ export function ExamRecordsView() {
           ? Number(toLatinDigits(editDialog.dismissalGrade))
           : null,
       noDiscount,
-      confirmExistingGrades: requiresActivationConfirmation,
       ...statusPatch,
     });
     setExamMutating(editDialog.id, false);
 
+    if (!result) return;
     if (!result.ok || result.queued) {
       toast.error(result.error || "تعذر تعديل الامتحان من النظام.");
       return;
@@ -585,12 +615,13 @@ export function ExamRecordsView() {
       return;
     }
     setExamMutating(deactivateDialog.id, true);
-    const result = await examApi.update(deactivateDialog.id, {
+    const result = await updateExamWithActivationConfirmation(deactivateDialog.id, {
       active: true,
       scheduledActivateAt: "",
       scheduledDeactivateAt: deactivateDialog.scheduledDeactivateAt,
     });
     setExamMutating(deactivateDialog.id, false);
+    if (!result) return;
     if (!result.ok || result.queued) {
       toast.error(result.error || "تعذر جدولة تعطيل الامتحان من النظام.");
       return;
@@ -607,8 +638,12 @@ export function ExamRecordsView() {
 
   const handleClearScheduledDeactivate = async () => {
     setExamMutating(deactivateDialog.id, true);
-    const result = await examApi.update(deactivateDialog.id, { scheduledDeactivateAt: "" });
+    const result = await updateExamWithActivationConfirmation(
+      deactivateDialog.id,
+      { scheduledDeactivateAt: "" },
+    );
     setExamMutating(deactivateDialog.id, false);
+    if (!result) return;
     if (!result.ok || result.queued) {
       toast.error(result.error || "تعذر إلغاء التعطيل المجدول من النظام.");
       return;
@@ -1050,22 +1085,14 @@ export function ExamRecordsView() {
 
   const handleToggleExamActive = async (exam: Exam) => {
     const enabling = !exam.active;
-    if (
-      enabling &&
-      !window.confirm(
-        "تنبيه: تفعيل هذا الامتحان قد يجعل الدرجات المحفوظة سابقاً مؤثرة مباشرة. هل راجعت الدرجات وتؤكد التفعيل؟",
-      )
-    ) {
-      return;
-    }
     setExamMutating(exam.id, true);
-    const result = await examApi.update(exam.id, {
+    const result = await updateExamWithActivationConfirmation(exam.id, {
       active: enabling,
       scheduledActivateAt: "",
       scheduledDeactivateAt: "",
-      confirmExistingGrades: enabling,
     });
     setExamMutating(exam.id, false);
+    if (!result) return;
     if (!result.ok || result.queued) {
       toast.error(result.error || "تعذر تغيير حالة الامتحان من النظام.");
       return;

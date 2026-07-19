@@ -5,6 +5,7 @@ import {
 } from "./exam-utils";
 export { isExamWithinStudentGraceWindow } from "./student-grace";
 import { isExamWithinStudentGraceWindow } from "./student-grace";
+import { baghdadDateKey, baghdadTodayKey } from "./baghdad-time";
 import type {
   AcademicChapter,
   AcademicCourseChapter,
@@ -25,16 +26,11 @@ const ACADEMIC_REACTIVATION_LINK_PREFIX = "[academic-reactivation-link:";
 const ACADEMIC_REACTIVATION_LINK_SUFFIX = "]";
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return baghdadTodayKey();
 }
 
 function dayKey(value: string | Date | null | undefined): string {
-  if (!value) return "";
-  if (value instanceof Date)
-    return Number.isFinite(value.getTime())
-      ? value.toISOString().slice(0, 10)
-      : "";
-  return String(value || "").slice(0, 10);
+  return baghdadDateKey(value);
 }
 
 export function isRuleManagedDismissal(
@@ -429,7 +425,7 @@ function latestStudentLogDate(
 ): string {
   const dates = logs
     .filter(predicate)
-    .map((log) => String(log.date || "").slice(0, 10))
+    .map((log) => dayKey(log.date))
     .filter(Boolean)
     .sort();
   return dates.length ? dates[dates.length - 1] : "";
@@ -739,7 +735,7 @@ export function recalculateAcademicState(
       if (
         finalChanceStartDate &&
         !isFinalChanceOpportunityLog(log) &&
-        String(log.date || "").slice(0, 10) < finalChanceStartDate
+        dayKey(log.date) < finalChanceStartDate
       )
         return;
       const amount = Math.abs(Number(log.amount || 0));
@@ -851,9 +847,9 @@ export function recalculateAcademicState(
       if (!exam) continue;
       if (!isExamAvailableForEntry(exam)) continue;
       if (!isGradeEntered(grade, exam)) continue;
-      const gradeEventDate = String(
+      const gradeEventDate = dayKey(
         grade.updatedAt || grade.createdAt || exam.date || "",
-      ).slice(0, 10);
+      );
       if (finalChanceStartDate && gradeEventDate < finalChanceStartDate)
         continue;
       if (

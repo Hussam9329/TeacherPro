@@ -8,6 +8,9 @@ import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { validationError, routeErrorResponse } from "@/lib/route-helpers";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import type { Prisma } from "@prisma/client";
+import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
+import { baghdadTodayKey } from "@/lib/baghdad-time";
 
 type ArchiveEntry = { studentId: string; opportunities: number; date: string };
 
@@ -33,7 +36,7 @@ function actionErrorResponse(error: unknown) {
 }
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return baghdadTodayKey();
 }
 
 function parseArchiveEntries(value: unknown): ArchiveEntry[] {
@@ -75,27 +78,35 @@ function buildArchive(
 async function buildActionPreview(
   courseChapterId: string,
   action: "activate" | "deactivate",
+  client: typeof db | Prisma.TransactionClient = db,
 ) {
-  const target = await db.courseChapter.findUnique({
+  const target = await client.courseChapter.findUnique({
     where: { id: courseChapterId },
     include: { chapter: true, course: true },
   });
   if (!target) return null;
 
   const [students, otherActiveLinks] = await Promise.all([
-    db.student.findMany({
+    client.student.findMany({
       where: { courseId: target.courseId },
-      select: { status: true, opportunities: true },
+      select: {
+        id: true,
+        status: true,
+        opportunities: true,
+        baseOpportunities: true,
+      },
     }),
-    db.courseChapter.count({
+    client.courseChapter.findMany({
       where: {
         courseId: target.courseId,
         id: { not: target.id },
         active: true,
         archived: false,
       },
+      select: { id: true },
     }),
   ]);
+  const otherActiveLinkCount = otherActiveLinks.length;
   const activeStudents = students.filter((student) => student.status === "نشط");
   const dismissedStudents = students.filter(
     (student) => student.status === "مفصول",
@@ -135,16 +146,17 @@ async function buildActionPreview(
         action === "deactivate"
           ? nonArchivedStudents.length
           : parseArchiveEntries(target.archive).length,
-      otherActiveLinksToDisable: action === "activate" ? otherActiveLinks : 0,
+      otherActiveLinksToDisable:
+        action === "activate" ? otherActiveLinkCount : 0,
     },
     canExecute:
       action === "deactivate"
-        ? target.active && !target.archived && otherActiveLinks === 0
+        ? target.active && !target.archived && otherActiveLinkCount === 0
         : true,
     blockingMessage:
       action === "deactivate" && (!target.active || target.archived)
         ? "هذا الربط غير مفعل حالياً، لذلك لن يسمح النظام بتصفير فرص الطلاب من خلاله."
-        : action === "deactivate" && otherActiveLinks > 0
+        : action === "deactivate" && otherActiveLinkCount > 0
           ? "توجد حالة تعارض قديمة: ما زال فصل نشط آخر مرتبطاً بالدورة. أصلح التعارض أولاً حتى لا تُصفّر الفرص بينما يوجد فصل نشط."
           : null,
     message:
@@ -152,6 +164,30 @@ async function buildActionPreview(
         ? `سيتم أرشفة رصيد ${nonArchivedStudents.length} طالب ثم تصفير فرصهم لأن الدورة ستصبح بلا فصل نشط.`
         : `سيتم تفعيل الفصل وتحديث ${nonArchivedStudents.length} طالب من بيانات الفصل الحقيقية.`,
     source: "database" as const,
+    previewToken: buildMutationPreviewToken("course-chapter-action", {
+      action,
+      target: {
+        id: target.id,
+        courseId: target.courseId,
+        chapterId: target.chapterId,
+        active: target.active,
+        archived: target.archived,
+        archive: target.archive,
+        course: target.course,
+        chapter: target.chapter,
+      },
+      students: students
+        .map((student) => ({
+          id: student.id,
+          status: student.status,
+          opportunities: student.opportunities,
+          baseOpportunities: student.baseOpportunities,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
+      otherActiveLinkIds: otherActiveLinks
+        .map((link) => link.id)
+        .sort((a, b) => a.localeCompare(b)),
+    }),
   };
 }
 
@@ -174,15 +210,19 @@ export async function POST(req: NextRequest) {
     const action = String(body.action || "").trim();
     const confirmImpact = body.confirmImpact === true;
     const previewOnly = body.previewOnly === true;
+    const previewToken = String(body.previewToken || "").trim();
     if (!courseChapterId)
       return validationError("تعذر تحديد ربط الفصل بالدورة");
     if (action !== "activate" && action !== "deactivate")
       return validationError("نوع إجراء الفصل غير معروف");
 
     if (previewOnly) {
-      const preview = await buildActionPreview(
-        courseChapterId,
-        action as "activate" | "deactivate",
+      const preview = await withSerializableTransaction((tx) =>
+        buildActionPreview(
+          courseChapterId,
+          action as "activate" | "deactivate",
+          tx,
+        ),
       );
       if (!preview)
         return validationError("رابط الفصل غير موجود أو تم حذفه مسبقاً", 404);
@@ -193,6 +233,21 @@ export async function POST(req: NextRequest) {
       return validationError("يجب تأكيد أثر العملية قبل تنفيذها", 409);
 
     const result = await withSerializableTransaction(async (tx) => {
+      const currentPreview = await buildActionPreview(
+        courseChapterId,
+        action as "activate" | "deactivate",
+        tx,
+      );
+      if (!currentPreview) {
+        throw new CourseChapterActionIntegrityError(
+          "رابط الفصل غير موجود أو تم حذفه مسبقاً",
+        );
+      }
+      if (!previewToken || currentPreview.previewToken !== previewToken) {
+        throw new CourseChapterActionIntegrityError(
+          "تغير الفصل أو أرصدة الطلاب بعد المعاينة. تم إيقاف العملية قبل أي تعديل؛ أعد فتح المعاينة ثم أكد من جديد.",
+        );
+      }
       const target = await tx.courseChapter.findUnique({
         where: { id: courseChapterId },
         include: { chapter: true, course: true },

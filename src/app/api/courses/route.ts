@@ -35,9 +35,23 @@ import {
   ensureExamCourseLinksSchema,
   parseCourseIds,
 } from "@/lib/exam-course-links";
+import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
 
 function formatLinkedStudentCount(count: number): string {
   return `${count} طالب`;
+}
+
+function archivedBalanceCount(value: unknown): number {
+  const source = String(value || "[]").trim();
+  try {
+    const parsed = JSON.parse(source);
+    if (!Array.isArray(parsed)) return source === "[]" ? 0 : 1;
+    return parsed.length;
+  } catch {
+    // A malformed archive is still protected data. Fail closed so deleting the
+    // course cannot silently discard a balance snapshot we could not parse.
+    return source && source !== "[]" ? 1 : 0;
+  }
 }
 
 class CourseConfigIntegrityError extends Error {
@@ -420,6 +434,90 @@ function validateCoursePayload(
   return null;
 }
 
+async function buildCourseUpdatePreview(
+  client: typeof db | Prisma.TransactionClient,
+  courseId: string,
+  data: Record<string, unknown>,
+) {
+  const existingCourse = await client.course.findUnique({
+    where: { id: courseId },
+  });
+  if (!existingCourse) return null;
+
+  const configTouched =
+    data.availablePrograms !== undefined ||
+    data.availableStudyTypes !== undefined ||
+    data.studyTypesByProgram !== undefined ||
+    data.locationConfig !== undefined;
+  const draftCourse: Record<string, unknown> = {
+    availablePrograms:
+      data.availablePrograms ?? existingCourse.availablePrograms,
+    availableStudyTypes:
+      data.availableStudyTypes ?? existingCourse.availableStudyTypes,
+    studyTypesByProgram:
+      data.studyTypesByProgram ?? existingCourse.studyTypesByProgram,
+    locationConfig: data.locationConfig ?? existingCourse.locationConfig,
+  };
+
+  if (configTouched) {
+    const validationMessage = validateCoursePayload(
+      { ...draftCourse, name: data.name ?? existingCourse.name },
+      true,
+    );
+    if (validationMessage) {
+      return { existingCourse, validationMessage } as const;
+    }
+  }
+
+  const students = configTouched
+    ? await client.student.findMany({
+        where: { courseId },
+        select: {
+          id: true,
+          status: true,
+          courseProgram: true,
+          courseTerm: true,
+          studyType: true,
+          locationScope: true,
+          baghdadMode: true,
+          mainSite: true,
+          subSite: true,
+        },
+      })
+    : [];
+  const nonArchivedStudents = students.filter(
+    (student) => student.status !== "مؤرشف",
+  );
+  const usageBlockMessage = configTouched
+    ? firstUsageBlockMessage(
+        existingCourse.name,
+        draftCourse,
+        nonArchivedStudents,
+      )
+    : null;
+  const snapshotPlan = configTouched
+    ? buildStudentSnapshotSyncPlan(draftCourse, students)
+    : null;
+  const previewToken = buildMutationPreviewToken("course-config-update", {
+    currentCourse: existingCourse,
+    proposed: data,
+    students: students
+      .map((student) => ({ ...student }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  });
+
+  return {
+    existingCourse,
+    configTouched,
+    draftCourse,
+    students,
+    usageBlockMessage,
+    snapshotPlan,
+    previewToken,
+    validationMessage: null,
+  } as const;
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "courses.view");
   if (authError) return authError;
@@ -491,6 +589,7 @@ export async function PUT(req: NextRequest) {
       id,
       previewOnly: rawPreviewOnly,
       syncStudentSnapshots: rawSyncStudentSnapshots,
+      previewToken: rawPreviewToken,
       ...data
     } = body;
     const previewOnly = rawPreviewOnly === true;
@@ -502,72 +601,34 @@ export async function PUT(req: NextRequest) {
       data.name = String(data.name ?? "").trim();
     }
 
-    const existingCourse = await db.course.findUnique({
-      where: { id: String(id) },
-    });
-    if (!existingCourse) return validationError("الدورة غير موجودة", 404);
-
-    const configTouched =
-      data.availablePrograms !== undefined ||
-      data.availableStudyTypes !== undefined ||
-      data.studyTypesByProgram !== undefined ||
-      data.locationConfig !== undefined;
-
-    let snapshotPlan: ReturnType<typeof buildStudentSnapshotSyncPlan> | null =
-      null;
-    let usageBlockMessage: string | null = null;
-    let draftCourse: Record<string, unknown> | null = null;
-
-    if (configTouched) {
-      draftCourse = {
-        availablePrograms:
-          data.availablePrograms ?? existingCourse.availablePrograms,
-        availableStudyTypes:
-          data.availableStudyTypes ?? existingCourse.availableStudyTypes,
-        studyTypesByProgram:
-          data.studyTypesByProgram ?? existingCourse.studyTypesByProgram,
-        locationConfig: data.locationConfig ?? existingCourse.locationConfig,
-      };
-
-      const validationMessage = validateCoursePayload(
-        { ...draftCourse, name: data.name ?? existingCourse.name },
-        true,
-      );
-      if (validationMessage) return validationError(validationMessage);
-
-      const existingStudents = await db.student.findMany({
-        where: { courseId: String(id) },
-        select: {
-          id: true,
-          status: true,
-          courseProgram: true,
-          courseTerm: true,
-          studyType: true,
-          locationScope: true,
-          baghdadMode: true,
-          mainSite: true,
-          subSite: true,
-        },
-      });
-      const nonArchivedStudents = existingStudents.filter(
-        (student) => student.status !== "مؤرشف",
-      );
-      usageBlockMessage = firstUsageBlockMessage(
-        existingCourse.name,
-        draftCourse,
-        nonArchivedStudents,
-      );
-      snapshotPlan = buildStudentSnapshotSyncPlan(
-        draftCourse,
-        existingStudents,
-      );
+    const previewState = await buildCourseUpdatePreview(
+      db,
+      String(id),
+      data,
+    );
+    if (!previewState) return validationError("الدورة غير موجودة", 404);
+    if (previewState.validationMessage) {
+      return validationError(previewState.validationMessage);
     }
+    const {
+      existingCourse,
+      configTouched,
+    } = previewState;
 
     if (previewOnly) {
+      const freshPreviewState = await withSerializableTransaction((tx) =>
+        buildCourseUpdatePreview(tx, String(id), data),
+      );
+      if (!freshPreviewState)
+        return validationError("الدورة غير موجودة", 404);
+      if (freshPreviewState.validationMessage) {
+        return validationError(freshPreviewState.validationMessage);
+      }
+      const freshPlan = freshPreviewState.snapshotPlan;
       return NextResponse.json({
         preview: {
-          configTouched,
-          ...(snapshotPlan || {
+          configTouched: freshPreviewState.configTouched,
+          ...(freshPlan || {
             totalStudents: 0,
             eligibleStudents: 0,
             compatibleStudents: 0,
@@ -585,27 +646,11 @@ export async function PUT(req: NextRequest) {
             canSync: true,
             source: "database" as const,
           }),
-          canSave: !usageBlockMessage,
-          blockingMessage: usageBlockMessage,
+          canSave: !freshPreviewState.usageBlockMessage,
+          blockingMessage: freshPreviewState.usageBlockMessage,
+          previewToken: freshPreviewState.previewToken,
         },
       });
-    }
-
-    if (usageBlockMessage) {
-      return NextResponse.json(
-        {
-          error: usageBlockMessage,
-          studentConfigImpact: snapshotPlan
-            ? {
-                ...snapshotPlan,
-                updates: undefined,
-                canSave: false,
-                blockingMessage: usageBlockMessage,
-              }
-            : null,
-        },
-        { status: 409 },
-      );
     }
 
     const updateData = { ...data };
@@ -642,6 +687,24 @@ export async function PUT(req: NextRequest) {
     }
 
     const result = await withSerializableTransaction(async (tx) => {
+      if (configTouched) {
+        const currentPreviewState = await buildCourseUpdatePreview(
+          tx,
+          String(id),
+          data,
+        );
+        if (!currentPreviewState) {
+          throw new CourseConfigIntegrityError("الدورة لم تعد موجودة", 404);
+        }
+        if (
+          !String(rawPreviewToken || "").trim() ||
+          currentPreviewState.previewToken !== String(rawPreviewToken).trim()
+        ) {
+          throw new CourseConfigIntegrityError(
+            "تغيرت إعدادات الدورة أو بيانات الطلاب بعد المعاينة. تم إيقاف الحفظ قبل أي تعديل؛ أعد المعاينة ثم أكد من جديد.",
+          );
+        }
+      }
       const course = await tx.course.update({
         where: { id: String(id) },
         data: updateData,
@@ -651,9 +714,9 @@ export async function PUT(req: NextRequest) {
         typeof buildStudentSnapshotSyncPlan
       > | null = null;
       if (configTouched) {
-        // The preview is informative only. Re-read every linked student after
-        // the course update inside the same transaction so a concurrent
-        // registration/transfer cannot be omitted from the actual sync.
+        // Re-read every linked student after the course update inside the same
+        // transaction. The token above binds this execution to the confirmed
+        // preview, while the second read also keeps the applied plan explicit.
         const freshStudents = await tx.student.findMany({
           where: { courseId: String(id) },
           select: {
@@ -760,43 +823,65 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get("id");
     if (!id) return validationError("تعذر تحديد الدورة المطلوبة");
 
-    const course = await db.course.findUnique({
-      where: { id },
-      select: { name: true },
-    });
-    if (!course) return validationError("الدورة غير موجودة", 404);
-
-    const studentCount = await db.student.count({ where: { courseId: id } });
-    if (studentCount > 0) {
-      return validationError(
-        `لا يمكن حذف الدورة "${course.name}" لأن ${formatLinkedStudentCount(studentCount)} مرتبطين بها. استخدم تعطيل الدورة إذا تريد إيقافها بدون حذف بياناتها.`,
-        409,
-      );
-    }
-
     await ensureExamCourseLinksSchema();
-    const relatedExamLink = await db.examCourse.findFirst({
-      where: { courseId: id },
-      include: { exam: { select: { id: true, name: true } } },
-    });
-    const relatedExam =
-      relatedExamLink?.exam ||
-      (
-        await db.exam.findMany({
-          select: { id: true, name: true, courseIds: true },
-        })
-      ).find((exam) => parseCourseIds(exam.courseIds).includes(id));
-    if (relatedExam) {
-      return validationError(
-        `لا يمكن حذف الدورة "${course.name}" لأنها مرتبطة بامتحان "${relatedExam.name}". استخدم تعطيل الدورة أو عدّل ربط الامتحان أولاً.`,
-        409,
-      );
-    }
+    const result = await withSerializableTransaction(async (tx) => {
+      const course = await tx.course.findUnique({
+        where: { id },
+        select: { name: true },
+      });
+      if (!course) return { notFound: true } as const;
 
-    await db.$transaction(async (tx) => {
+      const studentCount = await tx.student.count({ where: { courseId: id } });
+      if (studentCount > 0) return { course, studentCount } as const;
+
+      const courseChapterArchives = await tx.courseChapter.findMany({
+        where: { courseId: id },
+        select: { archive: true },
+      });
+      const archivedBalances = courseChapterArchives.reduce(
+        (count, link) => count + archivedBalanceCount(link.archive),
+        0,
+      );
+      if (archivedBalances > 0) {
+        return { course, archivedBalances } as const;
+      }
+
+      const relatedExamLink = await tx.examCourse.findFirst({
+        where: { courseId: id },
+        include: { exam: { select: { id: true, name: true } } },
+      });
+      const relatedExam =
+        relatedExamLink?.exam ||
+        (
+          await tx.exam.findMany({
+            select: { id: true, name: true, courseIds: true },
+          })
+        ).find((exam) => parseCourseIds(exam.courseIds).includes(id));
+      if (relatedExam) return { course, relatedExam } as const;
+
       await tx.courseChapter.deleteMany({ where: { courseId: id } });
       await tx.course.delete({ where: { id } });
+      return { course, deleted: true } as const;
     });
+    if ('notFound' in result) return validationError("الدورة غير موجودة", 404);
+    if ('studentCount' in result && typeof result.studentCount === "number") {
+      return validationError(
+        `لا يمكن حذف الدورة "${result.course.name}" لأن ${formatLinkedStudentCount(result.studentCount)} مرتبطين بها. استخدم تعطيل الدورة إذا تريد إيقافها بدون حذف بياناتها.`,
+        409,
+      );
+    }
+    if ('archivedBalances' in result && typeof result.archivedBalances === "number") {
+      return validationError(
+        `لا يمكن حذف الدورة "${result.course.name}" لأن روابط فصولها تحفظ ${result.archivedBalances} رصيد طالب مؤرشف. احذف الأرشيف صراحةً من مساره المخصص أو عطّل الدورة.`,
+        409,
+      );
+    }
+    if ('relatedExam' in result && result.relatedExam) {
+      return validationError(
+        `لا يمكن حذف الدورة "${result.course.name}" لأنها مرتبطة بامتحان "${result.relatedExam.name}". استخدم تعطيل الدورة أو عدّل ربط الامتحان أولاً.`,
+        409,
+      );
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, "تعذر حذف الدورة حالياً.");

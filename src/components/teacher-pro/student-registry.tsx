@@ -19,6 +19,7 @@ import {
   isStudentCurrentlyInGrace as isStudentCurrentlyInGraceUnified,
   type GracePeriodStartMode,
 } from "@/lib/student-grace";
+import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -303,7 +304,7 @@ const emptyEditForm: StudentEditForm = {
   baghdadMode: "",
   courseId: "",
   subSite: "",
-  createdAt: new Date().toISOString().slice(0, 10),
+  createdAt: baghdadTodayKey(),
   accountingGraceDays: "0",
 };
 
@@ -322,7 +323,7 @@ function getStudentEditForm(student: Student): StudentEditForm {
     baghdadMode: student.baghdadMode || "",
     courseId: student.courseId,
     subSite: student.subSite || "",
-    createdAt: student.createdAt || new Date().toISOString().slice(0, 10),
+    createdAt: baghdadDateKey(student.createdAt) || baghdadTodayKey(),
     accountingGraceDays: String(student.accountingGraceDays ?? 0),
   };
 }
@@ -935,7 +936,7 @@ export function StudentRegistryView() {
       : "";
   const editRegistrationDateChanged = Boolean(
     editOriginalStudent &&
-    editDialog.form.createdAt !== String(editOriginalStudent.createdAt || "").slice(0, 10),
+    editDialog.form.createdAt !== baghdadDateKey(editOriginalStudent.createdAt),
   );
   const editGraceDaysChanged = Boolean(
     editOriginalStudent &&
@@ -1297,6 +1298,11 @@ export function StudentRegistryView() {
         editNeedsAcademicImpactPreview && hasResolvedAcademicImpactPreview
           ? academicImpactPreview?.previewToken || ""
           : "",
+      academicImpactPreviewGraceStartDate:
+        editNeedsAcademicImpactPreview && hasResolvedAcademicImpactPreview
+          ? academicImpactPreview?.proposed.gracePeriodStartDate || ""
+          : "",
+      expectedMutationToken: editOriginalStudent?.mutationToken || "",
       name: form.name.trim(),
       school: form.school.trim(),
       gender: form.gender,
@@ -1326,6 +1332,12 @@ export function StudentRegistryView() {
     });
 
     if (!result.ok) {
+      if (result.status === 409) {
+        setAcademicImpactPreview(null);
+        setAcademicImpactPreviewSignature("");
+        setAcademicImpactConfirmed(false);
+        setServerRefreshKey((value) => value + 1);
+      }
       toast.error(result.error || "تعذر تعديل بيانات الطالب");
       return;
     }

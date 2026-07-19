@@ -28,6 +28,7 @@ import { toLatinDigits } from "@/lib/format";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { normalizeExamSiteValue } from "@/lib/exam-utils";
+import { baghdadTodayKey } from "@/lib/baghdad-time";
 
 type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
 const EXAM_MAIN_SITE_OPTIONS: string[] = [...MAIN_SITE_OPTIONS];
@@ -49,7 +50,7 @@ type ExamFormState = {
 };
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return baghdadTodayKey();
 }
 
 function defaultDateTimeForDate(date: string) {

@@ -52,6 +52,7 @@ import {
   getStudentGraceWindow,
   isStudentCurrentlyInGrace as isStudentCurrentlyInGraceUnified,
 } from "@/lib/student-grace";
+import { baghdadTodayKey } from "@/lib/baghdad-time";
 
 type FollowView = "leaves" | "calls" | "pledges";
 type CallCategory =
@@ -267,7 +268,7 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return baghdadTodayKey();
 }
 
 function phoneForWhatsApp(phone?: string) {

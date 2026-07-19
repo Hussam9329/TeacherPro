@@ -4,13 +4,12 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 
 function dayKey(value: Date | string | null | undefined): string {
-  if (!value) return "";
-  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : "";
-  return String(value || "").slice(0, 10);
+  return baghdadDateKey(value);
 }
 
 function normalizeDismissalText(value: string | null | undefined): string {

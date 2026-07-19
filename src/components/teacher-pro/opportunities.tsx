@@ -253,6 +253,8 @@ export function OpportunitiesView() {
           actionType: bulkActionDialog.type,
           excludeDismissed: bulkExcludeDismissed,
           excludeFullOpportunities: bulkExcludeFullOpportunities,
+          reactivateDismissedOnAdd:
+            bulkActionDialog.type === "add" && !bulkExcludeDismissed,
         })
         .then((result) => {
           if (!cancelled) setBulkTargetStats(result);
@@ -723,12 +725,14 @@ export function OpportunitiesView() {
       excludeFullOpportunities: bulkExcludeFullOpportunities,
       reactivateDismissedOnAdd:
         bulkActionDialog.type === "add" && !bulkExcludeDismissed,
+      previewToken: bulkTargetStats?.previewToken || "",
       // الواجهة تعرض معاينة العدد والاستثناءات قبل تنفيذ العملية؛
       // نرسل التأكيد للخادم حتى لا تفشل العمليات الكبيرة بعد موافقة المستخدم.
       confirmImpact: true,
     });
 
     if (!result.ok) {
+      if (result.status === 409) setRefreshKey((key) => key + 1);
       toast.error(result.error || "تعذر تنفيذ عملية الفرص الجماعية");
       return;
     }

@@ -6,6 +6,7 @@ import {
   type AcademicServerRecalculationResult,
 } from "@/lib/academic-recalculate-server";
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 
 export type AcademicGradeWritebackStatus = "درجة" | "غائب" | "غش";
 
@@ -127,7 +128,7 @@ function parseCourseIds(value: string | null | undefined): string[] {
 }
 
 function dayStart(value: Date | string | null | undefined): Date | null {
-  const key = String(value || "").slice(0, 10);
+  const key = baghdadDateKey(value);
   if (!key) return null;
   const date = new Date(`${key}T00:00:00.000Z`);
   return Number.isFinite(date.getTime()) ? date : null;

@@ -15,6 +15,7 @@ import {
 } from "@/lib/grade-classification";
 import { studentCourseScopeWhere } from "@/lib/student-scope";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 
 export type CallStatusFilter =
   | "all"
@@ -162,8 +163,7 @@ function dayAfter(value: Date): Date {
 }
 
 function dayKey(value: Date | string | null | undefined): string {
-  if (!value) return "";
-  return String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
+  return baghdadDateKey(value);
 }
 
 function examIncludesCourse(exam: Pick<DbExamLite, "courseIds">, courseId: string) {

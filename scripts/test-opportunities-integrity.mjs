@@ -10,6 +10,7 @@ const studentRoute = read('src/app/api/students/route.ts');
 const statsRoute = read('src/app/api/opportunities/stats/route.ts');
 const bulkTargetsRoute = read('src/app/api/opportunities/bulk-targets/route.ts');
 const bulkAdjustRoute = read('src/app/api/opportunities/bulk-adjust/route.ts');
+const bulkPreviewServer = read('src/lib/bulk-opportunity-preview-server.ts');
 const studentActionRoute = read('src/app/api/opportunities/student-action/route.ts');
 const opportunityLogsRoute = read('src/app/api/opportunity-logs/route.ts');
 const opportunitySnapshotServer = read('src/lib/student-opportunity-snapshot-server.ts');
@@ -71,10 +72,12 @@ check(
   'إحصائيات إدارة الفرص تعرض مشاكل المحرك: بلا فصل، تعارض، فرص كاملة، فرص ناقصة، فوق السقف',
 );
 check(
-  bulkTargetsRoute.includes('attachStudentOpportunitySnapshots') &&
-    bulkTargetsRoute.includes('opportunityHealth === "ready"') &&
-    bulkTargetsRoute.includes('student.isOpportunityFull') &&
-    !bulkTargetsRoute.includes('fullOpportunityLimitForStudent'),
+  bulkTargetsRoute.includes('buildBulkOpportunityPreview') &&
+    bulkAdjustRoute.includes('buildBulkOpportunityPreview') &&
+    bulkPreviewServer.includes('attachStudentOpportunitySnapshotsWithClient') &&
+    bulkPreviewServer.includes('opportunityHealth === "ready"') &&
+    bulkPreviewServer.includes('student.isOpportunityFull') &&
+    !bulkPreviewServer.includes('fullOpportunityLimitForStudent'),
   'معاينة العملية الجماعية تستخدم نفس Snapshot الفصل النشط ولا تعتمد على الأساس المخزن',
 );
 check(

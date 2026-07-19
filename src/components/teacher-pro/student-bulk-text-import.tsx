@@ -63,6 +63,7 @@ import {
   normalizeTelegramIdentifier,
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
+import { baghdadTodayKey } from "@/lib/baghdad-time";
 
 const EXPECTED_COLUMNS = 15;
 const COLUMN_NAMES = [
@@ -271,7 +272,7 @@ function normalizeRegisterContextCourse(
     active: row.course.active !== undefined ? Boolean(row.course.active) : true,
     createdAt: row.course.createdAt
       ? String(row.course.createdAt).slice(0, 10)
-      : new Date().toISOString().slice(0, 10),
+      : baghdadTodayKey(),
     availablePrograms: Array.isArray(row.course.availablePrograms)
       ? row.course.availablePrograms.map(String)
       : [],
@@ -646,7 +647,7 @@ export function StudentBulkTextImportView() {
               dismissalType: "",
               dismissalReason: "",
               dismissalNotes: "",
-              createdAt: new Date().toISOString().slice(0, 10),
+              createdAt: baghdadTodayKey(),
               opportunities,
               baseOpportunities: opportunities,
               opportunityLimit: opportunities,

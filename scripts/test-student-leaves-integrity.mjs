@@ -96,12 +96,12 @@ must(
 );
 
 must(
-  route.includes("db.$transaction") &&
+  route.includes("withSerializableTransaction") &&
     route.includes("backupGradesForLeave") &&
     route.includes("restoreGradesForLeave") &&
     route.includes("recalculateStudentsAcademicState"),
-  "API الإجازات يحفظ/يحذف داخل transaction مع نسخ احتياطي للدرجات وإعادة احتساب",
-  "API الإجازات يجب أن يحمي الدرجات ويعيد الاحتساب داخل transaction.",
+  "API الإجازات يحفظ/يحذف داخل transaction تسلسلية مع نسخ احتياطي للدرجات وإعادة احتساب",
+  "API الإجازات يجب أن يحمي الدرجات ويعيد الاحتساب داخل transaction تسلسلية.",
 );
 
 must(
