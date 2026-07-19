@@ -231,11 +231,11 @@ export function MissingStudentsNotesView() {
           hint="عدّ مباشر من بيانات النظام"
         />
         <StatCard
-          label="إجمالي الأحرف"
-          value={statValue(databaseStats?.totalCharacters)}
+          label="إجمالي الأسطر"
+          value={statValue(databaseStats?.totalLines)}
           icon={AlertTriangle}
           tone="danger"
-          hint="مجموع النصوص من بيانات النظام"
+          hint="مجموع الأسطر غير الفارغة من بيانات النظام"
         />
         <StatCard
           label="مصدر الصفحة"

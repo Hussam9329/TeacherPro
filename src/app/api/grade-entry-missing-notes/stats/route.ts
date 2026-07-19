@@ -25,7 +25,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       total: notes.length,
       examsWithNotes: new Set(notes.map((note) => note.examId)).size,
-      totalCharacters: notes.reduce((sum, note) => sum + String(note.text || "").length, 0),
+      totalLines: notes.reduce(
+        (sum, note) =>
+          sum +
+          String(note.text || "")
+            .split(/\r\n?|\n/)
+            .filter((line) => line.trim().length > 0).length,
+        0,
+      ),
       source: "database" as const,
       generatedAt: new Date().toISOString(),
     });

@@ -686,7 +686,7 @@ export interface GradeCoverageStatsResponse {
 export interface MissingStudentsNotesStatsResponse {
   total: number;
   examsWithNotes: number;
-  totalCharacters: number;
+  totalLines: number;
   source: "database";
   generatedAt?: string;
 }
