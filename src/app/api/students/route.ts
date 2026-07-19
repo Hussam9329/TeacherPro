@@ -1034,22 +1034,6 @@ export async function PUT(req: NextRequest) {
   if (data.telegram !== undefined) {
     data.telegram = sanitizeTelegramInput(String(data.telegram ?? ""));
   }
-  if (data.accountingGraceDays !== undefined) {
-    const graceDaysError = validateGraceDays(data.accountingGraceDays);
-    if (graceDaysError)
-      return NextResponse.json({ error: graceDaysError }, { status: 400 });
-    const requestedGraceDays = normalizeGraceDays(data.accountingGraceDays);
-    data.accountingGraceDays = requestedGraceDays;
-    // GRACE PERIOD START DATE: When the admin sets grace days > 0,
-    // the grace period starts from NOW (not from registration date).
-    // When the admin sets grace days = 0, clear the start date
-    // (student goes back to automatic 3-day from registration only).
-    if (requestedGraceDays > 0) {
-      data.gracePeriodStartDate = new Date();
-    } else {
-      data.gracePeriodStartDate = null;
-    }
-  }
   if (data.createdAt !== undefined) {
     const parsedCreatedAt = new Date(String(data.createdAt || ""));
     if (!Number.isFinite(parsedCreatedAt.getTime())) {

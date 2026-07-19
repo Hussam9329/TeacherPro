@@ -46,7 +46,8 @@ check(
 check(
   "التعديل العادي لا يعيد بدء السماح دون تغيير الأيام أو اختيار صريح",
   students.includes("graceDaysChanged || gracePeriodStartMode") &&
-    updateImpact.includes("graceDaysChanged || gracePeriodStartMode"),
+    updateImpact.includes("graceDaysChanged || gracePeriodStartMode") &&
+    !students.includes("data.gracePeriodStartDate = new Date()"),
 );
 check(
   "قوائم المكالمات تجلب تاريخ بدء السماح وتستبعد المحمي",
