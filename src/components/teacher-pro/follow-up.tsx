@@ -15,6 +15,7 @@ import {
   callCandidatesApi,
   callCourseExamsApi,
   callStatsApi,
+  gradeApi,
   pledgeApi,
   studentApi,
   studentCallApi,
@@ -284,6 +285,66 @@ function whatsappLink(phone: string): string {
   return digits ? `https://wa.me/${digits}` : "#";
 }
 
+function whatsappMessageLink(phone: string, message: string): string {
+  const digits = phoneForWhatsApp(sanitizePhoneInput(phone));
+  return digits
+    ? `https://wa.me/${digits}?text=${encodeURIComponent(message)}`
+    : "#";
+}
+
+function pledgeGradeReport(grades: Array<Record<string, unknown>>): string {
+  if (grades.length === 0) {
+    return "لا توجد درجات مسجلة للطالب في النظام.";
+  }
+
+  return grades
+    .map((rawGrade) => {
+      const exam = (rawGrade.exam || {}) as Record<string, unknown>;
+      const examName = String(exam.name || "امتحان غير مسمى").trim();
+      const examDate = formatAppDate(String(exam.date || ""));
+      const gradeText = formatGradeScore(
+        {
+          status: String(rawGrade.status || ""),
+          score:
+            typeof rawGrade.score === "number" ||
+            typeof rawGrade.score === "string"
+              ? rawGrade.score
+              : null,
+        },
+        { fullMark: Number(exam.fullMark || 0) },
+        String(rawGrade.status || "غير مدخلة"),
+      );
+      return [
+        `اسم الامتحان: ${examName}`,
+        `تاريخ الامتحان: ${examDate}`,
+        `درجة الامتحان: ${gradeText}`,
+      ].join("\n");
+    })
+    .join("\n\n");
+}
+
+function pledgeWhatsAppMessage(
+  grades: Array<Record<string, unknown>>,
+): string {
+  return `إدارة الأستاذ حسن فلاح
+تعهد ولي الأمر
+
+أتعهد أنا ولي أمر الطالب/ ……………………………. بمتابعة التزامه بالدوام والأنظمة، وأقر بأنه استنفد جميع الفرص الممنوحة ٣ فرص، وقد مُنح فرصة استثنائية أخيرة من إدارة الأستاذ حسن فلاح.
+
+وفي حال تكرار الغياب أو استنفاذ هذه الفرصة، يُفصل الطالب نهائيًا دون استثناء أو استرجاع لأي مبلغ مدفوع.
+
+اسم ولي الأمر: ……………………….
+اسم الطالب: ……………………….
+التوقيع: ……………………….
+التاريخ: …… / …… / …….
+
+ملاحظة مهمة:
+يرجى كتابة هذا التعهد بخط اليد في ورقة، وتوقيعه، ثم إرساله مع صورة من وجه هوية ولي الأمر إلى الإدارة.
+
+تقرير درجات الطالب:
+${pledgeGradeReport(grades)}`;
+}
+
 function telegramLink(telegram: string): string {
   const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
   return username ? `https://t.me/${encodeURIComponent(username)}` : "#";
@@ -551,6 +612,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [pledgeLoading, setPledgeLoading] = useState(false);
   const [pledgeError, setPledgeError] = useState("");
   const [pledgeSavingKeys, setPledgeSavingKeys] = useState<Record<string, boolean>>({});
+  const [pledgeWhatsAppLoadingKeys, setPledgeWhatsAppLoadingKeys] = useState<
+    Record<string, boolean>
+  >({});
   const [callGradeDisplayModes, setCallGradeDisplayModes] = useState<
     Record<string, CallGradeDisplayMode>
   >({});
@@ -2170,9 +2234,58 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     );
   };
 
+  const openPledgeWhatsApp = async (row: PledgeRow) => {
+    const phone = row.student.parentPhone || "";
+    const digits = phoneForWhatsApp(sanitizePhoneInput(phone));
+    if (!digits) {
+      toast.error("رقم ولي الأمر غير متوفر أو غير صالح لهذا الطالب.");
+      return;
+    }
+
+    const key = row.note?.id || row.key;
+    if (pledgeWhatsAppLoadingKeys[key]) return;
+
+    const whatsappWindow = window.open("about:blank", "_blank");
+    if (whatsappWindow) {
+      whatsappWindow.opener = null;
+      whatsappWindow.document.title = "جاري تجهيز تقرير الدرجات";
+      whatsappWindow.document.body.textContent =
+        "جاري تحميل تقرير درجات الطالب من النظام…";
+    }
+
+    setPledgeWhatsAppLoadingKeys((current) => ({ ...current, [key]: true }));
+    try {
+      const result = await gradeApi.listAll({ studentId: row.student.id });
+      if (!result) {
+        whatsappWindow?.close();
+        toast.error("تعذر تحميل تقرير درجات الطالب من النظام.");
+        return;
+      }
+
+      const grades = [...(result.grades || [])].sort((left, right) => {
+        const leftExam = (left.exam || {}) as Record<string, unknown>;
+        const rightExam = (right.exam || {}) as Record<string, unknown>;
+        return (
+          new Date(String(rightExam.date || 0)).getTime() -
+          new Date(String(leftExam.date || 0)).getTime()
+        );
+      });
+      const url = whatsappMessageLink(phone, pledgeWhatsAppMessage(grades));
+      if (whatsappWindow) whatsappWindow.location.href = url;
+      else window.location.assign(url);
+    } catch {
+      whatsappWindow?.close();
+      toast.error("تعذر تجهيز رسالة التعهد وتقرير الدرجات.");
+    } finally {
+      setPledgeWhatsAppLoadingKeys((current) => ({ ...current, [key]: false }));
+    }
+  };
+
   const renderPledgeRow = (row: PledgeRow) => {
     const { student, dismissalInfo, group, pledged, reactivated } = row;
-    const saving = Boolean(pledgeSavingKeys[row.note?.id || row.key]);
+    const rowKey = row.note?.id || row.key;
+    const saving = Boolean(pledgeSavingKeys[rowKey]);
+    const openingWhatsApp = Boolean(pledgeWhatsAppLoadingKeys[rowKey]);
     return (
       <div
         key={row.key}
@@ -2221,7 +2334,18 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         </div>
         <div className="flex flex-wrap gap-2">
           {renderPhoneLink("رقم الطالب", student.phone)}
-          {renderPhoneLink("رقم ولي الأمر", student.parentPhone)}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-auto rounded-xl border-emerald-500/40 px-3 py-2 text-xs font-bold text-emerald-700 underline hover:bg-emerald-500/10 dark:text-emerald-300"
+            disabled={openingWhatsApp || !student.parentPhone}
+            onClick={() => void openPledgeWhatsApp(row)}
+          >
+            {openingWhatsApp
+              ? "جاري تجهيز التقرير…"
+              : `رقم ولي الأمر: ${student.parentPhone || "غير متوفر"}`}
+          </Button>
         </div>
         <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-muted/30 px-3 py-2">
           <span className="text-sm font-bold">{saving ? "جاري الحفظ..." : "التعهد"}</span>

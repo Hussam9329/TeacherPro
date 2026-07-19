@@ -74,6 +74,27 @@ must(
 );
 
 must(
+  followUp.includes("gradeApi.listAll({ studentId: row.student.id })") &&
+    followUp.includes("pledgeGradeReport") &&
+    followUp.includes("whatsappMessageLink") &&
+    followUp.includes("اسم الامتحان:") &&
+    followUp.includes("تاريخ الامتحان:") &&
+    followUp.includes("درجة الامتحان:"),
+  "الضغط على رقم ولي الأمر يفتح واتساب برسالة التعهد وتقرير الدرجات الحقيقي من النظام",
+  "يجب تحميل درجات الطالب من API وتجهيز رابط واتساب لرقم ولي الأمر.",
+);
+
+must(
+  followUp.includes("اسم ولي الأمر: ……………………….") &&
+    followUp.includes("اسم الطالب: ……………………….") &&
+    followUp.includes("التوقيع: ……………………….") &&
+    followUp.includes("التاريخ: …… / …… / …….") &&
+    !followUp.includes("اسم الطالب: ${student.name}"),
+  "حقول نموذج التعهد تبقى فارغة كما طلب المستخدم ولا يملأ النظام إلا تقرير الدرجات",
+  "يجب إبقاء اسم ولي الأمر والطالب والتوقيع والتاريخ كفراغات داخل نص التعهد.",
+);
+
+must(
   followUp.includes("debouncedPledgeSearch") &&
     followUp.includes("typeFilter: pledgeTypeFilter") &&
     followUp.includes("statusFilter: pledgeStatusFilter"),
