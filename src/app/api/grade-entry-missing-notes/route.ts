@@ -110,6 +110,57 @@ export async function POST(req: NextRequest) {
 }
 
 /**
+ * تعديل ملاحظة موجودة من لوحة التحكم. نربط الحفظ بـ updatedAt الذي شاهدته
+ * الواجهة حتى لا يكتب مستخدم فوق تعديل أحدث لمستخدم آخر بصمت.
+ */
+export async function PATCH(req: NextRequest) {
+  const authError = await requirePermission(req, 'grades.edit');
+  if (authError) return authError;
+
+  const principal = await getAuthPrincipal(req);
+  if (!principal) {
+    return NextResponse.json({ error: 'يجب تسجيل الدخول أولاً.' }, { status: 401 });
+  }
+
+  try {
+    const body = await req.json();
+    const id = String(body?.id ?? '').trim();
+    const text = String(body?.text ?? '').trim();
+    const expectedUpdatedAt = String(body?.updatedAt ?? '').trim();
+    if (!id) return validationError('معرّف الملاحظة مطلوب');
+    if (!text) return validationError('نص الملاحظة مطلوب');
+    if (!expectedUpdatedAt || Number.isNaN(new Date(expectedUpdatedAt).getTime())) {
+      return validationError('نسخة الملاحظة غير صالحة. حدّث الصفحة ثم حاول مجدداً.');
+    }
+
+    const note = await withGradeEntryMissingNoteSchema(async () =>
+      db.$transaction(async (tx) => {
+        const updated = await tx.gradeEntryMissingNote.updateMany({
+          where: { id, updatedAt: new Date(expectedUpdatedAt) },
+          data: {
+            text,
+            userId: principal.id,
+            userName: principal.name || principal.username,
+          },
+        });
+        if (updated.count !== 1) return null;
+        return tx.gradeEntryMissingNote.findUnique({ where: { id } });
+      }),
+    );
+
+    if (!note) {
+      return NextResponse.json(
+        { error: 'تغيرت الملاحظة أو حُذفت بعد فتحها. حدّث البيانات ثم أعد التعديل.' },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ note: normalize(note as NoteRow) });
+  } catch (error) {
+    return routeErrorResponse(error, 'تعذر تعديل الملاحظة حالياً.');
+  }
+}
+
+/**
  * DELETE requires grades.delete OR admin. The previous check
  * (grades.view) let any user with read access delete notes, which
  * could erase a colleague's record of missing students.

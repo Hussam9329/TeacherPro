@@ -17,6 +17,7 @@ function must(condition, okMessage, failMessage) {
 
 const page = read("src/components/teacher-pro/missing-students-notes.tsx");
 const api = read("src/lib/api.ts");
+const route = read("src/app/api/grade-entry-missing-notes/route.ts");
 const pkg = JSON.parse(read("package.json"));
 
 must(
@@ -41,6 +42,17 @@ must(
     page.includes("تعذر حذف الملاحظة من بيانات النظام"),
   "حذف ملاحظة الطلاب غير الموجودين Server-first من API",
   "الحذف يجب أن يمر عبر DELETE إلى API مع رسالة فشل واضحة."
+);
+
+must(
+  page.includes('method: "PATCH"') &&
+    page.includes("missing-students-notes-edit") &&
+    page.includes("حفظ التعديل") &&
+    route.includes("export async function PATCH") &&
+    route.includes("updatedAt: new Date(expectedUpdatedAt)") &&
+    route.includes("status: 409"),
+  "تعديل ملاحظة الطلاب غير الموجودين Server-first ومحمي من الكتابة المتزامنة",
+  "التعديل يجب أن يمر عبر PATCH ويراجع updatedAt قبل الحفظ ثم يبث المزامنة.",
 );
 
 must(

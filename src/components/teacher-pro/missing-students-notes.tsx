@@ -8,6 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -24,7 +32,7 @@ import { formatAppDate } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
 import type { GradeEntryMissingNote } from "@/lib/grade-entry-notes";
 import { EmptyState, StatCard } from "./ui-kit";
-import { AlertTriangle, ClipboardList, Database, FileText, Search } from "lucide-react";
+import { AlertTriangle, ClipboardList, Database, FileText, Pencil, Search } from "lucide-react";
 
 function formatDateTime(value: string) {
   if (!value) return "-";
@@ -66,11 +74,14 @@ export function MissingStudentsNotesView() {
   const [notes, setNotes] = useState<GradeEntryMissingNote[]>([]);
   const [search, setSearch] = useState("");
   const [deleteDialogNote, setDeleteDialogNote] = useState<GradeEntryMissingNote | null>(null);
+  const [editDialogNote, setEditDialogNote] = useState<GradeEntryMissingNote | null>(null);
+  const [editText, setEditText] = useState("");
   const [databaseStats, setDatabaseStats] = useState<MissingStudentsNotesStatsResponse | null>(null);
   const [databaseStatsLoading, setDatabaseStatsLoading] = useState(false);
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState("");
   const [deletingNote, setDeletingNote] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
 
   const refreshDatabaseStats = (signal?: AbortSignal, silent = false) => {
     if (!silent) setDatabaseStatsLoading(true);
@@ -107,7 +118,7 @@ export function MissingStudentsNotesView() {
       .catch(() => {
         if (!signal.aborted && !silent) {
           setNotes([]);
-          setNotesError("تعذر تحميل ملاحظات الطلاب غير الموجودين من بيانات النظام. تم تعطيل الحذف حتى يرجع الاتصال.");
+          setNotesError("تعذر تحميل ملاحظات الطلاب غير الموجودين من بيانات النظام. تم تعطيل التعديل والحذف حتى يرجع الاتصال.");
         }
       })
       .finally(() => {
@@ -183,8 +194,106 @@ export function MissingStudentsNotesView() {
     }
   };
 
+  const handleEditNote = (note: GradeEntryMissingNote) => {
+    if (notesError || notesLoading) return;
+    setEditDialogNote(note);
+    setEditText(note.text);
+  };
+
+  const confirmEditNote = async () => {
+    if (!editDialogNote || savingNote) return;
+    const text = editText.trim();
+    if (!text) {
+      setNotesError("لا يمكن حفظ ملاحظة فارغة.");
+      return;
+    }
+
+    setSavingNote(true);
+    setNotesError("");
+    try {
+      const response = await fetch("/api/grade-entry-missing-notes", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editDialogNote.id,
+          text,
+          updatedAt: editDialogNote.updatedAt,
+        }),
+      });
+      const payload = (await response.json().catch(() => null)) as { note?: unknown; error?: string } | null;
+      if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+      const updatedNote = normalizeNote(payload?.note);
+      if (!updatedNote) throw new Error("استجابة الحفظ غير صالحة.");
+
+      setNotes((current) => current.map((note) => (note.id === updatedNote.id ? updatedNote : note)));
+      setEditDialogNote(null);
+      setEditText("");
+      refreshDatabaseStats();
+      emitTeacherProDataChanged({
+        source: "local-mutation",
+        reason: "missing-students-notes-edit",
+        scopes: ["grade-entry-notes", "grades", "exams", "dashboard"],
+      });
+    } catch (error) {
+      setNotesError(
+        error instanceof Error && error.message
+          ? error.message
+          : "تعذر تعديل الملاحظة في بيانات النظام. تحقق من الصلاحيات أو الاتصال ثم حاول مجدداً.",
+      );
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   return (
     <div className="section-stack tp-missing-notes">
+      <Dialog
+        open={Boolean(editDialogNote)}
+        onOpenChange={(open) => {
+          if (!open && !savingNote) {
+            setEditDialogNote(null);
+            setEditText("");
+          }
+        }}
+      >
+        <DialogContent dir="rtl" className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>تعديل الملاحظة</DialogTitle>
+            <DialogDescription>
+              عدّل ملاحظات امتحان {editDialogNote?.examName || "هذا الامتحان"} ثم احفظها في بيانات النظام.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="missing-students-note-edit">نص الملاحظة</Label>
+            <textarea
+              id="missing-students-note-edit"
+              value={editText}
+              onChange={(event) => setEditText(event.target.value)}
+              rows={12}
+              disabled={savingNote}
+              className="min-h-64 w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm leading-8 shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+              placeholder="اكتب أسماء الطلاب غير الموجودين وملاحظاتهم"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={savingNote}
+              onClick={() => {
+                setEditDialogNote(null);
+                setEditText("");
+              }}
+            >
+              إلغاء
+            </Button>
+            <Button type="button" disabled={savingNote || !editText.trim()} onClick={() => void confirmEditNote()}>
+              {savingNote ? "جاري الحفظ..." : "حفظ التعديل"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={Boolean(deleteDialogNote)} onOpenChange={(open) => !open && setDeleteDialogNote(null)}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
@@ -258,7 +367,7 @@ export function MissingStudentsNotesView() {
         </div>
       ) : (
         <div className="tp-missing-notes__status rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
-          القائمة والإحصائيات من بيانات النظام، والحذف لا يتم إلا بعد تأكيد الحفظ.
+          القائمة والإحصائيات من بيانات النظام، والتعديل والحذف يُحفظان مباشرة بعد التأكيد.
         </div>
       )}
 
@@ -320,16 +429,28 @@ export function MissingStudentsNotesView() {
                           <span>آخر تحديث: {formatDateTime(note.updatedAt)}</span>
                         </div>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="border-destructive/30 text-destructive hover:bg-destructive/10"
-                        onClick={() => handleDeleteNote(note)}
-                        disabled={Boolean(notesError) || notesLoading}
-                      >
-                        حذف الملاحظة
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditNote(note)}
+                          disabled={Boolean(notesError) || notesLoading}
+                        >
+                          <Pencil className="ml-2 size-4" />
+                          تعديل الملاحظة
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="border-destructive/30 text-destructive hover:bg-destructive/10"
+                          onClick={() => handleDeleteNote(note)}
+                          disabled={Boolean(notesError) || notesLoading}
+                        >
+                          حذف الملاحظة
+                        </Button>
+                      </div>
                     </div>
                     <div className="tp-missing-notes__text mt-4 whitespace-pre-wrap rounded-2xl border bg-muted/30 p-4 text-sm leading-8">
                       {note.text}
