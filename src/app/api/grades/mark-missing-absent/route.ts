@@ -17,9 +17,9 @@ import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
+import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 
 const MAX_STUDENTS_PER_REQUEST = 2_000;
-const BULK_WRITE_CONCURRENCY = 8;
 
 export async function POST(req: NextRequest) {
   const authError = await requirePermission(req, "grades.add");
@@ -45,21 +45,25 @@ export async function POST(req: NextRequest) {
     const examExists = await db.exam.count({ where: { id: examId } });
     if (!examExists) return validationError("الامتحان غير موجود", 404);
 
-    const grades: Grade[] = [];
-    const recalculatedStudents = new Map<string, AcademicStudent>();
-    const skippedStudentIds: string[] = [];
-    const failures: Array<{ studentId: string; error: string }> = [];
+    // One SERIALIZABLE transaction owns the entire batch. Grade writes are
+    // validated one by one, then all affected students are recalculated once.
+    // This avoids self-deadlocks caused by parallel transactions repeatedly
+    // reading and updating the same academic tables.
+    const result = await withSerializableTransaction(async (tx) => {
+      const grades: Grade[] = [];
+      const skippedStudentIds: string[] = [];
+      const failures: Array<{ studentId: string; error: string }> = [];
+      const createdStudentIds: string[] = [];
 
-    // Each student is resolved from current database state. Existing grades are
-    // deliberately skipped, making the bulk action safe to retry after a lost
-    // response and preventing stale entry-sheet rows from producing 409 storms.
-    const processStudent = async (studentId: string) => {
-      try {
-        const result = await withSerializableTransaction(async (tx) => {
+      for (const studentId of studentIds) {
+        try {
           const existingGrade = await tx.grade.findUnique({
             where: { studentId_examId: { studentId, examId } },
           });
-          if (existingGrade) return { existingGrade, writeback: null };
+          if (existingGrade) {
+            skippedStudentIds.push(studentId);
+            continue;
+          }
 
           const [student, exam] = await Promise.all([
             tx.student.findUnique({
@@ -94,49 +98,41 @@ export async function POST(req: NextRequest) {
             allowBlankGrade: false,
             blockOnLeave: true,
             enforceExamAvailability: true,
+            deferAcademicRecalculation: true,
           });
           if (!writeback) {
             throw new AcademicGradeWritebackError("تعذر إنشاء سجل حالة الطالب.");
           }
-          return { existingGrade: null, writeback };
-        });
-
-        if (result.existingGrade) {
-          skippedStudentIds.push(studentId);
-          return;
-        }
-        if (result.writeback) {
-          grades.push(result.writeback.grade);
-          for (const student of result.writeback.academicRecalculation?.students || []) {
-            recalculatedStudents.set(student.id, student);
+          grades.push(writeback.grade);
+          createdStudentIds.push(studentId);
+        } catch (error) {
+          if (error instanceof AcademicGradeWritebackError) {
+            failures.push({ studentId, error: error.message });
+            continue;
           }
+          throw error;
         }
-      } catch (error) {
-        if (error instanceof AcademicGradeWritebackError) {
-          failures.push({ studentId, error: error.message });
-          return;
-        }
-        throw error;
       }
-    };
 
-    // A bounded worker pool keeps the operation fast for large exams without
-    // exhausting the Neon connection pool. Every student still has an isolated
-    // SERIALIZABLE transaction and an existing grade is never overwritten.
-    let nextStudentIndex = 0;
-    const worker = async () => {
-      while (nextStudentIndex < studentIds.length) {
-        const studentId = studentIds[nextStudentIndex];
-        nextStudentIndex += 1;
-        await processStudent(studentId);
-      }
-    };
-    await Promise.all(
-      Array.from(
-        { length: Math.min(BULK_WRITE_CONCURRENCY, studentIds.length) },
-        () => worker(),
-      ),
-    );
+      const academicRecalculation = createdStudentIds.length
+        ? await recalculateStudentsAcademicState(createdStudentIds, { tx })
+        : null;
+
+      return {
+        grades,
+        skippedStudentIds,
+        failures,
+        academicRecalculation,
+      };
+    });
+
+    const grades = result.grades;
+    const skippedStudentIds = result.skippedStudentIds;
+    const failures = result.failures;
+    const recalculatedStudents = new Map<string, AcademicStudent>();
+    for (const student of result.academicRecalculation?.students || []) {
+      recalculatedStudents.set(student.id, student);
+    }
 
     await writeRequestAuditLog(
       req,

@@ -71,8 +71,9 @@ must(
     markMissingAbsentRoute.includes("existingGrade") &&
     markMissingAbsentRoute.includes("skippedStudentIds") &&
     markMissingAbsentRoute.includes("syncAcademicGradeWriteback") &&
-    markMissingAbsentRoute.includes("BULK_WRITE_CONCURRENCY") &&
-    markMissingAbsentRoute.includes("Promise.all") &&
+    markMissingAbsentRoute.includes("deferAcademicRecalculation: true") &&
+    markMissingAbsentRoute.includes("recalculateStudentsAcademicState(createdStudentIds, { tx })") &&
+    !markMissingAbsentRoute.includes("BULK_WRITE_CONCURRENCY") &&
     gradeEntry.includes("markingAllMissingAbsent") &&
     gradeEntry.includes("جارٍ تسجيل الحالات") &&
     gradeEntry.includes("missingExamStudentsBeforeGrace") &&

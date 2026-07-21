@@ -55,6 +55,7 @@ export interface AcademicGradeWritebackInput {
   blockOnLeave?: boolean;
   enforceExamAvailability?: boolean;
   allowDismissedExistingGradeCorrection?: boolean;
+  deferAcademicRecalculation?: boolean;
 }
 
 export function normalizeAcademicGradeStatus(
@@ -376,10 +377,17 @@ export async function syncAcademicGradeWriteback(
     },
   });
 
-  const academicRecalculation = await recalculateStudentsAcademicState(
-    [studentId],
-    input.tx ? { tx: input.tx } : {},
-  );
+  const academicRecalculation = input.deferAcademicRecalculation
+    ? {
+        studentIds: [studentId],
+        students: [],
+        opportunityLogs: [],
+        automaticOpportunityLogs: [],
+      }
+    : await recalculateStudentsAcademicState(
+        [studentId],
+        input.tx ? { tx: input.tx } : {},
+      );
 
   return { grade, academicRecalculation };
 }
