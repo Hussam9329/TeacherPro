@@ -25,6 +25,7 @@ const examNew = read("src/components/teacher-pro/exam-new.tsx");
 const examRecords = read("src/components/teacher-pro/exam-records.tsx");
 const leaveRoute = read("src/app/api/student-leaves/route.ts");
 const migration = read("prisma/migrations/20260712143000_grade_exam_integrity/migration.sql");
+const graceStatusMigration = read("prisma/migrations/20260722223000_allow_grace_grade_status/migration.sql");
 const pkg = JSON.parse(read("package.json"));
 
 must(
@@ -178,7 +179,9 @@ must(
 
 must(
   migration.includes("Grade_status_score_consistency") &&
-    migration.includes("Grade_prevent_relation_change"),
+    migration.includes("Grade_prevent_relation_change") &&
+    graceStatusMigration.includes("Grade_status_score_consistency") &&
+    graceStatusMigration.includes("ضمن فترة السماح"),
   "ترحيل قاعدة البيانات يثبت اتساق الدرجة والعلاقة",
   "الحماية يجب ألا تعتمد على الواجهة وحدها.",
 );
