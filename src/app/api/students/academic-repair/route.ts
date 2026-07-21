@@ -49,14 +49,24 @@ export async function PATCH(req: NextRequest) {
   if (rateLimitError) return rateLimitError;
 
   try {
-    const scope = new URL(req.url).searchParams.get("scope");
+    const searchParams = new URL(req.url).searchParams;
+    const scope = searchParams.get("scope");
     if (scope === "dismissed") {
       const batchSize = readBatchSize(req);
-      const rows = await db.student.findMany({
-        where: { status: "مفصول" },
+      const requestedLimit = Number(searchParams.get("limit") || 50);
+      const limit = Math.min(100, Math.max(10, Math.trunc(requestedLimit || 50)));
+      const afterId = String(searchParams.get("afterId") || "").trim();
+      const fetchedRows = await db.student.findMany({
+        where: {
+          status: "مفصول",
+          ...(afterId ? { id: { gt: afterId } } : {}),
+        },
         select: { id: true },
-        orderBy: { createdAt: "asc" },
+        orderBy: { id: "asc" },
+        take: limit + 1,
       });
+      const hasMore = fetchedRows.length > limit;
+      const rows = fetchedRows.slice(0, limit);
       let restoredStudents = 0;
       let stillDismissed = 0;
       let temporaryDismissals = 0;
@@ -90,6 +100,8 @@ export async function PATCH(req: NextRequest) {
       const result = {
         ok: true,
         reviewedDismissedStudents: rows.length,
+        nextCursor: rows.at(-1)?.id || afterId || null,
+        hasMore,
         restoredStudents,
         stillDismissed,
         temporaryDismissals,
