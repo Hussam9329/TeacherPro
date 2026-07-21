@@ -57,6 +57,7 @@ export async function PATCH(req: NextRequest) {
         select: { studentId: true },
       });
       let convertedGrades = 0;
+      let convertedBeforeRegistration = 0;
       let deletedGrades = 0;
       let deletedCalls = 0;
       const affectedStudentIds = new Set<string>();
@@ -71,6 +72,7 @@ export async function PATCH(req: NextRequest) {
           return { repair, recalculation };
         });
         convertedGrades += batch.repair.convertedGrades;
+        convertedBeforeRegistration += batch.repair.convertedBeforeRegistration;
         deletedGrades += batch.repair.deletedGrades;
         deletedCalls += batch.repair.deletedCalls;
         for (const studentId of batch.recalculation?.studentIds || []) {
@@ -81,6 +83,7 @@ export async function PATCH(req: NextRequest) {
       const result = {
         ok: true,
         convertedGrades,
+        convertedBeforeRegistration,
         deletedGrades,
         deletedCalls,
         recalculatedStudents: affectedStudentIds.size,
@@ -93,7 +96,7 @@ export async function PATCH(req: NextRequest) {
       );
       return NextResponse.json({
         ...result,
-        message: `تم تحويل ${convertedGrades} غياب محمي إلى ضمن فترة السماح.`,
+        message: `تم تحويل ${convertedGrades} غياب محمي إلى ضمن فترة السماح و${convertedBeforeRegistration} إلى قبل تسجيل الطالب.`,
         source: "database" as const,
         generatedAt: new Date().toISOString(),
       });
@@ -110,6 +113,7 @@ export async function PATCH(req: NextRequest) {
     });
     let deletedGrades = 0;
     let convertedGrades = 0;
+    let convertedBeforeRegistration = 0;
     let deletedCalls = 0;
     for (let index = 0; index < rows.length; index += batchSize) {
       const studentIds = rows.slice(index, index + batchSize).map((row) => row.studentId);
@@ -117,6 +121,7 @@ export async function PATCH(req: NextRequest) {
         repairProtectedAbsencesForStudents(tx, studentIds),
       );
       convertedGrades += repair.convertedGrades;
+      convertedBeforeRegistration += repair.convertedBeforeRegistration;
       deletedGrades += repair.deletedGrades;
       deletedCalls += repair.deletedCalls;
     }
@@ -129,12 +134,13 @@ export async function PATCH(req: NextRequest) {
       req,
       "الطلاب",
       "إصلاح أكاديمي شامل وإعادة احتساب كل الطلاب",
-      { ...result, convertedGrades, deletedGrades, deletedCalls },
+      { ...result, convertedGrades, convertedBeforeRegistration, deletedGrades, deletedCalls },
     );
 
     return NextResponse.json({
       ...result,
       convertedGrades,
+      convertedBeforeRegistration,
       deletedGrades,
       deletedCalls,
       message:

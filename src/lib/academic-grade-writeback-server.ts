@@ -12,7 +12,8 @@ export type AcademicGradeWritebackStatus =
   | "درجة"
   | "غائب"
   | "غش"
-  | "ضمن فترة السماح";
+  | "ضمن فترة السماح"
+  | "قبل تسجيل الطالب";
 
 type PrismaClientLike = typeof db | Prisma.TransactionClient;
 
@@ -66,7 +67,8 @@ export function normalizeAcademicGradeStatus(
   return status === "غائب" ||
     status === "غش" ||
     status === "درجة" ||
-    status === "ضمن فترة السماح"
+    status === "ضمن فترة السماح" ||
+    status === "قبل تسجيل الطالب"
     ? status
     : fallback;
 }
@@ -283,9 +285,8 @@ export async function syncAcademicGradeWriteback(
   // GRACE PERIOD & PRE-REGISTRATION PROTECTION:
   //
   // 1. PRE-REGISTRATION: If the exam date is BEFORE the student's
-  //    registration date (createdAt), block ALL grade entries (درجة,
-  //    غائب, غش). The student wasn't enrolled when the exam happened,
-  //    so no grade should exist.
+  //    registration date (createdAt), block scores/absence/cheating and allow
+  //    only the scoreless server marker "قبل تسجيل الطالب".
   //
   // 2. GRACE PERIOD: If the exam falls within the student's grace
   //    period, block "غائب" and allow the server-generated
@@ -298,16 +299,22 @@ export async function syncAcademicGradeWriteback(
   const examDateStr = exam.date.toISOString();
   const studentGraceStartStr = student.gracePeriodStartDate ? student.gracePeriodStartDate.toISOString() : null;
 
-  if (
-    (status === "غائب" || status === "ضمن فترة السماح") &&
-    !isExamOnOrAfterStudentRegistration(
-      { createdAt: studentCreatedAtStr },
-      { date: examDateStr },
-    )
-  ) {
+  const examOnOrAfterRegistration = isExamOnOrAfterStudentRegistration(
+    { createdAt: studentCreatedAtStr },
+    { date: examDateStr },
+  );
+
+  if (!examOnOrAfterRegistration && status !== "قبل تسجيل الطالب") {
     throw new AcademicGradeWritebackError(
-      "لا يمكن تسجيل غياب لهذا الطالب في هذا الامتحان لأن الامتحان أقدم من تاريخ تسجيل الطالب. " +
+      "لا يمكن تسجيل درجة أو غياب لهذا الطالب لأن الامتحان أقدم من تاريخ تسجيله. " +
       "الطالب لم يكن مسجلاً في النظام عند إجراء هذا الامتحان.",
+      409,
+    );
+  }
+
+  if (examOnOrAfterRegistration && status === "قبل تسجيل الطالب") {
+    throw new AcademicGradeWritebackError(
+      "لا يمكن تسجيل حالة قبل تسجيل الطالب لأن الامتحان ليس أقدم من تاريخ تسجيله.",
       409,
     );
   }

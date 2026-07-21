@@ -67,8 +67,8 @@ check(
   repairHelper.includes('status: "غائب"') &&
     repairHelper.includes("studentCall.deleteMany") &&
     repairHelper.includes('status: "ضمن فترة السماح"') &&
+    repairHelper.includes('status: "قبل تسجيل الطالب"') &&
     repairHelper.includes("grade.updateMany") &&
-    repairHelper.includes("grade.deleteMany") &&
     repair.includes("recalculateStudentsAcademicState") &&
     repair.includes("withSerializableTransaction"),
 );
@@ -78,6 +78,7 @@ check(
     academicRepair.includes('where: { status: "غائب" }') &&
     academicRepair.includes("deletedGrades") &&
     academicRepair.includes("convertedGrades") &&
+    academicRepair.includes("convertedBeforeRegistration") &&
     academicRepair.includes('scope === "grace"') &&
     academicRepair.includes("deletedCalls"),
 );

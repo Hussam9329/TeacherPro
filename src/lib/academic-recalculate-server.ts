@@ -136,7 +136,8 @@ function mapGrade(grade: {
     status:
       grade.status === "غائب" ||
       grade.status === "غش" ||
-      grade.status === "ضمن فترة السماح"
+      grade.status === "ضمن فترة السماح" ||
+      grade.status === "قبل تسجيل الطالب"
         ? grade.status
         : "درجة",
     score: grade.score === null ? null : Number(grade.score),

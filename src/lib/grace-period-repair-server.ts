@@ -20,6 +20,7 @@ type AbsenceCandidate = {
 export type GracePeriodRepairResult = {
   studentIds: string[];
   convertedGrades: number;
+  convertedBeforeRegistration: number;
   deletedGrades: number;
   deletedCalls: number;
 };
@@ -43,7 +44,7 @@ export async function repairProtectedAbsencesForStudents(
 ): Promise<GracePeriodRepairResult> {
   const requestedStudentIds = uniqueIds(rawStudentIds);
   if (requestedStudentIds.length === 0) {
-    return { studentIds: [], convertedGrades: 0, deletedGrades: 0, deletedCalls: 0 };
+    return { studentIds: [], convertedGrades: 0, convertedBeforeRegistration: 0, deletedGrades: 0, deletedCalls: 0 };
   }
 
   const candidates = (await client.grade.findMany({
@@ -72,7 +73,7 @@ export async function repairProtectedAbsencesForStudents(
   );
   const protectedAbsences = [...beforeRegistration, ...withinGrace];
   if (protectedAbsences.length === 0) {
-    return { studentIds: [], convertedGrades: 0, deletedGrades: 0, deletedCalls: 0 };
+    return { studentIds: [], convertedGrades: 0, convertedBeforeRegistration: 0, deletedGrades: 0, deletedCalls: 0 };
   }
 
   const affectedStudentIds = uniqueIds(protectedAbsences.map((grade) => grade.studentId));
@@ -106,14 +107,34 @@ export async function repairProtectedAbsencesForStudents(
       data: { notes: "تصحيح تلقائي: كان الامتحان ضمن فترة السماح" },
     });
   }
-  const gradeResult = await client.grade.deleteMany({
-    where: { id: { in: beforeRegistration.map((grade) => grade.id) } },
-  });
+  const beforeRegistrationGradeIds = beforeRegistration.map((grade) => grade.id);
+  const beforeRegistrationResult = beforeRegistrationGradeIds.length
+    ? await client.grade.updateMany({
+        where: { id: { in: beforeRegistrationGradeIds } },
+        data: {
+          status: "قبل تسجيل الطالب",
+          score: null,
+        },
+      })
+    : { count: 0 };
+  if (beforeRegistrationGradeIds.length) {
+    await client.grade.updateMany({
+      where: {
+        id: { in: beforeRegistrationGradeIds },
+        OR: [
+          { notes: null },
+          { notes: "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم" },
+        ],
+      },
+      data: { notes: "تصحيح تلقائي: الامتحان يسبق تاريخ تسجيل الطالب" },
+    });
+  }
 
   return {
     studentIds: affectedStudentIds,
     convertedGrades: convertedResult.count,
-    deletedGrades: gradeResult.count,
+    convertedBeforeRegistration: beforeRegistrationResult.count,
+    deletedGrades: 0,
     deletedCalls: callResult.count,
   };
 }

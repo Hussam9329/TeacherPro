@@ -18,6 +18,7 @@ import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
 
 const MAX_STUDENTS_PER_REQUEST = 2_000;
 
@@ -82,8 +83,14 @@ export async function POST(req: NextRequest) {
           if (!student) throw new AcademicGradeWritebackError("الطالب غير موجود.", 404);
           if (!exam) throw new AcademicGradeWritebackError("الامتحان غير موجود.", 404);
 
-          const withinGrace = isExamWithinStudentGraceWindow(student, exam);
-          const automaticStatus = withinGrace ? "ضمن فترة السماح" : "غائب";
+          const registeredForExam = isExamOnOrAfterStudentRegistration(student, exam);
+          const withinGrace =
+            registeredForExam && isExamWithinStudentGraceWindow(student, exam);
+          const automaticStatus = !registeredForExam
+            ? "قبل تسجيل الطالب"
+            : withinGrace
+              ? "ضمن فترة السماح"
+              : "غائب";
 
           const writeback = await syncAcademicGradeWriteback({
             tx,
@@ -91,9 +98,11 @@ export async function POST(req: NextRequest) {
             examId,
             status: automaticStatus,
             score: null,
-            notes: withinGrace
-              ? "تسجيل تلقائي: الطالب ضمن فترة السماح لهذا الامتحان"
-              : "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
+            notes: !registeredForExam
+              ? "تسجيل تلقائي: الامتحان يسبق تاريخ تسجيل الطالب"
+              : withinGrace
+                ? "تسجيل تلقائي: الطالب ضمن فترة السماح لهذا الامتحان"
+                : "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
             sourceLabel: "تسجيل الحالات الجماعي",
             allowBlankGrade: false,
             blockOnLeave: true,
@@ -151,6 +160,9 @@ export async function POST(req: NextRequest) {
       created: grades.length,
       createdAbsent: grades.filter((grade) => grade.status === "غائب").length,
       createdGrace: grades.filter((grade) => grade.status === "ضمن فترة السماح").length,
+      createdBeforeRegistration: grades.filter(
+        (grade) => grade.status === "قبل تسجيل الطالب",
+      ).length,
       skippedExisting: skippedStudentIds.length,
       skippedStudentIds,
       failed: failures.length,

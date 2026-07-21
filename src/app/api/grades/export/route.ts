@@ -152,7 +152,7 @@ function isGradeEnteredForExport(
       score <= Number(exam.fullMark || 0)
     );
   }
-  return grade.status === "غائب" || grade.status === "غش" || grade.status === "ضمن فترة السماح";
+  return grade.status === "غائب" || grade.status === "غش" || grade.status === "ضمن فترة السماح" || grade.status === "قبل تسجيل الطالب";
 }
 
 function isExamBeforeStudentRegistration(

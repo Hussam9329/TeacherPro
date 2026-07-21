@@ -76,13 +76,15 @@ must(
     !markMissingAbsentRoute.includes("BULK_WRITE_CONCURRENCY") &&
     gradeEntry.includes("markingAllMissingAbsent") &&
     gradeEntry.includes("جارٍ تسجيل الحالات") &&
-    gradeEntry.includes("missingExamStudentsBeforeGrace") &&
+    gradeEntry.includes("missingExamStudentsBeforeProtection") &&
     gradeEntry.includes("graceProtectedMissingStudents") &&
-    markMissingAbsentRoute.includes('withinGrace ? "ضمن فترة السماح" : "غائب"') &&
+    gradeEntry.includes("preRegistrationMissingStudents") &&
+    markMissingAbsentRoute.includes('? "قبل تسجيل الطالب"') &&
+    markMissingAbsentRoute.includes('createdBeforeRegistration') &&
     markMissingAbsentRoute.includes("createdGrace") &&
     gradeEntry.includes("firstFailureReason"),
   "التسجيل الجماعي يسجل الغياب أو السماح من حالة قاعدة البيانات الحالية ويتجاوز الموجود",
-  "يجب أن يسجل الخادم المحمي ضمن فترة السماح وغير المحمي غائباً دون تعارض 409.",
+  "يجب أن يسجل الخادم الغائب والسماح وما قبل التسجيل حسب تاريخ الامتحان دون تعارض 409.",
 );
 
 must(

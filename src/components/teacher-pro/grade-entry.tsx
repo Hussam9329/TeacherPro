@@ -76,7 +76,7 @@ import {
 } from "@/lib/filter-sequence";
 
 type DraftGrade = {
-  status: "درجة" | "غائب" | "غش" | "ضمن فترة السماح";
+  status: "درجة" | "غائب" | "غش" | "ضمن فترة السماح" | "قبل تسجيل الطالب";
   score: string;
   notes: string;
 };
@@ -1244,7 +1244,7 @@ export function GradeEntryView() {
     });
   };
 
-  const missingExamStudentsBeforeGrace = useMemo(() => {
+  const missingExamStudentsBeforeProtection = useMemo(() => {
     if (!selectedExam) return [];
     const selectedMainSites = splitSelection(selectedExam.mainSite);
 
@@ -1252,8 +1252,6 @@ export function GradeEntryView() {
       .filter((student) => {
         if (!selectedExam.courseIds.includes(student.courseId)) return false;
         if (filterCourseId && student.courseId !== filterCourseId) return false;
-        if (!isExamOnOrAfterStudentRegistration(student, selectedExam))
-          return false;
         if (!activeChapterCourseIds.has(student.courseId)) return false;
         if (!studentMatchesExamMainSites(student, selectedMainSites))
           return false;
@@ -1275,18 +1273,30 @@ export function GradeEntryView() {
 
   const graceProtectedMissingStudents = useMemo(
     () =>
-      missingExamStudentsBeforeGrace.filter((student) =>
-        isExamWithinStudentGracePeriod(student, selectedExam!),
+      missingExamStudentsBeforeProtection.filter(
+        (student) =>
+          isExamOnOrAfterStudentRegistration(student, selectedExam!) &&
+          isExamWithinStudentGracePeriod(student, selectedExam!),
       ),
-    [missingExamStudentsBeforeGrace, selectedExam],
+    [missingExamStudentsBeforeProtection, selectedExam],
+  );
+
+  const preRegistrationMissingStudents = useMemo(
+    () =>
+      missingExamStudentsBeforeProtection.filter(
+        (student) => !isExamOnOrAfterStudentRegistration(student, selectedExam!),
+      ),
+    [missingExamStudentsBeforeProtection, selectedExam],
   );
 
   const missingExamStudents = useMemo(
     () =>
-      missingExamStudentsBeforeGrace.filter(
-        (student) => !isExamWithinStudentGracePeriod(student, selectedExam!),
+      missingExamStudentsBeforeProtection.filter(
+        (student) =>
+          isExamOnOrAfterStudentRegistration(student, selectedExam!) &&
+          !isExamWithinStudentGracePeriod(student, selectedExam!),
       ),
-    [missingExamStudentsBeforeGrace, selectedExam],
+    [missingExamStudentsBeforeProtection, selectedExam],
   );
 
   const absentGradesForSelectedExam = useMemo(
@@ -1396,13 +1406,13 @@ export function GradeEntryView() {
 
   const handleMarkAllMissingAsAbsent = () => {
     if (!selectedExam) return;
-    if (missingExamStudentsBeforeGrace.length === 0) {
+    if (missingExamStudentsBeforeProtection.length === 0) {
       toast.info("لا يوجد طلاب بدون حالة مسجلة لهذا الامتحان");
       return;
     }
     setPendingConfirm({
       title: "تسجيل حالات غير المدخلين تلقائياً",
-      description: `سيتم تسجيل ${missingExamStudents.length} كغائب، وتسجيل ${graceProtectedMissingStudents.length} بحالة ضمن فترة السماح. لن يتم تعديل أي درجة موجودة مسبقاً. هل تريد المتابعة؟`,
+      description: `سيتم تسجيل ${missingExamStudents.length} كغائب، و${graceProtectedMissingStudents.length} ضمن فترة السماح، و${preRegistrationMissingStudents.length} بحالة قبل تسجيل الطالب. لن يتم تعديل أي درجة موجودة مسبقاً. هل تريد المتابعة؟`,
       confirmLabel: "تسجيل الحالات",
       destructive: missingExamStudents.length > 0,
       onConfirm: handleMarkAllMissingAsAbsentConfirmed,
@@ -1417,7 +1427,7 @@ export function GradeEntryView() {
       return;
     }
 
-    const targetStudents = [...missingExamStudentsBeforeGrace];
+    const targetStudents = [...missingExamStudentsBeforeProtection];
     if (targetStudents.length === 0) {
       toast.info("تم تحديث البيانات ولا يوجد طلاب بدون درجة حالياً.");
       return;
@@ -1457,6 +1467,7 @@ export function GradeEntryView() {
       created?: number;
       createdAbsent?: number;
       createdGrace?: number;
+      createdBeforeRegistration?: number;
       skippedExisting?: number;
       failed?: number;
       failures?: Array<{ studentId: string; error: string }>;
@@ -1466,6 +1477,10 @@ export function GradeEntryView() {
     const created = Math.max(0, Number(payload.created || 0));
     const createdAbsent = Math.max(0, Number(payload.createdAbsent || 0));
     const createdGrace = Math.max(0, Number(payload.createdGrace || 0));
+    const createdBeforeRegistration = Math.max(
+      0,
+      Number(payload.createdBeforeRegistration || 0),
+    );
     const skippedExisting = Math.max(0, Number(payload.skippedExisting || 0));
     const failed = Math.max(0, Number(payload.failed || 0));
     const firstFailureReason = payload.failures?.find((item) => item.error)?.error;
@@ -1482,7 +1497,7 @@ export function GradeEntryView() {
 
     if (created > 0) {
       toast.success(
-        `تم تسجيل ${createdAbsent} كغائب و${createdGrace} ضمن فترة السماح${skippedExisting ? `، وتجاوز ${skippedExisting} لديهم سجل محفوظ مسبقاً` : ""}${failed ? `، وتعذر تسجيل ${failed}` : ""}`,
+        `تم تسجيل ${createdAbsent} كغائب و${createdGrace} ضمن فترة السماح و${createdBeforeRegistration} قبل تسجيل الطالب${skippedExisting ? `، وتجاوز ${skippedExisting} لديهم سجل محفوظ مسبقاً` : ""}${failed ? `، وتعذر تسجيل ${failed}` : ""}`,
       );
     } else if (skippedExisting > 0 && failed === 0) {
       toast.info("كل الطلاب المحددين لديهم درجات محفوظة مسبقاً؛ تم تحديث الورقة.");
@@ -1704,15 +1719,15 @@ export function GradeEntryView() {
               onClick={handleMarkAllMissingAsAbsent}
               disabled={
                 !selectedExam ||
-                missingExamStudentsBeforeGrace.length === 0 ||
+                missingExamStudentsBeforeProtection.length === 0 ||
                 markingAllMissingAbsent
               }
-              title="يسجل غير المدخلين كغائبين، والمحميين بحالة ضمن فترة السماح"
+              title="يسجل الغائبين، والمحميين بالسماح، ومن كان الامتحان قبل تسجيلهم تلقائياً"
             >
               {markingAllMissingAbsent
                 ? "جارٍ تسجيل الحالات..."
-                : missingExamStudentsBeforeGrace.length > 0
-                  ? `تسجيل الكل (${missingExamStudents.length} غائب، ${graceProtectedMissingStudents.length} ضمن السماح)`
+                : missingExamStudentsBeforeProtection.length > 0
+                  ? `تسجيل الكل (${missingExamStudents.length} غائب، ${graceProtectedMissingStudents.length} سماح، ${preRegistrationMissingStudents.length} قبل التسجيل)`
                   : "لا يوجد طلاب غير مسجلين"}
             </Button>
             <Button
@@ -2008,9 +2023,10 @@ export function GradeEntryView() {
                       ? classification(grade, selectedExam, student)
                       : null;
                   const isSaving = Boolean(savingRows[student.id]);
-                  const canEdit = canEditGradeForStudent(student.id);
                   const examBeforeRegistration =
                     !isExamOnOrAfterStudentRegistration(student, selectedExam);
+                  const canEdit =
+                    canEditGradeForStudent(student.id) && !examBeforeRegistration;
                   const rowLocked = Boolean(
                     !leave && entered && !editableRows[student.id],
                   );
@@ -2101,10 +2117,10 @@ export function GradeEntryView() {
                               الحالي.
                             </p>
                           )}
-                        {grade && examBeforeRegistration && (
+                        {examBeforeRegistration && (
                           <p className="mt-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
-                            الدرجة محفوظة للمتابعة فقط ولا تخصم من الطالب لأن
-                            تاريخ الامتحان يسبق تاريخ تسجيله في الدورة.
+                            هذا الامتحان يسبق تاريخ تسجيل الطالب؛ حالته «قبل
+                            تسجيل الطالب» ولا تقبل درجة أو غياباً ولا تخصم منه.
                           </p>
                         )}
                         {leave && (
@@ -2270,7 +2286,10 @@ export function GradeEntryView() {
                             variant="secondary"
                             disabled={!canEdit}
                             onClick={() => {
-                              if (grade?.status === "ضمن فترة السماح") {
+                              if (
+                                grade?.status === "ضمن فترة السماح" ||
+                                grade?.status === "قبل تسجيل الطالب"
+                              ) {
                                 setDrafts((prev) => ({
                                   ...prev,
                                   [student.id]: {

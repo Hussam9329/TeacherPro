@@ -695,6 +695,10 @@ export function GradeRecordsView() {
     }
     const grade = gradeForAction(gradeId);
     if (!grade) return;
+    if (grade.status === "قبل تسجيل الطالب") {
+      toast.info("هذا الامتحان يسبق تسجيل الطالب ولا يقبل درجة أو غياباً.");
+      return;
+    }
     setEditDialog({
       open: true,
       id: grade.id,
@@ -702,6 +706,8 @@ export function GradeRecordsView() {
         (grade.status as string) === "مجاز"
           ? "غائب"
           : (grade.status as string) === "ضمن فترة السماح"
+            ? "درجة"
+          : (grade.status as string) === "قبل تسجيل الطالب"
             ? "درجة"
           : (grade.status as GradeStatus),
       score:

@@ -26,13 +26,14 @@ const examRecords = read("src/components/teacher-pro/exam-records.tsx");
 const leaveRoute = read("src/app/api/student-leaves/route.ts");
 const migration = read("prisma/migrations/20260712143000_grade_exam_integrity/migration.sql");
 const graceStatusMigration = read("prisma/migrations/20260722223000_allow_grace_grade_status/migration.sql");
+const preRegistrationStatusMigration = read("prisma/migrations/20260722235500_allow_pre_registration_grade_status/migration.sql");
 const pkg = JSON.parse(read("package.json"));
 
 must(
-  gradeEntry.includes("محفوظة للمتابعة فقط") &&
-    gradeEntry.includes("يسبق تاريخ تسجيله في الدورة") &&
+  gradeEntry.includes("يسبق تاريخ تسجيل الطالب") &&
+    gradeEntry.includes("لا تقبل درجة أو غياباً") &&
     gradeRecords.includes("تسجيل الطالب في الدورة"),
-  "الواجهة تشرح دائماً أن الدرجة السابقة للتسجيل محفوظة بلا خصم",
+  "الواجهة تشرح دائماً أن الامتحان السابق للتسجيل لا يقبل درجة أو غياباً",
   "يجب إظهار سبب استبعاد الدرجة السابقة لتسجيل الطالب في ورقة الإدخال وسجل الدرجات.",
 );
 
@@ -181,7 +182,8 @@ must(
   migration.includes("Grade_status_score_consistency") &&
     migration.includes("Grade_prevent_relation_change") &&
     graceStatusMigration.includes("Grade_status_score_consistency") &&
-    graceStatusMigration.includes("ضمن فترة السماح"),
+    graceStatusMigration.includes("ضمن فترة السماح") &&
+    preRegistrationStatusMigration.includes("قبل تسجيل الطالب"),
   "ترحيل قاعدة البيانات يثبت اتساق الدرجة والعلاقة",
   "الحماية يجب ألا تعتمد على الواجهة وحدها.",
 );

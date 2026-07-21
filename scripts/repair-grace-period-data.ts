@@ -29,6 +29,7 @@ async function main() {
 
   let deletedGrades = 0;
   let convertedGrades = 0;
+  let convertedBeforeRegistration = 0;
   let deletedCalls = 0;
   let recalculatedStudents = 0;
 
@@ -36,7 +37,7 @@ async function main() {
     const result = await withSerializableTransaction(async (tx) => {
       const repair = await repairProtectedAbsencesForStudents(tx, batch);
       if (repair.studentIds.length === 0) {
-        return { converted: 0, grades: 0, calls: 0, students: 0 };
+        return { converted: 0, beforeRegistration: 0, grades: 0, calls: 0, students: 0 };
       }
       const recalculation = await recalculateStudentsAcademicState(
         repair.studentIds,
@@ -44,19 +45,21 @@ async function main() {
       );
       return {
         converted: repair.convertedGrades,
+        beforeRegistration: repair.convertedBeforeRegistration,
         grades: repair.deletedGrades,
         calls: repair.deletedCalls,
         students: recalculation.studentIds.length,
       };
     });
     convertedGrades += result.converted;
+    convertedBeforeRegistration += result.beforeRegistration;
     deletedGrades += result.grades;
     deletedCalls += result.calls;
     recalculatedStudents += result.students;
   }
 
   console.log(
-    `[Grace Repair] Converted ${convertedGrades} protected absences to grace status, removed ${deletedGrades} pre-registration absences, removed ${deletedCalls} related call records, and recalculated ${recalculatedStudents} students.`,
+    `[Grace Repair] Converted ${convertedGrades} protected absences to grace status, converted ${convertedBeforeRegistration} pre-registration absences to pre-registration status, removed ${deletedCalls} related call records, and recalculated ${recalculatedStudents} students.`,
   );
 }
 
