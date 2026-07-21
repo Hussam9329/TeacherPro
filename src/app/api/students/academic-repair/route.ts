@@ -50,6 +50,68 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const scope = new URL(req.url).searchParams.get("scope");
+    if (scope === "dismissed") {
+      const batchSize = readBatchSize(req);
+      const rows = await db.student.findMany({
+        where: { status: "مفصول" },
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
+      });
+      let restoredStudents = 0;
+      let stillDismissed = 0;
+      let temporaryDismissals = 0;
+      let finalDismissals = 0;
+      let convertedGrades = 0;
+      let convertedBeforeRegistration = 0;
+      let deletedCalls = 0;
+
+      for (let index = 0; index < rows.length; index += batchSize) {
+        const studentIds = rows.slice(index, index + batchSize).map((row) => row.id);
+        const batch = await withSerializableTransaction(async (tx) => {
+          await ensureProtectedGradeMarkers(tx, { studentIds });
+          const repair = await repairProtectedAbsencesForStudents(tx, studentIds);
+          const recalculation = await recalculateStudentsAcademicState(studentIds, { tx });
+          return { repair, recalculation };
+        });
+        convertedGrades += batch.repair.convertedGrades;
+        convertedBeforeRegistration += batch.repair.convertedBeforeRegistration;
+        deletedCalls += batch.repair.deletedCalls;
+        for (const student of batch.recalculation.students) {
+          if (student.status !== "مفصول") {
+            restoredStudents += 1;
+          } else {
+            stillDismissed += 1;
+            if (student.dismissalType === "فصل نهائي") finalDismissals += 1;
+            else temporaryDismissals += 1;
+          }
+        }
+      }
+
+      const result = {
+        ok: true,
+        reviewedDismissedStudents: rows.length,
+        restoredStudents,
+        stillDismissed,
+        temporaryDismissals,
+        finalDismissals,
+        convertedGrades,
+        convertedBeforeRegistration,
+        deletedCalls,
+      };
+      await writeRequestAuditLog(
+        req,
+        "الطلاب",
+        "تدقيق المفصولين وتصحيح الفصل والفرص تلقائياً",
+        result,
+      );
+      return NextResponse.json({
+        ...result,
+        message: `تم تدقيق ${rows.length} مفصولاً: استُعيد ${restoredStudents} طالباً وثبت استحقاق فصل ${stillDismissed} طالباً.`,
+        source: "database" as const,
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
     if (scope === "grace" || scope === "protected") {
       const batchSize = readBatchSize(req);
       const rows = await db.student.findMany({

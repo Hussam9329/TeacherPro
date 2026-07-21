@@ -76,6 +76,8 @@ check(
   "الإصلاح الإداري الشامل ينشئ الحالات المحمية ويصحح السجلات ويعيد كل الأثر الأكاديمي",
   academicRepair.includes("repairProtectedAbsencesForStudents") &&
     academicRepair.includes("ensureProtectedGradeMarkers") &&
+    academicRepair.includes('scope === "dismissed"') &&
+    academicRepair.includes("restoredStudents") &&
     academicRepair.includes('scope === "protected"') &&
     academicRepair.includes('where: { status: { not: "مؤرشف" } }') &&
     academicRepair.includes("deletedGrades") &&
