@@ -1244,7 +1244,7 @@ export function GradeEntryView() {
     });
   };
 
-  const missingExamStudents = useMemo(() => {
+  const missingExamStudentsBeforeGrace = useMemo(() => {
     if (!selectedExam) return [];
     const selectedMainSites = splitSelection(selectedExam.mainSite);
 
@@ -1272,6 +1272,22 @@ export function GradeEntryView() {
     gradeByStudentId,
     automaticEffectStudentIds,
   ]);
+
+  const graceProtectedMissingStudents = useMemo(
+    () =>
+      missingExamStudentsBeforeGrace.filter((student) =>
+        isExamWithinStudentGracePeriod(student, selectedExam!),
+      ),
+    [missingExamStudentsBeforeGrace, selectedExam],
+  );
+
+  const missingExamStudents = useMemo(
+    () =>
+      missingExamStudentsBeforeGrace.filter(
+        (student) => !isExamWithinStudentGracePeriod(student, selectedExam!),
+      ),
+    [missingExamStudentsBeforeGrace, selectedExam],
+  );
 
   const absentGradesForSelectedExam = useMemo(
     () =>
@@ -1386,7 +1402,7 @@ export function GradeEntryView() {
     }
     setPendingConfirm({
       title: "تسجيل غير المدخلين كغائبين",
-      description: `سيتم تسجيل ${missingExamStudents.length} طالب من كل طلاب الدورة المرتبطين بامتحان ${selectedExam.name} كغائبين. لن يتم تعديل أي درجة موجودة مسبقًا. هل تريد المتابعة؟`,
+      description: `سيتم تسجيل ${missingExamStudents.length} طالب من كل طلاب الدورة المرتبطين بامتحان ${selectedExam.name} كغائبين. لن يتم تعديل أي درجة موجودة مسبقًا${graceProtectedMissingStudents.length ? `، وسيتم تجاوز ${graceProtectedMissingStudents.length} طالب محميين بفترة السماح` : ""}. هل تريد المتابعة؟`,
       confirmLabel: "تسجيل كغائب",
       destructive: true,
       onConfirm: handleMarkAllMissingAsAbsentConfirmed,
@@ -1441,12 +1457,14 @@ export function GradeEntryView() {
       created?: number;
       skippedExisting?: number;
       failed?: number;
+      failures?: Array<{ studentId: string; error: string }>;
       grades?: Grade[];
       academicRecalculation?: { students?: Student[] };
     };
     const created = Math.max(0, Number(payload.created || 0));
     const skippedExisting = Math.max(0, Number(payload.skippedExisting || 0));
     const failed = Math.max(0, Number(payload.failed || 0));
+    const firstFailureReason = payload.failures?.find((item) => item.error)?.error;
 
     for (const grade of payload.grades || []) {
       mergeServerGradeIntoEntrySheet(grade);
@@ -1465,7 +1483,9 @@ export function GradeEntryView() {
     } else if (skippedExisting > 0 && failed === 0) {
       toast.info("كل الطلاب المحددين لديهم درجات محفوظة مسبقاً؛ تم تحديث الورقة.");
     } else {
-      toast.error("تعذر تسجيل الغياب للطلاب المحددين.");
+      toast.error(
+        firstFailureReason || "تعذر تسجيل الغياب للطلاب المحددين.",
+      );
     }
   };
 
@@ -1687,7 +1707,11 @@ export function GradeEntryView() {
             >
               {markingAllMissingAbsent
                 ? "جارٍ تسجيل الغياب..."
-                : `تسجيل الكل كغائب (${missingExamStudents.length})`}
+                : missingExamStudents.length > 0
+                  ? `تسجيل الكل كغائب (${missingExamStudents.length})`
+                  : graceProtectedMissingStudents.length > 0
+                    ? `لا يوجد غياب مستحق (${graceProtectedMissingStudents.length} ضمن السماح)`
+                    : "لا يوجد طلاب غير مسجلين"}
             </Button>
             <Button
               variant="outline"
