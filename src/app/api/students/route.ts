@@ -44,7 +44,7 @@ import {
   normalizeGracePeriodStartMode,
   resolveManualGraceStartDate,
 } from "@/lib/student-grace";
-import { removeProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
+import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
 
@@ -1555,7 +1555,7 @@ export async function PUT(req: NextRequest) {
       });
 
       if (!transactionResetEnrollment && transactionAcademicInputsChanged) {
-        await removeProtectedAbsencesForStudents(tx, [String(id)]);
+        await repairProtectedAbsencesForStudents(tx, [String(id)]);
         academicRecalculation = await recalculateStudentsAcademicState(
           [String(id)],
           { tx },

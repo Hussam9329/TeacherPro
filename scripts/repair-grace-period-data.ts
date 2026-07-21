@@ -1,7 +1,7 @@
 import { db } from "../src/lib/db";
 import { withSerializableTransaction } from "../src/lib/serializable-transaction";
 import { recalculateStudentsAcademicState } from "../src/lib/academic-recalculate-server";
-import { removeProtectedAbsencesForStudents } from "../src/lib/grace-period-repair-server";
+import { repairProtectedAbsencesForStudents } from "../src/lib/grace-period-repair-server";
 
 const BATCH_SIZE = 100;
 
@@ -28,32 +28,35 @@ async function main() {
   }
 
   let deletedGrades = 0;
+  let convertedGrades = 0;
   let deletedCalls = 0;
   let recalculatedStudents = 0;
 
   for (const batch of chunks(studentIds, BATCH_SIZE)) {
     const result = await withSerializableTransaction(async (tx) => {
-      const repair = await removeProtectedAbsencesForStudents(tx, batch);
+      const repair = await repairProtectedAbsencesForStudents(tx, batch);
       if (repair.studentIds.length === 0) {
-        return { grades: 0, calls: 0, students: 0 };
+        return { converted: 0, grades: 0, calls: 0, students: 0 };
       }
       const recalculation = await recalculateStudentsAcademicState(
         repair.studentIds,
         { tx },
       );
       return {
+        converted: repair.convertedGrades,
         grades: repair.deletedGrades,
         calls: repair.deletedCalls,
         students: recalculation.studentIds.length,
       };
     });
+    convertedGrades += result.converted;
     deletedGrades += result.grades;
     deletedCalls += result.calls;
     recalculatedStudents += result.students;
   }
 
   console.log(
-    `[Grace Repair] Removed ${deletedGrades} invalid absences, removed ${deletedCalls} related call records, and recalculated ${recalculatedStudents} students.`,
+    `[Grace Repair] Converted ${convertedGrades} protected absences to grace status, removed ${deletedGrades} pre-registration absences, removed ${deletedCalls} related call records, and recalculated ${recalculatedStudents} students.`,
   );
 }
 

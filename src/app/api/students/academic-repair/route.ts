@@ -1,14 +1,18 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
-import { recalculateAllStudentsAcademicState } from "@/lib/academic-recalculate-server";
+import {
+  recalculateAllStudentsAcademicState,
+  recalculateStudentsAcademicState,
+} from "@/lib/academic-recalculate-server";
 import { db } from "@/lib/db";
-import { removeProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
+import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
 function readBatchSize(req: NextRequest): number {
@@ -44,7 +48,58 @@ export async function PATCH(req: NextRequest) {
   if (rateLimitError) return rateLimitError;
 
   try {
-    // Historical protected absences must be removed before recalculation.
+    const scope = new URL(req.url).searchParams.get("scope");
+    if (scope === "grace") {
+      const batchSize = readBatchSize(req);
+      const rows = await db.grade.findMany({
+        where: { status: "غائب" },
+        distinct: ["studentId"],
+        select: { studentId: true },
+      });
+      let convertedGrades = 0;
+      let deletedGrades = 0;
+      let deletedCalls = 0;
+      const affectedStudentIds = new Set<string>();
+
+      for (let index = 0; index < rows.length; index += batchSize) {
+        const studentIds = rows.slice(index, index + batchSize).map((row) => row.studentId);
+        const batch = await withSerializableTransaction(async (tx) => {
+          const repair = await repairProtectedAbsencesForStudents(tx, studentIds);
+          const recalculation = repair.studentIds.length
+            ? await recalculateStudentsAcademicState(repair.studentIds, { tx })
+            : null;
+          return { repair, recalculation };
+        });
+        convertedGrades += batch.repair.convertedGrades;
+        deletedGrades += batch.repair.deletedGrades;
+        deletedCalls += batch.repair.deletedCalls;
+        for (const studentId of batch.recalculation?.studentIds || []) {
+          affectedStudentIds.add(studentId);
+        }
+      }
+
+      const result = {
+        ok: true,
+        convertedGrades,
+        deletedGrades,
+        deletedCalls,
+        recalculatedStudents: affectedStudentIds.size,
+      };
+      await writeRequestAuditLog(
+        req,
+        "الدرجات",
+        "تصحيح غيابات فترة السماح التاريخية",
+        result,
+      );
+      return NextResponse.json({
+        ...result,
+        message: `تم تحويل ${convertedGrades} غياب محمي إلى ضمن فترة السماح.`,
+        source: "database" as const,
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
+    // Historical protected absences must be converted/removed before recalculation.
     // Recalculation alone ignores their penalty, but leaves the invalid grade
     // visible and able to reappear in related screens.
     const batchSize = readBatchSize(req);
@@ -54,12 +109,14 @@ export async function PATCH(req: NextRequest) {
       select: { studentId: true },
     });
     let deletedGrades = 0;
+    let convertedGrades = 0;
     let deletedCalls = 0;
     for (let index = 0; index < rows.length; index += batchSize) {
       const studentIds = rows.slice(index, index + batchSize).map((row) => row.studentId);
       const repair = await withSerializableTransaction((tx) =>
-        removeProtectedAbsencesForStudents(tx, studentIds),
+        repairProtectedAbsencesForStudents(tx, studentIds),
       );
+      convertedGrades += repair.convertedGrades;
       deletedGrades += repair.deletedGrades;
       deletedCalls += repair.deletedCalls;
     }
@@ -72,11 +129,12 @@ export async function PATCH(req: NextRequest) {
       req,
       "الطلاب",
       "إصلاح أكاديمي شامل وإعادة احتساب كل الطلاب",
-      { ...result, deletedGrades, deletedCalls },
+      { ...result, convertedGrades, deletedGrades, deletedCalls },
     );
 
     return NextResponse.json({
       ...result,
+      convertedGrades,
       deletedGrades,
       deletedCalls,
       message:

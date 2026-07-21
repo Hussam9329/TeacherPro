@@ -63,18 +63,22 @@ check(
     leaves.includes('backup.status === "غائب"'),
 );
 check(
-  "إصلاح الإنتاج يحذف الغياب والمكالمات المتضررة ثم يعيد الاحتساب داخل transaction",
+  "إصلاح الإنتاج يحول غياب السماح ويحذف السابق للتسجيل والمكالمات ثم يعيد الاحتساب",
   repairHelper.includes('status: "غائب"') &&
     repairHelper.includes("studentCall.deleteMany") &&
+    repairHelper.includes('status: "ضمن فترة السماح"') &&
+    repairHelper.includes("grade.updateMany") &&
     repairHelper.includes("grade.deleteMany") &&
     repair.includes("recalculateStudentsAcademicState") &&
     repair.includes("withSerializableTransaction"),
 );
 check(
-  "الإصلاح الإداري الشامل يحذف الغياب المحمي قبل إعادة الاحتساب",
-  academicRepair.includes("removeProtectedAbsencesForStudents") &&
+  "الإصلاح الإداري الشامل يصحح الغياب المحمي قبل إعادة الاحتساب",
+  academicRepair.includes("repairProtectedAbsencesForStudents") &&
     academicRepair.includes('where: { status: "غائب" }') &&
     academicRepair.includes("deletedGrades") &&
+    academicRepair.includes("convertedGrades") &&
+    academicRepair.includes('scope === "grace"') &&
     academicRepair.includes("deletedCalls"),
 );
 check(

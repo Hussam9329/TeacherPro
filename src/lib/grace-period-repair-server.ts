@@ -19,6 +19,7 @@ type AbsenceCandidate = {
 
 export type GracePeriodRepairResult = {
   studentIds: string[];
+  convertedGrades: number;
   deletedGrades: number;
   deletedCalls: number;
 };
@@ -29,25 +30,20 @@ function uniqueIds(values: Array<string | null | undefined>): string[] {
   );
 }
 
-function isProtectedOrPreRegistrationAbsence(grade: AbsenceCandidate): boolean {
-  return (
-    !isExamOnOrAfterStudentRegistration(grade.student, grade.exam) ||
-    isExamWithinStudentGraceWindow(grade.student, grade.exam)
-  );
-}
-
 /**
- * Removes impossible absence records and their call rows. Call this inside the
+ * Converts grace-protected absences to an explicit scoreless grace marker,
+ * removes impossible pre-registration absences, and removes related call rows.
+ * Call this inside the
  * same transaction as grace/registration changes, before academic
  * recalculation, so no request can observe a protected student as absent.
  */
-export async function removeProtectedAbsencesForStudents(
+export async function repairProtectedAbsencesForStudents(
   client: PrismaClientLike,
   rawStudentIds: Array<string | null | undefined>,
 ): Promise<GracePeriodRepairResult> {
   const requestedStudentIds = uniqueIds(rawStudentIds);
   if (requestedStudentIds.length === 0) {
-    return { studentIds: [], deletedGrades: 0, deletedCalls: 0 };
+    return { studentIds: [], convertedGrades: 0, deletedGrades: 0, deletedCalls: 0 };
   }
 
   const candidates = (await client.grade.findMany({
@@ -66,26 +62,57 @@ export async function removeProtectedAbsencesForStudents(
       exam: { select: { date: true } },
     },
   })) as AbsenceCandidate[];
-  const invalid = candidates.filter(isProtectedOrPreRegistrationAbsence);
-  if (invalid.length === 0) {
-    return { studentIds: [], deletedGrades: 0, deletedCalls: 0 };
+  const beforeRegistration = candidates.filter(
+    (grade) => !isExamOnOrAfterStudentRegistration(grade.student, grade.exam),
+  );
+  const withinGrace = candidates.filter(
+    (grade) =>
+      isExamOnOrAfterStudentRegistration(grade.student, grade.exam) &&
+      isExamWithinStudentGraceWindow(grade.student, grade.exam),
+  );
+  const protectedAbsences = [...beforeRegistration, ...withinGrace];
+  if (protectedAbsences.length === 0) {
+    return { studentIds: [], convertedGrades: 0, deletedGrades: 0, deletedCalls: 0 };
   }
 
-  const affectedStudentIds = uniqueIds(invalid.map((grade) => grade.studentId));
+  const affectedStudentIds = uniqueIds(protectedAbsences.map((grade) => grade.studentId));
   const callResult = await client.studentCall.deleteMany({
     where: {
-      OR: invalid.map((grade) => ({
+      OR: protectedAbsences.map((grade) => ({
         studentId: grade.studentId,
         examId: grade.examId,
       })),
     },
   });
+  const graceGradeIds = withinGrace.map((grade) => grade.id);
+  const convertedResult = graceGradeIds.length
+    ? await client.grade.updateMany({
+        where: { id: { in: graceGradeIds } },
+        data: {
+          status: "ضمن فترة السماح",
+          score: null,
+        },
+      })
+    : { count: 0 };
+  if (graceGradeIds.length) {
+    await client.grade.updateMany({
+      where: {
+        id: { in: graceGradeIds },
+        OR: [
+          { notes: null },
+          { notes: "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم" },
+        ],
+      },
+      data: { notes: "تصحيح تلقائي: كان الامتحان ضمن فترة السماح" },
+    });
+  }
   const gradeResult = await client.grade.deleteMany({
-    where: { id: { in: invalid.map((grade) => grade.id) } },
+    where: { id: { in: beforeRegistration.map((grade) => grade.id) } },
   });
 
   return {
     studentIds: affectedStudentIds,
+    convertedGrades: convertedResult.count,
     deletedGrades: gradeResult.count,
     deletedCalls: callResult.count,
   };

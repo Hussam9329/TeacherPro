@@ -98,9 +98,9 @@ check(
   "gracePeriodStartDate is repaired by migration and runtime guard",
 );
 check(
-  academicRepairRoute.includes("removeProtectedAbsencesForStudents") &&
+  academicRepairRoute.includes("repairProtectedAbsencesForStudents") &&
     academicRepairRoute.includes('where: { status: "غائب" }'),
-  "administrative repair removes historical protected absences before recalculation",
+  "administrative repair converts historical protected absences before recalculation",
 );
 check(
   schemaRepairLock.includes("pg_advisory_xact_lock") &&
