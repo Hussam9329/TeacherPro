@@ -265,6 +265,7 @@ export function GradeEntryView() {
   const [entrySheetLoading, setEntrySheetLoading] = useState(false);
   const [entrySheetError, setEntrySheetError] = useState<string | null>(null);
   const [entrySheetRefreshKey, setEntrySheetRefreshKey] = useState(0);
+  const [markingAllMissingAbsent, setMarkingAllMissingAbsent] = useState(false);
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const missingStudentsNoteLoadedRef = useRef("");
   const {
@@ -1394,12 +1395,20 @@ export function GradeEntryView() {
 
   const handleMarkAllMissingAsAbsentConfirmed = async () => {
     if (!selectedExam) return;
+    if (markingAllMissingAbsent) return;
     if (entrySheetError) {
       toast.error("لا يمكن تسجيل الغياب الجماعي لأن ورقة الإدخال غير محملة من بيانات النظام.");
       return;
     }
 
     const targetStudents = [...missingExamStudents];
+    if (targetStudents.length === 0) {
+      toast.info("تم تحديث البيانات ولا يوجد طلاب بدون درجة حالياً.");
+      return;
+    }
+
+    setMarkingAllMissingAbsent(true);
+    toast.info(`جارٍ تسجيل ${targetStudents.length} طالب كغائب...`);
 
     setSavingRows((prev) => {
       const next = { ...prev };
@@ -1413,6 +1422,7 @@ export function GradeEntryView() {
       selectedExam.id,
       targetStudents.map((student) => student.id),
     );
+    setMarkingAllMissingAbsent(false);
 
     setSavingRows((prev) => {
       const next = { ...prev };
@@ -1668,10 +1678,16 @@ export function GradeEntryView() {
               variant="secondary"
               size="sm"
               onClick={handleMarkAllMissingAsAbsent}
-              disabled={!selectedExam || missingExamStudents.length === 0}
+              disabled={
+                !selectedExam ||
+                missingExamStudents.length === 0 ||
+                markingAllMissingAbsent
+              }
               title="يسجل كل طلاب الدورة المرتبطين بهذا الامتحان الذين لا يملكون درجة مسجلة كغائبين، وليس الصفحة الحالية فقط"
             >
-              تسجيل الكل كغائب ({missingExamStudents.length})
+              {markingAllMissingAbsent
+                ? "جارٍ تسجيل الغياب..."
+                : `تسجيل الكل كغائب (${missingExamStudents.length})`}
             </Button>
             <Button
               variant="outline"

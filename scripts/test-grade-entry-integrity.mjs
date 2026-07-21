@@ -70,7 +70,11 @@ must(
     !gradeEntry.includes("ستتم المزامنة تلقائياً") &&
     markMissingAbsentRoute.includes("existingGrade") &&
     markMissingAbsentRoute.includes("skippedStudentIds") &&
-    markMissingAbsentRoute.includes("syncAcademicGradeWriteback"),
+    markMissingAbsentRoute.includes("syncAcademicGradeWriteback") &&
+    markMissingAbsentRoute.includes("BULK_WRITE_CONCURRENCY") &&
+    markMissingAbsentRoute.includes("Promise.all") &&
+    gradeEntry.includes("markingAllMissingAbsent") &&
+    gradeEntry.includes("جارٍ تسجيل الغياب"),
   "التسجيل الجماعي للغياب عملية خادمية واحدة تتجاوز الدرجات الموجودة دون تعارض 409",
   "تسجيل غير المدخلين كغائبين يجب أن يعتمد حالة قاعدة البيانات الحالية ويتجاوز الموجود.",
 );

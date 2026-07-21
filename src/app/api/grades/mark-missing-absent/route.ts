@@ -18,6 +18,7 @@ import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 
 const MAX_STUDENTS_PER_REQUEST = 2_000;
+const BULK_WRITE_CONCURRENCY = 8;
 
 export async function POST(req: NextRequest) {
   const authError = await requirePermission(req, "grades.add");
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
     // Each student is resolved from current database state. Existing grades are
     // deliberately skipped, making the bulk action safe to retry after a lost
     // response and preventing stale entry-sheet rows from producing 409 storms.
-    for (const studentId of studentIds) {
+    const processStudent = async (studentId: string) => {
       try {
         const result = await withSerializableTransaction(async (tx) => {
           const existingGrade = await tx.grade.findUnique({
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
 
         if (result.existingGrade) {
           skippedStudentIds.push(studentId);
-          continue;
+          return;
         }
         if (result.writeback) {
           grades.push(result.writeback.grade);
@@ -90,11 +91,29 @@ export async function POST(req: NextRequest) {
       } catch (error) {
         if (error instanceof AcademicGradeWritebackError) {
           failures.push({ studentId, error: error.message });
-          continue;
+          return;
         }
         throw error;
       }
-    }
+    };
+
+    // A bounded worker pool keeps the operation fast for large exams without
+    // exhausting the Neon connection pool. Every student still has an isolated
+    // SERIALIZABLE transaction and an existing grade is never overwritten.
+    let nextStudentIndex = 0;
+    const worker = async () => {
+      while (nextStudentIndex < studentIds.length) {
+        const studentId = studentIds[nextStudentIndex];
+        nextStudentIndex += 1;
+        await processStudent(studentId);
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(BULK_WRITE_CONCURRENCY, studentIds.length) },
+        () => worker(),
+      ),
+    );
 
     await writeRequestAuditLog(
       req,
