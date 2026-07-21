@@ -80,6 +80,12 @@ check(
     gradeEntry.includes("expectMissing: !currentGrade") &&
     gradesRoute.includes("expectMissing && existingGrade"),
 );
+check(
+  "Store الدرجات يحافظ على updatedAt كاملاً حتى لا ينتج تعارض 409 وهمي",
+  teacherStore.includes("const preserveGradeTimestamp") &&
+    teacherStore.includes("updatedAt: preserveGradeTimestamp(g.updatedAt)") &&
+    !teacherStore.includes("updatedAt: g.updatedAt\n      ? baghdadDateKey"),
+);
 
 check(
   "معاينة إعدادات الدورة والحفظ مرتبطان بنفس token وsnapshot الطلاب",
@@ -179,8 +185,8 @@ check(
     academicEngine.includes("return baghdadDateKey(value)") &&
     academicEngine.includes("const gradeEventDate = dayKey(") &&
     academicGradeWriteback.includes("const key = baghdadDateKey(value)") &&
-    teacherStore.includes("return baghdadDateKey(value)") &&
-    teacherStore.includes("baghdadDateKey(g.updatedAt as string | Date)"),
+    teacherStore.includes("function dayKey(") &&
+    teacherStore.includes("return baghdadDateKey(value)"),
 );
 check(
   "اختبار توافق preview/save داخل مجموعة اختبارات سلامة النظام",

@@ -1429,17 +1429,23 @@ function normalizeStudentRecord(st: Record<string, unknown>): Student {
 }
 
 function normalizeGradeRecord(g: Record<string, unknown>): Grade {
+  const preserveGradeTimestamp = (value: unknown): string => {
+    if (value instanceof Date) {
+      return Number.isFinite(value.getTime()) ? value.toISOString() : todayISO();
+    }
+    const text = String(value || "").trim();
+    return text || todayISO();
+  };
   return {
     ...(g as Record<string, unknown>),
     status: sanitizeGradeStatus(g.status),
     score: g.score === null || g.score === undefined ? null : Number(g.score),
     academicAccountingChecked: Boolean(g.academicAccountingChecked),
-    createdAt: g.createdAt
-      ? baghdadDateKey(g.createdAt as string | Date) || todayISO()
-      : todayISO(),
-    updatedAt: g.updatedAt
-      ? baghdadDateKey(g.updatedAt as string | Date) || todayISO()
-      : todayISO(),
+    // Keep the complete server timestamp. Optimistic concurrency compares
+    // updatedAt exactly; reducing it to a Baghdad date makes every edit look
+    // stale and causes a permanent 409 even immediately after loading.
+    createdAt: preserveGradeTimestamp(g.createdAt),
+    updatedAt: preserveGradeTimestamp(g.updatedAt),
   } as Grade;
 }
 
