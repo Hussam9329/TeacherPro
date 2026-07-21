@@ -54,7 +54,7 @@ export async function PATCH(req: NextRequest) {
     if (scope === "dismissed") {
       const batchSize = readBatchSize(req);
       const requestedLimit = Number(searchParams.get("limit") || 50);
-      const limit = Math.min(50, Math.max(1, Math.trunc(requestedLimit || 25)));
+      const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit || 50)));
       const afterId = String(searchParams.get("afterId") || "").trim();
       const fetchedRows = await db.student.findMany({
         where: {
