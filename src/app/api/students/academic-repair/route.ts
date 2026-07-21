@@ -13,6 +13,7 @@ import {
 } from "@/lib/academic-recalculate-server";
 import { db } from "@/lib/db";
 import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
+import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
 function readBatchSize(req: NextRequest): number {
@@ -49,13 +50,15 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const scope = new URL(req.url).searchParams.get("scope");
-    if (scope === "grace") {
+    if (scope === "grace" || scope === "protected") {
       const batchSize = readBatchSize(req);
-      const rows = await db.grade.findMany({
-        where: { status: "غائب" },
-        distinct: ["studentId"],
-        select: { studentId: true },
+      const rows = await db.student.findMany({
+        where: { status: { not: "مؤرشف" } },
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
       });
+      let createdBeforeRegistration = 0;
+      let createdGrace = 0;
       let convertedGrades = 0;
       let convertedBeforeRegistration = 0;
       let deletedGrades = 0;
@@ -63,14 +66,15 @@ export async function PATCH(req: NextRequest) {
       const affectedStudentIds = new Set<string>();
 
       for (let index = 0; index < rows.length; index += batchSize) {
-        const studentIds = rows.slice(index, index + batchSize).map((row) => row.studentId);
+        const studentIds = rows.slice(index, index + batchSize).map((row) => row.id);
         const batch = await withSerializableTransaction(async (tx) => {
+          const markers = await ensureProtectedGradeMarkers(tx, { studentIds });
           const repair = await repairProtectedAbsencesForStudents(tx, studentIds);
-          const recalculation = repair.studentIds.length
-            ? await recalculateStudentsAcademicState(repair.studentIds, { tx })
-            : null;
-          return { repair, recalculation };
+          const recalculation = await recalculateStudentsAcademicState(studentIds, { tx });
+          return { markers, repair, recalculation };
         });
+        createdBeforeRegistration += batch.markers.createdBeforeRegistration;
+        createdGrace += batch.markers.createdGrace;
         convertedGrades += batch.repair.convertedGrades;
         convertedBeforeRegistration += batch.repair.convertedBeforeRegistration;
         deletedGrades += batch.repair.deletedGrades;
@@ -82,6 +86,8 @@ export async function PATCH(req: NextRequest) {
 
       const result = {
         ok: true,
+        createdBeforeRegistration,
+        createdGrace,
         convertedGrades,
         convertedBeforeRegistration,
         deletedGrades,
@@ -91,12 +97,12 @@ export async function PATCH(req: NextRequest) {
       await writeRequestAuditLog(
         req,
         "الدرجات",
-        "تصحيح غيابات فترة السماح التاريخية",
+        "تنظيف جماعي للحالات المحمية وإعادة الأثر الأكاديمي",
         result,
       );
       return NextResponse.json({
         ...result,
-        message: `تم تحويل ${convertedGrades} غياب محمي إلى ضمن فترة السماح و${convertedBeforeRegistration} إلى قبل تسجيل الطالب.`,
+        message: `تم إنشاء ${createdGrace} حالة ضمن فترة السماح و${createdBeforeRegistration} حالة قبل التسجيل، وتصحيح ${convertedGrades + convertedBeforeRegistration} سجل سابق، ثم إعادة الفرص والفصل التلقائي إلى النتيجة الصحيحة.`,
         source: "database" as const,
         generatedAt: new Date().toISOString(),
       });

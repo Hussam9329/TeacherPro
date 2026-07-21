@@ -27,6 +27,7 @@ import {
   retryStudentCodeConflict,
 } from "@/lib/student-code-sequence";
 import { resolveManualGraceStartDate } from "@/lib/student-grace";
+import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
 
 type BulkStudentPayload = {
   name?: unknown;
@@ -466,7 +467,7 @@ export async function POST(req: NextRequest) {
           tx,
           normalizedRows.length,
         );
-        const createdStudents: unknown[] = [];
+        const createdStudents: Array<{ id: string }> = [];
         const executionWarnings: string[] = [];
         for (const [
           rowIndex,
@@ -586,6 +587,9 @@ export async function POST(req: NextRequest) {
           });
           createdStudents.push(createdStudent);
         }
+        await ensureProtectedGradeMarkers(tx, {
+          studentIds: createdStudents.map((student) => student.id),
+        });
         return { students: createdStudents, warnings: executionWarnings };
       }),
     );

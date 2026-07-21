@@ -47,6 +47,7 @@ import {
 import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
+import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
 
 function studentMutationToken(student: Record<string, unknown>): string {
   const fields = [
@@ -904,6 +905,10 @@ export async function POST(req: NextRequest) {
           },
         });
 
+        await ensureProtectedGradeMarkers(tx, {
+          studentIds: [createdStudent.id],
+        });
+
         await tx.auditLog.create({
           data: {
             module: "تسجيل الطلاب",
@@ -1554,7 +1559,12 @@ export async function PUT(req: NextRequest) {
         data: transactionData,
       });
 
+      if (transactionResetEnrollment) {
+        await ensureProtectedGradeMarkers(tx, { studentIds: [String(id)] });
+      }
+
       if (!transactionResetEnrollment && transactionAcademicInputsChanged) {
+        await ensureProtectedGradeMarkers(tx, { studentIds: [String(id)] });
         await repairProtectedAbsencesForStudents(tx, [String(id)]);
         academicRecalculation = await recalculateStudentsAcademicState(
           [String(id)],

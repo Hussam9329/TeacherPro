@@ -5,10 +5,11 @@ import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 
 type PrismaClientLike = typeof db | Prisma.TransactionClient;
 
-type AbsenceCandidate = {
+type ProtectedGradeCandidate = {
   id: string;
   studentId: string;
   examId: string;
+  status: string;
   student: {
     createdAt: Date;
     accountingGraceDays: number;
@@ -48,11 +49,15 @@ export async function repairProtectedAbsencesForStudents(
   }
 
   const candidates = (await client.grade.findMany({
-    where: { studentId: { in: requestedStudentIds }, status: "غائب" },
+    where: {
+      studentId: { in: requestedStudentIds },
+      status: { not: "قبل تسجيل الطالب" },
+    },
     select: {
       id: true,
       studentId: true,
       examId: true,
+      status: true,
       student: {
         select: {
           createdAt: true,
@@ -62,12 +67,13 @@ export async function repairProtectedAbsencesForStudents(
       },
       exam: { select: { date: true } },
     },
-  })) as AbsenceCandidate[];
+  })) as ProtectedGradeCandidate[];
   const beforeRegistration = candidates.filter(
     (grade) => !isExamOnOrAfterStudentRegistration(grade.student, grade.exam),
   );
   const withinGrace = candidates.filter(
     (grade) =>
+      grade.status === "غائب" &&
       isExamOnOrAfterStudentRegistration(grade.student, grade.exam) &&
       isExamWithinStudentGraceWindow(grade.student, grade.exam),
   );

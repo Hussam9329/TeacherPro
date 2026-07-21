@@ -14,6 +14,8 @@ import { writeRequestAuditLog } from '@/lib/audit-log-server';
 import type { Prisma } from '@prisma/client';
 import { buildMutationPreviewToken } from '@/lib/mutation-preview-token';
 import { withSerializableTransaction } from '@/lib/serializable-transaction';
+import { ensureProtectedGradeMarkers } from '@/lib/protected-grade-markers-server';
+import { repairProtectedAbsencesForStudents } from '@/lib/grace-period-repair-server';
 
 function parseBoolean(value: unknown): boolean {
   return value === true || value === 'true' || value === '1' || value === 1;
@@ -224,6 +226,7 @@ export async function POST(req: NextRequest) {
         },
       });
       await syncExamCourseLinks(tx, createdExam.id, parsedCourseIds);
+      await ensureProtectedGradeMarkers(tx, { examIds: [createdExam.id] });
       return createdExam;
     });
     await writeRequestAuditLog(req, 'الامتحانات', 'إضافة امتحان من بيانات النظام', {
@@ -368,6 +371,18 @@ export async function PUT(req: NextRequest) {
 
       const exam = await tx.exam.update({ where: { id }, data });
       await syncExamCourseLinks(tx, exam.id, exam.courseIds);
+      await ensureProtectedGradeMarkers(tx, { examIds: [exam.id] });
+      const examGradeStudents = await tx.grade.findMany({
+        where: { examId: exam.id },
+        distinct: ['studentId'],
+        select: { studentId: true },
+      });
+      if (examGradeStudents.length > 0) {
+        await repairProtectedAbsencesForStudents(
+          tx,
+          examGradeStudents.map((grade) => grade.studentId),
+        );
+      }
       const academicRecalculation = hasAcademicExamChange(existingExam, exam)
         ? await recalculateStudentsForExam(exam.id, {
             tx,
