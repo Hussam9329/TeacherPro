@@ -16,6 +16,7 @@ import {
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
+import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 
 const MAX_STUDENTS_PER_REQUEST = 2_000;
 const BULK_WRITE_CONCURRENCY = 8;
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
 
     if (!examId) return validationError("يجب اختيار الامتحان أولاً");
     if (studentIds.length === 0)
-      return validationError("لا يوجد طلاب لتسجيلهم غائبين");
+      return validationError("لا يوجد طلاب لتسجيل حالاتهم");
     if (studentIds.length > MAX_STUDENTS_PER_REQUEST)
       return validationError("عدد الطلاب في العملية أكبر من الحد المسموح");
 
@@ -60,20 +61,42 @@ export async function POST(req: NextRequest) {
           });
           if (existingGrade) return { existingGrade, writeback: null };
 
+          const [student, exam] = await Promise.all([
+            tx.student.findUnique({
+              where: { id: studentId },
+              select: {
+                createdAt: true,
+                accountingGraceDays: true,
+                gracePeriodStartDate: true,
+              },
+            }),
+            tx.exam.findUnique({
+              where: { id: examId },
+              select: { date: true },
+            }),
+          ]);
+          if (!student) throw new AcademicGradeWritebackError("الطالب غير موجود.", 404);
+          if (!exam) throw new AcademicGradeWritebackError("الامتحان غير موجود.", 404);
+
+          const withinGrace = isExamWithinStudentGraceWindow(student, exam);
+          const automaticStatus = withinGrace ? "ضمن فترة السماح" : "غائب";
+
           const writeback = await syncAcademicGradeWriteback({
             tx,
             studentId,
             examId,
-            status: "غائب",
+            status: automaticStatus,
             score: null,
-            notes: "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
-            sourceLabel: "تسجيل الغياب الجماعي",
+            notes: withinGrace
+              ? "تسجيل تلقائي: الطالب ضمن فترة السماح لهذا الامتحان"
+              : "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
+            sourceLabel: "تسجيل الحالات الجماعي",
             allowBlankGrade: false,
             blockOnLeave: true,
             enforceExamAvailability: true,
           });
           if (!writeback) {
-            throw new AcademicGradeWritebackError("تعذر إنشاء سجل الغياب للطالب.");
+            throw new AcademicGradeWritebackError("تعذر إنشاء سجل حالة الطالب.");
           }
           return { existingGrade: null, writeback };
         });
@@ -118,7 +141,7 @@ export async function POST(req: NextRequest) {
     await writeRequestAuditLog(
       req,
       "الدرجات",
-      "تسجيل الغياب الجماعي لغير المدخلين",
+      "تسجيل الحالات الجماعي لغير المدخلين",
       {
         examId,
         requested: studentIds.length,
@@ -130,6 +153,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       created: grades.length,
+      createdAbsent: grades.filter((grade) => grade.status === "غائب").length,
+      createdGrace: grades.filter((grade) => grade.status === "ضمن فترة السماح").length,
       skippedExisting: skippedStudentIds.length,
       skippedStudentIds,
       failed: failures.length,
@@ -140,6 +165,6 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    return routeErrorResponse(error, "تعذر تسجيل الغياب الجماعي حالياً.");
+    return routeErrorResponse(error, "تعذر تسجيل حالات الطلاب جماعياً حالياً.");
   }
 }

@@ -89,7 +89,7 @@ export function gradeMatchesStatusFilter(
     case "full-mark":
       return !isNoAccountingKind && score !== null && score === fullMark;
     case "has-grade":
-      return score !== null || grade.status === "غائب" || grade.status === "غش";
+      return score !== null || grade.status === "غائب" || grade.status === "غش" || grade.status === "ضمن فترة السماح";
     default:
       return true;
   }

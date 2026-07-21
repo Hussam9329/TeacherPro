@@ -8,7 +8,11 @@ import {
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 
-export type AcademicGradeWritebackStatus = "درجة" | "غائب" | "غش";
+export type AcademicGradeWritebackStatus =
+  | "درجة"
+  | "غائب"
+  | "غش"
+  | "ضمن فترة السماح";
 
 type PrismaClientLike = typeof db | Prisma.TransactionClient;
 
@@ -58,7 +62,10 @@ export function normalizeAcademicGradeStatus(
   fallback: AcademicGradeWritebackStatus = "درجة",
 ): AcademicGradeWritebackStatus {
   const status = String(value ?? "").trim();
-  return status === "غائب" || status === "غش" || status === "درجة"
+  return status === "غائب" ||
+    status === "غش" ||
+    status === "درجة" ||
+    status === "ضمن فترة السماح"
     ? status
     : fallback;
 }
@@ -280,22 +287,18 @@ export async function syncAcademicGradeWriteback(
   //    so no grade should exist.
   //
   // 2. GRACE PERIOD: If the exam falls within the student's grace
-  //    period (accountingGraceDays from createdAt), block "غائب"
-  //    (absence) entries. The academic engine already skips grace-period
-  //    grades during recalculation, but without this block the grade is
-  //    still SAVED, which:
-  //      - Shows up in the grade list (confusing for teachers)
-  //      - Triggers call-list inclusion
-  //      - May trigger manual deductions
+  //    period, block "غائب" and allow the server-generated
+  //    "ضمن فترة السماح" marker instead. That marker is a real grade
+  //    record but has no score and no academic accounting effect.
   //
   // "درجة" (actual score) and "غش" (cheating) are still allowed during
-  // grace period — only "غائب" is blocked.
+  // grace period.
   const studentCreatedAtStr = student.createdAt.toISOString();
   const examDateStr = exam.date.toISOString();
   const studentGraceStartStr = student.gracePeriodStartDate ? student.gracePeriodStartDate.toISOString() : null;
 
   if (
-    status === "غائب" &&
+    (status === "غائب" || status === "ضمن فترة السماح") &&
     !isExamOnOrAfterStudentRegistration(
       { createdAt: studentCreatedAtStr },
       { date: examDateStr },
@@ -318,6 +321,19 @@ export async function syncAcademicGradeWriteback(
     throw new AcademicGradeWritebackError(
       "لا يمكن تسجيل غياب لهذا الطالب في هذا الامتحان لأنه ضمن فترة السماح. " +
       "فترة السماح تحمي الطالب من المحاسبة على الامتحانات خلالها.",
+      409,
+    );
+  }
+
+  if (
+    status === "ضمن فترة السماح" &&
+    !isExamWithinStudentGraceWindow(
+      { createdAt: studentCreatedAtStr, accountingGraceDays: student.accountingGraceDays, gracePeriodStartDate: studentGraceStartStr },
+      { date: examDateStr },
+    )
+  ) {
+    throw new AcademicGradeWritebackError(
+      "لا يمكن تسجيل حالة ضمن فترة السماح لأن الامتحان خارج فترة سماح الطالب.",
       409,
     );
   }

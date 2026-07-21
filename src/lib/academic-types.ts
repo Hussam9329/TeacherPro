@@ -1,5 +1,5 @@
 export type StudentStatus = "نشط" | "مفصول" | "مؤرشف";
-export type GradeStatus = "درجة" | "غائب" | "غش";
+export type GradeStatus = "درجة" | "غائب" | "غش" | "ضمن فترة السماح";
 export type ExamType = "يومي" | "تراكمي" | "فاينل";
 export type StudentLeaveType = "exam" | "period";
 

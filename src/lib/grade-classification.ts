@@ -104,7 +104,7 @@ export function isGradeEnteredUnified(
     const score = Number(grade.score);
     return Number.isFinite(score) && score >= 0 && score <= Number(exam.fullMark || 0);
   }
-  return grade.status === "غائب" || grade.status === "غش";
+  return grade.status === "غائب" || grade.status === "غش" || grade.status === "ضمن فترة السماح";
 }
 
 export function isExamBeforeStudentRegistration(
@@ -152,6 +152,7 @@ export function classifyGradeAcademicImpact(
   const { student, leaves = [] } = options;
   if (hasStudentLeaveForExam(leaves, exam)) return "excused";
   if (!isGradeEnteredUnified(grade, exam)) return "missing";
+  if (grade?.status === "ضمن فترة السماح") return "grace-period";
   if (student && isExamBeforeStudentRegistration(student, exam)) return "before-registration";
   if (exam.active !== undefined && !getExamEntryAvailability({
     active: Boolean(exam.active),
@@ -219,7 +220,7 @@ export function gradeMatchesStatusFilterUnified(
     case "full-mark":
       return kind === "full-mark";
     case "has-grade":
-      return score !== null || grade?.status === "غائب" || grade?.status === "غش";
+      return score !== null || grade?.status === "غائب" || grade?.status === "غش" || grade?.status === "ضمن فترة السماح";
     default:
       return true;
   }

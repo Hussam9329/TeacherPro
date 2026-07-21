@@ -74,12 +74,14 @@ must(
     markMissingAbsentRoute.includes("BULK_WRITE_CONCURRENCY") &&
     markMissingAbsentRoute.includes("Promise.all") &&
     gradeEntry.includes("markingAllMissingAbsent") &&
-    gradeEntry.includes("جارٍ تسجيل الغياب") &&
+    gradeEntry.includes("جارٍ تسجيل الحالات") &&
     gradeEntry.includes("missingExamStudentsBeforeGrace") &&
     gradeEntry.includes("graceProtectedMissingStudents") &&
+    markMissingAbsentRoute.includes('withinGrace ? "ضمن فترة السماح" : "غائب"') &&
+    markMissingAbsentRoute.includes("createdGrace") &&
     gradeEntry.includes("firstFailureReason"),
-  "التسجيل الجماعي للغياب عملية خادمية واحدة تتجاوز الدرجات الموجودة دون تعارض 409",
-  "تسجيل غير المدخلين كغائبين يجب أن يعتمد حالة قاعدة البيانات الحالية ويتجاوز الموجود.",
+  "التسجيل الجماعي يسجل الغياب أو السماح من حالة قاعدة البيانات الحالية ويتجاوز الموجود",
+  "يجب أن يسجل الخادم المحمي ضمن فترة السماح وغير المحمي غائباً دون تعارض 409.",
 );
 
 must(

@@ -701,6 +701,8 @@ export function GradeRecordsView() {
       status:
         (grade.status as string) === "مجاز"
           ? "غائب"
+          : (grade.status as string) === "ضمن فترة السماح"
+            ? "درجة"
           : (grade.status as GradeStatus),
       score:
         grade.score !== null && grade.score !== undefined

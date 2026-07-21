@@ -76,7 +76,7 @@ import {
 } from "@/lib/filter-sequence";
 
 type DraftGrade = {
-  status: "درجة" | "غائب" | "غش";
+  status: "درجة" | "غائب" | "غش" | "ضمن فترة السماح";
   score: string;
   notes: string;
 };
@@ -1396,15 +1396,15 @@ export function GradeEntryView() {
 
   const handleMarkAllMissingAsAbsent = () => {
     if (!selectedExam) return;
-    if (missingExamStudents.length === 0) {
-      toast.info("لا يوجد طلاب بدون درجة لتسجيلهم غائبين في هذا الامتحان");
+    if (missingExamStudentsBeforeGrace.length === 0) {
+      toast.info("لا يوجد طلاب بدون حالة مسجلة لهذا الامتحان");
       return;
     }
     setPendingConfirm({
-      title: "تسجيل غير المدخلين كغائبين",
-      description: `سيتم تسجيل ${missingExamStudents.length} طالب من كل طلاب الدورة المرتبطين بامتحان ${selectedExam.name} كغائبين. لن يتم تعديل أي درجة موجودة مسبقًا${graceProtectedMissingStudents.length ? `، وسيتم تجاوز ${graceProtectedMissingStudents.length} طالب محميين بفترة السماح` : ""}. هل تريد المتابعة؟`,
-      confirmLabel: "تسجيل كغائب",
-      destructive: true,
+      title: "تسجيل حالات غير المدخلين تلقائياً",
+      description: `سيتم تسجيل ${missingExamStudents.length} كغائب، وتسجيل ${graceProtectedMissingStudents.length} بحالة ضمن فترة السماح. لن يتم تعديل أي درجة موجودة مسبقاً. هل تريد المتابعة؟`,
+      confirmLabel: "تسجيل الحالات",
+      destructive: missingExamStudents.length > 0,
       onConfirm: handleMarkAllMissingAsAbsentConfirmed,
     });
   };
@@ -1417,14 +1417,14 @@ export function GradeEntryView() {
       return;
     }
 
-    const targetStudents = [...missingExamStudents];
+    const targetStudents = [...missingExamStudentsBeforeGrace];
     if (targetStudents.length === 0) {
       toast.info("تم تحديث البيانات ولا يوجد طلاب بدون درجة حالياً.");
       return;
     }
 
     setMarkingAllMissingAbsent(true);
-    toast.info(`جارٍ تسجيل ${targetStudents.length} طالب كغائب...`);
+    toast.info(`جارٍ تسجيل حالة ${targetStudents.length} طالب تلقائياً...`);
 
     setSavingRows((prev) => {
       const next = { ...prev };
@@ -1455,6 +1455,8 @@ export function GradeEntryView() {
 
     const payload = (result.data || {}) as {
       created?: number;
+      createdAbsent?: number;
+      createdGrace?: number;
       skippedExisting?: number;
       failed?: number;
       failures?: Array<{ studentId: string; error: string }>;
@@ -1462,6 +1464,8 @@ export function GradeEntryView() {
       academicRecalculation?: { students?: Student[] };
     };
     const created = Math.max(0, Number(payload.created || 0));
+    const createdAbsent = Math.max(0, Number(payload.createdAbsent || 0));
+    const createdGrace = Math.max(0, Number(payload.createdGrace || 0));
     const skippedExisting = Math.max(0, Number(payload.skippedExisting || 0));
     const failed = Math.max(0, Number(payload.failed || 0));
     const firstFailureReason = payload.failures?.find((item) => item.error)?.error;
@@ -1478,13 +1482,13 @@ export function GradeEntryView() {
 
     if (created > 0) {
       toast.success(
-        `تم تسجيل ${created} طالب كغائب${skippedExisting ? `، وتجاوز ${skippedExisting} لديهم درجة محفوظة مسبقاً` : ""}${failed ? `، وتعذر تسجيل ${failed}` : ""}`,
+        `تم تسجيل ${createdAbsent} كغائب و${createdGrace} ضمن فترة السماح${skippedExisting ? `، وتجاوز ${skippedExisting} لديهم سجل محفوظ مسبقاً` : ""}${failed ? `، وتعذر تسجيل ${failed}` : ""}`,
       );
     } else if (skippedExisting > 0 && failed === 0) {
       toast.info("كل الطلاب المحددين لديهم درجات محفوظة مسبقاً؛ تم تحديث الورقة.");
     } else {
       toast.error(
-        firstFailureReason || "تعذر تسجيل الغياب للطلاب المحددين.",
+        firstFailureReason || "تعذر تسجيل حالات الطلاب المحددين.",
       );
     }
   };
@@ -1700,18 +1704,16 @@ export function GradeEntryView() {
               onClick={handleMarkAllMissingAsAbsent}
               disabled={
                 !selectedExam ||
-                missingExamStudents.length === 0 ||
+                missingExamStudentsBeforeGrace.length === 0 ||
                 markingAllMissingAbsent
               }
-              title="يسجل كل طلاب الدورة المرتبطين بهذا الامتحان الذين لا يملكون درجة مسجلة كغائبين، وليس الصفحة الحالية فقط"
+              title="يسجل غير المدخلين كغائبين، والمحميين بحالة ضمن فترة السماح"
             >
               {markingAllMissingAbsent
-                ? "جارٍ تسجيل الغياب..."
-                : missingExamStudents.length > 0
-                  ? `تسجيل الكل كغائب (${missingExamStudents.length})`
-                  : graceProtectedMissingStudents.length > 0
-                    ? `لا يوجد غياب مستحق (${graceProtectedMissingStudents.length} ضمن السماح)`
-                    : "لا يوجد طلاب غير مسجلين"}
+                ? "جارٍ تسجيل الحالات..."
+                : missingExamStudentsBeforeGrace.length > 0
+                  ? `تسجيل الكل (${missingExamStudents.length} غائب، ${graceProtectedMissingStudents.length} ضمن السماح)`
+                  : "لا يوجد طلاب غير مسجلين"}
             </Button>
             <Button
               variant="outline"
@@ -2267,12 +2269,22 @@ export function GradeEntryView() {
                             size="sm"
                             variant="secondary"
                             disabled={!canEdit}
-                            onClick={() =>
+                            onClick={() => {
+                              if (grade?.status === "ضمن فترة السماح") {
+                                setDrafts((prev) => ({
+                                  ...prev,
+                                  [student.id]: {
+                                    status: "درجة",
+                                    score: "",
+                                    notes: grade.notes || "",
+                                  },
+                                }));
+                              }
                               setEditableRows((prev) => ({
                                 ...prev,
                                 [student.id]: true,
-                              }))
-                            }
+                              }));
+                            }}
                           >
                             تعديل
                           </Button>

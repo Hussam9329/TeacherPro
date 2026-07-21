@@ -133,7 +133,12 @@ function mapGrade(grade: {
     id: grade.id,
     studentId: grade.studentId,
     examId: grade.examId,
-    status: grade.status === "غائب" || grade.status === "غش" ? grade.status : "درجة",
+    status:
+      grade.status === "غائب" ||
+      grade.status === "غش" ||
+      grade.status === "ضمن فترة السماح"
+        ? grade.status
+        : "درجة",
     score: grade.score === null ? null : Number(grade.score),
     createdAt: dateString(grade.createdAt),
     updatedAt: dateString(grade.updatedAt),

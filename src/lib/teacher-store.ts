@@ -306,7 +306,7 @@ export interface Grade {
   id: string;
   studentId: string;
   examId: string;
-  status: "درجة" | "غائب" | "غش";
+  status: "درجة" | "غائب" | "غش" | "ضمن فترة السماح";
   score: number | null;
   notes: string;
   academicAccountingChecked: boolean;
@@ -1658,6 +1658,7 @@ function normalizeGraceDaysValue(value: unknown): number {
 function sanitizeGradeStatus(value: unknown): Grade["status"] {
   if (value === "غش") return "غش";
   if (value === "غائب" || value === "مجاز") return "غائب";
+  if (value === "ضمن فترة السماح") return "ضمن فترة السماح";
   return "درجة";
 }
 
