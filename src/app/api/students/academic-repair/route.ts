@@ -54,7 +54,7 @@ export async function PATCH(req: NextRequest) {
     if (scope === "dismissed") {
       const batchSize = readBatchSize(req);
       const requestedLimit = Number(searchParams.get("limit") || 50);
-      const limit = Math.min(100, Math.max(10, Math.trunc(requestedLimit || 50)));
+      const limit = Math.min(50, Math.max(1, Math.trunc(requestedLimit || 25)));
       const afterId = String(searchParams.get("afterId") || "").trim();
       const fetchedRows = await db.student.findMany({
         where: {
@@ -77,12 +77,10 @@ export async function PATCH(req: NextRequest) {
 
       for (let index = 0; index < rows.length; index += batchSize) {
         const studentIds = rows.slice(index, index + batchSize).map((row) => row.id);
-        const batch = await withSerializableTransaction(async (tx) => {
-          await ensureProtectedGradeMarkers(tx, { studentIds });
-          const repair = await repairProtectedAbsencesForStudents(tx, studentIds);
-          const recalculation = await recalculateStudentsAcademicState(studentIds, { tx });
-          return { repair, recalculation };
-        });
+        await ensureProtectedGradeMarkers(db, { studentIds });
+        const repair = await repairProtectedAbsencesForStudents(db, studentIds);
+        const recalculation = await recalculateStudentsAcademicState(studentIds);
+        const batch = { repair, recalculation };
         convertedGrades += batch.repair.convertedGrades;
         convertedBeforeRegistration += batch.repair.convertedBeforeRegistration;
         deletedCalls += batch.repair.deletedCalls;
