@@ -3,6 +3,7 @@ export type GradeStatus =
   | "درجة"
   | "غائب"
   | "غش"
+  | "مجاز"
   | "ضمن فترة السماح"
   | "قبل تسجيل الطالب";
 export type ExamType = "يومي" | "تراكمي" | "فاينل";
@@ -59,6 +60,7 @@ export interface AcademicGrade {
   examId: string;
   status: GradeStatus;
   score: number | null;
+  notes?: string | null;
   createdAt: string;
   updatedAt: string;
 }

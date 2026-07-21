@@ -12,6 +12,7 @@ export type AcademicGradeWritebackStatus =
   | "درجة"
   | "غائب"
   | "غش"
+  | "مجاز"
   | "ضمن فترة السماح"
   | "قبل تسجيل الطالب";
 
@@ -66,6 +67,7 @@ export function normalizeAcademicGradeStatus(
   const status = String(value ?? "").trim();
   return status === "غائب" ||
     status === "غش" ||
+    status === "مجاز" ||
     status === "درجة" ||
     status === "ضمن فترة السماح" ||
     status === "قبل تسجيل الطالب"

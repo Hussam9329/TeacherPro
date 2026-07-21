@@ -21,7 +21,11 @@ import {
 } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { parseCourseIds } from "@/lib/exam-course-links";
-import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
+import {
+  isExamOnOrAfterStudentRegistration,
+  splitSelection,
+  studentMatchesExamMainSites,
+} from "@/lib/exam-utils";
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
@@ -201,16 +205,37 @@ async function getAffectedExamIds(
   data: NormalizedLeavePayload,
 ): Promise<string[]> {
   if (data.leaveType === "exam") return data.examId ? [data.examId] : [];
-  const exams = await tx.exam.findMany({
-    where: {
-      date: {
-        gte: data.dateFrom,
-        lt: dayAfter(data.dateTo),
+  const [student, exams] = await Promise.all([
+    tx.student.findUnique({
+      where: { id: data.studentId },
+      select: {
+        courseId: true,
+        mainSite: true,
+        subSite: true,
+        locationScope: true,
       },
-    },
-    select: { id: true },
-  });
-  return exams.map((exam) => exam.id);
+    }),
+    tx.exam.findMany({
+      where: {
+        date: {
+          gte: data.dateFrom,
+          lt: dayAfter(data.dateTo),
+        },
+      },
+      select: { id: true, courseIds: true, mainSite: true },
+    }),
+  ]);
+  if (!student) return [];
+  return exams
+    .filter(
+      (exam) =>
+        parseCourseIds(exam.courseIds).includes(student.courseId) &&
+        studentMatchesExamMainSites(
+          student,
+          splitSelection(String(exam.mainSite || "")),
+        ),
+    )
+    .map((exam) => exam.id);
 }
 
 type LeaveGradeBackupRow = {
@@ -243,7 +268,7 @@ async function backupGradesForLeave(
 ): Promise<number> {
   if (!examIds.length) return 0;
   const grades = await tx.grade.findMany({
-    where: { studentId, examId: { in: examIds } },
+    where: { studentId, examId: { in: examIds }, status: { not: "مجاز" } },
     select: {
       studentId: true,
       examId: true,
@@ -295,10 +320,57 @@ async function backupGradesForLeave(
   return grades.length;
 }
 
+async function writeExcusedGradeMarkers(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  examIds: string[],
+): Promise<number> {
+  if (!examIds.length) return 0;
+  for (const examId of examIds) {
+    await tx.grade.upsert({
+      where: { studentId_examId: { studentId, examId } },
+      update: {
+        status: "مجاز",
+        score: null,
+        notes: "تسجيل تلقائي: الطالب مجاز من هذا الامتحان",
+        academicAccountingChecked: false,
+      },
+      create: {
+        studentId,
+        examId,
+        status: "مجاز",
+        score: null,
+        notes: "تسجيل تلقائي: الطالب مجاز من هذا الامتحان",
+        academicAccountingChecked: false,
+      },
+    });
+  }
+  return examIds.length;
+}
+
+async function clearExcusedGradeMarkersForLeave(
+  tx: Prisma.TransactionClient,
+  leaveId: string,
+): Promise<void> {
+  const leave = await tx.studentLeave.findUnique({ where: { id: leaveId } });
+  if (!leave) return;
+  const data = normalizeStoredLeave(leave);
+  const examIds = await getAffectedExamIds(tx, data);
+  if (!examIds.length) return;
+  await tx.grade.deleteMany({
+    where: {
+      studentId: data.studentId,
+      examId: { in: examIds },
+      status: "مجاز",
+    },
+  });
+}
+
 async function restoreGradesForLeave(
   tx: Prisma.TransactionClient,
   leaveId: string,
 ): Promise<RestoredGrade[]> {
+  await clearExcusedGradeMarkersForLeave(tx, leaveId);
   const backups = await tx.$queryRaw<LeaveGradeBackupRow[]>`
     SELECT
       "studentId",
@@ -595,14 +667,7 @@ export async function POST(req: NextRequest) {
             data.studentId,
             affectedExamIds,
           );
-          if (affectedExamIds.length) {
-            await tx.grade.deleteMany({
-              where: {
-                studentId: data.studentId,
-                examId: { in: affectedExamIds },
-              },
-            });
-          }
+          await writeExcusedGradeMarkers(tx, data.studentId, affectedExamIds);
           const academicRecalculation = await recalculateStudentsAcademicState(
             [data.studentId, ...restoredGrades.map((grade) => grade.studentId)],
             { tx },
@@ -817,14 +882,7 @@ export async function PUT(req: NextRequest) {
             nextData.studentId,
             affectedAfter,
           );
-          if (affectedAfter.length) {
-            await tx.grade.deleteMany({
-              where: {
-                studentId: nextData.studentId,
-                examId: { in: affectedAfter },
-              },
-            });
-          }
+          await writeExcusedGradeMarkers(tx, nextData.studentId, affectedAfter);
 
           const academicRecalculation = await recalculateStudentsAcademicState(
             uniqueIds([

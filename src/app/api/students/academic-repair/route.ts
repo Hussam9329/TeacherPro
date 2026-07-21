@@ -249,6 +249,10 @@ export async function PATCH(req: NextRequest) {
 
     if (scope === "grace" || scope === "protected") {
       const batchSize = readBatchSize(req);
+      const excludeExamIds = String(searchParams.get("excludeExamIds") || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
       const rows = await db.student.findMany({
         where: { status: { not: "مؤرشف" } },
         select: { id: true },
@@ -256,6 +260,8 @@ export async function PATCH(req: NextRequest) {
       });
       let createdBeforeRegistration = 0;
       let createdGrace = 0;
+      let createdAbsent = 0;
+      let createdExcused = 0;
       let convertedGrades = 0;
       let convertedBeforeRegistration = 0;
       let deletedGrades = 0;
@@ -265,13 +271,20 @@ export async function PATCH(req: NextRequest) {
       for (let index = 0; index < rows.length; index += batchSize) {
         const studentIds = rows.slice(index, index + batchSize).map((row) => row.id);
         const batch = await withSerializableTransaction(async (tx) => {
-          const markers = await ensureProtectedGradeMarkers(tx, { studentIds });
+          const markers = await ensureProtectedGradeMarkers(tx, {
+            studentIds,
+            includeAbsent: scope === "protected",
+            excludeExamIds,
+            historicalNoEffect: true,
+          });
           const repair = await repairProtectedAbsencesForStudents(tx, studentIds);
           const recalculation = await recalculateStudentsAcademicState(studentIds, { tx });
           return { markers, repair, recalculation };
         });
         createdBeforeRegistration += batch.markers.createdBeforeRegistration;
         createdGrace += batch.markers.createdGrace;
+        createdAbsent += batch.markers.createdAbsent;
+        createdExcused += batch.markers.createdExcused;
         convertedGrades += batch.repair.convertedGrades;
         convertedBeforeRegistration += batch.repair.convertedBeforeRegistration;
         deletedGrades += batch.repair.deletedGrades;
@@ -285,6 +298,8 @@ export async function PATCH(req: NextRequest) {
         ok: true,
         createdBeforeRegistration,
         createdGrace,
+        createdAbsent,
+        createdExcused,
         convertedGrades,
         convertedBeforeRegistration,
         deletedGrades,
@@ -299,7 +314,7 @@ export async function PATCH(req: NextRequest) {
       );
       return NextResponse.json({
         ...result,
-        message: `تم إنشاء ${createdGrace} حالة ضمن فترة السماح و${createdBeforeRegistration} حالة قبل التسجيل، وتصحيح ${convertedGrades + convertedBeforeRegistration} سجل سابق، ثم إعادة الفرص والفصل التلقائي إلى النتيجة الصحيحة.`,
+        message: `تم إنشاء ${createdAbsent} غياباً تاريخياً بلا أثر، و${createdExcused} حالة مجاز، و${createdGrace} حالة ضمن فترة السماح، و${createdBeforeRegistration} حالة قبل التسجيل، ثم تصحيح السجلات الأكاديمية.`,
         source: "database" as const,
         generatedAt: new Date().toISOString(),
       });

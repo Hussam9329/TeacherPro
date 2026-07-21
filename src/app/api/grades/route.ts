@@ -187,7 +187,7 @@ function isGradeEnteredForServer(
       score <= Number(exam.fullMark || 0)
     );
   }
-  return grade.status === "غائب" || grade.status === "غش" || grade.status === "ضمن فترة السماح" || grade.status === "قبل تسجيل الطالب";
+  return grade.status === "غائب" || grade.status === "غش" || grade.status === "مجاز" || grade.status === "ضمن فترة السماح" || grade.status === "قبل تسجيل الطالب";
 }
 
 function isExamBeforeStudentRegistration(

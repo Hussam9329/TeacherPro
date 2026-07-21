@@ -76,7 +76,7 @@ import {
 } from "@/lib/filter-sequence";
 
 type DraftGrade = {
-  status: "درجة" | "غائب" | "غش" | "ضمن فترة السماح" | "قبل تسجيل الطالب";
+  status: "درجة" | "غائب" | "غش" | "مجاز" | "ضمن فترة السماح" | "قبل تسجيل الطالب";
   score: string;
   notes: string;
 };

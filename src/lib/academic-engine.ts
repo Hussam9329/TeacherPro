@@ -849,6 +849,11 @@ export function recalculateAcademicState(
     for (const grade of studentGrades) {
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
+      if (
+        grade.status === "مجاز" ||
+        String(grade.notes || "").startsWith("تسوية تاريخية بلا أثر:")
+      )
+        continue;
       if (!isExamAvailableForEntry(exam)) continue;
       if (!isGradeEntered(grade, exam)) continue;
       const examEventDate = dayKey(exam.date || grade.createdAt || "");

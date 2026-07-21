@@ -71,7 +71,7 @@ import {
   type GradeStatusFilter,
 } from "@/lib/grade-status-filters";
 
-type GradeStatus = "درجة" | "غائب" | "غش";
+type GradeStatus = "درجة" | "غائب" | "غش" | "مجاز";
 type ViewMode = "cards" | "table";
 type HydratedGrade = Grade & { student?: Student; exam?: unknown };
 

@@ -201,7 +201,7 @@ export function formatGradeScore(grade: GradeLike, exam?: ExamForGradeRange | nu
 export function isGradeEntered(grade: GradeLike, exam?: ExamForGradeRange | null): boolean {
   if (!grade || !exam) return false;
   if (grade.status === 'درجة') return isScoreInsideExamRange(grade.score, exam.fullMark);
-  return ['غائب', 'غش', 'ضمن فترة السماح', 'قبل تسجيل الطالب'].includes(String(grade.status || ''));
+  return ['غائب', 'غش', 'مجاز', 'ضمن فترة السماح', 'قبل تسجيل الطالب'].includes(String(grade.status || ''));
 }
 
 export function escapeHtml(value: unknown): string {

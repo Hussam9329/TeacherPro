@@ -126,6 +126,7 @@ function mapGrade(grade: {
   examId: string;
   status: string;
   score: number | null;
+  notes: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): AcademicGrade {
@@ -136,11 +137,13 @@ function mapGrade(grade: {
     status:
       grade.status === "غائب" ||
       grade.status === "غش" ||
+      grade.status === "مجاز" ||
       grade.status === "ضمن فترة السماح" ||
       grade.status === "قبل تسجيل الطالب"
         ? grade.status
         : "درجة",
     score: grade.score === null ? null : Number(grade.score),
+    notes: grade.notes,
     createdAt: dateString(grade.createdAt),
     updatedAt: dateString(grade.updatedAt),
   };
@@ -366,6 +369,7 @@ async function loadAcademicStateForStudents(
         examId: true,
         status: true,
         score: true,
+        notes: true,
         createdAt: true,
         updatedAt: true,
       },
