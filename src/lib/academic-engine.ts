@@ -619,6 +619,10 @@ export function recalculateAcademicState(
     const allStudentManualLogs = manualLogs
       .filter((log) => log.studentId === student.id)
       .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    const historicalSettlementDate = latestStudentLogDate(
+      allStudentManualLogs,
+      (log) => String(log.reason || "").startsWith("تسوية تاريخية:"),
+    );
 
     const hasIndependentManualReactivation =
       student.status === "نشط" &&
@@ -847,6 +851,13 @@ export function recalculateAcademicState(
       if (!exam) continue;
       if (!isExamAvailableForEntry(exam)) continue;
       if (!isGradeEntered(grade, exam)) continue;
+      const examEventDate = dayKey(exam.date || grade.createdAt || "");
+      if (
+        historicalSettlementDate &&
+        examEventDate &&
+        examEventDate <= historicalSettlementDate
+      )
+        continue;
       const gradeEventDate = dayKey(
         grade.updatedAt || grade.createdAt || exam.date || "",
       );

@@ -16,6 +16,7 @@ const bulkPreview = read("src/lib/bulk-opportunity-preview-server.ts");
 const studentAction = read("src/app/api/opportunities/student-action/route.ts");
 const academicEngine = read("src/lib/academic-engine.ts");
 const academicServer = read("src/lib/academic-recalculate-server.ts");
+const academicRepair = read("src/app/api/students/academic-repair/route.ts");
 const opportunitiesView = read("src/components/teacher-pro/opportunities.tsx");
 const registry = read("src/components/teacher-pro/student-registry.tsx");
 const dismissed = read("src/components/teacher-pro/dismissed-students.tsx");
@@ -93,6 +94,14 @@ check(
   academicServer.includes("activeLinksByCourseId") &&
     academicServer.includes("if (links.length !== 1) continue"),
   "مزامنة baseOpportunities لا تكتب قيمة عشوائية عند تعارض الفصول",
+);
+check(
+  academicEngine.includes("historicalSettlementDate") &&
+    academicEngine.includes("examEventDate <= historicalSettlementDate") &&
+    academicRepair.includes('scope === "restore-excess-dismissed"') &&
+    academicRepair.includes('action: "تسوية تاريخية"') &&
+    !academicRepair.includes('grade.deleteMany'),
+  "التسوية التاريخية تُبقي الدرجات محفوظة وتمنع أثرها الرجعي دون حذفها",
 );
 check(
   [opportunitiesView, registry, dismissed, followUp, profile, bulkImport].every(

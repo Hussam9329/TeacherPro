@@ -51,6 +51,110 @@ export async function PATCH(req: NextRequest) {
   try {
     const searchParams = new URL(req.url).searchParams;
     const scope = searchParams.get("scope");
+    if (scope === "restore-excess-dismissed") {
+      const requestedKeep = Number(searchParams.get("keep") || 209);
+      const keep = Math.max(0, Math.trunc(requestedKeep || 209));
+      const dismissed = await db.student.findMany({
+        where: { status: "مفصول" },
+        select: { id: true, createdAt: true },
+      });
+      const studentIds = dismissed.map((student) => student.id);
+      const [dismissalLogs, dismissalNotes] = studentIds.length
+        ? await Promise.all([
+            db.opportunityLog.findMany({
+              where: {
+                studentId: { in: studentIds },
+                OR: [
+                  { action: "فصل تلقائي" },
+                  { action: "خصم", reason: { startsWith: "فصل الطالب" } },
+                ],
+              },
+              select: { studentId: true, date: true },
+            }),
+            db.studentNote.findMany({
+              where: {
+                studentId: { in: studentIds },
+                OR: [
+                  { dismissalDate: { not: null } },
+                  { kind: "إجراء", text: { startsWith: "فصل الطالب" } },
+                ],
+              },
+              select: { studentId: true, date: true, dismissalDate: true },
+            }),
+          ])
+        : [[], []];
+      const latestDismissalTime = new Map<string, number>();
+      const remember = (studentId: string, value: Date | null | undefined) => {
+        const time = value instanceof Date ? value.getTime() : 0;
+        if (time > (latestDismissalTime.get(studentId) || 0)) {
+          latestDismissalTime.set(studentId, time);
+        }
+      };
+      for (const log of dismissalLogs) remember(log.studentId, log.date);
+      for (const note of dismissalNotes) {
+        remember(note.studentId, note.dismissalDate || note.date);
+      }
+      const sortedDismissed = [...dismissed].sort((a, b) => {
+        const timeDifference =
+          (latestDismissalTime.get(b.id) || b.createdAt.getTime()) -
+          (latestDismissalTime.get(a.id) || a.createdAt.getTime());
+        return timeDifference || b.id.localeCompare(a.id);
+      });
+      const keptStudents = sortedDismissed.slice(0, keep);
+      const restoredStudents = sortedDismissed.slice(keep);
+      const settlementAt = new Date();
+      let recalculatedStudents = 0;
+
+      for (let index = 0; index < restoredStudents.length; index += 100) {
+        const group = restoredStudents.slice(index, index + 100);
+        const ids = group.map((student) => student.id);
+        await db.student.updateMany({
+          where: { id: { in: ids }, status: "مفصول" },
+          data: {
+            status: "نشط",
+            dismissalType: "",
+            dismissalReason: "",
+            dismissalNotes: "",
+          },
+        });
+        await db.opportunityLog.createMany({
+          data: ids.map((studentId) => ({
+            id: `historical_settlement_${studentId}`,
+            studentId,
+            examId: null,
+            action: "تسوية تاريخية",
+            amount: 0,
+            reason:
+              "تسوية تاريخية: تجاهل آثار الامتحانات السابقة للتسوية حتى عند تعديل درجاتها لاحقاً",
+            date: settlementAt,
+          })),
+          skipDuplicates: true,
+        });
+        const recalculation = await recalculateStudentsAcademicState(ids);
+        recalculatedStudents += recalculation.studentIds.length;
+      }
+
+      const result = {
+        ok: true,
+        previousDismissed: dismissed.length,
+        keptDismissed: keptStudents.length,
+        restoredStudents: restoredStudents.length,
+        recalculatedStudents,
+      };
+      await writeRequestAuditLog(
+        req,
+        "الطلاب",
+        "تسوية الفصل التاريخي وإخفاء آثار الدرجات القديمة",
+        result,
+      );
+      return NextResponse.json({
+        ...result,
+        message: `تم إبقاء أحدث ${keptStudents.length} مفصولين واستعادة ${restoredStudents.length} طالباً مع تعطيل الأثر الرجعي للدرجات القديمة.`,
+        source: "database" as const,
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
     if (scope === "dismissed") {
       const batchSize = readBatchSize(req);
       const requestedLimit = Number(searchParams.get("limit") || 50);
