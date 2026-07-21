@@ -99,7 +99,8 @@ check(
   academicEngine.includes("historicalSettlementDate") &&
     academicEngine.includes("examEventDate <= historicalSettlementDate") &&
     academicRepair.includes('scope === "restore-excess-dismissed"') &&
-    academicRepair.includes('action: "تسوية تاريخية"') &&
+    academicRepair.includes('action: "إعادة تعيين"') &&
+    academicRepair.includes('startsWith: "تسوية تاريخية:"') &&
     !academicRepair.includes('grade.deleteMany'),
   "التسوية التاريخية تُبقي الدرجات محفوظة وتمنع أثرها الرجعي دون حذفها",
 );

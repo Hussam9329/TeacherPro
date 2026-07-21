@@ -54,6 +54,16 @@ export async function PATCH(req: NextRequest) {
     if (scope === "restore-excess-dismissed") {
       const requestedKeep = Number(searchParams.get("keep") || 209);
       const keep = Math.max(0, Math.trunc(requestedKeep || 209));
+      const existingSettlements = await db.opportunityLog.findMany({
+        where: { reason: { startsWith: "تسوية تاريخية:" } },
+        select: { id: true, studentId: true },
+      });
+      if (existingSettlements.length > 0) {
+        await db.opportunityLog.updateMany({
+          where: { id: { in: existingSettlements.map((log) => log.id) } },
+          data: { action: "إعادة تعيين", amount: 1 },
+        });
+      }
       const dismissed = await db.student.findMany({
         where: { status: "مفصول" },
         select: { id: true, createdAt: true },
@@ -122,15 +132,26 @@ export async function PATCH(req: NextRequest) {
             id: `historical_settlement_${studentId}`,
             studentId,
             examId: null,
-            action: "تسوية تاريخية",
-            amount: 0,
+            action: "إعادة تعيين",
+            amount: 1,
             reason:
               "تسوية تاريخية: تجاهل آثار الامتحانات السابقة للتسوية حتى عند تعديل درجاتها لاحقاً",
             date: settlementAt,
           })),
           skipDuplicates: true,
         });
-        const recalculation = await recalculateStudentsAcademicState(ids);
+      }
+
+      const settlementStudentIds = Array.from(
+        new Set([
+          ...existingSettlements.map((log) => log.studentId),
+          ...restoredStudents.map((student) => student.id),
+        ]),
+      );
+      for (let index = 0; index < settlementStudentIds.length; index += 100) {
+        const recalculation = await recalculateStudentsAcademicState(
+          settlementStudentIds.slice(index, index + 100),
+        );
         recalculatedStudents += recalculation.studentIds.length;
       }
 
