@@ -1520,6 +1520,8 @@ export const gradeApi = {
     );
   },
   add: (grade: Record<string, unknown>) => apiPost("grades", grade),
+  markMissingAbsent: (examId: string, studentIds: string[]) =>
+    apiPost("grades/mark-missing-absent", { examId, studentIds }),
   listAll: async (
     query: GradeListQuery = {},
   ): Promise<GradeListResponse | null> => {

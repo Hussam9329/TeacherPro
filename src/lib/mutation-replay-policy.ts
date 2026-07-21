@@ -1,5 +1,6 @@
 const REPLAY_SAFE_POST_ENDPOINTS = new Set([
   "/api/grades",
+  "/api/grades/mark-missing-absent",
   "/api/student-calls",
   "/api/correction-sheets",
   "/api/students/academic-repair",

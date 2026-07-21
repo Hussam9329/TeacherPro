@@ -1399,10 +1399,6 @@ export function GradeEntryView() {
       return;
     }
 
-    const timestamp = new Date().toLocaleTimeString("ar-IQ", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
     const targetStudents = [...missingExamStudents];
 
     setSavingRows((prev) => {
@@ -1413,23 +1409,9 @@ export function GradeEntryView() {
       return next;
     });
 
-    const results = await Promise.all(
-      targetStudents.map(async (student) => {
-        const draft: DraftGrade = {
-          status: "غائب",
-          score: "",
-          notes: "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
-        };
-        const result = await gradeApi.add({
-          studentId: student.id,
-          examId: selectedExam.id,
-          status: "غائب",
-          score: null,
-          notes: draft.notes,
-          expectMissing: true,
-        });
-        return { student, draft, result };
-      }),
+    const result = await gradeApi.markMissingAbsent(
+      selectedExam.id,
+      targetStudents.map((student) => student.id),
     );
 
     setSavingRows((prev) => {
@@ -1440,40 +1422,40 @@ export function GradeEntryView() {
       return next;
     });
 
-    const successful = results.filter(({ result }) => result.ok && !result.queued);
-    const failed = results.filter(({ result }) => !result.ok || result.queued);
-    if (failed.some(({ result }) => result.status === 409)) {
-      setEntrySheetRefreshKey((key) => key + 1);
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر تسجيل الغياب الجماعي من بيانات النظام.");
+      return;
     }
-    const nextDrafts: Record<string, DraftGrade> = {};
-    const nextSavedRows: Record<string, string> = {};
-    const nextEditableRows: Record<string, boolean> = {};
-    const recalculatedStudents: Student[] = [];
 
-    successful.forEach(({ student, draft, result }) => {
-      const payload = gradePayloadFromResult(result);
-      if (payload.grade) mergeServerGradeIntoEntrySheet(payload.grade);
-      if (payload.academicRecalculation?.students?.length) {
-        recalculatedStudents.push(...payload.academicRecalculation.students);
-      }
-      nextDrafts[student.id] = draft;
-      nextSavedRows[student.id] = `تم تسجيله غائب ${timestamp}`;
-      nextEditableRows[student.id] = false;
-    });
+    const payload = (result.data || {}) as {
+      created?: number;
+      skippedExisting?: number;
+      failed?: number;
+      grades?: Grade[];
+      academicRecalculation?: { students?: Student[] };
+    };
+    const created = Math.max(0, Number(payload.created || 0));
+    const skippedExisting = Math.max(0, Number(payload.skippedExisting || 0));
+    const failed = Math.max(0, Number(payload.failed || 0));
 
-    if (recalculatedStudents.length) mergeStudentsCache(recalculatedStudents);
-    setDrafts((prev) => ({ ...prev, ...nextDrafts }));
-    setSavedRows((prev) => ({ ...prev, ...nextSavedRows }));
-    setEditableRows((prev) => ({ ...prev, ...nextEditableRows }));
+    for (const grade of payload.grades || []) {
+      mergeServerGradeIntoEntrySheet(grade);
+    }
+    if (payload.academicRecalculation?.students?.length) {
+      mergeStudentsCache(payload.academicRecalculation.students);
+    }
 
-    if (successful.length > 0) {
-      emitGradeEntryServerSync("grade-entry-mark-missing-absent");
+    setEntrySheetRefreshKey((key) => key + 1);
+    emitGradeEntryServerSync("grade-entry-mark-missing-absent");
+
+    if (created > 0) {
       toast.success(
-        `تم تسجيل ${successful.length} طالب كغائب في بيانات النظام${failed.length ? `، وفشل ${failed.length}` : ""}`,
+        `تم تسجيل ${created} طالب كغائب${skippedExisting ? `، وتجاوز ${skippedExisting} لديهم درجة محفوظة مسبقاً` : ""}${failed ? `، وتعذر تسجيل ${failed}` : ""}`,
       );
-    }
-    if (failed.length > 0 && successful.length === 0) {
-      toast.error("تعذر تسجيل الغياب الجماعي من بيانات النظام.");
+    } else if (skippedExisting > 0 && failed === 0) {
+      toast.info("كل الطلاب المحددين لديهم درجات محفوظة مسبقاً؛ تم تحديث الورقة.");
+    } else {
+      toast.error("تعذر تسجيل الغياب للطلاب المحددين.");
     }
   };
 

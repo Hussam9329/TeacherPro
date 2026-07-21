@@ -23,6 +23,7 @@ const api = read("src/lib/api.ts");
 const gradesRoute = read("src/app/api/grades/route.ts");
 const gradeWriteback = read("src/lib/academic-grade-writeback-server.ts");
 const entrySheetRoute = read("src/app/api/grades/entry-sheet/route.ts");
+const markMissingAbsentRoute = read("src/app/api/grades/mark-missing-absent/route.ts");
 const profileDialog = read("src/components/teacher-pro/student-profile-dialog.tsx");
 const profileLogRoute = read("src/app/api/students/profile-log/route.ts");
 const profileStatsRoute = read("src/app/api/students/profile-stats/route.ts");
@@ -63,12 +64,15 @@ must(
 );
 
 must(
-  gradeEntry.includes("Promise.all") &&
+  gradeEntry.includes("gradeApi.markMissingAbsent") &&
     gradeEntry.includes("mark-missing-absent") &&
     gradeEntry.includes("تم تسجيل") &&
-    !gradeEntry.includes("ستتم المزامنة تلقائياً"),
-  "التسجيل الجماعي للغياب صار Server-first وليس محلياً ثم مزامنة لاحقة",
-  "تسجيل غير المدخلين كغائبين يجب أن يمر عبر الخادم لكل طالب أو API خادمي.",
+    !gradeEntry.includes("ستتم المزامنة تلقائياً") &&
+    markMissingAbsentRoute.includes("existingGrade") &&
+    markMissingAbsentRoute.includes("skippedStudentIds") &&
+    markMissingAbsentRoute.includes("syncAcademicGradeWriteback"),
+  "التسجيل الجماعي للغياب عملية خادمية واحدة تتجاوز الدرجات الموجودة دون تعارض 409",
+  "تسجيل غير المدخلين كغائبين يجب أن يعتمد حالة قاعدة البيانات الحالية ويتجاوز الموجود.",
 );
 
 must(
