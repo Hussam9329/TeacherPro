@@ -51,6 +51,55 @@ export async function PATCH(req: NextRequest) {
   try {
     const searchParams = new URL(req.url).searchParams;
     const scope = searchParams.get("scope");
+    if (scope === "effect-exams") {
+      const examIds = Array.from(
+        new Set(
+          String(searchParams.get("examIds") || "")
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+        ),
+      ).slice(0, 10);
+      if (!examIds.length) {
+        return NextResponse.json(
+          { error: "يجب تحديد الامتحانات المطلوب تطبيق أثرها." },
+          { status: 400 },
+        );
+      }
+      const absentGrades = await db.grade.findMany({
+        where: { examId: { in: examIds }, status: "غائب" },
+        select: { studentId: true },
+      });
+      const studentIds = Array.from(
+        new Set(absentGrades.map((grade) => grade.studentId)),
+      );
+      let recalculatedStudents = 0;
+      for (let index = 0; index < studentIds.length; index += 100) {
+        const recalculation = await recalculateStudentsAcademicState(
+          studentIds.slice(index, index + 100),
+        );
+        recalculatedStudents += recalculation.studentIds.length;
+      }
+      const result = {
+        ok: true,
+        examIds,
+        absentGrades: absentGrades.length,
+        targetedStudents: studentIds.length,
+        recalculatedStudents,
+      };
+      await writeRequestAuditLog(
+        req,
+        "الدرجات",
+        "تطبيق أثر غياب الامتحانات المحددة على طلابها فقط",
+        result,
+      );
+      return NextResponse.json({
+        ...result,
+        message: `تم تطبيق أثر ${absentGrades.length} حالة غياب على ${recalculatedStudents} طالباً مستهدفاً فقط.`,
+        source: "database" as const,
+        generatedAt: new Date().toISOString(),
+      });
+    }
     if (scope === "protected") {
       return NextResponse.json(
         {
