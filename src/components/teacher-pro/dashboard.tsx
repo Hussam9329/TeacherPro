@@ -10,8 +10,6 @@ import {
   BookOpen,
   CheckCircle2,
   Clock,
-  Database,
-  RefreshCw,
   Shield,
   Users,
   UserX,
@@ -180,7 +178,7 @@ export function DashboardView() {
       </div>
 
       <Card className="tp-dashboard__alerts overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardHeader className="pb-2">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <AlertTriangle className="size-5 text-amber-500" />
@@ -190,14 +188,11 @@ export function DashboardView() {
               مشاكل محسوبة من بيانات النظام حتى لا تختفي بسبب بيانات مؤقتة أو فلتر جزئي.
             </p>
           </div>
-          <span className="rounded-full bg-muted px-3 py-1 text-xs font-bold text-muted-foreground">
-            {statsLoading ? "…" : alerts.length}
-          </span>
         </CardHeader>
         <CardContent>
           {statsLoading ? (
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-              {Array.from({ length: 4 }).map((_, index) => (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, index) => (
                 <div key={index} className="h-28 animate-pulse rounded-3xl border bg-muted/40" />
               ))}
             </div>
@@ -219,9 +214,9 @@ export function DashboardView() {
               description="لم ترجع بيانات النظام أي امتحانات ناقصة الدرجات، طلاب بلا فصل نشط، إجازات اليوم، فرص صفر، أو تعهدات معلقة."
             />
           ) : (
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            <div className="tp-dashboard__alert-grid grid grid-cols-1 gap-4 lg:grid-cols-3">
               {alerts.map((alert) => (
-                <div key={alert.id} className={cn("rounded-3xl border p-4", alertToneClass[alert.tone])}>
+                <div key={alert.id} className={cn("tp-dashboard__alert-card rounded-2xl border p-4", alertToneClass[alert.tone])}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-black">{alert.title}</p>
@@ -240,7 +235,7 @@ export function DashboardView() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="mt-3 bg-background/70"
+                    className="tp-dashboard__alert-action mt-4 bg-background/75"
                     onClick={() => setSection(alert.actionSection)}
                   >
                     {alert.actionLabel}
@@ -252,10 +247,10 @@ export function DashboardView() {
         </CardContent>
       </Card>
 
-      <Card className="tp-dashboard__missing overflow-hidden border-amber-200/70 bg-gradient-to-l from-amber-50 to-background dark:border-amber-900/50 dark:from-amber-950/30 dark:to-background">
+      <Card className="tp-dashboard__missing overflow-hidden">
         <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
-            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
               <UserX className="size-5" />
             </div>
             <div>
@@ -293,7 +288,7 @@ export function DashboardView() {
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+          <div className="tp-dashboard__activity-list max-h-[28rem] space-y-3 overflow-y-auto px-1 py-1">
             {statsLoading ? (
               Array.from({ length: 3 }).map((_, index) => (
                 <div key={index} className="h-20 animate-pulse rounded-3xl border bg-muted/40" />
@@ -307,7 +302,7 @@ export function DashboardView() {
               recentLogs.map((log) => (
                 <div
                   key={log.id}
-                  className="list-row border-r-4 border-r-primary/40"
+                  className="tp-dashboard__activity-row list-row"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -327,27 +322,18 @@ export function DashboardView() {
               ))
             )}
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className="tp-dashboard__source border-primary/20 bg-primary/5">
-        <CardContent className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between xl:flex-col xl:items-stretch">
-          <div className="flex items-start gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-background text-primary">
-              <Database className="size-5" />
+          {recentLogs.length > 0 && (
+            <div className="mt-4 flex justify-center border-t border-border/60 pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-w-56"
+                onClick={() => setSection("logs")}
+              >
+                عرض المزيد من السجلات
+              </Button>
             </div>
-            <div>
-              <p className="font-black">مصدر أرقام اللوحة: بيانات النظام</p>
-              <p className="mt-1 text-xs leading-6 text-muted-foreground">
-                لا يتم حساب بطاقات الرئيسية من بيانات الطلاب المؤقتة أو الصفحات المحملة جزئياً. آخر تحديث: {statsLoading ? "جاري التحميل" : formatStatsTime(stats?.generatedAt)}
-              </p>
-              {statsError && <p className="mt-1 text-xs font-bold text-destructive">{statsError}</p>}
-            </div>
-          </div>
-          <Button type="button" variant="outline" size="sm" className="xl:w-full" onClick={() => void loadStats({ background: true })} disabled={statsLoading}>
-            <RefreshCw className={cn("ml-2 size-4", statsLoading && "animate-spin")} />
-            تحديث من بيانات النظام
-          </Button>
+          )}
         </CardContent>
       </Card>
     </div>
