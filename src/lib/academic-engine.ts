@@ -860,7 +860,10 @@ export function recalculateAcademicState(
       if (
         historicalSettlementDate &&
         examEventDate &&
-        examEventDate <= historicalSettlementDate
+        examEventDate <= historicalSettlementDate &&
+        !String(grade.notes || "").startsWith(
+          "أثر أكاديمي فعّال بعد التسوية:",
+        )
       )
         continue;
       const gradeEventDate = dayKey(

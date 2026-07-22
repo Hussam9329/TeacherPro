@@ -51,6 +51,86 @@ export async function PATCH(req: NextRequest) {
   try {
     const searchParams = new URL(req.url).searchParams;
     const scope = searchParams.get("scope");
+    if (scope === "protected") {
+      return NextResponse.json(
+        {
+          error: "أُغلقت التسوية التاريخية بعد تنفيذها مرة واحدة، ولا يمكن تطبيقها على امتحانات لاحقة.",
+          oneTimeSettlementClosed: true,
+        },
+        { status: 410 },
+      );
+    }
+    if (scope === "protected-status-only") {
+      const batchSize = readBatchSize(req);
+      const effectExamIds = Array.from(
+        new Set(
+          String(searchParams.get("effectExamIds") || "")
+            .split(",")
+            .map((value) => value.trim())
+            .filter(Boolean),
+        ),
+      );
+      const rows = await db.student.findMany({
+        where: { status: { not: "مؤرشف" } },
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
+      });
+      let convertedGrades = 0;
+      let convertedBeforeRegistration = 0;
+
+      for (let index = 0; index < rows.length; index += batchSize) {
+        const studentIds = rows.slice(index, index + batchSize).map((row) => row.id);
+        const repair = await withSerializableTransaction((tx) =>
+          repairProtectedAbsencesForStudents(tx, studentIds, {
+            deleteCalls: false,
+            onlyAbsences: true,
+          }),
+        );
+        convertedGrades += repair.convertedGrades;
+        convertedBeforeRegistration += repair.convertedBeforeRegistration;
+      }
+
+      let enabledEffectGrades = 0;
+      if (effectExamIds.length) {
+        const grades = await db.grade.findMany({
+          where: { examId: { in: effectExamIds }, status: "غائب" },
+          select: { id: true, notes: true },
+        });
+        for (const grade of grades) {
+          const currentNotes = String(grade.notes || "").trim();
+          if (currentNotes.startsWith("أثر أكاديمي فعّال بعد التسوية:")) continue;
+          await db.grade.update({
+            where: { id: grade.id },
+            data: {
+              notes: `أثر أكاديمي فعّال بعد التسوية: ${currentNotes || "غياب امتحان حالي"}`,
+            },
+          });
+          enabledEffectGrades += 1;
+        }
+      }
+
+      const result = {
+        ok: true,
+        convertedGrades,
+        convertedBeforeRegistration,
+        enabledEffectGrades,
+        recalculatedStudents: 0,
+        deletedGrades: 0,
+        deletedCalls: 0,
+      };
+      await writeRequestAuditLog(
+        req,
+        "الدرجات",
+        "تصحيح حالات السماح وقبل التسجيل دون إعادة احتساب",
+        result,
+      );
+      return NextResponse.json({
+        ...result,
+        message: `تم تحويل ${convertedGrades} غياباً إلى ضمن فترة السماح و${convertedBeforeRegistration} إلى قبل تسجيل الطالب دون إعادة احتساب.`,
+        source: "database" as const,
+        generatedAt: new Date().toISOString(),
+      });
+    }
     if (scope === "restore-excess-dismissed") {
       const requestedKeep = Number(searchParams.get("keep") || 209);
       const keep = Math.max(0, Math.trunc(requestedKeep || 209));
@@ -247,7 +327,7 @@ export async function PATCH(req: NextRequest) {
       });
     }
 
-    if (scope === "grace" || scope === "protected") {
+    if (scope === "grace") {
       const batchSize = readBatchSize(req);
       const excludeExamIds = String(searchParams.get("excludeExamIds") || "")
         .split(",")
@@ -273,7 +353,7 @@ export async function PATCH(req: NextRequest) {
         const batch = await withSerializableTransaction(async (tx) => {
           const markers = await ensureProtectedGradeMarkers(tx, {
             studentIds,
-            includeAbsent: scope === "protected",
+            includeAbsent: false,
             excludeExamIds,
             historicalNoEffect: true,
           });

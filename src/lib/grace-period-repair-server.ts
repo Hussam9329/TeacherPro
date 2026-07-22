@@ -42,6 +42,7 @@ function uniqueIds(values: Array<string | null | undefined>): string[] {
 export async function repairProtectedAbsencesForStudents(
   client: PrismaClientLike,
   rawStudentIds: Array<string | null | undefined>,
+  options: { deleteCalls?: boolean; onlyAbsences?: boolean } = {},
 ): Promise<GracePeriodRepairResult> {
   const requestedStudentIds = uniqueIds(rawStudentIds);
   if (requestedStudentIds.length === 0) {
@@ -69,7 +70,9 @@ export async function repairProtectedAbsencesForStudents(
     },
   })) as ProtectedGradeCandidate[];
   const beforeRegistration = candidates.filter(
-    (grade) => !isExamOnOrAfterStudentRegistration(grade.student, grade.exam),
+    (grade) =>
+      (!options.onlyAbsences || grade.status === "غائب") &&
+      !isExamOnOrAfterStudentRegistration(grade.student, grade.exam),
   );
   const withinGrace = candidates.filter(
     (grade) =>
@@ -83,14 +86,16 @@ export async function repairProtectedAbsencesForStudents(
   }
 
   const affectedStudentIds = uniqueIds(protectedAbsences.map((grade) => grade.studentId));
-  const callResult = await client.studentCall.deleteMany({
-    where: {
-      OR: protectedAbsences.map((grade) => ({
-        studentId: grade.studentId,
-        examId: grade.examId,
-      })),
-    },
-  });
+  const callResult = options.deleteCalls === false
+    ? { count: 0 }
+    : await client.studentCall.deleteMany({
+        where: {
+          OR: protectedAbsences.map((grade) => ({
+            studentId: grade.studentId,
+            examId: grade.examId,
+          })),
+        },
+      });
   const graceGradeIds = withinGrace.map((grade) => grade.id);
   const convertedResult = graceGradeIds.length
     ? await client.grade.updateMany({
