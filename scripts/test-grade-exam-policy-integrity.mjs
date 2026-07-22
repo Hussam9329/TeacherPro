@@ -120,6 +120,22 @@ must(
 );
 
 must(
+  examRoute.includes("const exam = await withSerializableTransaction(async (tx)") &&
+    examRoute.includes("await ensureProtectedGradeMarkers(tx, { examIds: [createdExam.id] })"),
+  "إنشاء الامتحان وتوليد حالات الطلاب يعملان في transaction تسلسلية تمنع سباق الاستيراد",
+  "إنشاء الامتحان يجب أن يستخدم نفس عزل Serializable المستخدم في تسجيل الطلاب.",
+);
+
+must(
+  examRoute.includes("gradeRangeConflict") &&
+    examRoute.includes("score: { gt: Number(candidateExam.fullMark) }") &&
+    examRoute.includes("EXAM_FULL_MARK_BELOW_STORED_GRADES") &&
+    examRoute.includes("لم تُعدّل أو تُحذف أي درجة"),
+  "خفض الدرجة الكاملة لا يبطل درجات محفوظة بل يُرفض بلا تعديل البيانات",
+  "يجب رفض fullMark الأقل من أعلى درجة محفوظة بدل إسقاط أثر الدرجة بصمت.",
+);
+
+must(
   examUtils.includes("A future activation is authoritative") &&
     examUtils.includes("if (activateAt && activateAt > now)") &&
     examRoute.includes("effectiveStoredActive") &&

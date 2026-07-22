@@ -206,7 +206,12 @@ export async function POST(req: NextRequest) {
     const scheduledDeactivateAt = body.scheduledDeactivateAt ? parseBaghdadDateTime(String(body.scheduledDeactivateAt)) : null;
     const requestedActive = body.active === undefined ? true : parseBoolean(body.active);
     const effectiveStoredActive = Boolean(scheduledActivateAt && scheduledActivateAt > new Date()) ? false : requestedActive;
-    const exam = await db.$transaction(async (tx) => {
+    // Student creation uses the same SERIALIZABLE helper. Keeping exam
+    // creation at the same isolation level prevents a concurrent exam +
+    // student import from both missing each other's protected grade markers.
+    // If PostgreSQL detects that race, the shared helper retries the complete
+    // transaction and the retry sees the committed student/exam.
+    const exam = await withSerializableTransaction(async (tx) => {
       const createdExam = await tx.exam.create({
         data: {
         name: String(body.name ?? '').trim(),
@@ -326,6 +331,33 @@ export async function PUT(req: NextRequest) {
       if (candidateValidationMessage) {
         return { validationMessage: candidateValidationMessage } as const;
       }
+
+      // Never make an existing numeric grade invalid by lowering fullMark.
+      // Stored grades are user data: reject the exam edit instead of silently
+      // clamping, deleting, or excluding them from academic calculation.
+      if (
+        data.fullMark !== undefined &&
+        Number(data.fullMark) !== Number(existingExam.fullMark)
+      ) {
+        const invalidGradeStats = await tx.grade.aggregate({
+          where: {
+            examId: id,
+            status: 'درجة',
+            score: { gt: Number(candidateExam.fullMark) },
+          },
+          _count: { _all: true },
+          _max: { score: true },
+        });
+        if (invalidGradeStats._count._all > 0) {
+          return {
+            gradeRangeConflict: {
+              invalidGradeCount: invalidGradeStats._count._all,
+              highestStoredScore: Number(invalidGradeStats._max.score || 0),
+              proposedFullMark: Number(candidateExam.fullMark),
+            },
+          } as const;
+        }
+      }
       const candidateCourseIds = parseCourseIds(candidateExam.courseIds);
       const courseProblems = await courseSelectionProblems(tx, candidateCourseIds);
       if (courseProblems.length > 0) {
@@ -412,6 +444,24 @@ export async function PUT(req: NextRequest) {
           storedGradeCount,
         },
         { status: 409 },
+      );
+    }
+    if ('gradeRangeConflict' in result && result.gradeRangeConflict) {
+      const { invalidGradeCount, highestStoredScore, proposedFullMark } =
+        result.gradeRangeConflict;
+      return NextResponse.json(
+        {
+          error: `لا يمكن جعل الدرجة الكاملة ${proposedFullMark} لأن ${invalidGradeCount} درجة محفوظة تتجاوزها (أعلاها ${highestStoredScore}). لم تُعدّل أو تُحذف أي درجة. صحح الدرجات أولاً أو اختر درجة كاملة مناسبة.`,
+          code: 'EXAM_FULL_MARK_BELOW_STORED_GRADES',
+          retryable: false,
+          invalidGradeCount,
+          highestStoredScore,
+          proposedFullMark,
+        },
+        {
+          status: 409,
+          headers: { 'X-TeacherPro-Retryable': '0' },
+        },
       );
     }
     if ('editConflict' in result && result.editConflict) {

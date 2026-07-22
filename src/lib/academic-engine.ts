@@ -52,9 +52,14 @@ export function isRuleManagedDismissal(
 
 export function examPenaltyValue(exam: Pick<AcademicExam, "noDiscount" | "opportunitiesPenalty">): number {
   if (exam.noDiscount) return 0;
-  return typeof exam.opportunitiesPenalty === "number"
-    ? exam.opportunitiesPenalty
-    : Number(exam.opportunitiesPenalty) || 1;
+  const numeric = Number(exam.opportunitiesPenalty);
+  // Old or partially migrated rows may contain 0/invalid values even though
+  // current exam validation requires a positive integer. A discountable exam
+  // must never turn into a silent zero-penalty exam because of that legacy
+  // value; use the documented default of one opportunity.
+  return Number.isFinite(numeric) && numeric > 0
+    ? Math.max(1, Math.trunc(numeric))
+    : 1;
 }
 
 export function isAutomaticOpportunityLog(log: AcademicOpportunityLog): boolean {

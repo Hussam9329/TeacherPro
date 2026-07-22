@@ -1644,9 +1644,10 @@ function isRuleManagedDismissal(student: Student): boolean {
 
 function examPenaltyValue(exam: Exam): number {
   if (exam.noDiscount) return 0;
-  return typeof exam.opportunitiesPenalty === "number"
-    ? exam.opportunitiesPenalty
-    : Number(exam.opportunitiesPenalty) || 1;
+  const numeric = Number(exam.opportunitiesPenalty);
+  return Number.isFinite(numeric) && numeric > 0
+    ? Math.max(1, Math.trunc(numeric))
+    : 1;
 }
 
 function normalizeGraceDaysValue(value: unknown): number {
