@@ -337,6 +337,8 @@ export async function GET(req: NextRequest) {
 
     const gradeByStudentId = new Map<string, DbGradeLite>();
     grades.forEach((grade) => gradeByStudentId.set(grade.studentId, grade));
+    const studentById = new Map<string, DbStudentLite>();
+    students.forEach((student) => studentById.set(student.id, student));
 
     const leavesByStudentId = new Map<string, DbLeaveLite[]>();
     leaves.forEach((leave) => {
@@ -351,7 +353,7 @@ export async function GET(req: NextRequest) {
     >();
     calls.forEach((call) => {
       const grade = gradeByStudentId.get(call.studentId);
-      const student = students.find((item) => item.id === call.studentId);
+      const student = studentById.get(call.studentId);
       if (!grade || !student) return;
       const category = gradeCategory(grade, exam, student, leavesByStudentId.get(call.studentId) || []);
       const exactCategory = `grade:${grade.id}`;
