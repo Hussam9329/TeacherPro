@@ -20,6 +20,7 @@ import {
   useTeacherProSyncKey,
 } from "@/hooks/use-teacherpro-sync";
 import { useLatestRequest } from "@/hooks/use-latest-request";
+import { formatAuditLogDisplay } from "@/lib/audit-log-display";
 
 type DashboardAlert = {
   id: string;
@@ -299,27 +300,28 @@ export function DashboardView() {
                 description="سيظهر سجل العمليات هنا بمجرد إضافة أو تعديل البيانات."
               />
             ) : (
-              recentLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="tp-dashboard__activity-row list-row"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold">{log.action}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {log.userName || log.user || "—"} - {log.module} - {formatStatsTime(log.time)}
-                      </p>
+              recentLogs.map((log) => {
+                const display = formatAuditLogDisplay(log);
+                return (
+                  <div
+                    key={log.id}
+                    className="tp-dashboard__activity-row list-row"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold">{log.action}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {log.userName || log.user || "—"} - {log.module} - {formatStatsTime(log.time)}
+                        </p>
+                      </div>
+                      <span className="chip">نشاط</span>
                     </div>
-                    <span className="chip">نشاط</span>
-                  </div>
-                  {log.details && (
                     <p className="mt-2 text-xs leading-6 text-muted-foreground">
-                      {log.details}
+                      {display.summary}
                     </p>
-                  )}
-                </div>
-              ))
+                  </div>
+                );
+              })
             )}
           </div>
           {recentLogs.length > 0 && (
