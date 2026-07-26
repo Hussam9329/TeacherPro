@@ -3133,6 +3133,7 @@ export const useTeacherStore = create<TeacherState>()(
               "courses",
               "chapters",
               "exam-new",
+              "exam-records",
               "grade-entry",
               "student-register",
               "student-bulk-import",

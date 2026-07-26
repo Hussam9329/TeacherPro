@@ -519,6 +519,10 @@ export function StudentBulkTextImportView() {
             Math.trunc(Number(courseRow.activeChapter.opportunities || 0)),
           )
         : 0;
+      const hasActiveChapter = Boolean(
+        courseRow?.activeChapter &&
+          Number(courseRow.activeChapterCount || 0) === 1,
+      );
       const accountingGraceDays = Math.min(30, parseInteger(graceRaw, 0));
 
       if (!nameRaw.trim()) errors.push("اسم الطالب مطلوب");
@@ -652,15 +656,23 @@ export function StudentBulkTextImportView() {
               baseOpportunities: opportunities,
               opportunityLimit: opportunities,
               opportunitySource: "student-record",
-              opportunityLimitSource: "active-chapter",
-              opportunityHealth: opportunities > 0 ? "ready" : "zero-limit",
-              hasActiveChapter: opportunities > 0,
-              activeChapterConflictCount: 1,
+              opportunityLimitSource: hasActiveChapter
+                ? "active-chapter"
+                : "no-active-chapter",
+              opportunityHealth: hasActiveChapter
+                ? opportunities > 0
+                  ? "ready"
+                  : "zero-limit"
+                : "missing-active-chapter",
+              hasActiveChapter,
+              activeChapterConflictCount: Number(
+                courseRow?.activeChapterCount || 0,
+              ),
               // Registration context intentionally exposes only the chapter
               // name and cap, not a chapter ID. The explicit opportunityLimit
               // is sufficient for the shared display formatter.
               activeChapter: null,
-              isOpportunityFull: opportunities > 0,
+              isOpportunityFull: hasActiveChapter && opportunities > 0,
               isOpportunityOverLimit: false,
               accountingGraceDays,
             }
