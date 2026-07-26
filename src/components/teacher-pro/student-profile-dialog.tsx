@@ -593,7 +593,12 @@ export function StudentProfileDialog({
 
   if (!open || !student || !isMounted) return null;
 
-  const activeChapter = activeChapterForCourse(student.courseId);
+  // بيانات ملف الطالب تأتي مباشرة من قاعدة البيانات، لذلك هي المصدر الموثوق
+  // للفصل النشط. كاش الصفحة يبقى fallback فقط أثناء التحميل.
+  const activeChapter =
+    databaseStats?.activeChapter ??
+    student.activeChapter ??
+    activeChapterForCourse(student.courseId);
   const profileStatValue = (value: number | undefined) => {
     if (databaseStatsLoading && !databaseStats) return "…";
     return value ?? "—";
