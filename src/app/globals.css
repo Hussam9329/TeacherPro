@@ -2447,17 +2447,31 @@ button[data-slot="button"][class*="text-destructive"] svg {
 
   .tp-student-profile__content {
     padding: 0.75rem;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   }
 
   .tp-student-profile__nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    position: static;
+    display: flex;
+    max-width: 100%;
+    grid-template-columns: none;
     gap: 0.5rem;
+    margin-inline: -0.75rem;
+    padding-inline: 0.75rem;
+    padding-bottom: 0.6rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline proximity;
+    scrollbar-width: thin;
   }
 
   .tp-student-profile__nav > button {
-    min-height: 5.6rem;
+    flex: 0 0 8.75rem;
+    min-height: 4.75rem;
     padding: 0.75rem;
     border-radius: 1rem;
+    scroll-snap-align: start;
   }
 }
 

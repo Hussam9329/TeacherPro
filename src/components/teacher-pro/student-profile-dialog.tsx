@@ -646,7 +646,7 @@ export function StudentProfileDialog({
   const profileContent = (
     <section
       dir="rtl"
-      className="tp-student-profile fixed inset-0 z-[999] flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden bg-background text-foreground"
+      className="tp-student-profile fixed inset-0 z-[999] flex h-[100dvh] w-full max-w-full flex-col overflow-hidden bg-background text-foreground"
       aria-labelledby="student-profile-title"
       role="dialog"
       aria-modal="true"
