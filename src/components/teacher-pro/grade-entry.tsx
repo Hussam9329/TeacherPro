@@ -488,13 +488,16 @@ export function GradeEntryView() {
   const entryGradesSource = useMemo(() => {
     if (!selectedExamId) return grades;
     const byKey = new Map<string, Grade>();
-    for (const grade of entrySheetGrades) {
-      byKey.set(`${grade.studentId}:${grade.examId}`, grade);
-    }
+    // ابدأ بذاكرة الواجهة، ثم اجعل ورقة الإدخال القادمة مباشرة من الخادم
+    // هي المرجع النهائي. عكس هذا الترتيب كان يعيد expectedUpdatedAt قديماً
+    // ويؤدي إلى رفض الحفظ بتعارض 409 رغم عدم وجود تعديل متزامن حقيقي.
     for (const grade of grades) {
       if (grade.examId === selectedExamId) {
         byKey.set(`${grade.studentId}:${grade.examId}`, grade);
       }
+    }
+    for (const grade of entrySheetGrades) {
+      byKey.set(`${grade.studentId}:${grade.examId}`, grade);
     }
     return Array.from(byKey.values());
   }, [entrySheetGrades, grades, selectedExamId]);
