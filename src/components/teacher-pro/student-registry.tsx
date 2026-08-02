@@ -93,8 +93,10 @@ import {
   Phone,
   RotateCcw,
   Save,
+  Search,
   SearchX,
   ShieldCheck,
+  SlidersHorizontal,
   UserPlus,
   UserRound,
   UserX,
@@ -1690,252 +1692,310 @@ export function StudentRegistryView() {
     <div className="tp-student-registry space-y-4">
       <Card className="tp-filter-card tp-student-registry__filters">
         <CardContent className="tp-filter-content">
-          <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
-            <div className="tp-filter-field tp-filter-primary">
-              <Label htmlFor="registry-course" className="text-xs">
-                الدورة
-              </Label>
-              <Select
-                name="courseId"
-                value={filterCourseId || "all"}
-                onValueChange={(v) => {
-                  setFilterCourseId(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="registry-course">
-                  <SelectValue placeholder="كل الدورات" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الدورات</SelectItem>
-                  {courses.map((course) => (
-                    <SelectItem key={course.id} value={course.id}>
-                      {course.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="tp-student-registry__filter-heading">
+            <div className="tp-student-registry__filter-heading-icon">
+              <SlidersHorizontal aria-hidden="true" className="size-5" />
             </div>
-            <div className="tp-filter-field tp-filter-primary">
-              <Label htmlFor="registry-program" className="text-xs">
-                نوع الدورة
-              </Label>
-              <Select
-                name="courseProgram"
-                value={filterCourseProgram || "all"}
-                onValueChange={(v) => {
-                  setFilterCourseProgram(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="registry-program">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {availableProgramsForFilter.map((program) => (
-                    <SelectItem key={program} value={program}>
-                      {program}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="min-w-0">
+              <h2>الفلاتر الأساسية</h2>
+              <p>
+                حدّد بيانات الدراسة أو حالة الطالب للوصول إلى النتائج المطلوبة
+                بسرعة.
+              </p>
             </div>
-            {filterCourseProgram === "كورسات" && (
-              <div className="tp-filter-field tp-filter-primary">
-                <Label htmlFor="registry-term" className="text-xs">
-                  الكورس
-                </Label>
-                <Select
-                  name="courseTerm"
-                  value={filterCourseTerm || "all"}
-                  onValueChange={(v) => {
-                    setFilterCourseTerm(v === "all" ? "" : v);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger id="registry-term">
-                    <SelectValue placeholder="الكل" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">الكل</SelectItem>
-                    {STUDENT_FILTER_COURSE_TERMS.map((term) => (
-                      <SelectItem key={term} value={term}>
-                        {term}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          </div>
+
+          <div className="tp-student-registry__filter-sections">
+            <section className="tp-student-registry__filter-section tp-student-registry__filter-section--study">
+              <div className="tp-student-registry__filter-section-heading">
+                <GraduationCap aria-hidden="true" className="size-4" />
+                <div>
+                  <h3>الدورة ونوع الدراسة</h3>
+                  <p>الفلاتر الرئيسية المرتبطة بتسجيل الطالب.</p>
+                </div>
               </div>
-            )}
-            <div className="tp-filter-field tp-filter-primary">
-              <Label htmlFor="registry-study-type" className="text-xs">
-                نوع البرنامج
-              </Label>
-              <Select
-                name="studyType"
-                value={filterStudyType || "all"}
-                onValueChange={(v) => {
-                  setFilterStudyType(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="registry-study-type">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {availableStudyTypesForFilter.map((studyType) => (
-                    <SelectItem key={studyType} value={studyType}>
-                      {studyType}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="registry-location" className="text-xs">
-                المحافظة / الموقع
-              </Label>
-              <Select
-                name="location"
-                value={filterLocation || "all"}
-                onValueChange={(v) => {
-                  setFilterLocation(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="registry-location">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {locationFilterOptions.map((location) => (
-                    <SelectItem key={location} value={location}>
-                      {location}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="registry-status" className="text-xs">
-                الحالة
-              </Label>
-              <Select
-                name="status"
-                value={filterStatus || "all"}
-                onValueChange={(v) => {
-                  setFilterStatus(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="registry-status">
-                  <SelectValue placeholder="كل الحالات" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الحالات</SelectItem>
-                  <SelectItem value="نشط">نشط</SelectItem>
-                  <SelectItem value="مفصول">مفصول</SelectItem>
-                  <SelectItem value="مؤرشف">مؤرشف</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="registry-gender" className="text-xs">
-                الجنس
-              </Label>
-              <Select
-                name="gender"
-                value={filterGender || "all"}
-                onValueChange={(v) => {
-                  setFilterGender(v === "all" ? "" : v);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="registry-gender">
-                  <SelectValue placeholder="كل الأجناس" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="ذكر">ذكر</SelectItem>
-                  <SelectItem value="أنثى">أنثى</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="registry-issue" className="text-xs">
-                مشاكل/صحة الطالب
-              </Label>
-              <Select
-                name="registryIssue"
-                value={filterRegistryIssue || "all"}
-                onValueChange={(v) => {
-                  setFilterRegistryIssue(
-                    v === "all" ? "" : (v as RegistryIssueFilter),
-                  );
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger id="registry-issue">
-                  <SelectValue placeholder="كل الطلاب" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">كل الطلاب</SelectItem>
-                  {Object.entries(registryIssueFilterLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-search 2xl:col-span-2">
-              <Label htmlFor="registry-search" className="text-xs">
-                بحث
-              </Label>
-              <Input
-                id="registry-search"
-                name="search"
-                data-teacherpro-search="true"
-                autoComplete="off"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="اسم / كود / تيليجرام / هاتف"
-              />
-            </div>
-            <div className="tp-filter-field tp-filter-meta">
-              <Label htmlFor="registry-view" className="text-xs">
-                طريقة العرض
-              </Label>
-              <Select
-                value={viewMode}
-                onValueChange={(v) => setViewMode(v as RegistryViewMode)}
-              >
-                <SelectTrigger id="registry-view">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cards">البطاقات</SelectItem>
-                  <SelectItem value="table">الجدول</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-actions">
-              <span className="text-xs font-medium">تصدير</span>
-              <ExportDialog
-                title="تصدير سجل الطلاب"
-                fileName="students"
-                rows={studentExportRows}
-                fetchRows={fetchStudentExportRows}
-                columns={studentExportColumns}
-                triggerLabel="تصدير"
-                description="تقرير سجل الطلاب حسب الفلاتر الحالية"
-              />
-            </div>
+              <div className="tp-student-registry__filter-grid">
+                <div className="tp-filter-field tp-filter-primary">
+                  <Label htmlFor="registry-course" className="text-xs">
+                    الدورة
+                  </Label>
+                  <Select
+                    name="courseId"
+                    value={filterCourseId || "all"}
+                    onValueChange={(v) => {
+                      setFilterCourseId(v === "all" ? "" : v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger id="registry-course">
+                      <SelectValue placeholder="كل الدورات" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">كل الدورات</SelectItem>
+                      {courses.map((course) => (
+                        <SelectItem key={course.id} value={course.id}>
+                          {course.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="tp-filter-field tp-filter-primary">
+                  <Label htmlFor="registry-program" className="text-xs">
+                    نوع الدورة
+                  </Label>
+                  <Select
+                    name="courseProgram"
+                    value={filterCourseProgram || "all"}
+                    onValueChange={(v) => {
+                      setFilterCourseProgram(v === "all" ? "" : v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger id="registry-program">
+                      <SelectValue placeholder="الكل" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">الكل</SelectItem>
+                      {availableProgramsForFilter.map((program) => (
+                        <SelectItem key={program} value={program}>
+                          {program}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {filterCourseProgram === "كورسات" && (
+                  <div className="tp-filter-field tp-filter-primary">
+                    <Label htmlFor="registry-term" className="text-xs">
+                      الكورس
+                    </Label>
+                    <Select
+                      name="courseTerm"
+                      value={filterCourseTerm || "all"}
+                      onValueChange={(v) => {
+                        setFilterCourseTerm(v === "all" ? "" : v);
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger id="registry-term">
+                        <SelectValue placeholder="الكل" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">الكل</SelectItem>
+                        {STUDENT_FILTER_COURSE_TERMS.map((term) => (
+                          <SelectItem key={term} value={term}>
+                            {term}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="tp-filter-field tp-filter-primary">
+                  <Label htmlFor="registry-study-type" className="text-xs">
+                    نوع البرنامج
+                  </Label>
+                  <Select
+                    name="studyType"
+                    value={filterStudyType || "all"}
+                    onValueChange={(v) => {
+                      setFilterStudyType(v === "all" ? "" : v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger id="registry-study-type">
+                      <SelectValue placeholder="الكل" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">الكل</SelectItem>
+                      {availableStudyTypesForFilter.map((studyType) => (
+                        <SelectItem key={studyType} value={studyType}>
+                          {studyType}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </section>
+
+            <section className="tp-student-registry__filter-section">
+              <div className="tp-student-registry__filter-section-heading">
+                <UserRound aria-hidden="true" className="size-4" />
+                <div>
+                  <h3>بيانات الطالب وحالته</h3>
+                  <p>الموقع والجنس والحالة وسلامة بيانات الملف.</p>
+                </div>
+              </div>
+              <div className="tp-student-registry__filter-grid">
+                <div className="tp-filter-field tp-filter-secondary">
+                  <Label htmlFor="registry-location" className="text-xs">
+                    المحافظة / الموقع
+                  </Label>
+                  <Select
+                    name="location"
+                    value={filterLocation || "all"}
+                    onValueChange={(v) => {
+                      setFilterLocation(v === "all" ? "" : v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger id="registry-location">
+                      <SelectValue placeholder="الكل" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">الكل</SelectItem>
+                      {locationFilterOptions.map((location) => (
+                        <SelectItem key={location} value={location}>
+                          {location}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="tp-filter-field tp-filter-secondary">
+                  <Label htmlFor="registry-status" className="text-xs">
+                    الحالة
+                  </Label>
+                  <Select
+                    name="status"
+                    value={filterStatus || "all"}
+                    onValueChange={(v) => {
+                      setFilterStatus(v === "all" ? "" : v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger id="registry-status">
+                      <SelectValue placeholder="كل الحالات" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">كل الحالات</SelectItem>
+                      <SelectItem value="نشط">نشط</SelectItem>
+                      <SelectItem value="مفصول">مفصول</SelectItem>
+                      <SelectItem value="مؤرشف">مؤرشف</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="tp-filter-field tp-filter-secondary">
+                  <Label htmlFor="registry-gender" className="text-xs">
+                    الجنس
+                  </Label>
+                  <Select
+                    name="gender"
+                    value={filterGender || "all"}
+                    onValueChange={(v) => {
+                      setFilterGender(v === "all" ? "" : v);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger id="registry-gender">
+                      <SelectValue placeholder="كل الأجناس" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">الكل</SelectItem>
+                      <SelectItem value="ذكر">ذكر</SelectItem>
+                      <SelectItem value="أنثى">أنثى</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="tp-filter-field tp-filter-secondary">
+                  <Label htmlFor="registry-issue" className="text-xs">
+                    مشاكل/صحة الطالب
+                  </Label>
+                  <Select
+                    name="registryIssue"
+                    value={filterRegistryIssue || "all"}
+                    onValueChange={(v) => {
+                      setFilterRegistryIssue(
+                        v === "all" ? "" : (v as RegistryIssueFilter),
+                      );
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger id="registry-issue">
+                      <SelectValue placeholder="كل الطلاب" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">كل الطلاب</SelectItem>
+                      {Object.entries(registryIssueFilterLabels).map(
+                        ([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </section>
+
+            <section className="tp-student-registry__filter-section tp-student-registry__filter-section--tools">
+              <div className="tp-student-registry__filter-section-heading">
+                <Search aria-hidden="true" className="size-4" />
+                <div>
+                  <h3>البحث والعرض</h3>
+                  <p>ابحث مباشرة، ثم اختر شكل النتائج أو صدّرها.</p>
+                </div>
+              </div>
+              <div className="tp-student-registry__filter-tools-grid">
+                <div className="tp-filter-field tp-filter-search">
+                  <Label htmlFor="registry-search" className="text-xs">
+                    بحث
+                  </Label>
+                  <Input
+                    id="registry-search"
+                    name="search"
+                    data-teacherpro-search="true"
+                    autoComplete="off"
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPage(1);
+                    }}
+                    placeholder="اسم / كود / تيليجرام / هاتف"
+                  />
+                </div>
+
+                <div className="tp-filter-field tp-filter-meta">
+                  <Label htmlFor="registry-view" className="text-xs">
+                    طريقة العرض
+                  </Label>
+                  <Select
+                    value={viewMode}
+                    onValueChange={(v) => setViewMode(v as RegistryViewMode)}
+                  >
+                    <SelectTrigger id="registry-view">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cards">البطاقات</SelectItem>
+                      <SelectItem value="table">الجدول</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="tp-filter-field tp-filter-actions">
+                  <span className="text-xs font-medium">تصدير</span>
+                  <ExportDialog
+                    title="تصدير سجل الطلاب"
+                    fileName="students"
+                    rows={studentExportRows}
+                    fetchRows={fetchStudentExportRows}
+                    columns={studentExportColumns}
+                    triggerLabel="تصدير"
+                    description="تقرير سجل الطلاب حسب الفلاتر الحالية"
+                  />
+                </div>
+              </div>
+            </section>
           </div>
         </CardContent>
       </Card>

@@ -2328,6 +2328,108 @@ button[data-slot="button"][class*="text-destructive"] svg {
   box-shadow: 0 16px 48px -42px color-mix(in oklch, var(--primary) 42%, transparent);
 }
 
+.tp-student-registry__filter-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 78%, transparent);
+}
+
+.tp-student-registry__filter-heading-icon {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--border));
+  border-radius: 0.9rem;
+  color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 9%, var(--background));
+}
+
+.tp-student-registry__filter-heading h2 {
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.5rem;
+}
+
+.tp-student-registry__filter-heading p,
+.tp-student-registry__filter-section-heading p {
+  margin-top: 0.1rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+}
+
+.tp-student-registry__filter-sections {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.tp-student-registry__filter-section {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid color-mix(in oklch, var(--border) 82%, transparent);
+  border-radius: 1.15rem;
+  background: color-mix(in oklch, var(--muted) 22%, var(--background));
+}
+
+.tp-student-registry__filter-section--study {
+  border-color: color-mix(in oklch, var(--primary) 15%, var(--border));
+  background: color-mix(in oklch, var(--primary) 3%, var(--background));
+}
+
+.tp-student-registry__filter-section--tools {
+  background: color-mix(in oklch, var(--card) 70%, var(--muted));
+}
+
+.tp-student-registry__filter-section-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+  color: var(--primary);
+}
+
+.tp-student-registry__filter-section-heading > svg {
+  margin-top: 0.2rem;
+  flex: 0 0 auto;
+}
+
+.tp-student-registry__filter-section-heading h3 {
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  font-weight: 850;
+  line-height: 1.25rem;
+}
+
+.tp-student-registry__filter-grid,
+.tp-student-registry__filter-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.tp-student-registry__filter-tools-grid {
+  grid-template-columns: minmax(16rem, 2fr) minmax(10rem, 0.8fr) minmax(10rem, 0.8fr);
+}
+
+.tp-student-registry__filter-section .tp-filter-field {
+  order: initial;
+}
+
+.tp-student-registry__filter-section .tp-filter-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.tp-student-registry__filter-section .tp-filter-actions [data-slot="button"] {
+  width: 100%;
+}
+
 .tp-student-registry__stats > * {
   min-height: 6.2rem;
   box-shadow: none;
@@ -2494,6 +2596,14 @@ button[data-slot="button"][class*="text-destructive"] svg {
     width: 100%;
     min-width: 0;
   }
+
+  .tp-student-registry__filter-tools-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tp-student-registry__filter-tools-grid .tp-filter-search {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (min-width: 640px) {
@@ -2530,6 +2640,31 @@ button[data-slot="button"][class*="text-destructive"] svg {
 
   .tp-student-registry__confirm-actions {
     flex-direction: column-reverse;
+  }
+
+  .tp-student-registry__filter-heading {
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .tp-student-registry__filter-section {
+    padding: 0.75rem;
+    border-radius: 1rem;
+  }
+
+  .tp-student-registry__filter-section-heading p {
+    display: none;
+  }
+
+  .tp-student-registry__filter-grid,
+  .tp-student-registry__filter-tools-grid {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+  }
+
+  .tp-student-registry__filter-tools-grid .tp-filter-search {
+    grid-column: auto;
   }
 }
 
