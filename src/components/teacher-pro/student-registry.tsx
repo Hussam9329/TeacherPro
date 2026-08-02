@@ -296,6 +296,17 @@ export function StudentRegistryView() {
   }, [registryStateStorageKey]);
 
   useEffect(() => {
+    if (!registryStateHydrated || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("section") !== "student-registry") return;
+    const issue = String(params.get("registryIssue") || "");
+    if (issue && issue in registryIssueFilterLabels) {
+      setFilterRegistryIssue(issue as RegistryIssueFilter);
+      setPage(1);
+    }
+  }, [registryStateHydrated]);
+
+  useEffect(() => {
     if (!registryStateHydrated) return;
     if (skipRegistryStatePersistKey.current === registryStateStorageKey) {
       skipRegistryStatePersistKey.current = "";

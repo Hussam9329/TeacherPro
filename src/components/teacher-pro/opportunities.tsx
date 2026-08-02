@@ -134,6 +134,31 @@ export function OpportunitiesView() {
     useState<OpportunityBulkTargetsResponse | null>(null);
   const [bulkTargetLoading, setBulkTargetLoading] = useState(false);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("section") !== "opportunities") return;
+    const status = String(params.get("status") || "");
+    const opportunityCount = String(params.get("opportunityCount") || "");
+    if (
+      [
+        "active",
+        "dismissed",
+        "has-opportunities",
+        "no-opportunities",
+        "temporary-dismissal",
+        "final-dismissal",
+      ].includes(status)
+    ) {
+      setFilterStatus(status);
+      setPage(1);
+    }
+    if (/^\d+$/.test(opportunityCount)) {
+      setFilterOpportunityCount(opportunityCount);
+      setPage(1);
+    }
+  }, []);
+
   // Action dialog
   const [actionDialog, setActionDialog] = useState<{
     studentId: string;

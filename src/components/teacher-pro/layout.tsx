@@ -174,6 +174,16 @@ const sectionsWithPageSearch = new Set<SectionId>([
   "logs",
 ]);
 const sectionIds = new Set<SectionId>(menuItems.map((item) => item.id));
+const dashboardActionQueryKeys = [
+  "dashboardAlert",
+  "examId",
+  "filterStatus",
+  "registryIssue",
+  "dashboardDate",
+  "status",
+  "opportunityCount",
+  "statusFilter",
+] as const;
 
 const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   dashboard: ["dashboard", "students", "grades", "opportunities", "exams", "correction"],
@@ -606,6 +616,9 @@ export function TeacherProLayout() {
     if (typeof window !== "undefined") {
       window.requestAnimationFrame(() => {
         const nextUrl = new URL(window.location.href);
+        for (const key of dashboardActionQueryKeys) {
+          nextUrl.searchParams.delete(key);
+        }
         nextUrl.searchParams.set("section", section);
         nextUrl.hash = "";
         window.history.pushState({}, "", nextUrl.toString());

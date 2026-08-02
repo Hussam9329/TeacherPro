@@ -268,10 +268,25 @@ export function GradeEntryView() {
   const [markingAllMissingAbsent, setMarkingAllMissingAbsent] = useState(false);
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const missingStudentsNoteLoadedRef = useRef("");
+  const dashboardQueryAppliedRef = useRef(false);
   const {
     locked: clearingAbsentGrades,
     runLocked: runClearAbsentGradesLocked,
   } = useActionLock();
+
+  useEffect(() => {
+    if (dashboardQueryAppliedRef.current || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("section") !== "grade-entry") return;
+
+    const examId = String(params.get("examId") || "").trim();
+    const status = String(params.get("filterStatus") || "").trim();
+    if (examId) setSelectedExamId(examId);
+    if (["غير مسجل", "ضمن السماح", "درجة", "غائب", "غش", "مجاز", "ضمن فترة السماح", "قبل تسجيل الطالب"].includes(status)) {
+      setFilterStatus(status);
+    }
+    dashboardQueryAppliedRef.current = true;
+  }, []);
 
   useEffect(() => {
     setEntryNotesByExam(readStoredGradeEntryNotes());

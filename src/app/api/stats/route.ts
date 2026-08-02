@@ -1,23 +1,42 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-import type { Prisma } from '@prisma/client';
-import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/server-auth';
-import { db } from '@/lib/db';
-import { ensureExamSchema } from '@/lib/exam-schema';
-import { ensureFollowupTables, withFollowupTables } from '@/lib/followup-schema';
+import { Prisma } from "@prisma/client";
+import { NextRequest, NextResponse } from "next/server";
 import {
-  ensureGradeEntryMissingNoteSchema,
-  withGradeEntryMissingNoteSchema,
-} from '@/lib/grade-entry-missing-note-schema';
-import { baghdadDateKey } from '@/lib/baghdad-time';
+  hasPermission,
+  requirePermissionPrincipal,
+} from "@/lib/server-auth";
+import { db } from "@/lib/db";
+import {
+  databaseMigrationRequiredResponse,
+  isMissingDatabaseObjectError,
+  routeErrorResponse,
+} from "@/lib/route-helpers";
+import { baghdadDateKey } from "@/lib/baghdad-time";
+import { parseCourseIds } from "@/lib/grade-classification";
+import {
+  getExamEntryAvailability,
+  isAllMainSitesSelection,
+  normalizeExamSiteValue,
+  splitSelection,
+} from "@/lib/exam-utils";
+import {
+  extractAuditEntityIds,
+  type AuditLogEntityLabels,
+} from "@/lib/audit-log-display";
+import {
+  buildCurrentDismissalInfo,
+  getActiveChapterHealth,
+  pledgeMatchesCurrentDismissal,
+  sanitizeDashboardAuditLog,
+} from "@/lib/dashboard-stats";
 
 const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
-const PLEDGE_NOTE_KIND = 'تعهد ولي الأمر';
+const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 
-type DashboardAlertTone = 'danger' | 'warning' | 'info' | 'success';
+type DashboardAlertTone = "danger" | "warning" | "info" | "success";
 
 type DashboardAlert = {
   id: string;
@@ -26,12 +45,13 @@ type DashboardAlert = {
   count: number;
   tone: DashboardAlertTone;
   actionSection:
-    | 'grade-entry'
-    | 'student-registry'
-    | 'follow-up-leaves'
-    | 'opportunities'
-    | 'follow-up-pledges';
+    | "grade-entry"
+    | "student-registry"
+    | "follow-up-leaves"
+    | "opportunities"
+    | "follow-up-pledges";
   actionLabel: string;
+  actionQuery?: Record<string, string>;
   sample?: string[];
 };
 
@@ -42,53 +62,12 @@ type ExamAlertRow = {
   courseIds: string;
   mainSite: string | null;
   fullMark: number;
+  active: boolean;
+  scheduledActivateAt: Date | null;
+  scheduledDeactivateAt: Date | null;
 };
 
-type StudentAlertRow = {
-  id: string;
-  courseId: string;
-  mainSite: string | null;
-  subSite: string | null;
-  locationScope: string | null;
-  createdAt: Date;
-};
-
-type GradeAlertRow = {
-  examId: string;
-  studentId: string;
-  status: string;
-  score: number | null;
-};
-
-type LeaveAlertRow = {
-  studentId: string;
-  examId: string | null;
-  leaveType: string;
-  date: Date;
-  dateFrom: Date | null;
-  dateTo: Date | null;
-};
-
-function parseCourseIds(value: string | null | undefined): string[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
-  } catch {
-    return [];
-  }
-}
-
-function splitSelection(value?: string | null): string[] {
-  return String(value || '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function dateKey(value: Date | string | null | undefined): string {
-  return baghdadDateKey(value);
-}
+type StatsClient = Prisma.TransactionClient;
 
 function dayAfter(value: Date): Date {
   const next = new Date(value);
@@ -96,75 +75,52 @@ function dayAfter(value: Date): Date {
   return next;
 }
 
-function getTodayBaghdadRange() {
-  const baghdadNow = new Date(Date.now() + BAGHDAD_OFFSET_MS);
-  const key = `${baghdadNow.getUTCFullYear()}-${String(baghdadNow.getUTCMonth() + 1).padStart(2, '0')}-${String(baghdadNow.getUTCDate()).padStart(2, '0')}`;
+function getTodayBaghdadRange(now = new Date()) {
+  const baghdadNow = new Date(now.getTime() + BAGHDAD_OFFSET_MS);
+  const key = `${baghdadNow.getUTCFullYear()}-${String(
+    baghdadNow.getUTCMonth() + 1,
+  ).padStart(2, "0")}-${String(baghdadNow.getUTCDate()).padStart(2, "0")}`;
   const start = new Date(`${key}T00:00:00.000Z`);
   return { key, start, end: dayAfter(start) };
 }
 
-function normalizeArabicText(value: unknown): string {
-  return String(value || '')
-    .trim()
-    .replace(/[إأآٱ]/g, 'ا')
-    .replace(/ة/g, 'ه')
-    .replace(/ى/g, 'ي')
-    .replace(/ؤ/g, 'و')
-    .replace(/ئ/g, 'ي')
-    .replace(/\s+/g, ' ');
+async function countPendingCorrectionItems(tx: StatsClient): Promise<number> {
+  const rows = await tx.$queryRaw<Array<{ count: bigint | number | string }>>`
+    SELECT COUNT(*)::bigint AS "count"
+    FROM (
+      SELECT "studentId", "examId"
+      FROM "CorrectionSheet"
+      WHERE "status" IS DISTINCT FROM 'مكتمل'
+      UNION
+      SELECT "studentId", "examId"
+      FROM "TelegramExamSubmission"
+      WHERE "status" IS DISTINCT FROM 'مكتمل'
+    ) AS "pendingCorrectionItems"
+  `;
+  return Number(rows[0]?.count || 0);
 }
 
-function normalizeExamSiteValue(value?: string | null): string {
-  const raw = normalizeArabicText(value);
-  if (!raw || raw === normalizeArabicText('الكل')) return raw || '';
-  if (['اونلاين', 'الكتروني', 'إلكتروني', 'الكترونى'].map(normalizeArabicText).includes(raw)) {
-    return normalizeArabicText('أونلاين');
+async function countActiveExamsWithMissingGrades(
+  tx: StatsClient,
+  healthyCourseIds: Set<string>,
+  now: Date,
+) {
+  if (healthyCourseIds.size === 0) {
+    return {
+      examsWithMissingGrades: 0,
+      missingGradesTotal: 0,
+      sample: [] as string[],
+      firstExamId: "",
+    };
   }
-  return raw;
-}
 
-function studentMatchesExamMainSites(
-  student: { mainSite?: string | null; subSite?: string | null; locationScope?: string | null },
-  selectedMainSites: string[],
-): boolean {
-  const normalizedSelection = selectedMainSites.map(normalizeExamSiteValue).filter(Boolean);
-  if (normalizedSelection.length === 0 || normalizedSelection.includes(normalizeExamSiteValue('الكل'))) return true;
-  const values = new Set([student.mainSite, student.subSite, student.locationScope].map(normalizeExamSiteValue).filter(Boolean));
-  return normalizedSelection.some((site) => values.has(site));
-}
-
-function isExamOnOrAfterStudentRegistration(student: { createdAt?: Date | string | null }, exam: { date?: Date | string | null }): boolean {
-  const registeredAt = dateKey(student.createdAt);
-  const examDate = dateKey(exam.date);
-  if (!registeredAt || !examDate) return true;
-  return examDate >= registeredAt;
-}
-
-function isGradeEntered(grade: GradeAlertRow | undefined, exam: { fullMark?: number | null }): boolean {
-  if (!grade) return false;
-  if (grade.status === 'درجة') {
-    const score = Number(grade.score);
-    return Number.isFinite(score) && score >= 0 && score <= Number(exam.fullMark || 0);
-  }
-  return grade.status === 'غائب' || grade.status === 'غش';
-}
-
-function hasLeaveForExam(studentId: string, exam: ExamAlertRow, leaves: LeaveAlertRow[]): boolean {
-  const examDate = dateKey(exam.date);
-  return leaves.some((leave) => {
-    if (leave.studentId !== studentId) return false;
-    if ((leave.leaveType || 'exam') === 'period') {
-      const from = dateKey(leave.dateFrom || leave.date);
-      const to = dateKey(leave.dateTo || leave.dateFrom || leave.date);
-      return Boolean(examDate && from && to && examDate >= from && examDate <= to);
-    }
-    return leave.examId === exam.id;
-  });
-}
-
-async function countActiveExamsWithMissingGrades(activeChapterCourseIds: Set<string>) {
-  const exams = (await db.exam.findMany({
-    where: { active: true },
+  const candidates = (await tx.exam.findMany({
+    where: {
+      OR: [
+        { active: true },
+        { scheduledActivateAt: { lte: now } },
+      ],
+    },
     select: {
       id: true,
       name: true,
@@ -172,281 +128,582 @@ async function countActiveExamsWithMissingGrades(activeChapterCourseIds: Set<str
       courseIds: true,
       mainSite: true,
       fullMark: true,
+      active: true,
+      scheduledActivateAt: true,
+      scheduledDeactivateAt: true,
     },
-    orderBy: { date: 'desc' },
+    orderBy: [{ date: "desc" }, { id: "asc" }],
   })) as ExamAlertRow[];
 
-  const examIds = exams.map((exam) => exam.id);
-  const courseIds = Array.from(new Set(exams.flatMap((exam) => parseCourseIds(exam.courseIds))));
-  if (exams.length === 0 || courseIds.length === 0) {
-    return { examsWithMissingGrades: 0, missingGradesTotal: 0, sample: [] as string[] };
+  const exams = candidates.filter(
+    (exam) =>
+      getExamEntryAvailability(exam, now).available &&
+      parseCourseIds(exam.courseIds).some((courseId) =>
+        healthyCourseIds.has(courseId),
+      ),
+  );
+  if (exams.length === 0) {
+    return {
+      examsWithMissingGrades: 0,
+      missingGradesTotal: 0,
+      sample: [] as string[],
+      firstExamId: "",
+    };
   }
 
-  const examDates = exams.map((exam) => exam.date).filter((date): date is Date => date instanceof Date);
-  const minExamDate = examDates.length ? new Date(Math.min(...examDates.map((date) => date.getTime()))) : null;
-  const maxExamDate = examDates.length ? new Date(Math.max(...examDates.map((date) => date.getTime()))) : null;
+  // The database receives only the compact exam policy. It performs all
+  // student/grade/leave eligibility work and returns one aggregate row per
+  // affected exam, so no large academic collections reach the Node process.
+  const examPolicyJson = JSON.stringify(
+    exams.map((exam) => {
+      const selectedMainSites = splitSelection(exam.mainSite);
+      return {
+        id: exam.id,
+        name: exam.name,
+        exam_date: baghdadDateKey(exam.date),
+        full_mark: exam.fullMark,
+        course_ids: Array.from(
+          new Set(
+            parseCourseIds(exam.courseIds).filter((courseId) =>
+              healthyCourseIds.has(courseId),
+            ),
+          ),
+        ),
+        main_sites: Array.from(
+          new Set(
+            selectedMainSites.map(normalizeExamSiteValue).filter(Boolean),
+          ),
+        ),
+        all_sites: isAllMainSitesSelection(selectedMainSites),
+      };
+    }),
+  );
 
-  const leaveWhere: Prisma.StudentLeaveWhereInput = {
-    OR: [
-      { examId: { in: examIds } },
-      ...(minExamDate && maxExamDate
-        ? [
-            {
-              leaveType: 'period',
-              dateFrom: { lte: dayAfter(maxExamDate) },
-              dateTo: { gte: minExamDate },
-            },
-          ]
-        : []),
-    ],
+  const rows = await tx.$queryRaw<
+    Array<{
+      id: string;
+      name: string;
+      exam_date: Date | string;
+      missing_count: bigint | number | string;
+    }>
+  >(Prisma.sql`
+    WITH "examPolicy" AS (
+      SELECT *
+      FROM jsonb_to_recordset(${examPolicyJson}::jsonb) AS policy(
+        id text,
+        name text,
+        exam_date date,
+        full_mark integer,
+        course_ids jsonb,
+        main_sites jsonb,
+        all_sites boolean
+      )
+    ),
+    "eligibleStudents" AS (
+      SELECT
+        policy.id AS "examId",
+        policy.name AS "examName",
+        policy.exam_date AS "examDate",
+        policy.full_mark AS "fullMark",
+        student.id AS "studentId"
+      FROM "examPolicy" policy
+      CROSS JOIN LATERAL jsonb_array_elements_text(policy.course_ids) course_id(value)
+      JOIN "Student" student
+        ON student."courseId" = course_id.value
+       AND student.status = 'نشط'
+      CROSS JOIN LATERAL (
+        SELECT
+          ((student."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Baghdad')::date AS registration_date,
+          CASE
+            WHEN LEAST(30, GREATEST(0, student."accountingGraceDays")) > 0
+              THEN COALESCE(
+                ((student."gracePeriodStartDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Baghdad')::date,
+                ((student."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Baghdad')::date
+              )
+            ELSE ((student."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Baghdad')::date
+          END AS grace_start,
+          CASE
+            WHEN LEAST(30, GREATEST(0, student."accountingGraceDays")) > 0
+              THEN LEAST(30, GREATEST(0, student."accountingGraceDays"))
+            ELSE 3
+          END AS grace_days
+      ) grace
+      WHERE policy.exam_date >= grace.registration_date
+        AND NOT (
+          policy.exam_date >= grace.grace_start
+          AND policy.exam_date < grace.grace_start + grace.grace_days
+        )
+        AND (
+          policy.all_sites
+          OR EXISTS (
+            SELECT 1
+            FROM (
+              SELECT CASE
+                WHEN site.raw_value = '' THEN ''
+                WHEN site.raw_value IN ('اونلاين', 'إونلاين', 'الكتروني', 'إلكتروني') THEN 'أونلاين'
+                WHEN site.raw_value LIKE 'خارج القطر%' THEN 'خارج القطر'
+                WHEN site.raw_value = 'اربيل' THEN 'أربيل'
+                WHEN site.raw_value = 'الانبار' THEN 'الأنبار'
+                WHEN site.raw_value = 'البصره' THEN 'البصرة'
+                WHEN site.raw_value IN ('الديوانيه', 'القادسية') THEN 'الديوانية'
+                WHEN site.raw_value = 'ذي قار' THEN 'الناصرية'
+                ELSE site.raw_value
+              END AS normalized_value
+              FROM (
+                SELECT regexp_replace(
+                  trim(COALESCE(value.raw_value, '')),
+                  '[[:space:]]+',
+                  ' ',
+                  'g'
+                ) AS raw_value
+                FROM (VALUES
+                  (student."mainSite"),
+                  (student."subSite"),
+                  (student."locationScope")
+                ) value(raw_value)
+              ) site
+            ) student_site
+            JOIN jsonb_array_elements_text(policy.main_sites) selected_site(value)
+              ON selected_site.value = student_site.normalized_value
+          )
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "StudentLeave" leave_record
+          WHERE leave_record."studentId" = student.id
+            AND (
+              (
+                COALESCE(leave_record."leaveType", 'exam') <> 'period'
+                AND leave_record."examId" = policy.id
+              )
+              OR (
+                leave_record."leaveType" = 'period'
+                AND policy.exam_date BETWEEN
+                  ((COALESCE(leave_record."dateFrom", leave_record.date) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Baghdad')::date
+                  AND ((COALESCE(leave_record."dateTo", leave_record."dateFrom", leave_record.date) AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Baghdad')::date
+              )
+            )
+        )
+    )
+    SELECT
+      eligible."examId" AS id,
+      eligible."examName" AS name,
+      eligible."examDate" AS exam_date,
+      COUNT(*)::bigint AS missing_count
+    FROM "eligibleStudents" eligible
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM "Grade" grade
+      WHERE grade."examId" = eligible."examId"
+        AND grade."studentId" = eligible."studentId"
+        AND (
+          grade.status IN (
+            'غائب',
+            'غش',
+            'مجاز',
+            'ضمن فترة السماح',
+            'قبل تسجيل الطالب'
+          )
+          OR (
+            grade.status = 'درجة'
+            AND grade.score IS NOT NULL
+            AND grade.score >= 0
+            AND grade.score <= eligible."fullMark"
+          )
+        )
+      )
+    GROUP BY eligible."examId", eligible."examName", eligible."examDate"
+    ORDER BY eligible."examDate" DESC, eligible."examId" ASC
+  `);
+
+  const normalizedRows = rows
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      count: Number(row.missing_count || 0),
+    }))
+    .filter((row) => row.count > 0);
+  return {
+    examsWithMissingGrades: normalizedRows.length,
+    missingGradesTotal: normalizedRows.reduce(
+      (total, row) => total + row.count,
+      0,
+    ),
+    sample: normalizedRows
+      .slice(0, 3)
+      .map((row) => `${row.name} (${row.count})`),
+    firstExamId: normalizedRows[0]?.id || "",
   };
+}
 
-  const [students, grades, leaves] = await Promise.all([
-    db.student.findMany({
+async function countDismissedStudentsNeedingCurrentPledge(
+  tx: StatsClient,
+): Promise<number> {
+  const dismissedStudents = await tx.student.findMany({
+    where: { status: "مفصول" },
+    select: {
+      id: true,
+      status: true,
+      dismissalType: true,
+      dismissalReason: true,
+      createdAt: true,
+    },
+  });
+  if (dismissedStudents.length === 0) return 0;
+
+  const studentIds = dismissedStudents.map((student) => student.id);
+  const [pledgeNotes, dismissalLogs, dismissalActionNotes] = await Promise.all([
+    tx.studentNote.findMany({
       where: {
-        status: 'نشط',
-        courseId: { in: courseIds },
+        studentId: { in: studentIds },
+        kind: PLEDGE_NOTE_KIND,
+      },
+      select: {
+        studentId: true,
+        text: true,
+        date: true,
+        dismissalKey: true,
+        sourceType: true,
+        sourceId: true,
+        dismissalType: true,
+        dismissalReason: true,
+        dismissalDate: true,
+      },
+    }),
+    tx.opportunityLog.findMany({
+      where: {
+        studentId: { in: studentIds },
+        OR: [
+          { action: "فصل تلقائي" },
+          { action: "خصم", reason: { startsWith: "فصل الطالب" } },
+        ],
       },
       select: {
         id: true,
-        courseId: true,
-        mainSite: true,
-        subSite: true,
-        locationScope: true,
-        createdAt: true,
-      },
-    }),
-    db.grade.findMany({
-      where: { examId: { in: examIds } },
-      select: {
-        examId: true,
         studentId: true,
-        status: true,
-        score: true,
-      },
-    }),
-    withFollowupTables(() => db.studentLeave.findMany({
-      where: leaveWhere,
-      select: {
-        studentId: true,
-        examId: true,
-        leaveType: true,
+        action: true,
+        reason: true,
         date: true,
-        dateFrom: true,
-        dateTo: true,
       },
-    }), 'StudentLeave'),
+      orderBy: [{ date: "desc" }, { id: "desc" }],
+    }),
+    tx.studentNote.findMany({
+      where: {
+        studentId: { in: studentIds },
+        kind: "إجراء",
+        text: { startsWith: "فصل الطالب" },
+      },
+      select: {
+        id: true,
+        studentId: true,
+        kind: true,
+        text: true,
+        date: true,
+      },
+      orderBy: [{ date: "desc" }, { id: "desc" }],
+    }),
   ]);
 
-  const studentsByCourse = new Map<string, StudentAlertRow[]>();
-  students.forEach((student) => {
-    if (!activeChapterCourseIds.has(student.courseId)) return;
-    const current = studentsByCourse.get(student.courseId) || [];
-    current.push(student);
-    studentsByCourse.set(student.courseId, current);
-  });
-
-  const gradesByExam = new Map<string, Map<string, GradeAlertRow>>();
-  grades.forEach((grade) => {
-    const examGrades = gradesByExam.get(grade.examId) || new Map<string, GradeAlertRow>();
-    examGrades.set(grade.studentId, grade);
-    gradesByExam.set(grade.examId, examGrades);
-  });
-
-  const leavesByStudent = new Map<string, LeaveAlertRow[]>();
-  leaves.forEach((leave) => {
-    const current = leavesByStudent.get(leave.studentId) || [];
-    current.push(leave);
-    leavesByStudent.set(leave.studentId, current);
-  });
-
-  let examsWithMissingGrades = 0;
-  let missingGradesTotal = 0;
-  const sample: string[] = [];
-
-  for (const exam of exams) {
-    const selectedCourseIds = parseCourseIds(exam.courseIds).filter((courseId) => activeChapterCourseIds.has(courseId));
-    if (selectedCourseIds.length === 0) continue;
-    const selectedMainSites = splitSelection(exam.mainSite);
-    const examGrades = gradesByExam.get(exam.id) || new Map<string, GradeAlertRow>();
-    const eligibleStudents = selectedCourseIds
-      .flatMap((courseId) => studentsByCourse.get(courseId) || [])
-      .filter((student) => isExamOnOrAfterStudentRegistration(student, exam))
-      .filter((student) => studentMatchesExamMainSites(student, selectedMainSites));
-
-    let missingForExam = 0;
-    for (const student of eligibleStudents) {
-      const studentLeaves = leavesByStudent.get(student.id) || [];
-      if (studentLeaves.length > 0 && hasLeaveForExam(student.id, exam, studentLeaves)) continue;
-      if (!isGradeEntered(examGrades.get(student.id), exam)) missingForExam += 1;
-    }
-
-    if (missingForExam > 0) {
-      examsWithMissingGrades += 1;
-      missingGradesTotal += missingForExam;
-      if (sample.length < 3) sample.push(`${exam.name} (${missingForExam})`);
-    }
+  const notesByStudent = new Map<string, typeof pledgeNotes>();
+  for (const note of pledgeNotes) {
+    const notes = notesByStudent.get(note.studentId) || [];
+    notes.push(note);
+    notesByStudent.set(note.studentId, notes);
+  }
+  const logsByStudent = new Map<string, typeof dismissalLogs>();
+  for (const log of dismissalLogs) {
+    const logs = logsByStudent.get(log.studentId) || [];
+    logs.push(log);
+    logsByStudent.set(log.studentId, logs);
+  }
+  const actionsByStudent = new Map<string, typeof dismissalActionNotes>();
+  for (const note of dismissalActionNotes) {
+    const notes = actionsByStudent.get(note.studentId) || [];
+    notes.push(note);
+    actionsByStudent.set(note.studentId, notes);
   }
 
-  return { examsWithMissingGrades, missingGradesTotal, sample };
+  let pending = 0;
+  for (const student of dismissedStudents) {
+    const current = buildCurrentDismissalInfo(
+      student,
+      logsByStudent.get(student.id) || [],
+      actionsByStudent.get(student.id) || [],
+    );
+    if (!current) continue;
+    const hasCurrentPledge = (notesByStudent.get(student.id) || []).some(
+      (note) => pledgeMatchesCurrentDismissal(note, current),
+    );
+    if (!hasCurrentPledge) pending += 1;
+  }
+  return pending;
+}
+
+async function readRecentDashboardLogs(
+  tx: StatsClient,
+  canViewLogs: boolean,
+) {
+  if (!canViewLogs) return [];
+  const logs = await tx.auditLog.findMany({
+    orderBy: [{ time: "desc" }, { id: "desc" }],
+    take: 6,
+    select: {
+      id: true,
+      module: true,
+      action: true,
+      details: true,
+      userName: true,
+      time: true,
+    },
+  });
+
+  const studentIds = new Set<string>();
+  const examIds = new Set<string>();
+  for (const log of logs) {
+    const ids = extractAuditEntityIds(log.details);
+    ids.studentIds.forEach((id) => studentIds.add(id));
+    ids.examIds.forEach((id) => examIds.add(id));
+  }
+
+  const [students, exams] = await Promise.all([
+    studentIds.size
+      ? tx.student.findMany({
+          where: { id: { in: Array.from(studentIds) } },
+          select: { id: true, name: true, code: true },
+        })
+      : Promise.resolve([]),
+    examIds.size
+      ? tx.exam.findMany({
+          where: { id: { in: Array.from(examIds) } },
+          select: { id: true, name: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const labels: AuditLogEntityLabels = {
+    students: Object.fromEntries(
+      students.map((student) => [
+        student.id,
+        student.code ? `${student.name} (${student.code})` : student.name,
+      ]),
+    ),
+    exams: Object.fromEntries(exams.map((exam) => [exam.id, exam.name])),
+  };
+  return logs.map((log) => sanitizeDashboardAuditLog(log, labels));
 }
 
 /**
- * Dashboard statistics endpoint.
- *
- * Every number returned here is calculated from the database at request time.
- * The dashboard intentionally does not fall back to client-side cached arrays,
- * because cached/paginated data can make الإدارة ترى أرقاماً ناقصة ومطمئنة.
+ * All dashboard numbers are read from one repeatable-read snapshot. This keeps
+ * related cards and alerts mutually consistent without locking or mutating any
+ * production rows.
  */
 export async function GET(req: NextRequest) {
-  const authError = await requireAuth(req);
-  if (authError) return authError;
+  const principalOrError = await requirePermissionPrincipal(req, "system.dashboard");
+  if (principalOrError instanceof NextResponse) return principalOrError;
+  const canViewLogs = hasPermission(principalOrError, "logs.view");
 
   try {
-    // A dashboard request fans out into many concurrent reads. Repair the
-    // compatibility schema first so one missing column cannot reject the
-    // entire Promise.all batch with an opaque 500 response.
-    await ensureExamSchema();
-    await ensureFollowupTables();
-    await ensureGradeEntryMissingNoteSchema();
+    const snapshot = await db.$transaction(
+      async (tx) => {
+        const now = new Date();
+        const today = getTodayBaghdadRange(now);
 
-    const today = getTodayBaghdadRange();
+        const activeChapterLinks = await tx.courseChapter.findMany({
+          where: { active: true, archived: false },
+          select: {
+            courseId: true,
+            chapter: { select: { opportunities: true } },
+          },
+        });
+        const chapterHealth = getActiveChapterHealth(activeChapterLinks);
+        const activeStudentGroups = await tx.student.groupBy({
+          by: ["courseId"],
+          where: { status: "نشط" },
+          _count: { _all: true },
+        });
+        const activeCount = activeStudentGroups.reduce(
+          (sum, group) => sum + group._count._all,
+          0,
+        );
+        const studentsWithoutActiveChapterCount = activeStudentGroups.reduce(
+          (sum, group) =>
+            sum +
+            (chapterHealth.activeLinkCountByCourse.has(group.courseId)
+              ? 0
+              : group._count._all),
+          0,
+        );
+        const studentsWithChapterConflictCount = activeStudentGroups.reduce(
+          (sum, group) =>
+            sum +
+            (chapterHealth.conflictCourseIds.has(group.courseId)
+              ? group._count._all
+              : 0),
+          0,
+        );
 
-    const activeChapterLinks = (await db.courseChapter.findMany({
-      where: { active: true, archived: false },
-      select: { courseId: true },
-    })) as Array<{ courseId: string }>;
-    const activeChapterCourseIds = new Set<string>(activeChapterLinks.map((link) => link.courseId));
+        const positiveOpportunityCourseIds = new Set(
+          activeChapterLinks
+            .filter(
+              (link) =>
+                chapterHealth.healthyCourseIds.has(link.courseId) &&
+                link.chapter.opportunities > 0,
+            )
+            .map((link) => link.courseId),
+        );
 
-    const activeStudentWhere = { status: 'نشط' as const };
-    const studentsWithoutActiveChapterWhere: Prisma.StudentWhereInput = activeChapterCourseIds.size > 0
-      ? { status: 'نشط', courseId: { notIn: Array.from(activeChapterCourseIds) } }
-      : activeStudentWhere;
+        const [
+          dismissedCount,
+          totalCount,
+          pendingSheetsCount,
+          missingNotesCount,
+          zeroOpportunityActiveCount,
+          todaysLeavesCount,
+          dismissedNeedsPledgeCount,
+          recentLogs,
+          missingGradesSummary,
+        ] = await Promise.all([
+          tx.student.count({ where: { status: "مفصول" } }),
+          tx.student.count(),
+          countPendingCorrectionItems(tx),
+          tx.gradeEntryMissingNote.count(),
+          positiveOpportunityCourseIds.size
+            ? tx.student.count({
+                where: {
+                  status: "نشط",
+                  opportunities: 0,
+                  courseId: { in: Array.from(positiveOpportunityCourseIds) },
+                },
+              })
+            : Promise.resolve(0),
+          tx.studentLeave.count({
+            where: {
+              OR: [
+                {
+                  leaveType: "exam",
+                  date: { gte: today.start, lt: today.end },
+                },
+                {
+                  leaveType: "period",
+                  dateFrom: { lte: today.start },
+                  dateTo: { gte: today.start },
+                },
+              ],
+            },
+          }),
+          countDismissedStudentsNeedingCurrentPledge(tx),
+          readRecentDashboardLogs(tx, canViewLogs),
+          countActiveExamsWithMissingGrades(
+            tx,
+            chapterHealth.healthyCourseIds,
+            now,
+          ),
+        ]);
 
-    const [
-      activeCount,
-      dismissedCount,
-      totalCount,
-      pendingSheetsCount,
-      missingNotesCount,
-      zeroOpportunityActiveCount,
-      studentsWithoutActiveChapterCount,
-      todaysLeavesCount,
-      dismissedStudents,
-      pledgeNotes,
-      recentLogs,
-      missingGradesSummary,
-    ] = await Promise.all([
-      db.student.count({ where: activeStudentWhere }),
-      db.student.count({ where: { status: 'مفصول' } }),
-      db.student.count(),
-      db.correctionSheet.count({ where: { NOT: { status: 'مكتمل' } } }),
-      withGradeEntryMissingNoteSchema(() => db.gradeEntryMissingNote.count()),
-      db.student.count({ where: { status: 'نشط', opportunities: 0 } }),
-      db.student.count({ where: studentsWithoutActiveChapterWhere }),
-      withFollowupTables(() => db.studentLeave.count({
-        where: {
-          OR: [
-            { leaveType: 'exam', date: { gte: today.start, lt: today.end } },
-            { leaveType: 'period', dateFrom: { lte: today.start }, dateTo: { gte: today.start } },
-          ],
-        },
-      }), 'StudentLeave'),
-      db.student.findMany({
-        where: { status: 'مفصول' },
-        select: { id: true },
-      }),
-      withFollowupTables(() => db.studentNote.findMany({
-        where: { kind: PLEDGE_NOTE_KIND },
-        select: { studentId: true },
-      }), 'StudentNote'),
-      db.auditLog.findMany({
-        orderBy: { time: 'desc' },
-        take: 6,
-      }),
-      countActiveExamsWithMissingGrades(activeChapterCourseIds),
-    ]);
+        const allAlerts: DashboardAlert[] = [
+          {
+            id: "exams-missing-grades",
+            title: "امتحانات عليها طلاب بلا درجات",
+            description: `يوجد ${missingGradesSummary.missingGradesTotal} طالباً نشطاً مستحقاً للإدخال ولم تُسجل له درجة أو حالة معتمدة. لا يشمل العدد المجازين أو طلاب السماح أو من يسبق الامتحان تسجيلهم.`,
+            count: missingGradesSummary.examsWithMissingGrades,
+            tone: "danger",
+            actionSection: "grade-entry",
+            actionLabel: "فتح تسجيل الدرجات",
+            actionQuery: {
+              ...(missingGradesSummary.firstExamId
+                ? { examId: missingGradesSummary.firstExamId }
+                : {}),
+              filterStatus: "غير مسجل",
+            },
+            sample: missingGradesSummary.sample,
+          },
+          {
+            id: "students-without-active-chapter",
+            title: "طلاب بدون فصل نشط",
+            description:
+              "هؤلاء الطلاب في دورات لا تملك فصلاً نشطاً، لذلك لا يمكن تطبيق قواعد الامتحان والفرص عليهم بصورة صحيحة.",
+            count: studentsWithoutActiveChapterCount,
+            tone: "warning",
+            actionSection: "student-registry",
+            actionLabel: "مراجعة سجل الطلاب",
+            actionQuery: { registryIssue: "no-active-chapter" },
+          },
+          {
+            id: "students-with-active-chapter-conflict",
+            title: "طلاب ضمن دورات لها أكثر من فصل نشط",
+            description:
+              "هذه الدورات مرتبطة بأكثر من فصل نشط في الوقت نفسه، لذلك يجب حسم الفصل المعتمد قبل أي محاسبة جديدة.",
+            count: studentsWithChapterConflictCount,
+            tone: "danger",
+            actionSection: "student-registry",
+            actionLabel: "مراجعة التعارض",
+            actionQuery: { registryIssue: "active-chapter-conflict" },
+          },
+          {
+            id: "today-leaves",
+            title: "إجازات اليوم",
+            description: `إجازات مطابقة لتاريخ اليوم ${today.key} بتوقيت بغداد، وتشمل إجازات اليوم والإجازات الممتدة.`,
+            count: todaysLeavesCount,
+            tone: "info",
+            actionSection: "follow-up-leaves",
+            actionLabel: "فتح الإجازات",
+            actionQuery: { dashboardDate: today.key },
+          },
+          {
+            id: "active-zero-opportunities",
+            title: "طلاب نشطون بفرص صفر",
+            description:
+              "طلاب نشطون رصيدهم صفر ضمن فصول سقف فرصها أكبر من صفر، وهذا يحتاج مراجعة قبل أي خصم جديد.",
+            count: zeroOpportunityActiveCount,
+            tone: "danger",
+            actionSection: "opportunities",
+            actionLabel: "فتح إدارة الفرص",
+            actionQuery: { status: "no-opportunities" },
+          },
+          {
+            id: "dismissed-needs-pledge",
+            title: "طلاب مفصولون يحتاجون تعهد",
+            description:
+              "طلاب مفصولون لا يوجد لهم تعهد مرتبط بحالة الفصل الحالية. التعهدات التاريخية لفصل سابق لا تدخل في العدد.",
+            count: dismissedNeedsPledgeCount,
+            tone: "warning",
+            actionSection: "follow-up-pledges",
+            actionLabel: "فتح التعهدات",
+            actionQuery: { statusFilter: "pending" },
+          },
+        ];
 
-    const pledgedStudentIds = new Set(pledgeNotes.map((note) => note.studentId));
-    const dismissedNeedsPledgeCount = dismissedStudents.filter((student) => !pledgedStudentIds.has(student.id)).length;
-
-    const allAlerts: DashboardAlert[] = [
-      {
-        id: 'exams-missing-grades',
-        title: 'امتحانات عليها طلاب بلا درجات',
-        description: `يوجد ${missingGradesSummary.missingGradesTotal} طالباً نشطاً ضمن امتحانات مفعلة ولم تُسجل لهم درجة أو غياب أو غش أو إجازة.`,
-        count: missingGradesSummary.examsWithMissingGrades,
-        tone: 'danger',
-        actionSection: 'grade-entry',
-        actionLabel: 'فتح تسجيل الدرجات',
-        sample: missingGradesSummary.sample,
+        return {
+          activeStudents: activeCount,
+          dismissedStudents: dismissedCount,
+          totalStudents: totalCount,
+          pendingCorrectionSheets: pendingSheetsCount,
+          missingStudentsNotes: missingNotesCount,
+          alerts: allAlerts.filter((alert) => alert.count > 0),
+          recentLogs,
+          canViewLogs,
+          source: "database" as const,
+          generatedAt: now.toISOString(),
+        };
       },
       {
-        id: 'students-without-active-chapter',
-        title: 'طلاب بدون فصل نشط',
-        description: 'هؤلاء الطلاب في دورات لا تملك أي فصل نشط، لذلك قد لا تدخل قواعد الامتحان والفرص عليهم بشكل صحيح.',
-        count: studentsWithoutActiveChapterCount,
-        tone: 'warning',
-        actionSection: 'student-registry',
-        actionLabel: 'مراجعة سجل الطلاب',
+        isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+        maxWait: 10_000,
+        timeout: 55_000,
       },
-      {
-        id: 'today-leaves',
-        title: 'إجازات اليوم',
-        description: `إجازات مطابقة لتاريخ اليوم ${today.key} بتوقيت بغداد، وتشمل إجازات اليوم والإجازات الممتدة.`,
-        count: todaysLeavesCount,
-        tone: 'info',
-        actionSection: 'follow-up-leaves',
-        actionLabel: 'فتح الإجازات',
-      },
-      {
-        id: 'active-zero-opportunities',
-        title: 'طلاب نشطون بفرص صفر',
-        description: 'طلاب حالتهم نشط لكن عدد الفرص لديهم صفر، وهذا يحتاج مراجعة قبل أي خصم أو فصل تلقائي جديد.',
-        count: zeroOpportunityActiveCount,
-        tone: 'danger',
-        actionSection: 'opportunities',
-        actionLabel: 'فتح إدارة الفرص',
-      },
-      {
-        id: 'dismissed-needs-pledge',
-        title: 'طلاب مفصولون يحتاجون تعهد',
-        description: 'طلاب مفصولون لا يوجد لهم تعهد ولي أمر محفوظ في بيانات النظام.',
-        count: dismissedNeedsPledgeCount,
-        tone: 'warning',
-        actionSection: 'follow-up-pledges',
-        actionLabel: 'فتح التعهدات',
-      },
-    ];
-    const alerts = allAlerts.filter((alert) => alert.count > 0);
+    );
 
-    return NextResponse.json({
-      activeStudents: activeCount,
-      dismissedStudents: dismissedCount,
-      totalStudents: totalCount,
-      pendingCorrectionSheets: pendingSheetsCount,
-      missingStudentsNotes: missingNotesCount,
-      alerts,
-      recentLogs,
-      source: 'database' as const,
-      generatedAt: new Date().toISOString(),
+    return NextResponse.json(snapshot, {
+      headers: { "Cache-Control": "private, no-store, max-age=0" },
     });
   } catch (error) {
-    const err = error as { code?: string; message?: string; meta?: unknown };
-    console.error('[API] /api/stats error:', JSON.stringify({
-      code: err?.code,
-      message: err?.message,
-      meta: err?.meta,
-      stack: (error as Error)?.stack?.split('\n').slice(0, 8),
-    }));
-    return NextResponse.json(
-      {
-        error: 'تعذر تحميل الإحصائيات والتنبيهات من بيانات النظام حالياً.',
-        code: err?.code,
-        detail: err?.message,
-        meta: err?.meta,
-      },
-      { status: 500 },
+    if (isMissingDatabaseObjectError(error)) {
+      return databaseMigrationRequiredResponse(
+        "بيانات لوحة النظام غير جاهزة بعد وتحتاج تحديث مخطط البيانات بواسطة مسؤول النظام. لم تتغير أي بيانات.",
+      );
+    }
+    return routeErrorResponse(
+      error,
+      "تعذر تحميل إحصائيات لوحة النظام حالياً. لم تتغير أي بيانات.",
     );
   }
 }

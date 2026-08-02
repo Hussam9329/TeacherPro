@@ -21,6 +21,7 @@ import {
 } from "@/hooks/use-teacherpro-sync";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import { formatAuditLogDisplay } from "@/lib/audit-log-display";
+import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 
 type DashboardAlert = {
   id: string;
@@ -30,6 +31,7 @@ type DashboardAlert = {
   tone: "danger" | "warning" | "info" | "success";
   actionSection: SectionId;
   actionLabel: string;
+  actionQuery?: Record<string, string>;
   sample?: string[];
 };
 
@@ -48,6 +50,18 @@ type DashboardStats = {
     user?: string | null;
     userName?: string | null;
     time: string;
+    summary?: string | null;
+    actionLabel?: string | null;
+    moduleLabel?: string | null;
+    display?: {
+      summary?: string | null;
+      actionLabel?: string | null;
+      moduleLabel?: string | null;
+    } | null;
+    entityLabels?: {
+      students?: Record<string, string>;
+      exams?: Record<string, string>;
+    };
   }>;
   source: "database";
   generatedAt: string;
@@ -67,6 +81,66 @@ const alertBadgeClass: Record<DashboardAlert["tone"], string> = {
   success: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
 };
 
+const dashboardActionQueryKeys = [
+  "dashboardAlert",
+  "examId",
+  "filterStatus",
+  "registryIssue",
+  "dashboardDate",
+  "status",
+  "opportunityCount",
+  "statusFilter",
+] as const;
+
+const alertFallbackQuery: Record<string, Record<string, string>> = {
+  "exams-missing-grades": { filterStatus: "غير مسجل" },
+  "students-without-active-chapter": {
+    registryIssue: "no-active-chapter",
+  },
+  "today-leaves": { dashboardDate: "today" },
+  "active-zero-opportunities": {
+    status: "no-opportunities",
+    opportunityCount: "0",
+  },
+  "dismissed-needs-pledge": { statusFilter: "pending" },
+};
+
+function baghdadDayKey(now = Date.now()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Baghdad",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(now));
+}
+
+function millisecondsUntilNextBaghdadDay(now = Date.now()) {
+  const baghdadOffset = 3 * 60 * 60 * 1000;
+  const shiftedNow = new Date(now + baghdadOffset);
+  const nextMidnight = Date.UTC(
+    shiftedNow.getUTCFullYear(),
+    shiftedNow.getUTCMonth(),
+    shiftedNow.getUTCDate() + 1,
+  );
+  return Math.max(1_000, nextMidnight - shiftedNow.getTime() + 1_000);
+}
+
+function humanizeAuditLabel(value: string | null | undefined, fallback: string) {
+  const normalized = String(value || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .trim();
+  return humanizeTeacherProText(normalized) || fallback;
+}
+
+function humanizeAuditSummary(value: string | null | undefined) {
+  const raw = String(value || "").trim();
+  if (!raw || raw.startsWith("{") || raw.startsWith("[")) {
+    return "تم تنفيذ العملية بدون تفاصيل إضافية قابلة للعرض.";
+  }
+  return humanizeTeacherProText(raw);
+}
+
 function formatStatsTime(value?: string) {
   if (!value) return "—";
   try {
@@ -74,6 +148,7 @@ function formatStatsTime(value?: string) {
       dateStyle: "medium",
       timeStyle: "short",
       timeZone: "Asia/Baghdad",
+      numberingSystem: "latn",
     }).format(new Date(value));
   } catch {
     return value;
@@ -81,7 +156,7 @@ function formatStatsTime(value?: string) {
 }
 
 export function DashboardView() {
-  const { setSection } = useTeacherStore();
+  const { setSection, canAccess } = useTeacherStore();
   const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams", "correction"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const beginStatsRequest = useLatestRequest();
@@ -89,13 +164,19 @@ export function DashboardView() {
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [statsRefreshing, setStatsRefreshing] = useState(false);
   const [statsError, setStatsError] = useState("");
 
   const loadStats = useCallback(
     async (options: { background?: boolean } = {}) => {
       const request = beginStatsRequest();
       const background = Boolean(options.background || statsLoadedRef.current);
-      if (!background) setStatsLoading(true);
+      if (background) {
+        setStatsRefreshing(true);
+      } else {
+        setStatsLoading(true);
+        setStatsRefreshing(false);
+      }
       setStatsError("");
       try {
         const res = await fetch("/api/stats", {
@@ -119,7 +200,10 @@ export function DashboardView() {
         );
         if (!background) setStats(null);
       } finally {
-        if (request.isLatest()) setStatsLoading(false);
+        if (request.isLatest()) {
+          setStatsLoading(false);
+          setStatsRefreshing(false);
+        }
       }
     },
     [beginStatsRequest],
@@ -128,6 +212,67 @@ export function DashboardView() {
   useEffect(() => {
     void loadStats({ background: isBackgroundSync() });
   }, [isBackgroundSync, loadStats, syncKey]);
+
+  useEffect(() => {
+    let timer = 0;
+    let currentDay = baghdadDayKey();
+
+    const scheduleNextDayRefresh = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        currentDay = baghdadDayKey();
+        void loadStats({ background: true });
+        scheduleNextDayRefresh();
+      }, millisecondsUntilNextBaghdadDay());
+    };
+
+    const refreshAfterSuspension = () => {
+      if (document.visibilityState !== "visible") return;
+      const nextDay = baghdadDayKey();
+      if (nextDay === currentDay) return;
+      currentDay = nextDay;
+      void loadStats({ background: true });
+      scheduleNextDayRefresh();
+    };
+
+    scheduleNextDayRefresh();
+    document.addEventListener("visibilitychange", refreshAfterSuspension);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", refreshAfterSuspension);
+    };
+  }, [loadStats]);
+
+  const navigateFromDashboard = useCallback(
+    (
+      section: SectionId,
+      options: { alertId?: string; query?: Record<string, string> } = {},
+    ) => {
+      if (!canAccess(section)) return;
+      if (typeof window !== "undefined") {
+        const nextUrl = new URL(window.location.href);
+        for (const key of dashboardActionQueryKeys) {
+          nextUrl.searchParams.delete(key);
+        }
+        nextUrl.searchParams.set("section", section);
+        if (options.alertId) {
+          nextUrl.searchParams.set("dashboardAlert", options.alertId);
+        }
+        for (const [key, value] of Object.entries(options.query || {})) {
+          const cleanValue = String(value || "").trim();
+          if (cleanValue) nextUrl.searchParams.set(key, cleanValue);
+        }
+        nextUrl.hash = "";
+        window.history.pushState(
+          { section, source: "dashboard" },
+          "",
+          nextUrl.toString(),
+        );
+      }
+      React.startTransition(() => setSection(section));
+    },
+    [canAccess, setSection],
+  );
 
   const kpiCards = [
     {
@@ -162,15 +307,83 @@ export function DashboardView() {
 
   const recentLogs = stats?.recentLogs ?? [];
   const alerts = stats?.alerts ?? [];
+  const initialLoading = statsLoading && !stats;
+  const initialError = Boolean(statsError && !stats);
+  const staleData = Boolean(statsError && stats);
+  const dashboardState = initialLoading
+    ? "loading"
+    : initialError
+      ? "error"
+      : staleData
+        ? "stale"
+        : "ready";
 
   return (
-    <div className="section-stack tp-dashboard">
+    <div
+      className="section-stack tp-dashboard"
+      data-dashboard-state={dashboardState}
+      aria-busy={initialLoading || statsRefreshing}
+    >
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {initialLoading
+          ? "جارٍ تحميل بيانات لوحة النظام."
+          : statsRefreshing
+            ? "جارٍ تحديث بيانات لوحة النظام."
+            : statsError
+              ? statsError
+              : stats
+                ? `اكتمل تحديث لوحة النظام في ${formatStatsTime(stats.generatedAt)}.`
+                : ""}
+      </div>
+
+      {initialError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-2xl border border-destructive/35 bg-destructive/10 p-4 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <p className="font-black">تعذر تحميل لوحة النظام</p>
+            <p className="mt-1 leading-6">{statsError}</p>
+          </div>
+          <Button type="button" variant="outline" onClick={() => void loadStats()}>
+            إعادة المحاولة
+          </Button>
+        </div>
+      )}
+
+      {staleData && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-2xl border border-amber-300/70 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/35 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <p className="font-black">تعذر جلب التحديث الجديد</p>
+            <p className="mt-1 leading-6">
+              الأرقام المعروضة هي آخر نسخة ناجحة من {formatStatsTime(stats?.generatedAt)}، وليست تحديثاً حالياً.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadStats({ background: true })}
+          >
+            إعادة المحاولة
+          </Button>
+        </div>
+      )}
+
+      {!initialError && stats && (
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          {statsRefreshing ? "جارٍ تحديث الأرقام…" : `آخر تحديث: ${formatStatsTime(stats.generatedAt)}`}
+        </p>
+      )}
+
       <div className="tp-dashboard__kpis grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {kpiCards.map((card) => (
           <StatCard
             key={card.label}
             label={card.label}
-            value={statsLoading ? "…" : card.value ?? "—"}
+            value={initialLoading ? "…" : card.value ?? "—"}
             icon={card.icon}
             tone={card.tone}
             hint={card.hint}
@@ -178,10 +391,10 @@ export function DashboardView() {
         ))}
       </div>
 
-      <Card className="tp-dashboard__alerts overflow-hidden">
+      <Card className="tp-dashboard__alerts overflow-hidden" aria-labelledby="dashboard-alerts-title">
         <CardHeader className="pb-2">
           <div>
-            <CardTitle className="flex items-center gap-2 text-base">
+            <CardTitle id="dashboard-alerts-title" className="flex items-center gap-2 text-base">
               <AlertTriangle className="size-5 text-amber-500" />
               تنبيهات إدارية
             </CardTitle>
@@ -191,13 +404,14 @@ export function DashboardView() {
           </div>
         </CardHeader>
         <CardContent>
-          {statsLoading ? (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {initialLoading ? (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3" role="status">
+              <span className="sr-only">جارٍ تحميل التنبيهات الإدارية.</span>
               {Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="h-28 animate-pulse rounded-3xl border bg-muted/40" />
+                <div key={index} aria-hidden="true" className="h-28 animate-pulse rounded-3xl border bg-muted/40" />
               ))}
             </div>
-          ) : statsError ? (
+          ) : initialError ? (
             <EmptyState
               icon={AlertTriangle}
               title="تعذر عرض التنبيهات"
@@ -215,15 +429,15 @@ export function DashboardView() {
               description="لم ترجع بيانات النظام أي امتحانات ناقصة الدرجات، طلاب بلا فصل نشط، إجازات اليوم، فرص صفر، أو تعهدات معلقة."
             />
           ) : (
-            <div className="tp-dashboard__alert-grid grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <ul className="tp-dashboard__alert-grid grid list-none grid-cols-1 gap-4 p-0 lg:grid-cols-3">
               {alerts.map((alert) => (
-                <div key={alert.id} className={cn("tp-dashboard__alert-card rounded-2xl border p-4", alertToneClass[alert.tone])}>
+                <li key={alert.id} className={cn("tp-dashboard__alert-card rounded-2xl border p-4", alertToneClass[alert.tone])}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-black">{alert.title}</p>
                       <p className="mt-1 text-xs leading-6 opacity-80">{alert.description}</p>
                       {alert.sample && alert.sample.length > 0 && (
-                        <p className="mt-2 text-xs font-bold opacity-80">
+                        <p className="mt-2 break-words text-xs font-bold opacity-80">
                           أمثلة: {alert.sample.join("، ")}
                         </p>
                       )}
@@ -232,22 +446,33 @@ export function DashboardView() {
                       {alert.count}
                     </span>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="tp-dashboard__alert-action mt-4 bg-background/75"
-                    onClick={() => setSection(alert.actionSection)}
-                  >
-                    {alert.actionLabel}
-                  </Button>
-                </div>
+                  {canAccess(alert.actionSection) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="tp-dashboard__alert-action mt-4 bg-background/75"
+                      onClick={() =>
+                        navigateFromDashboard(alert.actionSection, {
+                          alertId: alert.id,
+                          query: {
+                            ...(alertFallbackQuery[alert.id] || {}),
+                            ...(alert.actionQuery || {}),
+                          },
+                        })
+                      }
+                    >
+                      {alert.actionLabel}
+                    </Button>
+                  )}
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </CardContent>
       </Card>
 
+      {canAccess("missing-students-notes") && (
       <Card className="tp-dashboard__missing overflow-hidden">
         <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
@@ -261,7 +486,11 @@ export function DashboardView() {
               </p>
             </div>
           </div>
-          <Button type="button" className="shrink-0" onClick={() => setSection("missing-students-notes")}>
+          <Button
+            type="button"
+            className="shrink-0"
+            onClick={() => navigateFromDashboard("missing-students-notes")}
+          >
             الطلاب غير الموجودين
             {(stats?.missingStudentsNotes ?? 0) > 0 && (
               <span className="mr-2 rounded-full bg-white/20 px-2 py-0.5 text-xs">
@@ -271,9 +500,11 @@ export function DashboardView() {
           </Button>
         </CardContent>
       </Card>
+      )}
 
+      {canAccess("logs") && (
       <Card className="tp-dashboard__activity">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardHeader className="flex flex-col items-stretch justify-between gap-3 pb-2 sm:flex-row sm:items-center">
           <div>
             <CardTitle className="text-base">آخر الفعاليات</CardTitle>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -283,45 +514,74 @@ export function DashboardView() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setSection("logs")}
+            className="w-full sm:w-auto"
+            onClick={() => navigateFromDashboard("logs")}
           >
             عرض السجلات
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="tp-dashboard__activity-list max-h-[28rem] space-y-3 overflow-y-auto px-1 py-1">
-            {statsLoading ? (
-              Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="h-20 animate-pulse rounded-3xl border bg-muted/40" />
-              ))
+          <div className="tp-dashboard__activity-list space-y-3 px-1 py-1 md:max-h-[28rem] md:overflow-y-auto">
+            {initialLoading ? (
+              <div role="status">
+                <span className="sr-only">جارٍ تحميل آخر الفعاليات.</span>
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} aria-hidden="true" className="mb-3 h-20 animate-pulse rounded-3xl border bg-muted/40" />
+                ))}
+              </div>
+            ) : initialError ? (
+              <EmptyState
+                icon={AlertTriangle}
+                title="تعذر تحميل آخر الفعاليات"
+                description="لم يتمكن النظام من التحقق من سجل الفعاليات. أعد تحميل لوحة النظام."
+                action={
+                  <Button type="button" variant="outline" onClick={() => void loadStats()}>
+                    إعادة المحاولة
+                  </Button>
+                }
+              />
             ) : recentLogs.length === 0 ? (
               <EmptyState
                 title="لا توجد فعاليات بعد"
                 description="سيظهر سجل العمليات هنا بمجرد إضافة أو تعديل البيانات."
               />
             ) : (
-              recentLogs.map((log) => {
-                const display = formatAuditLogDisplay(log);
+              <ol className="space-y-3" aria-label="آخر فعاليات النظام">
+              {recentLogs.map((log) => {
+                const fallbackDisplay = formatAuditLogDisplay(log, log.entityLabels);
+                const summary = humanizeAuditSummary(
+                  log.summary || log.display?.summary || fallbackDisplay.summary,
+                );
+                const actionLabel = humanizeAuditLabel(
+                  log.actionLabel || log.display?.actionLabel || log.action,
+                  "عملية في النظام",
+                );
+                const moduleLabel = humanizeAuditLabel(
+                  log.moduleLabel || log.display?.moduleLabel || log.module,
+                  "النظام",
+                );
                 return (
-                  <div
+                  <li
                     key={log.id}
                     className="tp-dashboard__activity-row list-row"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-bold">{log.action}</p>
+                        <p className="break-words text-sm font-bold">{actionLabel}</p>
                         <p className="text-xs text-muted-foreground">
-                          {log.userName || log.user || "—"} - {log.module} - {formatStatsTime(log.time)}
+                          {humanizeAuditLabel(log.userName || log.user, "النظام")} - {moduleLabel} -{" "}
+                          <time dateTime={log.time}>{formatStatsTime(log.time)}</time>
                         </p>
                       </div>
                       <span className="chip">نشاط</span>
                     </div>
                     <p className="mt-2 text-xs leading-6 text-muted-foreground">
-                      {display.summary}
+                      {summary}
                     </p>
-                  </div>
+                  </li>
                 );
-              })
+              })}
+              </ol>
             )}
           </div>
           {recentLogs.length > 0 && (
@@ -330,7 +590,7 @@ export function DashboardView() {
                 variant="outline"
                 size="sm"
                 className="min-w-56"
-                onClick={() => setSection("logs")}
+                onClick={() => navigateFromDashboard("logs")}
               >
                 عرض المزيد من السجلات
               </Button>
@@ -338,6 +598,7 @@ export function DashboardView() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

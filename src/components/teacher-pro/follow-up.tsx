@@ -518,6 +518,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [leaveSearch, setLeaveSearch] = useState("");
   const debouncedLeaveSearch = useDebouncedValue(leaveSearch, 180);
   const [leaveTypeFilter, setLeaveTypeFilter] = useState<"all" | LeaveMode>("all");
+  const [leaveDateFilter, setLeaveDateFilter] = useState("");
 
   useEffect(() => {
     if (view !== "leaves") return;
@@ -626,6 +627,26 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     useState<PledgeTypeFilter>("all");
   const [pledgeStatusFilter, setPledgeStatusFilter] =
     useState<PledgeStatusFilter>("all");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const section = params.get("section");
+    if (view === "leaves" && section === "follow-up-leaves") {
+      const requestedDate = String(params.get("dashboardDate") || "");
+      setLeaveDateFilter(
+        requestedDate === "today" || /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+          ? requestedDate
+          : "",
+      );
+    }
+    if (view === "pledges" && section === "follow-up-pledges") {
+      const status = String(params.get("statusFilter") || "");
+      if (["all", "pledged", "pending", "reactivated"].includes(status)) {
+        setPledgeStatusFilter(status as PledgeStatusFilter);
+      }
+    }
+  }, [view]);
 
   const [profileStudentId, setProfileStudentId] = useState("");
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
@@ -1520,6 +1541,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         const isPeriod = (leave.leaveType || "exam") === "period";
         if (leaveTypeFilter !== "all" && (isPeriod ? "period" : "exam") !== leaveTypeFilter)
           return false;
+        if (leaveDateFilter) {
+          const targetDate = leaveDateFilter === "today" ? baghdadTodayKey() : leaveDateFilter;
+          const matchesToday = isPeriod
+            ? dayKey(leave.dateFrom || leave.date) <= targetDate &&
+              dayKey(leave.dateTo || leave.dateFrom || leave.date) >= targetDate
+            : dayKey(leave.date) === targetDate;
+          if (!matchesToday) return false;
+        }
         if (!normalizedSearch) return true;
         return searchAny(normalizedSearch, [
           student?.name,
@@ -1542,6 +1571,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     debouncedLeaveSearch,
     leaveRowsFromDb,
     leaveTypeFilter,
+    leaveDateFilter,
     students,
     exams,
   ]);
@@ -1616,6 +1646,27 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <b className="text-2xl">{leaveStats.withNotes}</b>
           </div>
         </div>
+
+        {leaveDateFilter && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
+            <span className="font-bold">
+              النتائج مفلترة على إجازات {leaveDateFilter === "today" ? "اليوم" : formatAppDate(leaveDateFilter)} بتوقيت بغداد.
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setLeaveDateFilter("");
+                const nextUrl = new URL(window.location.href);
+                nextUrl.searchParams.delete("dashboardDate");
+                window.history.replaceState({}, "", nextUrl.toString());
+              }}
+            >
+              عرض كل الإجازات
+            </Button>
+          </div>
+        )}
 
         <div className="tp-filter-card tp-filter-grid grid-cols-1 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
           <div className="tp-filter-field tp-filter-search">
