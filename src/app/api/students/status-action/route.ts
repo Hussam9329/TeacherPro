@@ -9,11 +9,66 @@ import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-sna
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { validateDismissalType, STUDENT_STATUS_DISMISSED } from "@/lib/student-status-enums";
+import {
+  buildStudentMutationToken,
+  withStudentMutationToken,
+} from "@/lib/student-mutation-token";
 
 type RegistryStatusAction = "dismiss" | "reactivate" | "restore";
 
+type ActiveChapterSnapshot = {
+  id: string;
+  name: string;
+  opportunities: number;
+};
+
+type ActiveChapterResolution =
+  | { kind: "missing"; activeCount: 0 }
+  | { kind: "conflict"; activeCount: number }
+  | {
+      kind: "zero-limit";
+      activeCount: 1;
+      chapter: ActiveChapterSnapshot;
+      opportunities: 0;
+    }
+  | {
+      kind: "ready";
+      activeCount: 1;
+      chapter: ActiveChapterSnapshot;
+      opportunities: number;
+    };
+
 function cleanText(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function statusActionConflict(message: string, errorKind: string) {
+  return Object.assign(new Error(message), {
+    statusCode: 409 as const,
+    errorKind,
+  });
+}
+
+function assertExpectedStudentSnapshot(
+  student: Record<string, unknown>,
+  expectedStatus: string,
+  expectedMutationToken: string,
+) {
+  if (expectedStatus && cleanText(student.status) !== expectedStatus) {
+    throw statusActionConflict(
+      `تغيرت حالة الطالب من «${expectedStatus}» إلى «${cleanText(student.status) || "غير محددة"}» بعد فتح الإجراء. حدّث السجل وراجع الحالة الجديدة.`,
+      "stale-student-status",
+    );
+  }
+  if (
+    expectedMutationToken &&
+    buildStudentMutationToken(student) !== expectedMutationToken
+  ) {
+    throw statusActionConflict(
+      "تغيرت بيانات الطالب بعد فتح الإجراء. تم إيقاف التنفيذ قبل أي كتابة؛ حدّث السجل ثم أعد المحاولة.",
+      "stale-student-snapshot",
+    );
+  }
 }
 
 function prismaErrorResponse(error: unknown) {
@@ -34,15 +89,48 @@ function prismaErrorResponse(error: unknown) {
 async function getActiveChapterForCourse(
   tx: Prisma.TransactionClient,
   courseId: string,
-) {
+): Promise<ActiveChapterResolution> {
   const links = await tx.courseChapter.findMany({
     where: { courseId, active: true, archived: false },
     select: {
       chapter: { select: { id: true, name: true, opportunities: true } },
     },
   });
-  if (links.length !== 1) return null;
-  return links[0].chapter;
+
+  if (links.length === 0) {
+    return { kind: "missing", activeCount: 0 };
+  }
+  if (links.length > 1) {
+    return { kind: "conflict", activeCount: links.length };
+  }
+
+  const chapter = links[0].chapter;
+  const opportunities = Math.max(
+    0,
+    Math.trunc(Number(chapter.opportunities || 0)),
+  );
+  if (opportunities <= 0) {
+    return {
+      kind: "zero-limit",
+      activeCount: 1,
+      chapter,
+      opportunities: 0,
+    };
+  }
+  return {
+    kind: "ready",
+    activeCount: 1,
+    chapter,
+    opportunities,
+  };
+}
+
+function chapterFromResolution(
+  resolution: ActiveChapterResolution,
+): ActiveChapterSnapshot | null {
+  return resolution.kind === "ready" || resolution.kind === "zero-limit"
+    ? resolution.chapter
+    : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -53,6 +141,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const action = cleanText(body.action) as RegistryStatusAction;
   const studentId = cleanText(body.studentId || body.id);
+  const expectedStatus = cleanText(body.expectedStatus);
+  const expectedMutationToken = cleanText(body.expectedMutationToken);
 
   if (!studentId) {
     return NextResponse.json(
@@ -95,8 +185,16 @@ export async function POST(req: NextRequest) {
       const result = await withSerializableTransaction(async (tx) => {
         const student = await tx.student.findUnique({ where: { id: studentId } });
         if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
+        assertExpectedStudentSnapshot(
+          student as unknown as Record<string, unknown>,
+          expectedStatus,
+          expectedMutationToken,
+        );
         if (student.status === ARCHIVED_STUDENT_STATUS) {
-          throw Object.assign(new Error("archived student cannot be dismissed"), { statusCode: 409 });
+          throw statusActionConflict(
+            "لا يمكن فصل طالب مؤرشف. استعده أولاً ثم نفّذ إجراء الفصل.",
+            "archived-dismissal",
+          );
         }
 
         // Q79 FIX: Prevent dismissing an already-dismissed student.
@@ -105,9 +203,9 @@ export async function POST(req: NextRequest) {
         // notes, and could auto-promote "فصل مؤقت" to "فصل نهائي"
         // unintentionally if a "فرصة أخيرة بعد تعهد" log existed.
         if (student.status === STUDENT_STATUS_DISMISSED) {
-          throw Object.assign(
-            new Error("الطالب مفصول مسبقاً. لا يمكن تكرار إجراء الفصل. استخدم إعادة التفعيل أو الاستعادة حسب الحاجة."),
-            { statusCode: 409, code: "ALREADY_DISMISSED" },
+          throw statusActionConflict(
+            "الطالب مفصول مسبقاً. لا يمكن تكرار إجراء الفصل. استخدم إعادة التفعيل عند الحاجة.",
+            "already-dismissed",
           );
         }
 
@@ -123,7 +221,11 @@ export async function POST(req: NextRequest) {
             ? `عدم الالتزام بالتعهد السابق - ${reason}`
             : reason;
         const deductedOpportunities = Math.max(0, Math.trunc(Number(student.opportunities || 0)));
-        const activeChapter = await getActiveChapterForCourse(tx, student.courseId);
+        const activeChapterResolution = await getActiveChapterForCourse(
+          tx,
+          student.courseId,
+        );
+        const activeChapter = chapterFromResolution(activeChapterResolution);
 
         const updatedStudent = await tx.student.update({
           where: { id: studentId },
@@ -183,7 +285,9 @@ export async function POST(req: NextRequest) {
         ok: true,
         action,
         ...result,
-        student: studentWithOpportunity,
+        student: withStudentMutationToken(
+          studentWithOpportunity as unknown as Record<string, unknown>,
+        ),
         source: "database",
       });
     }
@@ -192,12 +296,47 @@ export async function POST(req: NextRequest) {
       const result = await withSerializableTransaction(async (tx) => {
         const student = await tx.student.findUnique({ where: { id: studentId } });
         if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
+        assertExpectedStudentSnapshot(
+          student as unknown as Record<string, unknown>,
+          expectedStatus,
+          expectedMutationToken,
+        );
         if (student.status !== ARCHIVED_STUDENT_STATUS) {
-          throw Object.assign(new Error("student is not archived"), { statusCode: 409 });
+          throw statusActionConflict(
+            "إجراء الاستعادة مخصص للطلاب المؤرشفين فقط. حدّث سجل الطالب ثم أعد المحاولة.",
+            "not-archived",
+          );
         }
 
-        const activeChapter = await getActiveChapterForCourse(tx, student.courseId);
-        const baseline = Math.max(0, Math.trunc(Number(activeChapter?.opportunities || 0)));
+        // The chapter state is authoritative only when read inside this same
+        // serializable transaction. Never restore at a guessed zero balance:
+        // the administrator must first resolve a missing, conflicting, or
+        // zero-limit active chapter.
+        const activeChapterResolution = await getActiveChapterForCourse(
+          tx,
+          student.courseId,
+        );
+        if (activeChapterResolution.kind === "missing") {
+          throw statusActionConflict(
+            "لا يمكن استعادة الطالب لأن دورته لا تحتوي على فصل نشط. فعّل فصلاً واحداً بفرص صالحة ثم أعد المحاولة.",
+            "missing-active-chapter",
+          );
+        }
+        if (activeChapterResolution.kind === "conflict") {
+          throw statusActionConflict(
+            `لا يمكن استعادة الطالب لأن دورته تحتوي على ${activeChapterResolution.activeCount} فصول نشطة متعارضة. أصلح التعارض واجعل فصلاً واحداً فقط نشطاً ثم أعد المحاولة.`,
+            "conflicting-active-chapters",
+          );
+        }
+        if (activeChapterResolution.kind === "zero-limit") {
+          throw statusActionConflict(
+            `لا يمكن استعادة الطالب لأن الفصل النشط «${activeChapterResolution.chapter.name}» سقف فرصه 0. عدّل فرص الفصل إلى قيمة صالحة ثم أعد المحاولة.`,
+            "zero-opportunity-limit",
+          );
+        }
+
+        const activeChapter = activeChapterResolution.chapter;
+        const baseline = activeChapterResolution.opportunities;
         await tx.student.update({
           where: { id: studentId },
           data: {
@@ -221,9 +360,7 @@ export async function POST(req: NextRequest) {
           data: {
             studentId,
             kind: "استعادة",
-            text: activeChapter
-              ? `استعادة الطالب من الأرشيف وإعادة احتساب ملفه حسب الفصل النشط: ${activeChapter.name}`
-              : "استعادة الطالب من الأرشيف بدون فصل نشط؛ بدأ برصيد 0 لحين تفعيل فصل",
+            text: `استعادة الطالب من الأرشيف وإعادة احتساب ملفه حسب الفصل النشط: ${activeChapter.name}`,
             sourceType: "student-archive-restore",
             sourceId: studentId,
           },
@@ -242,9 +379,15 @@ export async function POST(req: NextRequest) {
           studentNotes: [studentNote],
           opportunityLogs: academicRecalculation.automaticOpportunityLogs,
           academicRecalculation,
-          warning: activeChapter
-            ? null
-            : "لا يوجد فصل نشط للدورة؛ تمت الاستعادة برصيد 0.",
+          impact: {
+            previousStatus: ARCHIVED_STUDENT_STATUS,
+            nextStatus: updatedStudent.status,
+            activeChapterId: activeChapter.id,
+            activeChapterName: activeChapter.name,
+            restoredOpportunityLimit: baseline,
+            resultingOpportunities: updatedStudent.opportunities,
+            resultingBaseOpportunities: updatedStudent.baseOpportunities,
+          },
         };
       });
 
@@ -255,7 +398,9 @@ export async function POST(req: NextRequest) {
         ok: true,
         action,
         ...result,
-        student: studentWithOpportunity,
+        student: withStudentMutationToken(
+          studentWithOpportunity as unknown as Record<string, unknown>,
+        ),
         source: "database",
       });
     }
@@ -263,12 +408,36 @@ export async function POST(req: NextRequest) {
     const result = await withSerializableTransaction(async (tx) => {
       const student = await tx.student.findUnique({ where: { id: studentId } });
       if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
+      assertExpectedStudentSnapshot(
+        student as unknown as Record<string, unknown>,
+        expectedStatus,
+        expectedMutationToken,
+      );
       if (student.status === ARCHIVED_STUDENT_STATUS) {
-        throw Object.assign(new Error("archived student must be restored explicitly"), { statusCode: 409, errorKind: "archived-reactivation" });
+        throw statusActionConflict(
+          "الطالب مؤرشف. استخدم إجراء «استعادة من الأرشيف»؛ إعادة تفعيل المفصولين لا تستعيد المؤرشفين.",
+          "archived-reactivation",
+        );
+      }
+      if (student.status === "نشط") {
+        throw statusActionConflict(
+          "الطالب نشط حالياً ولا يحتاج إلى إعادة تفعيل. تم منع إنشاء سجل أو ملاحظة مكررة.",
+          "already-active",
+        );
+      }
+      if (student.status !== STUDENT_STATUS_DISMISSED) {
+        throw statusActionConflict(
+          `لا يمكن إعادة تفعيل الطالب لأن حالته الحالية «${student.status || "غير محددة"}» ليست حالة فصل معتمدة.`,
+          "invalid-reactivation-status",
+        );
       }
 
-      const shouldGrantFinalChance = student.status === "مفصول";
-      const activeChapter = await getActiveChapterForCourse(tx, student.courseId);
+      const shouldGrantFinalChance = true;
+      const activeChapterResolution = await getActiveChapterForCourse(
+        tx,
+        student.courseId,
+      );
+      const activeChapter = chapterFromResolution(activeChapterResolution);
       const previousReason = student.dismissalReason || student.dismissalType || "بدون سبب مسجل";
 
       const updatedStudent = await tx.student.update({
@@ -346,21 +515,24 @@ export async function POST(req: NextRequest) {
       ok: true,
       action,
       ...result,
-      student: studentWithOpportunity,
+      student: withStudentMutationToken(
+        studentWithOpportunity as unknown as Record<string, unknown>,
+      ),
       source: "database",
     });
   } catch (error) {
-    const err = error as { statusCode?: number; message?: string };
+    const err = error as {
+      statusCode?: number;
+      message?: string;
+      errorKind?: string;
+    };
     if (err.statusCode === 409) {
-      const errorKind = (error as { errorKind?: string }).errorKind;
       return NextResponse.json(
         {
           error:
-            errorKind === "archived-reactivation"
-              ? "الطالب مؤرشف. استخدم إجراء «استعادة من الأرشيف»؛ إعادة تفعيل المفصولين لا تستعيد المؤرشفين."
-              : action === "restore"
-                ? "إجراء الاستعادة مخصص للطلاب المؤرشفين فقط."
-                : "لا يمكن فصل طالب مؤرشف. استعده أولاً ثم نفّذ الإجراء المطلوب.",
+            cleanText(err.message) ||
+            "تغيرت حالة الطالب أو الفصل المرتبط به. حدّث الصفحة ثم أعد المحاولة.",
+          errorKind: err.errorKind || "status-conflict",
         },
         { status: 409 },
       );

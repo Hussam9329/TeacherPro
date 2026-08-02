@@ -24,7 +24,7 @@ import { normalizeListFilter } from "@/lib/all-filter";
 import {
   ARCHIVED_STUDENT_STATUS,
   buildStudentArchiveSummary,
-  getStudentDeleteImpact,
+  getStudentDeleteImpactInTransaction,
 } from "@/lib/student-delete-impact";
 import {
   validateStudentCourseChoices,
@@ -46,29 +46,12 @@ import {
 } from "@/lib/student-grace";
 import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
-import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
 import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
-
-function studentMutationToken(student: Record<string, unknown>): string {
-  const fields = [
-    "id", "name", "nameKey", "school", "gender", "phone", "phoneKey",
-    "parentPhone", "telegram", "telegramKey", "courseProgram", "courseTerm",
-    "studyType", "locationScope", "baghdadMode", "mainSite", "subSite",
-    "code", "status", "dismissalType", "dismissalReason", "dismissalNotes",
-    "createdAt", "opportunities", "baseOpportunities", "accountingGraceDays",
-    "gracePeriodStartDate", "courseId",
-  ];
-  return buildMutationPreviewToken(
-    `student-edit:${String(student.id || "")}`,
-    Object.fromEntries(fields.map((field) => [field, student[field]])),
-  );
-}
-
-function withStudentMutationToken<T extends Record<string, unknown>>(
-  student: T,
-): T & { mutationToken: string } {
-  return { ...student, mutationToken: studentMutationToken(student) };
-}
+import { buildStudentRegistryIssueWhere } from "@/lib/student-registry-issue-server";
+import {
+  buildStudentMutationToken,
+  withStudentMutationToken,
+} from "@/lib/student-mutation-token";
 
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -425,98 +408,6 @@ function buildStudentFilterWhere(
   return and;
 }
 
-async function buildRegistryIssueWhere(
-  searchParams: URLSearchParams,
-): Promise<Prisma.StudentWhereInput | null> {
-  const registryIssue = normalizeListFilter(searchParams.get("registryIssue"));
-  if (!registryIssue) return null;
-
-  if (registryIssue === "missing-contact") {
-    return {
-      OR: [
-        { phone: null },
-        { phone: "" },
-        { parentPhone: null },
-        { parentPhone: "" },
-      ],
-    };
-  }
-
-  if (registryIssue === "no-telegram") {
-    return {
-      OR: [{ telegram: null }, { telegram: "" }, { telegramKey: null }],
-    };
-  }
-
-  if (registryIssue === "zero-opportunities") {
-    return { status: "نشط", opportunities: 0 };
-  }
-
-  const activeLinks = await db.courseChapter.findMany({
-    where: { active: true, archived: false },
-    select: {
-      courseId: true,
-      chapter: { select: { opportunities: true } },
-    },
-  });
-  const grouped = new Map<string, typeof activeLinks>();
-  for (const link of activeLinks) {
-    const list = grouped.get(link.courseId) || [];
-    list.push(link);
-    grouped.set(link.courseId, list);
-  }
-
-  if (registryIssue === "active-chapter-conflict") {
-    const conflictCourseIds = Array.from(grouped.entries())
-      .filter(([, links]) => links.length > 1)
-      .map(([courseId]) => courseId);
-    return conflictCourseIds.length
-      ? { courseId: { in: conflictCourseIds } }
-      : { id: "__none__" };
-  }
-
-  if (registryIssue === "no-active-chapter") {
-    const allCourses = await db.course.findMany({ select: { id: true } });
-    const noActiveCourseIds = allCourses
-      .map((course) => course.id)
-      .filter((courseId) => {
-        const links = grouped.get(courseId) || [];
-        const cap =
-          links.length === 1 ? Number(links[0].chapter.opportunities || 0) : 0;
-        return links.length !== 1 || cap <= 0;
-      });
-    return noActiveCourseIds.length
-      ? { courseId: { in: noActiveCourseIds } }
-      : { id: "__none__" };
-  }
-
-  if (
-    registryIssue === "opportunity-full" ||
-    registryIssue === "opportunity-over-limit"
-  ) {
-    const courseCaps = Array.from(grouped.entries())
-      .map(([courseId, links]) => ({
-        courseId,
-        cap:
-          links.length === 1
-            ? Math.max(
-                0,
-                Math.trunc(Number(links[0].chapter.opportunities || 0)),
-              )
-            : 0,
-      }))
-      .filter((item) => item.cap > 0);
-    const or = courseCaps.map(({ courseId, cap }) => ({
-      courseId,
-      opportunities:
-        registryIssue === "opportunity-full" ? { gte: cap } : { gt: cap },
-    }));
-    return or.length ? { OR: or } : { id: "__none__" };
-  }
-
-  return null;
-}
-
 function composeStudentWhere(
   filters: Prisma.StudentWhereInput[],
   searchWhere?: Prisma.StudentWhereInput | null,
@@ -546,7 +437,7 @@ export async function GET(req: NextRequest) {
   );
   const rawQuery = String(searchParams.get("q") ?? "").trim();
   const filters = buildStudentFilterWhere(searchParams);
-  const registryIssueWhere = await buildRegistryIssueWhere(searchParams);
+  const registryIssueWhere = await buildStudentRegistryIssueWhere(searchParams);
   if (registryIssueWhere) filters.push(registryIssueWhere);
   let searchWhere: Prisma.StudentWhereInput | null = null;
 
@@ -1324,7 +1215,7 @@ export async function PUT(req: NextRequest) {
       if (
         expectedMutationToken &&
         expectedMutationToken !==
-          studentMutationToken(
+          buildStudentMutationToken(
             lockedStudent as unknown as Record<string, unknown>,
           )
       ) {
@@ -1484,6 +1375,14 @@ export async function PUT(req: NextRequest) {
         if (nextOpportunities.error) {
           throw new StudentIntegrityError(nextOpportunities.error);
         }
+        if (
+          !nextOpportunities.hasActiveChapter ||
+          nextOpportunities.baseOpportunities <= 0
+        ) {
+          throw new StudentIntegrityError(
+            "لا يمكن بدء ملف جديد للطالب دون فصل نشط واحد ذي رصيد فرص صالح في الدورة المستهدفة.",
+          );
+        }
         transactionData.courseId = transactionTargetCourseId;
         transactionData.opportunities = nextOpportunities.opportunities;
         transactionData.baseOpportunities = nextOpportunities.baseOpportunities;
@@ -1640,37 +1539,43 @@ export async function DELETE(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
+  const previewToken = searchParams.get("previewToken")?.trim() || "";
   if (!id)
     return NextResponse.json(
       { error: "تعذر تحديد الطالب المطلوب" },
       { status: 400 },
     );
   try {
-    const impact = await getStudentDeleteImpact(id);
-    if (!impact) {
-      return NextResponse.json(
-        { error: "تعذر العثور على الطالب المطلوب" },
-        { status: 404 },
-      );
-    }
+    const result = await withSerializableTransaction(async (tx) => {
+      const impact = await getStudentDeleteImpactInTransaction(tx, id);
+      if (!impact) {
+        throw new StudentIntegrityError("تعذر العثور على الطالب المطلوب", 404);
+      }
 
-    if (impact.student.status === ARCHIVED_STUDENT_STATUS) {
-      return NextResponse.json({ ok: true, archived: true, impact });
-    }
+      if (impact.student.status === ARCHIVED_STUDENT_STATUS) {
+        return { student: null, impact, alreadyArchived: true };
+      }
+      if (!previewToken) {
+        throw new StudentIntegrityError(
+          "يجب معاينة بيانات الطالب المرتبطة قبل الأرشفة.",
+        );
+      }
+      if (previewToken !== impact.previewToken) {
+        throw new StudentIntegrityError(
+          "تغيرت بيانات الطالب أو سجلاته بعد فتح نافذة الأرشفة. تمت إعادة الفحص؛ راجع الأثر ثم أعد المحاولة.",
+        );
+      }
 
-    const relationSummary = buildStudentArchiveSummary(impact.counts);
-    const archiveText = `أرشفة الطالب بدلاً من الحذف النهائي. السبب: حماية البيانات المرتبطة (${relationSummary}). الحالة السابقة: ${impact.student.status || "غير محددة"}.`;
+      const relationSummary = buildStudentArchiveSummary(impact.counts);
+      const archiveText = `أرشفة الطالب بدلاً من الحذف النهائي. السبب: حماية البيانات المرتبطة (${relationSummary}). الحالة السابقة: ${impact.student.status || "غير محددة"}.`;
 
-    const [student] = await db.$transaction([
-      db.student.update({
+      const student = await tx.student.update({
         where: { id },
         data: {
           status: ARCHIVED_STUDENT_STATUS,
-          dismissalReason: "أرشفة إدارية",
-          dismissalNotes: archiveText,
         },
-      }),
-      db.studentNote.create({
+      });
+      await tx.studentNote.create({
         data: {
           studentId: id,
           kind: "أرشفة",
@@ -1678,8 +1583,8 @@ export async function DELETE(req: NextRequest) {
           sourceType: "student-archive",
           sourceId: id,
         },
-      }),
-      db.auditLog.create({
+      });
+      await tx.auditLog.create({
         data: {
           module: "سجل الطلاب",
           action: "أرشفة طالب بدل الحذف",
@@ -1687,11 +1592,20 @@ export async function DELETE(req: NextRequest) {
           userId: principal.id,
           userName: principal.name,
         },
-      }),
-    ]);
+      });
+      return { student, impact, alreadyArchived: false };
+    });
+
+    if (result.alreadyArchived || !result.student) {
+      return NextResponse.json({
+        ok: true,
+        archived: true,
+        impact: result.impact,
+      });
+    }
 
     const [studentWithOpportunity] = await attachStudentOpportunitySnapshots([
-      student,
+      result.student,
     ]);
 
     return NextResponse.json({
@@ -1701,12 +1615,12 @@ export async function DELETE(req: NextRequest) {
         studentWithOpportunity as unknown as Record<string, unknown>,
       ),
       impact: {
-        ...impact,
+        ...result.impact,
         counts: {
-          ...impact.counts,
-          notes: impact.counts.notes + 1,
+          ...result.impact.counts,
+          notes: result.impact.counts.notes + 1,
         },
-        totalRelations: impact.totalRelations + 1,
+        totalRelations: result.impact.totalRelations + 1,
         hasRelations: true,
       },
       message: "تمت أرشفة الطالب بدل الحذف النهائي حفاظاً على سجلاته.",

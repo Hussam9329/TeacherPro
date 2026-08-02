@@ -4105,15 +4105,12 @@ export const useTeacherStore = create<TeacherState>()(
         const student = get().students.find((st) => st.id === id);
         if (!student) return false;
         const previousStudents = get().students;
-        const archiveNote = `أرشفة الطالب بدلاً من الحذف النهائي حفاظاً على درجاته وإجازاته ومكالماته وفرصه وملاحظاته وأوراق تصحيحه. الحالة السابقة: ${student.status || "غير محددة"}.`;
         set((s) => ({
           students: s.students.map((st) =>
             st.id === id
               ? {
                   ...st,
                   status: ARCHIVED_STUDENT_STATUS as Student["status"],
-                  dismissalReason: "أرشفة إدارية",
-                  dismissalNotes: archiveNote,
                 }
               : st,
           ),
@@ -4123,7 +4120,16 @@ export const useTeacherStore = create<TeacherState>()(
           "أرشفة طالب بدل الحذف",
           `${student.name} - ${student.code}`,
         );
-        syncToServer(get, () => studentApi.remove(id), {
+        syncToServer(get, async () => {
+          const impact = await studentApi.deleteImpact(id);
+          if (!impact?.previewToken) {
+            return {
+              ok: false,
+              error: "تعذر معاينة علاقات الطالب قبل الأرشفة",
+            };
+          }
+          return studentApi.remove(id, { previewToken: impact.previewToken });
+        }, {
           description: "أرشفة طالب بدل الحذف النهائي",
           rollback: () => set({ students: previousStudents }),
         });

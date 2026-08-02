@@ -10,6 +10,7 @@ import { sanitizePhoneInput } from "@/lib/format";
 import { sanitizeTelegramInput } from "@/lib/student-utils";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
+import { buildStudentRegistryIssueWhere } from "@/lib/student-registry-issue-server";
 
 function buildLocationWhere(location: string): Prisma.StudentWhereInput | null {
   const normalized = normalizeArabicText(location);
@@ -72,9 +73,9 @@ function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
   return { OR: or };
 }
 
-function buildStudentExportWhere(
+async function buildStudentExportWhere(
   searchParams: URLSearchParams,
-): Prisma.StudentWhereInput {
+): Promise<Prisma.StudentWhereInput> {
   const and: Prisma.StudentWhereInput[] = [];
   const q = String(searchParams.get("q") || "").trim();
   const courseId = normalizeListFilter(searchParams.get("courseId"));
@@ -101,6 +102,9 @@ function buildStudentExportWhere(
   const searchWhere = buildSearchWhere(q);
   if (searchWhere) and.unshift(searchWhere);
 
+  const registryIssueWhere = await buildStudentRegistryIssueWhere(searchParams);
+  if (registryIssueWhere) and.push(registryIssueWhere);
+
   return and.length > 0 ? { AND: and } : {};
 }
 
@@ -110,7 +114,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const searchParams = new URL(req.url).searchParams;
-    const where = buildStudentExportWhere(searchParams);
+    const where = await buildStudentExportWhere(searchParams);
     const [totalCount, students] = await Promise.all([
       db.student.count({ where }),
       db.student.findMany({

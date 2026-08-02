@@ -488,7 +488,21 @@ export function StudentRegistryView() {
     courseName,
     activeChapterForCourse,
     mergeStudentsCache,
+    currentUser,
   } = useTeacherStore();
+
+  const registryUser = currentUser();
+  const isRegistryAdmin = Boolean(
+    registryUser?.username?.trim().toLowerCase() === "admin" ||
+      registryUser?.roleId === "role_admin",
+  );
+  const registryPermissions = new Set(registryUser?.permissions || []);
+  const canAddStudents =
+    isRegistryAdmin || registryPermissions.has("students.add");
+  const canEditStudents =
+    isRegistryAdmin || registryPermissions.has("students.edit");
+  const canArchiveStudents =
+    isRegistryAdmin || registryPermissions.has("students.delete");
 
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -578,6 +592,10 @@ export function StudentRegistryView() {
   const [dismissType, setDismissType] = useState("فصل مؤقت");
   const [dismissReason, setDismissReason] = useState("");
   const [dismissNotes, setDismissNotes] = useState("");
+  const [reactivateDialog, setReactivateDialog] = useState<{
+    student: Student | null;
+    open: boolean;
+  }>({ student: null, open: false });
 
   const [fileDialog, setFileDialog] = useState<{
     student: Student | null;
@@ -844,8 +862,12 @@ export function StudentRegistryView() {
   }, [filterCourseProgram, filterCourseTerm]);
 
   const editFilteredCourses = useMemo(
-    () => courses.filter((c) => c.active),
-    [courses],
+    () =>
+      courses.filter(
+        (course) =>
+          course.active || course.id === editOriginalStudent?.courseId,
+      ),
+    [courses, editOriginalStudent?.courseId],
   );
 
   const editSelectedCourse = useMemo(
@@ -873,18 +895,22 @@ export function StudentRegistryView() {
     useState(false);
   const [editTargetActiveChapterConflict, setEditTargetActiveChapterConflict] =
     useState(false);
+  const [editTargetActiveChapterLookupFailed, setEditTargetActiveChapterLookupFailed] =
+    useState(false);
 
   useEffect(() => {
     const courseId = editDialog.form.courseId;
     if (!courseId || !editDialog.open) {
       setEditTargetActiveChapterFromServer(null);
       setEditTargetActiveChapterConflict(false);
+      setEditTargetActiveChapterLookupFailed(false);
       return;
     }
 
     let cancelled = false;
     setEditTargetActiveChapterLoading(true);
     setEditTargetActiveChapterConflict(false);
+    setEditTargetActiveChapterLookupFailed(false);
 
     courseApi
       .activeChapterForCourse(courseId)
@@ -893,13 +919,16 @@ export function StudentRegistryView() {
         if (!response) {
           setEditTargetActiveChapterFromServer(null);
           setEditTargetActiveChapterConflict(false);
+          setEditTargetActiveChapterLookupFailed(true);
           return;
         }
         setEditTargetActiveChapterFromServer(response.activeChapter);
         setEditTargetActiveChapterConflict(Boolean(response.conflict));
+        setEditTargetActiveChapterLookupFailed(false);
       })
       .catch(() => {
         if (cancelled) return;
+        setEditTargetActiveChapterLookupFailed(true);
         // fallback إلى الكاش المحلي لو فشل الطلب
         setEditTargetActiveChapterFromServer(
           activeChapterForCourse(courseId)
@@ -994,6 +1023,12 @@ export function StudentRegistryView() {
   const editAcademicImpactSignature = `${editDialog.id}|${editDialog.form.createdAt}|${Number(editDialog.form.accountingGraceDays || 0)}|${gracePeriodStartMode}`;
   const resetWillStartNewFile =
     editNeedsTransferPolicy && effectiveCourseTransferPolicy === "reset";
+  const editResetChapterUnresolved =
+    resetWillStartNewFile &&
+    (editTargetActiveChapterLoading ||
+      editTargetActiveChapterLookupFailed ||
+      editTargetActiveChapterConflict ||
+      !editTargetActiveChapter);
   const editNeedsAcademicImpactPreview =
     !resetWillStartNewFile &&
     (editRegistrationDateChanged || editGraceDaysChanged);
@@ -1154,6 +1189,10 @@ export function StudentRegistryView() {
   ]);
 
   const openEditDialog = (student: Student) => {
+    if (!canEditStudents) {
+      toast.error("لا تملك صلاحية تعديل بيانات الطلاب");
+      return;
+    }
     setEditOriginalStudent(student);
     setCourseTransferPolicy("");
     setCourseTransferPolicySignature("");
@@ -1219,6 +1258,19 @@ export function StudentRegistryView() {
       return editCourseChanged
         ? "نقل الطالب إلى دورة جديدة يحتاج تأكيد بدء ملف جديد وتصفير الإجراءات الحالية"
         : "عند تغيير نوع البرنامج/الكورس/الموقع داخل نفس الدورة اختر الإبقاء على الملف أو البدء كطالب جديد";
+    }
+
+    if (editResetChapterUnresolved) {
+      if (editTargetActiveChapterLoading) {
+        return "انتظر اكتمال التحقق من الفصل النشط للدورة المستهدفة";
+      }
+      if (editTargetActiveChapterLookupFailed) {
+        return "تعذر التحقق من الفصل النشط من بيانات النظام؛ أعد المحاولة قبل بدء ملف جديد";
+      }
+      if (editTargetActiveChapterConflict) {
+        return "الدورة المستهدفة تحتوي تعارضاً بين الفصول النشطة؛ يجب حل التعارض قبل بدء ملف جديد";
+      }
+      return "لا يمكن بدء ملف جديد لأن الدورة المستهدفة لا تحتوي على فصل نشط";
     }
 
     // Course settings-based validation
@@ -1420,6 +1472,10 @@ export function StudentRegistryView() {
   });
 
   const openDeleteDialog = (student: Student) => {
+    if (!canArchiveStudents) {
+      toast.error("لا تملك صلاحية أرشفة الطلاب");
+      return;
+    }
     if (registryServerUnavailable) {
       toast.error("لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالنظام ثم حاول مجدداً.");
       return;
@@ -1439,8 +1495,27 @@ export function StudentRegistryView() {
       toast.error("لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة.");
       return;
     }
-    const result = await studentApi.remove(deleteDialog.id);
+    const previewToken = deleteImpact?.previewToken || "";
+    if (!previewToken) {
+      toast.error("يجب اكتمال معاينة علاقات الطالب قبل تأكيد الأرشفة");
+      return;
+    }
+    const result = await studentApi.remove(deleteDialog.id, { previewToken });
     if (!result.ok) {
+      if (result.status === 409) {
+        setDeleteImpactLoading(true);
+        const refreshedImpact = await studentApi
+          .deleteImpact(deleteDialog.id)
+          .catch(() => null);
+        setDeleteImpact(refreshedImpact);
+        setDeleteImpactLoading(false);
+        toast.warning(result.error || "تغيرت بيانات الطالب المرتبطة", {
+          description: refreshedImpact
+            ? "تم تحديث معاينة العلاقات. راجع الأعداد الجديدة ثم أكّد الأرشفة مرة أخرى."
+            : "تعذر تحديث المعاينة؛ أغلق النافذة وافتحها مجدداً بعد التحقق من الاتصال.",
+        });
+        return;
+      }
       toast.error(result.error || "تعذر أرشفة الطالب");
       return;
     }
@@ -1530,8 +1605,37 @@ export function StudentRegistryView() {
     ? filtered
     : localFiltered.slice((page - 1) * pageSize, page * pageSize);
   const registryServerUnavailable = Boolean(serverStudentsError && !serverStudents);
+  const dismissHasFinalChance = Boolean(
+    dismissDialog.student &&
+      opportunityLogs.some(
+        (log) =>
+          log.studentId === dismissDialog.student?.id &&
+          log.action === "فرصة أخيرة بعد تعهد",
+      ),
+  );
+  const closeDismissDialog = () => {
+    setDismissDialog({ student: null, open: false });
+    setDismissType("فصل مؤقت");
+    setDismissReason("");
+    setDismissNotes("");
+  };
+  const openDismissDialog = (student: Student) => {
+    if (!canEditStudents) {
+      toast.error("لا تملك صلاحية فصل الطلاب");
+      return;
+    }
+    setDismissType("فصل مؤقت");
+    setDismissReason("");
+    setDismissNotes("");
+    setDismissDialog({ student, open: true });
+  };
   const handleDismiss = runStatusActionLocked(async () => {
     if (!dismissDialog.student) return;
+    if (!canEditStudents) {
+      toast.error("لا تملك صلاحية فصل الطلاب");
+      closeDismissDialog();
+      return;
+    }
     if (registryServerUnavailable) {
       toast.error("لا يمكن فصل طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالنظام ثم حاول مجدداً.");
       return;
@@ -1546,6 +1650,8 @@ export function StudentRegistryView() {
       dismissalType: dismissType,
       reason: dismissReason.trim(),
       notes: dismissNotes.trim(),
+      expectedStatus: dismissDialog.student.status,
+      expectedMutationToken: dismissDialog.student.mutationToken || "",
     });
     if (!result.ok) {
       toast.error(result.error || "تعذر فصل الطالب");
@@ -1562,25 +1668,48 @@ export function StudentRegistryView() {
           : prev,
       );
     }
-    setDismissDialog({ student: null, open: false });
-    setDismissReason("");
-    setDismissNotes("");
+    closeDismissDialog();
     setServerRefreshKey((value) => value + 1);
-    toast.success("تم فصل الطالب من بيانات النظام", {
-      description: "تم حفظ حالة الطالب وسجل الفرص والملاحظة الإدارية داخل عملية واحدة.",
-    });
+    const promotedToFinal = Boolean(
+      dismissType === "فصل مؤقت" &&
+        updatedStudent?.dismissalType === "فصل نهائي",
+    );
+    if (promotedToFinal) {
+      toast.warning("حوّل النظام الفصل المؤقت إلى فصل نهائي", {
+        description:
+          updatedStudent?.dismissalReason ||
+          "السبب: وجود فرصة أخيرة سابقة بعد تعهد.",
+      });
+    } else {
+      toast.success("تم فصل الطالب من بيانات النظام", {
+        description:
+          "تم حفظ حالة الطالب وسجل الفرص والملاحظة الإدارية داخل عملية واحدة.",
+      });
+    }
   });
 
-  const handleReactivate = runStatusActionLocked(async (studentId: string) => {
+  const handleReactivate = runStatusActionLocked(async (student: Student) => {
+    if (!canEditStudents) {
+      toast.error("لا تملك صلاحية استعادة أو إعادة تفعيل الطلاب");
+      return;
+    }
     if (registryServerUnavailable) {
       toast.error("لا يمكن إعادة تفعيل طالب أثناء عرض نسخة محلية مؤقتة.");
       return;
     }
-    const student = students.find((item) => item.id === studentId);
-    const isArchived = student?.status === ARCHIVED_STUDENT_STATUS;
+    if (student.status === "نشط") {
+      setReactivateDialog({ student: null, open: false });
+      setServerRefreshKey((value) => value + 1);
+      toast.warning("الطالب نشط بالفعل؛ لم يتم إنشاء أي إجراء جديد.");
+      return;
+    }
+    const studentId = student.id;
+    const isArchived = student.status === ARCHIVED_STUDENT_STATUS;
     const result = await studentApi.statusAction({
       action: isArchived ? "restore" : "reactivate",
       studentId,
+      expectedStatus: student.status,
+      expectedMutationToken: student.mutationToken || "",
     });
     if (!result.ok) {
       toast.error(
@@ -1589,7 +1718,11 @@ export function StudentRegistryView() {
       );
       return;
     }
-    const updatedStudent = (result.data as { student?: Student } | null)?.student;
+    const statusResult = result.data as {
+      student?: Student;
+      warning?: string | null;
+    } | null;
+    const updatedStudent = statusResult?.student;
     if (updatedStudent) {
       mergeStudentsCache([updatedStudent]);
       setServerStudents((prev) => {
@@ -1602,12 +1735,16 @@ export function StudentRegistryView() {
           : next;
       });
     }
+    setReactivateDialog({ student: null, open: false });
     setServerRefreshKey((value) => value + 1);
-    toast.success(
-      student?.status === ARCHIVED_STUDENT_STATUS
-        ? "تمت استعادة الطالب من الأرشيف"
-        : "تم إعادة تفعيل الطالب",
-    );
+    const successTitle = isArchived
+      ? "تمت استعادة الطالب من الأرشيف"
+      : "تمت إعادة تفعيل الطالب";
+    if (statusResult?.warning) {
+      toast.warning(successTitle, { description: statusResult.warning });
+    } else {
+      toast.success(successTitle);
+    }
   });
 
   // Export rows: use current filtered results (server or local).
@@ -2122,8 +2259,12 @@ export function StudentRegistryView() {
         <EmptyState
           icon={UserPlus}
           title="لم تقم بإضافة طلاب بعد"
-          description="ابدأ بإضافة أول طالب، وبعدها ستظهر البطاقات والفلاتر والإحصائيات هنا تلقائياً."
-          action={
+          description={
+            canAddStudents
+              ? "ابدأ بإضافة أول طالب، وبعدها ستظهر البطاقات والفلاتر والإحصائيات هنا تلقائياً."
+              : "لا توجد سجلات طلاب متاحة للعرض حالياً."
+          }
+          action={canAddStudents ? (
             <Button
               onClick={() => setSection("student-register")}
               className="tp-student-registry__empty-action"
@@ -2131,7 +2272,7 @@ export function StudentRegistryView() {
               <UserPlus aria-hidden="true" className="size-4" />
               إضافة طالب الآن
             </Button>
-          }
+          ) : undefined}
         />
       ) : filteredTotalCount === 0 ? (
         <EmptyState
@@ -2310,42 +2451,48 @@ export function StudentRegistryView() {
                     <Eye aria-hidden="true" className="size-4" />
                     ملف الطالب
                   </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="tp-student-registry__action-button"
-                    disabled={registryServerUnavailable}
-                    onClick={() => openEditDialog(student)}
-                  >
-                    <Pencil aria-hidden="true" className="size-4" />
-                    تعديل
-                  </Button>
-                  {student.status === "نشط" ? (
+                  {canEditStudents && (
                     <Button
-                      variant="destructive"
+                      variant="secondary"
                       size="sm"
                       className="tp-student-registry__action-button"
-                      disabled={registryServerUnavailable || isStatusActionSaving}
-                      onClick={() => setDismissDialog({ student, open: true })}
+                      disabled={registryServerUnavailable}
+                      onClick={() => openEditDialog(student)}
                     >
-                      <UserX aria-hidden="true" className="size-4" />
-                      فصل
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="tp-student-registry__action-button tp-student-registry__action-button--restore"
-                      disabled={registryServerUnavailable || isStatusActionSaving}
-                      onClick={() => handleReactivate(student.id)}
-                    >
-                      <RotateCcw aria-hidden="true" className="size-4" />
-                      {student.status === ARCHIVED_STUDENT_STATUS
-                        ? "استعادة"
-                        : "إعادة تفعيل"}
+                      <Pencil aria-hidden="true" className="size-4" />
+                      تعديل
                     </Button>
                   )}
-                  {student.status !== ARCHIVED_STUDENT_STATUS && (
+                  {canEditStudents &&
+                    (student.status === "نشط" ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="tp-student-registry__action-button"
+                        disabled={registryServerUnavailable || isStatusActionSaving}
+                        onClick={() => openDismissDialog(student)}
+                      >
+                        <UserX aria-hidden="true" className="size-4" />
+                        فصل
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="tp-student-registry__action-button tp-student-registry__action-button--restore"
+                        disabled={registryServerUnavailable || isStatusActionSaving}
+                        onClick={() =>
+                          setReactivateDialog({ student, open: true })
+                        }
+                      >
+                        <RotateCcw aria-hidden="true" className="size-4" />
+                        {student.status === ARCHIVED_STUDENT_STATUS
+                          ? "استعادة"
+                          : "إعادة تفعيل"}
+                      </Button>
+                    ))}
+                  {canArchiveStudents &&
+                    student.status !== ARCHIVED_STUDENT_STATUS && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -2437,44 +2584,48 @@ export function StudentRegistryView() {
                         <Eye aria-hidden="true" className="size-4" />
                         ملف الطالب
                       </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="tp-student-registry__action-button"
-                        disabled={registryServerUnavailable}
-                        onClick={() => openEditDialog(student)}
-                      >
-                        <Pencil aria-hidden="true" className="size-4" />
-                        تعديل
-                      </Button>
-                      {student.status === "نشط" ? (
+                      {canEditStudents && (
                         <Button
-                          variant="destructive"
+                          variant="secondary"
                           size="sm"
                           className="tp-student-registry__action-button"
-                          disabled={registryServerUnavailable || isStatusActionSaving}
-                          onClick={() =>
-                            setDismissDialog({ student, open: true })
-                          }
+                          disabled={registryServerUnavailable}
+                          onClick={() => openEditDialog(student)}
                         >
-                          <UserX aria-hidden="true" className="size-4" />
-                          فصل
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="tp-student-registry__action-button tp-student-registry__action-button--restore"
-                          disabled={registryServerUnavailable || isStatusActionSaving}
-                          onClick={() => handleReactivate(student.id)}
-                        >
-                          <RotateCcw aria-hidden="true" className="size-4" />
-                          {student.status === ARCHIVED_STUDENT_STATUS
-                            ? "استعادة"
-                            : "إعادة تفعيل"}
+                          <Pencil aria-hidden="true" className="size-4" />
+                          تعديل
                         </Button>
                       )}
-                      {student.status !== ARCHIVED_STUDENT_STATUS && (
+                      {canEditStudents &&
+                        (student.status === "نشط" ? (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="tp-student-registry__action-button"
+                            disabled={registryServerUnavailable || isStatusActionSaving}
+                            onClick={() => openDismissDialog(student)}
+                          >
+                            <UserX aria-hidden="true" className="size-4" />
+                            فصل
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="tp-student-registry__action-button tp-student-registry__action-button--restore"
+                            disabled={registryServerUnavailable || isStatusActionSaving}
+                            onClick={() =>
+                              setReactivateDialog({ student, open: true })
+                            }
+                          >
+                            <RotateCcw aria-hidden="true" className="size-4" />
+                            {student.status === ARCHIVED_STUDENT_STATUS
+                              ? "استعادة"
+                              : "إعادة تفعيل"}
+                          </Button>
+                        ))}
+                      {canArchiveStudents &&
+                        student.status !== ARCHIVED_STUDENT_STATUS && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -2797,6 +2948,10 @@ export function StudentRegistryView() {
                             editFilteredCourses.map((c) => (
                               <SelectItem key={c.id} value={c.id}>
                                 {c.name}
+                                {!c.active &&
+                                c.id === editOriginalStudent?.courseId
+                                  ? " — الدورة الحالية (غير نشطة)"
+                                  : ""}
                               </SelectItem>
                             ))
                           )}
@@ -2861,12 +3016,31 @@ export function StudentRegistryView() {
                           )}
                         </RadioGroup>
 
-                        {effectiveCourseTransferPolicy === "reset" &&
-                          !editTargetActiveChapter && (
-                            <p className="mt-3 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
-                              تنبيه: الدورة لا تحتوي على فصل نشط، لذلك سيبدأ الملف الجديد برصيد 0 / 0.
-                            </p>
-                          )}
+                        {effectiveCourseTransferPolicy === "reset" && (
+                          <div className="mt-3" aria-live="polite">
+                            {editTargetActiveChapterLoading ? (
+                              <p className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700 dark:border-sky-500/50 dark:bg-sky-950/30 dark:text-sky-100">
+                                جاري التحقق من الفصل النشط ورصيد البداية من بيانات النظام… لا يمكن الحفظ قبل اكتمال التحقق.
+                              </p>
+                            ) : editTargetActiveChapterLookupFailed ? (
+                              <p className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
+                                تعذر التحقق من الفصل النشط من بيانات النظام. لن يُسمح ببدء ملف جديد حتى ينجح التحقق.
+                              </p>
+                            ) : editTargetActiveChapterConflict ? (
+                              <p className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
+                                يوجد أكثر من فصل نشط مرتبط بهذه الدورة. يجب حل التعارض أولاً؛ تم إيقاف بدء الملف الجديد لحماية رصيد الطالب.
+                              </p>
+                            ) : !editTargetActiveChapter ? (
+                              <p className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
+                                لا يوجد فصل نشط لهذه الدورة. لن يبدأ الطالب برصيد 0 ولن يُسمح بالحفظ حتى يتم تفعيل فصل واحد.
+                              </p>
+                            ) : (
+                              <p className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-950/30 dark:text-emerald-100">
+                                تم التحقق: الفصل النشط «{editTargetActiveChapter.name}» ورصيد البداية {editTargetOpportunities} / {editTargetOpportunities}.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -3227,10 +3401,14 @@ export function StudentRegistryView() {
               <Button
                 className="tp-student-registry__dialog-button"
                 onClick={handleEditSave}
-                disabled={isSavingEdit}
+                disabled={isSavingEdit || editResetChapterUnresolved}
               >
                 <Save aria-hidden="true" className="size-4" />
-                {isSavingEdit ? "جاري الحفظ..." : "حفظ التعديلات"}
+                {isSavingEdit
+                  ? "جاري الحفظ..."
+                  : editResetChapterUnresolved
+                    ? "الحفظ متوقف لحماية الرصيد"
+                    : "حفظ التعديلات"}
               </Button>
             </div>
           </DialogFooter>
@@ -3292,7 +3470,11 @@ export function StudentRegistryView() {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
-              disabled={isDeletingStudent || deleteImpactLoading}
+              disabled={
+                isDeletingStudent ||
+                deleteImpactLoading ||
+                !deleteImpact?.previewToken
+              }
               className="tp-student-registry__dialog-button bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               <Archive aria-hidden="true" className="size-4" />
@@ -3302,11 +3484,70 @@ export function StudentRegistryView() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog
+        open={reactivateDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReactivateDialog({ student: null, open: false });
+          }
+        }}
+      >
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {reactivateDialog.student?.status === ARCHIVED_STUDENT_STATUS
+                ? "تأكيد استعادة الطالب من الأرشيف"
+                : "تأكيد إعادة تفعيل الطالب"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-right leading-relaxed">
+                <p>
+                  هل تريد متابعة الإجراء للطالب «
+                  {reactivateDialog.student?.name || "الطالب المحدد"}»؟
+                </p>
+                {reactivateDialog.student?.status ===
+                ARCHIVED_STUDENT_STATUS ? (
+                  <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-500/50 dark:bg-amber-950/30 dark:text-amber-100">
+                    سيعود الطالب إلى السجل النشط، وسيحدد النظام رصيده حسب الفصل النشط للدورة بعد التحقق منه. لن تُحذف درجاته أو سجلاته المحفوظة.
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-500/50 dark:bg-amber-950/30 dark:text-amber-100">
+                    ستُزال حالة الفصل الحالية ويُمنح الطالب فرصة أخيرة واحدة. أي فصل لاحق بعد هذه الفرصة قد يصبح نهائياً وفق قواعد النظام.
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="tp-student-registry__confirm-actions">
+            <AlertDialogCancel className="tp-student-registry__dialog-button">
+              <X aria-hidden="true" className="size-4" />
+              إلغاء
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="tp-student-registry__dialog-button"
+              disabled={isStatusActionSaving || !reactivateDialog.student}
+              onClick={(event) => {
+                event.preventDefault();
+                if (reactivateDialog.student) {
+                  void handleReactivate(reactivateDialog.student);
+                }
+              }}
+            >
+              <RotateCcw aria-hidden="true" className="size-4" />
+              {isStatusActionSaving
+                ? "جاري التنفيذ..."
+                : reactivateDialog.student?.status === ARCHIVED_STUDENT_STATUS
+                  ? "تأكيد الاستعادة"
+                  : "تأكيد إعادة التفعيل"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog
         open={dismissDialog.open}
         onOpenChange={(o) => {
-          setDismissDialog({ ...dismissDialog, open: o });
-          if (!o) setDismissNotes("");
+          if (!o) closeDismissDialog();
         }}
       >
         <DialogContent dir="rtl">
@@ -3316,6 +3557,19 @@ export function StudentRegistryView() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm leading-6 text-destructive">
+              عند تأكيد الفصل سيصبح رصيد فرص الطالب <strong>0</strong> فوراً، سواء اخترت فصلاً مؤقتاً أم نهائياً.
+            </div>
+            {dismissHasFinalChance && dismissType === "فصل مؤقت" && (
+              <div className="rounded-2xl border border-amber-400/50 bg-amber-500/10 p-3 text-sm font-bold leading-6 text-amber-800 dark:text-amber-200">
+                لدى الطالب سجل «فرصة أخيرة بعد تعهد»؛ لذلك سيحوّل النظام الفصل المؤقت إلى <strong>فصل نهائي</strong> ويثبت السبب مع عدم الالتزام بالتعهد السابق.
+              </div>
+            )}
+            {!dismissHasFinalChance && dismissType === "فصل مؤقت" && (
+              <div className="rounded-2xl border border-amber-300/60 bg-amber-500/5 p-3 text-xs leading-6 text-amber-800 dark:text-amber-200">
+                يتحقق النظام مجدداً عند الحفظ: إذا وُجدت فرصة أخيرة بعد تعهد في السجل الكامل، سيتحوّل هذا الاختيار تلقائياً إلى فصل نهائي بدلاً من الفصل المؤقت.
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="dismiss-type">نوع الفصل</Label>
               <Select
@@ -3359,10 +3613,7 @@ export function StudentRegistryView() {
             <Button
               variant="outline"
               className="tp-student-registry__dialog-button"
-              onClick={() => {
-                setDismissDialog({ student: null, open: false });
-                setDismissNotes("");
-              }}
+              onClick={closeDismissDialog}
             >
               <X aria-hidden="true" className="size-4" />
               إلغاء
@@ -3371,9 +3622,10 @@ export function StudentRegistryView() {
               variant="destructive"
               className="tp-student-registry__dialog-button border-red-600 bg-red-600 text-white shadow-sm shadow-red-600/20 hover:border-red-700 hover:bg-red-700 hover:text-white dark:border-red-600 dark:bg-red-600 dark:text-white dark:hover:border-red-500 dark:hover:bg-red-500"
               onClick={handleDismiss}
+              disabled={isStatusActionSaving}
             >
               <UserX aria-hidden="true" className="size-4" />
-              تأكيد الفصل
+              {isStatusActionSaving ? "جاري الفصل..." : "تأكيد الفصل"}
             </Button>
           </DialogFooter>
         </DialogContent>

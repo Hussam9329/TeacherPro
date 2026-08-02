@@ -632,6 +632,7 @@ export interface StudentDeleteImpactResponse {
   hasRelations: boolean;
   archiveRecommended: boolean;
   blockingReasons: string[];
+  previewToken: string;
   source: "database";
 }
 
@@ -1495,7 +1496,8 @@ export const studentApi = {
     ),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("students", { id, ...updates }),
-  remove: (id: string) => apiDelete("students", id),
+  remove: (id: string, options: { previewToken: string }) =>
+    apiDelete("students", id, { previewToken: options.previewToken }),
 };
 
 // ─── Exam API ─────────────────────────────────────────────────────────────────

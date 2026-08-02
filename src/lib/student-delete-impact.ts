@@ -1,4 +1,6 @@
-import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
+import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 
 export type StudentDeleteImpactCounts = {
   grades: number;
@@ -22,6 +24,7 @@ export type StudentDeleteImpact = {
   hasRelations: boolean;
   archiveRecommended: boolean;
   blockingReasons: string[];
+  previewToken: string;
 };
 
 export const ARCHIVED_STUDENT_STATUS = "مؤرشف";
@@ -47,14 +50,14 @@ export function buildStudentArchiveSummary(
   return parts.length ? parts.join("، ") : "لا توجد بيانات مرتبطة";
 }
 
-export async function getStudentDeleteImpact(
+export async function getStudentDeleteImpactInTransaction(
+  tx: Prisma.TransactionClient,
   studentId: string,
 ): Promise<StudentDeleteImpact | null> {
-  const student = await db.student.findUnique({
+  const studentSnapshot = await tx.student.findUnique({
     where: { id: studentId },
-    select: { id: true, name: true, code: true, status: true },
   });
-  if (!student) return null;
+  if (!studentSnapshot) return null;
 
   const [
     grades,
@@ -64,14 +67,14 @@ export async function getStudentDeleteImpact(
     opportunityLogs,
     correctionSheets,
     telegramSubmissions,
-  ] = await db.$transaction([
-    db.grade.count({ where: { studentId } }),
-    db.studentLeave.count({ where: { studentId } }),
-    db.studentCall.count({ where: { studentId } }),
-    db.studentNote.count({ where: { studentId } }),
-    db.opportunityLog.count({ where: { studentId } }),
-    db.correctionSheet.count({ where: { studentId } }),
-    db.telegramExamSubmission.count({ where: { studentId } }),
+  ] = await Promise.all([
+    tx.grade.count({ where: { studentId } }),
+    tx.studentLeave.count({ where: { studentId } }),
+    tx.studentCall.count({ where: { studentId } }),
+    tx.studentNote.count({ where: { studentId } }),
+    tx.opportunityLog.count({ where: { studentId } }),
+    tx.correctionSheet.count({ where: { studentId } }),
+    tx.telegramExamSubmission.count({ where: { studentId } }),
   ]);
 
   const counts: StudentDeleteImpactCounts = {
@@ -89,7 +92,12 @@ export async function getStudentDeleteImpact(
   );
 
   return {
-    student,
+    student: {
+      id: studentSnapshot.id,
+      name: studentSnapshot.name,
+      code: studentSnapshot.code,
+      status: studentSnapshot.status,
+    },
     counts,
     totalRelations,
     hasRelations: totalRelations > 0,
@@ -97,5 +105,17 @@ export async function getStudentDeleteImpact(
     blockingReasons: impactLabels
       .filter(([key]) => Number(counts[key] || 0) > 0)
       .map(([key, label]) => `${label}: ${counts[key]}`),
+    previewToken: buildMutationPreviewToken(
+      `student-archive:${studentSnapshot.id}`,
+      { student: studentSnapshot, counts },
+    ),
   };
+}
+
+export async function getStudentDeleteImpact(
+  studentId: string,
+): Promise<StudentDeleteImpact | null> {
+  return withSerializableTransaction((tx) =>
+    getStudentDeleteImpactInTransaction(tx, studentId),
+  );
 }

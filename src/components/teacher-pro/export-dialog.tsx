@@ -32,8 +32,18 @@ function normalizeExportValue(value: string | number | null | undefined): string
   return typeof value === "string" ? humanizeTeacherProText(value) : value ?? "";
 }
 
+function protectSpreadsheetCell(value: string | number | null | undefined): string {
+  const normalized = normalizeExportValue(value);
+  const text = String(normalized);
+  // Spreadsheet applications interpret these leading characters as formulas.
+  // Prefix only string input so legitimate negative numeric values remain numeric.
+  return typeof normalized === "string" && /^\s*[=+\-@]/.test(text)
+    ? `'${text}`
+    : text;
+}
+
 function escapeCsvCell(value: string | number | null | undefined): string {
-  const str = String(normalizeExportValue(value));
+  const str = protectSpreadsheetCell(value);
   if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -75,7 +85,7 @@ function buildCsv<T>(rows: T[], columns: ExportColumn<T>[]): string {
 }
 
 function plainExcelCell(value: string | number | null | undefined): string {
-  return String(normalizeExportValue(value))
+  return protectSpreadsheetCell(value)
     .replace(/\t/g, " ")
     .replace(/\r?\n/g, " ")
     .trim();
