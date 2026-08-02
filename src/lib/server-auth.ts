@@ -268,11 +268,22 @@ const SERVER_PERMISSION_EQUIVALENTS: Record<string, string[]> = {
   "system.settings": [],
 };
 
-function hasPermission(principal: AuthPrincipal, permission: string): boolean {
+export function hasPermission(principal: AuthPrincipal, permission: string): boolean {
   if (principal.isAdmin || principal.permissions.includes(permission)) return true;
   return (SERVER_PERMISSION_EQUIVALENTS[permission] || []).some((alias) =>
     principal.permissions.includes(alias),
   );
+}
+
+export async function requireAnyPermissionPrincipal(
+  req: NextRequest,
+  permissions: string[],
+): Promise<AuthPrincipal | NextResponse> {
+  const principal = await getAuthPrincipal(req);
+  if (!principal) return unauthorizedResponse();
+  return permissions.some((permission) => hasPermission(principal, permission))
+    ? principal
+    : forbiddenResponse();
 }
 
 export function unauthorizedResponse() {

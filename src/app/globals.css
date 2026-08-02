@@ -2688,6 +2688,12 @@ button[data-slot="button"][class*="text-destructive"] svg {
 /* UIUX 25 — student profile visual hierarchy */
 .tp-student-profile__header {
   border-color: color-mix(in oklch, var(--primary) 14%, var(--border));
+  max-height: 50dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-top: max(1rem, calc(env(safe-area-inset-top) + 0.5rem));
+  padding-inline-start: max(1rem, env(safe-area-inset-left));
+  padding-inline-end: max(1rem, env(safe-area-inset-right));
   background:
     linear-gradient(135deg, color-mix(in oklch, var(--primary) 6%, var(--background)), var(--background) 64%);
 }
@@ -2730,6 +2736,9 @@ button[data-slot="button"][class*="text-destructive"] svg {
 @media (max-width: 640px) {
   .tp-student-profile__header {
     padding: 0.9rem;
+    padding-top: max(0.9rem, calc(env(safe-area-inset-top) + 0.45rem));
+    padding-inline-start: max(0.9rem, env(safe-area-inset-left));
+    padding-inline-end: max(0.9rem, env(safe-area-inset-right));
   }
 
   .tp-student-profile__header h2 {
@@ -2749,6 +2758,8 @@ button[data-slot="button"][class*="text-destructive"] svg {
   .tp-student-profile__content {
     padding: 0.75rem;
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    padding-inline-start: max(0.75rem, env(safe-area-inset-left));
+    padding-inline-end: max(0.75rem, env(safe-area-inset-right));
   }
 
   .tp-student-profile__nav {
@@ -2773,6 +2784,17 @@ button[data-slot="button"][class*="text-destructive"] svg {
     padding: 0.75rem;
     border-radius: 1rem;
     scroll-snap-align: start;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .tp-student-profile__header {
+    max-height: 46dvh;
+  }
+
+  .tp-student-profile__header h2 {
+    font-size: 1.2rem;
+    line-height: 1.45;
   }
 }
 

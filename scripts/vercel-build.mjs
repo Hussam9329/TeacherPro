@@ -24,16 +24,23 @@ function run(name, args, env = process.env) {
   if (result.status !== 0) fail(`${name} exited with code ${result.status ?? "unknown"}. Deployment stopped before incompatible code could go live.`);
 }
 
-const databaseUrl = String(process.env.DATABASE_URL || "").trim();
-if (!databaseUrl) {
-  fail("DATABASE_URL is missing. Add it to the Vercel Production/Preview environment; builds are intentionally blocked without the real database so schema migrations cannot be skipped.");
-}
-
 run("prisma", ["generate"]);
 
 // Compile first. If application compilation fails, the production database is
 // left untouched and the previous deployment keeps running on its old schema.
 run("next", ["build"]);
+
+// Publishing application code must never mutate production data implicitly.
+// Database migrations are an explicit, separately authorized deployment action.
+if (String(process.env.TEACHERPRO_RUN_MIGRATIONS || "").trim() !== "true") {
+  console.log("\n[TeacherPro Deploy] Database migrations skipped (explicit opt-in not enabled).\n");
+  process.exit(0);
+}
+
+const databaseUrl = String(process.env.DATABASE_URL || "").trim();
+if (!databaseUrl) {
+  fail("DATABASE_URL is required only when TEACHERPRO_RUN_MIGRATIONS=true.");
+}
 
 // Use a direct, non-pooler URL for DDL when supplied (Neon/Supabase/etc.).
 // Prisma still uses DATABASE_URL at runtime; only the migration command is

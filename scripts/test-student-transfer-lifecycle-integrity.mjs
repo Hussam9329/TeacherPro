@@ -11,6 +11,7 @@ const statusRoute = read("src/app/api/students/status-action/route.ts");
 const archiveHelper = read("src/lib/student-enrollment-archive-server.ts");
 const tokenHelper = read("src/lib/student-academic-impact-token.ts");
 const profileRoute = read("src/app/api/students/profile-log/route.ts");
+const profileHelper = read("src/lib/student-profile-server.ts");
 const registry = read("src/components/teacher-pro/student-registry.tsx");
 const profile = read("src/components/teacher-pro/student-profile-dialog.tsx");
 const api = read("src/lib/api.ts");
@@ -150,7 +151,8 @@ check(
   "ملف الطالب يعرض الملفات القديمة للقراءة فقط ويفصل سجلاتها عن الملف الحالي",
   profileRoute.includes("studentEnrollmentArchive.findMany") &&
     profileRoute.includes("currentEnrollmentStartedAt") &&
-    profileRoute.includes("time: { gte: currentEnrollmentStartedAt }") &&
+    profileRoute.includes("from: currentEnrollmentStartedAt") &&
+    profileHelper.includes('{ time: { gte: options.from } }') &&
     profile.includes("الملفات السابقة — للقراءة فقط") &&
     profile.includes("لا تدخل درجاتها أو فرصها أو إجراءاتها في ملفه الحالي") &&
     profile.includes("أوراق التصحيح القديمة") &&

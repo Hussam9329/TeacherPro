@@ -161,10 +161,10 @@ must(
 );
 
 must(
-  profileStatsRoute.includes("callsCount") &&
+    profileStatsRoute.includes("callsCount") &&
     profileStatsRoute.includes("leavesCount") &&
     profileStatsRoute.includes("pledgesCount") &&
-    profileStatsRoute.includes("timelineCount") &&
+    profileStatsRoute.includes("timeline: activityStats.timeline") &&
     profileStatsRoute.includes("deductions"),
   "إحصائيات ملف الطالب تشمل المكالمات والإجازات والتعهدات والخصومات والسجل الزمني",
   "كروت ملف الطالب يجب أن تأتي من إحصائيات DB لكل مسار مهم.",

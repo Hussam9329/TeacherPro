@@ -756,6 +756,7 @@ export interface PledgeActionResponse {
 
 export interface StudentProfileStatsResponse {
   studentId: string;
+  student?: Record<string, unknown>;
   grades: number;
   exams: number;
   absent: number;
@@ -764,6 +765,9 @@ export interface StudentProfileStatsResponse {
   failed: number;
   graceGrades: number;
   noDiscountGrades: number;
+  beforeRegistrationGrades?: number;
+  excusedGrades?: number;
+  cheatingGrades?: number;
   opportunities: number;
   baseOpportunities: number;
   opportunityLimit: number | null;
@@ -790,9 +794,32 @@ export interface StudentProfileStatsResponse {
   dismissals?: number;
   reactivations?: number;
   timeline?: number;
+  timelineTruncated?: boolean;
   actions: number;
+  audit?: StudentProfileAuditMetadata;
+  sections?: StudentProfileSectionAccess;
+  snapshotVersion?: string;
   source: "database";
   generatedAt?: string;
+}
+
+export interface StudentProfileSectionAccess {
+  students: boolean;
+  grades: boolean;
+  opportunities: boolean;
+  followUp: boolean;
+  logs: boolean;
+  correction: boolean;
+  archives: boolean;
+}
+
+export interface StudentProfileAuditMetadata {
+  limit: number;
+  returned: number;
+  truncated: boolean;
+  matchSource:
+    | "student-id-or-exact-code"
+    | "redacted";
 }
 
 export interface StudentAcademicUpdateImpactResponse {
@@ -865,6 +892,7 @@ export interface StudentEnrollmentArchiveRecord {
 
 export interface StudentProfileLogResponse {
   studentId: string;
+  student?: Record<string, unknown>;
   grades: Array<Record<string, unknown>>;
   exams?: Array<Record<string, unknown>>;
   opportunityLogs: Array<Record<string, unknown>>;
@@ -873,6 +901,9 @@ export interface StudentProfileLogResponse {
   studentNotes: Array<Record<string, unknown>>;
   logs: Array<Record<string, unknown>>;
   enrollmentArchives?: StudentEnrollmentArchiveRecord[];
+  audit?: StudentProfileAuditMetadata;
+  sections?: StudentProfileSectionAccess;
+  snapshotVersion?: string;
   source: "database";
   generatedAt?: string;
 }

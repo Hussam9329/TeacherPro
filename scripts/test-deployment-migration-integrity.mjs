@@ -49,6 +49,12 @@ check(
   "deployment runs prisma migrate deploy",
 );
 check(
+  buildScript.includes("TEACHERPRO_RUN_MIGRATIONS") &&
+    buildScript.indexOf("TEACHERPRO_RUN_MIGRATIONS") <
+      buildScript.indexOf('run("prisma", ["migrate", "deploy"]'),
+  "production migrations require an explicit deployment opt-in",
+);
+check(
   buildScript.includes("DIRECT_URL") && buildScript.includes("DATABASE_URL"),
   "deployment supports direct migration URL and requires database URL",
 );
