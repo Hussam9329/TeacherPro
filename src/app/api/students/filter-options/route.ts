@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
     if (status) and.push({ status });
     else and.push({ status: { not: "مؤرشف" } });
 
+    const gender = normalizeListFilter(searchParams.get("gender"));
+    if (gender) and.push({ gender });
+
     const courseId = normalizeListFilter(searchParams.get("courseId"));
     if (courseId) and.push({ courseId });
 

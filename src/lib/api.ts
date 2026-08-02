@@ -551,6 +551,7 @@ export interface ServerData {
 export interface StudentListQuery {
   q?: string;
   status?: string;
+  gender?: string;
   courseProgram?: string;
   courseTerm?: string;
   studyType?: string;
@@ -607,6 +608,7 @@ export interface StudentStatsResponse {
 export interface StudentStatsQuery {
   q?: string;
   status?: string;
+  gender?: string;
   courseId?: string;
   courseProgram?: string;
   courseTerm?: string;
@@ -1378,6 +1380,7 @@ export const studentStatsApi = {
     const queryString = buildQueryString({
       q: query.q,
       status: query.status,
+      gender: query.gender,
       courseId: query.courseId,
       courseProgram: query.courseProgram,
       courseTerm: query.courseTerm,
@@ -1427,6 +1430,7 @@ export const studentApi = {
     const queryString = buildQueryString({
       q: query.q,
       status: query.status,
+      gender: query.gender,
       courseProgram: query.courseProgram,
       courseTerm: query.courseTerm,
       studyType: query.studyType,

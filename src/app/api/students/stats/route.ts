@@ -156,6 +156,7 @@ export async function GET(req: NextRequest) {
 
     const visibleStudentsWhere = visibleStudentWhere();
     const status = normalizeListFilter(searchParams.get("status"));
+    const gender = normalizeListFilter(searchParams.get("gender"));
     const filters: Prisma.StudentWhereInput[] = [
       status ? { status } : visibleStudentsWhere,
     ];
@@ -169,6 +170,7 @@ export async function GET(req: NextRequest) {
     const query = String(searchParams.get("q") || "").trim();
     const issue = normalizeListFilter(searchParams.get("registryIssue"));
 
+    if (gender) filters.push({ gender });
     if (courseId) filters.push({ courseId });
     if (courseProgram) filters.push({ courseProgram });
     if (courseProgram === "كورسات" && courseTerm) filters.push({ courseTerm });

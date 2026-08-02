@@ -372,6 +372,9 @@ function buildStudentFilterWhere(
     and.push({ status: { not: ARCHIVED_STUDENT_STATUS } });
   }
 
+  const gender = normalizeListFilter(searchParams.get("gender"));
+  if (gender) and.push({ gender });
+
   const courseId = normalizeListFilter(searchParams.get("courseId"));
   if (courseId) and.push({ courseId });
 

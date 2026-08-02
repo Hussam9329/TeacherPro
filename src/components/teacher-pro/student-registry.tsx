@@ -481,6 +481,7 @@ export function StudentRegistryView() {
 
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterGender, setFilterGender] = useState("");
   const [filterCourseId, setFilterCourseId] = useState("");
   const [filterCourseProgram, setFilterCourseProgram] = useState("");
   const [filterCourseTerm, setFilterCourseTerm] = useState("");
@@ -614,6 +615,7 @@ export function StudentRegistryView() {
   useEffect(() => {
     const params = new URLSearchParams();
     if (filterStatus) params.set("status", filterStatus);
+    if (filterGender) params.set("gender", filterGender);
     if (filterCourseId) params.set("courseId", filterCourseId);
     if (filterCourseProgram) params.set("courseProgram", filterCourseProgram);
     if (filterCourseProgram === "كورسات" && filterCourseTerm) {
@@ -622,12 +624,18 @@ export function StudentRegistryView() {
     if (filterStudyType) params.set("studyType", filterStudyType);
 
     const fallbackLocations = () =>
-      getAcademicLocationFilterOptions(students, {
-        courseId: filterCourseId,
-        courseProgram: filterCourseProgram,
-        courseTerm: filterCourseProgram === "كورسات" ? filterCourseTerm : "",
-        studyType: filterStudyType,
-      });
+      getAcademicLocationFilterOptions(
+        filterGender
+          ? students.filter((student) => student.gender === filterGender)
+          : students,
+        {
+          courseId: filterCourseId,
+          courseProgram: filterCourseProgram,
+          courseTerm:
+            filterCourseProgram === "كورسات" ? filterCourseTerm : "",
+          studyType: filterStudyType,
+        },
+      );
 
     const controller = new AbortController();
 
@@ -669,6 +677,7 @@ export function StudentRegistryView() {
   }, [
     students,
     filterStatus,
+    filterGender,
     filterCourseId,
     filterCourseProgram,
     filterCourseTerm,
@@ -695,6 +704,7 @@ export function StudentRegistryView() {
         {
           q: debouncedSearch,
           status: filterStatus,
+          gender: filterGender,
           courseId: filterCourseId,
           courseProgram: filterCourseProgram,
           courseTerm: filterCourseProgram === "كورسات" ? filterCourseTerm : "",
@@ -748,6 +758,7 @@ export function StudentRegistryView() {
   }, [
     debouncedSearch,
     filterStatus,
+    filterGender,
     filterCourseId,
     filterCourseProgram,
     filterCourseTerm,
@@ -768,6 +779,7 @@ export function StudentRegistryView() {
       .get({
         q: debouncedSearch,
         status: filterStatus,
+        gender: filterGender,
         courseId: filterCourseId,
         courseProgram: filterCourseProgram,
         courseTerm: filterCourseProgram === "كورسات" ? filterCourseTerm : "",
@@ -803,6 +815,7 @@ export function StudentRegistryView() {
   }, [
     debouncedSearch,
     filterStatus,
+    filterGender,
     filterCourseId,
     filterCourseProgram,
     filterCourseTerm,
@@ -1463,6 +1476,7 @@ export function StudentRegistryView() {
         return false;
       if (filterStatus && s.status !== filterStatus) return false;
       if (!filterStatus && s.status === ARCHIVED_STUDENT_STATUS) return false;
+      if (filterGender && s.gender !== filterGender) return false;
       if (filterCourseId && s.courseId !== filterCourseId) return false;
       if (filterRegistryIssue) {
         const badges = registryHealthBadges(s).map((badge) => badge.label);
@@ -1484,6 +1498,7 @@ export function StudentRegistryView() {
     students,
     debouncedSearch,
     filterStatus,
+    filterGender,
     filterCourseId,
     filterCourseProgram,
     filterCourseTerm,
@@ -1599,6 +1614,7 @@ export function StudentRegistryView() {
     const params = new URLSearchParams();
     if (debouncedSearch) params.set("q", debouncedSearch);
     if (filterStatus) params.set("status", filterStatus);
+    if (filterGender) params.set("gender", filterGender);
     if (filterCourseId) params.set("courseId", filterCourseId);
     if (filterCourseProgram) params.set("courseProgram", filterCourseProgram);
     if (filterCourseTerm) params.set("courseTerm", filterCourseTerm);
@@ -1620,6 +1636,7 @@ export function StudentRegistryView() {
   const resetFilters = () => {
     setSearch("");
     setFilterStatus("");
+    setFilterGender("");
     setFilterCourseId("");
     setFilterCourseProgram("");
     setFilterCourseTerm("");
@@ -1812,6 +1829,28 @@ export function StudentRegistryView() {
                   <SelectItem value="نشط">نشط</SelectItem>
                   <SelectItem value="مفصول">مفصول</SelectItem>
                   <SelectItem value="مؤرشف">مؤرشف</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="tp-filter-field tp-filter-secondary">
+              <Label htmlFor="registry-gender" className="text-xs">
+                الجنس
+              </Label>
+              <Select
+                name="gender"
+                value={filterGender || "all"}
+                onValueChange={(v) => {
+                  setFilterGender(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-gender">
+                  <SelectValue placeholder="كل الأجناس" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="ذكر">ذكر</SelectItem>
+                  <SelectItem value="أنثى">أنثى</SelectItem>
                 </SelectContent>
               </Select>
             </div>

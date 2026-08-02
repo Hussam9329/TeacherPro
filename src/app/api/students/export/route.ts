@@ -79,6 +79,7 @@ function buildStudentExportWhere(
   const q = String(searchParams.get("q") || "").trim();
   const courseId = normalizeListFilter(searchParams.get("courseId"));
   const status = normalizeListFilter(searchParams.get("status"));
+  const gender = normalizeListFilter(searchParams.get("gender"));
   const courseProgram = normalizeListFilter(searchParams.get("courseProgram"));
   const courseTerm = normalizeListFilter(searchParams.get("courseTerm"));
   const studyType = normalizeListFilter(searchParams.get("studyType"));
@@ -89,6 +90,7 @@ function buildStudentExportWhere(
   if (courseId) and.push({ courseId });
   if (status) and.push({ status });
   else and.push({ status: { not: STUDENT_STATUS_ARCHIVED } });
+  if (gender) and.push({ gender });
   if (courseProgram) and.push({ courseProgram });
   if (courseProgram === "كورسات" && courseTerm) and.push({ courseTerm });
   if (studyType) and.push({ studyType });
