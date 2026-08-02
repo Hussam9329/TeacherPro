@@ -81,15 +81,24 @@ import {
 } from "@/lib/validation";
 import { useActionLock } from "@/hooks/use-action-lock";
 import {
+  Archive,
   AlertTriangle,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
   GraduationCap,
   MapPin,
+  Pencil,
   Phone,
+  RotateCcw,
+  Save,
   SearchX,
   ShieldCheck,
   UserPlus,
   UserRound,
+  UserX,
+  X,
 } from "lucide-react";
 import { CountScopeSummary, EmptyState } from "./ui-kit";
 import { StudentProfileDialog } from "./student-profile-dialog";
@@ -1932,7 +1941,7 @@ export function StudentRegistryView() {
       </Card>
 
       <div className="tp-student-registry__stats grid grid-cols-1 gap-3 md:grid-cols-3">
-        <Card className="bg-card/80">
+        <Card className="tp-student-registry__stat-card bg-card/80">
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">الطلاب النشطون</p>
@@ -1943,16 +1952,18 @@ export function StudentRegistryView() {
             <Button
               variant="outline"
               size="sm"
+              className="tp-student-registry__stat-action"
               onClick={() => {
                 setFilterStatus("نشط");
                 setPage(1);
               }}
             >
-              عرض
+              <UserRound aria-hidden="true" className="size-4" />
+              عرض النشطين
             </Button>
           </CardContent>
         </Card>
-        <Card className="border-destructive/30 bg-destructive/5">
+        <Card className="tp-student-registry__stat-card border-destructive/30 bg-destructive/5">
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">قائمة المفصولين</p>
@@ -1963,16 +1974,18 @@ export function StudentRegistryView() {
             <Button
               variant="destructive"
               size="sm"
+              className="tp-student-registry__stat-action"
               onClick={() => {
                 setFilterStatus("مفصول");
                 setPage(1);
               }}
             >
+              <UserX aria-hidden="true" className="size-4" />
               عرض المفصولين
             </Button>
           </CardContent>
         </Card>
-        <Card className="border-amber-500/30 bg-amber-500/5">
+        <Card className="tp-student-registry__stat-card border-amber-500/30 bg-amber-500/5">
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">بدون فصل نشط</p>
@@ -1983,10 +1996,12 @@ export function StudentRegistryView() {
             <Button
               variant="outline"
               size="sm"
+              className="tp-student-registry__stat-action"
               onClick={() => {
                 resetFilters();
               }}
             >
+              <Eye aria-hidden="true" className="size-4" />
               عرض الكل
             </Button>
           </CardContent>
@@ -2013,7 +2028,7 @@ export function StudentRegistryView() {
               setPage(1);
             }}
           >
-            <SelectTrigger id="registry-pageSize" className="w-20 h-8">
+            <SelectTrigger id="registry-pageSize" className="h-10 w-24 rounded-xl">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -2051,8 +2066,9 @@ export function StudentRegistryView() {
           action={
             <Button
               onClick={() => setSection("student-register")}
-              className="min-h-11 px-6"
+              className="tp-student-registry__empty-action"
             >
+              <UserPlus aria-hidden="true" className="size-4" />
               إضافة طالب الآن
             </Button>
           }
@@ -2066,8 +2082,9 @@ export function StudentRegistryView() {
             <Button
               variant="outline"
               onClick={resetFilters}
-              className="min-h-11 px-6"
+              className="tp-student-registry__empty-action"
             >
+              <RotateCcw aria-hidden="true" className="size-4" />
               مسح الفلاتر
             </Button>
           }
@@ -2223,42 +2240,46 @@ export function StudentRegistryView() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="tp-student-registry__card-actions">
                   <Button
-                    variant="outline"
+                    variant="default"
                     size="sm"
-                    className="min-h-11 text-xs"
+                    className="tp-student-registry__action-button"
                     onClick={() => setFileDialog({ student, open: true })}
                   >
+                    <Eye aria-hidden="true" className="size-4" />
                     ملف الطالب
                   </Button>
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="min-h-11 text-xs"
+                    className="tp-student-registry__action-button"
                     disabled={registryServerUnavailable}
                     onClick={() => openEditDialog(student)}
                   >
+                    <Pencil aria-hidden="true" className="size-4" />
                     تعديل
                   </Button>
                   {student.status === "نشط" ? (
                     <Button
                       variant="destructive"
                       size="sm"
-                      className="min-h-11 text-xs"
+                      className="tp-student-registry__action-button"
                       disabled={registryServerUnavailable || isStatusActionSaving}
                       onClick={() => setDismissDialog({ student, open: true })}
                     >
+                      <UserX aria-hidden="true" className="size-4" />
                       فصل
                     </Button>
                   ) : (
                     <Button
-                      variant="default"
+                      variant="outline"
                       size="sm"
-                      className="min-h-11 text-xs"
+                      className="tp-student-registry__action-button tp-student-registry__action-button--restore"
                       disabled={registryServerUnavailable || isStatusActionSaving}
                       onClick={() => handleReactivate(student.id)}
                     >
+                      <RotateCcw aria-hidden="true" className="size-4" />
                       {student.status === ARCHIVED_STUDENT_STATUS
                         ? "استعادة"
                         : "إعادة تفعيل"}
@@ -2268,10 +2289,11 @@ export function StudentRegistryView() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="min-h-11 border-destructive/40 text-xs text-destructive hover:bg-destructive/10"
+                      className="tp-student-registry__action-button border-destructive/40 text-destructive hover:bg-destructive/10"
                       disabled={registryServerUnavailable || isDeletingStudent}
                       onClick={() => openDeleteDialog(student)}
                     >
+                      <Archive aria-hidden="true" className="size-4" />
                       أرشفة
                     </Button>
                   )}
@@ -2344,53 +2366,63 @@ export function StudentRegistryView() {
                       {student.status}
                     </Badge>
                   </td>
-                  <td className="p-3 min-w-56">
-                    <div className="flex flex-wrap gap-1">
+                  <td className="tp-student-registry__actions-cell p-3">
+                    <div className="tp-student-registry__table-actions">
                       <Button
-                        variant="outline"
+                        variant="default"
                         size="sm"
+                        className="tp-student-registry__action-button"
                         onClick={() => setFileDialog({ student, open: true })}
                       >
-                        ملف
+                        <Eye aria-hidden="true" className="size-4" />
+                        ملف الطالب
                       </Button>
                       <Button
                         variant="secondary"
                         size="sm"
+                        className="tp-student-registry__action-button"
                         disabled={registryServerUnavailable}
                         onClick={() => openEditDialog(student)}
                       >
+                        <Pencil aria-hidden="true" className="size-4" />
                         تعديل
                       </Button>
                       {student.status === "نشط" ? (
                         <Button
                           variant="destructive"
                           size="sm"
+                          className="tp-student-registry__action-button"
                           disabled={registryServerUnavailable || isStatusActionSaving}
                           onClick={() =>
                             setDismissDialog({ student, open: true })
                           }
                         >
+                          <UserX aria-hidden="true" className="size-4" />
                           فصل
                         </Button>
                       ) : (
                         <Button
+                          variant="outline"
                           size="sm"
+                          className="tp-student-registry__action-button tp-student-registry__action-button--restore"
                           disabled={registryServerUnavailable || isStatusActionSaving}
                           onClick={() => handleReactivate(student.id)}
                         >
+                          <RotateCcw aria-hidden="true" className="size-4" />
                           {student.status === ARCHIVED_STUDENT_STATUS
                             ? "استعادة"
-                            : "تفعيل"}
+                            : "إعادة تفعيل"}
                         </Button>
                       )}
                       {student.status !== ARCHIVED_STUDENT_STATUS && (
                         <Button
                           variant="outline"
                           size="sm"
-                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                          className="tp-student-registry__action-button border-destructive/40 text-destructive hover:bg-destructive/10"
                           disabled={registryServerUnavailable || isDeletingStudent}
                           onClick={() => openDeleteDialog(student)}
                         >
+                          <Archive aria-hidden="true" className="size-4" />
                           أرشفة
                         </Button>
                       )}
@@ -2404,25 +2436,29 @@ export function StudentRegistryView() {
       )}
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
+        <div className="tp-student-registry__pagination">
           <Button
             variant="outline"
             size="sm"
+            className="tp-student-registry__pagination-button tp-student-registry__pagination-button--previous"
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
           >
+            <ChevronRight aria-hidden="true" className="size-4" />
             السابق
           </Button>
-          <span className="text-sm text-muted-foreground">
+          <span className="tp-student-registry__pagination-summary text-sm text-muted-foreground">
             صفحة {page} من {totalPages} · المعروض في الصفحة: {paged.length}
           </span>
           <Button
             variant="outline"
             size="sm"
+            className="tp-student-registry__pagination-button tp-student-registry__pagination-button--next"
             disabled={page >= totalPages}
             onClick={() => setPage((p) => p + 1)}
           >
             التالي
+            <ChevronLeft aria-hidden="true" className="size-4" />
           </Button>
         </div>
       )}
@@ -3095,7 +3131,7 @@ export function StudentRegistryView() {
                                 type="button"
                                 variant={academicImpactConfirmed ? "default" : "outline"}
                                 onClick={() => setAcademicImpactConfirmed((value) => !value)}
-                                className="rounded-xl"
+                                className="min-h-11 w-full rounded-xl sm:w-auto"
                               >
                                 {academicImpactConfirmed
                                   ? "تم تأكيد الأثر — يمكن الحفظ"
@@ -3117,21 +3153,23 @@ export function StudentRegistryView() {
             <p className="hidden text-xs text-muted-foreground sm:block">
               راجع الحقول المطلوبة قبل حفظ التعديل.
             </p>
-            <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+            <div className="tp-student-registry__dialog-actions">
               <Button
                 variant="outline"
-                className="min-w-28 rounded-2xl"
+                className="tp-student-registry__dialog-button"
                 onClick={() =>
                   setEditDialog({ open: false, id: "", form: emptyEditForm })
                 }
               >
+                <X aria-hidden="true" className="size-4" />
                 إلغاء
               </Button>
               <Button
-                className="min-w-32 rounded-2xl"
+                className="tp-student-registry__dialog-button"
                 onClick={handleEditSave}
                 disabled={isSavingEdit}
               >
+                <Save aria-hidden="true" className="size-4" />
                 {isSavingEdit ? "جاري الحفظ..." : "حفظ التعديلات"}
               </Button>
             </div>
@@ -3187,13 +3225,17 @@ export function StudentRegistryView() {
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+          <AlertDialogFooter className="tp-student-registry__confirm-actions">
+            <AlertDialogCancel className="tp-student-registry__dialog-button">
+              <X aria-hidden="true" className="size-4" />
+              إلغاء
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteConfirm}
               disabled={isDeletingStudent || deleteImpactLoading}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="tp-student-registry__dialog-button bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
+              <Archive aria-hidden="true" className="size-4" />
               {isDeletingStudent ? "جاري الأرشفة..." : "أرشفة الطالب"}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -3253,21 +3295,24 @@ export function StudentRegistryView() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="tp-student-registry__confirm-actions">
             <Button
               variant="outline"
+              className="tp-student-registry__dialog-button"
               onClick={() => {
                 setDismissDialog({ student: null, open: false });
                 setDismissNotes("");
               }}
             >
+              <X aria-hidden="true" className="size-4" />
               إلغاء
             </Button>
             <Button
               variant="destructive"
-              className="border-red-600 bg-red-600 text-white shadow-sm shadow-red-600/20 hover:border-red-700 hover:bg-red-700 hover:text-white dark:border-red-600 dark:bg-red-600 dark:text-white dark:hover:border-red-500 dark:hover:bg-red-500"
+              className="tp-student-registry__dialog-button border-red-600 bg-red-600 text-white shadow-sm shadow-red-600/20 hover:border-red-700 hover:bg-red-700 hover:text-white dark:border-red-600 dark:bg-red-600 dark:text-white dark:hover:border-red-500 dark:hover:bg-red-500"
               onClick={handleDismiss}
             >
+              <UserX aria-hidden="true" className="size-4" />
               تأكيد الفصل
             </Button>
           </DialogFooter>
