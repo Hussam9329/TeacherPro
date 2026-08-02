@@ -765,10 +765,23 @@ export function StudentRegistryView() {
   useEffect(() => {
     let cancelled = false;
     studentStatsApi
-      .get()
+      .get({
+        q: debouncedSearch,
+        status: filterStatus,
+        courseId: filterCourseId,
+        courseProgram: filterCourseProgram,
+        courseTerm: filterCourseProgram === "كورسات" ? filterCourseTerm : "",
+        studyType: filterStudyType,
+        location: filterLocation,
+        registryIssue: filterRegistryIssue,
+      })
       .then((result) => {
         if (cancelled) return;
-        setStudentsSystemTotal(result ? Number(result.total || 0) : null);
+        setStudentsSystemTotal(
+          result
+            ? Number(result.systemTotal ?? result.total ?? 0)
+            : null,
+        );
         setActiveStudentsTotal(result ? Number(result.active || 0) : null);
         setDismissedStudentsTotal(
           result ? Number(result.dismissed || 0) : null,
@@ -787,7 +800,18 @@ export function StudentRegistryView() {
     return () => {
       cancelled = true;
     };
-  }, [serverRefreshKey, syncKey]);
+  }, [
+    debouncedSearch,
+    filterStatus,
+    filterCourseId,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
+    filterLocation,
+    filterRegistryIssue,
+    serverRefreshKey,
+    syncKey,
+  ]);
 
   useEffect(() => {
     if (filterCourseProgram !== "كورسات" && filterCourseTerm) {

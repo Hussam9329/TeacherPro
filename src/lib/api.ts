@@ -595,12 +595,24 @@ const DEFAULT_GRADE_PAGE_SIZE = 100;
 const LIST_ALL_PAGE_SIZE = 500;
 
 export interface StudentStatsResponse {
+  systemTotal?: number;
   total: number;
   active: number;
   dismissed: number;
   archived?: number;
   noActiveChapter: number;
   source: "database";
+}
+
+export interface StudentStatsQuery {
+  q?: string;
+  status?: string;
+  courseId?: string;
+  courseProgram?: string;
+  courseTerm?: string;
+  studyType?: string;
+  location?: string;
+  registryIssue?: string;
 }
 
 export interface StudentDeleteImpactResponse {
@@ -1362,7 +1374,21 @@ export const courseChapterApi = {
 // ─── Student API ──────────────────────────────────────────────────────────────
 
 export const studentStatsApi = {
-  get: () => apiGet<StudentStatsResponse>("students/stats"),
+  get: (query: StudentStatsQuery = {}) => {
+    const queryString = buildQueryString({
+      q: query.q,
+      status: query.status,
+      courseId: query.courseId,
+      courseProgram: query.courseProgram,
+      courseTerm: query.courseTerm,
+      studyType: query.studyType,
+      location: query.location,
+      registryIssue: query.registryIssue,
+    });
+    return apiGet<StudentStatsResponse>(
+      `students/stats${queryString ? `?${queryString}` : ""}`,
+    );
+  },
 };
 
 export interface StudentRegisterContextRow {
