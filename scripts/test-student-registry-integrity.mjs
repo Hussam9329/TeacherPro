@@ -4,6 +4,8 @@ import path from 'node:path';
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const registry = read('src/components/teacher-pro/student-registry.tsx');
+const registryResults = read('src/components/teacher-pro/student-registry-results.tsx');
+const registryHelpers = read('src/components/teacher-pro/student-registry-helpers.ts');
 const api = read('src/lib/api.ts');
 const studentsRoute = read('src/app/api/students/route.ts');
 const studentsExportRoute = read('src/app/api/students/export/route.ts');
@@ -23,34 +25,36 @@ function check(label, condition) {
   checks.push({ label, ok: Boolean(condition) });
 }
 
-check('سجل الطلاب يستخدم روابط واتساب ويب https://wa.me وليس whatsapp://', registry.includes('https://wa.me/') && !registry.includes('whatsapp://'));
-check('سجل الطلاب يستخدم روابط تليكرام https://t.me وليس tg://', registry.includes('https://t.me/') && !registry.includes('tg://'));
+const registryUi = `${registry}\n${registryResults}\n${registryHelpers}`;
+check('سجل الطلاب يستخدم روابط واتساب ويب https://wa.me وليس whatsapp://', registryUi.includes('https://wa.me/') && !registryUi.includes('whatsapp://'));
+check('سجل الطلاب يستخدم روابط تليكرام https://t.me وليس tg://', registryUi.includes('https://t.me/') && !registryUi.includes('tg://'));
 check('تحميل سجل الطلاب يستخدم AbortController فعلياً لمنع رجوع نتائج قديمة', registry.includes('new AbortController()') && registry.includes('controller.abort()') && registry.includes('quietAbort: true'));
 check('قائمة سجل الطلاب تطلب opportunityMode حتى تصل Badges الصحة من قاعدة البيانات', registry.includes('opportunityMode: true'));
 check(
   'سجل الطلاب يعرض رصيد الفرص المحفوظ مثل صفحة المكالمات ولا يربطه بكاش الفصل المحلي',
-  registry.includes('function registryOpportunityText(student: Student)') &&
-    registry.includes('formatOpportunityBalance(student, { separator: " / " })') &&
-    (registry.match(/registryOpportunityText\(student\)/g) || []).length >= 2 &&
-    !registry.includes('activeChapterForCourse(student.courseId)'),
+  registryResults.includes('formatOpportunityBalance(student, { separator: " / " })') &&
+    (registryResults.match(/formatOpportunityBalance\(student/g) || []).length >= 2 &&
+    !registryResults.includes('activeChapterForCourse(student.courseId)'),
 );
 check('سجل الطلاب يملك فلتر صحة/مشاكل واضح', registry.includes('RegistryIssueFilter') && registry.includes('registryIssueFilterLabels') && registry.includes('filterRegistryIssue'));
 check(
   'قائمة الطلاب والتصدير يشتركان في فلتر registryIssue نفسه من قاعدة البيانات',
   api.includes('registryIssue?: string') &&
     api.includes('registryIssue: query.registryIssue') &&
-    studentsRoute.includes('buildStudentRegistryIssueWhere(searchParams)') &&
-    studentsExportRoute.includes('buildStudentRegistryIssueWhere(searchParams)') &&
+    studentsRoute.includes('buildStudentRegistryWhere(searchParams)') &&
+    studentsExportRoute.includes('buildStudentRegistryWhere(searchParams)') &&
+    registryFiltersHelper.includes('buildStudentRegistryIssueWhere(searchParams)') &&
     registryIssueHelper.includes('active-chapter-conflict') &&
     registryIssueHelper.includes('opportunity-over-limit'),
 );
 check(
   'القائمة والإحصائيات والتصدير تستخدم بحثاً وموقعاً موحدين',
-  [studentsRoute, studentsStatsRoute, studentsExportRoute].every(
-    (source) =>
-      source.includes('buildStudentRegistrySearchWhere') &&
-      source.includes('buildStudentRegistryLocationWhere'),
-  ) &&
+  studentsRoute.includes('buildStudentRegistryWhere(searchParams)') &&
+    studentsExportRoute.includes('buildStudentRegistryWhere(searchParams)') &&
+    studentsStatsRoute.includes('buildStudentRegistrySearchWhere') &&
+    studentsStatsRoute.includes('buildStudentRegistryLocationWhere') &&
+    registryFiltersHelper.includes('buildStudentRegistrySearchWhere') &&
+    registryFiltersHelper.includes('buildStudentRegistryLocationWhere') &&
     registryFiltersHelper.includes('{ name: { contains: query') &&
     registryFiltersHelper.includes('telegramKey: { startsWith: telegram'),
 );

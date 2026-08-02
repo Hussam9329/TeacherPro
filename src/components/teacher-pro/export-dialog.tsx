@@ -215,6 +215,8 @@ export function ExportDialog<T = Record<string, unknown>>({
   pdfTitle,
   pdfFileName,
   fetchRows,
+  totalRowCount,
+  disabled = false,
 }: {
   title: string;
   fileName: string;
@@ -228,6 +230,9 @@ export function ExportDialog<T = Record<string, unknown>>({
   pdfTitle?: string;
   pdfFileName?: string;
   fetchRows?: () => Promise<T[]>;
+  /** Exact number of rows that fetchRows will export (not the current page). */
+  totalRowCount?: number | null;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedColumnKeys, setSelectedColumnKeys] = useState<string[]>(() =>
@@ -373,7 +378,7 @@ export function ExportDialog<T = Record<string, unknown>>({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
+        <Button variant="outline" size="sm" className="gap-2" disabled={disabled}>
           <Download className="h-4 w-4" />
           {triggerLabel}
         </Button>
@@ -386,7 +391,8 @@ export function ExportDialog<T = Record<string, unknown>>({
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-1 gap-2 rounded-xl border bg-muted/30 p-3 text-sm sm:grid-cols-2">
             <p className="text-muted-foreground">
-              عدد الصفوف المعروضة حالياً: <b>{rows.length}</b>
+              عدد النتائج التي ستُصدّر:{" "}
+              <b>{totalRowCount ?? (fetchRows ? "يُحسب عند التصدير" : rows.length)}</b>
             </p>
             <p className="text-muted-foreground">
               الأعمدة المختارة: <b>{selectedColumns.length}</b> من <b>{columns.length}</b>

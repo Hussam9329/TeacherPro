@@ -488,7 +488,7 @@ export function GradeEntryView() {
   const entryGradesSource = useMemo(() => {
     if (!selectedExamId) return grades;
     const byKey = new Map<string, Grade>();
-    // ابدأ بذاكرة الواجهة، ثم اجعل ورقة الإدخال القادمة مباشرة من الخادم
+    // ابدأ بذاكرة الواجهة، ثم اجعل ورقة الإدخال القادمة مباشرة من بيانات النظام
     // هي المرجع النهائي. عكس هذا الترتيب كان يعيد expectedUpdatedAt قديماً
     // ويؤدي إلى رفض الحفظ بتعارض 409 رغم عدم وجود تعديل متزامن حقيقي.
     for (const grade of grades) {

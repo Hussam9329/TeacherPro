@@ -1,7 +1,7 @@
 "use client";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useTeacherStore,
   type CourseTransferPolicy,
@@ -14,12 +14,8 @@ import {
   type StudentAcademicUpdateImpactResponse,
   type StudentDeleteImpactResponse,
 } from "@/lib/api";
-import {
-  getStudentGraceWindow,
-  isStudentCurrentlyInGrace as isStudentCurrentlyInGraceUnified,
-  type GracePeriodStartMode,
-} from "@/lib/student-grace";
-import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
+import { type GracePeriodStartMode } from "@/lib/student-grace";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,7 +55,6 @@ import {
   sanitizePhoneInput,
   toLatinDigits,
 } from "@/lib/format";
-import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import {
   COURSE_TERMS,
   getAvailablePrograms,
@@ -72,13 +67,10 @@ import {
 } from "@/lib/course-config";
 import {
   getStudentDuplicateMessage,
-  normalizeTelegramIdentifier,
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
-import {
-  getRequiredTextError,
-  searchAny,
-} from "@/lib/validation";
+import { getRequiredTextError } from "@/lib/validation";
+import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { useActionLock } from "@/hooks/use-action-lock";
 import {
   Archive,
@@ -89,7 +81,6 @@ import {
   Eye,
   GraduationCap,
   MapPin,
-  Pencil,
   Phone,
   RotateCcw,
   Save,
@@ -104,8 +95,15 @@ import {
 } from "lucide-react";
 import { CountScopeSummary, EmptyState } from "./ui-kit";
 import { StudentProfileDialog } from "./student-profile-dialog";
+import {
+  StudentRegistryResults,
+  formatRegistryLocation,
+  registryIssueFilterLabels,
+  studentMatchesRegistryIssue,
+  type RegistryIssueFilter,
+} from "./student-registry-results";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { ExportDialog, type ExportColumn } from "./export-dialog";
+import { ExportDialog } from "./export-dialog";
 import {
   STUDENT_FILTER_COURSE_TERMS,
   studentMatchesListFilters,
@@ -115,394 +113,26 @@ import {
   getAcademicLocationFilterOptions,
   getAcademicStudyTypeFilterOptions,
 } from "@/lib/filter-sequence";
-
-const studentExportColumns: ExportColumn<any>[] = [
-  { key: "code", label: "الكود", value: (s) => s.code || "" },
-  { key: "name", label: "الاسم", value: (s) => s.name || "" },
-  { key: "school", label: "المدرسة", value: (s) => s.school || "" },
-  { key: "gender", label: "الجنس", value: (s) => s.gender || "" },
-  { key: "course", label: "الدورة", value: (s) => s.courseName || "" },
-  {
-    key: "courseProgram",
-    label: "نوع الدورة",
-    value: (s) => s.courseProgram || "",
-  },
-  { key: "courseTerm", label: "الكورس", value: (s) => s.courseTerm || "" },
-  { key: "studyType", label: "نوع البرنامج", value: (s) => s.studyType || "" },
-  {
-    key: "locationScope",
-    label: "نطاق الموقع",
-    value: (s) => s.locationScope || "",
-  },
-  { key: "location", label: "الموقع", value: (s) => s.locationText || "" },
-  { key: "status", label: "الحالة", value: (s) => s.status || "" },
-  { key: "opportunities", label: "الفرص", value: (s) => s.opportunities ?? "" },
-  {
-    key: "grace",
-    label: "فترة السماح",
-    value: (s) => `${s.accountingGraceDays ?? 0} يوم`,
-  },
-  { key: "phone", label: "الهاتف", value: (s) => s.phone || "" },
-  { key: "parentPhone", label: "ولي الأمر", value: (s) => s.parentPhone || "" },
-  { key: "telegram", label: "التيليجرام", value: (s) => s.telegram || "" },
-];
-
-type RegistryViewMode = "cards" | "table";
-
-const ARCHIVED_STUDENT_STATUS = "مؤرشف";
-const STUDENT_REGISTRY_STATE_KEY = "teacherpro:student-registry-state:v1";
-
-function academicImpactKindLabel(kind: string): string {
-  const labels: Record<string, string> = {
-    missing: "غير مكتملة",
-    excused: "إجازة",
-    "grace-period": "ضمن السماح",
-    "before-registration": "قبل التسجيل",
-    "unavailable-exam": "امتحان غير متاح",
-    cheating: "غش",
-    "absent-dismissal": "غياب فصل",
-    "absent-deducted": "غياب مخصوم",
-    discounted: "درجة مخصومة",
-    "academic-accounting": "محاسبة أكاديمية",
-    dismissal: "درجة فصل",
-    failed: "راسب",
-    passed: "ناجح",
-    "full-mark": "درجة كاملة",
-    "no-discount-protected": "بدون خصم",
-  };
-  return labels[kind] || kind || "—";
-}
-
-
-
-type RegistryIssueFilter =
-  | ""
-  | "no-active-chapter"
-  | "active-chapter-conflict"
-  | "zero-opportunity-limit"
-  | "zero-opportunities"
-  | "opportunity-full"
-  | "opportunity-over-limit"
-  | "missing-contact"
-  | "no-telegram";
-
-type RegistryStudentHealth = Student & {
-  hasActiveChapter?: boolean;
-  activeChapterConflictCount?: number;
-  activeChapter?: { id: string; name: string; opportunities: number } | null;
-  opportunityLimit?: number | null;
-  opportunityHealth?:
-    | "ready"
-    | "zero-limit"
-    | "missing-active-chapter"
-    | "active-chapter-conflict";
-  isOpportunityFull?: boolean;
-  isOpportunityOverLimit?: boolean;
-};
-
-const registryIssueFilterLabels: Record<Exclude<RegistryIssueFilter, "">, string> = {
-  "no-active-chapter": "بدون فصل نشط",
-  "active-chapter-conflict": "تعارض فصول نشطة",
-  "zero-opportunity-limit": "سقف فرص صفر",
-  "zero-opportunities": "فرص صفر",
-  "opportunity-full": "فرص كاملة",
-  "opportunity-over-limit": "فوق السقف",
-  "missing-contact": "ناقص بيانات تواصل",
-  "no-telegram": "بلا تيليجرام",
-};
-
-function registryHealthBadges(student: Student) {
-  const row = student as RegistryStudentHealth;
-  const badges: Array<{ label: string; className: string }> = [];
-  const conflictCount = Number(row.activeChapterConflictCount || 0);
-  const opportunityHealth =
-    row.opportunityHealth ||
-    (conflictCount > 1
-      ? "active-chapter-conflict"
-      : row.hasActiveChapter === false
-        ? "missing-active-chapter"
-        : Number(row.activeChapter?.opportunities) === 0
-          ? "zero-limit"
-          : "ready");
-
-  if (opportunityHealth === "active-chapter-conflict") {
-    badges.push({
-      label: `تعارض فصول نشطة: ${conflictCount}`,
-      className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
-    });
-  } else if (opportunityHealth === "missing-active-chapter") {
-    badges.push({
-      label: "بدون فصل نشط",
-      className: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-    });
-  } else if (opportunityHealth === "zero-limit") {
-    badges.push({
-      label: "سقف فرص صفر",
-      className: "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
-    });
-  }
-
-  if (opportunityHealth === "ready" && row.isOpportunityOverLimit) {
-    badges.push({
-      label: "فرص فوق السقف",
-      className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
-    });
-  } else if (opportunityHealth === "ready" && row.isOpportunityFull) {
-    badges.push({
-      label: "فرص كاملة",
-      className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    });
-  }
-
-  if (!sanitizePhoneInput(student.phone || "") || !sanitizePhoneInput(student.parentPhone || "")) {
-    badges.push({
-      label: "ناقص بيانات تواصل",
-      className: "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
-    });
-  }
-
-  if (!normalizeTelegramIdentifier(student.telegram || "")) {
-    badges.push({
-      label: "بلا تيليجرام",
-      className: "border-muted-foreground/30 bg-muted/60 text-muted-foreground",
-    });
-  }
-
-  return badges;
-}
-
-function studentMatchesRegistryIssue(
-  student: Student,
-  issue: RegistryIssueFilter,
-): boolean {
-  if (!issue) return true;
-  const row = student as RegistryStudentHealth;
-  const conflictCount = Number(row.activeChapterConflictCount || 0);
-  const limit =
-    row.opportunityLimit ??
-    (row.activeChapter ? Number(row.activeChapter.opportunities || 0) : null);
-  const health =
-    row.opportunityHealth ||
-    (conflictCount > 1
-      ? "active-chapter-conflict"
-      : row.hasActiveChapter === false
-        ? "missing-active-chapter"
-        : limit === 0
-          ? "zero-limit"
-          : "ready");
-
-  if (issue === "no-active-chapter") return health === "missing-active-chapter";
-  if (issue === "active-chapter-conflict")
-    return health === "active-chapter-conflict";
-  if (issue === "zero-opportunity-limit") return health === "zero-limit";
-  if (issue === "zero-opportunities")
-    return student.status === "نشط" && Number(student.opportunities || 0) === 0;
-  if (issue === "opportunity-full")
-    return (
-      health === "ready" &&
-      limit !== null &&
-      Number(student.opportunities || 0) === limit
-    );
-  if (issue === "opportunity-over-limit")
-    return (
-      health === "ready" &&
-      limit !== null &&
-      Number(student.opportunities || 0) > limit
-    );
-  if (issue === "missing-contact")
-    return (
-      !sanitizePhoneInput(student.phone || "") ||
-      !sanitizePhoneInput(student.parentPhone || "")
-    );
-  if (issue === "no-telegram")
-    return !normalizeTelegramIdentifier(student.telegram || "");
-  return true;
-}
-
-/**
- * Keep the opportunity balance consistent with the calls page.
- *
- * The student list is server-driven and already receives the persisted
- * opportunities/baseOpportunities values from /api/students.  Do not gate the
- * display behind the client-side course/chapter cache: that cache can still be
- * loading (or be stale) and previously made valid balances appear as 0 / 0.
- * Chapter health remains visible through the dedicated server snapshot badges.
- */
-function registryOpportunityText(student: Student): string {
-  return formatOpportunityBalance(student, { separator: " / " });
-}
-
-const studentDeleteImpactLabels: Array<
-  [keyof StudentDeleteImpactResponse["counts"], string]
-> = [
-  ["grades", "درجات"],
-  ["leaves", "إجازات"],
-  ["calls", "مكالمات"],
-  ["notes", "ملاحظات"],
-  ["opportunityLogs", "سجلات فرص"],
-  ["correctionSheets", "أوراق تصحيح"],
-  ["telegramSubmissions", "مستلمات بوت"],
-];
-
-function formatStudentDeleteImpact(
-  impact: StudentDeleteImpactResponse | null,
-): string[] {
-  if (!impact) return [];
-  return studentDeleteImpactLabels
-    .map(([key, label]) => [Number(impact.counts?.[key] || 0), label] as const)
-    .filter(([count]) => count > 0)
-    .map(([count, label]) => `${label}: ${count}`);
-}
-
-type StudentEditForm = {
-  name: string;
-  school: string;
-  gender: "ذكر" | "أنثى";
-  phone: string;
-  parentPhone: string;
-  telegram: string;
-  courseProgram: string;
-  courseTerm: string;
-  studyType: string;
-  locationScope: string;
-  baghdadMode: string;
-  courseId: string;
-  subSite: string;
-  createdAt: string;
-  accountingGraceDays: string;
-};
-
-const emptyEditForm: StudentEditForm = {
-  name: "",
-  school: "",
-  gender: "ذكر",
-  phone: "",
-  parentPhone: "",
-  telegram: "",
-  courseProgram: "",
-  courseTerm: "",
-  studyType: "",
-  locationScope: "",
-  baghdadMode: "",
-  courseId: "",
-  subSite: "",
-  createdAt: baghdadTodayKey(),
-  accountingGraceDays: "0",
-};
-
-function getStudentEditForm(student: Student): StudentEditForm {
-  return {
-    name: student.name,
-    school: student.school || "",
-    gender: student.gender,
-    phone: student.phone,
-    parentPhone: student.parentPhone,
-    telegram: sanitizeTelegramInput(student.telegram),
-    courseProgram: student.courseProgram || "",
-    courseTerm: student.courseTerm || "",
-    studyType: student.studyType || "",
-    locationScope: student.locationScope || "",
-    baghdadMode: student.baghdadMode || "",
-    courseId: student.courseId,
-    subSite: student.subSite || "",
-    createdAt: baghdadDateKey(student.createdAt) || baghdadTodayKey(),
-    accountingGraceDays: String(student.accountingGraceDays ?? 0),
-  };
-}
-
-function whatsappLink(phone: string): string {
-  const sanitized = sanitizePhoneInput(phone);
-  const appPhone =
-    sanitized.startsWith("07") && sanitized.length === 11
-      ? `964${sanitized.slice(1)}`
-      : sanitized;
-  return `https://wa.me/${encodeURIComponent(appPhone)}`;
-}
-
-function telegramLink(telegram: string): string {
-  const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
-  return `https://t.me/${encodeURIComponent(username)}`;
-}
-
-function normalizeGraceDaysInput(value: string): string {
-  const digits = toLatinDigits(value).replace(/\D/g, "");
-  if (!digits) return "0";
-  return String(Math.min(Number(digits), 30));
-}
-
-function isValidGraceDays(value: string): boolean {
-  if (!/^\d+$/.test(value)) return false;
-  const days = Number(value);
-  return Number.isInteger(days) && days >= 0 && days <= 30;
-}
-
-function graceEndDate(student: Student): string {
-  const graceWindow = getStudentGraceWindow(student);
-  if (!graceWindow)
-    return formatAppDate(
-      student.createdAt,
-      String(student.createdAt || "").slice(0, 10) || "-",
-    );
-  const end = new Date(graceWindow.endExclusive);
-  end.setUTCDate(end.getUTCDate() - 1);
-  return formatAppDate(end);
-}
-
-function isStudentCurrentlyInGrace(student: Student): boolean {
-  return isStudentCurrentlyInGraceUnified(student);
-}
-
-function ContactLink({
-  href,
-  children,
-}: {
-  href: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <a
-      href={href}
-      className="break-all font-bold text-primary underline-offset-4 hover:underline"
-    >
-      {children || "—"}
-    </a>
-  );
-}
-
-
-function studentMatchesRegistrySearch(
-  student: Student,
-  query: string,
-): boolean {
-  const trimmed = toLatinDigits(query).trim();
-  if (!trimmed) return true;
-  const telegramKey = normalizeTelegramIdentifier(trimmed);
-  const studentTelegramKey = normalizeTelegramIdentifier(student.telegram || "");
-  const queryCode = trimmed.toLocaleLowerCase("ar-IQ");
-  const studentCode = String(student.code || "")
-    .trim()
-    .toLocaleLowerCase("ar-IQ");
-  const compact = sanitizePhoneInput(trimmed);
-  const phoneValues = [student.phone, student.parentPhone].map((value) =>
-    sanitizePhoneInput(String(value || "")),
-  );
-
-  return (
-    searchAny(trimmed, [student.name, student.school]) ||
-    Boolean(studentCode && studentCode.startsWith(queryCode)) ||
-    Boolean(
-      telegramKey &&
-        studentTelegramKey &&
-        studentTelegramKey.startsWith(telegramKey),
-    ) ||
-    phoneValues.some(
-      (value) =>
-        Boolean(compact && value.startsWith(compact)) ||
-        (compact.length >= 7 && value.includes(compact)),
-    )
-  );
-}
-
+import {
+  ARCHIVED_STUDENT_STATUS,
+  STUDENT_REGISTRY_STATE_KEY,
+  academicImpactKindLabel,
+  emptyEditForm,
+  formatStudentDeleteImpact,
+  getStudentRegistryCapabilities,
+  getStudentEditForm,
+  graceEndDate,
+  isStudentCurrentlyInGrace,
+  isValidGraceDays,
+  normalizeGraceDaysInput,
+  reconcileRegistryRowsAfterMutation,
+  studentExportColumns,
+  studentMatchesRegistrySearch,
+  telegramLink,
+  whatsappLink,
+  type RegistryViewMode,
+  type StudentEditForm,
+} from "./student-registry-helpers";
 export function StudentRegistryView() {
   const {
     students,
@@ -522,20 +152,11 @@ export function StudentRegistryView() {
   } = useTeacherStore();
 
   const registryUser = currentUser();
-  const isRegistryAdmin = Boolean(
-    registryUser?.username?.trim().toLowerCase() === "admin" ||
-      registryUser?.roleId === "role_admin",
-  );
-  const registryPermissions = new Set(registryUser?.permissions || []);
+  const { canAddStudents, canEditStudents, canArchiveStudents } =
+    getStudentRegistryCapabilities(registryUser);
   const registryStateStorageKey = `${STUDENT_REGISTRY_STATE_KEY}:${
     registryUser?.id || registryUser?.username || "guest"
   }`;
-  const canAddStudents =
-    isRegistryAdmin || registryPermissions.has("students.add");
-  const canEditStudents =
-    isRegistryAdmin || registryPermissions.has("students.edit");
-  const canArchiveStudents =
-    isRegistryAdmin || registryPermissions.has("students.delete");
 
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -741,6 +362,11 @@ export function StudentRegistryView() {
     null,
   );
   const [studentStatsRefreshKey, setStudentStatsRefreshKey] = useState(0);
+  const [suppressedIssueRows, setSuppressedIssueRows] = useState<{
+    issue: RegistryIssueFilter;
+    ids: string[];
+  }>({ issue: "", ids: [] });
+  const registryResultsRef = useRef<HTMLDivElement>(null);
 
   const [dismissDialog, setDismissDialog] = useState<{
     student: Student | null;
@@ -825,6 +451,7 @@ export function StudentRegistryView() {
     setNoActiveChapterStudentsTotal(null);
     setStudentStatsError(null);
     setStudentStatsLoading(true);
+    setSuppressedIssueRows({ issue: "", ids: [] });
     setLocationFilterOptions([]);
     setLoadedLocationFilterContextKey("");
   }, [registryStateStorageKey]);
@@ -975,6 +602,7 @@ export function StudentRegistryView() {
         const nextTotalPages = Math.max(1, Number(result.totalPages || 1));
         const nextStudents = (result.students || []) as unknown as Student[];
         setServerStudents(nextStudents);
+        setSuppressedIssueRows({ issue: "", ids: [] });
         mergeStudentsCache(nextStudents);
         setServerTotalCount(Number(result.totalCount || 0));
         setServerTotalPages(nextTotalPages);
@@ -1089,6 +717,94 @@ export function StudentRegistryView() {
     serverRefreshKey,
     syncKey,
   ]);
+
+  const studentMatchesCurrentRegistryFilters = useCallback(
+    (student: Student) => {
+      if (
+        debouncedSearch &&
+        !studentMatchesRegistrySearch(student, debouncedSearch)
+      ) {
+        return false;
+      }
+      if (filterStatus && student.status !== filterStatus) return false;
+      if (!filterStatus && student.status === ARCHIVED_STUDENT_STATUS)
+        return false;
+      if (filterGender && student.gender !== filterGender) return false;
+      if (filterCourseId && student.courseId !== filterCourseId) return false;
+      if (!studentMatchesRegistryIssue(student, filterRegistryIssue))
+        return false;
+      return studentMatchesListFilters(student, {
+        courseProgram: filterCourseProgram,
+        courseTerm: filterCourseTerm,
+        studyType: filterStudyType,
+        location: filterLocation,
+      });
+    },
+    [
+      debouncedSearch,
+      filterStatus,
+      filterGender,
+      filterCourseId,
+      filterCourseProgram,
+      filterCourseTerm,
+      filterStudyType,
+      filterLocation,
+      filterRegistryIssue,
+    ],
+  );
+
+  const reconcileMutationStudent = useCallback(
+    (updatedStudent: Student) => {
+      mergeStudentsCache([updatedStudent]);
+      if (filterRegistryIssue) {
+        setSuppressedIssueRows((current) => ({
+          issue: filterRegistryIssue,
+          ids: Array.from(new Set([...current.ids, updatedStudent.id])),
+        }));
+      }
+
+      if (!serverStudents) return;
+      // Mutation responses are not guaranteed to include a fresh opportunity
+      // snapshot, so issue-filtered rows wait for the authoritative refresh.
+      const shouldRemain =
+        !filterRegistryIssue &&
+        studentMatchesCurrentRegistryFilters(updatedStudent);
+      const reconciliation = reconcileRegistryRowsAfterMutation(
+        serverStudents,
+        updatedStudent,
+        shouldRemain,
+      );
+      setServerStudents(reconciliation.rows);
+
+      const delta = reconciliation.totalDelta;
+      if (delta !== 0) {
+        const nextTotal = Math.max(0, serverTotalCount + delta);
+        const nextTotalPages = Math.max(1, Math.ceil(nextTotal / pageSize));
+        setServerTotalCount(nextTotal);
+        setServerTotalPages(nextTotalPages);
+        if (page > nextTotalPages) setPage(nextTotalPages);
+      }
+    },
+    [
+      filterRegistryIssue,
+      mergeStudentsCache,
+      page,
+      pageSize,
+      serverStudents,
+      serverTotalCount,
+      studentMatchesCurrentRegistryFilters,
+    ],
+  );
+
+  const changeRegistryPage = useCallback((nextPage: number) => {
+    setPage(nextPage);
+    window.requestAnimationFrame(() => {
+      registryResultsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, []);
 
   const editFilteredCourses = useMemo(
     () =>
@@ -1670,14 +1386,7 @@ export function StudentRegistryView() {
     }
     const updatedStudent = (result.data as { student?: Student } | null)?.student;
     if (updatedStudent) {
-      mergeStudentsCache([updatedStudent]);
-      setServerStudents((prev) =>
-        prev
-          ? prev.map((student) =>
-              student.id === updatedStudent.id ? updatedStudent : student,
-            )
-          : prev,
-      );
+      reconcileMutationStudent(updatedStudent);
     }
     setEditDialog({ open: false, id: "", form: emptyEditForm });
     setEditOriginalStudent(null);
@@ -1746,16 +1455,20 @@ export function StudentRegistryView() {
       toast.error(result.error || "تعذر أرشفة الطالب");
       return;
     }
-    const archivedStudent = (result.data as { student?: Student } | null)?.student;
+    const responseStudent = (result.data as { student?: Student } | null)?.student;
+    const sourceStudent =
+      serverStudents?.find((student) => student.id === deleteDialog.id) ||
+      students.find((student) => student.id === deleteDialog.id);
+    const archivedStudent =
+      responseStudent ||
+      (sourceStudent
+        ? ({
+            ...sourceStudent,
+            status: ARCHIVED_STUDENT_STATUS,
+          } as Student)
+        : null);
     if (archivedStudent) {
-      mergeStudentsCache([archivedStudent]);
-      setServerStudents((prev) =>
-        prev
-          ? prev.map((student) =>
-              student.id === archivedStudent.id ? archivedStudent : student,
-            ).filter((student) => filterStatus || student.status !== ARCHIVED_STUDENT_STATUS)
-          : prev,
-      );
+      reconcileMutationStudent(archivedStudent);
     } else {
       setServerStudents((prev) =>
         prev ? prev.filter((student) => student.id !== deleteDialog.id) : prev,
@@ -1771,39 +1484,20 @@ export function StudentRegistryView() {
   });
 
   const localFiltered = useMemo(() => {
-    return students.filter((s) => {
-      if (
-        debouncedSearch &&
-        !studentMatchesRegistrySearch(s, debouncedSearch)
-      )
-        return false;
-      if (filterStatus && s.status !== filterStatus) return false;
-      if (!filterStatus && s.status === ARCHIVED_STUDENT_STATUS) return false;
-      if (filterGender && s.gender !== filterGender) return false;
-      if (filterCourseId && s.courseId !== filterCourseId) return false;
-      if (!studentMatchesRegistryIssue(s, filterRegistryIssue)) return false;
-      if (
-        !studentMatchesListFilters(s, {
-          courseProgram: filterCourseProgram,
-          courseTerm: filterCourseTerm,
-          studyType: filterStudyType,
-          location: filterLocation,
-        })
-      )
-        return false;
-      return true;
-    });
+    const suppressedIds =
+      filterRegistryIssue && suppressedIssueRows.issue === filterRegistryIssue
+        ? new Set(suppressedIssueRows.ids)
+        : null;
+    return students.filter(
+      (student) =>
+        !suppressedIds?.has(student.id) &&
+        studentMatchesCurrentRegistryFilters(student),
+    );
   }, [
     students,
-    debouncedSearch,
-    filterStatus,
-    filterGender,
-    filterCourseId,
-    filterCourseProgram,
-    filterCourseTerm,
-    filterStudyType,
-    filterLocation,
     filterRegistryIssue,
+    suppressedIssueRows,
+    studentMatchesCurrentRegistryFilters,
   ]);
 
   const usingServerStudents = Boolean(serverStudents);
@@ -1872,14 +1566,7 @@ export function StudentRegistryView() {
     }
     const updatedStudent = (result.data as { student?: Student } | null)?.student;
     if (updatedStudent) {
-      mergeStudentsCache([updatedStudent]);
-      setServerStudents((prev) =>
-        prev
-          ? prev.map((student) =>
-              student.id === updatedStudent.id ? updatedStudent : student,
-            )
-          : prev,
-      );
+      reconcileMutationStudent(updatedStudent);
     }
     closeDismissDialog();
     setServerRefreshKey((value) => value + 1);
@@ -1937,16 +1624,7 @@ export function StudentRegistryView() {
     } | null;
     const updatedStudent = statusResult?.student;
     if (updatedStudent) {
-      mergeStudentsCache([updatedStudent]);
-      setServerStudents((prev) => {
-        if (!prev) return prev;
-        const next = prev.map((item) =>
-          item.id === studentId ? updatedStudent : item,
-        );
-        return filterStatus && filterStatus !== "نشط"
-          ? next.filter((item) => item.id !== studentId)
-          : next;
-      });
+      reconcileMutationStudent(updatedStudent);
     }
     setReactivateDialog({ student: null, open: false });
     setServerRefreshKey((value) => value + 1);
@@ -1968,12 +1646,12 @@ export function StudentRegistryView() {
   ).map((student) => ({
     ...student,
     courseName: courseName(student.courseId),
-    locationText: `${student.locationScope || student.mainSite || ""} - ${student.subSite || ""}`,
+    locationText: formatRegistryLocation(student),
   }));
 
   const fetchStudentExportRows = async () => {
     const params = new URLSearchParams();
-    if (search.trim()) params.set("q", search.trim());
+    if (debouncedSearch) params.set("q", debouncedSearch);
     if (filterStatus) params.set("status", filterStatus);
     if (filterGender) params.set("gender", filterGender);
     if (filterCourseId) params.set("courseId", filterCourseId);
@@ -1986,11 +1664,13 @@ export function StudentRegistryView() {
       credentials: "same-origin",
     });
     if (!res.ok) throw new Error("students export failed");
-    const json = (await res.json()) as { students?: Student[] };
+    const json = (await res.json()) as {
+      students?: Array<Student & { courseName?: string; course?: { name?: string } | null }>;
+    };
     return (json.students || []).map((student) => ({
       ...student,
-      courseName: courseName(student.courseId),
-      locationText: `${student.locationScope || student.mainSite || ""} - ${student.subSite || ""}`,
+      courseName: student.courseName || student.course?.name || courseName(student.courseId),
+      locationText: formatRegistryLocation(student),
     }));
   };
 
@@ -2074,7 +1754,7 @@ export function StudentRegistryView() {
               <div className="tp-student-registry__filter-section-heading">
                 <GraduationCap aria-hidden="true" className="size-4" />
                 <div>
-                  <h3>الدورة ونوع الدراسة</h3>
+                  <h3>الدورة ونوع البرنامج</h3>
                   <p>الفلاتر الرئيسية المرتبطة بتسجيل الطالب.</p>
                 </div>
               </div>
@@ -2353,6 +2033,8 @@ export function StudentRegistryView() {
                     fileName="students"
                     rows={studentExportRows}
                     fetchRows={fetchStudentExportRows}
+                    totalRowCount={filteredTotalCount}
+                    disabled={registryResultsPending || registryServerUnavailable}
                     columns={studentExportColumns}
                     triggerLabel="تصدير"
                     description="تقرير سجل الطلاب حسب الفلاتر الحالية"
@@ -2451,6 +2133,7 @@ export function StudentRegistryView() {
       {studentStatsError && !registryStatsPending && (
         <div
           role="alert"
+          aria-live="assertive"
           className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm font-medium text-destructive"
         >
           <span>{studentStatsError}</span>
@@ -2466,7 +2149,12 @@ export function StudentRegistryView() {
         </div>
       )}
 
-      <div className="tp-student-registry__results space-y-2">
+      <div
+        ref={registryResultsRef}
+        className="tp-student-registry__results space-y-2"
+        aria-live="polite"
+        aria-busy={registryResultsPending}
+      >
         <CountScopeSummary
           subject="الطلاب (يشمل المؤرشفين)"
           systemTotal={
@@ -2476,8 +2164,20 @@ export function StudentRegistryView() {
                 ? "—"
                 : (studentsSystemTotal ?? "—")
           }
-          filteredTotal={registryResultsPending ? "…" : filteredTotalCount}
-          pageCount={registryResultsPending ? "…" : paged.length}
+          filteredTotal={
+            registryResultsPending
+              ? "…"
+              : registryServerUnavailable
+                ? `${filteredTotalCount} محلياً`
+                : filteredTotalCount
+          }
+          pageCount={
+            registryResultsPending
+              ? "…"
+              : registryServerUnavailable
+                ? `${paged.length} محلياً`
+                : paged.length
+          }
         />
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
           {hasActiveRegistryFilters ? (
@@ -2514,21 +2214,38 @@ export function StudentRegistryView() {
       </div>
 
       {registryResultsPending && (
-        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary"
+        >
           جاري تحميل نتائج الطلاب من بيانات النظام...
         </div>
       )}
 
       {serverStudentsError && !registrySearchPending && (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300">
-          {serverStudentsError}
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300"
+        >
+          <strong>{serverStudentsError}</strong>
           <span className="mt-1 block text-xs">
-            تم إيقاف التعديل والفصل والأرشفة مؤقتاً حتى ترجع بيانات بيانات النظام، حتى لا تتعامل الصفحة مع بيانات مؤقتة قديمة.
+            المعروض الآن نسخة محلية جزئية وقد لا تشمل جميع الطلاب. تم إيقاف التعديل والفصل والأرشفة مؤقتاً حتى تعود بيانات النظام، منعاً للتعامل مع بيانات قديمة.
           </span>
         </div>
       )}
 
-      {students.length === 0 &&
+      {registryServerUnavailable &&
+      filteredTotalCount === 0 &&
+      !registryResultsPending ? (
+        <EmptyState
+          icon={AlertTriangle}
+          title="لا تتوفر نتائج محلية كافية"
+          description="تعذر الاتصال ببيانات النظام، والنسخة المحلية الجزئية لا تحتوي نتائج لهذه الفلاتر. هذا لا يعني عدم وجود طلاب في النظام."
+        />
+      ) : !registryServerUnavailable &&
+      students.length === 0 &&
       filteredTotalCount === 0 &&
       !registryResultsPending ? (
         <EmptyState
@@ -2565,360 +2282,27 @@ export function StudentRegistryView() {
             </Button>
           }
         />
-      ) : viewMode === "cards" ? (
-        <div className="tp-student-registry__cards grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {paged.map((student) => (
-            <Card
-              key={student.id}
-              className="transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-xl hover:shadow-primary/10"
-            >
-              <CardContent className="p-4">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-bold">{student.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {student.code} - {student.school || "بدون مدرسة"}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      student.status === "نشط"
-                        ? "default"
-                        : student.status === ARCHIVED_STUDENT_STATUS
-                          ? "secondary"
-                          : "destructive"
-                    }
-                  >
-                    {student.status}
-                  </Badge>
-                </div>
-
-                <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-xs text-muted-foreground">
-                      الدورة
-                    </span>
-                    <p className="text-xs font-medium">
-                      {courseName(student.courseId)}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">
-                      نوع الدورة
-                    </span>
-                    <p className="text-xs font-medium">
-                      {student.courseProgram
-                        ? student.courseProgram === "كورسات"
-                          ? `كورسات - ${student.courseTerm}`
-                          : student.courseProgram
-                        : "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">
-                      نوع البرنامج
-                    </span>
-                    <p className="text-xs font-medium">
-                      {student.studyType || "-"}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">
-                      الموقع
-                    </span>
-                    <p className="text-xs font-medium">{`${student.locationScope || student.mainSite || "-"} - ${student.subSite || "-"}`}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">الفرص</span>
-                    <p className="text-xs font-medium">
-                      {registryOpportunityText(student)}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">
-                      السماح
-                    </span>
-                    <p className="text-xs font-medium">
-                      {student.accountingGraceDays ?? 0} يوم
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">
-                      تاريخ الإضافة
-                    </span>
-                    <p className="text-xs font-medium">
-                      {formatAppDate(
-                        student.createdAt,
-                        student.createdAt || "-",
-                      )}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">
-                      تيليجرام
-                    </span>
-                    <p className="text-xs">
-                      {student.telegram ? (
-                        <ContactLink href={telegramLink(student.telegram)}>
-                          {student.telegram}
-                        </ContactLink>
-                      ) : (
-                        "-"
-                      )}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">
-                      رقم الطالب
-                    </span>
-                    <p className="text-xs">
-                      <ContactLink href={whatsappLink(student.phone)}>
-                        {student.phone}
-                      </ContactLink>
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-muted-foreground">
-                      ولي الأمر
-                    </span>
-                    <p className="text-xs">
-                      <ContactLink href={whatsappLink(student.parentPhone)}>
-                        {student.parentPhone}
-                      </ContactLink>
-                    </p>
-                  </div>
-                </div>
-
-                {registryHealthBadges(student).length > 0 && (
-                  <div className="mb-3 flex flex-wrap gap-1.5">
-                    {registryHealthBadges(student).map((badge) => (
-                      <Badge
-                        key={badge.label}
-                        variant="outline"
-                        className={`rounded-full ${badge.className}`}
-                      >
-                        {badge.label}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-
-                {student.status === "مفصول" && (
-                  <div className="mb-3 rounded bg-destructive/10 p-2 text-xs text-destructive">
-                    <div>
-                      {student.dismissalType} - {student.dismissalReason}
-                    </div>
-                    {student.dismissalNotes && (
-                      <div className="mt-1 text-destructive/80">
-                        ملاحظات: {student.dismissalNotes}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="tp-student-registry__card-actions">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="tp-student-registry__action-button"
-                    onClick={() => setFileDialog({ student, open: true })}
-                  >
-                    <Eye aria-hidden="true" className="size-4" />
-                    ملف الطالب
-                  </Button>
-                  {canEditStudents && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="tp-student-registry__action-button"
-                      disabled={registryServerUnavailable}
-                      onClick={() => openEditDialog(student)}
-                    >
-                      <Pencil aria-hidden="true" className="size-4" />
-                      تعديل
-                    </Button>
-                  )}
-                  {canEditStudents &&
-                    (student.status === "نشط" ? (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="tp-student-registry__action-button"
-                        disabled={registryServerUnavailable || isStatusActionSaving}
-                        onClick={() => openDismissDialog(student)}
-                      >
-                        <UserX aria-hidden="true" className="size-4" />
-                        فصل
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="tp-student-registry__action-button tp-student-registry__action-button--restore"
-                        disabled={registryServerUnavailable || isStatusActionSaving}
-                        onClick={() =>
-                          setReactivateDialog({ student, open: true })
-                        }
-                      >
-                        <RotateCcw aria-hidden="true" className="size-4" />
-                        {student.status === ARCHIVED_STUDENT_STATUS
-                          ? "استعادة"
-                          : "إعادة تفعيل"}
-                      </Button>
-                    ))}
-                  {canArchiveStudents &&
-                    student.status !== ARCHIVED_STUDENT_STATUS && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="tp-student-registry__action-button border-destructive/40 text-destructive hover:bg-destructive/10"
-                      disabled={registryServerUnavailable || isDeletingStudent}
-                      onClick={() => openDeleteDialog(student)}
-                    >
-                      <Archive aria-hidden="true" className="size-4" />
-                      أرشفة
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
       ) : (
-        <div className="table-wrap">
-          <table className="responsive-table text-sm">
-            <thead>
-              <tr>
-                <th className="p-3 text-right">الطالب</th>
-                <th className="p-3 text-right">الكود</th>
-                <th className="p-3 text-right">الدورة</th>
-                <th className="p-3 text-right">الدراسة</th>
-                <th className="p-3 text-right">الموقع</th>
-                <th className="p-3 text-right">الهاتف</th>
-                <th className="p-3 text-right">التيليجرام</th>
-                <th className="p-3 text-right">الفرص</th>
-                <th className="p-3 text-right">السماح</th>
-                <th className="p-3 text-right">الحالة</th>
-                <th className="p-3 text-right">الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paged.map((student) => (
-                <tr key={student.id} className="border-t align-top">
-                  <td className="p-3 font-medium">
-                    {student.name}
-                    <div className="text-xs text-muted-foreground">
-                      {student.school || "بدون مدرسة"}
-                    </div>
-                  </td>
-                  <td className="p-3">{student.code}</td>
-                  <td className="p-3">{courseName(student.courseId)}</td>
-                  <td className="p-3">{student.studyType || "—"}</td>
-                  <td className="p-3 min-w-40">{`${student.locationScope || student.mainSite || "-"} - ${student.subSite || "-"}`}</td>
-                  <td className="p-3">
-                    <ContactLink href={whatsappLink(student.phone)}>
-                      {student.phone}
-                    </ContactLink>
-                  </td>
-                  <td className="p-3">
-                    {student.telegram ? (
-                      <ContactLink href={telegramLink(student.telegram)}>
-                        {student.telegram}
-                      </ContactLink>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="p-3">
-                    {registryOpportunityText(student)}
-                  </td>
-                  <td className="p-3">
-                    {student.accountingGraceDays ?? 0} يوم
-                  </td>
-                  <td className="p-3">
-                    <Badge
-                      variant={
-                        student.status === "نشط"
-                          ? "default"
-                          : student.status === ARCHIVED_STUDENT_STATUS
-                            ? "secondary"
-                            : "destructive"
-                      }
-                    >
-                      {student.status}
-                    </Badge>
-                  </td>
-                  <td className="tp-student-registry__actions-cell p-3">
-                    <div className="tp-student-registry__table-actions">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="tp-student-registry__action-button"
-                        onClick={() => setFileDialog({ student, open: true })}
-                      >
-                        <Eye aria-hidden="true" className="size-4" />
-                        ملف الطالب
-                      </Button>
-                      {canEditStudents && (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="tp-student-registry__action-button"
-                          disabled={registryServerUnavailable}
-                          onClick={() => openEditDialog(student)}
-                        >
-                          <Pencil aria-hidden="true" className="size-4" />
-                          تعديل
-                        </Button>
-                      )}
-                      {canEditStudents &&
-                        (student.status === "نشط" ? (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="tp-student-registry__action-button"
-                            disabled={registryServerUnavailable || isStatusActionSaving}
-                            onClick={() => openDismissDialog(student)}
-                          >
-                            <UserX aria-hidden="true" className="size-4" />
-                            فصل
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="tp-student-registry__action-button tp-student-registry__action-button--restore"
-                            disabled={registryServerUnavailable || isStatusActionSaving}
-                            onClick={() =>
-                              setReactivateDialog({ student, open: true })
-                            }
-                          >
-                            <RotateCcw aria-hidden="true" className="size-4" />
-                            {student.status === ARCHIVED_STUDENT_STATUS
-                              ? "استعادة"
-                              : "إعادة تفعيل"}
-                          </Button>
-                        ))}
-                      {canArchiveStudents &&
-                        student.status !== ARCHIVED_STUDENT_STATUS && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="tp-student-registry__action-button border-destructive/40 text-destructive hover:bg-destructive/10"
-                          disabled={registryServerUnavailable || isDeletingStudent}
-                          onClick={() => openDeleteDialog(student)}
-                        >
-                          <Archive aria-hidden="true" className="size-4" />
-                          أرشفة
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <StudentRegistryResults
+          students={paged}
+          viewMode={viewMode}
+          activeIssue={filterRegistryIssue}
+          courseName={courseName}
+          whatsappLink={whatsappLink}
+          telegramLink={telegramLink}
+          canEdit={canEditStudents}
+          canArchive={canArchiveStudents}
+          serverUnavailable={registryServerUnavailable}
+          statusActionSaving={isStatusActionSaving}
+          deleting={isDeletingStudent}
+          onFile={(student) => setFileDialog({ student, open: true })}
+          onEdit={openEditDialog}
+          onDismiss={openDismissDialog}
+          onReactivate={(student) =>
+            setReactivateDialog({ student, open: true })
+          }
+          onArchive={openDeleteDialog}
+        />
       )}
 
       {totalPages > 1 && (
@@ -2928,7 +2312,7 @@ export function StudentRegistryView() {
             size="sm"
             className="tp-student-registry__pagination-button tp-student-registry__pagination-button--previous"
             disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
+            onClick={() => changeRegistryPage(page - 1)}
           >
             <ChevronRight aria-hidden="true" className="size-4" />
             السابق
@@ -2941,7 +2325,7 @@ export function StudentRegistryView() {
             size="sm"
             className="tp-student-registry__pagination-button tp-student-registry__pagination-button--next"
             disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
+            onClick={() => changeRegistryPage(page + 1)}
           >
             التالي
             <ChevronLeft aria-hidden="true" className="size-4" />
@@ -3245,7 +2629,7 @@ export function StudentRegistryView() {
                                 : "تغيير داخل نفس الدورة — اختر طريقة التعامل مع الملف"}
                             </p>
                             <p className="mt-1 text-xs leading-6 opacity-90">
-                              رصيد الطالب الحالي: {registryOpportunityText(editOriginalStudent)}.
+                              رصيد الطالب الحالي: {formatOpportunityBalance(editOriginalStudent)}.
                               {editCourseChanged
                                 ? ` سيتم حفظ كل درجاته وفرصه وإجازاته ومكالماته وملاحظاته الحالية داخل ملف سابق للقراءة فقط، ثم تصفير الملف الحي وبدء التسجيل في ${courseName(editDialog.form.courseId)}.`
                                 : " يمكنك إبقاء كل الدرجات والفرص والإجراءات حرفياً كما هي، أو أرشفتها والبدء كطالب جديد داخل الدورة نفسها."}

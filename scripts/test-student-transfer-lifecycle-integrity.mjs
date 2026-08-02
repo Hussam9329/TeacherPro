@@ -126,20 +126,21 @@ check(
 );
 check(
   "تأكيد المعاينة لا يبقى صالحاً بعد تغيير التاريخ أو السماح في الواجهة",
-  registry.includes("effectiveAcademicImpactConfirmed") &&
-    registry.includes("hasCurrentAcademicImpactPreview && academicImpactConfirmed"),
+  registry.includes("resolvedAcademicImpactConfirmed") &&
+    registry.includes("hasResolvedAcademicImpactPreview && academicImpactConfirmed"),
 );
 check(
   "استعادة المؤرشف إجراء مستقل ولا تمر عبر إعادة تفعيل أو تعديل عام",
-  statusRoute.includes('type RegistryStatusAction = "dismiss" | "reactivate" | "restore"') &&
+    statusRoute.includes('type RegistryStatusAction = "dismiss" | "reactivate" | "restore"') &&
     statusRoute.includes('if (action === "restore")') &&
-    statusRoute.includes("archived student must be restored explicitly") &&
+    statusRoute.includes("إجراء الاستعادة مخصص للطلاب المؤرشفين فقط") &&
     studentsRoute.includes("استعده من إجراء «استعادة من الأرشيف» أولاً") &&
     registry.includes('isArchived ? "restore" : "reactivate"'),
 );
 check(
   "الاستعادة تضبط رصيد الفصل الحالي وتعيد الاحتساب داخل العملية نفسها",
-  statusRoute.includes("getActiveChapterForCourse(tx, student.courseId)") &&
+  statusRoute.includes("getActiveChapterForCourse(") &&
+    statusRoute.includes("student.courseId") &&
     statusRoute.includes("baseOpportunities: baseline") &&
     statusRoute.includes("recalculateStudentsAcademicState") &&
     statusRoute.includes("{ tx }") &&

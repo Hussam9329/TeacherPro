@@ -52,7 +52,7 @@ check(
 );
 check(
   "كل تعديل طالب يحمل fingerprint للسجل ويُرفض عند تعديل متزامن",
-  studentsRoute.includes("studentMutationToken") &&
+  studentsRoute.includes("buildStudentMutationToken(") &&
     studentsRoute.includes("rawExpectedMutationToken") &&
     studentsRoute.includes("تغير سجل الطالب بعد فتحه للتعديل") &&
     studentRegistry.includes("expectedMutationToken: editOriginalStudent?.mutationToken"),

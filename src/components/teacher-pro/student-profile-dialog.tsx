@@ -75,8 +75,16 @@ function archiveSnapshotObject(
 }
 
 function ContactLink({ href, children }: { href: string; children: React.ReactNode }) {
+  if (!href) {
+    return <span className="text-muted-foreground">{children || "—"}</span>;
+  }
   return (
-    <a href={href} className="break-words font-bold text-primary underline-offset-4 hover:underline">
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="break-words font-bold text-primary underline-offset-4 hover:underline"
+    >
       {children || "—"}
     </a>
   );
@@ -593,7 +601,7 @@ export function StudentProfileDialog({
 
   if (!open || !student || !isMounted) return null;
 
-  // بيانات ملف الطالب تأتي مباشرة من قاعدة البيانات، لذلك هي المصدر الموثوق
+  // بيانات ملف الطالب تأتي مباشرة من بيانات النظام، لذلك هي المصدر الموثوق
   // للفصل النشط. كاش الصفحة يبقى fallback فقط أثناء التحميل.
   const activeChapter =
     databaseStats?.activeChapter ??

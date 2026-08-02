@@ -2477,6 +2477,22 @@ button[data-slot="button"][class*="text-destructive"] svg {
   grid-column: 1 / -1;
 }
 
+.tp-student-registry__table-wrap {
+  max-height: min(72vh, 48rem);
+  overflow: auto;
+}
+
+.tp-student-registry__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--muted);
+}
+
+.tp-student-registry__table tbody tr {
+  scroll-margin-top: 4rem;
+}
+
 .tp-student-registry__action-button {
   width: 100%;
   min-width: 0;

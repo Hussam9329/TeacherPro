@@ -19,7 +19,6 @@ import {
   databaseMigrationRequiredResponse,
   isMissingDatabaseObjectError,
 } from "@/lib/route-helpers";
-import { normalizeListFilter } from "@/lib/all-filter";
 import {
   ARCHIVED_STUDENT_STATUS,
   buildStudentArchiveSummary,
@@ -46,15 +45,11 @@ import {
 import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
-import { buildStudentRegistryIssueWhere } from "@/lib/student-registry-issue-server";
 import {
   buildStudentMutationToken,
   withStudentMutationToken,
 } from "@/lib/student-mutation-token";
-import {
-  buildStudentRegistryLocationWhere,
-  buildStudentRegistrySearchWhere,
-} from "@/lib/student-registry-filters-server";
+import { buildStudentRegistryWhere } from "@/lib/student-registry-filters-server";
 
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -212,84 +207,6 @@ function clampPageSize(value: number): number {
   return Math.min(500, Math.max(1, value));
 }
 
-function buildStudentFilterWhere(
-  searchParams: URLSearchParams,
-): Prisma.StudentWhereInput[] {
-  const and: Prisma.StudentWhereInput[] = [];
-
-  const status = normalizeListFilter(searchParams.get("status"));
-  if (status) {
-    and.push({ status });
-  } else {
-    // الطلاب المؤرشفون محفوظون للسجلات والتقارير، لكن لا يظهرون في القوائم اليومية
-    // إلا عند اختيار فلتر "مؤرشف" صراحةً.
-    and.push({ status: { not: ARCHIVED_STUDENT_STATUS } });
-  }
-
-  const gender = normalizeListFilter(searchParams.get("gender"));
-  if (gender) and.push({ gender });
-
-  const courseId = normalizeListFilter(searchParams.get("courseId"));
-  if (courseId) and.push({ courseId });
-
-  const courseIds = String(searchParams.get("courseIds") ?? "")
-    .split(",")
-    .map((item) => normalizeListFilter(item))
-    .filter(Boolean);
-  if (courseIds.length > 0) and.push({ courseId: { in: courseIds } });
-
-  const courseProgram = normalizeListFilter(searchParams.get("courseProgram"));
-  if (courseProgram) and.push({ courseProgram });
-
-  const courseTerm = normalizeListFilter(searchParams.get("courseTerm"));
-  if (courseProgram === "كورسات" && courseTerm) and.push({ courseTerm });
-
-  const studyType = normalizeListFilter(searchParams.get("studyType"));
-  if (studyType) and.push({ studyType });
-
-  const location = normalizeListFilter(searchParams.get("location"));
-  const locationWhere = location
-    ? buildStudentRegistryLocationWhere(location)
-    : null;
-  if (locationWhere) and.push(locationWhere);
-
-  // Database-side filters used by إدارة الفرص. Keep them under explicit
-  // names so normal student status filtering remains the literal Arabic value.
-  const opportunityStatus = normalizeListFilter(
-    searchParams.get("opportunityStatus"),
-  );
-  if (opportunityStatus === "active") and.push({ status: "نشط" });
-  else if (opportunityStatus === "dismissed") and.push({ status: "مفصول" });
-  else if (opportunityStatus === "has-opportunities")
-    and.push({ status: "نشط", opportunities: { gt: 0 } });
-  else if (opportunityStatus === "no-opportunities")
-    and.push({ status: "نشط", opportunities: 0 });
-  else if (opportunityStatus === "temporary-dismissal")
-    and.push({ status: "مفصول", dismissalType: "فصل مؤقت" });
-  else if (opportunityStatus === "final-dismissal")
-    and.push({ status: "مفصول", dismissalType: "فصل نهائي" });
-
-  const opportunityCount = normalizeListFilter(
-    searchParams.get("opportunityCount"),
-  );
-  if (opportunityCount !== "") {
-    const count = Number(opportunityCount);
-    if (Number.isFinite(count) && count >= 0)
-      and.push({ opportunities: Math.trunc(count) });
-  }
-
-  return and;
-}
-
-function composeStudentWhere(
-  filters: Prisma.StudentWhereInput[],
-  searchWhere?: Prisma.StudentWhereInput | null,
-): Prisma.StudentWhereInput {
-  const and = [...filters];
-  if (searchWhere) and.unshift(searchWhere);
-  return and.length > 0 ? { AND: and } : {};
-}
-
 export async function GET(req: NextRequest) {
   const authError = await requireAnyPermission(req, [
     "students.view",
@@ -308,19 +225,13 @@ export async function GET(req: NextRequest) {
   const pageSize = clampPageSize(
     readPositiveIntegerParam(searchParams, "pageSize", 50),
   );
-  const rawQuery = String(searchParams.get("q") ?? "").trim();
-  const filters = buildStudentFilterWhere(searchParams);
-  const registryIssueWhere = await buildStudentRegistryIssueWhere(searchParams);
-  if (registryIssueWhere) filters.push(registryIssueWhere);
-  const searchWhere = buildStudentRegistrySearchWhere(rawQuery);
-
-  const where = composeStudentWhere(filters, searchWhere);
+  const where = await buildStudentRegistryWhere(searchParams);
 
   const [totalCount, students] = await db.$transaction([
     db.student.count({ where }),
     db.student.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),

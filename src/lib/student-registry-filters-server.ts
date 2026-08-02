@@ -3,6 +3,9 @@ import { sanitizePhoneInput } from "@/lib/format";
 import { normalizeArabicText } from "@/lib/route-helpers";
 import { sanitizeTelegramInput } from "@/lib/student-utils";
 import { getStudentFilterLocationAliases } from "@/lib/student-list-filters";
+import { normalizeListFilter } from "@/lib/all-filter";
+import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
+import { buildStudentRegistryIssueWhere } from "@/lib/student-registry-issue-server";
 
 const BAGHDAD_SITES = ["المنصور", "البنوك", "زيونة"] as const;
 
@@ -114,4 +117,75 @@ export function buildStudentRegistrySearchWhere(
   }
 
   return { OR: or };
+}
+
+/**
+ * Complete database predicate shared by the paginated list and full export.
+ * Any filter added to the registry must pass through this helper so exporting
+ * can never return rows that are absent from the on-screen result set.
+ */
+export async function buildStudentRegistryWhere(
+  searchParams: URLSearchParams,
+): Promise<Prisma.StudentWhereInput> {
+  const and: Prisma.StudentWhereInput[] = [];
+  const status = normalizeListFilter(searchParams.get("status"));
+  const gender = normalizeListFilter(searchParams.get("gender"));
+  const courseId = normalizeListFilter(searchParams.get("courseId"));
+  const courseIds = String(searchParams.get("courseIds") || "")
+    .split(",")
+    .map((value) => normalizeListFilter(value))
+    .filter(Boolean);
+  const courseProgram = normalizeListFilter(searchParams.get("courseProgram"));
+  const courseTerm = normalizeListFilter(searchParams.get("courseTerm"));
+  const studyType = normalizeListFilter(searchParams.get("studyType"));
+  const location = normalizeListFilter(
+    searchParams.get("location") || searchParams.get("locationScope"),
+  );
+  const opportunityStatus = normalizeListFilter(
+    searchParams.get("opportunityStatus"),
+  );
+  const opportunityCount = normalizeListFilter(
+    searchParams.get("opportunityCount"),
+  );
+
+  and.push(
+    status ? { status } : { status: { not: STUDENT_STATUS_ARCHIVED } },
+  );
+  if (gender) and.push({ gender });
+  if (courseId) and.push({ courseId });
+  if (courseIds.length > 0) and.push({ courseId: { in: courseIds } });
+  if (courseProgram) and.push({ courseProgram });
+  if (courseProgram === "كورسات" && courseTerm) and.push({ courseTerm });
+  if (studyType) and.push({ studyType });
+
+  const locationWhere = buildStudentRegistryLocationWhere(location);
+  if (locationWhere) and.push(locationWhere);
+
+  if (opportunityStatus === "active") and.push({ status: "نشط" });
+  else if (opportunityStatus === "dismissed") and.push({ status: "مفصول" });
+  else if (opportunityStatus === "has-opportunities")
+    and.push({ status: "نشط", opportunities: { gt: 0 } });
+  else if (opportunityStatus === "no-opportunities")
+    and.push({ status: "نشط", opportunities: 0 });
+  else if (opportunityStatus === "temporary-dismissal")
+    and.push({ status: "مفصول", dismissalType: "فصل مؤقت" });
+  else if (opportunityStatus === "final-dismissal")
+    and.push({ status: "مفصول", dismissalType: "فصل نهائي" });
+
+  if (opportunityCount !== "") {
+    const count = Number(opportunityCount);
+    if (Number.isFinite(count) && count >= 0) {
+      and.push({ opportunities: Math.trunc(count) });
+    }
+  }
+
+  const searchWhere = buildStudentRegistrySearchWhere(
+    String(searchParams.get("q") || ""),
+  );
+  if (searchWhere) and.push(searchWhere);
+
+  const registryIssueWhere = await buildStudentRegistryIssueWhere(searchParams);
+  if (registryIssueWhere) and.push(registryIssueWhere);
+
+  return and.length === 1 ? and[0] : { AND: and };
 }
