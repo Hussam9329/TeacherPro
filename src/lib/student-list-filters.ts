@@ -1,5 +1,9 @@
 import { COURSE_TERMS, COURSE_PROGRAMS, STUDY_TYPES } from "./course-config";
-import { IRAQI_PROVINCES, normalizeIraqiProvinceName } from "./iraq";
+import {
+  BAGHDAD_COURSE_SITES,
+  IRAQI_PROVINCES,
+  normalizeIraqiProvinceName,
+} from "./iraq";
 
 export const STUDENT_FILTER_COURSE_PROGRAMS = COURSE_PROGRAMS;
 export const STUDENT_FILTER_COURSE_TERMS = COURSE_TERMS;
@@ -21,22 +25,47 @@ type StudentFilterSource = {
   subSite?: string | null;
 };
 
-const locationAliases: Record<string, string> = {
-  اربيل: "أربيل",
-  الانبار: "الأنبار",
-  البصره: "البصرة",
-  الديوانيه: "الديوانية",
-  القادسية: "الديوانية",
-  "ذي قار": "الناصرية",
-  الكتروني: "إلكتروني",
-  اونلاين: "أونلاين",
-  Online: "أونلاين",
+const locationAliasGroups: Record<string, readonly string[]> = {
+  "أربيل": ["أربيل", "اربيل"],
+  "الأنبار": ["الأنبار", "الانبار"],
+  "البصرة": ["البصرة", "البصره"],
+  "الديوانية": ["الديوانية", "الديوانيه", "القادسية"],
+  "الناصرية": ["الناصرية", "الناصريه", "ذي قار"],
+  "أونلاين": [
+    "أونلاين",
+    "اونلاين",
+    "Online",
+    "إلكتروني",
+    "الكتروني",
+    "إلكترونية",
+    "الكترونية",
+  ],
 };
+
+function locationAliasKey(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .toLocaleLowerCase("ar-IQ")
+    .normalize("NFKD")
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/\s+/g, " ");
+}
 
 export function normalizeStudentFilterLocation(value: unknown): string {
   const text = String(value ?? "").trim();
   if (!text) return "";
-  return normalizeIraqiProvinceName(locationAliases[text] || text);
+  const key = locationAliasKey(text);
+  const canonical = Object.entries(locationAliasGroups).find(([, aliases]) =>
+    aliases.some((alias) => locationAliasKey(alias) === key),
+  )?.[0];
+  return normalizeIraqiProvinceName(canonical || text);
+}
+
+export function getStudentFilterLocationAliases(value: unknown): string[] {
+  const canonical = normalizeStudentFilterLocation(value);
+  return [...(locationAliasGroups[canonical] || [canonical])].filter(Boolean);
 }
 
 export function getStudentLocationFilterValue(student: StudentFilterSource): string {
@@ -44,7 +73,15 @@ export function getStudentLocationFilterValue(student: StudentFilterSource): str
   const subSite = normalizeStudentFilterLocation(student.subSite);
   const mainSite = normalizeStudentFilterLocation(student.mainSite);
 
-  if (locationScope === "بغداد") return "بغداد";
+  if (locationScope === "بغداد") {
+    if (subSite && subSite !== "عموم بغداد" && subSite !== "بغداد") {
+      return subSite;
+    }
+    if (mainSite && mainSite !== "عموم بغداد" && mainSite !== "بغداد") {
+      return mainSite;
+    }
+    return "بغداد";
+  }
   if (locationScope === "خارج القطر") return "خارج القطر";
   if (locationScope === "محافظات") return subSite || mainSite;
   if (subSite && subSite !== "عموم بغداد") return subSite;
@@ -53,7 +90,21 @@ export function getStudentLocationFilterValue(student: StudentFilterSource): str
 
 export function getStudentLocationFilterOptions(students: StudentFilterSource[]): string[] {
   const discovered = new Set(students.map(getStudentLocationFilterValue).filter(Boolean));
-  const orderedBase = ["بغداد", ...IRAQI_PROVINCES, "خارج القطر", "أونلاين"];
+  if (
+    students.some(
+      (student) =>
+        normalizeStudentFilterLocation(student.locationScope) === "بغداد",
+    )
+  ) {
+    discovered.add("بغداد");
+  }
+  const orderedBase = [
+    "بغداد",
+    ...BAGHDAD_COURSE_SITES,
+    ...IRAQI_PROVINCES,
+    "خارج القطر",
+    "أونلاين",
+  ];
   const ordered = orderedBase.filter((item) => discovered.has(item));
   const custom = Array.from(discovered)
     .filter((item) => !orderedBase.includes(item as any))
@@ -65,6 +116,15 @@ export function studentMatchesListFilters(student: StudentFilterSource, filters:
   if (filters.courseProgram && student.courseProgram !== filters.courseProgram) return false;
   if (filters.courseProgram === "كورسات" && filters.courseTerm && student.courseTerm !== filters.courseTerm) return false;
   if (filters.studyType && student.studyType !== filters.studyType) return false;
-  if (filters.location && getStudentLocationFilterValue(student) !== filters.location) return false;
+  if (filters.location) {
+    const location = normalizeStudentFilterLocation(filters.location);
+    if (location === "بغداد") {
+      if (normalizeStudentFilterLocation(student.locationScope) !== "بغداد") {
+        return false;
+      }
+    } else if (getStudentLocationFilterValue(student) !== location) {
+      return false;
+    }
+  }
   return true;
 }

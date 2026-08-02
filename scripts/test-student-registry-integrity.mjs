@@ -7,7 +7,11 @@ const registry = read('src/components/teacher-pro/student-registry.tsx');
 const api = read('src/lib/api.ts');
 const studentsRoute = read('src/app/api/students/route.ts');
 const studentsExportRoute = read('src/app/api/students/export/route.ts');
+const studentsStatsRoute = read('src/app/api/students/stats/route.ts');
 const registryIssueHelper = read('src/lib/student-registry-issue-server.ts');
+const registryFiltersHelper = read('src/lib/student-registry-filters-server.ts');
+const studentListFilters = read('src/lib/student-list-filters.ts');
+const opportunitySnapshots = read('src/lib/student-opportunity-snapshot-server.ts');
 const exportDialog = read('src/components/teacher-pro/export-dialog.tsx');
 const deleteImpact = read('src/lib/student-delete-impact.ts');
 const statusRoutePath = path.join(root, 'src/app/api/students/status-action/route.ts');
@@ -41,6 +45,39 @@ check(
     registryIssueHelper.includes('opportunity-over-limit'),
 );
 check(
+  'القائمة والإحصائيات والتصدير تستخدم بحثاً وموقعاً موحدين',
+  [studentsRoute, studentsStatsRoute, studentsExportRoute].every(
+    (source) =>
+      source.includes('buildStudentRegistrySearchWhere') &&
+      source.includes('buildStudentRegistryLocationWhere'),
+  ) &&
+    registryFiltersHelper.includes('{ name: { contains: query') &&
+    registryFiltersHelper.includes('telegramKey: { startsWith: telegram'),
+);
+check(
+  'الإجمالي العام يشمل المؤرشفين ولا يمكن أن يقل عن نتائج فلتر المؤرشفين',
+  studentsStatsRoute.includes('db.student.count(),') &&
+    studentsStatsRoute.includes('systemTotal') &&
+    studentsStatsRoute.includes('scope: "all"'),
+);
+check(
+  'صحة الفصل متبادلة: مفقود وتعارض وسقف صفر، والفرص الكاملة لا تشمل فوق السقف',
+  registryIssueHelper.includes('studentRegistryNoActiveChapterWhere') &&
+    registryIssueHelper.includes('zero-opportunity-limit') &&
+    registryIssueHelper.includes('links.length > 1') &&
+    registryIssueHelper.includes('registryIssue === "opportunity-full" ? cap') &&
+    !registryIssueHelper.includes('registryIssue === "opportunity-full" ? { gte: cap }') &&
+    opportunitySnapshots.includes('? current === opportunityLimit'),
+);
+check(
+  'مواقع بغداد الفرعية ومرادفات المحافظات وأونلاين متاحة ومتطابقة',
+  studentListFilters.includes('...BAGHDAD_COURSE_SITES') &&
+    studentListFilters.includes('"ذي قار"') &&
+    studentListFilters.includes('"الناصرية"') &&
+    studentListFilters.includes('"الكتروني"') &&
+    registryFiltersHelper.includes('getStudentFilterLocationAliases'),
+);
+check(
   'تصدير CSV وExcel يمنع تفسير بيانات الطالب كمعادلات spreadsheet',
   exportDialog.includes('function protectSpreadsheetCell') &&
     exportDialog.includes('/^\\s*[=+\\-@]/') &&
@@ -56,6 +93,15 @@ check('واجهة سجل الطلاب تستدعي statusAction للفصل وإ�
 check('الواجهة توقف التعديل والفصل والأرشفة عند عرض نسخة محلية مؤقتة', registry.includes('registryServerUnavailable') && registry.includes('لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة') && registry.includes('لا يمكن فصل طالب أثناء عرض نسخة محلية مؤقتة'));
 check('أرشفة الطالب في API محفوظة داخل transaction ومقيدة ببصمة علاقاتها', studentsRoute.includes('withSerializableTransaction') && studentsRoute.includes('previewToken !== impact.previewToken') && deleteImpact.includes('buildMutationPreviewToken') && studentsRoute.includes('studentNote.create') && studentsRoute.includes('auditLog.create'));
 check('الأرشفة لا تستبدل سبب الفصل السابق', !studentsRoute.includes('dismissalReason: "أرشفة إدارية"'));
+check(
+  'واجهة السجل تحفظ الفلاتر والصفحة والعرض وتعرض خطأ العدادات مع إعادة المحاولة',
+  registry.includes('hydratedRegistryStorageKey') &&
+    registry.includes('registryStateStorageKey') &&
+    registry.includes('studentStatsError') &&
+    registry.includes('setStudentStatsRefreshKey') &&
+    registry.includes('setFilterRegistryIssue("no-active-chapter")') &&
+    registry.includes('hasActiveRegistryFilters'),
+);
 check('اختبار سجل الطلاب مضاف إلى package.json', pkg.scripts?.['test:student-registry-integrity'] === 'node scripts/test-student-registry-integrity.mjs');
 check('اختبار side-effects يشمل سجل الطلاب أيضاً', String(pkg.scripts?.['test:side-effects'] || '').includes('test:student-registry-integrity'));
 

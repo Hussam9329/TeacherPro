@@ -5,73 +5,13 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
-import { normalizeArabicText } from "@/lib/route-helpers";
-import { sanitizePhoneInput } from "@/lib/format";
-import { sanitizeTelegramInput } from "@/lib/student-utils";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 import { buildStudentRegistryIssueWhere } from "@/lib/student-registry-issue-server";
-
-function buildLocationWhere(location: string): Prisma.StudentWhereInput | null {
-  const normalized = normalizeArabicText(location);
-  if (!normalized) return null;
-
-  if (normalized === normalizeArabicText("بغداد"))
-    return { locationScope: "بغداد" };
-  if (normalized === normalizeArabicText("خارج القطر"))
-    return { locationScope: "خارج القطر" };
-
-  return {
-    OR: [
-      { subSite: { equals: location, mode: "insensitive" } },
-      { mainSite: { equals: location, mode: "insensitive" } },
-      { subSite: { contains: location, mode: "insensitive" } },
-      { mainSite: { contains: location, mode: "insensitive" } },
-    ],
-  };
-}
-
-function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
-  const q = rawQuery.trim();
-  if (!q) return null;
-  const normalizedQuery = normalizeArabicText(q);
-  const numericQuery = sanitizePhoneInput(q);
-  const telegramQuery = sanitizeTelegramInput(q)
-    .replace(/\s+/g, "")
-    .toLowerCase();
-  const or: Prisma.StudentWhereInput[] = [
-    { name: { contains: q, mode: "insensitive" } },
-    { nameKey: { contains: normalizedQuery, mode: "insensitive" } },
-    { code: { startsWith: q, mode: "insensitive" } },
-    { school: { contains: q, mode: "insensitive" } },
-  ];
-
-  if (telegramQuery) {
-    or.push(
-      { telegramKey: { startsWith: telegramQuery, mode: "insensitive" } },
-      {
-        telegram: { startsWith: sanitizeTelegramInput(q), mode: "insensitive" },
-      },
-    );
-  }
-
-  if (numericQuery) {
-    or.push(
-      { phone: { startsWith: numericQuery, mode: "insensitive" } },
-      { phoneKey: { startsWith: numericQuery, mode: "insensitive" } },
-      { parentPhone: { startsWith: numericQuery, mode: "insensitive" } },
-    );
-    if (numericQuery.length >= 7) {
-      or.push(
-        { phone: { contains: numericQuery, mode: "insensitive" } },
-        { phoneKey: { contains: numericQuery, mode: "insensitive" } },
-        { parentPhone: { contains: numericQuery, mode: "insensitive" } },
-      );
-    }
-  }
-
-  return { OR: or };
-}
+import {
+  buildStudentRegistryLocationWhere,
+  buildStudentRegistrySearchWhere,
+} from "@/lib/student-registry-filters-server";
 
 async function buildStudentExportWhere(
   searchParams: URLSearchParams,
@@ -96,10 +36,12 @@ async function buildStudentExportWhere(
   if (courseProgram === "كورسات" && courseTerm) and.push({ courseTerm });
   if (studyType) and.push({ studyType });
 
-  const locationWhere = location ? buildLocationWhere(location) : null;
+  const locationWhere = location
+    ? buildStudentRegistryLocationWhere(location)
+    : null;
   if (locationWhere) and.push(locationWhere);
 
-  const searchWhere = buildSearchWhere(q);
+  const searchWhere = buildStudentRegistrySearchWhere(q);
   if (searchWhere) and.unshift(searchWhere);
 
   const registryIssueWhere = await buildStudentRegistryIssueWhere(searchParams);

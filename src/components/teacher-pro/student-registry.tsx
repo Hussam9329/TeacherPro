@@ -1,7 +1,7 @@
 "use client";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   useTeacherStore,
   type CourseTransferPolicy,
@@ -150,6 +150,7 @@ const studentExportColumns: ExportColumn<any>[] = [
 type RegistryViewMode = "cards" | "table";
 
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
+const STUDENT_REGISTRY_STATE_KEY = "teacherpro:student-registry-state:v1";
 
 function academicImpactKindLabel(kind: string): string {
   const labels: Record<string, string> = {
@@ -178,6 +179,7 @@ type RegistryIssueFilter =
   | ""
   | "no-active-chapter"
   | "active-chapter-conflict"
+  | "zero-opportunity-limit"
   | "zero-opportunities"
   | "opportunity-full"
   | "opportunity-over-limit"
@@ -188,6 +190,12 @@ type RegistryStudentHealth = Student & {
   hasActiveChapter?: boolean;
   activeChapterConflictCount?: number;
   activeChapter?: { id: string; name: string; opportunities: number } | null;
+  opportunityLimit?: number | null;
+  opportunityHealth?:
+    | "ready"
+    | "zero-limit"
+    | "missing-active-chapter"
+    | "active-chapter-conflict";
   isOpportunityFull?: boolean;
   isOpportunityOverLimit?: boolean;
 };
@@ -195,6 +203,7 @@ type RegistryStudentHealth = Student & {
 const registryIssueFilterLabels: Record<Exclude<RegistryIssueFilter, "">, string> = {
   "no-active-chapter": "بدون فصل نشط",
   "active-chapter-conflict": "تعارض فصول نشطة",
+  "zero-opportunity-limit": "سقف فرص صفر",
   "zero-opportunities": "فرص صفر",
   "opportunity-full": "فرص كاملة",
   "opportunity-over-limit": "فوق السقف",
@@ -206,25 +215,39 @@ function registryHealthBadges(student: Student) {
   const row = student as RegistryStudentHealth;
   const badges: Array<{ label: string; className: string }> = [];
   const conflictCount = Number(row.activeChapterConflictCount || 0);
+  const opportunityHealth =
+    row.opportunityHealth ||
+    (conflictCount > 1
+      ? "active-chapter-conflict"
+      : row.hasActiveChapter === false
+        ? "missing-active-chapter"
+        : Number(row.activeChapter?.opportunities) === 0
+          ? "zero-limit"
+          : "ready");
 
-  if (conflictCount > 1) {
+  if (opportunityHealth === "active-chapter-conflict") {
     badges.push({
       label: `تعارض فصول نشطة: ${conflictCount}`,
       className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
     });
-  } else if (row.hasActiveChapter === false) {
+  } else if (opportunityHealth === "missing-active-chapter") {
     badges.push({
       label: "بدون فصل نشط",
       className: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
     });
+  } else if (opportunityHealth === "zero-limit") {
+    badges.push({
+      label: "سقف فرص صفر",
+      className: "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+    });
   }
 
-  if (row.isOpportunityOverLimit) {
+  if (opportunityHealth === "ready" && row.isOpportunityOverLimit) {
     badges.push({
       label: "فرص فوق السقف",
       className: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
     });
-  } else if (row.isOpportunityFull) {
+  } else if (opportunityHealth === "ready" && row.isOpportunityFull) {
     badges.push({
       label: "فرص كاملة",
       className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
@@ -246,6 +269,54 @@ function registryHealthBadges(student: Student) {
   }
 
   return badges;
+}
+
+function studentMatchesRegistryIssue(
+  student: Student,
+  issue: RegistryIssueFilter,
+): boolean {
+  if (!issue) return true;
+  const row = student as RegistryStudentHealth;
+  const conflictCount = Number(row.activeChapterConflictCount || 0);
+  const limit =
+    row.opportunityLimit ??
+    (row.activeChapter ? Number(row.activeChapter.opportunities || 0) : null);
+  const health =
+    row.opportunityHealth ||
+    (conflictCount > 1
+      ? "active-chapter-conflict"
+      : row.hasActiveChapter === false
+        ? "missing-active-chapter"
+        : limit === 0
+          ? "zero-limit"
+          : "ready");
+
+  if (issue === "no-active-chapter") return health === "missing-active-chapter";
+  if (issue === "active-chapter-conflict")
+    return health === "active-chapter-conflict";
+  if (issue === "zero-opportunity-limit") return health === "zero-limit";
+  if (issue === "zero-opportunities")
+    return student.status === "نشط" && Number(student.opportunities || 0) === 0;
+  if (issue === "opportunity-full")
+    return (
+      health === "ready" &&
+      limit !== null &&
+      Number(student.opportunities || 0) === limit
+    );
+  if (issue === "opportunity-over-limit")
+    return (
+      health === "ready" &&
+      limit !== null &&
+      Number(student.opportunities || 0) > limit
+    );
+  if (issue === "missing-contact")
+    return (
+      !sanitizePhoneInput(student.phone || "") ||
+      !sanitizePhoneInput(student.parentPhone || "")
+    );
+  if (issue === "no-telegram")
+    return !normalizeTelegramIdentifier(student.telegram || "");
+  return true;
 }
 
 /**
@@ -399,78 +470,37 @@ function ContactLink({
 }
 
 
-function looksLikeTelegramIdentifierSearch(query: string): boolean {
-  const trimmed = toLatinDigits(query).trim();
-  const telegramKey = normalizeTelegramIdentifier(trimmed);
-  if (telegramKey.length < 3) return false;
-  return (
-    /^@?[A-Za-z0-9_]+$/.test(trimmed) &&
-    (trimmed.startsWith("@") || /[A-Za-z_]/.test(trimmed))
-  );
-}
-
-function studentMatchesExactIdentifierSearch(
-  student: Student,
-  query: string,
-): boolean {
-  const trimmed = toLatinDigits(query).trim();
-  const queryTelegramKey = normalizeTelegramIdentifier(trimmed);
-  const studentTelegramKey = normalizeTelegramIdentifier(student.telegram);
-  const queryCode = trimmed.toLocaleLowerCase("ar-IQ");
-  const studentCode = String(student.code ?? "")
-    .trim()
-    .toLocaleLowerCase("ar-IQ");
-
-  if (studentTelegramKey && studentTelegramKey === queryTelegramKey)
-    return true;
-  if (!trimmed.startsWith("@") && studentCode && studentCode === queryCode)
-    return true;
-  return false;
-}
-
-function studentMatchesPrefixIdentifierSearch(
-  student: Student,
-  query: string,
-): boolean {
-  const trimmed = toLatinDigits(query).trim();
-  const queryTelegramKey = normalizeTelegramIdentifier(trimmed);
-  const studentTelegramKey = normalizeTelegramIdentifier(student.telegram);
-  const queryCode = trimmed.toLocaleLowerCase("ar-IQ");
-  const studentCode = String(student.code ?? "")
-    .trim()
-    .toLocaleLowerCase("ar-IQ");
-
-  if (studentTelegramKey && studentTelegramKey.startsWith(queryTelegramKey))
-    return true;
-  if (
-    !trimmed.startsWith("@") &&
-    studentCode &&
-    studentCode.startsWith(queryCode)
-  )
-    return true;
-  return false;
-}
-
 function studentMatchesRegistrySearch(
   student: Student,
   query: string,
-  hasExactIdentifierMatch: boolean,
 ): boolean {
-  if (!query.trim()) return true;
+  const trimmed = toLatinDigits(query).trim();
+  if (!trimmed) return true;
+  const telegramKey = normalizeTelegramIdentifier(trimmed);
+  const studentTelegramKey = normalizeTelegramIdentifier(student.telegram || "");
+  const queryCode = trimmed.toLocaleLowerCase("ar-IQ");
+  const studentCode = String(student.code || "")
+    .trim()
+    .toLocaleLowerCase("ar-IQ");
+  const compact = sanitizePhoneInput(trimmed);
+  const phoneValues = [student.phone, student.parentPhone].map((value) =>
+    sanitizePhoneInput(String(value || "")),
+  );
 
-  if (looksLikeTelegramIdentifierSearch(query)) {
-    return hasExactIdentifierMatch
-      ? studentMatchesExactIdentifierSearch(student, query)
-      : studentMatchesPrefixIdentifierSearch(student, query);
-  }
-
-  return searchAny(query, [
-    student.name,
-    student.code,
-    student.telegram,
-    student.phone,
-    student.parentPhone,
-  ]);
+  return (
+    searchAny(trimmed, [student.name, student.school]) ||
+    Boolean(studentCode && studentCode.startsWith(queryCode)) ||
+    Boolean(
+      telegramKey &&
+        studentTelegramKey &&
+        studentTelegramKey.startsWith(telegramKey),
+    ) ||
+    phoneValues.some(
+      (value) =>
+        Boolean(compact && value.startsWith(compact)) ||
+        (compact.length >= 7 && value.includes(compact)),
+    )
+  );
 }
 
 export function StudentRegistryView() {
@@ -497,6 +527,9 @@ export function StudentRegistryView() {
       registryUser?.roleId === "role_admin",
   );
   const registryPermissions = new Set(registryUser?.permissions || []);
+  const registryStateStorageKey = `${STUDENT_REGISTRY_STATE_KEY}:${
+    registryUser?.id || registryUser?.username || "guest"
+  }`;
   const canAddStudents =
     isRegistryAdmin || registryPermissions.has("students.add");
   const canEditStudents =
@@ -514,6 +547,14 @@ export function StudentRegistryView() {
   const [filterLocation, setFilterLocation] = useState("");
   const [filterRegistryIssue, setFilterRegistryIssue] =
     useState<RegistryIssueFilter>("");
+  const [viewMode, setViewMode] = useState<RegistryViewMode>("cards");
+  const [pageSize, setPageSize] = useState(10);
+  const [page, setPage] = useState(1);
+  const [hydratedRegistryStorageKey, setHydratedRegistryStorageKey] =
+    useState("");
+  const registryStateHydrated =
+    hydratedRegistryStorageKey === registryStateStorageKey;
+  const skipRegistryStatePersistKey = useRef("");
 
   // خيارات الفلاتر تُشتق من إعدادات الدورة/نوع الدورة المختارة، وليس من قوائم ثابتة.
   const availableProgramsForFilter = useMemo(
@@ -538,23 +579,36 @@ export function StudentRegistryView() {
 
   // عند تغيير فلتر سابق، يتم تنظيف أي فلتر تابع صار غير متاح.
   useEffect(() => {
+    if (!registryStateHydrated) return;
+    const clearedFilters: string[] = [];
     if (
       filterCourseProgram &&
+      availableProgramsForFilter.length > 0 &&
       !availableProgramsForFilter.includes(filterCourseProgram as any)
     ) {
       setFilterCourseProgram("");
-      return;
+      clearedFilters.push("نوع الدورة");
     }
     if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
       setFilterCourseTerm("");
+      clearedFilters.push("الكورس");
     }
     if (
       filterStudyType &&
+      availableStudyTypesForFilter.length > 0 &&
       !availableStudyTypesForFilter.includes(filterStudyType as any)
     ) {
       setFilterStudyType("");
+      clearedFilters.push("نوع البرنامج");
+    }
+    if (clearedFilters.length > 0) {
+      setPage(1);
+      toast.warning("تم مسح فلتر تابع لم يعد متاحاً", {
+        description: clearedFilters.join("، "),
+      });
     }
   }, [
+    registryStateHydrated,
     filterCourseProgram,
     filterCourseTerm,
     filterStudyType,
@@ -562,13 +616,111 @@ export function StudentRegistryView() {
     availableStudyTypesForFilter,
   ]);
 
-  const [viewMode, setViewMode] = useState<RegistryViewMode>("cards");
-  const [pageSize, setPageSize] = useState(10);
-  const [page, setPage] = useState(1);
+  useEffect(() => {
+    setHydratedRegistryStorageKey("");
+    setSearch("");
+    setFilterStatus("");
+    setFilterGender("");
+    setFilterCourseId("");
+    setFilterCourseProgram("");
+    setFilterCourseTerm("");
+    setFilterStudyType("");
+    setFilterLocation("");
+    setFilterRegistryIssue("");
+    setViewMode("cards");
+    setPageSize(10);
+    setPage(1);
+    try {
+      const raw = window.localStorage.getItem(registryStateStorageKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Record<string, unknown>;
+      const savedIssue = String(saved.registryIssue || "");
+      const savedStatus = String(saved.status || "");
+      const savedGender = String(saved.gender || "");
+      const savedPageSize = Number(saved.pageSize);
+      const savedPage = Number(saved.page);
+
+      setSearch(String(saved.search || ""));
+      setFilterStatus(
+        ["نشط", "مفصول", ARCHIVED_STUDENT_STATUS].includes(savedStatus)
+          ? savedStatus
+          : "",
+      );
+      setFilterGender(["ذكر", "أنثى"].includes(savedGender) ? savedGender : "");
+      setFilterCourseId(String(saved.courseId || ""));
+      setFilterCourseProgram(String(saved.courseProgram || ""));
+      setFilterCourseTerm(String(saved.courseTerm || ""));
+      setFilterStudyType(String(saved.studyType || ""));
+      setFilterLocation(String(saved.location || ""));
+      setFilterRegistryIssue(
+        savedIssue && savedIssue in registryIssueFilterLabels
+          ? (savedIssue as RegistryIssueFilter)
+          : "",
+      );
+      setViewMode(saved.viewMode === "table" ? "table" : "cards");
+      setPageSize([10, 50, 100].includes(savedPageSize) ? savedPageSize : 10);
+      setPage(
+        Number.isInteger(savedPage) && savedPage > 0 ? savedPage : 1,
+      );
+    } catch {
+      try {
+        window.localStorage.removeItem(registryStateStorageKey);
+      } catch {
+        // Keep defaults when browser storage is unavailable.
+      }
+    } finally {
+      skipRegistryStatePersistKey.current = registryStateStorageKey;
+      setHydratedRegistryStorageKey(registryStateStorageKey);
+    }
+  }, [registryStateStorageKey]);
+
+  useEffect(() => {
+    if (!registryStateHydrated) return;
+    if (skipRegistryStatePersistKey.current === registryStateStorageKey) {
+      skipRegistryStatePersistKey.current = "";
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        registryStateStorageKey,
+        JSON.stringify({
+          search,
+          status: filterStatus,
+          gender: filterGender,
+          courseId: filterCourseId,
+          courseProgram: filterCourseProgram,
+          courseTerm: filterCourseTerm,
+          studyType: filterStudyType,
+          location: filterLocation,
+          registryIssue: filterRegistryIssue,
+          viewMode,
+          pageSize,
+          page,
+        }),
+      );
+    } catch {
+      // Keep the registry usable when browser storage is unavailable.
+    }
+  }, [
+    registryStateHydrated,
+    registryStateStorageKey,
+    search,
+    filterStatus,
+    filterGender,
+    filterCourseId,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
+    filterLocation,
+    filterRegistryIssue,
+    viewMode,
+    pageSize,
+    page,
+  ]);
   const [serverStudents, setServerStudents] = useState<Student[] | null>(null);
   const [serverTotalCount, setServerTotalCount] = useState(0);
   const [serverTotalPages, setServerTotalPages] = useState(1);
-  const [serverStudentsLoading, setServerStudentsLoading] = useState(false);
+  const [serverStudentsLoading, setServerStudentsLoading] = useState(true);
   const [serverStudentsError, setServerStudentsError] = useState<string | null>(
     null,
   );
@@ -584,6 +736,11 @@ export function StudentRegistryView() {
   >(null);
   const [noActiveChapterStudentsTotal, setNoActiveChapterStudentsTotal] =
     useState<number | null>(null);
+  const [studentStatsLoading, setStudentStatsLoading] = useState(true);
+  const [studentStatsError, setStudentStatsError] = useState<string | null>(
+    null,
+  );
+  const [studentStatsRefreshKey, setStudentStatsRefreshKey] = useState(0);
 
   const [dismissDialog, setDismissDialog] = useState<{
     student: Student | null;
@@ -637,11 +794,44 @@ export function StudentRegistryView() {
   const { locked: isStatusActionSaving, runLocked: runStatusActionLocked } =
     useActionLock();
   const debouncedSearch = useDebouncedValue(search, 180);
+  const registrySearchPending = search !== debouncedSearch;
+  const studentListRequestId = useRef(0);
+  const studentStatsRequestId = useRef(0);
+
   // Fetch location filter options from server (distinct query, not all students)
   const [locationFilterOptions, setLocationFilterOptions] = useState<string[]>(
     [],
   );
+  const locationFilterContextKey = JSON.stringify([
+    filterStatus,
+    filterGender,
+    filterCourseId,
+    filterCourseProgram,
+    filterCourseTerm,
+    filterStudyType,
+  ]);
+  const [loadedLocationFilterContextKey, setLoadedLocationFilterContextKey] =
+    useState("");
+
   useEffect(() => {
+    setServerStudents(null);
+    setServerTotalCount(0);
+    setServerTotalPages(1);
+    setServerStudentsError(null);
+    setServerStudentsLoading(true);
+    setStudentsSystemTotal(null);
+    setActiveStudentsTotal(null);
+    setDismissedStudentsTotal(null);
+    setNoActiveChapterStudentsTotal(null);
+    setStudentStatsError(null);
+    setStudentStatsLoading(true);
+    setLocationFilterOptions([]);
+    setLoadedLocationFilterContextKey("");
+  }, [registryStateStorageKey]);
+
+  useEffect(() => {
+    if (!registryStateHydrated) return;
+    setLoadedLocationFilterContextKey("");
     const params = new URLSearchParams();
     if (filterStatus) params.set("status", filterStatus);
     if (filterGender) params.set("gender", filterGender);
@@ -680,6 +870,7 @@ export function StudentRegistryView() {
         if (controller.signal.aborted) return;
         if (Array.isArray(data?.locationOptions)) {
           setLocationFilterOptions(data.locationOptions.filter(Boolean));
+          setLoadedLocationFilterContextKey(locationFilterContextKey);
           return;
         }
         if (Array.isArray(data?.locations)) {
@@ -693,6 +884,7 @@ export function StudentRegistryView() {
             ),
           ) as string[];
           setLocationFilterOptions(scopes);
+          setLoadedLocationFilterContextKey(locationFilterContextKey);
           return;
         }
         setLocationFilterOptions(fallbackLocations());
@@ -704,6 +896,8 @@ export function StudentRegistryView() {
 
     return () => controller.abort();
   }, [
+    registryStateHydrated,
+    registryStateStorageKey,
     students,
     filterStatus,
     filterGender,
@@ -711,21 +905,41 @@ export function StudentRegistryView() {
     filterCourseProgram,
     filterCourseTerm,
     filterStudyType,
+    locationFilterContextKey,
     syncKey,
   ]);
 
   useEffect(() => {
-    if (filterLocation && !locationFilterOptions.includes(filterLocation)) {
+    if (
+      registryStateHydrated &&
+      loadedLocationFilterContextKey === locationFilterContextKey &&
+      filterLocation &&
+      !locationFilterOptions.includes(filterLocation)
+    ) {
       setFilterLocation("");
+      setPage(1);
+      toast.warning("تم مسح فلتر الموقع", {
+        description: "الموقع السابق غير متاح مع الفلاتر المختارة حالياً.",
+      });
     }
-  }, [filterLocation, locationFilterOptions]);
+  }, [
+    registryStateHydrated,
+    filterLocation,
+    locationFilterOptions,
+    loadedLocationFilterContextKey,
+    locationFilterContextKey,
+  ]);
 
   useEffect(() => {
+    if (!registryStateHydrated || registrySearchPending) return;
     let cancelled = false;
     const controller = new AbortController();
+    const requestId = ++studentListRequestId.current;
+    const requestIsStale = () =>
+      cancelled || requestId !== studentListRequestId.current;
 
     const silent = isBackgroundSync();
-    if (!silent) setServerStudentsLoading(true);
+    setServerStudentsLoading(true);
     if (!silent) setServerStudentsError(null);
 
     studentApi
@@ -747,7 +961,7 @@ export function StudentRegistryView() {
         { signal: controller.signal, quietAbort: true },
       )
       .then((result) => {
-        if (cancelled) return;
+        if (requestIsStale()) return;
         if (!result) {
           if (!silent) {
             setServerStudents(null);
@@ -770,14 +984,14 @@ export function StudentRegistryView() {
         }
       })
       .catch(() => {
-        if (cancelled || silent) return;
+        if (requestIsStale() || silent) return;
         setServerStudents(null);
         setServerStudentsError(
           "تعذر تحميل نتائج الطلاب من النظام. سيتم عرض النسخة المحلية مؤقتاً.",
         );
       })
       .finally(() => {
-        if (!cancelled) setServerStudentsLoading(false);
+        if (!requestIsStale()) setServerStudentsLoading(false);
       });
 
     return () => {
@@ -785,6 +999,9 @@ export function StudentRegistryView() {
       controller.abort();
     };
   }, [
+    registryStateHydrated,
+    registryStateStorageKey,
+    registrySearchPending,
     debouncedSearch,
     filterStatus,
     filterGender,
@@ -803,7 +1020,17 @@ export function StudentRegistryView() {
   ]);
 
   useEffect(() => {
+    if (!registryStateHydrated || registrySearchPending) return;
     let cancelled = false;
+    const requestId = ++studentStatsRequestId.current;
+    const requestIsStale = () =>
+      cancelled || requestId !== studentStatsRequestId.current;
+    setStudentStatsLoading(true);
+    setStudentStatsError(null);
+    setStudentsSystemTotal(null);
+    setActiveStudentsTotal(null);
+    setDismissedStudentsTotal(null);
+    setNoActiveChapterStudentsTotal(null);
     studentStatsApi
       .get({
         q: debouncedSearch,
@@ -817,31 +1044,38 @@ export function StudentRegistryView() {
         registryIssue: filterRegistryIssue,
       })
       .then((result) => {
-        if (cancelled) return;
+        if (requestIsStale()) return;
+        if (!result) throw new Error("student stats unavailable");
         setStudentsSystemTotal(
-          result
-            ? Number(result.systemTotal ?? result.total ?? 0)
-            : null,
+          Number(
+            result.systemTotal ??
+              Number(result.total || 0) + Number(result.archived || 0),
+          ),
         );
-        setActiveStudentsTotal(result ? Number(result.active || 0) : null);
-        setDismissedStudentsTotal(
-          result ? Number(result.dismissed || 0) : null,
-        );
-        setNoActiveChapterStudentsTotal(
-          result ? Number(result.noActiveChapter || 0) : null,
-        );
+        setActiveStudentsTotal(Number(result.active || 0));
+        setDismissedStudentsTotal(Number(result.dismissed || 0));
+        setNoActiveChapterStudentsTotal(Number(result.noActiveChapter || 0));
       })
       .catch(() => {
-        if (cancelled) return;
+        if (requestIsStale()) return;
         setStudentsSystemTotal(null);
         setActiveStudentsTotal(null);
         setDismissedStudentsTotal(null);
         setNoActiveChapterStudentsTotal(null);
+        setStudentStatsError(
+          "تعذر تحميل عدادات الطلاب من بيانات النظام حالياً.",
+        );
+      })
+      .finally(() => {
+        if (!requestIsStale()) setStudentStatsLoading(false);
       });
     return () => {
       cancelled = true;
     };
   }, [
+    registryStateHydrated,
+    registryStateStorageKey,
+    registrySearchPending,
     debouncedSearch,
     filterStatus,
     filterGender,
@@ -851,15 +1085,10 @@ export function StudentRegistryView() {
     filterStudyType,
     filterLocation,
     filterRegistryIssue,
+    studentStatsRefreshKey,
     serverRefreshKey,
     syncKey,
   ]);
-
-  useEffect(() => {
-    if (filterCourseProgram !== "كورسات" && filterCourseTerm) {
-      setFilterCourseTerm("");
-    }
-  }, [filterCourseProgram, filterCourseTerm]);
 
   const editFilteredCourses = useMemo(
     () =>
@@ -1035,8 +1264,6 @@ export function StudentRegistryView() {
   const hasCurrentAcademicImpactPreview =
     academicImpactPreviewSignature === editAcademicImpactSignature &&
     Boolean(academicImpactPreview);
-  const effectiveAcademicImpactConfirmed =
-    hasCurrentAcademicImpactPreview && academicImpactConfirmed;
 
   const editAvailableStudyTypes = useMemo(
     () =>
@@ -1544,31 +1771,17 @@ export function StudentRegistryView() {
   });
 
   const localFiltered = useMemo(() => {
-    const hasExactIdentifierMatch =
-      looksLikeTelegramIdentifierSearch(debouncedSearch) &&
-      students.some((student) =>
-        studentMatchesExactIdentifierSearch(student, debouncedSearch),
-      );
-
     return students.filter((s) => {
       if (
         debouncedSearch &&
-        !studentMatchesRegistrySearch(
-          s,
-          debouncedSearch,
-          hasExactIdentifierMatch,
-        )
+        !studentMatchesRegistrySearch(s, debouncedSearch)
       )
         return false;
       if (filterStatus && s.status !== filterStatus) return false;
       if (!filterStatus && s.status === ARCHIVED_STUDENT_STATUS) return false;
       if (filterGender && s.gender !== filterGender) return false;
       if (filterCourseId && s.courseId !== filterCourseId) return false;
-      if (filterRegistryIssue) {
-        const badges = registryHealthBadges(s).map((badge) => badge.label);
-        const label = registryIssueFilterLabels[filterRegistryIssue];
-        if (!badges.some((badge) => badge.includes(label))) return false;
-      }
+      if (!studentMatchesRegistryIssue(s, filterRegistryIssue)) return false;
       if (
         !studentMatchesListFilters(s, {
           courseProgram: filterCourseProgram,
@@ -1760,7 +1973,7 @@ export function StudentRegistryView() {
 
   const fetchStudentExportRows = async () => {
     const params = new URLSearchParams();
-    if (debouncedSearch) params.set("q", debouncedSearch);
+    if (search.trim()) params.set("q", search.trim());
     if (filterStatus) params.set("status", filterStatus);
     if (filterGender) params.set("gender", filterGender);
     if (filterCourseId) params.set("courseId", filterCourseId);
@@ -1791,9 +2004,23 @@ export function StudentRegistryView() {
     setFilterStudyType("");
     setFilterLocation("");
     setFilterRegistryIssue("");
-    setViewMode("cards");
     setPage(1);
   };
+  const hasActiveRegistryFilters = Boolean(
+    search.trim() ||
+      filterStatus ||
+      filterGender ||
+      filterCourseId ||
+      filterCourseProgram ||
+      filterCourseTerm ||
+      filterStudyType ||
+      filterLocation ||
+      filterRegistryIssue,
+  );
+  const registryStatsPending =
+    !registryStateHydrated || registrySearchPending || studentStatsLoading;
+  const registryResultsPending =
+    !registryStateHydrated || registrySearchPending || serverStudentsLoading;
 
   const activeFileStudent = fileDialog.student
     ? students.find((student) => student.id === fileDialog.student?.id) ||
@@ -2137,13 +2364,20 @@ export function StudentRegistryView() {
         </CardContent>
       </Card>
 
-      <div className="tp-student-registry__stats grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div
+        className="tp-student-registry__stats grid grid-cols-1 gap-3 md:grid-cols-3"
+        aria-busy={registryStatsPending}
+      >
         <Card className="tp-student-registry__stat-card bg-card/80">
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">الطلاب النشطون</p>
               <p className="text-2xl font-black">
-                {activeStudentsTotal ?? "…"}
+                {registryStatsPending
+                  ? "…"
+                  : studentStatsError
+                    ? "—"
+                    : (activeStudentsTotal ?? "—")}
               </p>
             </div>
             <Button
@@ -2165,7 +2399,11 @@ export function StudentRegistryView() {
             <div>
               <p className="text-xs text-muted-foreground">قائمة المفصولين</p>
               <p className="text-2xl font-black text-destructive">
-                {dismissedStudentsTotal ?? "…"}
+                {registryStatsPending
+                  ? "…"
+                  : studentStatsError
+                    ? "—"
+                    : (dismissedStudentsTotal ?? "—")}
               </p>
             </div>
             <Button
@@ -2187,7 +2425,11 @@ export function StudentRegistryView() {
             <div>
               <p className="text-xs text-muted-foreground">بدون فصل نشط</p>
               <p className="text-2xl font-black text-amber-600">
-                {noActiveChapterStudentsTotal ?? "…"}
+                {registryStatsPending
+                  ? "…"
+                  : studentStatsError
+                    ? "—"
+                    : (noActiveChapterStudentsTotal ?? "—")}
               </p>
             </div>
             <Button
@@ -2195,24 +2437,57 @@ export function StudentRegistryView() {
               size="sm"
               className="tp-student-registry__stat-action"
               onClick={() => {
-                resetFilters();
+                setFilterRegistryIssue("no-active-chapter");
+                setPage(1);
               }}
             >
               <Eye aria-hidden="true" className="size-4" />
-              عرض الكل
+              عرض الطلاب
             </Button>
           </CardContent>
         </Card>
       </div>
 
+      {studentStatsError && !registryStatsPending && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm font-medium text-destructive"
+        >
+          <span>{studentStatsError}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setStudentStatsRefreshKey((value) => value + 1)}
+          >
+            <RotateCcw aria-hidden="true" className="size-4" />
+            إعادة المحاولة
+          </Button>
+        </div>
+      )}
+
       <div className="tp-student-registry__results space-y-2">
         <CountScopeSummary
-          subject="الطلاب"
-          systemTotal={studentsSystemTotal ?? "…"}
-          filteredTotal={filteredTotalCount}
-          pageCount={paged.length}
+          subject="الطلاب (يشمل المؤرشفين)"
+          systemTotal={
+            registryStatsPending
+              ? "…"
+              : studentStatsError
+                ? "—"
+                : (studentsSystemTotal ?? "—")
+          }
+          filteredTotal={registryResultsPending ? "…" : filteredTotalCount}
+          pageCount={registryResultsPending ? "…" : paged.length}
         />
-        <div className="flex items-center justify-end text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+          {hasActiveRegistryFilters ? (
+            <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
+              <RotateCcw aria-hidden="true" className="size-4" />
+              مسح الفلاتر
+            </Button>
+          ) : (
+            <span />
+          )}
           <div className="flex items-center gap-2">
           <Label htmlFor="registry-pageSize" className="text-xs">
             حجم الصفحة:
@@ -2238,13 +2513,13 @@ export function StudentRegistryView() {
         </div>
       </div>
 
-      {serverStudentsLoading && (
+      {registryResultsPending && (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
           جاري تحميل نتائج الطلاب من بيانات النظام...
         </div>
       )}
 
-      {serverStudentsError && (
+      {serverStudentsError && !registrySearchPending && (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300">
           {serverStudentsError}
           <span className="mt-1 block text-xs">
@@ -2255,7 +2530,7 @@ export function StudentRegistryView() {
 
       {students.length === 0 &&
       filteredTotalCount === 0 &&
-      !serverStudentsLoading ? (
+      !registryResultsPending ? (
         <EmptyState
           icon={UserPlus}
           title="لم تقم بإضافة طلاب بعد"

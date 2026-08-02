@@ -17,7 +17,6 @@ import {
 import { getRequiredTextError } from "@/lib/validation";
 import {
   databaseMigrationRequiredResponse,
-  normalizeArabicText,
   isMissingDatabaseObjectError,
 } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
@@ -52,6 +51,10 @@ import {
   buildStudentMutationToken,
   withStudentMutationToken,
 } from "@/lib/student-mutation-token";
+import {
+  buildStudentRegistryLocationWhere,
+  buildStudentRegistrySearchWhere,
+} from "@/lib/student-registry-filters-server";
 
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
@@ -209,138 +212,6 @@ function clampPageSize(value: number): number {
   return Math.min(500, Math.max(1, value));
 }
 
-function buildLocationWhere(location: string): Prisma.StudentWhereInput | null {
-  const normalized = normalizeArabicText(location);
-  if (!normalized) return null;
-
-  if (normalized === normalizeArabicText("بغداد")) {
-    return { locationScope: "بغداد" };
-  }
-
-  if (normalized === normalizeArabicText("خارج القطر")) {
-    return { locationScope: "خارج القطر" };
-  }
-
-  return {
-    OR: [
-      { subSite: { equals: location, mode: "insensitive" } },
-      { mainSite: { equals: location, mode: "insensitive" } },
-      { subSite: { contains: location, mode: "insensitive" } },
-      { mainSite: { contains: location, mode: "insensitive" } },
-    ],
-  };
-}
-
-function looksLikeTelegramIdentifierQuery(rawQuery: string): boolean {
-  const latinQuery = rawQuery.trim();
-  const telegramQuery = sanitizeTelegramInput(latinQuery).replace(/\s+/g, "");
-  if (telegramQuery.length < 3) return false;
-
-  // A Telegram identifier is normally latin letters/digits/underscore, often pasted with @.
-  // When this is true we should not use broad contains search across names/phones,
-  // otherwise the exact student appears first and unrelated partial matches appear after it.
-  return (
-    /^@?[A-Za-z0-9_]+$/.test(latinQuery) &&
-    (latinQuery.startsWith("@") || /[A-Za-z_]/.test(latinQuery))
-  );
-}
-
-function buildExactIdentifierSearchWhere(
-  rawQuery: string,
-): Prisma.StudentWhereInput {
-  const telegramQuery = sanitizeTelegramInput(rawQuery)
-    .replace(/\s+/g, "")
-    .toLowerCase();
-  const codeQuery = rawQuery.trim();
-  const or: Prisma.StudentWhereInput[] = [
-    { telegramKey: { equals: telegramQuery, mode: "insensitive" } },
-    {
-      telegram: {
-        equals: sanitizeTelegramInput(rawQuery),
-        mode: "insensitive",
-      },
-    },
-  ];
-
-  if (!rawQuery.trim().startsWith("@")) {
-    or.push({ code: { equals: codeQuery, mode: "insensitive" } });
-  }
-
-  return { OR: or };
-}
-
-function buildPrefixIdentifierSearchWhere(
-  rawQuery: string,
-): Prisma.StudentWhereInput {
-  const telegramQuery = sanitizeTelegramInput(rawQuery)
-    .replace(/\s+/g, "")
-    .toLowerCase();
-  const codeQuery = rawQuery.trim();
-  const or: Prisma.StudentWhereInput[] = [
-    { telegramKey: { startsWith: telegramQuery, mode: "insensitive" } },
-    {
-      telegram: {
-        startsWith: sanitizeTelegramInput(rawQuery),
-        mode: "insensitive",
-      },
-    },
-  ];
-
-  if (!rawQuery.trim().startsWith("@")) {
-    or.push({ code: { startsWith: codeQuery, mode: "insensitive" } });
-  }
-
-  return { OR: or };
-}
-
-function buildRegularStudentSearchWhere(
-  rawQuery: string,
-): Prisma.StudentWhereInput {
-  const normalizedQuery = normalizeArabicText(rawQuery);
-  const numericQuery = sanitizePhoneInput(rawQuery);
-  const telegramQuery = sanitizeTelegramInput(rawQuery)
-    .replace(/\s+/g, "")
-    .toLowerCase();
-
-  const or: Prisma.StudentWhereInput[] = [
-    { name: { contains: rawQuery, mode: "insensitive" } },
-    { nameKey: { contains: normalizedQuery, mode: "insensitive" } },
-    { code: { startsWith: rawQuery, mode: "insensitive" } },
-  ];
-
-  if (telegramQuery) {
-    or.push(
-      { telegramKey: { startsWith: telegramQuery, mode: "insensitive" } },
-      {
-        telegram: {
-          startsWith: sanitizeTelegramInput(rawQuery),
-          mode: "insensitive",
-        },
-      },
-    );
-  }
-
-  if (numericQuery) {
-    or.push(
-      { phone: { startsWith: numericQuery, mode: "insensitive" } },
-      { phoneKey: { startsWith: numericQuery, mode: "insensitive" } },
-      { parentPhone: { startsWith: numericQuery, mode: "insensitive" } },
-    );
-
-    // For long phone searches, allow searching inside the number because users may paste
-    // a trailing part of the phone. Short numeric fragments stay strict to avoid noise.
-    if (numericQuery.length >= 7) {
-      or.push(
-        { phone: { contains: numericQuery, mode: "insensitive" } },
-        { phoneKey: { contains: numericQuery, mode: "insensitive" } },
-        { parentPhone: { contains: numericQuery, mode: "insensitive" } },
-      );
-    }
-  }
-
-  return { OR: or };
-}
-
 function buildStudentFilterWhere(
   searchParams: URLSearchParams,
 ): Prisma.StudentWhereInput[] {
@@ -377,7 +248,9 @@ function buildStudentFilterWhere(
   if (studyType) and.push({ studyType });
 
   const location = normalizeListFilter(searchParams.get("location"));
-  const locationWhere = location ? buildLocationWhere(location) : null;
+  const locationWhere = location
+    ? buildStudentRegistryLocationWhere(location)
+    : null;
   if (locationWhere) and.push(locationWhere);
 
   // Database-side filters used by إدارة الفرص. Keep them under explicit
@@ -439,24 +312,7 @@ export async function GET(req: NextRequest) {
   const filters = buildStudentFilterWhere(searchParams);
   const registryIssueWhere = await buildStudentRegistryIssueWhere(searchParams);
   if (registryIssueWhere) filters.push(registryIssueWhere);
-  let searchWhere: Prisma.StudentWhereInput | null = null;
-
-  if (rawQuery) {
-    if (looksLikeTelegramIdentifierQuery(rawQuery)) {
-      const exactSearchWhere = buildExactIdentifierSearchWhere(rawQuery);
-      const exactWhere = composeStudentWhere(filters, exactSearchWhere);
-      const exactCount = await db.student.count({ where: exactWhere });
-
-      // If the complete identifier/code exists, return only it. This prevents
-      // showing the correct result followed by unrelated prefix/partial matches.
-      searchWhere =
-        exactCount > 0
-          ? exactSearchWhere
-          : buildPrefixIdentifierSearchWhere(rawQuery);
-    } else {
-      searchWhere = buildRegularStudentSearchWhere(rawQuery);
-    }
-  }
+  const searchWhere = buildStudentRegistrySearchWhere(rawQuery);
 
   const where = composeStudentWhere(filters, searchWhere);
 

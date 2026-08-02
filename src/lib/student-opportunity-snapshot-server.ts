@@ -121,10 +121,12 @@ export function attachStudentOpportunitySnapshotsFromLinks<
       activeChapter,
       isOpportunityFull:
         opportunityLimit !== null && opportunityLimit > 0
-          ? current >= opportunityLimit
+          ? current === opportunityLimit
           : false,
       isOpportunityOverLimit:
-        opportunityLimit !== null ? current > opportunityLimit : false,
+        opportunityLimit !== null && opportunityLimit > 0
+          ? current > opportunityLimit
+          : false,
     };
   });
 }

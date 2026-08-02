@@ -2,6 +2,105 @@ import type { Prisma } from "@prisma/client";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { db } from "@/lib/db";
 
+export type StudentRegistryActiveCourseLink = {
+  courseId: string;
+  chapter: { opportunities: number };
+};
+
+function normalizedOpportunityLimit(value: unknown): number {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.trunc(numeric));
+}
+
+function groupActiveLinksByCourse(
+  activeLinks: readonly StudentRegistryActiveCourseLink[],
+): Map<string, StudentRegistryActiveCourseLink[]> {
+  const grouped = new Map<string, StudentRegistryActiveCourseLink[]>();
+  for (const link of activeLinks) {
+    const list = grouped.get(link.courseId) || [];
+    list.push(link);
+    grouped.set(link.courseId, list);
+  }
+  return grouped;
+}
+
+export function studentRegistryNoActiveChapterWhere(): Prisma.StudentWhereInput {
+  return {
+    course: {
+      chapters: {
+        none: { active: true, archived: false },
+      },
+    },
+  };
+}
+
+export async function loadStudentRegistryActiveCourseLinks(): Promise<
+  StudentRegistryActiveCourseLink[]
+> {
+  return db.courseChapter.findMany({
+    where: { active: true, archived: false },
+    select: {
+      courseId: true,
+      chapter: { select: { opportunities: true } },
+    },
+  });
+}
+
+export function buildStudentRegistryIssueWhereFromLinks(
+  registryIssue: string,
+  activeLinks: readonly StudentRegistryActiveCourseLink[],
+): Prisma.StudentWhereInput | null {
+  if (registryIssue === "no-active-chapter") {
+    return studentRegistryNoActiveChapterWhere();
+  }
+
+  const grouped = groupActiveLinksByCourse(activeLinks);
+
+  if (registryIssue === "active-chapter-conflict") {
+    const conflictCourseIds = Array.from(grouped.entries())
+      .filter(([, links]) => links.length > 1)
+      .map(([courseId]) => courseId);
+    return conflictCourseIds.length
+      ? { courseId: { in: conflictCourseIds } }
+      : { id: "__none__" };
+  }
+
+  if (registryIssue === "zero-opportunity-limit") {
+    const zeroLimitCourseIds = Array.from(grouped.entries())
+      .filter(
+        ([, links]) =>
+          links.length === 1 &&
+          normalizedOpportunityLimit(links[0].chapter.opportunities) === 0,
+      )
+      .map(([courseId]) => courseId);
+    return zeroLimitCourseIds.length
+      ? { courseId: { in: zeroLimitCourseIds } }
+      : { id: "__none__" };
+  }
+
+  if (
+    registryIssue === "opportunity-full" ||
+    registryIssue === "opportunity-over-limit"
+  ) {
+    const or = Array.from(grouped.entries())
+      .filter(([, links]) => links.length === 1)
+      .map(([courseId, links]) => ({
+        courseId,
+        cap: normalizedOpportunityLimit(links[0].chapter.opportunities),
+      }))
+      .filter(({ cap }) => cap > 0)
+      .map(({ courseId, cap }) => ({
+        courseId,
+        opportunities:
+          registryIssue === "opportunity-full" ? cap : { gt: cap },
+      }));
+    return or.length ? { OR: or } : { id: "__none__" };
+  }
+
+  return null;
+}
+
 /**
  * Builds the database predicate used by every student-registry read.
  *
@@ -27,7 +126,7 @@ export async function buildStudentRegistryIssueWhere(
 
   if (registryIssue === "no-telegram") {
     return {
-      OR: [{ telegram: null }, { telegram: "" }, { telegramKey: null }],
+      OR: [{ telegram: null }, { telegram: "" }],
     };
   }
 
@@ -35,67 +134,10 @@ export async function buildStudentRegistryIssueWhere(
     return { status: "نشط", opportunities: 0 };
   }
 
-  const activeLinks = await db.courseChapter.findMany({
-    where: { active: true, archived: false },
-    select: {
-      courseId: true,
-      chapter: { select: { opportunities: true } },
-    },
-  });
-  const grouped = new Map<string, typeof activeLinks>();
-  for (const link of activeLinks) {
-    const list = grouped.get(link.courseId) || [];
-    list.push(link);
-    grouped.set(link.courseId, list);
-  }
-
-  if (registryIssue === "active-chapter-conflict") {
-    const conflictCourseIds = Array.from(grouped.entries())
-      .filter(([, links]) => links.length > 1)
-      .map(([courseId]) => courseId);
-    return conflictCourseIds.length
-      ? { courseId: { in: conflictCourseIds } }
-      : { id: "__none__" };
-  }
-
   if (registryIssue === "no-active-chapter") {
-    const allCourses = await db.course.findMany({ select: { id: true } });
-    const noActiveCourseIds = allCourses
-      .map((course) => course.id)
-      .filter((courseId) => {
-        const links = grouped.get(courseId) || [];
-        const cap =
-          links.length === 1 ? Number(links[0].chapter.opportunities || 0) : 0;
-        return links.length !== 1 || cap <= 0;
-      });
-    return noActiveCourseIds.length
-      ? { courseId: { in: noActiveCourseIds } }
-      : { id: "__none__" };
+    return studentRegistryNoActiveChapterWhere();
   }
 
-  if (
-    registryIssue === "opportunity-full" ||
-    registryIssue === "opportunity-over-limit"
-  ) {
-    const courseCaps = Array.from(grouped.entries())
-      .map(([courseId, links]) => ({
-        courseId,
-        cap:
-          links.length === 1
-            ? Math.max(
-                0,
-                Math.trunc(Number(links[0].chapter.opportunities || 0)),
-              )
-            : 0,
-      }))
-      .filter((item) => item.cap > 0);
-    const or = courseCaps.map(({ courseId, cap }) => ({
-      courseId,
-      opportunities:
-        registryIssue === "opportunity-full" ? { gte: cap } : { gt: cap },
-    }));
-    return or.length ? { OR: or } : { id: "__none__" };
-  }
-
-  return null;
+  const activeLinks = await loadStudentRegistryActiveCourseLinks();
+  return buildStudentRegistryIssueWhereFromLinks(registryIssue, activeLinks);
 }
