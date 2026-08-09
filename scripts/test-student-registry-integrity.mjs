@@ -48,6 +48,25 @@ check(
     registryIssueHelper.includes('opportunity-over-limit'),
 );
 check(
+  'كل الحالات تعني جميع الطلاب فعلياً بما فيهم المؤرشفون',
+  registry.includes('<SelectItem value="all">كل الحالات</SelectItem>') &&
+    registry.includes('includeArchived: true') &&
+    registry.includes('params.set("includeArchived", "1")') &&
+    registryFiltersHelper.includes('if (status) and.push({ status });') &&
+    registryFiltersHelper.includes('else if (!includeArchived)') &&
+    studentsStatsRoute.includes('const filters: Prisma.StudentWhereInput[] = status ? [{ status }] : [];'),
+);
+check(
+  'التصدير الكامل مجزأ ومثبت بلقطة ويتحقق من العدد ولا يرسل كائن الدورة الضخم',
+  studentsExportRoute.includes('MAX_EXPORT_PAGE_SIZE = 500') &&
+    studentsExportRoute.includes('snapshotAt') &&
+    studentsExportRoute.includes('nextCursor') &&
+    studentsExportRoute.includes('studentExportSelect') &&
+    studentsExportRoute.includes('course: { select: { name: true } }') &&
+    registry.includes('collectStudentExportPages') &&
+    registry.includes('onProgress: ({ loaded, total })'),
+);
+check(
   'القائمة والإحصائيات والتصدير تستخدم بحثاً وموقعاً موحدين',
   studentsRoute.includes('buildStudentRegistryWhere(searchParams)') &&
     studentsExportRoute.includes('buildStudentRegistryWhere(searchParams)') &&
@@ -86,7 +105,14 @@ check(
   exportDialog.includes('function protectSpreadsheetCell') &&
     exportDialog.includes('/^\\s*[=+\\-@]/') &&
     exportDialog.includes('const str = protectSpreadsheetCell(value)') &&
-    exportDialog.includes('return protectSpreadsheetCell(value)'),
+    exportDialog.includes('protectSpreadsheetCell(normalized)'),
+);
+check(
+  'تصدير Excel ينتج ملف XLSX حقيقياً ومنسقاً',
+  exportDialog.includes('buildProfessionalXlsx') &&
+    exportDialog.includes('.xlsx`') &&
+    exportDialog.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') &&
+    !exportDialog.includes('buildPlainExcel'),
 );
 check('تعديل الطالب في سجل الطلاب صار server-first عبر studentApi.update وليس updateStudent من الكاش', registry.includes('await studentApi.update(editDialog.id') && !registry.includes('const result = updateStudent('));
 check('أرشفة الطالب في سجل الطلاب صارت server-first ومرتبطة ببصمة المعاينة', registry.includes('await studentApi.remove(deleteDialog.id, { previewToken })') && registry.includes('deleteImpact?.previewToken') && !registry.includes('const ok = deleteStudent('));

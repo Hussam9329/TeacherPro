@@ -103,7 +103,8 @@ import {
   type RegistryIssueFilter,
 } from "./student-registry-results";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { ExportDialog } from "./export-dialog";
+import { ExportDialog, type ExportFetchContext } from "./export-dialog";
+import { collectStudentExportPages } from "@/lib/student-export-pagination";
 import {
   STUDENT_FILTER_COURSE_TERMS,
   studentMatchesListFilters,
@@ -471,6 +472,7 @@ export function StudentRegistryView() {
     if (!registryStateHydrated) return;
     setLoadedLocationFilterContextKey("");
     const params = new URLSearchParams();
+    params.set("includeArchived", "1");
     if (filterStatus) params.set("status", filterStatus);
     if (filterGender) params.set("gender", filterGender);
     if (filterCourseId) params.set("courseId", filterCourseId);
@@ -592,6 +594,7 @@ export function StudentRegistryView() {
           studyType: filterStudyType,
           location: filterLocation,
           registryIssue: filterRegistryIssue,
+          includeArchived: true,
           opportunityMode: true,
           page,
           pageSize,
@@ -738,8 +741,6 @@ export function StudentRegistryView() {
         return false;
       }
       if (filterStatus && student.status !== filterStatus) return false;
-      if (!filterStatus && student.status === ARCHIVED_STUDENT_STATUS)
-        return false;
       if (filterGender && student.gender !== filterGender) return false;
       if (filterCourseId && student.courseId !== filterCourseId) return false;
       if (!studentMatchesRegistryIssue(student, filterRegistryIssue))
@@ -1660,25 +1661,67 @@ export function StudentRegistryView() {
     locationText: formatRegistryLocation(student),
   }));
 
-  const fetchStudentExportRows = async () => {
+  const fetchStudentExportRows = async ({
+    signal,
+    onProgress,
+  }: ExportFetchContext) => {
     const params = new URLSearchParams();
+    params.set("includeArchived", "1");
     if (debouncedSearch) params.set("q", debouncedSearch);
     if (filterStatus) params.set("status", filterStatus);
     if (filterGender) params.set("gender", filterGender);
     if (filterCourseId) params.set("courseId", filterCourseId);
     if (filterCourseProgram) params.set("courseProgram", filterCourseProgram);
-    if (filterCourseTerm) params.set("courseTerm", filterCourseTerm);
+    if (filterCourseProgram === "كورسات" && filterCourseTerm) {
+      params.set("courseTerm", filterCourseTerm);
+    }
     if (filterStudyType) params.set("studyType", filterStudyType);
     if (filterLocation) params.set("location", filterLocation);
     if (filterRegistryIssue) params.set("registryIssue", filterRegistryIssue);
-    const res = await fetch(`/api/students/export?${params.toString()}`, {
-      credentials: "same-origin",
-    });
-    if (!res.ok) throw new Error("students export failed");
-    const json = (await res.json()) as {
-      students?: Array<Student & { courseName?: string; course?: { name?: string } | null }>;
+    type ExportStudent = Student & {
+      courseName?: string;
+      course?: { name?: string } | null;
     };
-    return (json.students || []).map((student) => ({
+    const exportedStudents = await collectStudentExportPages<ExportStudent>(
+      async ({ cursor, snapshotAt, pageSize: exportPageSize, signal: pageSignal }) => {
+        const pageParams = new URLSearchParams(params);
+        pageParams.set("pageSize", String(exportPageSize));
+        if (cursor) pageParams.set("cursor", cursor);
+        if (snapshotAt) pageParams.set("snapshotAt", snapshotAt);
+        const res = await fetch(`/api/students/export?${pageParams.toString()}`, {
+          credentials: "same-origin",
+          cache: "no-store",
+          signal: pageSignal,
+        });
+        const json = (await res.json().catch(() => null)) as {
+          students?: ExportStudent[];
+          totalCount?: number;
+          hasMore?: boolean;
+          nextCursor?: string | null;
+          snapshotAt?: string;
+          error?: string;
+        } | null;
+        if (!res.ok) {
+          throw new Error(
+            json?.error || "تعذر تحميل صفحة من بيانات التصدير.",
+          );
+        }
+        return {
+          students: json?.students || [],
+          totalCount: Number(json?.totalCount),
+          hasMore: Boolean(json?.hasMore),
+          nextCursor: json?.nextCursor || null,
+          snapshotAt: String(json?.snapshotAt || ""),
+        };
+      },
+      {
+        pageSize: 500,
+        signal,
+        onProgress: ({ loaded, total }) => onProgress(loaded, total),
+      },
+    );
+
+    return exportedStudents.map((student) => ({
       ...student,
       courseName: student.courseName || student.course?.name || courseName(student.courseId),
       locationText: formatRegistryLocation(student),

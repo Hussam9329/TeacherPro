@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -16,11 +16,12 @@ import {
 import { Download, FileCode, FileSpreadsheet, FileText, Printer, RotateCcw } from "lucide-react";
 import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
+import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 
 export type ExportColumn<T = Record<string, unknown>> = {
   key: string;
   label: string;
-  value: (row: T) => string | number | null | undefined;
+  value: (row: T, index?: number) => string | number | null | undefined;
   defaultSelected?: boolean;
   locked?: boolean;
 };
@@ -78,34 +79,22 @@ function sanitizeExportFileName(value: string): string {
 function buildCsv<T>(rows: T[], columns: ExportColumn<T>[]): string {
   const header = columns.map((col) => escapeCsvCell(col.label)).join(",");
   const body = rows
-    .map((row) => columns.map((col) => escapeCsvCell(col.value(row))).join(","))
+    .map((row, rowIndex) =>
+      columns
+        .map((col) => escapeCsvCell(col.value(row, rowIndex)))
+        .join(","),
+    )
     .join("\r\n");
   // BOM for Excel Arabic support
-  return "\uFEFF" + header + "\r\n" + body;
-}
-
-function plainExcelCell(value: string | number | null | undefined): string {
-  return protectSpreadsheetCell(value)
-    .replace(/\t/g, " ")
-    .replace(/\r?\n/g, " ")
-    .trim();
-}
-
-function buildPlainExcel<T>(rows: T[], columns: ExportColumn<T>[]): string {
-  const header = columns.map((col) => plainExcelCell(col.label)).join("\t");
-  const body = rows
-    .map((row) => columns.map((col) => plainExcelCell(col.value(row))).join("\t"))
-    .join("\r\n");
-  // Plain tab-separated text only: no HTML, CSS, widths, colors, borders, RTL, or merged cells.
   return "\uFEFF" + header + "\r\n" + body;
 }
 
 function buildTableRows<T>(rows: T[], columns: ExportColumn<T>[]): string {
   return rows
     .map(
-      (row) =>
+      (row, rowIndex) =>
         `<tr>${columns
-          .map((col) => `<td>${escapeHtml(String(normalizeExportValue(col.value(row))))}</td>`)
+          .map((col) => `<td>${escapeHtml(String(normalizeExportValue(col.value(row, rowIndex))))}</td>`)
           .join("")}</tr>`,
     )
     .join("");
@@ -164,8 +153,8 @@ function buildHtml<T>(
     .join("")}</tr></thead><tbody>${buildTableRows(rows, columns)}</tbody></table></div></main></body></html>`;
 }
 
-function downloadBlob(content: string, fileName: string, mime: string) {
-  const blob = new Blob([content], { type: mime });
+function downloadBlob(content: BlobPart | Blob, fileName: string, mime: string) {
+  const blob = content instanceof Blob ? content : new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -202,6 +191,11 @@ const exportFormatIcons: Record<ExportFormat, React.ElementType> = {
   pdf: Printer,
 };
 
+export type ExportFetchContext = {
+  signal: AbortSignal;
+  onProgress: (loaded: number, total: number) => void;
+};
+
 export function ExportDialog<T = Record<string, unknown>>({
   title,
   fileName,
@@ -229,7 +223,7 @@ export function ExportDialog<T = Record<string, unknown>>({
   pageOrientation?: PageOrientation;
   pdfTitle?: string;
   pdfFileName?: string;
-  fetchRows?: () => Promise<T[]>;
+  fetchRows?: (context: ExportFetchContext) => Promise<T[]>;
   /** Exact number of rows that fetchRows will export (not the current page). */
   totalRowCount?: number | null;
   disabled?: boolean;
@@ -239,6 +233,18 @@ export function ExportDialog<T = Record<string, unknown>>({
     defaultColumnKeys(columns, defaultSelectedColumnKeys),
   );
   const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{
+    loaded: number;
+    total: number;
+  } | null>(null);
+  const exportAbortController = useRef<AbortController | null>(null);
+
+  useEffect(
+    () => () => {
+      exportAbortController.current?.abort();
+    },
+    [],
+  );
 
   const safeFileName = useMemo(() => {
     const base = String(fileName || "export").trim().replace(/[^\w\u0600-\u06FF-]+/g, "-");
@@ -280,16 +286,33 @@ export function ExportDialog<T = Record<string, unknown>>({
 
   const loadExportRows = async (): Promise<T[] | null> => {
     if (!fetchRows) return rows;
+    exportAbortController.current?.abort();
+    const controller = new AbortController();
+    exportAbortController.current = controller;
     setExporting(true);
+    setExportProgress({ loaded: 0, total: Math.max(0, totalRowCount || 0) });
     try {
-      const loadedRows = await fetchRows();
+      const loadedRows = await fetchRows({
+        signal: controller.signal,
+        onProgress: (loaded, total) => setExportProgress({ loaded, total }),
+      });
       return loadedRows;
     } catch (error) {
       console.error("[ExportDialog] failed to fetch server export rows:", error);
-      toast.error("تعذر تحميل بيانات التصدير الكاملة من النظام");
+      if (!(error instanceof Error && error.name === "AbortError")) {
+        toast.error(
+          error instanceof Error && error.message
+            ? error.message
+            : "تعذر تحميل بيانات التصدير الكاملة من النظام",
+        );
+      }
       return null;
     } finally {
+      if (exportAbortController.current === controller) {
+        exportAbortController.current = null;
+      }
       setExporting(false);
+      setExportProgress(null);
     }
   };
 
@@ -303,9 +326,34 @@ export function ExportDialog<T = Record<string, unknown>>({
 
   const exportExcel = (exportRows: T[]) => {
     if (!ensureExportable(exportRows)) return;
-    const excelText = buildPlainExcel(exportRows, selectedColumns);
-    downloadBlob(excelText, `${safeFileName}.xls`, "application/vnd.ms-excel;charset=utf-8");
-    toast.success(`تم تصدير ${exportRows.length} صف و ${selectedColumns.length} عمود بصيغة Excel بدون تنسيق`);
+    const workbook = buildProfessionalXlsx(
+      exportRows,
+      selectedColumns.map((column) => ({
+        label: humanizeTeacherProText(column.label),
+        value: (row: T, index?: number) => {
+          const normalized = normalizeExportValue(column.value(row, index));
+          return typeof normalized === "number"
+            ? normalized
+            : protectSpreadsheetCell(normalized);
+        },
+      })),
+      {
+        title: humanizeTeacherProText(title),
+        orientation: pageOrientation,
+      },
+    );
+    const workbookBlob = new Blob(
+      [workbook.buffer as ArrayBuffer],
+      {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+    );
+    downloadBlob(
+      workbookBlob,
+      `${safeFileName}.xlsx`,
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    toast.success(`تم إنشاء ملف Excel احترافي يضم ${exportRows.length} طالباً`);
     setOpen(false);
   };
 
@@ -376,7 +424,13 @@ export function ExportDialog<T = Record<string, unknown>>({
   const resetColumns = () => setSelectedColumnKeys(defaultColumnKeys(columns, defaultSelectedColumnKeys));
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) exportAbortController.current?.abort();
+        setOpen(nextOpen);
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2" disabled={disabled}>
           <Download className="h-4 w-4" />
@@ -398,6 +452,34 @@ export function ExportDialog<T = Record<string, unknown>>({
               الأعمدة المختارة: <b>{selectedColumns.length}</b> من <b>{columns.length}</b>
             </p>
           </div>
+
+          {exporting && exportProgress ? (
+            <div
+              className="space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-3"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <strong>جاري تحميل جميع الطلاب…</strong>
+                <span>
+                  {exportProgress.loaded} / {exportProgress.total || "…"}
+                </span>
+              </div>
+              <progress
+                className="h-2 w-full accent-primary"
+                max={Math.max(1, exportProgress.total)}
+                value={exportProgress.loaded}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => exportAbortController.current?.abort()}
+              >
+                إلغاء التصدير
+              </Button>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">

@@ -98,6 +98,10 @@ const opportunitySnapshots = loadTypeScriptModule(
 const registryViewHelpers = loadTypeScriptModule(
   "src/components/teacher-pro/student-registry-helpers.ts",
 );
+const studentExportPagination = loadTypeScriptModule(
+  "src/lib/student-export-pagination.ts",
+);
+const xlsxExport = loadTypeScriptModule("src/lib/xlsx-export.ts");
 
 function text(value, insensitive) {
   const result = String(value ?? "");
@@ -404,9 +408,13 @@ test("combined registry filters reconcile to the same Prisma predicate", async (
       courseTerm: "الكورس الأول",
       studyType: "حضوري",
       location: "المنصور",
+      includeArchived: "1",
     }),
   );
-  assert.deepEqual(matchingIds(searchableStudents, where), ["ali-name"]);
+  assert.deepEqual(matchingIds(searchableStudents, where), [
+    "ali-name",
+    "archived-ali",
+  ]);
 
   const defaultWhere = await registryFilters.buildStudentRegistryWhere(
     new URLSearchParams(),
@@ -416,12 +424,106 @@ test("combined registry filters reconcile to the same Prisma predicate", async (
     "ali-telegram",
   ]);
 
+  const allStatusesWhere = await registryFilters.buildStudentRegistryWhere(
+    new URLSearchParams({ includeArchived: "1" }),
+  );
+  assert.deepEqual(matchingIds(searchableStudents, allStatusesWhere), [
+    "ali-name",
+    "ali-telegram",
+    "archived-ali",
+  ]);
+
   const archivedWhere = await registryFilters.buildStudentRegistryWhere(
     new URLSearchParams({ status: "مؤرشف", q: "Ali" }),
   );
   assert.deepEqual(matchingIds(searchableStudents, archivedWhere), [
     "archived-ali",
   ]);
+});
+
+test("full student export collects and verifies more than 2600 rows", async () => {
+  const source = Array.from({ length: 2603 }, (_, index) => ({
+    id: `student-${String(index + 1).padStart(5, "0")}`,
+    name: `Student ${index + 1}`,
+  }));
+  const snapshotAt = "2026-08-09T10:00:00.000Z";
+  const requestedCursors = [];
+
+  const rows = await studentExportPagination.collectStudentExportPages(
+    async ({ cursor, pageSize }) => {
+      requestedCursors.push(cursor || "");
+      const start = cursor
+        ? source.findIndex((row) => row.id === cursor) + 1
+        : 0;
+      const students = source.slice(start, start + pageSize);
+      const nextIndex = start + students.length;
+      return {
+        students,
+        totalCount: source.length,
+        hasMore: nextIndex < source.length,
+        nextCursor:
+          nextIndex < source.length ? students.at(-1)?.id || null : null,
+        snapshotAt,
+      };
+    },
+    { pageSize: 500 },
+  );
+
+  assert.equal(rows.length, 2603);
+  assert.equal(new Set(rows.map((row) => row.id)).size, 2603);
+  assert.equal(requestedCursors.length, 6);
+  assert.equal(rows.at(-1).id, "student-02603");
+});
+
+test("student export refuses incomplete or duplicated page data", async () => {
+  await assert.rejects(
+    () =>
+      studentExportPagination.collectStudentExportPages(async () => ({
+        students: [{ id: "one" }],
+        totalCount: 2,
+        hasMore: false,
+        nextCursor: null,
+        snapshotAt: "2026-08-09T10:00:00.000Z",
+      })),
+    /لم يكتمل التصدير/,
+  );
+
+  let page = 0;
+  await assert.rejects(
+    () =>
+      studentExportPagination.collectStudentExportPages(async () => {
+        page += 1;
+        return page === 1
+          ? {
+              students: [{ id: "duplicate" }],
+              totalCount: 2,
+              hasMore: true,
+              nextCursor: "duplicate",
+              snapshotAt: "2026-08-09T10:00:00.000Z",
+            }
+          : {
+              students: [{ id: "duplicate" }],
+              totalCount: 2,
+              hasMore: false,
+              nextCursor: null,
+              snapshotAt: "2026-08-09T10:00:00.000Z",
+            };
+      }),
+    /مكرراً/,
+  );
+});
+
+test("professional Excel export is a genuine styled XLSX workbook", () => {
+  const bytes = xlsxExport.buildProfessionalXlsx(
+    [{ id: 1, name: "طالب" }],
+    [
+      { label: "ت", value: (row) => row.id },
+      { label: "الاسم", value: (row) => row.name },
+    ],
+    { title: "سجل الطلاب" },
+  );
+  assert.equal(String.fromCharCode(bytes[0], bytes[1]), "PK");
+  assert.ok(bytes.length > 1000);
 });
 
 const activeLinks = [

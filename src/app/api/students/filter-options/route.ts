@@ -23,8 +23,9 @@ export async function GET(req: NextRequest) {
     const and: Prisma.StudentWhereInput[] = [];
 
     const status = normalizeListFilter(searchParams.get("status"));
+    const includeArchived = searchParams.get("includeArchived") === "1";
     if (status) and.push({ status });
-    else and.push({ status: { not: "مؤرشف" } });
+    else if (!includeArchived) and.push({ status: { not: "مؤرشف" } });
 
     const gender = normalizeListFilter(searchParams.get("gender"));
     if (gender) and.push({ gender });

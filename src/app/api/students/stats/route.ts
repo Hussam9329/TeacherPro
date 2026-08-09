@@ -11,7 +11,6 @@ import {
   STUDENT_STATUS_ACTIVE,
   STUDENT_STATUS_ARCHIVED,
   STUDENT_STATUS_DISMISSED,
-  visibleStudentWhere,
 } from "@/lib/student-scope";
 import {
   buildStudentRegistryLocationWhere,
@@ -37,12 +36,9 @@ export async function GET(req: NextRequest) {
 
   try {
     const searchParams = new URL(req.url).searchParams;
-    const visibleStudentsWhere = visibleStudentWhere();
     const status = normalizeListFilter(searchParams.get("status"));
     const gender = normalizeListFilter(searchParams.get("gender"));
-    const filters: Prisma.StudentWhereInput[] = [
-      status ? { status } : visibleStudentsWhere,
-    ];
+    const filters: Prisma.StudentWhereInput[] = status ? [{ status }] : [];
     const courseId = normalizeListFilter(searchParams.get("courseId"));
     const courseProgram = normalizeListFilter(
       searchParams.get("courseProgram"),

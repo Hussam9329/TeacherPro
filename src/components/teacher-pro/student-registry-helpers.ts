@@ -59,6 +59,12 @@ export function reconcileRegistryRowsAfterMutation(
 }
 
 export const studentExportColumns: ExportColumn<any>[] = [
+  {
+    key: "sequence",
+    label: "ت",
+    value: (_student, index) => Number(index ?? 0) + 1,
+    locked: true,
+  },
   { key: "code", label: "الكود", value: (student) => student.code || "" },
   { key: "name", label: "الاسم", value: (student) => student.name || "" },
   { key: "school", label: "المدرسة", value: (student) => student.school || "" },
@@ -70,8 +76,11 @@ export const studentExportColumns: ExportColumn<any>[] = [
   { key: "locationScope", label: "نطاق الموقع", value: (student) => student.locationScope || "" },
   { key: "location", label: "الموقع", value: (student) => student.locationText || "" },
   { key: "status", label: "الحالة", value: (student) => student.status || "" },
+  { key: "dismissalType", label: "نوع الفصل", value: (student) => student.dismissalType || "", defaultSelected: false },
+  { key: "dismissalReason", label: "سبب الفصل", value: (student) => student.dismissalReason || "", defaultSelected: false },
   { key: "opportunities", label: "الفرص", value: (student) => student.opportunities ?? "" },
   { key: "grace", label: "فترة السماح", value: (student) => `${student.accountingGraceDays ?? 0} يوم` },
+  { key: "createdAt", label: "تاريخ التسجيل", value: (student) => formatAppDate(student.createdAt) },
   { key: "phone", label: "الهاتف", value: (student) => student.phone || "" },
   { key: "parentPhone", label: "ولي الأمر", value: (student) => student.parentPhone || "" },
   { key: "telegram", label: "التيليجرام", value: (student) => student.telegram || "" },

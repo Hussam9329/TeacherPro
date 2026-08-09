@@ -563,6 +563,8 @@ export interface StudentListQuery {
   opportunityCount?: string;
   opportunityMode?: boolean;
   registryIssue?: string;
+  /** Registry-only opt-in: an empty status includes archived students too. */
+  includeArchived?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -1473,6 +1475,7 @@ export const studentApi = {
       opportunityCount: query.opportunityCount,
       opportunityMode: query.opportunityMode ? "1" : undefined,
       registryIssue: query.registryIssue,
+      includeArchived: query.includeArchived ? "1" : undefined,
       page: query.page ?? 1,
       pageSize: query.pageSize ?? DEFAULT_STUDENT_PAGE_SIZE,
     });

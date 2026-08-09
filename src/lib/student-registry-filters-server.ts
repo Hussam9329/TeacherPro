@@ -129,6 +129,7 @@ export async function buildStudentRegistryWhere(
 ): Promise<Prisma.StudentWhereInput> {
   const and: Prisma.StudentWhereInput[] = [];
   const status = normalizeListFilter(searchParams.get("status"));
+  const includeArchived = searchParams.get("includeArchived") === "1";
   const gender = normalizeListFilter(searchParams.get("gender"));
   const courseId = normalizeListFilter(searchParams.get("courseId"));
   const courseIds = String(searchParams.get("courseIds") || "")
@@ -148,9 +149,12 @@ export async function buildStudentRegistryWhere(
     searchParams.get("opportunityCount"),
   );
 
-  and.push(
-    status ? { status } : { status: { not: STUDENT_STATUS_ARCHIVED } },
-  );
+  // Generic student reads keep their safe visible-only default. The registry
+  // explicitly opts into all statuses because its UI label is "كل الحالات".
+  if (status) and.push({ status });
+  else if (!includeArchived) {
+    and.push({ status: { not: STUDENT_STATUS_ARCHIVED } });
+  }
   if (gender) and.push({ gender });
   if (courseId) and.push({ courseId });
   if (courseIds.length > 0) and.push({ courseId: { in: courseIds } });
@@ -187,5 +191,6 @@ export async function buildStudentRegistryWhere(
   const registryIssueWhere = await buildStudentRegistryIssueWhere(searchParams);
   if (registryIssueWhere) and.push(registryIssueWhere);
 
+  if (and.length === 0) return {};
   return and.length === 1 ? and[0] : { AND: and };
 }
