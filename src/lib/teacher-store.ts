@@ -2541,6 +2541,17 @@ function writePendingGradeSaves(items: PendingGradeSave[]): void {
   }
 }
 
+function discardLegacyPendingGradeSaves(): void {
+  if (!canUseGradeOutbox()) return;
+  try {
+    // هذا الطابور القديم لا يحمل CAS أو idempotency، لذلك لا يجوز إعادة
+    // بثه فوق درجات أحدث. مصدر الحقيقة الوحيد من الآن هو الخادم.
+    window.localStorage.removeItem(PENDING_GRADE_SAVES_KEY);
+  } catch (error) {
+    console.warn("[Store] Failed to discard legacy pending grade saves:", error);
+  }
+}
+
 function gradeSaveForApi(item: PendingGradeSave): Record<string, unknown> {
   return {
     clientId: item.id,
@@ -2553,19 +2564,6 @@ function gradeSaveForApi(item: PendingGradeSave): Record<string, unknown> {
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
   };
-}
-
-function mergePendingGradeSavesIntoGrades(grades: Grade[]): Grade[] {
-  const pending = readPendingGradeSaves();
-  if (pending.length === 0) return grades;
-  const byKey = new Map<string, Grade>();
-  grades.forEach((grade) => byKey.set(pendingGradeKey(grade), grade));
-  pending.forEach((item) => {
-    const { queuedAt: _queuedAt, ...grade } = item;
-    void _queuedAt;
-    byKey.set(pendingGradeKey(item), grade as Grade);
-  });
-  return Array.from(byKey.values());
 }
 
 function mergePendingGradeSaves(items: Grade[]): PendingGradeSave[] {
@@ -2805,6 +2803,7 @@ export const useTeacherStore = create<TeacherState>()(
       },
 
       loadFromServer: async () => {
+        discardLegacyPendingGradeSaves();
         const requestSequence = ++loadAllRequestSequence;
         const isInitialLoad = !get().dbConnected;
         if (isInitialLoad) {
@@ -2899,13 +2898,13 @@ export const useTeacherStore = create<TeacherState>()(
             },
           ) as Exam[];
 
+          // بيانات الخادم هي المرجع. لا ندمج outbox الدرجات القديم فوقها؛
+          // ذلك كان يعرض مسودة محلية كأنها درجة محفوظة ثم تختفي لاحقاً.
           const grades = serverData.grades
-            ? mergePendingGradeSavesIntoGrades(
-                serverData.grades.map((g: Record<string, unknown>) =>
-                  normalizeGradeRecord(g),
-                ),
+            ? serverData.grades.map((g: Record<string, unknown>) =>
+                normalizeGradeRecord(g),
               )
-            : mergePendingGradeSavesIntoGrades(get().grades);
+            : get().grades;
 
           const opportunityLogs = serverData.opportunityLogs
             ? (serverData.opportunityLogs.map(
@@ -3072,8 +3071,6 @@ export const useTeacherStore = create<TeacherState>()(
             dbConnected: true,
             dbLoading: false,
           });
-          attachPendingGradeBrowserEvents(get);
-          schedulePendingGradeFlush(get, 900);
           if (serverData.students && serverData.grades) {
             repairAbsentDiscountAccountingIfNeeded(get);
           }
@@ -4466,7 +4463,12 @@ export const useTeacherStore = create<TeacherState>()(
 
         relatedGrades.forEach((grade) =>
           syncToServer(get, () =>
-            gradeApi.remove(grade.id, grade.studentId, grade.examId),
+            gradeApi.remove(
+              grade.id,
+              grade.studentId,
+              grade.examId,
+              grade.updatedAt,
+            ),
           ),
         );
         relatedOpportunityLogs
@@ -4672,7 +4674,13 @@ export const useTeacherStore = create<TeacherState>()(
         );
         syncToServer(
           get,
-          () => gradeApi.remove(id, grade.studentId, grade.examId),
+          () =>
+            gradeApi.remove(
+              id,
+              grade.studentId,
+              grade.examId,
+              grade.updatedAt,
+            ),
           {
             description: "حذف درجة",
             rollback: () => set(previousState),

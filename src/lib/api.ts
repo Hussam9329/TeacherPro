@@ -1621,8 +1621,12 @@ export const gradeApi = {
   },
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("grades", { id, ...updates }),
-  remove: (id: string, studentId?: string, examId?: string) =>
-    apiDelete("grades", id, { studentId, examId }),
+  remove: (
+    id: string,
+    studentId?: string,
+    examId?: string,
+    expectedUpdatedAt?: string,
+  ) => apiDelete("grades", id, { studentId, examId, expectedUpdatedAt }),
   removeAbsentByExam: async (examId: string): Promise<ApiResult> => {
     try {
       const params = new URLSearchParams({ examId, status: "غائب" });
@@ -2037,7 +2041,10 @@ export const correctionSheetApi = {
   add: (sheet: Record<string, unknown>) => apiPost("correction-sheets", sheet),
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("correction-sheets", { id, ...updates }),
-  remove: (id: string) => apiDelete("correction-sheets", id),
+  remove: (id: string, options: { deleteGrade?: boolean } = {}) =>
+    apiDelete("correction-sheets", id, {
+      deleteGrade: options.deleteGrade ? "true" : "false",
+    }),
 };
 
 // ─── User API ─────────────────────────────────────────────────────────────────

@@ -89,6 +89,13 @@ type GradeEntryNotice = {
   at: number;
 };
 
+type GradeRowSavePhase = "idle" | "dirty" | "saving" | "saved" | "error";
+
+type GradeRowSaveState = {
+  phase: GradeRowSavePhase;
+  message?: string;
+};
+
 type PendingConfirm = {
   title: string;
   description: string;
@@ -243,6 +250,9 @@ export function GradeEntryView() {
   const [drafts, setDrafts] = useState<Record<string, DraftGrade>>({});
   const [savingRows, setSavingRows] = useState<Record<string, boolean>>({});
   const [savedRows, setSavedRows] = useState<Record<string, string>>({});
+  const [rowSaveStates, setRowSaveStates] = useState<
+    Record<string, GradeRowSaveState>
+  >({});
   const [gradeEntryNotice, setGradeEntryNotice] =
     useState<GradeEntryNotice | null>(null);
   const [entryNotesByExam, setEntryNotesByExam] = useState<
@@ -267,12 +277,22 @@ export function GradeEntryView() {
   const [entrySheetRefreshKey, setEntrySheetRefreshKey] = useState(0);
   const [markingAllMissingAbsent, setMarkingAllMissingAbsent] = useState(false);
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const selectedExamIdRef = useRef("");
+  const entrySheetRequestSequenceRef = useRef(0);
+  const gradeMutationVersionRef = useRef(0);
+  const draftRevisionRef = useRef<Record<string, number>>({});
+  const confirmedGradesRef = useRef<Map<string, Grade>>(new Map());
+  const gradeSaveChainsRef = useRef<Record<string, Promise<void>>>({});
   const missingStudentsNoteLoadedRef = useRef("");
   const dashboardQueryAppliedRef = useRef(false);
   const {
     locked: clearingAbsentGrades,
     runLocked: runClearAbsentGradesLocked,
   } = useActionLock();
+
+  useEffect(() => {
+    selectedExamIdRef.current = selectedExamId;
+  }, [selectedExamId]);
 
   useEffect(() => {
     if (dashboardQueryAppliedRef.current || typeof window === "undefined") return;
@@ -318,6 +338,8 @@ export function GradeEntryView() {
   useEffect(() => {
     const selectedExam = exams.find((exam) => exam.id === selectedExamId);
     if (!selectedExam) {
+      entrySheetRequestSequenceRef.current += 1;
+      confirmedGradesRef.current.clear();
       setEntrySheetStudents([]);
       setEntrySheetGrades([]);
       setEntrySheetLeaves([]);
@@ -329,6 +351,8 @@ export function GradeEntryView() {
     }
 
     const controller = new AbortController();
+    const requestSequence = ++entrySheetRequestSequenceRef.current;
+    const mutationVersionAtRequestStart = gradeMutationVersionRef.current;
     const silent = isBackgroundSync();
     if (!silent) setEntrySheetLoading(true);
     if (!silent) setEntrySheetError(null);
@@ -336,7 +360,11 @@ export function GradeEntryView() {
     gradeEntrySheetApi
       .get(selectedExam.id, { signal: controller.signal, quietAbort: true })
       .then((result) => {
-        if (controller.signal.aborted) return;
+        if (
+          controller.signal.aborted ||
+          requestSequence !== entrySheetRequestSequenceRef.current
+        )
+          return;
         if (!result) {
           if (!silent) {
             setEntrySheetStudents([]);
@@ -361,15 +389,35 @@ export function GradeEntryView() {
           []) as unknown as CourseChapter[];
 
         setEntrySheetStudents(loadedStudents);
-        setEntrySheetGrades(loadedGrades);
+        // لا نسمح لطلب GET بدأ قبل حفظ درجة أن يعيد نسخة قديمة فوق
+        // النتيجة التي أكدها POST. ورقة جديدة ستطبق لاحقاً، أما القديمة
+        // فتُهمل بالكامل بالنسبة للدرجات.
+        if (mutationVersionAtRequestStart === gradeMutationVersionRef.current) {
+          setEntrySheetGrades(loadedGrades);
+          const nextConfirmed = new Map(confirmedGradesRef.current);
+          for (const [key, grade] of nextConfirmed) {
+            if (grade.examId === selectedExam.id) nextConfirmed.delete(key);
+          }
+          for (const grade of loadedGrades) {
+            nextConfirmed.set(`${grade.examId}:${grade.studentId}`, grade);
+          }
+          confirmedGradesRef.current = nextConfirmed;
+        }
         setEntrySheetLeaves(loadedLeaves);
         setEntrySheetOpportunityLogs(loadedOpportunityLogs);
         setEntrySheetCourseChapters(loadedCourseChapters);
         mergeStudentsCache(loadedStudents);
-        mergeGradesCache(loadedGrades);
+        if (mutationVersionAtRequestStart === gradeMutationVersionRef.current) {
+          mergeGradesCache(loadedGrades);
+        }
       })
       .catch(() => {
-        if (controller.signal.aborted || silent) return;
+        if (
+          controller.signal.aborted ||
+          silent ||
+          requestSequence !== entrySheetRequestSequenceRef.current
+        )
+          return;
         setEntrySheetStudents([]);
         setEntrySheetGrades([]);
         setEntrySheetLeaves([]);
@@ -380,7 +428,11 @@ export function GradeEntryView() {
         );
       })
       .finally(() => {
-        if (!controller.signal.aborted) setEntrySheetLoading(false);
+        if (
+          !controller.signal.aborted &&
+          requestSequence === entrySheetRequestSequenceRef.current
+        )
+          setEntrySheetLoading(false);
       });
 
     return () => {
@@ -502,19 +554,9 @@ export function GradeEntryView() {
 
   const entryGradesSource = useMemo(() => {
     if (!selectedExamId) return grades;
-    const byKey = new Map<string, Grade>();
-    // ابدأ بذاكرة الواجهة، ثم اجعل ورقة الإدخال القادمة مباشرة من بيانات النظام
-    // هي المرجع النهائي. عكس هذا الترتيب كان يعيد expectedUpdatedAt قديماً
-    // ويؤدي إلى رفض الحفظ بتعارض 409 رغم عدم وجود تعديل متزامن حقيقي.
-    for (const grade of grades) {
-      if (grade.examId === selectedExamId) {
-        byKey.set(`${grade.studentId}:${grade.examId}`, grade);
-      }
-    }
-    for (const grade of entrySheetGrades) {
-      byKey.set(`${grade.studentId}:${grade.examId}`, grade);
-    }
-    return Array.from(byKey.values());
+    // ورقة الإدخال القادمة من بيانات النظام هي المرجع الوحيد للامتحان المحدد.
+    // دمج ذاكرة قديمة كان يعيد درجات وهمية غير موجودة في بيانات النظام.
+    return entrySheetGrades.filter((grade) => grade.examId === selectedExamId);
   }, [entrySheetGrades, grades, selectedExamId]);
 
   const entryLeavesSource = useMemo(
@@ -603,6 +645,7 @@ export function GradeEntryView() {
       setDrafts({});
       setEditableRows({});
       setSavedRows({});
+      setRowSaveStates({});
       setReactivationWarningsAccepted({});
     }
   }, [filteredActiveExams, selectedExamId]);
@@ -712,6 +755,19 @@ export function GradeEntryView() {
   };
 
   const updateDraft = (studentId: string, patch: Partial<DraftGrade>) => {
+    const rowKey = `${selectedExam?.id || ""}:${studentId}`;
+    draftRevisionRef.current[rowKey] =
+      (draftRevisionRef.current[rowKey] || 0) + 1;
+    setSavedRows((prev) => {
+      if (!(studentId in prev)) return prev;
+      const next = { ...prev };
+      delete next[studentId];
+      return next;
+    });
+    setRowSaveStates((prev) => ({
+      ...prev,
+      [studentId]: { phase: "dirty", message: "تعديل غير محفوظ" },
+    }));
     setDrafts((prev) => ({
       ...prev,
       [studentId]: { ...getDraft(studentId), ...patch },
@@ -1040,6 +1096,10 @@ export function GradeEntryView() {
   };
 
   const mergeServerGradeIntoEntrySheet = (grade: Grade) => {
+    confirmedGradesRef.current.set(
+      `${grade.examId}:${grade.studentId}`,
+      grade,
+    );
     setEntrySheetGrades((current) => {
       const exists = current.some(
         (item) => item.studentId === grade.studentId && item.examId === grade.examId,
@@ -1074,34 +1134,145 @@ export function GradeEntryView() {
       ...prev,
       [studentId]: `${label} ${hh}:${mm}`,
     }));
+    setRowSaveStates((prev) => ({
+      ...prev,
+      [studentId]: { phase: "saved", message: `${label} ${hh}:${mm}` },
+    }));
   };
 
   const deleteExistingGradeFromServer = async (studentId: string, existing: Grade) => {
     if (!selectedExam) return;
-    setSavingRows((prev) => ({ ...prev, [studentId]: true }));
-    const result = await gradeApi.remove(existing.id, existing.studentId, existing.examId);
-    setSavingRows((prev) => ({ ...prev, [studentId]: false }));
+    const examId = selectedExam.id;
+    const rowKey = `${examId}:${studentId}`;
+    const runDelete = async () => {
+      if (selectedExamIdRef.current !== examId) return;
+      setSavingRows((prev) => ({ ...prev, [studentId]: true }));
+      setRowSaveStates((prev) => ({
+        ...prev,
+        [studentId]: { phase: "saving", message: "جاري الحذف" },
+      }));
+      try {
+        const currentGrade = confirmedGradesRef.current.get(rowKey) || existing;
+        const result = await gradeApi.remove(
+          currentGrade.id,
+          currentGrade.studentId,
+          currentGrade.examId,
+          currentGrade.updatedAt,
+        );
+        if (selectedExamIdRef.current !== examId) return;
 
-    if (!result.ok || result.queued) {
-      if (result.status === 409) setEntrySheetRefreshKey((key) => key + 1);
-      showGradeEntryNotice(
-        "error",
-        result.error || "تعذر حذف الدرجة من بيانات النظام. لم يتم تغيير ورقة الإدخال.",
-      );
-      restoreDraftFromSavedGrade(studentId);
-      return;
+        if (!result.ok || result.queued) {
+          setEntrySheetRefreshKey((key) => key + 1);
+          setRowSaveStates((prev) => ({
+            ...prev,
+            [studentId]: { phase: "error", message: "لم يُحذف — حدّث السجل" },
+          }));
+          showGradeEntryNotice(
+            "error",
+            result.error || "تعذر حذف الدرجة من بيانات النظام. لم يتم تغيير ورقة الإدخال.",
+          );
+          restoreDraftFromSavedGrade(studentId);
+          return;
+        }
+
+        gradeMutationVersionRef.current += 1;
+        confirmedGradesRef.current.delete(rowKey);
+        removeEntryGrade(currentGrade);
+        setDrafts((prev) => {
+          const next = { ...prev };
+          delete next[studentId];
+          return next;
+        });
+        setEditableRows((prev) => ({ ...prev, [studentId]: false }));
+        setSavedRows((prev) => ({
+          ...prev,
+          [studentId]: "تم حذف الدرجة من بيانات النظام",
+        }));
+        setRowSaveStates((prev) => ({
+          ...prev,
+          [studentId]: { phase: "saved", message: "تم حذف الدرجة" },
+        }));
+        emitGradeEntryServerSync("grade-entry-delete");
+        showGradeEntryNotice(
+          "success",
+          "تم حذف الدرجة من بيانات النظام وإعادة احتساب الطالب",
+        );
+      } finally {
+        if (selectedExamIdRef.current === examId) {
+          setSavingRows((prev) => ({ ...prev, [studentId]: false }));
+        }
+      }
+    };
+
+    const previous = gradeSaveChainsRef.current[rowKey] || Promise.resolve();
+    const next = previous.catch(() => undefined).then(runDelete);
+    gradeSaveChainsRef.current[rowKey] = next;
+    await next;
+    if (gradeSaveChainsRef.current[rowKey] === next) {
+      delete gradeSaveChainsRef.current[rowKey];
     }
+  };
 
-    removeEntryGrade(existing);
-    setDrafts((prev) => {
-      const next = { ...prev };
-      delete next[studentId];
-      return next;
-    });
-    setEditableRows((prev) => ({ ...prev, [studentId]: false }));
-    setSavedRows((prev) => ({ ...prev, [studentId]: "تم حذف الدرجة من بيانات النظام" }));
-    emitGradeEntryServerSync("grade-entry-delete");
-    showGradeEntryNotice("success", "تم حذف الدرجة من بيانات النظام وإعادة احتساب الطالب");
+  const gradeMatchesDraft = (grade: Grade | undefined, draft: DraftGrade) => {
+    if (!grade || grade.status !== draft.status) return false;
+    const expectedScore =
+      draft.status === "درجة" ? Number(toLatinDigits(draft.score).trim()) : null;
+    return (
+      grade.score === expectedScore &&
+      (grade.notes || "") === (draft.notes || "")
+    );
+  };
+
+  const reconcileFailedGradeSave = async (
+    examId: string,
+    studentId: string,
+    attemptedDraft: DraftGrade,
+    attemptedRevision: number,
+  ) => {
+    const result = await gradeEntrySheetApi.get(examId);
+    if (!result || selectedExamIdRef.current !== examId) return false;
+
+    // أي طلب قراءة أقدم أصبح غير صالح بعد هذه القراءة الصريحة من بيانات النظام.
+    entrySheetRequestSequenceRef.current += 1;
+    const loadedStudents = (result.students || []) as unknown as Student[];
+    const loadedGrades = (result.grades || []) as unknown as Grade[];
+    const loadedLeaves = (result.studentLeaves || []) as unknown as StudentLeave[];
+    const loadedOpportunityLogs = (result.opportunityLogs || []) as unknown as OpportunityLog[];
+    const loadedCourseChapters = (result.courseChapters || []) as unknown as CourseChapter[];
+
+    setEntrySheetStudents(loadedStudents);
+    setEntrySheetGrades(loadedGrades);
+    setEntrySheetLeaves(loadedLeaves);
+    setEntrySheetOpportunityLogs(loadedOpportunityLogs);
+    setEntrySheetCourseChapters(loadedCourseChapters);
+    mergeStudentsCache(loadedStudents);
+    mergeGradesCache(loadedGrades);
+
+    const nextConfirmed = new Map(confirmedGradesRef.current);
+    for (const [key, grade] of nextConfirmed) {
+      if (grade.examId === examId) nextConfirmed.delete(key);
+    }
+    for (const grade of loadedGrades) {
+      nextConfirmed.set(`${grade.examId}:${grade.studentId}`, grade);
+    }
+    confirmedGradesRef.current = nextConfirmed;
+
+    const freshGrade = loadedGrades.find(
+      (grade) => grade.studentId === studentId && grade.examId === examId,
+    );
+    if (!gradeMatchesDraft(freshGrade, attemptedDraft)) return false;
+
+    const rowKey = `${examId}:${studentId}`;
+    if ((draftRevisionRef.current[rowKey] || 0) === attemptedRevision) {
+      setDrafts((prev) => {
+        const next = { ...prev };
+        delete next[studentId];
+        return next;
+      });
+      setEditableRows((prev) => ({ ...prev, [studentId]: false }));
+      markStudentSavedNow(studentId, "تم التحقق من حفظها");
+    }
+    return true;
   };
 
   const saveGrade = async (
@@ -1167,48 +1338,132 @@ export function GradeEntryView() {
       return;
     }
 
-    setSavingRows((prev) => ({ ...prev, [studentId]: true }));
-    const currentGrade = getGrade(studentId);
-    const result = await gradeApi.add({
-      studentId,
-      examId: selectedExam.id,
-      status,
-      score,
-      notes: draft.notes,
-      expectedUpdatedAt: currentGrade?.updatedAt || "",
-      expectMissing: !currentGrade,
-    });
-    setSavingRows((prev) => ({ ...prev, [studentId]: false }));
+    const examAtRequest = selectedExam;
+    const rowKey = `${examAtRequest.id}:${studentId}`;
+    const attemptedRevision = draftRevisionRef.current[rowKey] || 0;
 
-    if (!result.ok || result.queued) {
-      showGradeEntryNotice(
-        "error",
-        result.error || "تعذر حفظ الدرجة في بيانات النظام. لم يتم اعتماد أي تغيير محلي.",
-      );
-      return;
-    }
+    // كل حفظ لطالب واحد ينتظر السابق. هذا يمنع blur وتغيير الحالة والزر
+    // من إرسال طلبين بنفس expectedUpdatedAt ثم خسارة آخر تعديل بسبب 409.
+    const runSave = async () => {
+      if (selectedExamIdRef.current !== examAtRequest.id) return;
+      setSavingRows((prev) => ({ ...prev, [studentId]: true }));
+      setSavedRows((prev) => {
+        const next = { ...prev };
+        delete next[studentId];
+        return next;
+      });
+      setRowSaveStates((prev) => ({
+        ...prev,
+        [studentId]: { phase: "saving", message: "جاري الحفظ" },
+      }));
 
-    const payload = gradePayloadFromResult(result);
-    if (!payload.grade) {
-      showGradeEntryNotice(
-        "error",
-        "تم قبول الطلب لكن لم يرجع النظام سجل الدرجة النهائي. حدّث ورقة الإدخال للتأكد.",
-      );
-      return;
-    }
+      try {
+        const currentGrade =
+          confirmedGradesRef.current.get(rowKey) || getGrade(studentId);
+        const result = await gradeApi.add({
+          studentId,
+          examId: examAtRequest.id,
+          status,
+          score,
+          notes: draft.notes,
+          expectedUpdatedAt: currentGrade?.updatedAt || "",
+          expectMissing: !currentGrade,
+        });
+        if (selectedExamIdRef.current !== examAtRequest.id) return;
 
-    mergeServerGradeIntoEntrySheet(payload.grade);
-    if (payload.academicRecalculation?.students?.length) {
-      mergeStudentsCache(payload.academicRecalculation.students);
+        if (!result.ok || result.queued) {
+          const reconciled = await reconcileFailedGradeSave(
+            examAtRequest.id,
+            studentId,
+            draft,
+            attemptedRevision,
+          );
+          if (reconciled) {
+            emitGradeEntryServerSync("grade-entry-save-reconciled");
+            if (!options.silent) {
+              showGradeEntryNotice(
+                "success",
+                "تم التحقق من بيانات النظام: الدرجة محفوظة فعلياً.",
+              );
+            }
+            return;
+          }
+          setRowSaveStates((prev) => ({
+            ...prev,
+            [studentId]: {
+              phase: "error",
+              message: "غير محفوظ — أعد المحاولة",
+            },
+          }));
+          showGradeEntryNotice(
+            "error",
+            result.error ||
+              "تعذر حفظ الدرجة في بيانات النظام. بقي التعديل كمسودة غير محفوظة.",
+          );
+          return;
+        }
+
+        const payload = gradePayloadFromResult(result);
+        if (!payload.grade) {
+          const reconciled = await reconcileFailedGradeSave(
+            examAtRequest.id,
+            studentId,
+            draft,
+            attemptedRevision,
+          );
+          if (!reconciled) {
+            setRowSaveStates((prev) => ({
+              ...prev,
+              [studentId]: { phase: "error", message: "تعذر تأكيد الحفظ" },
+            }));
+            showGradeEntryNotice(
+              "error",
+              "لم يرجع النظام سجل الدرجة النهائي، ولم يُعثر عليه عند التحقق من بيانات النظام.",
+            );
+          }
+          return;
+        }
+
+        gradeMutationVersionRef.current += 1;
+        mergeServerGradeIntoEntrySheet(payload.grade);
+        if (payload.academicRecalculation?.students?.length) {
+          mergeStudentsCache(payload.academicRecalculation.students);
+        }
+        if ((draftRevisionRef.current[rowKey] || 0) === attemptedRevision) {
+          setDrafts((prev) => {
+            const next = { ...prev };
+            delete next[studentId];
+            return next;
+          });
+          setEditableRows((prev) => ({ ...prev, [studentId]: false }));
+          markStudentSavedNow(studentId);
+        } else {
+          setRowSaveStates((prev) => ({
+            ...prev,
+            [studentId]: { phase: "dirty", message: "يوجد تعديل أحدث غير محفوظ" },
+          }));
+        }
+        emitGradeEntryServerSync("grade-entry-save");
+        if (!options.silent) {
+          showGradeEntryNotice(
+            "success",
+            "تم حفظ الدرجة في بيانات النظام وإعادة احتساب الطالب",
+          );
+        }
+      } finally {
+        if (selectedExamIdRef.current === examAtRequest.id) {
+          setSavingRows((prev) => ({ ...prev, [studentId]: false }));
+        }
+      }
+    };
+
+    const previous = gradeSaveChainsRef.current[rowKey] || Promise.resolve();
+    const next = previous.catch(() => undefined).then(runSave);
+    gradeSaveChainsRef.current[rowKey] = next;
+    await next;
+    if (gradeSaveChainsRef.current[rowKey] === next) {
+      delete gradeSaveChainsRef.current[rowKey];
     }
-    setEditableRows((prev) => ({ ...prev, [studentId]: false }));
-    markStudentSavedNow(studentId);
-    emitGradeEntryServerSync("grade-entry-save");
-    if (!options.silent)
-      showGradeEntryNotice(
-        "success",
-        "تم حفظ الدرجة في بيانات النظام وإعادة احتساب الطالب",
-      );
   };
 
   const autoSaveGrade = (studentId: string, draftOverride?: DraftGrade) => {
@@ -1542,6 +1797,7 @@ export function GradeEntryView() {
     setDrafts({});
     setEditableRows({});
     setSavedRows({});
+    setRowSaveStates({});
     setReactivationWarningsAccepted({});
   };
 
@@ -2041,6 +2297,10 @@ export function GradeEntryView() {
                       ? classification(grade, selectedExam, student)
                       : null;
                   const isSaving = Boolean(savingRows[student.id]);
+                  const explicitSaveState = rowSaveStates[student.id];
+                  const savePhase: GradeRowSavePhase = isSaving
+                    ? "saving"
+                    : explicitSaveState?.phase || (entered ? "saved" : "idle");
                   const examBeforeRegistration =
                     !isExamOnOrAfterStudentRegistration(student, selectedExam);
                   const canEdit =
@@ -2054,13 +2314,7 @@ export function GradeEntryView() {
                     <div
                       key={student.id}
                       className="teacherpro-heavy-row tp-save-row grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]"
-                      data-save-state={
-                        isSaving
-                          ? "saving"
-                          : savedRows[student.id] || entered
-                            ? "saved"
-                            : "idle"
-                      }
+                      data-save-state={savePhase}
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -2284,19 +2538,25 @@ export function GradeEntryView() {
                         <Badge
                           variant="outline"
                           className={`tp-save-indicator ${
-                            isSaving
+                            savePhase === "saving"
                               ? "tp-save-indicator--saving"
-                              : savedRows[student.id] || entered
+                              : savePhase === "saved"
                                 ? "tp-save-indicator--saved"
                                 : ""
                           }`}
                         >
-                          {isSaving
+                          {savePhase === "saving"
                             ? "جاري الحفظ"
                             : leave
                               ? "الطالب مجاز"
-                              : savedRows[student.id] ||
-                                (entered ? "محفوظ" : "غير مدخل")}
+                              : savePhase === "error"
+                                ? explicitSaveState?.message || "غير محفوظ — أعد المحاولة"
+                                : savePhase === "dirty"
+                                  ? explicitSaveState?.message || "تعديل غير محفوظ"
+                                  : savePhase === "idle" && entered
+                                    ? "جاهز للتعديل"
+                                    : savedRows[student.id] ||
+                                      (savePhase === "saved" ? "محفوظ" : "غير مدخل")}
                         </Badge>
                         {rowLocked ? (
                           <Button
@@ -2304,6 +2564,18 @@ export function GradeEntryView() {
                             variant="secondary"
                             disabled={!canEdit}
                             onClick={() => {
+                              setSavedRows((prev) => {
+                                const next = { ...prev };
+                                delete next[student.id];
+                                return next;
+                              });
+                              setRowSaveStates((prev) => ({
+                                ...prev,
+                                [student.id]: {
+                                  phase: "idle",
+                                  message: "جاهز للتعديل",
+                                },
+                              }));
                               if (
                                 grade?.status === "ضمن فترة السماح" ||
                                 grade?.status === "قبل تسجيل الطالب"

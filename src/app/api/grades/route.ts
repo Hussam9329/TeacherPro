@@ -431,6 +431,10 @@ export async function POST(req: NextRequest) {
           allowBlankGrade: false,
           blockOnLeave: true,
           enforceExamAvailability: true,
+          // الواجهة تسمح بتصحيح الدرجة التي سببت فصل الطالب. نسمح بذلك
+          // فقط إذا كان لهذا الطالب سجل موجود فعلاً في الامتحان؛ إنشاء
+          // درجة جديدة لطالب مفصول يبقى ممنوعاً.
+          allowDismissedExistingGradeCorrection: Boolean(existingGrade),
         });
         if (!writeback) {
           throw new AcademicGradeWritebackError(
@@ -647,6 +651,9 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get("id");
     const studentId = searchParams.get("studentId");
     const examId = searchParams.get("examId");
+    const expectedUpdatedAt = String(
+      searchParams.get("expectedUpdatedAt") || "",
+    ).trim();
 
     const status = searchParams.get("status");
 
@@ -696,8 +703,15 @@ export async function DELETE(req: NextRequest) {
       const result = await withSerializableTransaction(async (tx) => {
         const targetGrade = await tx.grade.findUnique({
           where: { id },
-          select: { id: true, studentId: true },
+          select: { id: true, studentId: true, updatedAt: true },
         });
+        if (
+          targetGrade &&
+          expectedUpdatedAt &&
+          targetGrade.updatedAt.toISOString() !== expectedUpdatedAt
+        ) {
+          throw new GradeWriteConflictError();
+        }
         const deletedById = await tx.grade.deleteMany({ where: { id } });
         const academicRecalculation =
           targetGrade && deletedById.count > 0
@@ -712,15 +726,15 @@ export async function DELETE(req: NextRequest) {
           academicRecalculation,
         };
       });
-      if (result.deleted > 0 || !studentId || !examId) {
-        await writeRequestAuditLog(req, "الدرجات", "حذف درجة وإعادة احتساب الطالب", {
-          gradeId: id,
-          deleted: result.deleted,
-          affectedStudents: result.studentIds?.length || 0,
-          studentIds: result.studentIds,
-        });
-        return NextResponse.json(result);
-      }
+      // وجود id يعني أن الطلب يستهدف هذا السجل حصراً. لا ننتقل إلى حذف
+      // studentId/examId إذا اختفى السجل؛ فقد تكون درجة أحدث أُنشئت مكانه.
+      await writeRequestAuditLog(req, "الدرجات", "حذف درجة وإعادة احتساب الطالب", {
+        gradeId: id,
+        deleted: result.deleted,
+        affectedStudents: result.studentIds?.length || 0,
+        studentIds: result.studentIds,
+      });
+      return NextResponse.json(result);
     }
     if (studentId && examId) {
       // Q100 FIX: SERIALIZABLE isolation with retry on conflict.

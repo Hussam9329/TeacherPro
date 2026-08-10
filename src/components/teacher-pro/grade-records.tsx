@@ -833,7 +833,12 @@ export function GradeRecordsView() {
       toast.error("تعذر العثور على الدرجة المطلوبة.");
       return;
     }
-    const result = await gradeApi.remove(deleteDialog.id, grade.studentId, grade.examId);
+    const result = await gradeApi.remove(
+      deleteDialog.id,
+      grade.studentId,
+      grade.examId,
+      grade.updatedAt,
+    );
     if (!result.ok || result.queued) {
       toast.error(result.error || "تعذر حذف الدرجة من النظام.");
       return;

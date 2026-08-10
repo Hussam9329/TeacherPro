@@ -251,12 +251,11 @@ export async function DELETE(req: NextRequest) {
     // actually earned, and any opportunity deduction caused by that
     // score remained in effect.
     //
-    // Default: deleteGrade=true (safe default — most callers want to
-    // undo the entire effect of the correction sheet). Pass
-    // deleteGrade=false to keep the grade (e.g. when the sheet was
-    // duplicated but the grade itself is correct).
+    // لا نحذف الدرجة افتراضياً: قد تكون الدرجة قد عُدلت يدوياً بعد إنشاء
+    // الورقة، وحذفها اعتماداً على studentId/examId يمسح درجة صحيحة بلا قصد.
+    // الحذف الصريح للدرجة يبقى متاحاً فقط عندما يرسل المستدعي deleteGrade=true.
     const deleteGradeRaw = searchParams.get("deleteGrade");
-    const deleteGrade = deleteGradeRaw === null ? true : deleteGradeRaw !== "false";
+    const deleteGrade = deleteGradeRaw === "true";
 
     // Fetch the sheet first (before deleting) so we know the
     // studentId/examId to look up the Grade.

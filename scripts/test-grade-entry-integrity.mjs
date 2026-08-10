@@ -24,6 +24,11 @@ const gradesRoute = read("src/app/api/grades/route.ts");
 const gradeWriteback = read("src/lib/academic-grade-writeback-server.ts");
 const entrySheetRoute = read("src/app/api/grades/entry-sheet/route.ts");
 const markMissingAbsentRoute = read("src/app/api/grades/mark-missing-absent/route.ts");
+const correctionSheetsRoute = read("src/app/api/correction-sheets/route.ts");
+const telegramSubmissionsRoute = read(
+  "src/app/api/telegram-exam-submissions/route.ts",
+);
+const teacherStore = read("src/lib/teacher-store.ts");
 const profileDialog = read("src/components/teacher-pro/student-profile-dialog.tsx");
 const profileLogRoute = read("src/app/api/students/profile-log/route.ts");
 const profileStatsRoute = read("src/app/api/students/profile-stats/route.ts");
@@ -57,10 +62,49 @@ must(
 
 must(
   gradeEntry.includes("!result.ok || result.queued") &&
-    gradeEntry.includes("لم يتم اعتماد أي تغيير محلي") &&
-    gradeEntry.includes("mergeServerGradeIntoEntrySheet"),
-  "الحفظ لا يظهر نجاحاً ولا يحدّث الورقة إلا بعد موافقة الخادم",
-  "يجب رفض النجاح الوهمي عند فشل/queue طلب حفظ الدرجة.",
+    gradeEntry.includes("reconcileFailedGradeSave") &&
+    gradeEntry.includes("غير محفوظ — أعد المحاولة") &&
+    gradeEntry.includes("mergeServerGradeIntoEntrySheet") &&
+    gradeEntry.includes("draftRevisionRef") &&
+    gradeEntry.includes("gradeSaveChainsRef") &&
+    gradeEntry.includes('phase: "dirty"') &&
+    gradeEntry.includes('phase: "error"') &&
+    gradeEntry.includes('phase: "saved"'),
+  "الحفظ يميز المسودة والحفظ والفشل، ويتحقق من DB ويسلسل طلبات الطالب",
+  "يجب منع شارة الحفظ الوهمية ومصالحة الفشل وتسلسل طلبات الصف الواحد.",
+);
+
+must(
+  gradeEntry.includes("return entrySheetGrades.filter") &&
+    gradeEntry.includes("confirmedGradesRef") &&
+    !teacherStore.includes("function mergePendingGradeSavesIntoGrades") &&
+    teacherStore.includes("discardLegacyPendingGradeSaves();"),
+  "ورقة الإدخال تجعل نتيجة DB مرجع الدرجات ولا تعرض كاشاً وهمياً",
+  "يجب ألا تُدمج درجات محلية قديمة فوق ورقة الإدخال القادمة من DB.",
+);
+
+must(
+  gradesRoute.includes("expectedUpdatedAt") &&
+    gradesRoute.includes("وجود id يعني أن الطلب يستهدف هذا السجل حصراً") &&
+    api.includes("expectedUpdatedAt?: string") &&
+    api.includes("{ studentId, examId, expectedUpdatedAt }"),
+  "حذف الدرجة محمي بنسخة السجل ولا يسقط إلى حذف درجة أحدث بالطالب والامتحان",
+  "يجب حماية الحذف بـupdatedAt ومنع fallback الخطر عند وجود id.",
+);
+
+must(
+  gradesRoute.includes(
+    "allowDismissedExistingGradeCorrection: Boolean(existingGrade)",
+  ),
+  "تصحيح درجة موجودة لطالب مفصول مسموح دون السماح بإنشاء درجة جديدة له",
+  "يجب أن يطابق الخادم سماح الواجهة بتصحيح الدرجة التي سببت الفصل.",
+);
+
+must(
+  correctionSheetsRoute.includes('const deleteGrade = deleteGradeRaw === "true"') &&
+    telegramSubmissionsRoute.includes('const deleteGrade = deleteGradeRaw === "true"'),
+  "حذف ورقة التصحيح أو مستلم تيليجرام لا يحذف درجة الطالب افتراضياً",
+  "يجب ألا تمسح المسارات المساندة درجة عُدلت يدوياً دون طلب صريح.",
 );
 
 must(

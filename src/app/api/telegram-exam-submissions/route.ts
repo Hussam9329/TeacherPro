@@ -947,12 +947,10 @@ export async function DELETE(req: NextRequest) {
 
     // Q87 FIX: Allow caller to choose whether to also delete the placeholder
     // Grade created when the submission was received.
-    // Default: deleteGrade=true (safe — most callers want to fully undo the
-    // submission so the student can re-take the exam).
-    // Pass deleteGrade=false to keep the grade (e.g. when the grade has been
-    // manually corrected and only the submission record should be removed).
+    // لا نحذف أي درجة افتراضياً. gradeId أو الزوج studentId/examId قد يشيران
+    // بعد التصحيح اليدوي إلى درجة أحدث من مستلم البوت نفسه.
     const deleteGradeRaw = searchParams.get("deleteGrade");
-    const deleteGrade = deleteGradeRaw === null ? true : deleteGradeRaw !== "false";
+    const deleteGrade = deleteGradeRaw === "true";
 
     // Atomic: delete submission + (optionally) grade + recalc student
     // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
