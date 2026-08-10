@@ -58,11 +58,6 @@ import {
 import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
-import {
-  deleteGradeEntryMissingNote,
-  findGradeEntryMissingNote,
-  upsertGradeEntryMissingNote,
-} from "@/lib/grade-entry-notes";
 import { GradeSmartNotesPanel } from "@/components/teacher-pro/grade-smart-notes-panel";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { studentMatchesListFilters } from "@/lib/student-list-filters";
@@ -231,7 +226,6 @@ export function GradeEntryView() {
   >({});
   const [gradeEntryNotice, setGradeEntryNotice] =
     useState<GradeEntryNotice | null>(null);
-  const [missingStudentsNote, setMissingStudentsNote] = useState("");
   const [gradeSmartNotes, setGradeSmartNotes] = useState<
     GradeSmartNoteRecord[]
   >([]);
@@ -267,7 +261,6 @@ export function GradeEntryView() {
   const draftRevisionRef = useRef<Record<string, number>>({});
   const confirmedGradesRef = useRef<Map<string, Grade>>(new Map());
   const gradeSaveChainsRef = useRef<Record<string, Promise<void>>>({});
-  const missingStudentsNoteLoadedRef = useRef("");
   const dashboardQueryAppliedRef = useRef(false);
   const {
     locked: clearingAbsentGrades,
@@ -553,32 +546,6 @@ export function GradeEntryView() {
     () => (selectedExam ? entrySheetCourseChapters : courseChapters),
     [selectedExam, entrySheetCourseChapters, courseChapters],
   );
-
-  useEffect(() => {
-    const savedNote = selectedExam
-      ? findGradeEntryMissingNote(selectedExam.id)?.text || ""
-      : "";
-    missingStudentsNoteLoadedRef.current = savedNote;
-    setMissingStudentsNote(savedNote);
-  }, [selectedExam?.id]);
-
-  useEffect(() => {
-    if (!selectedExam) return;
-    const timer = window.setTimeout(() => {
-      const normalizedCurrent = missingStudentsNote.trim();
-      const normalizedLoaded = missingStudentsNoteLoadedRef.current.trim();
-      if (normalizedCurrent === normalizedLoaded) return;
-
-      upsertGradeEntryMissingNote({
-        examId: selectedExam.id,
-        examName: selectedExam.name,
-        examDate: selectedExam.date,
-        text: missingStudentsNote,
-      });
-      missingStudentsNoteLoadedRef.current = normalizedCurrent;
-    }, 450);
-    return () => window.clearTimeout(timer);
-  }, [missingStudentsNote, selectedExam]);
 
   useEffect(() => {
     if (!selectedExamId) {
@@ -2159,13 +2126,6 @@ export function GradeEntryView() {
           loading={gradeSmartNotesLoading}
           error={gradeSmartNotesError}
           onRetry={() => setGradeSmartNotesRefreshKey((key) => key + 1)}
-          manualNote={missingStudentsNote}
-          onManualNoteChange={setMissingStudentsNote}
-          onClearManualNote={() => {
-            void deleteGradeEntryMissingNote(selectedExam.id);
-            missingStudentsNoteLoadedRef.current = "";
-            setMissingStudentsNote("");
-          }}
         />
       )}
 

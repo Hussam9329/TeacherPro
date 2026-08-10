@@ -13,7 +13,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import type {
   GradeSmartNoteCategory,
   GradeSmartNoteRecord,
@@ -92,9 +91,6 @@ export function GradeSmartNotesPanel({
   loading,
   error,
   onRetry,
-  manualNote,
-  onManualNoteChange,
-  onClearManualNote,
 }: {
   notes: GradeSmartNoteRecord[];
   totalCount: number;
@@ -102,9 +98,6 @@ export function GradeSmartNotesPanel({
   loading: boolean;
   error: string | null;
   onRetry: () => void;
-  manualNote: string;
-  onManualNoteChange: (value: string) => void;
-  onClearManualNote: () => void;
 }) {
   const [activeCategory, setActiveCategory] =
     useState<GradeSmartNoteCategory | null>(null);
@@ -325,43 +318,6 @@ export function GradeSmartNotesPanel({
           )}
         </section>
 
-        <section
-          className="rounded-2xl border border-dashed bg-background/70 p-4"
-          aria-labelledby="manual-grade-note-title"
-        >
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <Label id="manual-grade-note-title" htmlFor="grade-entry-manual-note">
-                ملاحظة يدوية إضافية
-              </Label>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                للطلاب غير الموجودين في القائمة أو تفاصيل الورقة فقط. هذه ليست
-                درجة ولا حالة طالب، ولا يترتب عليها أي أثر أكاديمي.
-              </p>
-            </div>
-            {manualNote.trim() && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onClearManualNote}
-              >
-                مسح الملاحظة
-              </Button>
-            )}
-          </div>
-          <textarea
-            id="grade-entry-manual-note"
-            value={manualNote}
-            onChange={(event) => onManualNoteChange(event.target.value)}
-            placeholder="مثال: الطالب غير موجود في قائمة هذا الامتحان، أو صورة الورقة غير واضحة..."
-            className="mt-3 min-h-[96px] w-full resize-y rounded-xl border border-input bg-background px-4 py-3 text-sm leading-7 shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>تُحفظ تلقائياً لهذا الامتحان</span>
-            <span className="tabular-nums">{manualNote.trim().length} حرف</span>
-          </div>
-        </section>
       </CardContent>
     </Card>
   );
