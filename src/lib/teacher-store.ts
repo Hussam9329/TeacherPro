@@ -310,6 +310,9 @@ export interface Grade {
   score: number | null;
   notes: string;
   academicAccountingChecked: boolean;
+  academicEffectExcluded?: boolean;
+  academicEffectExclusionReason?: string | null;
+  academicEffectExclusionSource?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1441,6 +1444,9 @@ function normalizeGradeRecord(g: Record<string, unknown>): Grade {
     status: sanitizeGradeStatus(g.status),
     score: g.score === null || g.score === undefined ? null : Number(g.score),
     academicAccountingChecked: Boolean(g.academicAccountingChecked),
+    academicEffectExcluded: Boolean(g.academicEffectExcluded),
+    academicEffectExclusionReason: String(g.academicEffectExclusionReason || "") || null,
+    academicEffectExclusionSource: String(g.academicEffectExclusionSource || "") || null,
     // Keep the complete server timestamp. Optimistic concurrency compares
     // updatedAt exactly; reducing it to a Baghdad date makes every edit look
     // stale and causes a permanent 409 even immediately after loading.
@@ -1825,6 +1831,7 @@ function findAcademicReactivationSourceForStudent(
 }
 
 function gradeHasAcademicEffect(grade: Grade, exam: Exam): boolean {
+  if (grade.academicEffectExcluded) return false;
   if (!isExamAvailableForEntry(exam)) return false;
   if (!isGradeEntered(grade, exam)) return false;
   if (grade.status === "غش") return true;
@@ -3438,6 +3445,12 @@ export const useTeacherStore = create<TeacherState>()(
           : null;
       },
       classification: (grade, exam, student) => {
+        if (grade?.academicEffectExcluded)
+          return {
+            text: "توثيق فقط - بلا أثر أكاديمي",
+            type: "info",
+            kind: "academic-effect-excluded",
+          };
         if (
           student &&
           get().studentLeaves.some((leave) =>

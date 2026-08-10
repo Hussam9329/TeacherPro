@@ -6,7 +6,6 @@ import { requireAnyPermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { ARCHIVED_STUDENT_STATUS } from "@/lib/student-delete-impact";
 import {
-  isExamOnOrAfterStudentRegistration,
   splitSelection,
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
@@ -26,10 +25,6 @@ function parseCourseIds(value: unknown): string[] {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
-}
-
-function dateKey(value: unknown): string {
-  return String(value || "").slice(0, 10);
 }
 
 function dayAfter(date: Date): Date {
@@ -91,25 +86,6 @@ export async function GET(req: NextRequest) {
     const gradedStudentIds = Array.from(
       new Set(grades.map((grade) => grade.studentId).filter(Boolean)),
     );
-    // Normalize exam for the date-comparison helpers (which expect date strings,
-    // not Date objects returned by Prisma).
-    const examForHelpers = {
-      ...exam,
-      date:
-        exam.date instanceof Date
-          ? exam.date.toISOString()
-          : exam.date
-            ? String(exam.date)
-            : null,
-      scheduledActivateAt:
-        exam.scheduledActivateAt instanceof Date
-          ? exam.scheduledActivateAt.toISOString()
-          : (exam.scheduledActivateAt ?? null),
-      scheduledDeactivateAt:
-        exam.scheduledDeactivateAt instanceof Date
-          ? exam.scheduledDeactivateAt.toISOString()
-          : (exam.scheduledDeactivateAt ?? null),
-    };
     const possibleStudentsRaw = await db.student.findMany({
       where: {
         OR: [
@@ -125,8 +101,9 @@ export async function GET(req: NextRequest) {
       orderBy: { name: "asc" },
     });
 
-    // Normalize createdAt to ISO string for isExamOnOrAfterStudentRegistration,
-    // which expects a string | null | undefined (not a Date).
+    // Keep pre-registration students in the entry sheet. Their numeric attempt
+    // is captured as BEFORE_REGISTRATION_PENDING rather than a Grade, so the
+    // operator can record the information without creating academic effects.
     const possibleStudents = possibleStudentsRaw.map((s) => ({
       ...s,
       createdAt:
@@ -141,8 +118,7 @@ export async function GET(req: NextRequest) {
     const students = possibleStudents.filter(
       (student) =>
         gradedStudentIdSet.has(student.id) ||
-        (isExamOnOrAfterStudentRegistration(student, examForHelpers) &&
-          studentMatchesExamMainSites(student, selectedMainSites)),
+        studentMatchesExamMainSites(student, selectedMainSites),
     );
     const studentIds = students.map((student) => student.id);
 

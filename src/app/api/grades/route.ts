@@ -5,7 +5,7 @@ export const maxDuration = 60;
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission } from "@/lib/server-auth";
+import { getAuthPrincipal, requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import {
   normalizeArabicText,
@@ -25,6 +25,14 @@ import {
 } from "@/lib/academic-grade-writeback-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { baghdadDateKey } from "@/lib/baghdad-time";
+import { getExamEntryAvailability } from "@/lib/exam-utils";
+import {
+  GRACE_SCORED_GRADE_EXCLUSION_REASON,
+  gradeSmartNoteExclusionSource,
+  isProtectedDismissedPendingGrade,
+  type GradeSmartNoteCategory,
+  upsertGradeSmartNote,
+} from "@/lib/grade-smart-notes-server";
 
 function parsePositiveInt(
   value: string | null,
@@ -169,6 +177,155 @@ class GradeWriteConflictError extends Error {
     );
     this.name = "GradeWriteConflictError";
   }
+}
+
+type NumericGradeAttemptContext = {
+  student: {
+    id: string;
+    name: string;
+    code: string;
+    courseId: string;
+    status: string;
+    createdAt: Date;
+    accountingGraceDays: number;
+    gracePeriodStartDate: Date | null;
+  };
+  exam: {
+    id: string;
+    name: string;
+    date: Date;
+    fullMark: number;
+    courseIds: string;
+    active: boolean;
+    scheduledActivateAt: Date | null;
+    scheduledDeactivateAt: Date | null;
+  };
+  category: GradeSmartNoteCategory | null;
+  reason: string;
+};
+
+function examCourseIds(value: string | null | undefined): string[] {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+  } catch {
+    // Older rows may contain a comma-separated list.
+  }
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function numericGradeScore(value: unknown, fullMark: number): number {
+  const text = value === null || value === undefined ? "" : String(value).trim();
+  const score = Number(text);
+  if (!text || !Number.isFinite(score) || !Number.isInteger(score)) {
+    throw new AcademicGradeWritebackError(
+      "الدرجات الكسرية أو غير الرقمية غير مدعومة. أدخل عدداً صحيحاً.",
+    );
+  }
+  if (score < 0 || score > fullMark) {
+    throw new AcademicGradeWritebackError(
+      `الدرجة يجب أن تكون رقماً بين 0 و ${fullMark}`,
+    );
+  }
+  return score;
+}
+
+async function inspectNumericGradeAttempt(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  examId: string,
+  scoreValue: unknown,
+): Promise<NumericGradeAttemptContext & { score: number }> {
+  const [student, exam] = await Promise.all([
+    tx.student.findUnique({
+      where: { id: studentId },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        courseId: true,
+        status: true,
+        createdAt: true,
+        accountingGraceDays: true,
+        gracePeriodStartDate: true,
+      },
+    }),
+    tx.exam.findUnique({
+      where: { id: examId },
+      select: {
+        id: true,
+        name: true,
+        date: true,
+        fullMark: true,
+        courseIds: true,
+        active: true,
+        scheduledActivateAt: true,
+        scheduledDeactivateAt: true,
+      },
+    }),
+  ]);
+  if (!student) {
+    throw new AcademicGradeWritebackError(
+      "الطالب المرتبط بالدرجة غير موجود.",
+      404,
+    );
+  }
+  if (!exam) {
+    throw new AcademicGradeWritebackError(
+      "الامتحان المرتبط بالدرجة غير موجود.",
+      404,
+    );
+  }
+  if (student.status === "مؤرشف") {
+    throw new AcademicGradeWritebackError(
+      "الطالب مؤرشف ولا يمكن اعتماد درجات على ملفه المقروء فقط.",
+    );
+  }
+  const availability = getExamEntryAvailability(exam);
+  if (!availability.available) {
+    throw new AcademicGradeWritebackError(
+      `لا يمكن اعتماد الدرجة: ${availability.reason}`,
+    );
+  }
+  const linkedCourseIds = examCourseIds(exam.courseIds);
+  if (linkedCourseIds.length > 0 && !linkedCourseIds.includes(student.courseId)) {
+    throw new AcademicGradeWritebackError("الطالب ليس ضمن دورات هذا الامتحان.");
+  }
+  const score = numericGradeScore(scoreValue, Number(exam.fullMark || 0));
+  const leaves = await tx.studentLeave.findMany({
+    where: { studentId },
+    select: {
+      examId: true,
+      leaveType: true,
+      date: true,
+      dateFrom: true,
+      dateTo: true,
+    },
+  });
+  const beforeRegistration = isExamBeforeStudentRegistration(student, exam);
+  const onLeave = leaves.some((leave) => leaveAppliesToExam(leave, exam));
+  const withinGrace = isExamWithinGracePeriod(student, exam);
+
+  let category: NumericGradeAttemptContext["category"] = null;
+  let reason = "";
+  if (beforeRegistration) {
+    category = "BEFORE_REGISTRATION_PENDING";
+    reason = "محاولة إدخال درجة لامتحان يسبق تسجيل الطالب في النظام.";
+  } else if (onLeave) {
+    category = "LEAVE_PENDING";
+    reason = "محاولة إدخال درجة لطالب لديه إجازة تغطي هذا الامتحان.";
+  } else if (student.status === "مفصول") {
+    category = "DISMISSED_PENDING";
+    reason = "محاولة إدخال درجة رقمية لطالب مفصول؛ حُفظت للمراجعة دون أثر أكاديمي.";
+  } else if (withinGrace) {
+    category = "GRACE_SCORED";
+    reason = "درجة حقيقية داخل فترة السماح؛ محفوظة للمتابعة دون أثر أكاديمي.";
+  }
+
+  return { student, exam, category, reason, score };
 }
 
 function dateKey(value: unknown): string {
@@ -384,6 +541,14 @@ export async function POST(req: NextRequest) {
   const authError = await requirePermission(req, "grades.add");
   if (authError) return authError;
 
+  const principal = await getAuthPrincipal(req);
+  if (!principal) {
+    return NextResponse.json(
+      { error: "يجب تسجيل الدخول أولاً." },
+      { status: 401 },
+    );
+  }
+
   try {
     await ensureExamSchema();
     await ensureFollowupTables();
@@ -409,6 +574,47 @@ export async function POST(req: NextRequest) {
           where: { studentId_examId: { studentId, examId } },
           select: { updatedAt: true },
         });
+
+        // Exceptional numeric attempts are captured as structured smart notes
+        // before optimistic-concurrency checks. They do not modify an existing
+        // official Grade and never trigger academic recalculation.
+        const numericAttempt =
+          String(body.status || "") === "درجة"
+            ? await inspectNumericGradeAttempt(
+                tx,
+                studentId,
+                examId,
+                body.score,
+              )
+            : null;
+        if (
+          numericAttempt?.category &&
+          numericAttempt.category !== "GRACE_SCORED"
+        ) {
+          const smartNote = await upsertGradeSmartNote({
+            tx,
+            category: numericAttempt.category,
+            status: "PENDING",
+            student: numericAttempt.student,
+            exam: numericAttempt.exam,
+            score: numericAttempt.score,
+            reason: numericAttempt.reason,
+            actor: {
+              id: principal.id,
+              name: principal.name || principal.username,
+            },
+          });
+          return {
+            capturedAsSmartNote: true as const,
+            pendingSmartNote: true as const,
+            grade: null,
+            smartNote,
+            academicRecalculation: null,
+            message:
+              "تم حفظ الدرجة كملاحظة ذكية معلّقة للمراجعة دون اعتمادها أو احتساب أي أثر أكاديمي.",
+          };
+        }
+
         const expectedUpdatedAt = String(body.expectedUpdatedAt || "").trim();
         const expectMissing = body.expectMissing === true;
         if (
@@ -441,9 +647,63 @@ export async function POST(req: NextRequest) {
             "يجب إدخال درجة صحيحة قبل حفظ السجل.",
           );
         }
-        return writeback;
+
+        if (numericAttempt?.category === "GRACE_SCORED") {
+          const smartNote = await upsertGradeSmartNote({
+            tx,
+            category: "GRACE_SCORED",
+            status: "PROCESSED",
+            student: numericAttempt.student,
+            exam: numericAttempt.exam,
+            score: numericAttempt.score,
+            reason: numericAttempt.reason,
+            actor: {
+              id: principal.id,
+              name: principal.name || principal.username,
+            },
+            resolution:
+              "تم اعتماد الدرجة كسجل حقيقي، مع استمرار استثنائها من الأثر الأكاديمي وفق فترة السماح.",
+          });
+          const linkedGrade = await tx.grade.update({
+            where: { id: writeback.grade.id },
+            data: {
+              academicEffectExcluded: true,
+              academicEffectExclusionReason:
+                GRACE_SCORED_GRADE_EXCLUSION_REASON,
+              academicEffectExclusionSource: gradeSmartNoteExclusionSource(
+                "GRACE_SCORED",
+                smartNote.id,
+              ),
+              smartNoteId: smartNote.id,
+            },
+          });
+          return {
+            ...writeback,
+            grade: linkedGrade,
+            capturedAsSmartNote: false as const,
+            smartNote,
+          };
+        }
+        return { ...writeback, capturedAsSmartNote: false as const };
       },
     );
+
+    if (result.capturedAsSmartNote) {
+      await writeRequestAuditLog(
+        req,
+        "الدرجات",
+        "حفظ محاولة درجة كملاحظة ذكية معلّقة",
+        {
+          smartNoteId: result.smartNote.id,
+          category: result.smartNote.category,
+          studentId: result.smartNote.studentId,
+          examId: result.smartNote.examId,
+          score: result.smartNote.score,
+          status: result.smartNote.status,
+        },
+      );
+      return NextResponse.json(result, { status: 202 });
+    }
 
     await writeRequestAuditLog(req, "الدرجات", "حفظ درجة وإعادة احتساب الطالب", {
       gradeId: result.grade.id,
@@ -452,6 +712,7 @@ export async function POST(req: NextRequest) {
       status: result.grade.status,
       score: result.grade.score,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+      smartNoteId: result.smartNote?.id || null,
     });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
@@ -585,6 +846,15 @@ export async function PUT(req: NextRequest) {
       }
 
       const nextStatus = String(body.status ?? freshTargetGrade.status);
+      if (
+        isProtectedDismissedPendingGrade(freshTargetGrade) &&
+        nextStatus !== "درجة"
+      ) {
+        throw new AcademicGradeWritebackError(
+          "هذه درجة تاريخية مستبعدة من الأثر الأكاديمي. يمكن تصحيح رقمها أو ملاحظتها فقط، ولا يمكن تحويلها إلى غياب أو غش.",
+          409,
+        );
+      }
       const nextScore =
         nextStatus === "درجة"
           ? body.score !== undefined
@@ -661,7 +931,11 @@ export async function DELETE(req: NextRequest) {
       // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
       const result = await withSerializableTransaction(async (tx) => {
         const targetGrades = await tx.grade.findMany({
-          where: { examId, status: "غائب" },
+          where: {
+            examId,
+            status: "غائب",
+            academicEffectExcluded: false,
+          },
           select: { id: true, studentId: true },
         });
         const studentIds: string[] = Array.from(
@@ -676,7 +950,11 @@ export async function DELETE(req: NextRequest) {
           };
         }
         const deletedAbsences = await tx.grade.deleteMany({
-          where: { examId, status: "غائب" },
+          where: {
+            examId,
+            status: "غائب",
+            academicEffectExcluded: false,
+          },
         });
         const academicRecalculation = await recalculateStudentsAcademicState(
           studentIds,
@@ -703,8 +981,20 @@ export async function DELETE(req: NextRequest) {
       const result = await withSerializableTransaction(async (tx) => {
         const targetGrade = await tx.grade.findUnique({
           where: { id },
-          select: { id: true, studentId: true, updatedAt: true },
+          select: {
+            id: true,
+            studentId: true,
+            updatedAt: true,
+            academicEffectExcluded: true,
+            academicEffectExclusionSource: true,
+          },
         });
+        if (targetGrade && isProtectedDismissedPendingGrade(targetGrade)) {
+          throw new AcademicGradeWritebackError(
+            "لا يمكن حذف هذه الدرجة التاريخية لأنها محفوظة للتوثيق ومستبعدة دائماً من الأثر الأكاديمي.",
+            409,
+          );
+        }
         if (
           targetGrade &&
           expectedUpdatedAt &&
@@ -741,8 +1031,19 @@ export async function DELETE(req: NextRequest) {
       const result = await withSerializableTransaction(async (tx) => {
         const targetGrade = await tx.grade.findUnique({
           where: { studentId_examId: { studentId, examId } },
-          select: { id: true, studentId: true },
+          select: {
+            id: true,
+            studentId: true,
+            academicEffectExcluded: true,
+            academicEffectExclusionSource: true,
+          },
         });
+        if (targetGrade && isProtectedDismissedPendingGrade(targetGrade)) {
+          throw new AcademicGradeWritebackError(
+            "لا يمكن حذف هذه الدرجة التاريخية لأنها محفوظة للتوثيق ومستبعدة دائماً من الأثر الأكاديمي.",
+            409,
+          );
+        }
         const deletedByPair = await tx.grade.deleteMany({
           where: { studentId, examId },
         });
@@ -770,6 +1071,9 @@ export async function DELETE(req: NextRequest) {
     }
     return validationError("تعذر تحديد الدرجة المطلوبة");
   } catch (error) {
+    if (error instanceof AcademicGradeWritebackError) {
+      return validationError(error.message, error.status);
+    }
     return routeErrorResponse(error, "تعذر حذف الدرجة حالياً.");
   }
 }

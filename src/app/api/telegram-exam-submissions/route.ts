@@ -967,7 +967,16 @@ export async function DELETE(req: NextRequest) {
       // deleted via /api/grades). deleteMany is idempotent.
       if (deleteGrade) {
         const deletedGrade = await tx.grade.deleteMany({
-          where: { studentId: submission.studentId, examId: submission.examId },
+          where: {
+            studentId: submission.studentId,
+            examId: submission.examId,
+            NOT: {
+              academicEffectExcluded: true,
+              academicEffectExclusionSource: {
+                startsWith: "GradeSmartNote:DISMISSED_PENDING:",
+              },
+            },
+          },
         });
         gradeDeleted = deletedGrade.count > 0;
       }

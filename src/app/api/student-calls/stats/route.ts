@@ -48,6 +48,9 @@ type DbGradeLite = {
   status: string;
   score: number | null;
   notes: string | null;
+  academicEffectExcluded: boolean;
+  academicEffectExclusionReason: string | null;
+  academicEffectExclusionSource: string | null;
 };
 
 type DbExamLite = {
@@ -295,6 +298,9 @@ export async function GET(req: NextRequest) {
               status: true,
               score: true,
               notes: true,
+              academicEffectExcluded: true,
+              academicEffectExclusionReason: true,
+              academicEffectExclusionSource: true,
             },
           }),
           db.studentLeave.findMany({

@@ -15,7 +15,14 @@ import {
   type Student,
   type StudentLeave,
 } from "@/lib/teacher-store";
-import { gradeApi, gradeEntrySheetApi, type ApiResult } from "@/lib/api";
+import {
+  gradeApi,
+  gradeEntrySheetApi,
+  gradeSmartNotesApi,
+  type ApiResult,
+  type GradeSmartNoteCategory,
+  type GradeSmartNoteRecord,
+} from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,6 +63,7 @@ import {
   findGradeEntryMissingNote,
   upsertGradeEntryMissingNote,
 } from "@/lib/grade-entry-notes";
+import { GradeSmartNotesPanel } from "@/components/teacher-pro/grade-smart-notes-panel";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { studentMatchesListFilters } from "@/lib/student-list-filters";
 import {
@@ -89,7 +97,14 @@ type GradeEntryNotice = {
   at: number;
 };
 
-type GradeRowSavePhase = "idle" | "dirty" | "saving" | "saved" | "error";
+type GradeRowSavePhase =
+  | "idle"
+  | "dirty"
+  | "saving"
+  | "saved"
+  | "pending"
+  | "noncounted"
+  | "error";
 
 type GradeRowSaveState = {
   phase: GradeRowSavePhase;
@@ -104,45 +119,6 @@ type PendingConfirm = {
   onConfirm: () => void;
   onCancel?: () => void;
 };
-
-const GRADE_ENTRY_NOTES_STORAGE_KEY = "teacherpro-grade-entry-notes-v1";
-
-function readStoredGradeEntryNotes(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(GRADE_ENTRY_NOTES_STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return {};
-    return Object.fromEntries(
-      Object.entries(parsed)
-        .filter(
-          ([key, value]) =>
-            typeof key === "string" && typeof value === "string",
-        )
-        .map(([key, value]) => [key, value as string]),
-    );
-  } catch (error) {
-    console.warn("[GradeEntry] Failed to read local entry notes:", error);
-    return {};
-  }
-}
-
-function writeStoredGradeEntryNotes(notes: Record<string, string>): void {
-  if (typeof window === "undefined") return;
-  try {
-    const compactNotes = Object.fromEntries(
-      Object.entries(notes).filter(([, value]) => value.trim().length > 0),
-    );
-    window.localStorage.setItem(
-      GRADE_ENTRY_NOTES_STORAGE_KEY,
-      JSON.stringify(compactNotes),
-    );
-  } catch (error) {
-    console.warn("[GradeEntry] Failed to write local entry notes:", error);
-  }
-}
 
 const GradeEntrySearchInput = React.memo(function GradeEntrySearchInput({
   value,
@@ -255,10 +231,18 @@ export function GradeEntryView() {
   >({});
   const [gradeEntryNotice, setGradeEntryNotice] =
     useState<GradeEntryNotice | null>(null);
-  const [entryNotesByExam, setEntryNotesByExam] = useState<
-    Record<string, string>
-  >({});
   const [missingStudentsNote, setMissingStudentsNote] = useState("");
+  const [gradeSmartNotes, setGradeSmartNotes] = useState<
+    GradeSmartNoteRecord[]
+  >([]);
+  const [gradeSmartNotesTotal, setGradeSmartNotesTotal] = useState(0);
+  const [gradeSmartNoteCategoryCounts, setGradeSmartNoteCategoryCounts] =
+    useState<Partial<Record<GradeSmartNoteCategory, number>>>({});
+  const [gradeSmartNotesLoading, setGradeSmartNotesLoading] = useState(false);
+  const [gradeSmartNotesError, setGradeSmartNotesError] = useState<
+    string | null
+  >(null);
+  const [gradeSmartNotesRefreshKey, setGradeSmartNotesRefreshKey] = useState(0);
   const [editableRows, setEditableRows] = useState<Record<string, boolean>>({});
   const [reactivationWarningsAccepted, setReactivationWarningsAccepted] =
     useState<Record<string, boolean>>({});
@@ -307,14 +291,6 @@ export function GradeEntryView() {
     }
     dashboardQueryAppliedRef.current = true;
   }, []);
-
-  useEffect(() => {
-    setEntryNotesByExam(readStoredGradeEntryNotes());
-  }, []);
-
-  useEffect(() => {
-    writeStoredGradeEntryNotes(entryNotesByExam);
-  }, [entryNotesByExam]);
 
   const showGradeEntryNotice = useCallback(
     (type: GradeEntryNotice["type"], message: string) => {
@@ -543,9 +519,6 @@ export function GradeEntryView() {
   }, [showGradeEntryNotice]);
 
   const selectedExam = exams.find((e) => e.id === selectedExamId);
-  const selectedExamEntryNotes = selectedExamId
-    ? entryNotesByExam[selectedExamId] || ""
-    : "";
 
   const entryStudentsSource = useMemo(
     () => (selectedExam ? entrySheetStudents : students),
@@ -606,6 +579,58 @@ export function GradeEntryView() {
     }, 450);
     return () => window.clearTimeout(timer);
   }, [missingStudentsNote, selectedExam]);
+
+  useEffect(() => {
+    if (!selectedExamId) {
+      setGradeSmartNotes([]);
+      setGradeSmartNotesTotal(0);
+      setGradeSmartNoteCategoryCounts({});
+      setGradeSmartNotesError(null);
+      setGradeSmartNotesLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setGradeSmartNotesLoading(true);
+    setGradeSmartNotesError(null);
+    gradeSmartNotesApi
+      .list(
+        { examId: selectedExamId, page: 1, pageSize: 200 },
+        { signal: controller.signal, quietAbort: true },
+      )
+      .then((result) => {
+        if (controller.signal.aborted) return;
+        if (!result) {
+          setGradeSmartNotesError(
+            "تعذر تحميل الدرجات الذكية لهذا الامتحان.",
+          );
+          return;
+        }
+        setGradeSmartNotes(result.notes || []);
+        setGradeSmartNotesTotal(Number(result.totalCount || 0));
+        setGradeSmartNoteCategoryCounts(result.categoryCounts || {});
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setGradeSmartNotesError(
+            "تعذر تحميل الدرجات الذكية لهذا الامتحان.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setGradeSmartNotesLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [selectedExamId, syncKey, gradeSmartNotesRefreshKey]);
+
+  const latestSmartNoteByStudentId = useMemo(() => {
+    const byStudentId = new Map<string, GradeSmartNoteRecord>();
+    for (const note of gradeSmartNotes) {
+      if (!byStudentId.has(note.studentId)) byStudentId.set(note.studentId, note);
+    }
+    return byStudentId;
+  }, [gradeSmartNotes]);
   const activeExams = useMemo(
     () => exams.filter((e) => isExamAvailableForEntry(e)),
     [exams, clockTick],
@@ -742,8 +767,10 @@ export function GradeEntryView() {
     return (
       drafts[studentId] || {
         status:
-          (existing?.status as string) === "مجاز"
-            ? "غائب"
+          ["مجاز", "قبل تسجيل الطالب"].includes(
+            String(existing?.status || ""),
+          )
+            ? "درجة"
             : (existing?.status as DraftGrade["status"]) || "درجة",
         score:
           existing?.score !== null && existing?.score !== undefined
@@ -908,8 +935,10 @@ export function GradeEntryView() {
       if (existing) {
         next[studentId] = {
           status:
-            (existing.status as string) === "مجاز"
-              ? "غائب"
+            ["مجاز", "قبل تسجيل الطالب"].includes(
+              String(existing.status || ""),
+            )
+              ? "درجة"
               : (existing.status as DraftGrade["status"]) || "درجة",
           score:
             existing.score !== null && existing.score !== undefined
@@ -954,11 +983,6 @@ export function GradeEntryView() {
           if (student.status === "مؤرشف") return false;
           if (!selectedExam.courseIds.includes(student.courseId)) return false;
           if (filterCourseId && student.courseId !== filterCourseId) return false;
-          if (
-            !isExamOnOrAfterStudentRegistration(student, selectedExam) &&
-            !hasSavedGradeForExam
-          )
-            return false;
           if (!activeChapterCourseIds.has(student.courseId)) return false;
           if (!studentMatchesExamMainSites(student, selectedMainSites))
             return false;
@@ -1022,12 +1046,21 @@ export function GradeEntryView() {
     return visibleExamStudents
       .filter((student) => {
         const leave = getStudentLeaveForSelectedExam(student.id);
-        if (leave || !canEditGradeForStudent(student.id)) return false;
         const grade = getGrade(student.id);
         const draft = getDraft(student.id);
+        const protectedNumericCapture = Boolean(
+          leave ||
+            !isExamOnOrAfterStudentRegistration(student, selectedExam) ||
+            student.status === "مفصول",
+        );
+        if (!canEditGradeForStudent(student.id) && !protectedNumericCapture)
+          return false;
         const entered = isGradeEntered(grade, selectedExam);
-        const rowLocked = Boolean(entered && !editableRows[student.id]);
-        return !rowLocked && draft.status === "درجة";
+        const rowLocked = Boolean(
+          entered && !protectedNumericCapture && !editableRows[student.id],
+        );
+        return !rowLocked &&
+          (protectedNumericCapture || draft.status === "درجة");
       })
       .map((student) => student.id);
   }, [
@@ -1084,8 +1117,20 @@ export function GradeEntryView() {
       .map((courseId) => courseName(courseId));
   }, [selectedExam, entryCourseChaptersSource, courseName]);
 
-  const gradePayloadFromResult = (result: ApiResult): { grade?: Grade; academicRecalculation?: { students?: Student[] } } =>
-    (result.data || {}) as { grade?: Grade; academicRecalculation?: { students?: Student[] } };
+  const gradePayloadFromResult = (
+    result: ApiResult,
+  ): {
+    grade?: Grade | null;
+    smartNote?: GradeSmartNoteRecord | null;
+    pendingSmartNote?: boolean;
+    academicRecalculation?: { students?: Student[] } | null;
+  } =>
+    (result.data || {}) as {
+      grade?: Grade | null;
+      smartNote?: GradeSmartNoteRecord | null;
+      pendingSmartNote?: boolean;
+      academicRecalculation?: { students?: Student[] } | null;
+    };
 
   const emitGradeEntryServerSync = (reason: string) => {
     emitTeacherProDataChanged({
@@ -1113,6 +1158,13 @@ export function GradeEntryView() {
         : [grade, ...current];
     });
     mergeGradesCache([grade]);
+  };
+
+  const mergeSmartNoteIntoPanel = (smartNote: GradeSmartNoteRecord) => {
+    setGradeSmartNotes((current) => [
+      smartNote,
+      ...current.filter((item) => item.id !== smartNote.id),
+    ]);
   };
 
   const removeEntryGrade = (grade: Grade) => {
@@ -1288,25 +1340,34 @@ export function GradeEntryView() {
       );
       return;
     }
-    const leave = getStudentLeaveForSelectedExam(studentId);
-    if (leave) {
-      showGradeEntryNotice(
-        "error",
-        `الطالب مجاز لهذا الامتحان ولا يمكن إدخال درجة له${leave.reason ? `: ${leave.reason}` : ""}`,
-      );
-      return;
-    }
-    if (!canEditGradeForStudent(studentId)) {
-      showGradeEntryNotice(
-        "error",
-        "هذا الطالب مفصول ولا يمكن تعديل درجته إلا داخل الامتحان الذي سبب الفصل",
-      );
-      return;
-    }
     const draft = draftOverride || getDraft(studentId);
     const status = draft.status;
     const normalizedScore = toLatinDigits(draft.score).trim();
     const score = status === "درجة" ? Number(normalizedScore) : null;
+    const student = studentById.get(studentId);
+    const leave = getStudentLeaveForSelectedExam(studentId);
+    const beforeRegistration = Boolean(
+      student && !isExamOnOrAfterStudentRegistration(student, selectedExam),
+    );
+    const dismissedAndLocked = student?.status === "مفصول";
+    const canCaptureAsSmartNote =
+      status === "درجة" &&
+      Boolean(leave || beforeRegistration || dismissedAndLocked);
+
+    if (leave && !canCaptureAsSmartNote) {
+      showGradeEntryNotice(
+        "error",
+        `الطالب مجاز لهذا الامتحان؛ يمكن إدخال رقم فقط ليُحفظ كدرجة معلّقة${leave.reason ? `: ${leave.reason}` : ""}`,
+      );
+      return;
+    }
+    if (!canEditGradeForStudent(studentId) && !canCaptureAsSmartNote) {
+      showGradeEntryNotice(
+        "error",
+        "هذا الطالب مفصول؛ يمكن إدخال رقم فقط ليُحفظ كدرجة معلّقة للمراجعة",
+      );
+      return;
+    }
 
     if (status === "درجة") {
       if (
@@ -1404,6 +1465,33 @@ export function GradeEntryView() {
         }
 
         const payload = gradePayloadFromResult(result);
+        if (payload.smartNote) {
+          mergeSmartNoteIntoPanel(payload.smartNote);
+          setGradeSmartNotesRefreshKey((key) => key + 1);
+        }
+
+        if (payload.pendingSmartNote && payload.smartNote && !payload.grade) {
+          gradeMutationVersionRef.current += 1;
+          setSavedRows((prev) => {
+            const next = { ...prev };
+            delete next[studentId];
+            return next;
+          });
+          setRowSaveStates((prev) => ({
+            ...prev,
+            [studentId]: {
+              phase: "pending",
+              message: "درجة معلّقة — لم تُسجّل كدرجة",
+            },
+          }));
+          emitGradeEntryServerSync("grade-entry-smart-note-captured");
+          showGradeEntryNotice(
+            "info",
+            "حفظ النظام الرقم كدرجة معلّقة للمراجعة، ولم يسجله كدرجة أو يحتسب له أي أثر.",
+          );
+          return;
+        }
+
         if (!payload.grade) {
           const reconciled = await reconcileFailedGradeSave(
             examAtRequest.id,
@@ -1436,7 +1524,25 @@ export function GradeEntryView() {
             return next;
           });
           setEditableRows((prev) => ({ ...prev, [studentId]: false }));
-          markStudentSavedNow(studentId);
+          if (payload.smartNote?.category === "GRACE_SCORED") {
+            const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
+            const baghdadNow = new Date(Date.now() + BAGHDAD_OFFSET_MS);
+            const hh = String(baghdadNow.getUTCHours()).padStart(2, "0");
+            const mm = String(baghdadNow.getUTCMinutes()).padStart(2, "0");
+            setSavedRows((prev) => ({
+              ...prev,
+              [studentId]: `محفوظة دون احتساب ${hh}:${mm}`,
+            }));
+            setRowSaveStates((prev) => ({
+              ...prev,
+              [studentId]: {
+                phase: "noncounted",
+                message: "محفوظة للمتابعة — غير محتسبة",
+              },
+            }));
+          } else {
+            markStudentSavedNow(studentId);
+          }
         } else {
           setRowSaveStates((prev) => ({
             ...prev,
@@ -1447,7 +1553,9 @@ export function GradeEntryView() {
         if (!options.silent) {
           showGradeEntryNotice(
             "success",
-            "تم حفظ الدرجة في بيانات النظام وإعادة احتساب الطالب",
+            payload.smartNote?.category === "GRACE_SCORED"
+              ? "تم حفظ الدرجة للمتابعة فقط؛ لن تخصم فرصة ولن تسبب فصلاً."
+              : "تم حفظ الدرجة في بيانات النظام وإعادة احتساب الطالب",
           );
         }
       } finally {
@@ -1468,18 +1576,24 @@ export function GradeEntryView() {
 
   const autoSaveGrade = (studentId: string, draftOverride?: DraftGrade) => {
     const draft = draftOverride || getDraft(studentId);
-    if (
-      !selectedExam ||
-      getStudentLeaveForSelectedExam(studentId) ||
-      !canEditGradeForStudent(studentId)
-    )
-      return;
+    if (!selectedExam) return;
+    const student = studentById.get(studentId);
+    const protectedNumericCapture =
+      draft.status === "درجة" &&
+      Boolean(
+        getStudentLeaveForSelectedExam(studentId) ||
+          (student &&
+            !isExamOnOrAfterStudentRegistration(student, selectedExam)) ||
+          student?.status === "مفصول",
+      );
+    if (!canEditGradeForStudent(studentId) && !protectedNumericCapture) return;
     const existing = getGrade(studentId);
     const normalizedScore = toLatinDigits(draft.score).trim();
 
     if (draft.status === "درجة") {
       if (!normalizedScore) {
-        if (existing) void deleteExistingGradeFromServer(studentId, existing);
+        if (existing && !protectedNumericCapture)
+          void deleteExistingGradeFromServer(studentId, existing);
         return;
       }
       if (!isScoreInsideExamRange(normalizedScore, selectedExam.fullMark))
@@ -1801,20 +1915,6 @@ export function GradeEntryView() {
     setReactivationWarningsAccepted({});
   };
 
-  const updateSelectedExamEntryNotes = (value: string) => {
-    if (!selectedExamId) return;
-    setEntryNotesByExam((current) => ({ ...current, [selectedExamId]: value }));
-  };
-
-  const clearSelectedExamEntryNotes = () => {
-    if (!selectedExamId) return;
-    setEntryNotesByExam((current) => {
-      const next = { ...current };
-      delete next[selectedExamId];
-      return next;
-    });
-  };
-
   return (
     <div className="tp-grade-entry-page space-y-6">
       {gradeEntryNotice && (
@@ -2048,102 +2148,25 @@ export function GradeEntryView() {
             </div>
           )}
 
-          {selectedExam && (
-            <div className="mt-4 rounded-2xl border bg-muted/25 p-4">
-              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <Label
-                    htmlFor="grade-entry-general-notes"
-                    className="text-sm font-black"
-                  >
-                    ملاحظات مدخل الدرجات
-                  </Label>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    اكتب أي ملاحظات سريعة تخص هذا الامتحان، مثل اسم طالب ودرجته
-                    أو حالة طالب غير موجود. هذه الملاحظات لا تدخل ضمن الدرجات
-                    ولا تغيّر بيانات الطلاب.
-                  </p>
-                </div>
-                {selectedExamEntryNotes.trim() && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 shrink-0 text-xs"
-                    onClick={clearSelectedExamEntryNotes}
-                  >
-                    مسح الملاحظات
-                  </Button>
-                )}
-              </div>
-              <textarea
-                id="grade-entry-general-notes"
-                value={selectedExamEntryNotes}
-                onChange={(event) =>
-                  updateSelectedExamEntryNotes(event.target.value)
-                }
-                placeholder={`مثال: طالب اسمه أحمد علي درجته 42 وغير موجود ضمن القائمة / صورة ورقة غير واضحة / ملاحظة خاصة بامتحان ${selectedExam.name}`}
-                className="min-h-[140px] w-full resize-y rounded-2xl border bg-background px-4 py-3 text-sm leading-6 outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/25"
-              />
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span className="tp-save-indicator tp-save-indicator--local">
-                  حفظ تلقائي محلي لهذا الامتحان حتى بعد تحديث الصفحة
-                </span>
-                <span>{selectedExamEntryNotes.length} حرف</span>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
 
       {selectedExam && (
-        <Card className="border-amber-200/70 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20">
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="text-base">
-                  ملاحظات مدخل الدرجات
-                </CardTitle>
-                <p className="mt-1 text-xs leading-6 text-muted-foreground">
-                  اكتب هنا أسماء أو درجات طلاب غير موجودين أثناء إدخال درجات هذا
-                  الامتحان. ستظهر كل الملاحظات لاحقاً من زر الطلاب غير الموجودين
-                  في لوحة النظام.
-                </p>
-              </div>
-              {missingStudentsNote.trim() && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    deleteGradeEntryMissingNote(selectedExam.id);
-                    missingStudentsNoteLoadedRef.current = "";
-                    setMissingStudentsNote("");
-                  }}
-                >
-                  مسح الملاحظات
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <textarea
-              id="grade-entry-missing-students-note"
-              value={missingStudentsNote}
-              onChange={(event) => setMissingStudentsNote(event.target.value)}
-              placeholder="مثال: الطالب أحمد علي غير موجود بالقائمة، درجته 84. أو: طالبة باسم زينب غير مضافة لهذا الامتحان..."
-              className="min-h-[120px] w-full resize-y rounded-2xl border border-input bg-background px-4 py-3 text-sm leading-7 shadow-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-              <span className="tp-save-indicator tp-save-indicator--local">
-                حفظ تلقائي محلي لكل امتحان على حدة
-              </span>
-              {missingStudentsNote.trim() && (
-                <span>{missingStudentsNote.trim().length} حرف</span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <GradeSmartNotesPanel
+          notes={gradeSmartNotes}
+          totalCount={gradeSmartNotesTotal}
+          categoryCounts={gradeSmartNoteCategoryCounts}
+          loading={gradeSmartNotesLoading}
+          error={gradeSmartNotesError}
+          onRetry={() => setGradeSmartNotesRefreshKey((key) => key + 1)}
+          manualNote={missingStudentsNote}
+          onManualNoteChange={setMissingStudentsNote}
+          onClearManualNote={() => {
+            void deleteGradeEntryMissingNote(selectedExam.id);
+            missingStudentsNoteLoadedRef.current = "";
+            setMissingStudentsNote("");
+          }}
+        />
       )}
 
       {!selectedExam && (
@@ -2298,18 +2321,44 @@ export function GradeEntryView() {
                       : null;
                   const isSaving = Boolean(savingRows[student.id]);
                   const explicitSaveState = rowSaveStates[student.id];
+                  const rowSmartNote = latestSmartNoteByStudentId.get(student.id);
                   const savePhase: GradeRowSavePhase = isSaving
                     ? "saving"
-                    : explicitSaveState?.phase || (entered ? "saved" : "idle");
+                    : explicitSaveState?.phase ||
+                      (rowSmartNote?.status === "PENDING"
+                        ? "pending"
+                        : rowSmartNote?.category === "GRACE_SCORED" && entered
+                          ? "noncounted"
+                          : entered
+                            ? "saved"
+                            : "idle");
                   const examBeforeRegistration =
                     !isExamOnOrAfterStudentRegistration(student, selectedExam);
-                  const canEdit =
-                    canEditGradeForStudent(student.id) && !examBeforeRegistration;
-                  const rowLocked = Boolean(
-                    !leave && entered && !editableRows[student.id],
+                  const canEditPersistedGrade =
+                    canEditGradeForStudent(student.id) &&
+                    !examBeforeRegistration &&
+                    !leave &&
+                    student.status !== "مفصول";
+                  const protectedNumericCapture = Boolean(
+                    leave ||
+                      examBeforeRegistration ||
+                      student.status === "مفصول",
                   );
-                  const controlsDisabled =
-                    Boolean(leave) || !canEdit || rowLocked;
+                  const rowLocked = Boolean(
+                    entered &&
+                      !protectedNumericCapture &&
+                      !editableRows[student.id],
+                  );
+                  const numericEntryMode =
+                    protectedNumericCapture || draft.status === "درجة";
+                  const numericInputDisabled =
+                    rowLocked ||
+                    (!canEditPersistedGrade && !protectedNumericCapture);
+                  const structuredControlsDisabled =
+                    rowLocked || !canEditPersistedGrade;
+                  const notesInputDisabled =
+                    rowLocked ||
+                    (!canEditPersistedGrade && !protectedNumericCapture);
                   return (
                     <div
                       key={student.id}
@@ -2340,17 +2389,27 @@ export function GradeEntryView() {
                             )}
                           {student.status === "مفصول" && (
                             <Badge
-                              variant={canEdit ? "secondary" : "destructive"}
+                              variant={
+                                canEditPersistedGrade ? "secondary" : "destructive"
+                              }
                               className="text-[10px]"
                             >
-                              {canEdit
+                              {canEditPersistedGrade
                                 ? "مفصول - يمكن تصحيح سبب الفصل"
-                                : "مفصول - إدخال مقفل"}
+                                : "مفصول - أي رقم سيُعلّق للمراجعة"}
                             </Badge>
                           )}
                           {studentHasManualReactivation(student.id) && (
                             <Badge variant="outline" className="text-[10px]">
                               إعادة تفعيل يدوي
+                            </Badge>
+                          )}
+                          {rowSmartNote?.status === "PENDING" && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-300 bg-amber-50 text-[10px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                            >
+                              درجة معلّقة: {rowSmartNote.score ?? "—"}
                             </Badge>
                           )}
                         </div>
@@ -2360,7 +2419,9 @@ export function GradeEntryView() {
                         {grade && (
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                             <Badge variant="outline" className="text-[10px]">
-                              الدرجة موجودة
+                              {grade.status === "درجة"
+                                ? "درجة محفوظة"
+                                : `حالة النظام: ${grade.status}`}
                             </Badge>
                             <span>
                               وقت الإدخال: {formatGradeEntryTimestamp(grade.createdAt)}
@@ -2392,12 +2453,15 @@ export function GradeEntryView() {
                         {examBeforeRegistration && (
                           <p className="mt-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
                             هذا الامتحان يسبق تاريخ تسجيل الطالب؛ حالته «قبل
-                            تسجيل الطالب» ولا تقبل درجة أو غياباً ولا تخصم منه.
+                            تسجيل الطالب» لا تقبل درجة أو غياباً رسمياً. يمكنك
+                            تدوين الرقم، وسيحفظه النظام كدرجة معلّقة للمراجعة دون
+                            احتساب.
                           </p>
                         )}
                         {leave && (
                           <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-300">
-                            الطالب مجاز لهذا الامتحان ولا يمكن إدخال درجة له
+                            الطالب مجاز لهذا الامتحان. أي رقم تدخله سيُحفظ كدرجة
+                            معلّقة للمراجعة دون احتساب
                             {leave.reason ? `: ${leave.reason}` : ""}
                           </p>
                         )}
@@ -2420,18 +2484,12 @@ export function GradeEntryView() {
                         ref={(element) => {
                           gradeInputRefs.current[student.id] = element;
                         }}
-                        type={draft.status === "درجة" ? "number" : "text"}
+                        type={numericEntryMode ? "number" : "text"}
                         min={0}
                         max={selectedExam.fullMark}
                         step={1}
-                        disabled={controlsDisabled || draft.status !== "درجة"}
-                        value={
-                          !leave
-                            ? draft.status === "درجة"
-                              ? draft.score
-                              : draft.status
-                            : ""
-                        }
+                        disabled={numericInputDisabled}
+                        value={numericEntryMode ? draft.score : draft.status}
                         onChange={(e) => {
                           const nextScore = normalizeGradeScoreInput(
                             e.target.value,
@@ -2465,7 +2523,7 @@ export function GradeEntryView() {
                           }
                         }}
                         placeholder={
-                          draft.status === "درجة"
+                          numericEntryMode
                             ? `0 - ${selectedExam.fullMark}`
                             : draft.status
                         }
@@ -2474,7 +2532,7 @@ export function GradeEntryView() {
 
                       <Select
                         value={draft.status}
-                        disabled={controlsDisabled}
+                        disabled={structuredControlsDisabled}
                         onValueChange={(value) => {
                           const nextStatus = value as DraftGrade["status"];
                           const nextDraft = {
@@ -2501,7 +2559,7 @@ export function GradeEntryView() {
 
                       <Input
                         value={draft.notes}
-                        disabled={controlsDisabled}
+                        disabled={notesInputDisabled}
                         onChange={(e) =>
                           updateDraft(student.id, { notes: e.target.value })
                         }
@@ -2542,17 +2600,26 @@ export function GradeEntryView() {
                               ? "tp-save-indicator--saving"
                               : savePhase === "saved"
                                 ? "tp-save-indicator--saved"
-                                : ""
+                                : savePhase === "pending"
+                                  ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+                                  : savePhase === "noncounted"
+                                    ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
+                                    : ""
                           }`}
                         >
                           {savePhase === "saving"
                             ? "جاري الحفظ"
-                            : leave
-                              ? "الطالب مجاز"
+                            : savePhase === "pending"
+                              ? explicitSaveState?.message || "درجة معلّقة"
+                              : savePhase === "noncounted"
+                                ? explicitSaveState?.message ||
+                                  "محفوظة للمتابعة — غير محتسبة"
                               : savePhase === "error"
                                 ? explicitSaveState?.message || "غير محفوظ — أعد المحاولة"
                                 : savePhase === "dirty"
                                   ? explicitSaveState?.message || "تعديل غير محفوظ"
+                                  : leave
+                                    ? "الطالب مجاز — الرقم سيُعلّق"
                                   : savePhase === "idle" && entered
                                     ? "جاهز للتعديل"
                                     : savedRows[student.id] ||
@@ -2562,7 +2629,7 @@ export function GradeEntryView() {
                           <Button
                             size="sm"
                             variant="secondary"
-                            disabled={!canEdit}
+                            disabled={!canEditPersistedGrade}
                             onClick={() => {
                               setSavedRows((prev) => {
                                 const next = { ...prev };
@@ -2603,9 +2670,17 @@ export function GradeEntryView() {
                             className="tp-save-manual-button"
                             title="حفظ بيانات هذا الطالب مباشرة"
                             onClick={() => void saveGrade(student.id)}
-                            disabled={Boolean(leave) || !canEdit || isSaving}
+                            disabled={
+                              (!canEditPersistedGrade &&
+                                !protectedNumericCapture) ||
+                              isSaving
+                            }
                           >
-                            {isSaving ? "جارٍ الحفظ..." : "حفظ الآن"}
+                            {isSaving
+                              ? "جارٍ الحفظ..."
+                              : protectedNumericCapture
+                                ? "حفظ كدرجة معلّقة"
+                                : "حفظ الآن"}
                           </Button>
                         )}
                       </div>

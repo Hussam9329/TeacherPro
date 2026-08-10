@@ -15,6 +15,7 @@ import { db } from "@/lib/db";
 import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
 import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 
 function readBatchSize(req: NextRequest): number {
   const raw = new URL(req.url).searchParams.get("batchSize");
@@ -243,32 +244,61 @@ export async function PATCH(req: NextRequest) {
       const restoredStudents = sortedDismissed.slice(keep);
       const settlementAt = new Date();
       let recalculatedStudents = 0;
+      let migratedPendingGrades = 0;
+      let pendingGradeConflicts = 0;
 
       for (let index = 0; index < restoredStudents.length; index += 100) {
         const group = restoredStudents.slice(index, index + 100);
         const ids = group.map((student) => student.id);
-        await db.student.updateMany({
-          where: { id: { in: ids }, status: "مفصول" },
-          data: {
-            status: "نشط",
-            dismissalType: "",
-            dismissalReason: "",
-            dismissalNotes: "",
-          },
+        const migration = await withSerializableTransaction(async (tx) => {
+          const transitioning = await tx.student.findMany({
+            where: { id: { in: ids }, status: "مفصول" },
+            select: { id: true },
+          });
+          const transitioningIds = transitioning.map((student) => student.id);
+          if (!transitioningIds.length)
+            return { processed: 0, conflicts: 0 };
+
+          await tx.student.updateMany({
+            where: { id: { in: transitioningIds }, status: "مفصول" },
+            data: {
+              status: "نشط",
+              dismissalType: "",
+              dismissalReason: "",
+              dismissalNotes: "",
+            },
+          });
+          await tx.opportunityLog.createMany({
+            data: transitioningIds.map((studentId) => ({
+              id: `historical_settlement_${studentId}`,
+              studentId,
+              examId: null,
+              action: "إعادة تعيين",
+              amount: 1,
+              reason:
+                "تسوية تاريخية: تجاهل آثار الامتحانات السابقة للتسوية حتى عند تعديل درجاتها لاحقاً",
+              date: settlementAt,
+            })),
+            skipDuplicates: true,
+          });
+
+          let processed = 0;
+          let conflicts = 0;
+          for (const transitioningStudentId of transitioningIds) {
+            const migrated =
+              await migrateDismissedPendingGradesAfterActivation(
+                tx,
+                transitioningStudentId,
+                { name: "TeacherPro - التسوية الأكاديمية" },
+                settlementAt,
+              );
+            processed += migrated.processed;
+            conflicts += migrated.conflicts;
+          }
+          return { processed, conflicts };
         });
-        await db.opportunityLog.createMany({
-          data: ids.map((studentId) => ({
-            id: `historical_settlement_${studentId}`,
-            studentId,
-            examId: null,
-            action: "إعادة تعيين",
-            amount: 1,
-            reason:
-              "تسوية تاريخية: تجاهل آثار الامتحانات السابقة للتسوية حتى عند تعديل درجاتها لاحقاً",
-            date: settlementAt,
-          })),
-          skipDuplicates: true,
-        });
+        migratedPendingGrades += migration.processed;
+        pendingGradeConflicts += migration.conflicts;
       }
 
       const settlementStudentIds = Array.from(
@@ -290,6 +320,8 @@ export async function PATCH(req: NextRequest) {
         keptDismissed: keptStudents.length,
         restoredStudents: restoredStudents.length,
         recalculatedStudents,
+        migratedPendingGrades,
+        pendingGradeConflicts,
       };
       await writeRequestAuditLog(
         req,

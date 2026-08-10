@@ -245,6 +245,10 @@ type LeaveGradeBackupRow = {
   score: number | null;
   notes: string | null;
   academicAccountingChecked: boolean;
+  academicEffectExcluded: boolean;
+  academicEffectExclusionReason: string | null;
+  academicEffectExclusionSource: string | null;
+  smartNoteId: string | null;
   gradeCreatedAt: Date | null;
 };
 
@@ -276,6 +280,10 @@ async function backupGradesForLeave(
       score: true,
       notes: true,
       academicAccountingChecked: true,
+      academicEffectExcluded: true,
+      academicEffectExclusionReason: true,
+      academicEffectExclusionSource: true,
+      smartNoteId: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -292,6 +300,10 @@ async function backupGradesForLeave(
         "score",
         "notes",
         "academicAccountingChecked",
+        "academicEffectExcluded",
+        "academicEffectExclusionReason",
+        "academicEffectExclusionSource",
+        "smartNoteId",
         "gradeCreatedAt",
         "gradeUpdatedAt"
       )
@@ -304,6 +316,10 @@ async function backupGradesForLeave(
         ${grade.score},
         ${grade.notes},
         ${grade.academicAccountingChecked},
+        ${grade.academicEffectExcluded},
+        ${grade.academicEffectExclusionReason},
+        ${grade.academicEffectExclusionSource},
+        ${grade.smartNoteId},
         ${grade.createdAt},
         ${grade.updatedAt}
       )
@@ -312,6 +328,10 @@ async function backupGradesForLeave(
         "score" = EXCLUDED."score",
         "notes" = EXCLUDED."notes",
         "academicAccountingChecked" = EXCLUDED."academicAccountingChecked",
+        "academicEffectExcluded" = EXCLUDED."academicEffectExcluded",
+        "academicEffectExclusionReason" = EXCLUDED."academicEffectExclusionReason",
+        "academicEffectExclusionSource" = EXCLUDED."academicEffectExclusionSource",
+        "smartNoteId" = EXCLUDED."smartNoteId",
         "gradeCreatedAt" = EXCLUDED."gradeCreatedAt",
         "gradeUpdatedAt" = EXCLUDED."gradeUpdatedAt"
     `;
@@ -379,6 +399,10 @@ async function restoreGradesForLeave(
       "score",
       "notes",
       "academicAccountingChecked",
+      "academicEffectExcluded",
+      "academicEffectExclusionReason",
+      "academicEffectExclusionSource",
+      "smartNoteId",
       "gradeCreatedAt"
     FROM "StudentLeaveGradeBackup"
     WHERE "leaveId" = ${leaveId}
@@ -437,6 +461,10 @@ async function restoreGradesForLeave(
         score: backup.status === "درجة" ? backup.score : null,
         notes: backup.notes,
         academicAccountingChecked: backup.academicAccountingChecked,
+        academicEffectExcluded: backup.academicEffectExcluded,
+        academicEffectExclusionReason: backup.academicEffectExclusionReason,
+        academicEffectExclusionSource: backup.academicEffectExclusionSource,
+        smartNoteId: backup.smartNoteId,
       },
       create: {
         studentId: backup.studentId,
@@ -445,6 +473,10 @@ async function restoreGradesForLeave(
         score: backup.status === "درجة" ? backup.score : null,
         notes: backup.notes,
         academicAccountingChecked: backup.academicAccountingChecked,
+        academicEffectExcluded: backup.academicEffectExcluded,
+        academicEffectExclusionReason: backup.academicEffectExclusionReason,
+        academicEffectExclusionSource: backup.academicEffectExclusionSource,
+        smartNoteId: backup.smartNoteId,
         ...(backup.gradeCreatedAt ? { createdAt: backup.gradeCreatedAt } : {}),
       },
     });

@@ -2,8 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission } from "@/lib/server-auth";
-import { db } from "@/lib/db";
+import { getAuthPrincipal, requirePermission } from "@/lib/server-auth";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withFollowupTables } from "@/lib/followup-schema";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
@@ -19,6 +18,7 @@ import {
 import { attachStudentOpportunitySnapshotsWithClient } from "@/lib/student-opportunity-snapshot-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { buildBulkOpportunityPreview } from "@/lib/bulk-opportunity-preview-server";
+import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 
 type StudentUpdatePayload = {
   id?: unknown;
@@ -173,6 +173,7 @@ async function handleFilterBasedBulkAdjust(
   req: NextRequest,
   body: Record<string, unknown>,
 ) {
+  const principal = await getAuthPrincipal(req);
   const actionType = body.actionType === "deduct" ? "deduct" : "add";
   const amount = normalizePositiveInt(body.amount, 1);
   const signedAmount = actionType === "deduct" ? -amount : amount;
@@ -366,6 +367,22 @@ async function handleFilterBasedBulkAdjust(
           }
         }
 
+        const pendingGradeMigrations: Array<
+          Awaited<
+            ReturnType<typeof migrateDismissedPendingGradesAfterActivation>
+          >
+        > = [];
+        for (const reactivatedStudentId of reactivationStudentIds) {
+          pendingGradeMigrations.push(
+            await migrateDismissedPendingGradesAfterActivation(
+              tx,
+              reactivatedStudentId,
+              { id: principal?.id, name: principal?.name },
+              now,
+            ),
+          );
+        }
+
         const academicRecalculation = appliedStudentIds.length
           ? await recalculateStudentsAcademicState(appliedStudentIds, { tx })
           : null;
@@ -376,6 +393,14 @@ async function handleFilterBasedBulkAdjust(
           savedOpportunityLogs: opportunityLogs.length,
           savedStudentNotes: studentNotes.length,
           reactivatedStudents: reactivationStudentIds.length,
+          migratedPendingGrades: pendingGradeMigrations.reduce(
+            (total, migration) => total + migration.processed,
+            0,
+          ),
+          pendingGradeConflicts: pendingGradeMigrations.reduce(
+            (total, migration) => total + migration.conflicts,
+            0,
+          ),
           totalMatching,
           eligibleWithActiveChapter,
           noActiveChapter,
@@ -476,6 +501,7 @@ export async function POST(req: NextRequest) {
     ) {
       return handleFilterBasedBulkAdjust(req, body as Record<string, unknown>);
     }
+    const principal = await getAuthPrincipal(req);
 
     const students = normalizeStudentUpdates(body.students);
     const opportunityLogs = normalizeOpportunityLogs(body.opportunityLogs);
@@ -487,7 +513,7 @@ export async function POST(req: NextRequest) {
 
     const result = await withFollowupTables(
       async () =>
-        db.$transaction(async (tx) => {
+        withSerializableTransaction(async (tx) => {
           const allStudentIds = Array.from(
             new Set(
               [
@@ -517,6 +543,18 @@ export async function POST(req: NextRequest) {
               .filter((student) => student.status !== "مؤرشف")
               .map((student) => student.id),
           );
+          const requestedActiveStudentIds = new Set(
+            students
+              .filter((student) => student.status === "نشط")
+              .map((student) => student.id),
+          );
+          const reactivationCandidates = existingStudents
+            .filter(
+              (student) =>
+                student.status === "مفصول" &&
+                requestedActiveStudentIds.has(student.id),
+            )
+            .map((student) => student.id);
           let updatedStudents = 0;
           const modifiableStudents = existingStudents.filter(
             (student) => student.status !== "مؤرشف",
@@ -672,6 +710,37 @@ export async function POST(req: NextRequest) {
             ? await recalculateStudentsAcademicState(recalculationIds, { tx })
             : null;
 
+          // The legacy payload can still carry an explicit dismissed→active
+          // transition. Resolve pending dismissed attempts only after the
+          // recalculation confirms that the transaction leaves the student
+          // active; a transient update that is immediately re-dismissed must
+          // not consume the pending note.
+          const reactivatedStudentIds = reactivationCandidates.length
+            ? (
+                await tx.student.findMany({
+                  where: {
+                    id: { in: reactivationCandidates },
+                    status: "نشط",
+                  },
+                  select: { id: true },
+                })
+              ).map((student) => student.id)
+            : [];
+          const pendingGradeMigrations: Array<
+            Awaited<
+              ReturnType<typeof migrateDismissedPendingGradesAfterActivation>
+            >
+          > = [];
+          for (const reactivatedStudentId of reactivatedStudentIds) {
+            pendingGradeMigrations.push(
+              await migrateDismissedPendingGradesAfterActivation(
+                tx,
+                reactivatedStudentId,
+                { id: principal?.id, name: principal?.name },
+              ),
+            );
+          }
+
           return {
             updatedStudents,
             savedOpportunityLogs: safeOpportunityLogs.length,
@@ -680,6 +749,15 @@ export async function POST(req: NextRequest) {
               allStudentIds.length - existingStudentIds.size,
             skippedArchivedStudents:
               existingStudentIds.size - modifiableStudentIds.size,
+            reactivatedStudents: reactivatedStudentIds.length,
+            migratedPendingGrades: pendingGradeMigrations.reduce(
+              (total, migration) => total + migration.processed,
+              0,
+            ),
+            pendingGradeConflicts: pendingGradeMigrations.reduce(
+              (total, migration) => total + migration.conflicts,
+              0,
+            ),
             academicRecalculation,
           };
         }),
@@ -696,6 +774,9 @@ export async function POST(req: NextRequest) {
         savedStudentNotes: result.savedStudentNotes,
         skippedMissingStudents: result.skippedMissingStudents,
         skippedArchivedStudents: result.skippedArchivedStudents,
+        reactivatedStudents: result.reactivatedStudents,
+        migratedPendingGrades: result.migratedPendingGrades,
+        pendingGradeConflicts: result.pendingGradeConflicts,
         recalculatedStudents:
           result.academicRecalculation?.students?.length || 0,
       },

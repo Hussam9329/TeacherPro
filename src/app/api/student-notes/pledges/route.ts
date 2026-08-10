@@ -9,6 +9,7 @@ import { Prisma } from "@prisma/client";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
@@ -526,6 +527,14 @@ export async function POST(req: NextRequest) {
           })
         : student;
 
+      const pendingGradeMigration = shouldReactivate
+        ? await migrateDismissedPendingGradesAfterActivation(
+            tx,
+            studentId,
+            { id: principal.id, name: principal.name },
+          )
+        : null;
+
       const reactivationLog = shouldReactivate
         ? await tx.opportunityLog.create({
             data: {
@@ -586,6 +595,7 @@ export async function POST(req: NextRequest) {
         actionNote,
         opportunityLogs: [reactivationLog, finalChanceLog].filter(Boolean),
         reactivated: shouldReactivate,
+        pendingGradeMigration,
       };
     });
 

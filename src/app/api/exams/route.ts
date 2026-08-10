@@ -521,6 +521,7 @@ export async function DELETE(req: NextRequest) {
         telegramSubmissionCount,
         opportunityLogCount,
         missingNoteCount,
+        smartNoteCount,
         leaveBackupCount,
       ] = await Promise.all([
         tx.exam.findUnique({ where: { id }, select: { id: true, name: true } }),
@@ -531,6 +532,7 @@ export async function DELETE(req: NextRequest) {
         tx.telegramExamSubmission.count({ where: { examId: id } }),
         tx.opportunityLog.count({ where: { examId: id } }),
         tx.gradeEntryMissingNote.count({ where: { examId: id } }),
+        tx.gradeSmartNote.count({ where: { examId: id } }),
         tx.studentLeaveGradeBackup.count({ where: { examId: id } }),
       ]);
       if (!exam) return { notFound: true } as const;
@@ -542,6 +544,7 @@ export async function DELETE(req: NextRequest) {
         ['مستلمات تيليجرام', telegramSubmissionCount],
         ['حركات فرص', opportunityLogCount],
         ['ملاحظات إدخال', missingNoteCount],
+        ['ملاحظات درجات ذكية', smartNoteCount],
         ['نسخ درجات الإجازات', leaveBackupCount],
       ] as const;
       const blockers = relationCounts.filter(([, count]) => count > 0);

@@ -280,7 +280,16 @@ export async function DELETE(req: NextRequest) {
       // 2. Optionally delete the associated Grade
       if (deleteGrade) {
         const deletedGrade = await tx.grade.deleteMany({
-          where: { studentId: sheet.studentId, examId: sheet.examId },
+          where: {
+            studentId: sheet.studentId,
+            examId: sheet.examId,
+            NOT: {
+              academicEffectExcluded: true,
+              academicEffectExclusionSource: {
+                startsWith: "GradeSmartNote:DISMISSED_PENDING:",
+              },
+            },
+          },
         });
         gradeDeleted = deletedGrade.count > 0;
       }

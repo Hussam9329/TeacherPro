@@ -25,6 +25,10 @@ const GRADE_SELECT = {
   score: true,
   notes: true,
   academicAccountingChecked: true,
+  academicEffectExcluded: true,
+  academicEffectExclusionReason: true,
+  academicEffectExclusionSource: true,
+  smartNoteId: true,
   createdAt: true,
   updatedAt: true,
   exam: {

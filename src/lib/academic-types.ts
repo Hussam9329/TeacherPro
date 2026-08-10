@@ -61,6 +61,9 @@ export interface AcademicGrade {
   status: GradeStatus;
   score: number | null;
   notes?: string | null;
+  academicEffectExcluded?: boolean;
+  academicEffectExclusionReason?: string | null;
+  academicEffectExclusionSource?: string | null;
   createdAt: string;
   updatedAt: string;
 }

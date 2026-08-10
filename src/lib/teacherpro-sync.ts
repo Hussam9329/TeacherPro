@@ -370,7 +370,8 @@ export function inferTeacherProScopesFromEndpoint(endpoint: string): TeacherProS
   const scopes = new Set<TeacherProSyncScope>();
   const add = (items: TeacherProSyncScope[]) => items.forEach((item) => scopes.add(item));
 
-  if (path.includes("grade-entry-missing-notes")) add(["grade-entry-notes", "grades", "exams"]);
+  if (path.includes("grade-smart-notes")) add(["grade-entry-notes", "grades", "students", "exams", "dashboard"]);
+  else if (path.includes("grade-entry-missing-notes")) add(["grade-entry-notes", "grades", "exams"]);
   else if (path.includes("grades")) add(["grades", "students", "opportunities", "dashboard"]);
   else if (path.includes("students")) add(["students", "grades", "opportunities", "dismissed", "dashboard"]);
   else if (path.includes("opportunity-logs")) add(["opportunities", "opportunity-logs", "students", "dashboard"]);

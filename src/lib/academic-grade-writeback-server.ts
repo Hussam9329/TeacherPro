@@ -37,6 +37,10 @@ export interface AcademicGradeWritebackResult {
     score: number | null;
     notes: string | null;
     academicAccountingChecked: boolean;
+    academicEffectExcluded: boolean;
+    academicEffectExclusionReason: string | null;
+    academicEffectExclusionSource: string | null;
+    smartNoteId: string | null;
     createdAt: Date;
     updatedAt: Date;
   };

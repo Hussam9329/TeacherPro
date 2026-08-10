@@ -40,6 +40,7 @@ type GradeRow = {
   studentId: string;
   status: string;
   score: number | null;
+  academicEffectExcluded: boolean;
   student: StudentRow;
 };
 
@@ -156,6 +157,7 @@ export async function GET(req: NextRequest) {
           studentId: true,
           status: true,
           score: true,
+          academicEffectExcluded: true,
           student: {
             select: {
               id: true,

@@ -1,6 +1,8 @@
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import {
   isAutomaticOpportunityLog,
   recalculateAcademicState,
@@ -127,6 +129,9 @@ function mapGrade(grade: {
   status: string;
   score: number | null;
   notes: string | null;
+  academicEffectExcluded?: boolean;
+  academicEffectExclusionReason?: string | null;
+  academicEffectExclusionSource?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): AcademicGrade {
@@ -144,6 +149,9 @@ function mapGrade(grade: {
         : "درجة",
     score: grade.score === null ? null : Number(grade.score),
     notes: grade.notes,
+    academicEffectExcluded: Boolean(grade.academicEffectExcluded),
+    academicEffectExclusionReason: grade.academicEffectExclusionReason ?? null,
+    academicEffectExclusionSource: grade.academicEffectExclusionSource ?? null,
     createdAt: dateString(grade.createdAt),
     updatedAt: dateString(grade.updatedAt),
   };
@@ -370,6 +378,10 @@ async function loadAcademicStateForStudents(
         status: true,
         score: true,
         notes: true,
+        academicEffectExcluded: true,
+        academicEffectExclusionReason: true,
+        academicEffectExclusionSource: true,
+        smartNoteId: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -661,6 +673,12 @@ export async function recalculateStudentsAcademicState(
   rawStudentIds: Array<string | null | undefined>,
   options: { tx?: Prisma.TransactionClient } = {},
 ): Promise<AcademicServerRecalculationResult> {
+  const transaction = options.tx;
+  if (!transaction) {
+    return withSerializableTransaction((tx) =>
+      recalculateStudentsAcademicState(rawStudentIds, { tx }),
+    );
+  }
   const studentIds = uniqueIds(rawStudentIds);
   if (studentIds.length === 0) {
     return {
@@ -671,7 +689,7 @@ export async function recalculateStudentsAcademicState(
     };
   }
 
-  const client = options.tx || db;
+  const client = transaction;
   await repairAcademicBaselinesForStudents(client, studentIds);
   const state = await loadAcademicStateForStudents(client, studentIds);
   const recalculableStudentIds = state.students
@@ -689,7 +707,32 @@ export async function recalculateStudentsAcademicState(
     state,
     new Set(recalculableStudentIds),
   );
-  return persistAcademicRecalculation(client, recalculableStudentIds, result);
+  const previouslyDismissedStudentIds = new Set(
+    state.students
+      .filter((student) => student.status === "مفصول")
+      .map((student) => student.id),
+  );
+  const reactivatedStudentIds = result.students
+    .filter(
+      (student) =>
+        student.status === "نشط" &&
+        previouslyDismissedStudentIds.has(student.id),
+    )
+    .map((student) => student.id);
+
+  const persisted = await persistAcademicRecalculation(
+    client,
+    recalculableStudentIds,
+    result,
+  );
+  for (const reactivatedStudentId of reactivatedStudentIds) {
+    await migrateDismissedPendingGradesAfterActivation(
+      transaction,
+      reactivatedStudentId,
+      { name: "TeacherPro - إعادة الاحتساب الأكاديمي" },
+    );
+  }
+  return persisted;
 }
 
 export async function recalculateStudentsForExam(

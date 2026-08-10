@@ -238,6 +238,10 @@ function examPenaltyText(exam?: Exam): string {
 
 function gradeImpactLabel(kind: GradeClassificationKind, grade: Grade, exam?: Exam): string {
   if (!exam) return "تعذر تحديد قاعدة الامتحان لأن الامتحان محذوف.";
+  if (kind === "academic-effect-excluded")
+    return grade.academicEffectExclusionReason
+      ? `محفوظة للتوثيق فقط بلا أي خصم أو فصل: ${grade.academicEffectExclusionReason}`
+      : "محفوظة للتوثيق فقط بلا أي خصم أو فصل.";
   if (kind === "excused") return "لم يتم الخصم: الطالب لديه إجازة تغطي هذا الامتحان.";
   if (kind === "before-registration") return "لم يتم الخصم: الامتحان قبل تاريخ تسجيل الطالب.";
   if (kind === "unavailable-exam") return "لم يتم الاحتساب: الامتحان غير متاح حالياً بحسب التفعيل أو الموعد.";
@@ -1044,6 +1048,7 @@ export function StudentProfileDialog({
                           {grade.notes ? <p className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
                         </div>
                         <div className="flex flex-wrap gap-1">
+                          {grade.academicEffectExcluded && <Badge className="w-fit" variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>}
                           {withinGrace && <Badge className="w-fit" variant="outline">ضمن السماح</Badge>}
                           {!withinGrace && withoutDiscount && <Badge className="w-fit" variant="secondary">بدون خصم</Badge>}
                           <Badge className="w-fit" variant={withinGrace || withoutDiscount ? "outline" : grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : "secondary"}>{grade.status}</Badge>
@@ -1075,9 +1080,10 @@ export function StudentProfileDialog({
                     );
                     return (
                       <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
-                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{withinGrace && <Badge variant="outline">ضمن السماح</Badge>}{!withinGrace && withoutDiscount && <Badge variant="secondary">بدون خصم</Badge>}<Badge>{grade.status}</Badge></div></div>
+                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{grade.academicEffectExcluded && <Badge variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>}{withinGrace && <Badge variant="outline">ضمن السماح</Badge>}{!withinGrace && withoutDiscount && <Badge variant="secondary">بدون خصم</Badge>}<Badge>{grade.status}</Badge></div></div>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{formatGradeScore(grade, exam, "—")}</b><p>درجة الطالب</p></div></div>
                         {grade.notes ? <p className="mt-3 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
+                        {grade.academicEffectExcluded && grade.academicEffectExclusionReason ? <p className="mt-2 text-xs font-medium text-sky-700 dark:text-sky-300">سبب عدم الاحتساب: {grade.academicEffectExclusionReason}</p> : null}
                       </div>
                     );
                   })}

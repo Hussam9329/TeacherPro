@@ -8,6 +8,7 @@ import { ARCHIVED_STUDENT_STATUS } from "@/lib/student-delete-impact";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 import { validateDismissalType, STUDENT_STATUS_DISMISSED } from "@/lib/student-status-enums";
 import {
   buildStudentMutationToken,
@@ -451,6 +452,13 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      const pendingGradeMigration =
+        await migrateDismissedPendingGradesAfterActivation(
+          tx,
+          studentId,
+          { id: principal.id, name: principal.name },
+        );
+
       const reactivationLog = await tx.opportunityLog.create({
         data: {
           studentId,
@@ -505,6 +513,7 @@ export async function POST(req: NextRequest) {
         student: updatedStudent,
         opportunityLogs: [reactivationLog, finalChanceLog].filter(Boolean),
         studentNotes: [studentNote],
+        pendingGradeMigration,
       };
     });
 

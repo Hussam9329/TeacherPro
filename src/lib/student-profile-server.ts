@@ -248,6 +248,8 @@ export function buildStudentProfileDataVersion(input: {
     opportunitySnapshot,
     grades: orderedFacts(input.grades, [
       "id", "examId", "status", "score", "notes", "academicAccountingChecked",
+      "academicEffectExcluded", "academicEffectExclusionReason",
+      "academicEffectExclusionSource", "smartNoteId",
       "createdAt", "updatedAt", "exam.id", "exam.name", "exam.type", "exam.date",
       "exam.fullMark", "exam.passMark", "exam.discountMark", "exam.opportunitiesPenalty",
       "exam.dismissalGrade", "exam.noDiscount", "exam.active",

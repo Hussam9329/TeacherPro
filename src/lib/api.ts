@@ -1183,6 +1183,52 @@ export interface GradeEntrySheetResponse {
   source: "database";
 }
 
+export type GradeSmartNoteCategory =
+  | "DISMISSED_PENDING"
+  | "GRACE_SCORED"
+  | "BEFORE_REGISTRATION_PENDING"
+  | "LEAVE_PENDING";
+
+export type GradeSmartNoteStatus =
+  | "PENDING"
+  | "PROCESSED"
+  | "CONFLICT"
+  | "REJECTED";
+
+export interface GradeSmartNoteRecord {
+  id: string;
+  category: GradeSmartNoteCategory;
+  status: GradeSmartNoteStatus;
+  examId: string;
+  studentId: string;
+  examNameSnapshot: string;
+  examDateSnapshot: string;
+  studentNameSnapshot: string;
+  studentCodeSnapshot: string;
+  score: number | null;
+  reason: string;
+  attemptedById?: string | null;
+  attemptedByName?: string | null;
+  attemptedAt: string;
+  resolution?: string | null;
+  resolutionById?: string | null;
+  resolutionByName?: string | null;
+  resolvedAt?: string | null;
+  resolutionGradeId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GradeSmartNotesResponse {
+  notes: GradeSmartNoteRecord[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  statusCounts: Partial<Record<GradeSmartNoteStatus, number>>;
+  categoryCounts: Partial<Record<GradeSmartNoteCategory, number>>;
+}
+
 interface PaginatedApiEnvelope extends Record<string, unknown> {
   total?: number;
   totalCount?: number;
@@ -1559,6 +1605,33 @@ export const gradeEntrySheetApi = {
       `grades/entry-sheet?examId=${encodeURIComponent(examId)}`,
       options,
     ),
+};
+
+export const gradeSmartNotesApi = {
+  list: (
+    query: {
+      examId?: string;
+      studentId?: string;
+      category?: GradeSmartNoteCategory;
+      status?: GradeSmartNoteStatus;
+      page?: number;
+      pageSize?: number;
+    } = {},
+    options: ApiGetOptions = {},
+  ) => {
+    const queryString = buildQueryString({
+      examId: query.examId,
+      studentId: query.studentId,
+      category: query.category,
+      status: query.status,
+      page: query.page ?? 1,
+      pageSize: query.pageSize ?? 100,
+    });
+    return apiGet<GradeSmartNotesResponse>(
+      `grade-smart-notes${queryString ? `?${queryString}` : ""}`,
+      options,
+    );
+  },
 };
 
 export const gradeApi = {

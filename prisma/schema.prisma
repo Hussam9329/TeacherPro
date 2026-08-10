@@ -87,6 +87,7 @@ model Student {
   telegramExamSubmissions TelegramExamSubmission[]
   studentLeaveGradeBackups StudentLeaveGradeBackup[]
   enrollmentArchives StudentEnrollmentArchive[]
+  gradeSmartNotes GradeSmartNote[]
 
   @@index([courseId])
   @@index([status])
@@ -120,6 +121,7 @@ model Exam {
   gradeEntryMissingNote GradeEntryMissingNote?
   examCourses ExamCourse[]
   studentLeaveGradeBackups StudentLeaveGradeBackup[]
+  gradeSmartNotes       GradeSmartNote[]
 
   @@index([type])
   @@index([date])
@@ -142,12 +144,17 @@ model Grade {
   score             Int?
   notes             String?
   academicAccountingChecked Boolean @default(false)
+  academicEffectExcluded Boolean @default(false)
+  academicEffectExclusionReason String?
+  academicEffectExclusionSource String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   studentId         String
   examId            String
   student           Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam              Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  smartNoteId       String?   @unique
+  smartNote         GradeSmartNote? @relation("GradeSmartNoteResolution", fields: [smartNoteId], references: [id], onDelete: SetNull)
   // Q88 FIX: back-relation for TelegramExamSubmission.gradeId FK.
   telegramSubmissions TelegramExamSubmission[]
 
@@ -155,6 +162,40 @@ model Grade {
   @@index([examId])
   @@index([status])
   @@index([updatedAt])
+}
+
+/// A structured, auditable capture of a grade attempt that either needs a
+/// later decision or was accepted under a non-accounting rule. It is separate
+/// from Grade so pending attempts can never affect opportunities/dismissal.
+model GradeSmartNote {
+  id                  String   @id @default(cuid())
+  category            String
+  status              String   @default("PENDING")
+  examId              String
+  studentId           String
+  examNameSnapshot    String   @default("")
+  examDateSnapshot    DateTime?
+  studentNameSnapshot String   @default("")
+  studentCodeSnapshot String   @default("")
+  score               Int?
+  reason              String   @default("")
+  attemptedById       String?
+  attemptedByName     String?
+  attemptedAt         DateTime @default(now())
+  resolution          String?
+  resolutionById      String?
+  resolutionByName    String?
+  resolvedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  exam                Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student             Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  resolutionGrade     Grade?   @relation("GradeSmartNoteResolution")
+
+  @@unique([examId, studentId, category])
+  @@index([status, category, updatedAt])
+  @@index([studentId, updatedAt])
+  @@index([examId, updatedAt])
 }
 
 model OpportunityLog {
@@ -336,6 +377,10 @@ model StudentLeaveGradeBackup {
   score                      Int?
   notes                      String?
   academicAccountingChecked  Boolean  @default(false)
+  academicEffectExcluded     Boolean  @default(false)
+  academicEffectExclusionReason String?
+  academicEffectExclusionSource String?
+  smartNoteId                String?
   gradeCreatedAt             DateTime?
   gradeUpdatedAt             DateTime?
   createdAt                  DateTime @default(now())

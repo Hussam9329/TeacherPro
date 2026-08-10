@@ -10,6 +10,7 @@ export type StudentDeleteImpactCounts = {
   opportunityLogs: number;
   correctionSheets: number;
   telegramSubmissions: number;
+  gradeSmartNotes: number;
 };
 
 export type StudentDeleteImpact = {
@@ -37,6 +38,7 @@ const impactLabels: Array<[keyof StudentDeleteImpactCounts, string]> = [
   ["opportunityLogs", "سجلات فرص"],
   ["correctionSheets", "أوراق تصحيح"],
   ["telegramSubmissions", "مستلمات بوت"],
+  ["gradeSmartNotes", "ملاحظات درجات ذكية"],
 ];
 
 export function buildStudentArchiveSummary(
@@ -67,6 +69,7 @@ export async function getStudentDeleteImpactInTransaction(
     opportunityLogs,
     correctionSheets,
     telegramSubmissions,
+    gradeSmartNotes,
   ] = await Promise.all([
     tx.grade.count({ where: { studentId } }),
     tx.studentLeave.count({ where: { studentId } }),
@@ -75,6 +78,7 @@ export async function getStudentDeleteImpactInTransaction(
     tx.opportunityLog.count({ where: { studentId } }),
     tx.correctionSheet.count({ where: { studentId } }),
     tx.telegramExamSubmission.count({ where: { studentId } }),
+    tx.gradeSmartNote.count({ where: { studentId } }),
   ]);
 
   const counts: StudentDeleteImpactCounts = {
@@ -85,6 +89,7 @@ export async function getStudentDeleteImpactInTransaction(
     opportunityLogs,
     correctionSheets,
     telegramSubmissions,
+    gradeSmartNotes,
   };
   const totalRelations = Object.values(counts).reduce(
     (sum, count) => sum + Number(count || 0),

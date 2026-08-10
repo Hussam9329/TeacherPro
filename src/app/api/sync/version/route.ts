@@ -37,10 +37,12 @@ type SyncVersionRow = {
   users: bigint;
   roles: bigint;
   auditlogs: bigint;
+  gradesmartnotes: bigint;
   gradesmax: Date | null;
   telegramsubmissionsmax: Date | null;
   missingnotesmax: Date | null;
   auditlogsmax: Date | null;
+  gradesmartnotesmax: Date | null;
 };
 
 function toNumber(value: unknown): number {
@@ -79,10 +81,12 @@ const SYNC_VERSION_SQL = `
     (SELECT COUNT(*) FROM "AppUser") AS users,
     (SELECT COUNT(*) FROM "Role") AS roles,
     (SELECT COUNT(*) FROM "AuditLog") AS auditlogs,
+    (SELECT COUNT(*) FROM "GradeSmartNote") AS gradesmartnotes,
     (SELECT MAX("updatedAt") FROM "Grade") AS gradesmax,
     COALESCE((SELECT MAX("updatedAt") FROM "TelegramExamSubmission"), NULL) AS telegramsubmissionsmax,
     COALESCE((SELECT MAX("updatedAt") FROM "GradeEntryMissingNote"), NULL) AS missingnotesmax,
-    (SELECT MAX("time") FROM "AuditLog") AS auditlogsmax
+    (SELECT MAX("time") FROM "AuditLog") AS auditlogsmax,
+    (SELECT MAX("updatedAt") FROM "GradeSmartNote") AS gradesmartnotesmax
 `;
 
 export async function GET(req: NextRequest) {
@@ -125,6 +129,7 @@ export async function GET(req: NextRequest) {
       users: toNumber(row.users),
       roles: toNumber(row.roles),
       auditLogs: toNumber(row.auditlogs),
+      gradeSmartNotes: toNumber(row.gradesmartnotes),
     };
 
     const maxDates: Record<string, string> = {
@@ -132,6 +137,7 @@ export async function GET(req: NextRequest) {
       telegramSubmissions: toIso(row.telegramsubmissionsmax),
       missingNotes: toIso(row.missingnotesmax),
       auditLogs: toIso(row.auditlogsmax),
+      gradeSmartNotes: toIso(row.gradesmartnotesmax),
     };
 
     const latestMs = Math.max(
@@ -183,6 +189,7 @@ async function fallbackSequentialQuery(): Promise<SyncVersionRow> {
     opportunityLogs, studentLeaves, studentCalls, studentNotes,
     correctionSheets, telegramSubmissions, users, roles, auditLogs,
     gradesMax, telegramMax, missingNotesMax, auditLogsMax,
+    gradeSmartNotes, gradeSmartNotesMax,
   ] = await Promise.all([
     safe(() => db.course.count(), 0),
     safe(() => db.chapter.count(), 0),
@@ -203,6 +210,8 @@ async function fallbackSequentialQuery(): Promise<SyncVersionRow> {
     safe(async () => (await db.telegramExamSubmission.aggregate({ _max: { updatedAt: true } }))._max.updatedAt, null),
     safe(async () => (await db.gradeEntryMissingNote.aggregate({ _max: { updatedAt: true } }))._max.updatedAt, null),
     safe(async () => (await db.auditLog.aggregate({ _max: { time: true } }))._max.time, null),
+    safe(() => db.gradeSmartNote.count(), 0),
+    safe(async () => (await db.gradeSmartNote.aggregate({ _max: { updatedAt: true } }))._max.updatedAt, null),
   ]);
 
   return {
@@ -212,7 +221,9 @@ async function fallbackSequentialQuery(): Promise<SyncVersionRow> {
     studentcalls: BigInt(studentCalls), studentnotes: BigInt(studentNotes),
     correctionsheets: BigInt(correctionSheets), telegramsubmissions: BigInt(telegramSubmissions),
     users: BigInt(users), roles: BigInt(roles), auditlogs: BigInt(auditLogs),
+    gradesmartnotes: BigInt(gradeSmartNotes),
     gradesmax: gradesMax, telegramsubmissionsmax: telegramMax,
     missingnotesmax: missingNotesMax, auditlogsmax: auditLogsMax,
+    gradesmartnotesmax: gradeSmartNotesMax,
   };
 }

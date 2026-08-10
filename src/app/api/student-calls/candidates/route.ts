@@ -73,6 +73,9 @@ type DbGradeLite = {
   score: number | null;
   notes: string | null;
   academicAccountingChecked: boolean;
+  academicEffectExcluded: boolean;
+  academicEffectExclusionReason: string | null;
+  academicEffectExclusionSource: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -497,6 +500,9 @@ export async function GET(req: NextRequest) {
         score: true,
         notes: true,
         academicAccountingChecked: true,
+        academicEffectExcluded: true,
+        academicEffectExclusionReason: true,
+        academicEffectExclusionSource: true,
         createdAt: true,
         updatedAt: true,
         student: {
@@ -625,6 +631,9 @@ export async function GET(req: NextRequest) {
                   score: true,
                   notes: true,
                   academicAccountingChecked: true,
+                  academicEffectExcluded: true,
+                  academicEffectExclusionReason: true,
+                  academicEffectExclusionSource: true,
                   createdAt: true,
                   updatedAt: true,
                 },

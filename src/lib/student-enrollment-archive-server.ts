@@ -27,6 +27,7 @@ export type StudentEnrollmentArchiveSummary = {
     correctionSheets: number;
     telegramExamSubmissions: number;
     studentLeaveGradeBackups: number;
+    gradeSmartNotes: number;
     auditLogs: number;
   };
 };
@@ -72,6 +73,7 @@ export async function archiveAndResetStudentEnrollment(
     correctionSheets,
     telegramExamSubmissions,
     studentLeaveGradeBackups,
+    gradeSmartNotes,
     activeCourseChapters,
     auditLogs,
   ] = await Promise.all([
@@ -117,6 +119,10 @@ export async function archiveAndResetStudentEnrollment(
       include: { exam: true },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     }),
+    tx.gradeSmartNote.findMany({
+      where: { studentId: input.studentId },
+      orderBy: [{ attemptedAt: "asc" }, { id: "asc" }],
+    }),
     tx.courseChapter.findMany({
       where: { courseId: student.courseId, active: true, archived: false },
       include: { chapter: true },
@@ -141,6 +147,7 @@ export async function archiveAndResetStudentEnrollment(
     correctionSheets: correctionSheets.length,
     telegramExamSubmissions: telegramExamSubmissions.length,
     studentLeaveGradeBackups: studentLeaveGradeBackups.length,
+    gradeSmartNotes: gradeSmartNotes.length,
     auditLogs: auditLogs.length,
   };
 
@@ -162,6 +169,7 @@ export async function archiveAndResetStudentEnrollment(
     correctionSheets,
     telegramExamSubmissions,
     studentLeaveGradeBackups,
+    gradeSmartNotes,
     auditLogs,
   };
 
@@ -190,6 +198,7 @@ export async function archiveAndResetStudentEnrollment(
   });
   await tx.correctionSheet.deleteMany({ where: { studentId: input.studentId } });
   await tx.grade.deleteMany({ where: { studentId: input.studentId } });
+  await tx.gradeSmartNote.deleteMany({ where: { studentId: input.studentId } });
   await tx.studentLeave.deleteMany({ where: { studentId: input.studentId } });
   await tx.studentCall.deleteMany({ where: { studentId: input.studentId } });
   await tx.opportunityLog.deleteMany({ where: { studentId: input.studentId } });

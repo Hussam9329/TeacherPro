@@ -279,6 +279,7 @@ export function affectedExamIdsForLeave(
 }
 
 export function gradeHasAcademicEffect(grade: AcademicGrade, exam: AcademicExam): boolean {
+  if (grade.academicEffectExcluded) return false;
   if (!isExamAvailableForEntry(exam)) return false;
   if (!isGradeEntered(grade, exam)) return false;
   if (grade.status === "غش") return true;
@@ -854,6 +855,7 @@ export function recalculateAcademicState(
     for (const grade of studentGrades) {
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
+      if (grade.academicEffectExcluded) continue;
       if (
         grade.status === "مجاز" ||
         String(grade.notes || "").startsWith("تسوية تاريخية بلا أثر:")

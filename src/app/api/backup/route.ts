@@ -24,10 +24,11 @@ type AnyDelegate = { upsert: (args: any) => Promise<any>; createMany: (args: any
 //  - v4 (legacy): missing TelegramExamSubmission, StudentLeaveGradeBackup,
 //    StudentEnrollmentArchive, GradeEntryMissingNote, PermissionCatalog;
 //    audit logs capped to last 500.
-//  - v5 (current): all 17 operational tables exported; audit logs unbounded.
+//  - v5: all legacy operational tables exported; audit logs unbounded.
+//  - v6 (current): adds structured GradeSmartNote records and Grade provenance.
 //    Safe to restore on v4+ databases (restore skips unknown tables).
 // ============================================================================
-const BACKUP_VERSION = 5;
+const BACKUP_VERSION = 6;
 
 const RESTORE_CONFIRMATION_TOKEN = 'RESTORE';
 
@@ -43,6 +44,7 @@ const RESTORE_ORDER = [
   'exams',
   'examCourses',
   'students',
+  'gradeSmartNotes',
   'grades',
   'opportunityLogs',
   'studentLeaves',
@@ -92,6 +94,7 @@ export async function GET(req: NextRequest) {
       studentEnrollmentArchives,
       gradeEntryMissingNotes,
       permissionCatalog,
+      gradeSmartNotes,
     ] = await Promise.all([
       db.course.findMany(),
       db.chapter.findMany(),
@@ -128,12 +131,13 @@ export async function GET(req: NextRequest) {
       findManyOrEmpty(db.studentEnrollmentArchive.findMany(), 'StudentEnrollmentArchive'),
       findManyOrEmpty(db.gradeEntryMissingNote.findMany(), 'GradeEntryMissingNote'),
       findManyOrEmpty(db.permissionCatalog.findMany(), 'PermissionCatalog'),
+      findManyOrEmpty(db.gradeSmartNote.findMany(), 'GradeSmartNote'),
     ]);
 
     return NextResponse.json({
       version: BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
-      tableCount: 20,
+      tableCount: 21,
       recordCounts: {
         courses: courses.length,
         chapters: chapters.length,
@@ -155,6 +159,7 @@ export async function GET(req: NextRequest) {
         studentEnrollmentArchives: studentEnrollmentArchives.length,
         gradeEntryMissingNotes: gradeEntryMissingNotes.length,
         permissionCatalog: permissionCatalog.length,
+        gradeSmartNotes: gradeSmartNotes.length,
       },
       courses,
       chapters,
@@ -177,6 +182,7 @@ export async function GET(req: NextRequest) {
       studentEnrollmentArchives,
       gradeEntryMissingNotes,
       permissionCatalog,
+      gradeSmartNotes,
     });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل البيانات');
@@ -383,6 +389,7 @@ async function collectTableCounts(): Promise<Record<string, number>> {
     ['exams', db.exam.count()],
     ['examCourses', db.examCourse.count()],
     ['students', db.student.count()],
+    ['gradeSmartNotes', safeCount(() => db.gradeSmartNote.count())],
     ['grades', db.grade.count()],
     ['opportunityLogs', db.opportunityLog.count()],
     ['studentLeaves', safeCount(() => db.studentLeave.count())],
@@ -691,6 +698,17 @@ async function restoreTable(
           ),
         );
         break;
+      case 'gradeSmartNotes':
+        await Promise.all(
+          batch.map((row) =>
+            upsertRecord(tx.gradeSmartNote, row as never, mode).then((r) => {
+              if (r === 'inserted') inserted++;
+              else if (r === 'updated') updated++;
+              else skipped++;
+            }),
+          ),
+        );
+        break;
       case 'correctionSheets':
         await Promise.all(
           batch.map((row) =>
@@ -754,6 +772,7 @@ const PRISMA_TABLE_NAMES: Record<string, string> = {
   exams: 'Exam',
   examCourses: 'ExamCourse',
   students: 'Student',
+  gradeSmartNotes: 'GradeSmartNote',
   grades: 'Grade',
   opportunityLogs: 'OpportunityLog',
   studentLeaves: 'StudentLeave',

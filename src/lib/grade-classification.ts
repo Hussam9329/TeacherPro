@@ -17,6 +17,7 @@ export type GradeStatusFilter =
 
 export type GradeClassificationKind =
   | "missing"
+  | "academic-effect-excluded"
   | "excused"
   | "grace-period"
   | "before-registration"
@@ -35,6 +36,9 @@ export type GradeClassificationKind =
 export type GradeLike = {
   status?: string | null;
   score?: number | null;
+  academicEffectExcluded?: boolean | null;
+  academicEffectExclusionReason?: string | null;
+  academicEffectExclusionSource?: string | null;
 };
 
 export type ExamLike = {
@@ -150,6 +154,7 @@ export function classifyGradeAcademicImpact(
   options: { student?: StudentGraceLike | null; leaves?: StudentLeaveLike[] } = {},
 ): GradeClassificationKind {
   const { student, leaves = [] } = options;
+  if (grade?.academicEffectExcluded) return "academic-effect-excluded";
   if (hasStudentLeaveForExam(leaves, exam)) return "excused";
   if (grade?.status === "مجاز") return "excused";
   if (!isGradeEnteredUnified(grade, exam)) return "missing";
@@ -189,7 +194,7 @@ export function classifyGradeAcademicImpact(
 }
 
 export function isProtectedGradeKind(kind: GradeClassificationKind): boolean {
-  return kind === "excused" || kind === "grace-period" || kind === "before-registration" || kind === "unavailable-exam" || kind === "missing" || kind === "no-discount-protected";
+  return kind === "academic-effect-excluded" || kind === "excused" || kind === "grace-period" || kind === "before-registration" || kind === "unavailable-exam" || kind === "missing" || kind === "no-discount-protected";
 }
 
 export function gradeMatchesStatusFilterUnified(
@@ -237,5 +242,6 @@ export function gradeKindForCalls(kind: GradeClassificationKind): "absent" | "di
   if (kind === "full-mark") return "full";
   if (kind === "passed") return "passed";
   if (kind === "missing") return "missing";
+  if (kind === "academic-effect-excluded") return "protected";
   return "protected";
 }
