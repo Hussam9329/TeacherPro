@@ -71,6 +71,7 @@ import {
   splitSelection,
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
+import { isStudentCurrentlyInGrace } from "@/lib/student-grace";
 import {
   examMatchesAcademicFilters,
   getAcademicCourseProgramFilterOptions,
@@ -731,10 +732,16 @@ export function GradeEntryView() {
 
   const getDraft = (studentId: string): DraftGrade => {
     const existing = getGrade(studentId);
+    const graceSmartNote = latestSmartNoteByStudentId.get(studentId);
+    const pendingGraceScore =
+      graceSmartNote?.category === "GRACE_SCORED" &&
+      graceSmartNote.status === "PENDING"
+        ? graceSmartNote.score
+        : null;
     return (
       drafts[studentId] || {
         status:
-          ["مجاز", "قبل تسجيل الطالب"].includes(
+          ["مجاز", "ضمن فترة السماح", "قبل تسجيل الطالب"].includes(
             String(existing?.status || ""),
           )
             ? "درجة"
@@ -742,6 +749,8 @@ export function GradeEntryView() {
         score:
           existing?.score !== null && existing?.score !== undefined
             ? String(existing.score)
+            : pendingGraceScore !== null && pendingGraceScore !== undefined
+              ? String(pendingGraceScore)
             : "",
         notes: existing?.notes || "",
       }
@@ -775,7 +784,40 @@ export function GradeEntryView() {
     if (!selectedExam) return false;
     const student = studentById.get(studentId);
     return Boolean(
-      student && isExamWithinStudentGracePeriod(student, selectedExam),
+      student &&
+        isStudentCurrentlyInGrace(student) &&
+        isExamWithinStudentGracePeriod(student, selectedExam),
+    );
+  };
+
+  const canCaptureGraceScoreDirectly = (studentId: string) => {
+    if (!isStudentInGraceForSelectedExam(studentId)) return false;
+    const existing = getGrade(studentId);
+    if (
+      existing?.status !== "درجة" ||
+      existing.academicEffectExcluded !== true
+    ) {
+      return true;
+    }
+
+    // توافق بيانات الإنتاج القديمة: كانت درجة السماح تُنشأ رسمياً ومستبعدة
+    // فوراً. نبقي إدخالها مباشراً ما دام السماح نشطاً، لكن لا نعمم ذلك على
+    // الدرجات التاريخية المستبعدة لأسباب أخرى.
+    const source = String(existing.academicEffectExclusionSource || "");
+    const graceSourcePrefix = "GradeSmartNote:GRACE_SCORED:";
+    if (!source.startsWith(graceSourcePrefix)) return false;
+
+    // المصدر لا يُكتب على Grade إلا عند معالجة GRACE_SCORED وربطها كسجل
+    // رسمي. وإذا كانت الملاحظة ضمن الصفحة المحمّلة نتحقق أيضاً من حالتها؛
+    // غيابها طبيعي لأن لوحة الملاحظات مجزأة ولا تجلب كل سجلات الامتحان.
+    const smartNoteId = source.slice(graceSourcePrefix.length);
+    const loadedSmartNote = gradeSmartNotes.find(
+      (note) => note.id === smartNoteId,
+    );
+    return (
+      !loadedSmartNote ||
+      (loadedSmartNote.category === "GRACE_SCORED" &&
+        loadedSmartNote.status === "PROCESSED")
     );
   };
 
@@ -902,7 +944,7 @@ export function GradeEntryView() {
       if (existing) {
         next[studentId] = {
           status:
-            ["مجاز", "قبل تسجيل الطالب"].includes(
+            ["مجاز", "ضمن فترة السماح", "قبل تسجيل الطالب"].includes(
               String(existing.status || ""),
             )
               ? "درجة"
@@ -1018,7 +1060,8 @@ export function GradeEntryView() {
         const protectedNumericCapture = Boolean(
           leave ||
             !isExamOnOrAfterStudentRegistration(student, selectedExam) ||
-            student.status === "مفصول",
+            student.status === "مفصول" ||
+            canCaptureGraceScoreDirectly(student.id),
         );
         if (!canEditGradeForStudent(student.id) && !protectedNumericCapture)
           return false;
@@ -1038,6 +1081,7 @@ export function GradeEntryView() {
     opportunityLogs,
     editableRows,
     drafts,
+    clockTick,
   ]);
 
   const focusGradeInputAt = (index: number) => {
@@ -1317,9 +1361,12 @@ export function GradeEntryView() {
       student && !isExamOnOrAfterStudentRegistration(student, selectedExam),
     );
     const dismissedAndLocked = student?.status === "مفصول";
+    const graceNumericCapture = canCaptureGraceScoreDirectly(studentId);
     const canCaptureAsSmartNote =
       status === "درجة" &&
-      Boolean(leave || beforeRegistration || dismissedAndLocked);
+      Boolean(
+        leave || beforeRegistration || dismissedAndLocked || graceNumericCapture,
+      );
 
     if (leave && !canCaptureAsSmartNote) {
       showGradeEntryNotice(
@@ -1352,6 +1399,7 @@ export function GradeEntryView() {
 
     if (
       !options.skipReactivationWarning &&
+      !graceNumericCapture &&
       needsReactivationWarning(studentId, draft)
     ) {
       requestReactivatedStudentGradeEdit(
@@ -1438,6 +1486,7 @@ export function GradeEntryView() {
         }
 
         if (payload.pendingSmartNote && payload.smartNote && !payload.grade) {
+          const isGracePending = payload.smartNote.category === "GRACE_SCORED";
           gradeMutationVersionRef.current += 1;
           setSavedRows((prev) => {
             const next = { ...prev };
@@ -1448,14 +1497,18 @@ export function GradeEntryView() {
             ...prev,
             [studentId]: {
               phase: "pending",
-              message: "درجة معلّقة — لم تُسجّل كدرجة",
+              message: isGracePending
+                ? "درجة معلّقة — ضمن فترة السماح"
+                : "درجة معلّقة — لم تُسجّل كدرجة",
             },
           }));
           emitGradeEntryServerSync("grade-entry-smart-note-captured");
-          showGradeEntryNotice(
-            "info",
-            "حفظ النظام الرقم كدرجة معلّقة للمراجعة، ولم يسجله كدرجة أو يحتسب له أي أثر.",
-          );
+          if (!isGracePending && !options.silent) {
+            showGradeEntryNotice(
+              "info",
+              "حفظ النظام الرقم كدرجة معلّقة للمراجعة، ولم يسجله كدرجة أو يحتسب له أي أثر.",
+            );
+          }
           return;
         }
 
@@ -1517,7 +1570,7 @@ export function GradeEntryView() {
           }));
         }
         emitGradeEntryServerSync("grade-entry-save");
-        if (!options.silent) {
+        if (!options.silent && !graceNumericCapture) {
           showGradeEntryNotice(
             "success",
             payload.smartNote?.category === "GRACE_SCORED"
@@ -1551,7 +1604,8 @@ export function GradeEntryView() {
         getStudentLeaveForSelectedExam(studentId) ||
           (student &&
             !isExamOnOrAfterStudentRegistration(student, selectedExam)) ||
-          student?.status === "مفصول",
+          student?.status === "مفصول" ||
+          canCaptureGraceScoreDirectly(studentId),
       );
     if (!canEditGradeForStudent(studentId) && !protectedNumericCapture) return;
     const existing = getGrade(studentId);
@@ -1578,7 +1632,10 @@ export function GradeEntryView() {
       return;
     }
 
-    if (needsReactivationWarning(studentId, draft)) {
+    if (
+      !canCaptureGraceScoreDirectly(studentId) &&
+      needsReactivationWarning(studentId, draft)
+    ) {
       requestReactivatedStudentGradeEdit(
         studentId,
         draft,
@@ -2282,9 +2339,14 @@ export function GradeEntryView() {
                   const isSaving = Boolean(savingRows[student.id]);
                   const explicitSaveState = rowSaveStates[student.id];
                   const rowSmartNote = latestSmartNoteByStudentId.get(student.id);
+                  const effectiveSaveState =
+                    explicitSaveState?.phase === "pending" &&
+                    rowSmartNote?.status !== "PENDING"
+                      ? undefined
+                      : explicitSaveState;
                   const savePhase: GradeRowSavePhase = isSaving
                     ? "saving"
-                    : explicitSaveState?.phase ||
+                    : effectiveSaveState?.phase ||
                       (rowSmartNote?.status === "PENDING"
                         ? "pending"
                         : rowSmartNote?.category === "GRACE_SCORED" && entered
@@ -2294,6 +2356,8 @@ export function GradeEntryView() {
                             : "idle");
                   const examBeforeRegistration =
                     !isExamOnOrAfterStudentRegistration(student, selectedExam);
+                  const graceNumericCapture =
+                    canCaptureGraceScoreDirectly(student.id);
                   const canEditPersistedGrade =
                     canEditGradeForStudent(student.id) &&
                     !examBeforeRegistration &&
@@ -2302,7 +2366,8 @@ export function GradeEntryView() {
                   const protectedNumericCapture = Boolean(
                     leave ||
                       examBeforeRegistration ||
-                      student.status === "مفصول",
+                      student.status === "مفصول" ||
+                      graceNumericCapture,
                   );
                   const rowLocked = Boolean(
                     entered &&
@@ -2315,7 +2380,7 @@ export function GradeEntryView() {
                     rowLocked ||
                     (!canEditPersistedGrade && !protectedNumericCapture);
                   const structuredControlsDisabled =
-                    rowLocked || !canEditPersistedGrade;
+                    rowLocked || !canEditPersistedGrade || graceNumericCapture;
                   const notesInputDisabled =
                     rowLocked ||
                     (!canEditPersistedGrade && !protectedNumericCapture);
@@ -2324,6 +2389,9 @@ export function GradeEntryView() {
                       key={student.id}
                       className="teacherpro-heavy-row tp-save-row grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]"
                       data-save-state={savePhase}
+                      data-grace-direct-entry={
+                        graceNumericCapture ? "true" : undefined
+                      }
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -2342,7 +2410,7 @@ export function GradeEntryView() {
                             </Badge>
                           )}
                           {!leave &&
-                            isStudentInGraceForSelectedExam(student.id) && (
+                            graceNumericCapture && (
                               <Badge variant="outline" className="text-[10px]">
                                 ضمن فترة السماح
                               </Badge>
@@ -2426,10 +2494,11 @@ export function GradeEntryView() {
                           </p>
                         )}
                         {!leave &&
-                          isStudentInGraceForSelectedExam(student.id) && (
+                          graceNumericCapture && (
                             <p className="mt-1 text-[11px] text-sky-700 dark:text-sky-300">
-                              هذا الامتحان داخل فترة السماح؛ تحفظ الدرجة
-                              للمتابعة فقط ولا تخصم فرصاً ولا تسبب فصلاً.
+                              هذا الامتحان داخل فترة السماح؛ أدخل الدرجة مباشرة
+                              وستبقى معلّقة حتى انتهاء السماح، دون خصم فرص أو
+                              فصل.
                             </p>
                           )}
                         {student.status === "مفصول" &&
@@ -2570,20 +2639,26 @@ export function GradeEntryView() {
                           {savePhase === "saving"
                             ? "جاري الحفظ"
                             : savePhase === "pending"
-                              ? explicitSaveState?.message || "درجة معلّقة"
+                              ? effectiveSaveState?.message || "درجة معلّقة"
                               : savePhase === "noncounted"
-                                ? explicitSaveState?.message ||
+                                ? effectiveSaveState?.message ||
                                   "محفوظة للمتابعة — غير محتسبة"
-                              : savePhase === "error"
-                                ? explicitSaveState?.message || "غير محفوظ — أعد المحاولة"
-                                : savePhase === "dirty"
-                                  ? explicitSaveState?.message || "تعديل غير محفوظ"
-                                  : leave
-                                    ? "الطالب مجاز — الرقم سيُعلّق"
-                                  : savePhase === "idle" && entered
-                                    ? "جاهز للتعديل"
-                                    : savedRows[student.id] ||
-                                      (savePhase === "saved" ? "محفوظ" : "غير مدخل")}
+                                : savePhase === "error"
+                                  ? effectiveSaveState?.message ||
+                                    "غير محفوظ — أعد المحاولة"
+                                  : savePhase === "dirty"
+                                    ? effectiveSaveState?.message ||
+                                      "تعديل غير محفوظ"
+                                    : leave
+                                      ? "الطالب مجاز — الرقم سيُعلّق"
+                                      : graceNumericCapture
+                                        ? "أدخل الدرجة — ستُعلّق تلقائياً"
+                                        : savePhase === "idle" && entered
+                                          ? "جاهز للتعديل"
+                                          : savedRows[student.id] ||
+                                            (savePhase === "saved"
+                                              ? "محفوظ"
+                                              : "غير مدخل")}
                         </Badge>
                         {rowLocked ? (
                           <Button

@@ -14,6 +14,10 @@ const [
   notesRoute,
   entrySheet,
   helper,
+  graceExpiryHelper,
+  graceCronRoute,
+  academicRecalculation,
+  vercelConfig,
   correctionSheetsRoute,
   telegramSubmissionsRoute,
 ] =
@@ -24,6 +28,10 @@ const [
     read("src/app/api/grade-smart-notes/route.ts"),
     read("src/app/api/grades/entry-sheet/route.ts"),
     read("src/lib/grade-smart-notes-server.ts"),
+    read("src/lib/grade-smart-note-grace-expiry-server.ts"),
+    read("src/app/api/internal/grace-smart-notes/settle/route.ts"),
+    read("src/lib/academic-recalculate-server.ts"),
+    read("vercel.json"),
     read("src/app/api/correction-sheets/route.ts"),
     read("src/app/api/telegram-exam-submissions/route.ts"),
   ]);
@@ -51,9 +59,7 @@ assert.match(schema, /smartNoteId\s+String\?\s+@unique/);
 assert.match(migration, /Grade_smartNoteId_fkey/);
 assert.match(migration, /Grade_academicEffectExclusion_provenance_check/);
 
-const blockedBranch = gradesRoute.indexOf(
-  'numericAttempt.category !== "GRACE_SCORED"',
-);
+const blockedBranch = gradesRoute.indexOf("if (numericAttempt?.category)");
 const writebackCall = gradesRoute.indexOf("syncAcademicGradeWriteback({", blockedBranch);
 assert.ok(blockedBranch >= 0 && writebackCall > blockedBranch);
 const blockedSource = gradesRoute.slice(blockedBranch, writebackCall);
@@ -63,23 +69,48 @@ assert.match(blockedSource, /academicRecalculation:\s*null/);
 assert.match(gradesRoute, /NextResponse\.json\(result, \{ status: 202 \}\)/);
 
 const graceBranch = gradesRoute.indexOf(
-  'numericAttempt?.category === "GRACE_SCORED"',
+  'numericAttempt.category === "GRACE_SCORED"',
 );
-assert.ok(graceBranch > writebackCall, "grace score must use normal Grade writeback first");
-const graceSource = gradesRoute.slice(graceBranch, graceBranch + 1_800);
-assert.match(graceSource, /status:\s*"PROCESSED"/);
-assert.match(graceSource, /academicEffectExcluded:\s*true/);
-assert.match(graceSource, /GRACE_SCORED_GRADE_EXCLUSION_REASON/);
-assert.match(graceSource, /gradeSmartNoteExclusionSource\([\s\S]*"GRACE_SCORED"/);
-assert.match(graceSource, /smartNoteId:\s*smartNote\.id/);
-assert.match(graceSource, /grade:\s*linkedGrade/);
+assert.ok(graceBranch > blockedBranch && graceBranch < writebackCall);
+const graceSource = gradesRoute.slice(graceBranch, writebackCall);
+assert.match(graceSource, /reconcileExpiredGracePendingGrades\(/);
+assert.match(graceSource, /noteIds:\s*\[smartNote\.id\]/);
+assert.match(graceSource, /graceMigration\.processed\s*>\s*0/);
+assert.match(graceSource, /pendingSmartNote:\s*false/);
+assert.match(graceSource, /smartNoteConflict:\s*true/);
+assert.match(gradesRoute, /smartNote\.status === "PROCESSED"[\s\S]*isStudentCurrentlyInGrace\(numericAttempt\.student\)/);
+assert.match(gradesRoute, /grandfatheredGraceGrade:\s*true/);
+assert.match(gradesRoute, /score:\s*numericAttempt\.score[\s\S]*academicRecalculation:\s*null/);
 
-assert.match(gradesRoute, /isProtectedDismissedPendingGrade\(freshTargetGrade\)[\s\S]*nextStatus !== "درجة"/);
-assert.match(gradesRoute, /isProtectedDismissedPendingGrade\(targetGrade\)[\s\S]*لا يمكن حذف هذه الدرجة التاريخية/);
+assert.match(graceExpiryHelper, /category:\s*"GRACE_SCORED"/);
+assert.match(graceExpiryHelper, /status:\s*"PENDING"/);
+assert.match(graceExpiryHelper, /today\s*>=\s*graceWindow\.endExclusive/);
+assert.match(graceExpiryHelper, /examSnapshotDate\s*&&\s*!examStillInsideCurrentWindow/);
+assert.match(graceExpiryHelper, /eligibleRemaining/);
+assert.match(graceExpiryHelper, /status:\s*GRACE_PLACEHOLDER_STATUS/);
+assert.match(graceExpiryHelper, /academicEffectExcluded:\s*true/);
+assert.match(graceExpiryHelper, /gradeSmartNoteExclusionSource\([\s\S]*"GRACE_SCORED"/);
+assert.match(graceExpiryHelper, /status:\s*"CONFLICT"/);
+assert.match(graceExpiryHelper, /note\.score\s*>\s*fullMark/);
+
+assert.match(academicRecalculation, /reconcileExpiredGracePendingGrades\([\s\S]*studentIds/);
+assert.match(graceCronRoute, /process\.env\.CRON_SECRET/);
+assert.match(graceCronRoute, /timingSafeEqual/);
+assert.match(graceCronRoute, /reconcileExpiredGracePendingGrades\(/);
+assert.match(vercelConfig, /api\/internal\/grace-smart-notes\/settle/);
+assert.match(vercelConfig, /5 21 \* \* \*/);
+
+// Ordinary user-facing GET endpoints must remain read-only. Grace settlement
+// is write-triggered or performed by the authenticated internal cron only.
+assert.doesNotMatch(notesRoute, /reconcileExpiredGracePendingGrades/);
+assert.doesNotMatch(entrySheet, /reconcileExpiredGracePendingGrades/);
+
+assert.match(gradesRoute, /isProtectedSmartNoteHistoricalGrade\(freshTargetGrade\)[\s\S]*nextStatus !== "درجة"/);
+assert.match(gradesRoute, /isProtectedSmartNoteHistoricalGrade\(targetGrade\)[\s\S]*لا يمكن حذف هذه الدرجة التاريخية/);
 for (const deletionRoute of [correctionSheetsRoute, telegramSubmissionsRoute]) {
   assert.match(
     deletionRoute,
-    /academicEffectExclusionSource:\s*\{[\s\S]*startsWith:\s*"GradeSmartNote:DISMISSED_PENDING:"/,
+    /academicEffectExclusionSource:\s*\{[\s\S]*startsWith:\s*"GradeSmartNote:"/,
   );
 }
 

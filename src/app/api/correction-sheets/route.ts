@@ -286,7 +286,7 @@ export async function DELETE(req: NextRequest) {
             NOT: {
               academicEffectExcluded: true,
               academicEffectExclusionSource: {
-                startsWith: "GradeSmartNote:DISMISSED_PENDING:",
+                startsWith: "GradeSmartNote:",
               },
             },
           },

@@ -2,6 +2,7 @@ import { baghdadDateKey } from "@/lib/baghdad-time";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
+import { reconcileExpiredGracePendingGrades } from "@/lib/grade-smart-note-grace-expiry-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import {
   isAutomaticOpportunityLog,
@@ -691,6 +692,14 @@ export async function recalculateStudentsAcademicState(
 
   const client = transaction;
   await repairAcademicBaselinesForStudents(client, studentIds);
+  // Finalize expired grace attempts before loading the academic snapshot.
+  // The resulting Grades are permanently excluded, so recalculation observes
+  // them for history but never derives opportunities or dismissal from them.
+  await reconcileExpiredGracePendingGrades({
+    tx: transaction,
+    studentIds,
+    actor: { name: "TeacherPro - إعادة الاحتساب الأكاديمي" },
+  });
   const state = await loadAcademicStateForStudents(client, studentIds);
   const recalculableStudentIds = state.students
     .filter((student) => student.status !== "مؤرشف")

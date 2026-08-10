@@ -37,6 +37,18 @@ export function isProtectedDismissedPendingGrade(grade: {
   );
 }
 
+export function isProtectedSmartNoteHistoricalGrade(grade: {
+  academicEffectExcluded?: boolean | null;
+  academicEffectExclusionSource?: string | null;
+}): boolean {
+  if (!grade.academicEffectExcluded) return false;
+  const source = String(grade.academicEffectExclusionSource || "");
+  return (
+    source.startsWith("GradeSmartNote:DISMISSED_PENDING:") ||
+    source.startsWith("GradeSmartNote:GRACE_SCORED:")
+  );
+}
+
 export type GradeSmartNoteCategory =
   (typeof GRADE_SMART_NOTE_CATEGORIES)[number];
 export type GradeSmartNoteStatus =
@@ -98,6 +110,25 @@ export async function upsertGradeSmartNote(
   input: UpsertGradeSmartNoteInput,
 ) {
   const client: PrismaClientLike = input.tx || db;
+  const uniqueWhere = {
+    examId_studentId_category: {
+      examId: input.exam.id,
+      studentId: input.student.id,
+      category: input.category,
+    },
+  } as const;
+
+  // Network retries and stale entry sheets must never reopen a note that was
+  // already processed, rejected, or marked as a conflict. Explicit reopening
+  // remains possible only through the version-checked smart-note API.
+  if (input.status === "PENDING") {
+    const resolvedExisting = await client.gradeSmartNote.findUnique({
+      where: uniqueWhere,
+    });
+    if (resolvedExisting && resolvedExisting.status !== "PENDING") {
+      return resolvedExisting;
+    }
+  }
   const attemptedAt = input.attemptedAt || new Date();
   const resolvedAt =
     input.status === "PENDING"
@@ -106,13 +137,7 @@ export async function upsertGradeSmartNote(
   const resolutionActor = input.resolutionActor || input.actor || null;
 
   return client.gradeSmartNote.upsert({
-    where: {
-      examId_studentId_category: {
-        examId: input.exam.id,
-        studentId: input.student.id,
-        category: input.category,
-      },
-    },
+    where: uniqueWhere,
     create: {
       category: input.category,
       status: input.status,
