@@ -70,6 +70,8 @@ const STATUS_LABELS: Record<GradeSmartNoteStatus, string> = {
   REJECTED: "مرفوضة بعد المراجعة",
 };
 
+const DEFAULT_VISIBLE_NOTES_COUNT = 5;
+
 function formatSmartNoteTime(value: string): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "وقت غير معروف";
@@ -101,12 +103,20 @@ export function GradeSmartNotesPanel({
 }) {
   const [activeCategory, setActiveCategory] =
     useState<GradeSmartNoteCategory | null>(null);
-  const visibleNotes = useMemo(
+  const [showAllNotes, setShowAllNotes] = useState(false);
+  const filteredNotes = useMemo(
     () =>
       activeCategory
         ? notes.filter((note) => note.category === activeCategory)
         : notes,
     [activeCategory, notes],
+  );
+  const visibleNotes = useMemo(
+    () =>
+      showAllNotes
+        ? filteredNotes
+        : filteredNotes.slice(0, DEFAULT_VISIBLE_NOTES_COUNT),
+    [filteredNotes, showAllNotes],
   );
 
   return (
@@ -160,9 +170,10 @@ export function GradeSmartNotesPanel({
                   key={category}
                   type="button"
                   onClick={() =>
-                    setActiveCategory((current) =>
-                      current === category ? null : category,
-                    )
+                    setActiveCategory((current) => {
+                      setShowAllNotes(false);
+                      return current === category ? null : category;
+                    })
                   }
                   aria-pressed={selected}
                   className={`rounded-2xl border p-4 text-start transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${meta.className} ${selected ? "ring-2 ring-violet-500 ring-offset-2 ring-offset-background" : ""}`}
@@ -201,9 +212,12 @@ export function GradeSmartNotesPanel({
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => setActiveCategory(null)}
+                onClick={() => {
+                  setActiveCategory(null);
+                  setShowAllNotes(false);
+                }}
               >
-                عرض الكل
+                إلغاء التصفية
               </Button>
             )}
           </div>
@@ -232,7 +246,7 @@ export function GradeSmartNotesPanel({
             >
               جاري تحميل الدرجات الذكية...
             </p>
-          ) : visibleNotes.length === 0 ? (
+          ) : filteredNotes.length === 0 ? (
             <p className="rounded-2xl border border-dashed bg-background/70 p-5 text-center text-sm text-muted-foreground">
               لا توجد حالات من هذا النوع لهذا الامتحان.
             </p>
@@ -314,6 +328,20 @@ export function GradeSmartNotesPanel({
                 );
                 })}
               </ul>
+              {filteredNotes.length > DEFAULT_VISIBLE_NOTES_COUNT && (
+                <div className="mt-4 flex justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowAllNotes((current) => !current)}
+                    aria-expanded={showAllNotes}
+                  >
+                    {showAllNotes
+                      ? "عرض أقل"
+                      : `إظهار الكل (${filteredNotes.length})`}
+                  </Button>
+                </div>
+              )}
             </>
           )}
         </section>

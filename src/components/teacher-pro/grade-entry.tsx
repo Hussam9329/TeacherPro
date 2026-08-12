@@ -2177,6 +2177,7 @@ export function GradeEntryView() {
 
       {selectedExam && (
         <GradeSmartNotesPanel
+          key={selectedExam.id}
           notes={gradeSmartNotes}
           totalCount={gradeSmartNotesTotal}
           categoryCounts={gradeSmartNoteCategoryCounts}
