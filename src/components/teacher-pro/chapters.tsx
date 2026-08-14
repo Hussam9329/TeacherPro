@@ -83,38 +83,6 @@ type ActionDialog = {
   action: "activate" | "deactivate";
 };
 
-type SafeOpportunityRepairPreview = {
-  canExecute: boolean;
-  blockingMessage: string | null;
-  impact: {
-    eligibleCourses: number;
-    conflictingCourses: number;
-    zeroOpportunityCourses: number;
-    affectedStudents: number;
-    skippedDismissed: number;
-    skippedArchived: number;
-  };
-  perCourse: Array<{
-    courseId: string;
-    courseName: string;
-    chapterId: string;
-    chapterName: string;
-    chapterOpportunities: number;
-    affectedStudents: number;
-  }>;
-  sampleStudents: Array<{
-    studentId: string;
-    studentName: string;
-    studentCode: string;
-    courseName: string;
-    nextOpportunities: number;
-  }>;
-  message: string;
-  previewToken: string;
-  source: "database";
-  generatedAt: string;
-};
-
 type SecondChapterTransitionPreview = {
   canExecute: boolean;
   blockers: string[];
@@ -122,6 +90,7 @@ type SecondChapterTransitionPreview = {
     courseNames: readonly string[];
     chapterId: string | null;
     chapterName: string;
+    willCreateChapter: boolean;
     currentChapterOpportunities: number | null;
     nextChapterOpportunities: number;
   };
@@ -271,11 +240,6 @@ export function ChaptersView() {
   const [chapterSyncDialog, setChapterSyncDialog] = useState<ChapterSyncDialog>(
     { open: false, payload: null, preview: null },
   );
-  const [repairDialog, setRepairDialog] = useState(false);
-  const [repairPreview, setRepairPreview] =
-    useState<SafeOpportunityRepairPreview | null>(null);
-  const [repairPreviewLoading, setRepairPreviewLoading] = useState(false);
-  const [repairPreviewError, setRepairPreviewError] = useState("");
   const [transitionDialog, setTransitionDialog] = useState(false);
   const [transitionPreview, setTransitionPreview] =
     useState<SecondChapterTransitionPreview | null>(null);
@@ -304,8 +268,6 @@ export function ChaptersView() {
   const { locked: isDeletingLink, runLocked: runDeleteLinkLocked } =
     useActionLock();
   const { locked: isApplyingAction, runLocked: runApplyActionLocked } =
-    useActionLock();
-  const { locked: isFixingZeroOpp, runLocked: runFixZeroOppLocked } =
     useActionLock();
   const {
     locked: isApplyingSecondChapterTransition,
@@ -655,99 +617,6 @@ export function ChaptersView() {
     })();
   };
 
-  const loadRepairPreview = async () => {
-    setRepairPreview(null);
-    setRepairPreviewError("");
-    setRepairPreviewLoading(true);
-    try {
-      const response = await fetch("/api/students/fix-zero-opportunities", {
-        method: "PATCH",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ previewOnly: true }),
-      });
-      const payload = await response.json().catch(() => null);
-      const preview = (payload?.preview || null) as
-        | SafeOpportunityRepairPreview
-        | null;
-      if (!response.ok || !preview) {
-        setRepairPreviewError(
-          payload?.error || "تعذر تحميل معاينة الإصلاح من النظام.",
-        );
-        return;
-      }
-      setRepairPreview(preview);
-    } catch {
-      setRepairPreviewError("تعذر الاتصال بالنظام لتحميل معاينة الإصلاح.");
-    } finally {
-      setRepairPreviewLoading(false);
-    }
-  };
-
-  const openRepairDialog = () => {
-    setRepairDialog(true);
-    void loadRepairPreview();
-  };
-
-  const handleRepairDialogOpenChange = (open: boolean) => {
-    if (!open && isFixingZeroOpp) return;
-    setRepairDialog(open);
-    if (!open) {
-      setRepairPreview(null);
-      setRepairPreviewError("");
-      setRepairPreviewLoading(false);
-    }
-  };
-
-  const handleFixZeroOpportunities = async () => {
-    await runFixZeroOppLocked(async () => {
-      if (!repairPreview?.canExecute || !repairPreview.previewToken) {
-        toast.error(
-          repairPreview?.blockingMessage ||
-            "يجب تحميل معاينة صالحة قبل تنفيذ الإصلاح.",
-        );
-        return;
-      }
-      try {
-        const response = await fetch("/api/students/fix-zero-opportunities", {
-          method: "PATCH",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            confirmImpact: true,
-            previewToken: repairPreview.previewToken,
-          }),
-        });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok) {
-          if (response.status === 409) {
-            setRepairPreview(null);
-            setRepairPreviewError(
-              payload?.error ||
-                "تغيرت البيانات بعد المعاينة. حمّل معاينة جديدة قبل التنفيذ.",
-            );
-          }
-          toast.error(payload?.error || "تعذر إصلاح فرص الطلاب حالياً.");
-          return;
-        }
-        setRepairDialog(false);
-        setRepairPreview(null);
-        setRepairPreviewError("");
-        await refreshAfterMutation("إصلاح آمن ومؤكد لطلاب 0/0 النشطين");
-        if (payload?.fixedTotal > 0) {
-          toast.success(
-            payload.message || `تم إصلاح ${payload.fixedTotal} طالب.`,
-          );
-        } else {
-          toast.info(payload?.message || "لا يوجد طلاب يحتاجون إصلاحاً.");
-        }
-      } catch {
-        setRepairPreviewError("تعذر الاتصال بالنظام لتنفيذ الإصلاح.");
-        toast.error("تعذر الاتصال بالنظام لإصلاح فرص الطلاب.");
-      }
-    })();
-  };
-
   const loadSecondChapterTransitionPreview = async () => {
     setTransitionPreview(null);
     setTransitionPreviewError("");
@@ -1071,9 +940,6 @@ export function ChaptersView() {
   const actionLink = actionDialog.link;
   const zeroZeroReviewCount =
     overview?.stats.studentsZeroZeroWithActive || 0;
-  const totalCourses = overview?.stats.courses ?? 0;
-  const withoutActive = overview?.stats.coursesWithoutActiveChapter ?? 0;
-  const hasActiveChapters = totalCourses - withoutActive > 0;
 
   return (
     <div className="tp-chapters space-y-6">
@@ -1121,7 +987,8 @@ export function ChaptersView() {
 
           <div className="tp-chapters__rule rounded-2xl border border-dashed bg-muted/25 p-3 text-xs text-muted-foreground">
             أي تفعيل أو إلغاء تفعيل يعرض أثره قبل التنفيذ، ويتم من النظام داخل
-            عملية واحدة حتى لا يظهر أكثر من فصل نشط لنفس الدورة.
+            عملية واحدة حتى لا يظهر أكثر من فصل نشط لنفس الدورة. عداد طلاب 0/0
+            مؤشر تشخيصي للعرض والمراجعة فقط، ولا ينفذ إصلاحاً جماعياً.
           </div>
         </CardContent>
       </Card>
@@ -1297,8 +1164,10 @@ export function ChaptersView() {
               <p className="mt-1 leading-6 text-muted-foreground">
                 يوقف أي فصل نشط سابق، ويفعّل «الفصل الثاني - الانسجة» بثلاث
                 فرص، ويعيد جميع طلاب الدورتين — بمن فيهم المفصولون والمؤرشفون —
-                إلى نشط برصيد 3/3. المعاينة تعرض الاسمين الفعليين المطابقين من
-                بيانات النظام قبل السماح بالتنفيذ.
+                إلى نشط برصيد 3/3. إذا لم يكن الفصل المستهدف موجوداً فسينشئه
+                التنفيذ بثلاث فرص داخل المعاملة نفسها. المعاينة تعرض الاسمين
+                الفعليين المطابقين من بيانات النظام قبل السماح بالتنفيذ، ولا
+                تشمل «الدورة الصيفية الثانية».
               </p>
               <Button
                 type="button"
@@ -1311,26 +1180,6 @@ export function ChaptersView() {
               </Button>
             </div>
 
-            <div className="tp-chapters__maintenance rounded-2xl border border-amber-500/35 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-100">
-              <p className="font-black">إصلاح آمن لطلاب 0/0</p>
-              <p className="mt-1 leading-6">
-                يعالج فقط الطالب النشط الذي فرصه 0/0 داخل دورة لها فصل نشط
-                واحد وفرصه أكبر من صفر. لا يغيّر حالة أي طالب، ولا يمس
-                المفصولين أو المؤرشفين، ولا يشغّل إعادة احتساب شاملة.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-3 rounded-full border-amber-500/50"
-                onClick={openRepairDialog}
-                disabled={isFixingZeroOpp || !hasActiveChapters}
-              >
-                {hasActiveChapters
-                  ? "معاينة الإصلاح الآمن"
-                  : "لا يوجد فصل نشط"}
-              </Button>
-            </div>
           </CardContent>
         </Card>
 
@@ -1519,8 +1368,8 @@ export function ChaptersView() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {resolvedTransitionCourseNames
-                ? `العملية محصورة بالدورتين الفعليتين ${resolvedTransitionCourseNames}. ستوقف الفصل السابق، وتفعّل الفصل الثاني - الانسجة، وتجعل جميع طلابهما نشطين برصيد 3/3 داخل معاملة واحدة.`
-                : "ستقرأ المعاينة الاسمين الفعليين للدورتين من بيانات النظام قبل عرض الأثر والسماح بالتنفيذ."}
+                ? `العملية محصورة بالدورتين الفعليتين ${resolvedTransitionCourseNames}. لا تشمل «الدورة الصيفية الثانية». ستوقف الفصل السابق، ثم تستخدم الفصل الثاني - الانسجة أو تنشئه إذا كان غير موجود، وتجعل جميع طلابهما نشطين برصيد 3/3 داخل معاملة واحدة.`
+                : "ستقرأ المعاينة الاسمين الفعليين للدورتين وحالة وجود الفصل المستهدف من بيانات النظام قبل عرض الأثر والسماح بالتنفيذ، ولن تشمل «الدورة الصيفية الثانية»."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {transitionPreviewLoading ? (
@@ -1542,6 +1391,11 @@ export function ChaptersView() {
             </div>
           ) : transitionPreview ? (
             <div className="space-y-3 text-sm">
+              <p className="rounded-xl border border-primary/25 bg-primary/5 p-3 text-xs font-bold leading-6">
+                {transitionPreview.target.willCreateChapter
+                  ? `الفصل «${transitionPreview.target.chapterName}» غير موجود حالياً؛ سيُنشأ بثلاث فرص عند التأكيد داخل المعاملة نفسها.`
+                  : `سيُستخدم الفصل الموجود «${transitionPreview.target.chapterName}» وتُضبط فرصه من ${transitionPreview.target.currentChapterOpportunities ?? "—"} إلى ${transitionPreview.target.nextChapterOpportunities}.`}
+              </p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {statCard("كل الطلاب", transitionPreview.impact.totalStudents)}
                 {statCard(
@@ -1789,98 +1643,6 @@ export function ChaptersView() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog
-        open={repairDialog}
-        onOpenChange={handleRepairDialogOpenChange}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>معاينة إصلاح طلاب 0/0 النشطين</AlertDialogTitle>
-            <AlertDialogDescription>
-              الإصلاح محصور بالطلاب النشطين 0/0 في دورة لها فصل نشط واحد موجب.
-              لن تتغير حالة أي طالب، ولن يتأثر المفصولون أو المؤرشفون، ولن يعمل
-              أي احتساب أكاديمي شامل.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {repairPreviewLoading ? (
-            <p className="rounded-2xl border bg-muted/25 p-4 text-sm text-muted-foreground">
-              جاري تحميل الأثر المباشر من بيانات النظام...
-            </p>
-          ) : repairPreviewError ? (
-            <div className="space-y-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-              <p>{repairPreviewError}</p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void loadRepairPreview()}
-                disabled={isFixingZeroOpp}
-              >
-                تحميل معاينة جديدة
-              </Button>
-            </div>
-          ) : repairPreview ? (
-            <div className="space-y-3 text-sm">
-              <div className="grid gap-2 sm:grid-cols-2">
-                {statCard(
-                  "طلاب سيُصلحون",
-                  repairPreview.impact.affectedStudents,
-                )}
-                {statCard(
-                  "دورات مؤهلة",
-                  repairPreview.impact.eligibleCourses,
-                )}
-                {statCard(
-                  "مفصولون مستثنون",
-                  repairPreview.impact.skippedDismissed,
-                  "لن يتغيروا",
-                )}
-                {statCard(
-                  "مؤرشفون مستثنون",
-                  repairPreview.impact.skippedArchived,
-                  "لن يتغيروا",
-                )}
-              </div>
-              <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-6 text-muted-foreground">
-                {repairPreview.message}
-              </p>
-              {repairPreview.impact.conflictingCourses > 0 ||
-              repairPreview.impact.zeroOpportunityCourses > 0 ? (
-                <p className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-xs leading-6 text-amber-900 dark:text-amber-100">
-                  تم استبعاد {repairPreview.impact.conflictingCourses} دورة فيها
-                  أكثر من فصل نشط و
-                  {repairPreview.impact.zeroOpportunityCourses} دورة سقف فصلها
-                  صفر.
-                </p>
-              ) : null}
-              {repairPreview.blockingMessage ? (
-                <p className="rounded-xl border bg-muted/25 p-3 text-xs text-muted-foreground">
-                  {repairPreview.blockingMessage}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isFixingZeroOpp}>
-              إلغاء
-            </AlertDialogCancel>
-            <Button
-              type="button"
-              onClick={() => void handleFixZeroOpportunities()}
-              disabled={
-                isFixingZeroOpp ||
-                repairPreviewLoading ||
-                Boolean(repairPreviewError) ||
-                !repairPreview?.canExecute
-              }
-            >
-              {isFixingZeroOpp
-                ? "جاري الإصلاح..."
-                : `إصلاح ${repairPreview?.impact.affectedStudents || 0} طالب بعد المعاينة`}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

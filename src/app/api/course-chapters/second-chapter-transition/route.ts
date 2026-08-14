@@ -34,7 +34,12 @@ const COURSE_TARGETS = [
   {
     key: "exemption",
     label: "دورة الإعفاء",
-    aliases: ["طلاب الاعفاء", "دورة الاعفاء", "دورة طلاب الاعفاء"],
+    aliases: [
+      "طلاب الاعفاء",
+      "دورة الاعفاء",
+      "دورة طلاب الاعفاء",
+      "طلاب دورة الاعفاء",
+    ],
   },
 ] as const;
 const TARGET_CHAPTER_NAME = "الفصل الثاني - الانسجة";
@@ -103,9 +108,7 @@ async function buildTransitionPreview(client: TransitionClient = db) {
       );
     }
   }
-  if (chapterMatches.length === 0) {
-    blockers.push(`لم يوجد فصل باسم «${TARGET_CHAPTER_NAME}».`);
-  } else if (chapterMatches.length > 1) {
+  if (chapterMatches.length > 1) {
     blockers.push(
       `يوجد أكثر من فصل باسم «${TARGET_CHAPTER_NAME}»؛ أُوقف التنفيذ لمنع اختيار فصل خاطئ.`,
     );
@@ -123,6 +126,7 @@ async function buildTransitionPreview(client: TransitionClient = db) {
     );
   }
   const targetChapter = chapterMatches.length === 1 ? chapterMatches[0] : null;
+  const willCreateChapter = chapterMatches.length === 0;
   const targetCourseIds = targetCourses.map((course) => course.id);
 
   const [
@@ -295,6 +299,7 @@ async function buildTransitionPreview(client: TransitionClient = db) {
     externalTargetLinks,
     existingTransitionMarker,
     existingTransitionNote,
+    willCreateChapter,
   };
 
   const totalStudents = perCourse.reduce(
@@ -314,13 +319,13 @@ async function buildTransitionPreview(client: TransitionClient = db) {
     canExecute:
       blockers.length === 0 &&
       targetCourses.length === COURSE_TARGETS.length &&
-      targetCourseIdsAreUnique &&
-      Boolean(targetChapter),
+      targetCourseIdsAreUnique,
     blockers,
     target: {
       courseNames: targetCourses.map((course) => course.name),
       chapterId: targetChapter?.id || null,
       chapterName: targetChapter?.name || TARGET_CHAPTER_NAME,
+      willCreateChapter,
       currentChapterOpportunities: targetChapter?.opportunities ?? null,
       nextChapterOpportunities: TARGET_OPPORTUNITIES,
     },
@@ -359,7 +364,7 @@ async function buildTransitionPreview(client: TransitionClient = db) {
     message:
       blockers.length > 0
         ? "المعاينة وجدت مانعاً، لذلك لن يسمح النظام بالتنفيذ."
-        : `سيتم تفعيل الفصل الثاني بثلاث فرص لدورتي ${targetCourses.map((course) => `«${course.name}»`).join(" و")} وإعادة ${studentsToReactivate} طالب إلى نشط، داخل عملية ذرية واحدة.`,
+        : `${willCreateChapter ? `سيُنشأ فصل «${TARGET_CHAPTER_NAME}» بثلاث فرص` : `سيُستخدم فصل «${targetChapter?.name || TARGET_CHAPTER_NAME}» وتُضبط فرصه على ثلاث`} لدورتي ${targetCourses.map((course) => `«${course.name}»`).join(" و")}، مع إعادة ${studentsToReactivate} طالب إلى نشط داخل عملية ذرية واحدة.`,
     previewToken: buildMutationPreviewToken(
       "second-chapter-transition-summer-exemption",
       snapshot,
@@ -406,14 +411,13 @@ export async function POST(req: NextRequest) {
           "تغيرت بيانات الدورتين أو الطلاب بعد المعاينة. أُوقف التنفيذ قبل أي تعديل؛ أعد تحميل المعاينة.",
         );
       }
-      if (!preview.canExecute || !preview.target.chapterId) {
+      if (!preview.canExecute) {
         throw new SecondChapterTransitionError(
           preview.blockers[0] || "لا يمكن تنفيذ الانتقال حسب المعاينة الحالية.",
         );
       }
 
       const now = new Date();
-      const chapterId = preview.target.chapterId;
       await tx.auditLog.create({
         data: {
           id: SECOND_CHAPTER_TRANSITION_MARKER_ID,
@@ -428,10 +432,33 @@ export async function POST(req: NextRequest) {
           userName: "TeacherPro emergency transition",
         },
       });
-      await tx.chapter.update({
-        where: { id: chapterId },
-        data: { opportunities: TARGET_OPPORTUNITIES },
-      });
+      let transitionChapter: {
+        id: string;
+        name: string;
+        opportunities: number;
+      };
+      if (preview.target.willCreateChapter) {
+        transitionChapter = await tx.chapter.create({
+          data: {
+            name: TARGET_CHAPTER_NAME,
+            opportunities: TARGET_OPPORTUNITIES,
+          },
+          select: { id: true, name: true, opportunities: true },
+        });
+      } else {
+        if (!preview.target.chapterId) {
+          throw new SecondChapterTransitionError(
+            "تعذر تحديد الفصل الموجود رغم نجاح المعاينة. أُلغيت العملية بالكامل.",
+          );
+        }
+        transitionChapter = await tx.chapter.update({
+          where: { id: preview.target.chapterId },
+          data: { opportunities: TARGET_OPPORTUNITIES },
+          select: { id: true, name: true, opportunities: true },
+        });
+      }
+      const chapterId = transitionChapter.id;
+      const chapterName = transitionChapter.name;
 
       let updatedStudents = 0;
       let reactivatedStudents = 0;
@@ -544,7 +571,7 @@ export async function POST(req: NextRequest) {
             data: courseStudents.map((student) => ({
               studentId: student.id,
               kind: "إجراء",
-              text: `${student.status === "نشط" ? "بدء رصيد فصل جديد" : "استعادة وإعادة تفعيل"} عند الانتقال إلى ${preview.target.chapterName} بثلاث فرص. الحالة السابقة: ${student.status}، الرصيد السابق: ${student.opportunities}/${student.baseOpportunities}${student.dismissalType ? `، نوع الفصل السابق: ${student.dismissalType}` : ""}${student.dismissalReason ? `، السبب السابق: ${student.dismissalReason}` : ""}${student.dismissalNotes ? `، الملاحظات السابقة: ${student.dismissalNotes}` : ""}.`,
+              text: `${student.status === "نشط" ? "بدء رصيد فصل جديد" : "استعادة وإعادة تفعيل"} عند الانتقال إلى ${chapterName} بثلاث فرص. الحالة السابقة: ${student.status}، الرصيد السابق: ${student.opportunities}/${student.baseOpportunities}${student.dismissalType ? `، نوع الفصل السابق: ${student.dismissalType}` : ""}${student.dismissalReason ? `، السبب السابق: ${student.dismissalReason}` : ""}${student.dismissalNotes ? `، الملاحظات السابقة: ${student.dismissalNotes}` : ""}.`,
               date: now,
               sourceType: SECOND_CHAPTER_TRANSITION_NOTE_SOURCE,
               sourceId: SECOND_CHAPTER_TRANSITION_MARKER_ID,
@@ -561,7 +588,7 @@ export async function POST(req: NextRequest) {
               reason: SECOND_CHAPTER_SETTLEMENT_REASON,
               date: now,
               chapterId,
-              chapterNameSnapshot: preview.target.chapterName,
+              chapterNameSnapshot: chapterName,
             })),
           });
         }
@@ -574,7 +601,7 @@ export async function POST(req: NextRequest) {
               reason: SECOND_CHAPTER_REACTIVATION_REASON,
               date: now,
               chapterId,
-              chapterNameSnapshot: preview.target.chapterName,
+              chapterNameSnapshot: chapterName,
             })),
           });
         }
@@ -590,7 +617,8 @@ export async function POST(req: NextRequest) {
           students: course.students.total,
         })),
         chapterId,
-        chapterName: preview.target.chapterName,
+        chapterName,
+        createdChapter: preview.target.willCreateChapter,
         opportunities: TARGET_OPPORTUNITIES,
       };
     });
@@ -604,7 +632,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      message: `تم تفعيل ${result.chapterName} بثلاث فرص لدورتي ${result.courses.map((course) => `«${course.courseName}»`).join(" و")}، وإعادة تفعيل ${result.reactivatedStudents} طالب، وضبط ${result.updatedStudents} طالب على 3/3.`,
+      message: `${result.createdChapter ? "تم إنشاء" : "تم ضبط"} ${result.chapterName} بثلاث فرص وتفعيله لدورتي ${result.courses.map((course) => `«${course.courseName}»`).join(" و")}، وإعادة تفعيل ${result.reactivatedStudents} طالب، وضبط ${result.updatedStudents} طالب على 3/3.`,
       ...result,
       source: "database" as const,
       generatedAt: new Date().toISOString(),

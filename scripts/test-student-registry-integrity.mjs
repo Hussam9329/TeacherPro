@@ -78,17 +78,34 @@ check(
     registryFiltersHelper.includes('telegramKey: { startsWith: telegram'),
 );
 check(
-  'الإجمالي العام يشمل المؤرشفين ولا يمكن أن يقل عن نتائج فلتر المؤرشفين',
-  studentsStatsRoute.includes('db.student.count(),') &&
-    studentsStatsRoute.includes('systemTotal') &&
+  'عدادات الحالات العامة مستقلة عن الفلاتر مع إبقاء العدادات المفلترة',
+  studentsStatsRoute.includes('systemStatusRows') &&
+    studentsStatsRoute.includes('filteredStatusRows') &&
+    studentsStatsRoute.includes('system,') &&
+    studentsStatsRoute.includes('filtered,') &&
+    studentsStatsRoute.includes('systemTotal: system.total') &&
+    studentsStatsRoute.includes('other: Math.max(0, total - active - dismissed - archived)') &&
+    api.includes('system: StudentStatusCounts') &&
+    api.includes('filtered: StudentStatusCounts') &&
     studentsStatsRoute.includes('scope: "all"'),
 );
 check(
-  'واجهة سجل الطلاب تعرض عداد المؤرشفين وتفتح فلترهم مباشرة',
+  'واجهة سجل الطلاب تعرض عدادات النظام وتفتح فلتر المؤرشفين مباشرة',
   registry.includes('archivedStudentsTotal') &&
-    registry.includes('setArchivedStudentsTotal(Number(result.archived || 0))') &&
+    registry.includes('setActiveStudentsTotal(Number(result.system.active || 0))') &&
+    registry.includes('setDismissedStudentsTotal(Number(result.system.dismissed || 0))') &&
+    registry.includes('setArchivedStudentsTotal(Number(result.system.archived || 0))') &&
+    registry.includes('data-count-scope="system"') &&
     registry.includes('عرض المؤرشفين') &&
     registry.includes('setFilterStatus(ARCHIVED_STUDENT_STATUS)'),
+);
+check(
+  'واجهة سجل الطلاب تحذر من الحالات غير المعروفة وتتيح عرض كل الحالات',
+  registry.includes('otherStudentsTotal') &&
+    registry.includes('setOtherStudentsTotal(Number(result.system.other || 0))') &&
+    registry.includes('حالات طلاب غير معروفة') &&
+    registry.includes('عرض كل الحالات') &&
+    registry.includes('onClick={resetFilters}'),
 );
 check(
   'صحة الفصل متبادلة: مفقود وتعارض وسقف صفر، والفرص الكاملة لا تشمل فوق السقف',

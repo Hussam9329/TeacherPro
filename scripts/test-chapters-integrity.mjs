@@ -34,6 +34,10 @@ const courseChaptersRoute = read(files.courseChaptersRoute);
 const activateRoute = read(files.activateRoute);
 const fixZeroRoute = read(files.fixZeroRoute);
 const secondChapterTransitionRoute = read(files.secondChapterTransitionRoute);
+const secondChapterCourseMatchSource = secondChapterTransitionRoute.slice(
+  secondChapterTransitionRoute.indexOf("const courseMatches"),
+  secondChapterTransitionRoute.indexOf("const chapterMatches"),
+);
 const secondChapterTransitionPolicy = read(
   files.secondChapterTransitionPolicy,
 );
@@ -173,22 +177,24 @@ assert(
   "صفحة الفصول تملك بحث وفلاتر مفهومة للدورات والفصول",
 );
 assert(
-  chaptersView.includes("معاينة الإصلاح الآمن") &&
-    chaptersView.includes("/api/students/fix-zero-opportunities") &&
-    chaptersView.includes("previewOnly: true") &&
-    chaptersView.includes("previewToken: repairPreview.previewToken") &&
-    !chaptersView.includes("mode=include-dismissed"),
-  "إصلاح فرص 0/0 يقرأ معاينة حقيقية ثم يرسل token التأكيد بلا وضع جماعي خطير",
+  chaptersView.includes('statCard("طلاب 0/0"') &&
+    chaptersView.includes("للمراجعة فقط") &&
+    chaptersView.includes("مؤشر تشخيصي للعرض والمراجعة فقط") &&
+    !chaptersView.includes("/api/students/fix-zero-opportunities") &&
+    !chaptersView.includes("repairDialog") &&
+    !chaptersView.includes("repairPreview") &&
+    !chaptersView.includes("handleFixZeroOpportunities") &&
+    !chaptersView.includes("معاينة الإصلاح الآمن"),
+  "صفحة الفصول تعرض 0/0 كمؤشر تشخيصي فقط ولا تملك زر أو حوار إصلاح جماعي",
 );
 assert(
-  fixZeroRoute.includes('status: "نشط"') &&
-    fixZeroRoute.includes("opportunities: 0") &&
-    fixZeroRoute.includes("baseOpportunities: 0") &&
-    fixZeroRoute.includes("buildMutationPreviewToken") &&
-    fixZeroRoute.includes("withSerializableTransaction") &&
-    !fixZeroRoute.includes("include-dismissed") &&
-    !fixZeroRoute.includes("recalculateAllStudentsAcademicState"),
-  "إصلاح فرص الطلاب محصور بالنشطين 0/0 ومؤكد بمعاينة ذرية بلا إعادة احتساب شاملة",
+  fixZeroRoute.includes("retiredMaintenanceEndpoint") &&
+    fixZeroRoute.includes("status: 410") &&
+    fixZeroRoute.includes('"x-teacherpro-retryable": "0"') &&
+    !fixZeroRoute.includes('from "@/lib/db"') &&
+    !fixZeroRoute.includes("updateMany") &&
+    !fixZeroRoute.includes("withSerializableTransaction"),
+  "مسار إصلاح الطلاب القديم موقوف نهائياً ولا يقرأ أو يكتب بيانات الطلاب",
 );
 assert(
   chaptersView.includes(
@@ -227,11 +233,15 @@ assert(
     '"طلاب الاعفاء"',
     '"دورة الاعفاء"',
     '"دورة طلاب الاعفاء"',
+    '"طلاب دورة الاعفاء"',
   ].every((alias) => secondChapterTransitionRoute.includes(alias)) &&
     secondChapterTransitionRoute.includes("const normalizedAliases = new Set") &&
-    secondChapterTransitionRoute.includes(
+    secondChapterCourseMatchSource.includes(
       "normalizedAliases.has(normalizeArabicText(course.name))",
     ) &&
+    !secondChapterCourseMatchSource.includes(".includes(") &&
+    !secondChapterCourseMatchSource.includes(".startsWith(") &&
+    !secondChapterCourseMatchSource.includes(".endsWith(") &&
     secondChapterTransitionRoute.includes("match.matches.length > 1") &&
     secondChapterTransitionRoute.includes("resolvedMatches") &&
     secondChapterTransitionRoute.includes("targetCourseIdsAreUnique") &&
@@ -239,8 +249,36 @@ assert(
       "courseNames: targetCourses.map((course) => course.name)",
     ) &&
     chaptersView.includes("transitionPreview?.target.courseNames") &&
-    chaptersView.includes("resolvedTransitionCourseNames"),
-  "دورة الإعفاء تُحل من ثلاث تسميات عربية إلى سجل واحد فقط، وتعرض المعاينة الاسم الفعلي بلا توسيع نطاق الطلاب",
+    chaptersView.includes("resolvedTransitionCourseNames") &&
+    chaptersView.includes("لا تشمل «الدورة الصيفية الثانية»"),
+  "دورة الإعفاء تُحل من أربع تسميات عربية بمطابقة مساواة فقط، وتُستبعد الدورة الصيفية الثانية صراحة",
+);
+assert(
+  secondChapterTransitionRoute.includes(
+    "const willCreateChapter = chapterMatches.length === 0",
+  ) &&
+    secondChapterTransitionRoute.includes("chapterMatches.length > 1") &&
+    !secondChapterTransitionRoute.includes(
+      "blockers.push(`لم يوجد فصل باسم",
+    ) &&
+    secondChapterTransitionRoute.includes(
+      "if (preview.target.willCreateChapter)",
+    ) &&
+    secondChapterTransitionRoute.includes("await tx.chapter.create({") &&
+    secondChapterTransitionRoute.includes("name: TARGET_CHAPTER_NAME") &&
+    secondChapterTransitionRoute.includes(
+      "opportunities: TARGET_OPPORTUNITIES",
+    ) &&
+    secondChapterTransitionRoute.includes("await tx.chapter.update({") &&
+    secondChapterTransitionRoute.indexOf("await tx.auditLog.create({") <
+      secondChapterTransitionRoute.indexOf("await tx.chapter.create({") &&
+    secondChapterTransitionRoute.includes(
+      "const chapterId = transitionChapter.id",
+    ) &&
+    chaptersView.includes("willCreateChapter: boolean") &&
+    chaptersView.includes("transitionPreview.target.willCreateChapter") &&
+    chaptersView.includes("سيُنشأ بثلاث فرص عند التأكيد"),
+  "غياب الفصل المستهدف يظهر في المعاينة كإنشاء آمن داخل معاملة الانتقال، بينما يمنع تكرار أكثر من فصل مطابق",
 );
 
 assert(

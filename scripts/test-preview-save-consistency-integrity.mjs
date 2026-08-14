@@ -132,14 +132,13 @@ check(
     courseChapterAction.includes("withSerializableTransaction"),
 );
 check(
-  "إصلاح فرص 0/0 يعيد بناء المعاينة داخل transaction ويرفض token المتغير قبل الكتابة",
-  safeOpportunityRepair.includes("buildMutationPreviewToken") &&
-    safeOpportunityRepair.includes('"safe-zero-opportunities-repair"') &&
-    safeOpportunityRepair.includes(
-      "currentPreview.previewToken !== previewToken",
-    ) &&
-    safeOpportunityRepair.includes("withSerializableTransaction") &&
-    !safeOpportunityRepair.includes("recalculateAllStudentsAcademicState"),
+  "مسار إصلاح فرص 0/0 موقوف ولا يستطيع أي تبويب قديم إعادة تشغيله",
+  safeOpportunityRepair.includes("retiredMaintenanceEndpoint") &&
+    safeOpportunityRepair.includes("status: 410") &&
+    safeOpportunityRepair.includes('"x-teacherpro-retryable": "0"') &&
+    !safeOpportunityRepair.includes('from "@/lib/db"') &&
+    !safeOpportunityRepair.includes("updateMany") &&
+    !safeOpportunityRepair.includes("buildMutationPreviewToken"),
 );
 check(
   "انتقال الدورتين يعيد نفس المعاينة داخل transaction ويمنع الحفظ الجزئي أو token القديم",

@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json(
     {
       error:
-        "تم إيقاف مسار ضبط الفرص القديم. استخدم الإصلاح الآمن من صفحة الفصول بعد المعاينة والتأكيد.",
+        "تم إيقاف مسار ضبط الفرص القديم نهائياً، ولا يوجد إجراء جماعي بديل لتعديل أرصدة الطلاب.",
       retiredMaintenanceEndpoint: true,
     },
     { status: 410 },

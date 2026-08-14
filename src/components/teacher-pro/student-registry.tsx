@@ -370,6 +370,9 @@ export function StudentRegistryView() {
   const [archivedStudentsTotal, setArchivedStudentsTotal] = useState<
     number | null
   >(null);
+  const [otherStudentsTotal, setOtherStudentsTotal] = useState<number | null>(
+    null,
+  );
   const [noActiveChapterStudentsTotal, setNoActiveChapterStudentsTotal] =
     useState<number | null>(null);
   const [studentStatsLoading, setStudentStatsLoading] = useState(true);
@@ -464,6 +467,7 @@ export function StudentRegistryView() {
     setActiveStudentsTotal(null);
     setDismissedStudentsTotal(null);
     setArchivedStudentsTotal(null);
+    setOtherStudentsTotal(null);
     setNoActiveChapterStudentsTotal(null);
     setStudentStatsError(null);
     setStudentStatsLoading(true);
@@ -676,6 +680,8 @@ export function StudentRegistryView() {
     setStudentsSystemTotal(null);
     setActiveStudentsTotal(null);
     setDismissedStudentsTotal(null);
+    setArchivedStudentsTotal(null);
+    setOtherStudentsTotal(null);
     setNoActiveChapterStudentsTotal(null);
     studentStatsApi
       .get({
@@ -692,16 +698,14 @@ export function StudentRegistryView() {
       .then((result) => {
         if (requestIsStale()) return;
         if (!result) throw new Error("student stats unavailable");
-        setStudentsSystemTotal(
-          Number(
-            result.systemTotal ??
-              Number(result.total || 0) + Number(result.archived || 0),
-          ),
+        setStudentsSystemTotal(Number(result.system.total || 0));
+        setActiveStudentsTotal(Number(result.system.active || 0));
+        setDismissedStudentsTotal(Number(result.system.dismissed || 0));
+        setArchivedStudentsTotal(Number(result.system.archived || 0));
+        setOtherStudentsTotal(Number(result.system.other || 0));
+        setNoActiveChapterStudentsTotal(
+          Number(result.filtered.noActiveChapter || 0),
         );
-        setActiveStudentsTotal(Number(result.active || 0));
-        setDismissedStudentsTotal(Number(result.dismissed || 0));
-        setArchivedStudentsTotal(Number(result.archived || 0));
-        setNoActiveChapterStudentsTotal(Number(result.noActiveChapter || 0));
       })
       .catch(() => {
         if (requestIsStale()) return;
@@ -709,6 +713,7 @@ export function StudentRegistryView() {
         setActiveStudentsTotal(null);
         setDismissedStudentsTotal(null);
         setArchivedStudentsTotal(null);
+        setOtherStudentsTotal(null);
         setNoActiveChapterStudentsTotal(null);
         setStudentStatsError(
           "تعذر تحميل عدادات الطلاب من بيانات النظام حالياً.",
@@ -2110,10 +2115,15 @@ export function StudentRegistryView() {
         className="tp-student-registry__stats grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"
         aria-busy={registryStatsPending}
       >
-        <Card className="tp-student-registry__stat-card bg-card/80">
+        <Card
+          className="tp-student-registry__stat-card bg-card/80"
+          data-count-scope="system"
+        >
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
-              <p className="text-xs text-muted-foreground">الطلاب النشطون</p>
+              <p className="text-xs text-muted-foreground">
+                الطلاب النشطون · إجمالي النظام
+              </p>
               <p className="text-2xl font-black">
                 {registryStatsPending
                   ? "…"
@@ -2127,6 +2137,7 @@ export function StudentRegistryView() {
               size="sm"
               className="tp-student-registry__stat-action"
               onClick={() => {
+                resetFilters();
                 setFilterStatus("نشط");
                 setPage(1);
               }}
@@ -2136,10 +2147,15 @@ export function StudentRegistryView() {
             </Button>
           </CardContent>
         </Card>
-        <Card className="tp-student-registry__stat-card border-destructive/30 bg-destructive/5">
+        <Card
+          className="tp-student-registry__stat-card border-destructive/30 bg-destructive/5"
+          data-count-scope="system"
+        >
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
-              <p className="text-xs text-muted-foreground">قائمة المفصولين</p>
+              <p className="text-xs text-muted-foreground">
+                قائمة المفصولين · إجمالي النظام
+              </p>
               <p className="text-2xl font-black text-destructive">
                 {registryStatsPending
                   ? "…"
@@ -2153,6 +2169,7 @@ export function StudentRegistryView() {
               size="sm"
               className="tp-student-registry__stat-action"
               onClick={() => {
+                resetFilters();
                 setFilterStatus("مفصول");
                 setPage(1);
               }}
@@ -2162,10 +2179,15 @@ export function StudentRegistryView() {
             </Button>
           </CardContent>
         </Card>
-        <Card className="tp-student-registry__stat-card border-slate-500/30 bg-slate-500/5">
+        <Card
+          className="tp-student-registry__stat-card border-slate-500/30 bg-slate-500/5"
+          data-count-scope="system"
+        >
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
-              <p className="text-xs text-muted-foreground">المؤرشفون</p>
+              <p className="text-xs text-muted-foreground">
+                المؤرشفون · إجمالي النظام
+              </p>
               <p className="text-2xl font-black text-slate-600 dark:text-slate-300">
                 {registryStatsPending
                   ? "…"
@@ -2179,6 +2201,7 @@ export function StudentRegistryView() {
               size="sm"
               className="tp-student-registry__stat-action"
               onClick={() => {
+                resetFilters();
                 setFilterStatus(ARCHIVED_STUDENT_STATUS);
                 setPage(1);
               }}
@@ -2215,6 +2238,37 @@ export function StudentRegistryView() {
           </CardContent>
         </Card>
       </div>
+
+      {!registryStatsPending &&
+        !studentStatsError &&
+        (otherStudentsTotal ?? 0) > 0 && (
+          <Card
+            role="alert"
+            className="border-amber-500/40 bg-amber-500/10"
+            data-count-scope="system"
+          >
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div className="flex items-center gap-3">
+                <AlertTriangle
+                  aria-hidden="true"
+                  className="size-5 shrink-0 text-amber-700 dark:text-amber-300"
+                />
+                <div>
+                  <p className="font-bold text-amber-900 dark:text-amber-100">
+                    حالات طلاب غير معروفة: {otherStudentsTotal}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    توجد حالات خارج نشط ومفصول ومؤرشف ضمن إجمالي النظام.
+                  </p>
+                </div>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
+                <Eye aria-hidden="true" className="size-4" />
+                عرض كل الحالات
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
       {studentStatsError && !registryStatsPending && (
         <div

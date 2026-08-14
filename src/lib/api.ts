@@ -597,13 +597,19 @@ const DEFAULT_STUDENT_PAGE_SIZE = 50;
 const DEFAULT_GRADE_PAGE_SIZE = 100;
 const LIST_ALL_PAGE_SIZE = 500;
 
-export interface StudentStatsResponse {
-  systemTotal?: number;
+export interface StudentStatusCounts {
   total: number;
   active: number;
   dismissed: number;
-  archived?: number;
+  archived: number;
+  other: number;
   noActiveChapter: number;
+}
+
+export interface StudentStatsResponse extends StudentStatusCounts {
+  system: StudentStatusCounts;
+  filtered: StudentStatusCounts;
+  systemTotal: number;
   source: "database";
 }
 
@@ -918,17 +924,6 @@ export interface SyncVersionResponse {
   maxDates: Record<string, string>;
   source: "database";
   generatedAt: string;
-}
-
-export interface AcademicRepairResponse {
-  ok: true;
-  totalStudents: number;
-  recalculatedStudents: number;
-  automaticOpportunityLogs: number;
-  batches: number;
-  message: string;
-  source: "database";
-  generatedAt?: string;
 }
 
 export interface CallStatsQuery {
@@ -1832,13 +1827,6 @@ export const studentProfileLogApi = {
       `students/profile-log${queryString ? `?${queryString}` : ""}`,
     );
   },
-};
-
-export const academicRepairApi = {
-  run: () =>
-    apiPost("students/academic-repair", {}) as Promise<
-      ApiResult & { data?: AcademicRepairResponse }
-    >,
 };
 
 export const syncVersionApi = {

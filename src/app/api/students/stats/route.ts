@@ -30,6 +30,33 @@ function combineStudentWhere(
   return { AND: valid };
 }
 
+type StudentStatusCountRow = {
+  status: string;
+  _count: { _all: number };
+};
+
+function buildStatusCounts(
+  rows: StudentStatusCountRow[],
+  noActiveChapter: number,
+) {
+  const countsByStatus = new Map(
+    rows.map((row) => [row.status, row._count._all]),
+  );
+  const total = rows.reduce((sum, row) => sum + row._count._all, 0);
+  const active = countsByStatus.get(STUDENT_STATUS_ACTIVE) || 0;
+  const dismissed = countsByStatus.get(STUDENT_STATUS_DISMISSED) || 0;
+  const archived = countsByStatus.get(STUDENT_STATUS_ARCHIVED) || 0;
+
+  return {
+    total,
+    active,
+    dismissed,
+    archived,
+    other: Math.max(0, total - active - dismissed - archived),
+    noActiveChapter,
+  };
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "students.view");
   if (authError) return authError;
@@ -62,40 +89,50 @@ export async function GET(req: NextRequest) {
 
     const filteredWhere = combineStudentWhere(...filters);
 
-    const [systemTotal, total, active, dismissed, archived, noActiveChapter] =
-      await Promise.all([
-        db.student.count(),
-        db.student.count({ where: filteredWhere }),
-        db.student.count({
-          where: combineStudentWhere(filteredWhere, {
-            status: STUDENT_STATUS_ACTIVE,
-          }),
-        }),
-        db.student.count({
-          where: combineStudentWhere(filteredWhere, {
-            status: STUDENT_STATUS_DISMISSED,
-          }),
-        }),
-        db.student.count({
-          where: combineStudentWhere(filteredWhere, {
-            status: STUDENT_STATUS_ARCHIVED,
-          }),
-        }),
-        db.student.count({
-          where: combineStudentWhere(
-            filteredWhere,
-            studentRegistryNoActiveChapterWhere(),
-          ),
-        }),
-      ]);
+    const [
+      systemStatusRows,
+      filteredStatusRows,
+      systemNoActiveChapter,
+      filteredNoActiveChapter,
+    ] = await Promise.all([
+      db.student.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
+      db.student.groupBy({
+        by: ["status"],
+        where: filteredWhere,
+        _count: { _all: true },
+      }),
+      db.student.count({
+        where: studentRegistryNoActiveChapterWhere(),
+      }),
+      db.student.count({
+        where: combineStudentWhere(
+          filteredWhere,
+          studentRegistryNoActiveChapterWhere(),
+        ),
+      }),
+    ]);
+
+    const system = buildStatusCounts(systemStatusRows, systemNoActiveChapter);
+    const filtered = buildStatusCounts(
+      filteredStatusRows,
+      filteredNoActiveChapter,
+    );
 
     return NextResponse.json({
-      systemTotal,
-      total,
-      active,
-      dismissed,
-      archived,
-      noActiveChapter,
+      system,
+      filtered,
+      // Keep the original filtered fields while clients migrate to the
+      // explicit system/filtered scopes above.
+      systemTotal: system.total,
+      total: filtered.total,
+      active: filtered.active,
+      dismissed: filtered.dismissed,
+      archived: filtered.archived,
+      other: filtered.other,
+      noActiveChapter: filtered.noActiveChapter,
       scope: "all" as const,
       source: "database" as const,
     });
