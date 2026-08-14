@@ -14,6 +14,12 @@ const coursesView = read("src/components/teacher-pro/courses.tsx");
 const chaptersRoute = read("src/app/api/chapters/route.ts");
 const chaptersView = read("src/components/teacher-pro/chapters.tsx");
 const courseChapterAction = read("src/app/api/course-chapters/activate/route.ts");
+const safeOpportunityRepair = read(
+  "src/app/api/students/fix-zero-opportunities/route.ts",
+);
+const secondChapterTransition = read(
+  "src/app/api/course-chapters/second-chapter-transition/route.ts",
+);
 const bulkAdjust = read("src/app/api/opportunities/bulk-adjust/route.ts");
 const bulkTargets = read("src/app/api/opportunities/bulk-targets/route.ts");
 const bulkPreview = read("src/lib/bulk-opportunity-preview-server.ts");
@@ -104,6 +110,26 @@ check(
   courseChapterAction.includes('buildMutationPreviewToken("course-chapter-action"') &&
     courseChapterAction.includes("currentPreview.previewToken !== previewToken") &&
     courseChapterAction.includes("withSerializableTransaction"),
+);
+check(
+  "إصلاح فرص 0/0 يعيد بناء المعاينة داخل transaction ويرفض token المتغير قبل الكتابة",
+  safeOpportunityRepair.includes("buildMutationPreviewToken") &&
+    safeOpportunityRepair.includes('"safe-zero-opportunities-repair"') &&
+    safeOpportunityRepair.includes(
+      "currentPreview.previewToken !== previewToken",
+    ) &&
+    safeOpportunityRepair.includes("withSerializableTransaction") &&
+    !safeOpportunityRepair.includes("recalculateAllStudentsAcademicState"),
+);
+check(
+  "انتقال الدورتين يعيد نفس المعاينة داخل transaction ويمنع الحفظ الجزئي أو token القديم",
+  secondChapterTransition.includes("buildMutationPreviewToken") &&
+    secondChapterTransition.includes(
+      '"second-chapter-transition-summer-exemption"',
+    ) &&
+    secondChapterTransition.includes("preview.previewToken !== previewToken") &&
+    secondChapterTransition.includes("withSerializableTransaction") &&
+    secondChapterTransition.includes("أُلغيت العملية بالكامل"),
 );
 check(
   "عملية الفرص الجماعية تشارك builder واحداً بين GET preview وPOST execution",
