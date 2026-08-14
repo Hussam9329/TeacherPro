@@ -176,6 +176,10 @@ const callStatusFilterOptions = Object.keys(
   callStatusFilterLabels,
 ) as CallStatusFilter[];
 
+function callStatusSupportsGradeRange(status: CallStatusFilter): boolean {
+  return status !== "absent" && status !== "cheating";
+}
+
 const callGradeDisplayModeLabels: Record<CallGradeDisplayMode, string> = {
   latest: "آخر امتحان",
   "latest-two": "آخر امتحانين",
@@ -625,6 +629,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const debouncedCallFilterSearch = useDebouncedValue(callFilterSearch, 300);
   const debouncedCallGradeFrom = useDebouncedValue(callGradeFrom, 300);
   const debouncedCallGradeTo = useDebouncedValue(callGradeTo, 300);
+  const callGradeRangeEnabled = callStatusSupportsGradeRange(callStatusFilter);
+  const effectiveCallGradeFrom = callGradeRangeEnabled
+    ? debouncedCallGradeFrom
+    : "";
+  const effectiveCallGradeTo = callGradeRangeEnabled
+    ? debouncedCallGradeTo
+    : "";
   const [pledgeSearch, setPledgeSearch] = useState("");
   const debouncedPledgeSearch = useDebouncedValue(pledgeSearch, 250);
   const [pledgeTypeFilter, setPledgeTypeFilter] =
@@ -734,8 +745,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           courseId: callCourseId,
           examId: callExamId,
           statusFilter: callStatusFilter,
-          gradeFrom: debouncedCallGradeFrom,
-          gradeTo: debouncedCallGradeTo,
+          gradeFrom: effectiveCallGradeFrom,
+          gradeTo: effectiveCallGradeTo,
           q: debouncedCallGeneralSearch,
           filterQ: debouncedCallFilterSearch,
           page: callGradePage,
@@ -798,8 +809,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     callCourseId,
     callExamId,
     callStatusFilter,
-    debouncedCallGradeFrom,
-    debouncedCallGradeTo,
+    effectiveCallGradeFrom,
+    effectiveCallGradeTo,
     debouncedCallGeneralSearch,
     debouncedCallFilterSearch,
     callGradePage,
@@ -825,8 +836,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             courseId: callCourseId,
             examId: callExamId,
             statusFilter: callStatusFilter,
-            gradeFrom: debouncedCallGradeFrom,
-            gradeTo: debouncedCallGradeTo,
+            gradeFrom: effectiveCallGradeFrom,
+            gradeTo: effectiveCallGradeTo,
             q: debouncedCallGeneralSearch,
             filterQ: debouncedCallFilterSearch,
           },
@@ -853,8 +864,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     callCourseId,
     callExamId,
     callStatusFilter,
-    debouncedCallGradeFrom,
-    debouncedCallGradeTo,
+    effectiveCallGradeFrom,
+    effectiveCallGradeTo,
     debouncedCallGeneralSearch,
     debouncedCallFilterSearch,
     syncKey,
@@ -1326,8 +1337,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       courseId: callCourseId,
       examId: callExamId,
       statusFilter: callStatusFilter,
-      gradeFrom: debouncedCallGradeFrom,
-      gradeTo: debouncedCallGradeTo,
+      gradeFrom: effectiveCallGradeFrom,
+      gradeTo: effectiveCallGradeTo,
       q: debouncedCallGeneralSearch,
       filterQ: debouncedCallFilterSearch,
       pageSize: 200,
@@ -2664,7 +2675,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     value={callStatusFilter}
                     disabled={!callExamSelected}
                     onValueChange={(value) => {
-                      setCallStatusFilter(value as CallStatusFilter);
+                      const nextStatus = value as CallStatusFilter;
+                      setCallStatusFilter(nextStatus);
+                      if (!callStatusSupportsGradeRange(nextStatus)) {
+                        setCallGradeFrom("");
+                        setCallGradeTo("");
+                      }
                       setCallGradePage(1);
                     }}
                   >
@@ -2690,7 +2706,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     min={0}
                     max={selectedCallExam?.fullMark}
                     step="any"
-                    disabled={!callExamSelected}
+                    disabled={!callExamSelected || !callGradeRangeEnabled}
                     value={callGradeFrom}
                     onChange={(event) => {
                       setCallGradeFrom(event.target.value);
@@ -2709,7 +2725,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     min={0}
                     max={selectedCallExam?.fullMark}
                     step="any"
-                    disabled={!callExamSelected}
+                    disabled={!callExamSelected || !callGradeRangeEnabled}
                     value={callGradeTo}
                     onChange={(event) => {
                       setCallGradeTo(event.target.value);
@@ -2768,7 +2784,16 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   )}
                 </div>
               </div>
-              {callGradeRangeInvalid ? (
+              {callStatusFilter === "absent" ? (
+                <p className="rounded-2xl border border-amber-300/70 bg-amber-50/70 p-3 text-xs font-bold text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                  الغائبون يشملون المسجلين بحالة «غائب» والطلاب الذين لم تُدخل
+                  درجاتهم بعد انتهاء الامتحان. نطاق الدرجة معطّل لهذا الفلتر.
+                </p>
+              ) : callStatusFilter === "cheating" ? (
+                <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+                  حالة الغش غير رقمية، لذلك نطاق الدرجة معطّل لهذا الفلتر.
+                </p>
+              ) : callGradeRangeInvalid ? (
                 <p className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm font-bold text-destructive">
                   درجة «من» يجب ألا تكون أكبر من درجة «إلى».
                 </p>

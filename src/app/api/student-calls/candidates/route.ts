@@ -17,9 +17,14 @@ import { studentCourseScopeWhere } from "@/lib/student-scope";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import {
-  callGradeMatchesRange,
+  callGradeMatchesRangeForStatus,
   parseCallGradeRange,
 } from "@/lib/call-grade-range";
+import {
+  buildImplicitCallAbsenceGrade,
+  resolveCallAbsenceSource,
+  type CallAbsenceSource,
+} from "@/lib/call-absence";
 
 export type CallStatusFilter =
   | "all"
@@ -208,18 +213,6 @@ function classifyCallImpact(
   return classifyGradeAcademicImpact(grade, exam, { student, leaves });
 }
 
-function callKindForGrade(
-  grade: DbGradeLite | undefined,
-  exam: DbExamLite,
-  student?: DbStudentLite,
-  leaves: DbLeaveLite[] = [],
-): CallKind {
-  const impactKind = classifyCallImpact(grade, exam, student, leaves);
-  // التصنيف الأكاديمي هو المرجع الوحيد. الغياب المحمي بالسماح/الإجازة
-  // لا يتحول إلى مرشح مكالمة لمجرد بقاء سجل قديم في قاعدة البيانات.
-  return gradeKindForCalls(impactKind);
-}
-
 function callLabel(kind: CallKind): string {
   if (kind === "absent") return "غائب";
   if (kind === "cheating") return "غش";
@@ -231,7 +224,15 @@ function callLabel(kind: CallKind): string {
   return "محمي من المحاسبة";
 }
 
-function callReason(kind: CallKind, grade: DbGradeLite, exam: DbExamLite): string {
+function callReason(
+  kind: CallKind,
+  grade: DbGradeLite,
+  exam: DbExamLite,
+  absenceSource?: CallAbsenceSource | null,
+): string {
+  if (absenceSource === "missing") {
+    return "لم تُسجّل له درجة لهذا الامتحان؛ يُعرض غائباً للمتابعة فقط.";
+  }
   const scoreText =
     grade.status === "درجة" && grade.score !== null
       ? `${grade.score}/${exam.fullMark}`
@@ -253,8 +254,18 @@ function callBadgesForGrade(args: {
   grade: DbGradeLite;
   exam: DbExamLite;
   impactKind: GradeClassificationKind;
+  absenceSource?: CallAbsenceSource | null;
 }): CallBadgeInfo[] {
-  const { grade, exam, impactKind } = args;
+  const { grade, exam, impactKind, absenceSource } = args;
+  if (absenceSource === "missing") {
+    return [
+      {
+        label: "لم يمتحن: لا توجد درجة مسجلة",
+        tone: "warning",
+        detail: "هذا غياب مشتق للمتابعة فقط ولم ينشئ النظام سجل درجة أو خصماً.",
+      },
+    ];
+  }
   if (hasAbsentStatus(grade)) {
     if (impactKind === "absent-dismissal") {
       return [
@@ -341,10 +352,12 @@ function gradeMatchesStatusFilter(
   filter: CallStatusFilter,
   kind: CallKind,
   impactKind: GradeClassificationKind,
-  grade?: DbGradeLite,
+  absenceSource?: CallAbsenceSource | null,
 ): boolean {
-  if (filter === "all") return !NON_DISPLAY_CALL_KINDS.has(kind);
-  if (filter === "absent") return kind === "absent";
+  if (filter === "all") {
+    return Boolean(absenceSource) || !NON_DISPLAY_CALL_KINDS.has(kind);
+  }
+  if (filter === "absent") return Boolean(absenceSource);
   if (filter === "discounted") return isDeductedImpact(impactKind);
   if (filter === "passed") return kind === "passed" || kind === "full";
   if (filter === "failed") {
@@ -410,20 +423,21 @@ function buildGradeItem(args: {
   exam: DbExamLite;
   student: DbStudentLite;
   leaves: DbLeaveLite[];
+  absenceSource?: CallAbsenceSource | null;
 }) {
-  const { grade, exam, student, leaves } = args;
+  const { grade, exam, student, leaves, absenceSource = null } = args;
   const impactKind = classifyCallImpact(grade, exam, student, leaves);
-  const kind = gradeKindForCalls(impactKind);
+  const kind = absenceSource ? "absent" : gradeKindForCalls(impactKind);
   return {
     id: `grade:${grade.id}`,
-    callKey: `grade:${grade.id}`,
+    callKey: absenceSource === "missing" ? "absent" : `grade:${grade.id}`,
     exam: toClientExam(exam),
     grade,
     category: kind,
     impactKind,
     label: callLabel(kind),
-    reason: callReason(kind, grade, exam),
-    badges: callBadgesForGrade({ grade, exam, impactKind }),
+    reason: callReason(kind, grade, exam, absenceSource),
+    badges: callBadgesForGrade({ grade, exam, impactKind, absenceSource }),
     // آخر امتحانين يجب أن يكونا حسب تاريخ الامتحان نفسه، لا حسب وقت تعديل الدرجة.
     sortTime: new Date(exam.date).getTime() || 0,
   };
@@ -494,6 +508,38 @@ export async function GET(req: NextRequest) {
     const courseExamById = new Map(courseExams.map((item) => [item.id, item]));
     const courseExamIds = courseExams.map((item) => item.id);
 
+    const selectedStudents = (await db.student.findMany({
+      where: studentCourseScopeWhere(courseId, "followup"),
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        school: true,
+        gender: true,
+        phone: true,
+        parentPhone: true,
+        telegram: true,
+        courseProgram: true,
+        courseTerm: true,
+        studyType: true,
+        locationScope: true,
+        baghdadMode: true,
+        mainSite: true,
+        subSite: true,
+        code: true,
+        status: true,
+        dismissalType: true,
+        dismissalReason: true,
+        dismissalNotes: true,
+        opportunities: true,
+        baseOpportunities: true,
+        accountingGraceDays: true,
+        gracePeriodStartDate: true,
+        createdAt: true,
+        courseId: true,
+      },
+    })) as DbStudentLite[];
+
     const selectedGrades = (await db.grade.findMany({
       where: {
         examId,
@@ -545,7 +591,44 @@ export async function GET(req: NextRequest) {
       },
     })) as Array<DbGradeLite & { student: DbStudentLite }>;
 
-    if (selectedGrades.length === 0) {
+    const [scoredAttempts, correctionAttempts, submissionAttempts] =
+      await Promise.all([
+        db.gradeSmartNote.findMany({
+          where: {
+            examId,
+            score: { not: null },
+            student: { is: studentCourseScopeWhere(courseId, "followup") },
+          },
+          select: { studentId: true },
+        }),
+        db.correctionSheet.findMany({
+          where: {
+            examId,
+            student: { is: studentCourseScopeWhere(courseId, "followup") },
+          },
+          select: { studentId: true },
+        }),
+        db.telegramExamSubmission.findMany({
+          where: {
+            examId,
+            student: { is: studentCourseScopeWhere(courseId, "followup") },
+            OR: [
+              { pageCount: { gt: 0 } },
+              {
+                AND: [{ pages: { not: "[]" } }, { pages: { not: "" } }],
+              },
+            ],
+          },
+          select: { studentId: true },
+        }),
+      ]);
+    const attemptEvidenceStudentIds = new Set([
+      ...scoredAttempts.map((note) => note.studentId),
+      ...correctionAttempts.map((sheet) => sheet.studentId),
+      ...submissionAttempts.map((submission) => submission.studentId),
+    ]);
+
+    if (selectedStudents.length === 0) {
       return NextResponse.json({
         rows: [],
         students: [],
@@ -561,7 +644,13 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const candidateStudentIds = selectedGrades.map((grade) => grade.studentId);
+    const selectedGradeByStudentId = new Map<string, DbGradeLite>();
+    selectedGrades.forEach((grade) => {
+      if (!selectedGradeByStudentId.has(grade.studentId)) {
+        selectedGradeByStudentId.set(grade.studentId, grade);
+      }
+    });
+    const candidateStudentIds = selectedStudents.map((student) => student.id);
     const examDayStart = startOfUtcDay(exam.date);
     const examDayEnd = dayAfter(exam.date);
     const selectedLeaves = await db.studentLeave.findMany({
@@ -592,18 +681,34 @@ export async function GET(req: NextRequest) {
       selectedLeavesByStudentId.set(leave.studentId, list);
     });
 
-    const matching = selectedGrades.flatMap((grade) => {
-      const student = grade.student as DbStudentLite;
-      if (!student || student.status === "مؤرشف") return [];
+    const matching = selectedStudents.flatMap((student) => {
+      const storedGrade = selectedGradeByStudentId.get(student.id);
       const leaves = leavesForExam(selectedLeavesByStudentId, student.id, exam);
+      const absenceSource = resolveCallAbsenceSource({
+        grade: storedGrade,
+        exam,
+        student,
+        leaves,
+        hasAttemptEvidence: attemptEvidenceStudentIds.has(student.id),
+      });
+      const grade =
+        storedGrade ||
+        (absenceSource === "missing"
+          ? buildImplicitCallAbsenceGrade({
+              studentId: student.id,
+              examId: exam.id,
+              examDate: exam.date,
+            })
+          : undefined);
+      if (!grade) return [];
       const impactKind = classifyCallImpact(grade, exam, student, leaves);
-      const kind = gradeKindForCalls(impactKind);
-      if (!gradeMatchesStatusFilter(statusFilter, kind, impactKind, grade)) return [];
-      if (!callGradeMatchesRange(grade, gradeRange)) return [];
+      const kind = absenceSource ? "absent" : gradeKindForCalls(impactKind);
+      if (!gradeMatchesStatusFilter(statusFilter, kind, impactKind, absenceSource)) return [];
+      if (!callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)) return [];
       const values = searchableValues({ student, grade, exam, kind });
       if (generalSearch && !includesSearch(generalSearch, values)) return [];
       if (filterSearch && !includesSearch(filterSearch, values)) return [];
-      return [{ student, grade, kind }];
+      return [{ student, grade, kind, absenceSource }];
     });
 
     const sortedMatching = matching.sort((a, b) => {
@@ -693,20 +798,26 @@ export async function GET(req: NextRequest) {
       gradesByStudentId.set(grade.studentId, list);
     });
 
-    const rows = paged.map(({ student, grade }) => {
+    const rows = paged.map(({ student, grade, absenceSource }) => {
       const authoritativeStudent = pagedStudentById.get(student.id) || student;
-      const items = (gradesByStudentId.get(student.id) || [])
+      const storedItems = (gradesByStudentId.get(student.id) || [])
         .flatMap((itemGrade) => {
           const itemExam = courseExamById.get(itemGrade.examId);
           if (!itemExam) return [];
           const leaves = leavesForExam(leavesByStudentId, student.id, itemExam);
+          const itemAbsenceSource = resolveCallAbsenceSource({
+            grade: itemGrade,
+            exam: itemExam,
+            student: authoritativeStudent,
+            leaves,
+          });
           const impactKind = classifyCallImpact(
             itemGrade,
             itemExam,
             authoritativeStudent,
             leaves,
           );
-          const kind = gradeKindForCalls(impactKind);
+          const kind = itemAbsenceSource ? "absent" : gradeKindForCalls(impactKind);
           if (NON_DISPLAY_CALL_KINDS.has(kind)) return [];
           return [
             buildGradeItem({
@@ -714,19 +825,28 @@ export async function GET(req: NextRequest) {
               exam: itemExam,
               student: authoritativeStudent,
               leaves,
+              absenceSource: itemAbsenceSource,
             }),
           ];
         })
         .sort((a, b) => b.sortTime - a.sortTime || a.exam.name.localeCompare(b.exam.name, "ar"));
 
       const focusItem =
-        items.find((item) => item.grade.id === grade.id || item.exam.id === examId) ||
+        storedItems.find((item) => item.grade.id === grade.id || item.exam.id === examId) ||
         buildGradeItem({
           grade,
           exam,
           student: authoritativeStudent,
           leaves: leavesForExam(selectedLeavesByStudentId, student.id, exam),
+          absenceSource,
         });
+      const items = storedItems.some((item) => item.id === focusItem.id)
+        ? storedItems
+        : [focusItem, ...storedItems].sort(
+            (a, b) =>
+              b.sortTime - a.sortTime ||
+              a.exam.name.localeCompare(b.exam.name, "ar"),
+          );
 
       return {
         id: `student:${student.id}`,

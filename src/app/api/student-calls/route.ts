@@ -10,6 +10,10 @@ import {
   validationError,
 } from "@/lib/route-helpers";
 import { withFollowupTables } from "@/lib/followup-schema";
+import {
+  callCategoryAliasesForCurrentGrade,
+  retainedCallCategory,
+} from "@/lib/call-absence";
 
 function dateOrNull(value: unknown): Date | null {
   if (!value) return null;
@@ -104,11 +108,26 @@ export async function POST(req: NextRequest) {
     const result = await withFollowupTables(
       () =>
         db.$transaction(async (tx) => {
+          const currentGrade = data.examId
+            ? await tx.grade.findUnique({
+                where: {
+                  studentId_examId: {
+                    studentId: data.studentId,
+                    examId: data.examId,
+                  },
+                },
+                select: { id: true, status: true },
+              })
+            : null;
+          const categoryAliases = callCategoryAliasesForCurrentGrade({
+            requestedCategory: data.category,
+            currentGrade,
+          });
           const existing = await tx.studentCall.findFirst({
             where: {
               studentId: data.studentId,
               examId: data.examId,
-              category: data.category,
+              category: { in: categoryAliases },
             },
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           });
@@ -133,6 +152,15 @@ export async function POST(req: NextRequest) {
           }
 
           const { createdAt: _createdAt, ...updateData } = data;
+          updateData.category = retainedCallCategory(
+            data.category,
+            existing?.category,
+            categoryAliases,
+          );
+          const createData = {
+            ...data,
+            category: String(updateData.category || data.category),
+          };
           let studentCall;
           if (existing) {
             studentCall = await tx.studentCall.update({
@@ -141,7 +169,7 @@ export async function POST(req: NextRequest) {
             });
           } else {
             try {
-              studentCall = await tx.studentCall.create({ data });
+              studentCall = await tx.studentCall.create({ data: createData });
             } catch (createError) {
               if (!isUniqueConstraintError(createError)) throw createError;
               // A second tab/request created the same logical call between findFirst and create.
@@ -150,7 +178,7 @@ export async function POST(req: NextRequest) {
                 where: {
                   studentId: data.studentId,
                   examId: data.examId,
-                  category: data.category,
+                  category: { in: categoryAliases },
                 },
                 orderBy: [{ createdAt: "desc" }, { id: "desc" }],
               });
@@ -167,7 +195,7 @@ export async function POST(req: NextRequest) {
             where: {
               studentId: data.studentId,
               examId: data.examId,
-              category: data.category,
+              category: { in: categoryAliases },
               id: { not: studentCall.id },
             },
           });

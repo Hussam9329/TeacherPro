@@ -142,10 +142,10 @@ assert(
 );
 assert(
   candidates.includes('filter === "absent"') &&
-    candidates.includes('return kind === "absent"') &&
+    candidates.includes('return Boolean(absenceSource)') &&
     stats.includes('filter === "absent"') &&
-    stats.includes('return kind === "absent"'),
-  'فلتر الغائبين يعتمد على التصنيف الأكاديمي الموحد ويستبعد الغياب المحمي',
+    stats.includes('return Boolean(absenceSource)'),
+  'فلتر الغائبين يوحّد الغياب المسجل والمشتق ويستبعد الحالات المحمية',
 );
 assert(
   candidates.includes('gracePeriodStartDate: true') &&
@@ -195,8 +195,8 @@ assert(
 assert(
   api.includes('gradeFrom: query.gradeFrom') &&
     api.includes('gradeTo: query.gradeTo') &&
-    candidates.includes('callGradeMatchesRange(grade, gradeRange)') &&
-    stats.includes('callGradeMatchesRange(grade, gradeRange)'),
+    candidates.includes('callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)') &&
+    stats.includes('callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)'),
   'نطاق الدرجة ينتقل إلى القائمة والتصدير والإحصائيات بنفس المنطق',
 );
 assert(
@@ -204,6 +204,23 @@ assert(
     gradeRange.includes('score > range.to') &&
     gradeRange.includes('grade?.status !== "درجة"'),
   'نطاق الدرجة شامل للحدين ويستبعد الحالات غير الرقمية عند تفعيله',
+);
+assert(
+  followUp.includes('callStatusSupportsGradeRange') &&
+    followUp.includes('setCallGradeFrom("");') &&
+    followUp.includes('setCallGradeTo("");') &&
+    followUp.includes('disabled={!callExamSelected || !callGradeRangeEnabled}'),
+  'اختيار الغائبين أو الغش يمسح نطاق الدرجة ويعطّل حقليه للحالات غير الرقمية',
+);
+assert(
+  followUp.includes('gradeFrom: effectiveCallGradeFrom') &&
+    followUp.includes('gradeTo: effectiveCallGradeTo'),
+  'طلبات القائمة والإحصائيات والتصدير لا ترسل نطاقاً رقمياً متأخراً مع الغائبين أو الغش',
+);
+assert(
+  followUp.includes('الطلاب الذين لم تُدخل') &&
+    followUp.includes('درجاتهم بعد انتهاء الامتحان'),
+  'الواجهة توضح أن الغائبين تشمل أيضاً غير المدخلة درجاتهم بعد انتهاء الامتحان',
 );
 
 if (process.exitCode) {

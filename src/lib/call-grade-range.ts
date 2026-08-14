@@ -46,3 +46,14 @@ export function callGradeMatchesRange(
   if (range.to !== null && score > range.to) return false;
   return true;
 }
+
+export function callGradeMatchesRangeForStatus(
+  grade: GradeWithNumericScore | undefined,
+  range: CallGradeRange,
+  statusFilter: string,
+): boolean {
+  // الغياب ليس درجة رقمية. بقاء قيمة قديمة في حقلي من/إلى يجب ألا يحوّل
+  // فلتر الغائبين إلى نتيجة فارغة.
+  if (statusFilter === "absent" || statusFilter === "cheating") return true;
+  return callGradeMatchesRange(grade, range);
+}

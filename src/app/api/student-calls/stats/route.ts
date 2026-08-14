@@ -16,9 +16,14 @@ import {
 } from "@/lib/grade-classification";
 import { studentCourseScopeWhere } from "@/lib/student-scope";
 import {
-  callGradeMatchesRange,
+  callGradeMatchesRangeForStatus,
   parseCallGradeRange,
 } from "@/lib/call-grade-range";
+import {
+  buildImplicitCallAbsenceGrade,
+  resolveCallAbsenceSource,
+  type CallAbsenceSource,
+} from "@/lib/call-absence";
 
 type CallStatusFilter =
   | "all"
@@ -41,6 +46,9 @@ type DbStudentLite = {
   school: string;
   status: string;
   studyType: string | null;
+  mainSite: string | null;
+  subSite: string | null;
+  locationScope: string | null;
   createdAt: Date;
   accountingGraceDays: number;
   gracePeriodStartDate: Date | null;
@@ -63,11 +71,15 @@ type DbExamLite = {
   type: string;
   date: Date;
   courseIds: string;
+  mainSite: string | null;
   fullMark: number;
   passMark: number;
   discountMark: number;
   dismissalGrade: number | null;
   noDiscount: boolean;
+  active: boolean;
+  scheduledActivateAt: Date | null;
+  scheduledDeactivateAt: Date | null;
 };
 
 type DbLeaveLite = {
@@ -125,10 +137,6 @@ function normalizeContactStatus(
   return call.completed ? "تم الاتصال" : "";
 }
 
-function hasAbsentStatus(grade: Pick<DbGradeLite, "status"> | undefined): boolean {
-  return grade?.status === "غائب";
-}
-
 function isDeductedImpact(kind: GradeClassificationKind): boolean {
   return (
     kind === "absent-deducted" ||
@@ -163,7 +171,9 @@ function gradeCategory(
   exam: DbExamLite,
   student?: DbStudentLite,
   leaves: DbLeaveLite[] = [],
+  absenceSource?: CallAbsenceSource | null,
 ): "absent" | "discounted" | "failed" | "academic-accounting" | "full" | "passed" | "cheating" | "protected" | "missing" {
+  if (absenceSource) return "absent";
   return callGradeKind(grade, exam, student, leaves);
 }
 
@@ -173,12 +183,15 @@ function gradeMatchesStatusFilter(
   exam: DbExamLite,
   student?: DbStudentLite,
   leaves: DbLeaveLite[] = [],
+  absenceSource?: CallAbsenceSource | null,
 ): boolean {
-  if (!grade) return false;
+  if (!grade && !absenceSource) return false;
   const impactKind = classifyCallImpact(grade, exam, student, leaves);
-  const kind = gradeKindForCalls(impactKind);
-  if (filter === "all") return kind !== "missing" && kind !== "protected";
-  if (filter === "absent") return kind === "absent";
+  const kind = absenceSource ? "absent" : gradeKindForCalls(impactKind);
+  if (filter === "all") {
+    return Boolean(absenceSource) || (kind !== "missing" && kind !== "protected");
+  }
+  if (filter === "absent") return Boolean(absenceSource);
   if (filter === "discounted") return isDeductedImpact(impactKind);
   if (filter === "passed") return kind === "passed" || kind === "full";
   if (filter === "failed") {
@@ -202,9 +215,12 @@ function searchableValues(
   grade: DbGradeLite | undefined,
   exam: DbExamLite,
   leaves: DbLeaveLite[],
+  absenceSource?: CallAbsenceSource | null,
 ) {
   const score = grade?.score ?? "";
-  const category = grade ? gradeCategory(grade, exam, student, leaves) : "";
+  const category = grade
+    ? gradeCategory(grade, exam, student, leaves, absenceSource)
+    : "";
   const labelByCategory: Record<string, string> = {
     absent: "غائب الغائبين",
     discounted: "مخصوم المخصومين خصم",
@@ -260,11 +276,15 @@ export async function GET(req: NextRequest) {
         type: true,
         date: true,
         courseIds: true,
+        mainSite: true,
         fullMark: true,
         passMark: true,
         discountMark: true,
         dismissalGrade: true,
         noDiscount: true,
+        active: true,
+        scheduledActivateAt: true,
+        scheduledDeactivateAt: true,
       },
     });
     if (!exam) return NextResponse.json(zeroStats);
@@ -275,7 +295,15 @@ export async function GET(req: NextRequest) {
     const examDayStart = startOfUtcDay(exam.date);
     const examDayEnd = dayAfter(exam.date);
 
-    const [students, grades, leaves, calls] = await withFollowupTables(
+    const [
+      students,
+      grades,
+      leaves,
+      calls,
+      scoredAttempts,
+      correctionAttempts,
+      submissionAttempts,
+    ] = await withFollowupTables(
       () =>
         Promise.all([
           db.student.findMany({
@@ -290,6 +318,9 @@ export async function GET(req: NextRequest) {
               school: true,
               status: true,
               studyType: true,
+              mainSite: true,
+              subSite: true,
+              locationScope: true,
               createdAt: true,
               accountingGraceDays: true,
               gracePeriodStartDate: true,
@@ -345,12 +376,45 @@ export async function GET(req: NextRequest) {
               completed: true,
             },
           }),
+          db.gradeSmartNote.findMany({
+            where: {
+              examId,
+              score: { not: null },
+              student: { is: studentCourseScopeWhere(courseId, "followup") },
+            },
+            select: { studentId: true },
+          }),
+          db.correctionSheet.findMany({
+            where: {
+              examId,
+              student: { is: studentCourseScopeWhere(courseId, "followup") },
+            },
+            select: { studentId: true },
+          }),
+          db.telegramExamSubmission.findMany({
+            where: {
+              examId,
+              student: { is: studentCourseScopeWhere(courseId, "followup") },
+              OR: [
+                { pageCount: { gt: 0 } },
+                {
+                  AND: [{ pages: { not: "[]" } }, { pages: { not: "" } }],
+                },
+              ],
+            },
+            select: { studentId: true },
+          }),
         ]),
       "StudentCallStats",
     );
 
     const gradeByStudentId = new Map<string, DbGradeLite>();
     grades.forEach((grade) => gradeByStudentId.set(grade.studentId, grade));
+    const attemptEvidenceStudentIds = new Set([
+      ...scoredAttempts.map((note) => note.studentId),
+      ...correctionAttempts.map((sheet) => sheet.studentId),
+      ...submissionAttempts.map((submission) => submission.studentId),
+    ]);
     const studentById = new Map<string, DbStudentLite>();
     students.forEach((student) => studentById.set(student.id, student));
 
@@ -366,11 +430,36 @@ export async function GET(req: NextRequest) {
       { status: string; completed: boolean }
     >();
     calls.forEach((call) => {
-      const grade = gradeByStudentId.get(call.studentId);
       const student = studentById.get(call.studentId);
-      if (!grade || !student) return;
-      const category = gradeCategory(grade, exam, student, leavesByStudentId.get(call.studentId) || []);
-      const exactCategory = `grade:${grade.id}`;
+      if (!student) return;
+      const storedGrade = gradeByStudentId.get(call.studentId);
+      const studentLeaves = leavesByStudentId.get(call.studentId) || [];
+      const absenceSource = resolveCallAbsenceSource({
+        grade: storedGrade,
+        exam,
+        student,
+        leaves: studentLeaves,
+        hasAttemptEvidence: attemptEvidenceStudentIds.has(student.id),
+      });
+      const grade =
+        storedGrade ||
+        (absenceSource === "missing"
+          ? buildImplicitCallAbsenceGrade({
+              studentId: student.id,
+              examId: exam.id,
+              examDate: exam.date,
+            })
+          : undefined);
+      if (!grade) return;
+      const category = gradeCategory(
+        grade,
+        exam,
+        student,
+        studentLeaves,
+        absenceSource,
+      );
+      const exactCategory =
+        absenceSource === "missing" ? "absent" : `grade:${grade.id}`;
       if (call.category !== exactCategory && call.category !== category) return;
       if (!bestCallByStudentId.has(call.studentId)) {
         bestCallByStudentId.set(call.studentId, call);
@@ -378,18 +467,51 @@ export async function GET(req: NextRequest) {
     });
 
     const matchingStudents = students.filter((student) => {
-      const grade = gradeByStudentId.get(student.id);
+      const storedGrade = gradeByStudentId.get(student.id);
       const studentLeaves = leavesByStudentId.get(student.id) || [];
-      if (!gradeMatchesStatusFilter(statusFilter, grade, exam, student, studentLeaves)) return false;
-      if (!callGradeMatchesRange(grade, gradeRange)) return false;
+      const absenceSource = resolveCallAbsenceSource({
+        grade: storedGrade,
+        exam,
+        student,
+        leaves: studentLeaves,
+        hasAttemptEvidence: attemptEvidenceStudentIds.has(student.id),
+      });
+      const grade =
+        storedGrade ||
+        (absenceSource === "missing"
+          ? buildImplicitCallAbsenceGrade({
+              studentId: student.id,
+              examId: exam.id,
+              examDate: exam.date,
+            })
+          : undefined);
+      if (
+        !gradeMatchesStatusFilter(
+          statusFilter,
+          grade,
+          exam,
+          student,
+          studentLeaves,
+          absenceSource,
+        )
+      ) {
+        return false;
+      }
+      if (!callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)) return false;
       if (
         generalSearch &&
-        !includesSearch(generalSearch, searchableValues(student, grade, exam, studentLeaves))
+        !includesSearch(
+          generalSearch,
+          searchableValues(student, grade, exam, studentLeaves, absenceSource),
+        )
       )
         return false;
       if (
         filterSearch &&
-        !includesSearch(filterSearch, searchableValues(student, grade, exam, studentLeaves))
+        !includesSearch(
+          filterSearch,
+          searchableValues(student, grade, exam, studentLeaves, absenceSource),
+        )
       )
         return false;
       return true;
