@@ -13,6 +13,9 @@ const must = (condition, ok, bad = ok) => condition ? pass(ok) : fail(bad);
 const resetView = read("src/components/teacher-pro/admin-log-reset.tsx");
 const clearRoute = read("src/app/api/logs/clear/route.ts");
 const restoreRoute = read("src/app/api/logs/restore/route.ts");
+const logsRoute = read("src/app/api/logs/route.ts");
+const opportunityLogsRoute = read("src/app/api/opportunity-logs/route.ts");
+const transitionPolicy = read("src/lib/second-chapter-transition.ts");
 const store = read("src/lib/teacher-store.ts");
 const pkg = JSON.parse(read("package.json"));
 
@@ -41,6 +44,19 @@ must(
     clearRoute.includes("إجراءات الحسابات والصلاحيات والأمان وتسجيل الدخول"),
   "API تصفير اللوغ يحفظ نسخة احتياطية ويتحقق من كلمة مرور الأدمن ويشمل الحسابات/الصلاحيات",
   "logs/clear يجب أن يكون محمياً بكلمة مرور الأدمن ونسخة احتياطية ونطاق حسابات محدث.",
+);
+
+must(
+  clearRoute.includes("SECOND_CHAPTER_TRANSITION_MARKER_ID") &&
+    clearRoute.includes("SECOND_CHAPTER_PROTECTED_OPPORTUNITY_REASONS") &&
+    logsRoute.includes("SECOND_CHAPTER_TRANSITION_MARKER_ID") &&
+    opportunityLogsRoute.includes(
+      "isSecondChapterProtectedOpportunityReason",
+    ) &&
+    transitionPolicy.includes("SECOND_CHAPTER_SETTLEMENT_REASON") &&
+    transitionPolicy.includes("SECOND_CHAPTER_REACTIVATION_REASON"),
+  "تصفير/حذف السجلات يحمي علامة انتقال الفصل الثاني وسجلات التسوية وإعادة التفعيل",
+  "يجب منع حذف السجلات التي تحفظ بداية الفصل الثاني وتمنع رجوع آثار الفصل السابق.",
 );
 
 must(
