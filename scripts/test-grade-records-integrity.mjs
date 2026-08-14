@@ -55,6 +55,15 @@ must(
 );
 
 must(
+  page.includes('label: "درجة الطالب"') &&
+    page.includes('key: "fullMark"') &&
+    page.includes('label: "الدرجة الكاملة"') &&
+    page.includes('normalizeScore(grade.score)'),
+  "تصدير سجل الدرجات يفصل درجة الطالب عن الدرجة الكاملة كقيم رقمية",
+  "يجب ألا يصدّر سجل الدرجات الدرجة بصيغة 20/50 التي قد يفسرها Excel كتاريخ."
+);
+
+must(
   api.includes("gradeCoverageStatsApi") && api.includes("options: ApiGetOptions") &&
     api.includes("apiGet<GradeCoverageStatsResponse>") && api.includes("options"),
   "طبقة API تدعم AbortController لإحصائيات سجل الدرجات",

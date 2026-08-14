@@ -49,6 +49,7 @@ import {
   getExamEntryAvailability,
   isExamOnOrAfterStudentRegistration,
   isGradeEntered,
+  normalizeScore,
 } from "@/lib/exam-utils";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { useActionLock } from "@/hooks/use-action-lock";
@@ -113,8 +114,17 @@ const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
   { key: "status", label: "الحالة", value: ({ grade }) => grade.status || "" },
   {
     key: "score",
-    label: "الدرجة",
-    value: ({ grade, exam }) => formatGradeScore(grade, exam, ""),
+    label: "درجة الطالب",
+    value: ({ grade }) =>
+      grade.status === "درجة" ? (normalizeScore(grade.score) ?? "") : "",
+  },
+  {
+    key: "fullMark",
+    label: "الدرجة الكاملة",
+    value: ({ exam }) => {
+      const fullMark = Number(exam?.fullMark);
+      return Number.isFinite(fullMark) ? fullMark : "";
+    },
   },
   {
     key: "accounting",
