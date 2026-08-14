@@ -197,7 +197,11 @@ const contactStatusOptions: Array<{
   { value: "لم يرد", label: "لم يرد" },
   { value: "الرقم خاطئ", label: "الرقم خاطئ" },
 ];
-const CALL_PAGE_SIZE = 120;
+// Each call row is a full interaction card (history, contact status, notes and
+// actions). Rendering 120 cards at once creates thousands of DOM nodes and can
+// hold React's scheduler for hundreds of milliseconds. Counts and exports are
+// server-driven, so a smaller UI page keeps the complete result set intact.
+const CALL_PAGE_SIZE = 30;
 const nonCallableGradeKinds = new Set([
   "grace",
   "before-registration",
@@ -730,6 +734,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       return;
     }
     let cancelled = false;
+    let responseApplied = false;
     const controller = new AbortController();
     const requestSequence = ++callCandidatesRequestSequenceRef.current;
     const mutationVersionAtRequestStart = callMutationVersionRef.current;
@@ -764,20 +769,26 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           return;
         const nextRows = (result.rows || []) as unknown as CallStudentRow[];
         callRowsRef.current = nextRows;
-        setCallRowsFromDb(nextRows);
-        // لا نسمح لطلب بدأ قبل حفظ المستخدم أن يعيد حالة اتصال قديمة فوق النتيجة المحفوظة.
-        if (mutationVersionAtRequestStart === callMutationVersionRef.current) {
-          setCallPageStudentCalls(
-            (result.studentCalls || []) as unknown as StudentCall[],
-          );
-        }
-        if (result.exams?.length) {
-          setCallCourseExamsFromDb(result.exams as unknown as Exam[]);
-        }
-        setCallServerPageInfo({
-          totalCount: Number(result.totalCount || 0),
-          totalPages: Math.max(1, Number(result.totalPages || 1)),
-          hasMore: Boolean(result.hasMore),
+        responseApplied = true;
+        // تحديث صفحة كاملة من بطاقات المكالمات عمل واجهة غير عاجل. الانتقال
+        // يسمح لـ React بتقسيم الرسم بدل حبس الـmain thread في message task واحدة.
+        React.startTransition(() => {
+          setCallRowsFromDb(nextRows);
+          // لا نسمح لطلب بدأ قبل حفظ المستخدم أن يعيد حالة اتصال قديمة فوق النتيجة المحفوظة.
+          if (mutationVersionAtRequestStart === callMutationVersionRef.current) {
+            setCallPageStudentCalls(
+              (result.studentCalls || []) as unknown as StudentCall[],
+            );
+          }
+          if (result.exams?.length) {
+            setCallCourseExamsFromDb(result.exams as unknown as Exam[]);
+          }
+          setCallServerPageInfo({
+            totalCount: Number(result.totalCount || 0),
+            totalPages: Math.max(1, Number(result.totalPages || 1)),
+            hasMore: Boolean(result.hasMore),
+          });
+          setCallLoading(false);
         });
       })
       .catch(() => {
@@ -797,7 +808,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           !controller.signal.aborted &&
           requestSequence === callCandidatesRequestSequenceRef.current
         )
-          setCallLoading(false);
+          if (!responseApplied) setCallLoading(false);
       });
 
     return () => {
@@ -2004,7 +2015,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return (
       <div
         key={row.id}
-        className="rounded-3xl border bg-card/90 p-4 text-sm shadow-sm transition-colors hover:border-primary/25"
+        className="teacherpro-heavy-row rounded-3xl border bg-card/90 p-4 text-sm shadow-sm transition-colors hover:border-primary/25"
       >
         <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
           <div className="space-y-2">

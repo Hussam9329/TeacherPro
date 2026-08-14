@@ -36,6 +36,20 @@ const profileLog = read(files.profileLog);
 const profileDialog = read(files.profileDialog);
 const gradeRange = read(files.gradeRange);
 
+const callPageSizeMatch = followUp.match(/const CALL_PAGE_SIZE = (\d+);/);
+const callPageSize = Number(callPageSizeMatch?.[1] || 0);
+
+assert(
+  callPageSize > 0 && callPageSize <= 40,
+  'صفحة المكالمات تحد عدد البطاقات الثقيلة إلى 40 أو أقل بدون تغيير العدد أو التصدير',
+);
+assert(
+  followUp.includes('React.startTransition(() => {') &&
+    followUp.includes('setCallRowsFromDb(nextRows);') &&
+    followUp.includes('className="teacherpro-heavy-row rounded-3xl'),
+  'تحديث بطاقات المكالمات مجدول كواجهة غير عاجلة وكل بطاقة معزولة عن إعادة تخطيط الصفحة',
+);
+
 assert(
   followUp.includes('const callRows = callRowsFromDb;'),
   'تبويبة المكالمات تعرض الصفوف القادمة من قاعدة البيانات فقط',
