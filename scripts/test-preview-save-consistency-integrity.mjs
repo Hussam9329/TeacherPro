@@ -17,6 +17,12 @@ const courseChapterAction = read("src/app/api/course-chapters/activate/route.ts"
 const safeOpportunityRepair = read(
   "src/app/api/students/fix-zero-opportunities/route.ts",
 );
+const academicRepair = read(
+  "src/app/api/students/academic-repair/route.ts",
+);
+const retiredOpportunityClamp = read(
+  "src/app/api/students/clamp-opportunities/route.ts",
+);
 const secondChapterTransition = read(
   "src/app/api/course-chapters/second-chapter-transition/route.ts",
 );
@@ -43,6 +49,20 @@ const academicExamSnapshotSource = examsRoute.slice(
   examsRoute.indexOf("function academicExamSnapshot"),
   examsRoute.indexOf("function hasAcademicExamChange"),
 );
+const replaySafePostSetStart = replayPolicy.indexOf(
+  "const REPLAY_SAFE_POST_ENDPOINTS",
+);
+const replaySafePostEndpointsSource = replayPolicy.slice(
+  replaySafePostSetStart,
+  replayPolicy.indexOf("]);", replaySafePostSetStart) + 3,
+);
+const maintenanceRepairEndpoints = [
+  "/api/students/academic-repair",
+  "/api/students/fix-zero-opportunities",
+  "/api/students/clamp-opportunities",
+  "/api/course-chapters/second-chapter-transition",
+  "/api/logs/clear",
+];
 
 check(
   "معاينة الطالب والحفظ يستخدمان تاريخ بدء السماح نفسه ولا يعيدان توليد اليوم عند التنفيذ",
@@ -203,6 +223,28 @@ check(
   outbox.includes("FAILED_OUTBOX_KEY") &&
     outbox.includes("recordFailedMutation") &&
     outbox.includes("announceTeacherProSyncError"),
+);
+check(
+  "طلبات الإصلاح والصيانة الحساسة لا تُعاد تلقائياً وتُحذف من outbox قبل أي إرسال",
+  maintenanceRepairEndpoints.every(
+    (endpoint) =>
+      replayPolicy.includes(endpoint) &&
+      !replaySafePostEndpointsSource.includes(endpoint),
+  ) &&
+    replayPolicy.includes("if (isMaintenanceRepairEndpoint(endpoint)) return false") &&
+    outbox.includes("purgeMaintenanceRepairMutations(readOutbox())") &&
+    outbox.indexOf("purgeMaintenanceRepairMutations(readOutbox())") <
+      outbox.indexOf("await fetch(item.endpoint"),
+);
+check(
+  "الحزم القديمة لا تستطيع تشغيل إصلاح شامل أو ضبط فرص بلا نطاق ومعاينة",
+  academicRepair.includes("EXPLICIT_ACADEMIC_REPAIR_SCOPES") &&
+    academicRepair.includes("if (!EXPLICIT_ACADEMIC_REPAIR_SCOPES.has(scope))") &&
+    academicRepair.includes("retiredMaintenanceEndpoint: true") &&
+    !academicRepair.includes("recalculateAllStudentsAcademicState") &&
+    retiredOpportunityClamp.includes("retiredMaintenanceEndpoint: true") &&
+    retiredOpportunityClamp.includes("{ status: 410 }") &&
+    !retiredOpportunityClamp.includes("db.student.updateMany"),
 );
 
 check(

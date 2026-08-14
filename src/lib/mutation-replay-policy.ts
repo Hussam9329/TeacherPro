@@ -3,7 +3,13 @@ const REPLAY_SAFE_POST_ENDPOINTS = new Set([
   "/api/grades/mark-missing-absent",
   "/api/student-calls",
   "/api/correction-sheets",
+]);
+
+const NON_REPLAYABLE_MAINTENANCE_ENDPOINTS = new Set([
   "/api/students/academic-repair",
+  "/api/students/fix-zero-opportunities",
+  "/api/students/clamp-opportunities",
+  "/api/course-chapters/second-chapter-transition",
   "/api/logs/clear",
 ]);
 
@@ -11,6 +17,10 @@ function endpointPath(endpoint: string): string {
   const raw = String(endpoint || "").trim();
   const withoutQuery = raw.split("?", 1)[0];
   return withoutQuery.startsWith("/") ? withoutQuery : `/api/${withoutQuery}`;
+}
+
+export function isMaintenanceRepairEndpoint(endpoint: string): boolean {
+  return NON_REPLAYABLE_MAINTENANCE_ENDPOINTS.has(endpointPath(endpoint));
 }
 
 /**
@@ -23,6 +33,7 @@ export function mutationCanBeReplayed(
   method: "POST" | "PUT" | "DELETE",
   payload?: unknown,
 ): boolean {
+  if (isMaintenanceRepairEndpoint(endpoint)) return false;
   if (method === "DELETE") return false;
   const record = payload && typeof payload === "object"
     ? payload as Record<string, unknown>

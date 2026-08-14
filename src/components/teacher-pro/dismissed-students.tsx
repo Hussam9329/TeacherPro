@@ -26,6 +26,8 @@ import {
   Users,
   Clock,
   Ban,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   HandHeart,
 } from "lucide-react";
@@ -70,7 +72,18 @@ type DismissalDetail = {
   pledgeDate?: string;
 };
 
+type DismissedStudentListResponse = {
+  students: Student[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  hasMore: boolean;
+  source: "database";
+};
+
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
+const DISMISSED_PAGE_SIZE = 50;
 
 function dayKey(value: string | Date | null | undefined): string {
   return baghdadDateKey(value);
@@ -117,7 +130,6 @@ export function DismissedStudentsView() {
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "dismissed", "dashboard"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const {
-    students,
     courses,
     exams,
     grades,
@@ -137,6 +149,10 @@ export function DismissedStudentsView() {
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [dismissalDetails, setDismissalDetails] = useState<Record<string, DismissalDetail>>({});
   const [dismissedServerStudents, setDismissedServerStudents] = useState<Student[]>([]);
+  const [dismissedListTotalCount, setDismissedListTotalCount] = useState(0);
+  const [dismissedListTotalPages, setDismissedListTotalPages] = useState(1);
+  const [dismissedPage, setDismissedPage] = useState(1);
+  const [dismissedListRefreshKey, setDismissedListRefreshKey] = useState(0);
   const [dismissedStudentsSearchLoading, setDismissedStudentsSearchLoading] = useState(false);
   const [dismissalDetailsLoading, setDismissalDetailsLoading] = useState(false);
   const [listError, setListError] = useState("");
@@ -164,37 +180,64 @@ export function DismissedStudentsView() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const params = new URLSearchParams({
+      page: String(dismissedPage),
+      pageSize: String(DISMISSED_PAGE_SIZE),
+    });
+    if (debouncedSearch) params.set("q", debouncedSearch);
+    if (filterCourseId) params.set("courseId", filterCourseId);
+    if (filterDismissalType) params.set("dismissalType", filterDismissalType);
+    if (filterNotes !== "all") params.set("notesFilter", filterNotes);
+    if (filterPledge !== "all") params.set("pledgeFilter", filterPledge);
+
     const silent = isBackgroundSync();
     if (!silent) setDismissedStudentsSearchLoading(true);
     if (!silent) setListError("");
-    studentApi
-      .list(
-        {
-          status: "مفصول",
-          q: debouncedSearch || undefined,
-          courseId: filterCourseId || undefined,
-          opportunityMode: true,
-          pageSize: 100,
-          page: 1,
-        },
-        { signal: controller.signal, quietAbort: true },
-      )
+    fetch(`/api/dismissed-students/list?${params.toString()}`, {
+      credentials: "same-origin",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as
+          | DismissedStudentListResponse
+          | { error?: string }
+          | null;
+        if (!response.ok) {
+          throw new Error(
+            (payload as { error?: string } | null)?.error ||
+              "تعذر تحميل قائمة المفصولين.",
+          );
+        }
+        return payload as DismissedStudentListResponse;
+      })
       .then((result) => {
         if (controller.signal.aborted) return;
         if (!result) {
           if (!silent) {
             setDismissedServerStudents([]);
+            setDismissedListTotalCount(0);
+            setDismissedListTotalPages(1);
             setListError("تعذر تحميل المفصولين من بيانات النظام. لا توجد إجراءات حساسة متاحة حتى يرجع الاتصال.");
           }
           return;
         }
+        const nextTotalPages = Math.max(1, Number(result.totalPages || 1));
+        if (dismissedPage > nextTotalPages) {
+          setDismissedPage(nextTotalPages);
+          return;
+        }
         const next = (result.students || []) as unknown as Student[];
         setDismissedServerStudents(next);
+        setDismissedListTotalCount(Number(result.totalCount || 0));
+        setDismissedListTotalPages(nextTotalPages);
         mergeStudentsCache(next);
       })
-      .catch(() => {
+      .catch((error) => {
         if (!controller.signal.aborted && !silent) {
+          console.warn("[DismissedStudentsView] list load failed", error);
           setDismissedServerStudents([]);
+          setDismissedListTotalCount(0);
+          setDismissedListTotalPages(1);
           setListError("تعذر تحميل المفصولين من بيانات النظام. لا توجد إجراءات حساسة متاحة حتى يرجع الاتصال.");
         }
       })
@@ -202,7 +245,18 @@ export function DismissedStudentsView() {
         if (!controller.signal.aborted) setDismissedStudentsSearchLoading(false);
       });
     return () => controller.abort();
-  }, [debouncedSearch, filterCourseId, mergeStudentsCache, syncKey, isBackgroundSync]);
+  }, [
+    debouncedSearch,
+    dismissedListRefreshKey,
+    dismissedPage,
+    filterCourseId,
+    filterDismissalType,
+    filterNotes,
+    filterPledge,
+    mergeStudentsCache,
+    syncKey,
+    isBackgroundSync,
+  ]);
 
   useEffect(() => {
     const ids = dismissedServerStudents.map((student) => student.id).filter(Boolean);
@@ -289,9 +343,18 @@ export function DismissedStudentsView() {
     () =>
       Array.from(
         new Set(
-          dismissedServerStudents
-            .filter((student) => student.status === "مفصول")
-            .map((student) => dismissalDetails[student.id]?.type || student.dismissalType || "مفصول"),
+          [
+            "فصل مؤقت",
+            "فصل نهائي",
+            ...dismissedServerStudents
+              .filter((student) => student.status === "مفصول")
+              .map(
+                (student) =>
+                  dismissalDetails[student.id]?.type ||
+                  student.dismissalType ||
+                  "مفصول",
+              ),
+          ],
         ),
       ).filter(Boolean),
     [dismissedServerStudents, dismissalDetails],
@@ -372,29 +435,8 @@ export function DismissedStudentsView() {
   const dismissedStudents = useMemo(() => {
     return dismissedServerStudents
       .filter((student) => student.status === "مفصول")
-      .filter((student) => {
-        const detail = dismissalDetails[student.id];
-        const hasNotes = Boolean(String(detail?.notes ?? student.dismissalNotes ?? "").trim());
-        const hasPledge = Boolean(detail?.hasPledge);
-        const type = detail?.type || student.dismissalType || "مفصول";
-
-        if (filterCourseId && student.courseId !== filterCourseId) return false;
-        if (filterDismissalType && type !== filterDismissalType) return false;
-        if (filterNotes === "with-notes" && !hasNotes) return false;
-        if (filterNotes === "without-notes" && hasNotes) return false;
-        if (filterPledge === "with-pledge" && !hasPledge) return false;
-        if (filterPledge === "without-pledge" && hasPledge) return false;
-        return true;
-      })
       .sort((a, b) => a.name.localeCompare(b.name, "ar"));
-  }, [
-    dismissedServerStudents,
-    dismissalDetails,
-    filterCourseId,
-    filterDismissalType,
-    filterNotes,
-    filterPledge,
-  ]);
+  }, [dismissedServerStudents]);
 
 
   const canRunSensitiveActions = !listError && !detailsError && !dismissedStudentsSearchLoading && !dismissalDetailsLoading;
@@ -450,6 +492,7 @@ export function DismissedStudentsView() {
       return next;
     });
     emitTeacherProDataChanged({ source: "local-mutation", reason: "dismissed-students-reactivate", scopes: ["students", "opportunities", "dismissed", "dashboard"] });
+    setDismissedListRefreshKey((value) => value + 1);
     toast.success("تمت إعادة تفعيل الطالب من بيانات النظام");
   };
 
@@ -548,6 +591,7 @@ export function DismissedStudentsView() {
       return next;
     });
     emitTeacherProDataChanged({ source: "local-mutation", reason: "dismissed-students-note", scopes: ["students", "dismissed", "dashboard"] });
+    setDismissedListRefreshKey((value) => value + 1);
     toast.success("تم حفظ ملاحظات الفصل من بيانات النظام");
   };
 
@@ -558,6 +602,7 @@ export function DismissedStudentsView() {
     setFilterNotes((values.notesFilter as NotesFilter) || "all");
     setFilterPledge((values.pledgeFilter as PledgeFilter) || "all");
     setViewMode((values.viewMode as ViewMode) || "cards");
+    setDismissedPage(1);
   };
 
   const clearFilters = () => {
@@ -567,6 +612,7 @@ export function DismissedStudentsView() {
     setFilterNotes("all");
     setFilterPledge("all");
     setViewMode("cards");
+    setDismissedPage(1);
   };
 
   const renderNotesEditor = (student: Student) => {
@@ -694,9 +740,10 @@ export function DismissedStudentsView() {
               </Label>
               <Select
                 value={filterCourseId || "all"}
-                onValueChange={(value) =>
-                  setFilterCourseId(value === "all" ? "" : value)
-                }
+                onValueChange={(value) => {
+                  setFilterCourseId(value === "all" ? "" : value);
+                  setDismissedPage(1);
+                }}
               >
                 <SelectTrigger id="dismissed-course">
                   <SelectValue placeholder="الكل" />
@@ -717,9 +764,10 @@ export function DismissedStudentsView() {
               </Label>
               <Select
                 value={filterDismissalType || "all"}
-                onValueChange={(value) =>
-                  setFilterDismissalType(value === "all" ? "" : value)
-                }
+                onValueChange={(value) => {
+                  setFilterDismissalType(value === "all" ? "" : value);
+                  setDismissedPage(1);
+                }}
               >
                 <SelectTrigger id="dismissed-type">
                   <SelectValue placeholder="الكل" />
@@ -740,7 +788,10 @@ export function DismissedStudentsView() {
               </Label>
               <Select
                 value={filterNotes}
-                onValueChange={(value) => setFilterNotes(value as NotesFilter)}
+                onValueChange={(value) => {
+                  setFilterNotes(value as NotesFilter);
+                  setDismissedPage(1);
+                }}
               >
                 <SelectTrigger id="dismissed-notes">
                   <SelectValue />
@@ -758,7 +809,10 @@ export function DismissedStudentsView() {
               </Label>
               <Select
                 value={filterPledge}
-                onValueChange={(value) => setFilterPledge(value as PledgeFilter)}
+                onValueChange={(value) => {
+                  setFilterPledge(value as PledgeFilter);
+                  setDismissedPage(1);
+                }}
               >
                 <SelectTrigger id="dismissed-pledge">
                   <SelectValue />
@@ -779,7 +833,10 @@ export function DismissedStudentsView() {
                 name="search"
                 data-teacherpro-search="true"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setDismissedPage(1);
+                }}
                 placeholder="اسم / كود / سبب / ملاحظات / تيليجرام"
               />
             </div>
@@ -934,6 +991,44 @@ export function DismissedStudentsView() {
 
       {dismissedStudents.length === 0 && !dismissedStudentsSearchLoading && (
         <p className="empty-state">لا يوجد طلاب مفصولون حسب الفلترة الحالية.</p>
+      )}
+
+      {dismissedListTotalPages > 1 && (
+        <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border bg-card/70 p-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={dismissedPage <= 1 || dismissedStudentsSearchLoading}
+            onClick={() =>
+              setDismissedPage((current) => Math.max(1, current - 1))
+            }
+          >
+            <ChevronRight aria-hidden="true" className="size-4" />
+            السابق
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            صفحة {dismissedPage} من {dismissedListTotalPages} · المعروض {" "}
+            {dismissedStudents.length} من {dismissedListTotalCount}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={
+              dismissedPage >= dismissedListTotalPages ||
+              dismissedStudentsSearchLoading
+            }
+            onClick={() =>
+              setDismissedPage((current) =>
+                Math.min(dismissedListTotalPages, current + 1),
+              )
+            }
+          >
+            التالي
+            <ChevronLeft aria-hidden="true" className="size-4" />
+          </Button>
+        </div>
       )}
     </div>
   );

@@ -367,6 +367,9 @@ export function StudentRegistryView() {
   const [dismissedStudentsTotal, setDismissedStudentsTotal] = useState<
     number | null
   >(null);
+  const [archivedStudentsTotal, setArchivedStudentsTotal] = useState<
+    number | null
+  >(null);
   const [noActiveChapterStudentsTotal, setNoActiveChapterStudentsTotal] =
     useState<number | null>(null);
   const [studentStatsLoading, setStudentStatsLoading] = useState(true);
@@ -460,6 +463,7 @@ export function StudentRegistryView() {
     setStudentsSystemTotal(null);
     setActiveStudentsTotal(null);
     setDismissedStudentsTotal(null);
+    setArchivedStudentsTotal(null);
     setNoActiveChapterStudentsTotal(null);
     setStudentStatsError(null);
     setStudentStatsLoading(true);
@@ -696,6 +700,7 @@ export function StudentRegistryView() {
         );
         setActiveStudentsTotal(Number(result.active || 0));
         setDismissedStudentsTotal(Number(result.dismissed || 0));
+        setArchivedStudentsTotal(Number(result.archived || 0));
         setNoActiveChapterStudentsTotal(Number(result.noActiveChapter || 0));
       })
       .catch(() => {
@@ -703,6 +708,7 @@ export function StudentRegistryView() {
         setStudentsSystemTotal(null);
         setActiveStudentsTotal(null);
         setDismissedStudentsTotal(null);
+        setArchivedStudentsTotal(null);
         setNoActiveChapterStudentsTotal(null);
         setStudentStatsError(
           "تعذر تحميل عدادات الطلاب من بيانات النظام حالياً.",
@@ -2101,7 +2107,7 @@ export function StudentRegistryView() {
       </Card>
 
       <div
-        className="tp-student-registry__stats grid grid-cols-1 gap-3 md:grid-cols-3"
+        className="tp-student-registry__stats grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"
         aria-busy={registryStatsPending}
       >
         <Card className="tp-student-registry__stat-card bg-card/80">
@@ -2153,6 +2159,32 @@ export function StudentRegistryView() {
             >
               <UserX aria-hidden="true" className="size-4" />
               عرض المفصولين
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="tp-student-registry__stat-card border-slate-500/30 bg-slate-500/5">
+          <CardContent className="flex items-center justify-between gap-3 p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">المؤرشفون</p>
+              <p className="text-2xl font-black text-slate-600 dark:text-slate-300">
+                {registryStatsPending
+                  ? "…"
+                  : studentStatsError
+                    ? "—"
+                    : (archivedStudentsTotal ?? "—")}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="tp-student-registry__stat-action"
+              onClick={() => {
+                setFilterStatus(ARCHIVED_STUDENT_STATUS);
+                setPage(1);
+              }}
+            >
+              <Archive aria-hidden="true" className="size-4" />
+              عرض المؤرشفين
             </Button>
           </CardContent>
         </Card>

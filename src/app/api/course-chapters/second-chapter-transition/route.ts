@@ -25,7 +25,18 @@ import {
 
 type TransitionClient = typeof db | Prisma.TransactionClient;
 
-const COURSE_TARGETS = ["الدورة الصيفية", "طلاب الاعفاء"] as const;
+const COURSE_TARGETS = [
+  {
+    key: "summer",
+    label: "الدورة الصيفية",
+    aliases: ["الدورة الصيفية"],
+  },
+  {
+    key: "exemption",
+    label: "دورة الإعفاء",
+    aliases: ["طلاب الاعفاء", "دورة الاعفاء", "دورة طلاب الاعفاء"],
+  },
+] as const;
 const TARGET_CHAPTER_NAME = "الفصل الثاني - الانسجة";
 const TARGET_OPPORTUNITIES = 3;
 
@@ -58,13 +69,19 @@ async function buildTransitionPreview(client: TransitionClient = db) {
     }),
   ]);
 
-  const courseMatches = COURSE_TARGETS.map((targetName) => ({
-    targetName,
-    matches: allCourses.filter(
-      (course) =>
-        normalizeArabicText(course.name) === normalizeArabicText(targetName),
-    ),
-  }));
+  const courseMatches = COURSE_TARGETS.map((target) => {
+    const normalizedAliases = new Set(
+      target.aliases.map((alias) => normalizeArabicText(alias)),
+    );
+    return {
+      targetKey: target.key,
+      targetLabel: target.label,
+      aliases: target.aliases,
+      matches: allCourses.filter((course) =>
+        normalizedAliases.has(normalizeArabicText(course.name)),
+      ),
+    };
+  });
   const chapterMatches = allChapters.filter(
     (chapter) =>
       normalizeArabicText(chapter.name) ===
@@ -74,10 +91,15 @@ async function buildTransitionPreview(client: TransitionClient = db) {
   const blockers: string[] = [];
   for (const match of courseMatches) {
     if (match.matches.length === 0) {
-      blockers.push(`لم تُوجد دورة باسم «${match.targetName}» في قاعدة البيانات.`);
-    } else if (match.matches.length > 1) {
       blockers.push(
-        `يوجد أكثر من سجل باسم «${match.targetName}»؛ أُوقف التنفيذ لمنع اختيار دورة خاطئة.`,
+        `لم تُوجد ${match.targetLabel} في قاعدة البيانات ضمن الأسماء المعتمدة: ${match.aliases.map((alias) => `«${alias}»`).join("، ")}.`,
+      );
+    } else if (match.matches.length > 1) {
+      const resolvedMatches = match.matches
+        .map((course) => `«${course.name}» (${course.id})`)
+        .join("، ");
+      blockers.push(
+        `طابقت ${match.targetLabel} أكثر من دورة فعلية: ${resolvedMatches}. أُوقف التنفيذ لمنع توسيع النطاق أو اختيار دورة خاطئة.`,
       );
     }
   }
@@ -92,6 +114,14 @@ async function buildTransitionPreview(client: TransitionClient = db) {
   const targetCourses = courseMatches.flatMap((match) =>
     match.matches.length === 1 ? match.matches : [],
   );
+  const targetCourseIdsAreUnique =
+    new Set(targetCourses.map((course) => course.id)).size ===
+    targetCourses.length;
+  if (!targetCourseIdsAreUnique) {
+    blockers.push(
+      "طابق سجل دورة واحد أكثر من هدف؛ أُوقف التنفيذ لمنع تكرار أو توسيع نطاق الطلاب.",
+    );
+  }
   const targetChapter = chapterMatches.length === 1 ? chapterMatches[0] : null;
   const targetCourseIds = targetCourses.map((course) => course.id);
 
@@ -238,7 +268,9 @@ async function buildTransitionPreview(client: TransitionClient = db) {
 
   const snapshot = {
     courseMatches: courseMatches.map((match) => ({
-      targetName: match.targetName,
+      targetKey: match.targetKey,
+      targetLabel: match.targetLabel,
+      aliases: match.aliases,
       matches: match.matches,
     })),
     chapterMatches,
@@ -282,10 +314,11 @@ async function buildTransitionPreview(client: TransitionClient = db) {
     canExecute:
       blockers.length === 0 &&
       targetCourses.length === COURSE_TARGETS.length &&
+      targetCourseIdsAreUnique &&
       Boolean(targetChapter),
     blockers,
     target: {
-      courseNames: COURSE_TARGETS,
+      courseNames: targetCourses.map((course) => course.name),
       chapterId: targetChapter?.id || null,
       chapterName: targetChapter?.name || TARGET_CHAPTER_NAME,
       currentChapterOpportunities: targetChapter?.opportunities ?? null,
@@ -326,7 +359,7 @@ async function buildTransitionPreview(client: TransitionClient = db) {
     message:
       blockers.length > 0
         ? "المعاينة وجدت مانعاً، لذلك لن يسمح النظام بالتنفيذ."
-        : `سيتم تفعيل الفصل الثاني بثلاث فرص للدورتين وإعادة ${studentsToReactivate} طالب إلى نشط، داخل عملية ذرية واحدة.`,
+        : `سيتم تفعيل الفصل الثاني بثلاث فرص لدورتي ${targetCourses.map((course) => `«${course.name}»`).join(" و")} وإعادة ${studentsToReactivate} طالب إلى نشط، داخل عملية ذرية واحدة.`,
     previewToken: buildMutationPreviewToken(
       "second-chapter-transition-summer-exemption",
       snapshot,
@@ -571,7 +604,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      message: `تم تفعيل ${result.chapterName} بثلاث فرص للدورتين، وإعادة تفعيل ${result.reactivatedStudents} طالب، وضبط ${result.updatedStudents} طالب على 3/3.`,
+      message: `تم تفعيل ${result.chapterName} بثلاث فرص لدورتي ${result.courses.map((course) => `«${course.courseName}»`).join(" و")}، وإعادة تفعيل ${result.reactivatedStudents} طالب، وضبط ${result.updatedStudents} طالب على 3/3.`,
       ...result,
       source: "database" as const,
       generatedAt: new Date().toISOString(),

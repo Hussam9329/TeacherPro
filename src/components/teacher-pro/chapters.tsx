@@ -282,6 +282,12 @@ export function ChaptersView() {
   const [transitionPreviewLoading, setTransitionPreviewLoading] =
     useState(false);
   const [transitionPreviewError, setTransitionPreviewError] = useState("");
+  const resolvedTransitionCourseNames =
+    transitionPreview?.target.courseNames.length === 2
+      ? transitionPreview.target.courseNames
+          .map((name) => `«${name}»`)
+          .join(" و")
+      : "";
 
   const { locked: isAddingChapter, runLocked: runAddChapterLocked } =
     useActionLock();
@@ -1286,12 +1292,13 @@ export function ChaptersView() {
 
             <div className="rounded-2xl border border-primary/35 bg-primary/10 p-4 text-xs">
               <p className="font-black">
-                انتقال الدورة الصيفية وطلاب الاعفاء إلى الفصل الثاني
+                انتقال الدورة الصيفية ودورة الإعفاء إلى الفصل الثاني
               </p>
               <p className="mt-1 leading-6 text-muted-foreground">
                 يوقف أي فصل نشط سابق، ويفعّل «الفصل الثاني - الانسجة» بثلاث
                 فرص، ويعيد جميع طلاب الدورتين — بمن فيهم المفصولون والمؤرشفون —
-                إلى نشط برصيد 3/3. التنفيذ ذري ومحصور بهاتين الدورتين.
+                إلى نشط برصيد 3/3. المعاينة تعرض الاسمين الفعليين المطابقين من
+                بيانات النظام قبل السماح بالتنفيذ.
               </p>
               <Button
                 type="button"
@@ -1506,17 +1513,19 @@ export function ChaptersView() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              تفعيل الفصل الثاني للدورتين بثلاث فرص
+              {resolvedTransitionCourseNames
+                ? `تفعيل الفصل الثاني لـ ${resolvedTransitionCourseNames} بثلاث فرص`
+                : "تفعيل الفصل الثاني للدورتين بثلاث فرص"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              العملية محصورة بالدورة الصيفية ودورة طلاب الاعفاء. ستوقف الفصل
-              السابق، وتفعّل الفصل الثاني - الانسجة، وتجعل جميع طلاب الدورتين
-              نشطين برصيد 3/3 داخل معاملة واحدة.
+              {resolvedTransitionCourseNames
+                ? `العملية محصورة بالدورتين الفعليتين ${resolvedTransitionCourseNames}. ستوقف الفصل السابق، وتفعّل الفصل الثاني - الانسجة، وتجعل جميع طلابهما نشطين برصيد 3/3 داخل معاملة واحدة.`
+                : "ستقرأ المعاينة الاسمين الفعليين للدورتين من بيانات النظام قبل عرض الأثر والسماح بالتنفيذ."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {transitionPreviewLoading ? (
             <p className="rounded-2xl border bg-muted/25 p-4 text-sm text-muted-foreground">
-              جاري قراءة العدد والحالة الحالية من قاعدة البيانات...
+              جاري قراءة العدد والحالة الحالية من بيانات النظام...
             </p>
           ) : transitionPreviewError ? (
             <div className="space-y-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">

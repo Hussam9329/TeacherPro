@@ -84,6 +84,13 @@ check(
     studentsStatsRoute.includes('scope: "all"'),
 );
 check(
+  'واجهة سجل الطلاب تعرض عداد المؤرشفين وتفتح فلترهم مباشرة',
+  registry.includes('archivedStudentsTotal') &&
+    registry.includes('setArchivedStudentsTotal(Number(result.archived || 0))') &&
+    registry.includes('عرض المؤرشفين') &&
+    registry.includes('setFilterStatus(ARCHIVED_STUDENT_STATUS)'),
+);
+check(
   'صحة الفصل متبادلة: مفقود وتعارض وسقف صفر، والفرص الكاملة لا تشمل فوق السقف',
   registryIssueHelper.includes('studentRegistryNoActiveChapterWhere') &&
     registryIssueHelper.includes('zero-opportunity-limit') &&

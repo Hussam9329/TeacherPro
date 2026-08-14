@@ -25,18 +25,50 @@ const pagePath = "src/components/teacher-pro/dismissed-students.tsx";
 const detailsRoutePath = "src/app/api/dismissed-students/details/route.ts";
 const statusActionRoutePath = "src/app/api/students/status-action/route.ts";
 const dismissedStatsRoutePath = "src/app/api/dismissed-students/stats/route.ts";
+const dismissedListRoutePath = "src/app/api/dismissed-students/list/route.ts";
+const dismissedFiltersPath = "src/lib/dismissed-student-filters-server.ts";
 const pkgPath = "package.json";
 
 const page = read(pagePath);
 const detailsRoute = read(detailsRoutePath);
 const statusActionRoute = read(statusActionRoutePath);
 const dismissedStatsRoute = read(dismissedStatsRoutePath);
+const dismissedListRoute = read(dismissedListRoutePath);
+const dismissedFilters = read(dismissedFiltersPath);
 const pkg = JSON.parse(read(pkgPath));
 
 must(
-  page.includes("studentApi") && page.includes(".list(") && page.includes('status: "مفصول"'),
-  "صفحة المفصولين تقرأ قائمة المفصولين من API الطلاب بفلتر الحالة",
-  "صفحة المفصولين يجب أن تقرأ المفصولين من قاعدة البيانات عبر studentApi.list(status=مفصول).",
+  page.includes("/api/dismissed-students/list?") &&
+    page.includes("dismissedPage") &&
+    page.includes("dismissedListTotalPages") &&
+    page.includes("dismissedListTotalCount") &&
+    page.includes("السابق") &&
+    page.includes("التالي"),
+  "صفحة المفصولين تستخدم قائمة خادمية مجزأة مع تنقل وعدد إجمالي",
+  "يجب ألا تتوقف قائمة المفصولين عند أول 100 طالب؛ يلزم API مجزأ وأزرار السابق/التالي.",
+);
+
+must(
+  dismissedListRoute.includes('requirePermission(req, "students.view")') &&
+    dismissedListRoute.includes("buildDismissedStudentWhere(searchParams)") &&
+    dismissedListRoute.includes("db.student.count({ where })") &&
+    dismissedListRoute.includes("skip: (page - 1) * pageSize") &&
+    dismissedListRoute.includes("totalPages") &&
+    dismissedListRoute.includes("totalCount"),
+  "API قائمة المفصولين يحسب الصفحات والعدد من قاعدة البيانات بنفس الاستعلام",
+  "API قائمة المفصولين يجب أن يكون محمياً ويعيد totalCount/totalPages من DB.",
+);
+
+must(
+  dismissedFilters.includes("dismissalType") &&
+    dismissedFilters.includes("notesFilter") &&
+    dismissedFilters.includes("pledgeFilter") &&
+    dismissedFilters.includes("studentNotes") &&
+    dismissedFilters.includes("some:") &&
+    dismissedFilters.includes("none:") &&
+    dismissedStatsRoute.includes("buildDismissedStudentWhere(searchParams)"),
+  "القائمة والإحصائيات تشتركان في فلاتر النوع والملاحظات والتعهد الخادمية",
+  "لا يجوز تطبيق فلاتر المفصولين على الصفحة محلياً؛ يجب مشاركتها بين list وstats على الخادم.",
 );
 
 must(

@@ -222,6 +222,26 @@ assert(
     ),
   "انتقال الدورتين ذري ولمرة واحدة ويحفظ الحالة السابقة ثم يبدأ 3/3 بعد تسوية آثار الفصل السابق",
 );
+assert(
+  [
+    '"طلاب الاعفاء"',
+    '"دورة الاعفاء"',
+    '"دورة طلاب الاعفاء"',
+  ].every((alias) => secondChapterTransitionRoute.includes(alias)) &&
+    secondChapterTransitionRoute.includes("const normalizedAliases = new Set") &&
+    secondChapterTransitionRoute.includes(
+      "normalizedAliases.has(normalizeArabicText(course.name))",
+    ) &&
+    secondChapterTransitionRoute.includes("match.matches.length > 1") &&
+    secondChapterTransitionRoute.includes("resolvedMatches") &&
+    secondChapterTransitionRoute.includes("targetCourseIdsAreUnique") &&
+    secondChapterTransitionRoute.includes(
+      "courseNames: targetCourses.map((course) => course.name)",
+    ) &&
+    chaptersView.includes("transitionPreview?.target.courseNames") &&
+    chaptersView.includes("resolvedTransitionCourseNames"),
+  "دورة الإعفاء تُحل من ثلاث تسميات عربية إلى سجل واحد فقط، وتعرض المعاينة الاسم الفعلي بلا توسيع نطاق الطلاب",
+);
 
 assert(
   serializableTransaction.includes("TransactionIsolationLevel.Serializable") &&

@@ -20,6 +20,9 @@ const academicRepair = read("src/app/api/students/academic-repair/route.ts");
 const opportunitiesView = read("src/components/teacher-pro/opportunities.tsx");
 const registry = read("src/components/teacher-pro/student-registry.tsx");
 const dismissed = read("src/components/teacher-pro/dismissed-students.tsx");
+const dismissedListRoute = read(
+  "src/app/api/dismissed-students/list/route.ts",
+);
 const followUp = read("src/components/teacher-pro/follow-up.tsx");
 const profile = read("src/components/teacher-pro/student-profile-dialog.tsx");
 const bulkImport = read("src/components/teacher-pro/student-bulk-text-import.tsx");
@@ -113,7 +116,8 @@ check(
 check(
   opportunitiesView.includes("opportunityMode: true") &&
     registry.includes("opportunityMode: true") &&
-    dismissed.includes("opportunityMode: true") &&
+    dismissed.includes("/api/dismissed-students/list?") &&
+    dismissedListRoute.includes("attachStudentOpportunitySnapshots") &&
     followUp.match(/opportunityMode: true/g)?.length >= 2,
   "كل القوائم التي تعرض الفرص تطلب Snapshot الخادمي صراحة",
 );

@@ -105,8 +105,10 @@ check(
 );
 check(
   academicRepairRoute.includes("repairProtectedAbsencesForStudents") &&
-    academicRepairRoute.includes('where: { status: "غائب" }'),
-  "administrative repair converts historical protected absences before recalculation",
+    academicRepairRoute.includes("EXPLICIT_ACADEMIC_REPAIR_SCOPES") &&
+    academicRepairRoute.includes("retiredMaintenanceEndpoint: true") &&
+    !academicRepairRoute.includes("recalculateAllStudentsAcademicState"),
+  "administrative repairs require an explicit scope and the legacy global recalculation is retired",
 );
 check(
   schemaRepairLock.includes("pg_advisory_xact_lock") &&
@@ -140,9 +142,10 @@ check(
 check(
   outbox.includes("responseIsExplicitlyNonRetryable") &&
     outbox.includes("sameQueuedMutation") &&
-    outbox.includes("dedupeQueuedMutations(readOutbox())") &&
+    outbox.includes("purgeMaintenanceRepairMutations(readOutbox())") &&
+    outbox.includes("dedupeQueuedMutations(") &&
     outbox.includes("x-teacherpro-retryable"),
-  "persistent outbox drops schema mismatch and deduplicates new and historical mutations",
+  "persistent outbox drops schema mismatch and maintenance repairs before deduplicating historical mutations",
 );
 
 if (process.exitCode) process.exit(process.exitCode);

@@ -8,7 +8,6 @@ import { routeErrorResponse } from "@/lib/route-helpers";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import {
-  recalculateAllStudentsAcademicState,
   recalculateStudentsAcademicState,
 } from "@/lib/academic-recalculate-server";
 import { db } from "@/lib/db";
@@ -24,15 +23,21 @@ function readBatchSize(req: NextRequest): number {
   return Math.min(500, Math.max(25, Math.trunc(numeric)));
 }
 
+const EXPLICIT_ACADEMIC_REPAIR_SCOPES = new Set([
+  "effect-exams",
+  "protected",
+  "protected-status-only",
+  "restore-excess-dismissed",
+  "dismissed",
+  "grace",
+]);
+
 /**
  * PATCH /api/students/academic-repair
  *
- * علاج جماعي آمن وقابل للتكرار لكل الطلاب غير المؤرشفين:
- * - يطابق baseOpportunities مع فرص الفصل النشط الحالي لكل دورة.
- * - يعيد احتساب الفرص والحالة والفصل من سجلات الدرجات/الإجازات/التعهدات حسب القواعد الحالية.
- * - يحذف سجلات الخصم/الفصل التلقائية القديمة ويعيد إنشاء الصحيح منها فقط.
- *
- * لا يكرر الخصومات لأن سجلات النظام التلقائية تُستبدل من جديد في كل تشغيل.
+ * لا يوجد إصلاح شامل افتراضي بعد الآن. يجب أن يحمل أي استعمال إداري نطاقاً
+ * صريحاً من القائمة المحدودة أدناه؛ الطلب القديم بلا scope يُرفض قبل أي
+ * قراءة أو كتابة لبيانات الطلاب حتى لا تستطيع حزمة متصفح قديمة إعادة الضرر.
  */
 export async function PATCH(req: NextRequest) {
   // Q96 FIX: Use dedicated system.maintenance permission instead of
@@ -49,9 +54,20 @@ export async function PATCH(req: NextRequest) {
   );
   if (rateLimitError) return rateLimitError;
 
+  const searchParams = new URL(req.url).searchParams;
+  const scope = String(searchParams.get("scope") || "").trim();
+  if (!EXPLICIT_ACADEMIC_REPAIR_SCOPES.has(scope)) {
+    return NextResponse.json(
+      {
+        error:
+          "تم إيقاف الإصلاح الأكاديمي الشامل القديم. استخدم إجراءً محدداً بمعاينة وتأكيد من الواجهة.",
+        retiredMaintenanceEndpoint: true,
+      },
+      { status: 410 },
+    );
+  }
+
   try {
-    const searchParams = new URL(req.url).searchParams;
-    const scope = searchParams.get("scope");
     if (scope === "effect-exams") {
       const examIds = Array.from(
         new Set(
@@ -481,54 +497,13 @@ export async function PATCH(req: NextRequest) {
       });
     }
 
-    // Historical protected absences must be converted/removed before recalculation.
-    // Recalculation alone ignores their penalty, but leaves the invalid grade
-    // visible and able to reappear in related screens.
-    const batchSize = readBatchSize(req);
-    const rows = await db.grade.findMany({
-      where: { status: "غائب" },
-      distinct: ["studentId"],
-      select: { studentId: true },
-    });
-    let deletedGrades = 0;
-    let convertedGrades = 0;
-    let convertedBeforeRegistration = 0;
-    let deletedCalls = 0;
-    for (let index = 0; index < rows.length; index += batchSize) {
-      const studentIds = rows.slice(index, index + batchSize).map((row) => row.studentId);
-      const repair = await withSerializableTransaction((tx) =>
-        repairProtectedAbsencesForStudents(tx, studentIds),
-      );
-      convertedGrades += repair.convertedGrades;
-      convertedBeforeRegistration += repair.convertedBeforeRegistration;
-      deletedGrades += repair.deletedGrades;
-      deletedCalls += repair.deletedCalls;
-    }
-
-    const result = await recalculateAllStudentsAcademicState({
-      batchSize,
-    });
-
-    await writeRequestAuditLog(
-      req,
-      "الطلاب",
-      "إصلاح أكاديمي شامل وإعادة احتساب كل الطلاب",
-      { ...result, convertedGrades, convertedBeforeRegistration, deletedGrades, deletedCalls },
+    return NextResponse.json(
+      {
+        error: "نطاق الإصلاح الأكاديمي غير مدعوم.",
+        retiredMaintenanceEndpoint: true,
+      },
+      { status: 410 },
     );
-
-    return NextResponse.json({
-      ...result,
-      convertedGrades,
-      convertedBeforeRegistration,
-      deletedGrades,
-      deletedCalls,
-      message:
-        result.recalculatedStudents > 0
-          ? `تمت إعادة احتساب ${result.recalculatedStudents} طالب حسب القواعد الحالية.`
-          : "لا توجد سجلات طلاب تحتاج إعادة احتساب.",
-      source: "database" as const,
-      generatedAt: new Date().toISOString(),
-    });
   } catch (error) {
     return routeErrorResponse(
       error,

@@ -5,33 +5,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
-
-const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
-
-function cleanText(value: unknown): string {
-  return String(value ?? "").trim();
-}
-
-function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
-  const q = cleanText(rawQuery);
-  if (!q) return null;
-  return {
-    OR: [
-      { name: { contains: q, mode: "insensitive" } },
-      { code: { contains: q, mode: "insensitive" } },
-      { phone: { contains: q, mode: "insensitive" } },
-      { parentPhone: { contains: q, mode: "insensitive" } },
-      { telegram: { contains: q, mode: "insensitive" } },
-      { dismissalReason: { contains: q, mode: "insensitive" } },
-      { dismissalNotes: { contains: q, mode: "insensitive" } },
-    ],
-  };
-}
-
-function composeAnd(parts: Prisma.StudentWhereInput[]): Prisma.StudentWhereInput {
-  const filtered = parts.filter(Boolean);
-  return filtered.length ? { AND: filtered } : {};
-}
+import {
+  buildDismissedStudentWhere,
+  composeDismissedStudentWhere,
+  DISMISSED_STUDENT_PLEDGE_NOTE_KIND,
+  DISMISSED_STUDENT_STATUS,
+} from "@/lib/dismissed-student-filters-server";
 
 async function collectDismissedStats(
   where: Prisma.StudentWhereInput,
@@ -45,11 +24,29 @@ async function collectDismissedStats(
 }> {
   const [total, temporary, final, withNotes, pledgeRows] = await db.$transaction([
     db.student.count({ where }),
-    db.student.count({ where: composeAnd([where, { dismissalType: "فصل مؤقت" }]) }),
-    db.student.count({ where: composeAnd([where, { dismissalType: "فصل نهائي" }]) }),
-    db.student.count({ where: composeAnd([where, { dismissalNotes: { not: "" } }]) }),
+    db.student.count({
+      where: composeDismissedStudentWhere([
+        where,
+        { dismissalType: "فصل مؤقت" },
+      ]),
+    }),
+    db.student.count({
+      where: composeDismissedStudentWhere([
+        where,
+        { dismissalType: "فصل نهائي" },
+      ]),
+    }),
+    db.student.count({
+      where: composeDismissedStudentWhere([
+        where,
+        { dismissalNotes: { not: "" } },
+      ]),
+    }),
     db.studentNote.findMany({
-      where: { kind: PLEDGE_NOTE_KIND, student: where },
+      where: {
+        kind: DISMISSED_STUDENT_PLEDGE_NOTE_KIND,
+        student: where,
+      },
       select: { studentId: true },
       distinct: ["studentId"],
     }),
@@ -70,38 +67,10 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   const searchParams = new URL(req.url).searchParams;
-  const q = cleanText(searchParams.get("q"));
-  const courseId = cleanText(searchParams.get("courseId"));
-  const dismissalType = cleanText(searchParams.get("dismissalType"));
-  const notesFilter = cleanText(searchParams.get("notesFilter"));
-  const pledgeFilter = cleanText(searchParams.get("pledgeFilter"));
-
-  const systemWhere: Prisma.StudentWhereInput = { status: "مفصول" };
-  const filteredParts: Prisma.StudentWhereInput[] = [systemWhere];
-  const searchWhere = buildSearchWhere(q);
-  if (searchWhere) filteredParts.push(searchWhere);
-  if (courseId) filteredParts.push({ courseId });
-  if (dismissalType) filteredParts.push({ dismissalType });
-  if (notesFilter === "with-notes") {
-    filteredParts.push({ dismissalNotes: { not: "" } });
-  } else if (notesFilter === "without-notes") {
-    filteredParts.push({ OR: [{ dismissalNotes: null }, { dismissalNotes: "" }] });
-  }
-
-  const beforePledgeWhere = composeAnd(filteredParts);
-  const pledgeRows = await db.studentNote.findMany({
-    where: { kind: PLEDGE_NOTE_KIND, student: beforePledgeWhere },
-    select: { studentId: true },
-    distinct: ["studentId"],
-  });
-  const pledgedStudentIds = pledgeRows.map((row) => row.studentId);
-
-  if (pledgeFilter === "with-pledge") {
-    filteredParts.push({ id: { in: pledgedStudentIds.length ? pledgedStudentIds : ["__none__"] } });
-  } else if (pledgeFilter === "without-pledge") {
-    filteredParts.push({ id: { notIn: pledgedStudentIds } });
-  }
-  const filteredWhere = composeAnd(filteredParts);
+  const systemWhere: Prisma.StudentWhereInput = {
+    status: DISMISSED_STUDENT_STATUS,
+  };
+  const filteredWhere = buildDismissedStudentWhere(searchParams);
 
   const [system, filtered] = await Promise.all([
     collectDismissedStats(systemWhere),

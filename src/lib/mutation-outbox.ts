@@ -3,7 +3,10 @@ import {
   emitTeacherProDataChanged,
   inferTeacherProScopesFromEndpoint,
 } from "./teacherpro-sync";
-import { mutationCanBeReplayed } from "./mutation-replay-policy";
+import {
+  isMaintenanceRepairEndpoint,
+  mutationCanBeReplayed,
+} from "./mutation-replay-policy";
 
 /**
  * Generic client-side outbox for any server mutation that may fail due to
@@ -137,6 +140,16 @@ function dedupeQueuedMutations(items: QueuedMutation[]): QueuedMutation[] {
   return unique;
 }
 
+function purgeMaintenanceRepairMutations(
+  items: QueuedMutation[],
+): QueuedMutation[] {
+  const safeItems = items.filter(
+    (item) => !isMaintenanceRepairEndpoint(item.endpoint),
+  );
+  if (safeItems.length !== items.length) writeOutbox(safeItems);
+  return safeItems;
+}
+
 /**
  * Enqueue a mutation to be sent to the server. If the server is reachable,
  * it will be sent immediately; on failure it stays in the outbox and is
@@ -227,7 +240,9 @@ let flushInFlight = false;
 export async function flushOutbox(): Promise<number> {
   if (!canUseStorage()) return 0;
   if (flushInFlight) return 0;
-  const items = dedupeQueuedMutations(readOutbox());
+  const items = dedupeQueuedMutations(
+    purgeMaintenanceRepairMutations(readOutbox()),
+  );
   if (items.length === 0) return 0;
 
   flushInFlight = true;
