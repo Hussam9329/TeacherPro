@@ -11,6 +11,7 @@ import { normalizeListFilter } from "@/lib/all-filter";
 import {
   classifyGradeAcademicImpact,
   gradeMatchesStatusFilterUnified,
+  parseCourseIds,
 } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 
@@ -125,6 +126,16 @@ type GradeWithRelations = Prisma.GradeGetPayload<{
   include: { student: { include: { studentLeaves: true } }; exam: true };
 }>;
 
+type CompleteExportStudent = Prisma.StudentGetPayload<{
+  include: { studentLeaves: true };
+}>;
+
+type CompleteExportExam = Prisma.ExamGetPayload<{
+  include: { examCourses: { select: { courseId: true } } };
+}>;
+
+type CompleteExportGrade = Prisma.GradeGetPayload<Record<string, never>>;
+
 const databaseComputedGradeFilters = new Set<GradeStatusFilter>([
   "excused",
   "grace-period",
@@ -235,12 +246,213 @@ function normalizeGradeStatusFilter(
     : "all";
 }
 
+function completeExportStudentWhere(
+  searchParams: URLSearchParams,
+): Prisma.StudentWhereInput {
+  const and: Prisma.StudentWhereInput[] = [
+    { status: { not: STUDENT_STATUS_ARCHIVED } },
+  ];
+  const courseId = normalizeListFilter(searchParams.get("courseId"));
+  const courseProgram = normalizeListFilter(searchParams.get("courseProgram"));
+  const courseTerm = normalizeListFilter(searchParams.get("courseTerm"));
+  const studyType = normalizeListFilter(searchParams.get("studyType"));
+  if (courseId) and.push({ courseId });
+  if (courseProgram) and.push({ courseProgram });
+  if (courseProgram === "كورسات" && courseTerm) and.push({ courseTerm });
+  if (studyType) and.push({ studyType });
+  return { AND: and };
+}
+
+function completeExportExamCourseIds(exam: CompleteExportExam): string[] {
+  return Array.from(
+    new Set([
+      ...parseCourseIds(exam.courseIds),
+      ...exam.examCourses.map((link) => String(link.courseId || "")),
+    ].filter(Boolean)),
+  );
+}
+
+function studentMatchesExportNameLetter(
+  student: CompleteExportStudent,
+  rawLetter: string,
+): boolean {
+  if (!rawLetter || rawLetter === "all") return true;
+  const letter = normalizeArabicText(rawLetter).slice(0, 1);
+  const first = normalizeArabicText(student.name).slice(0, 1);
+  return Boolean(letter && first === letter);
+}
+
+function completeExportRowMatchesQuery(
+  rawQuery: string,
+  student: CompleteExportStudent,
+  exam: CompleteExportExam,
+  grade: CompleteExportGrade | null,
+): boolean {
+  const query = rawQuery.trim();
+  if (!query) return true;
+  const normalizedQuery = normalizeArabicText(query).toLocaleLowerCase();
+  const plainQuery = query.toLocaleLowerCase();
+  const compactQuery = plainQuery.replace(/\s+/g, "").replace(/^@/, "");
+  return [
+    student.name,
+    student.code,
+    student.phone,
+    student.parentPhone,
+    student.telegram,
+    student.school,
+    student.mainSite,
+    student.subSite,
+    student.locationScope,
+    exam.name,
+    grade?.notes,
+  ].some((value) => {
+    const text = String(value || "").toLocaleLowerCase();
+    const compactText = text.replace(/\s+/g, "").replace(/^@/, "");
+    return (
+      text.includes(plainQuery) ||
+      (compactQuery.length > 0 && compactText.includes(compactQuery)) ||
+      (normalizedQuery.length > 0 &&
+        normalizeArabicText(text).toLocaleLowerCase().includes(normalizedQuery))
+    );
+  });
+}
+
+function missingGradePenalty(exam: CompleteExportExam): number {
+  if (exam.noDiscount) return 0;
+  const numeric = Number(exam.opportunitiesPenalty);
+  return Number.isFinite(numeric) && numeric > 0
+    ? Math.max(1, Math.trunc(numeric))
+    : 1;
+}
+
+function predictedMissingActionText(
+  student: CompleteExportStudent,
+  exam: CompleteExportExam,
+): string {
+  if (student.status === "مفصول") {
+    return "لا إجراء جديد - الطالب مفصول حالياً";
+  }
+  const kind = classifyGradeAcademicImpact(
+    { status: "غائب", score: null },
+    exam,
+    { student, leaves: student.studentLeaves },
+  );
+  if (kind === "excused") return "لا إجراء - الطالب مجاز";
+  if (kind === "before-registration") {
+    return "لا إجراء - الامتحان قبل تسجيل الطالب";
+  }
+  if (kind === "grace-period") {
+    return "لا إجراء - الطالب ضمن فترة السماح";
+  }
+  if (kind === "unavailable-exam") {
+    return "لا إجراء حالياً - الامتحان غير متاح أو غير محتسب";
+  }
+  if (kind === "no-discount-protected") {
+    return "لا إجراء - الامتحان بلا خصم";
+  }
+  if (kind === "absent-dismissal") {
+    return "فصل تلقائي عند تسجيله غائباً";
+  }
+  if (kind === "absent-deducted") {
+    const penalty = missingGradePenalty(exam);
+    const opportunities = Math.max(0, Number(student.opportunities || 0));
+    const remaining = Math.max(0, opportunities - penalty);
+    return remaining === 0
+      ? `فصل تلقائي لانتهاء الفرص عند تسجيل الغياب (خصم ${penalty})`
+      : `خصم ${penalty} فرصة؛ المتبقي المتوقع ${remaining}`;
+  }
+  return "يُحدد الإجراء عند تسجيل الغياب";
+}
+
+async function completeGradeExportRows(searchParams: URLSearchParams) {
+  const requestedExamId = normalizeListFilter(searchParams.get("examId"));
+  const requestedCourseId = normalizeListFilter(searchParams.get("courseId"));
+  const nameLetter = normalizeListFilter(searchParams.get("nameLetter"));
+  const query = String(searchParams.get("q") || "").trim();
+  const statusFilter = normalizeGradeStatusFilter(searchParams);
+
+  const [students, examCandidates] = await Promise.all([
+    db.student.findMany({
+      where: completeExportStudentWhere(searchParams),
+      include: { studentLeaves: true },
+      orderBy: [{ name: "asc" }, { code: "asc" }],
+    }),
+    db.exam.findMany({
+      where: requestedExamId ? { id: requestedExamId } : {},
+      include: { examCourses: { select: { courseId: true } } },
+      orderBy: [{ date: "desc" }, { name: "asc" }],
+    }),
+  ]);
+
+  const exams = examCandidates.filter((exam) => {
+    const courseIds = completeExportExamCourseIds(exam);
+    return !requestedCourseId || courseIds.includes(requestedCourseId);
+  });
+  if (students.length === 0 || exams.length === 0) return [];
+
+  const eligiblePairs = exams.flatMap((exam) => {
+    const courseIds = completeExportExamCourseIds(exam);
+    return students
+      .filter((student) => courseIds.includes(student.courseId))
+      .map((student) => ({ student, exam }));
+  });
+  if (eligiblePairs.length === 0) return [];
+
+  const studentIds = Array.from(
+    new Set(eligiblePairs.map(({ student }) => student.id)),
+  );
+  const examIds = Array.from(new Set(exams.map((exam) => exam.id)));
+  const grades = await db.grade.findMany({
+    where: { studentId: { in: studentIds }, examId: { in: examIds } },
+  });
+  const gradeByStudentExam = new Map(
+    grades.map((grade) => [`${grade.studentId}:${grade.examId}`, grade]),
+  );
+
+  const rows = [];
+  for (const { student, exam } of eligiblePairs) {
+    const storedGrade =
+      gradeByStudentExam.get(`${student.id}:${exam.id}`) || null;
+    const grade =
+      storedGrade && isGradeEnteredForExport(storedGrade, exam)
+        ? storedGrade
+        : null;
+    if (!studentMatchesExportNameLetter(student, nameLetter)) continue;
+    if (!completeExportRowMatchesQuery(query, student, exam, grade)) continue;
+    if (!grade && statusFilter !== "all") continue;
+    if (grade && statusFilter !== "all") {
+      const hydratedGrade = { ...grade, student, exam } as GradeWithRelations;
+      if (!gradeMatchesExportStatusFilter(statusFilter, hydratedGrade)) continue;
+    }
+    rows.push({
+      grade,
+      student,
+      exam,
+      statusText: grade?.status || "لم يمتحن",
+      predictedActionText: grade
+        ? ""
+        : predictedMissingActionText(student, exam),
+    });
+  }
+  return rows;
+}
+
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "grades.view");
   if (authError) return authError;
 
   try {
     const searchParams = new URL(req.url).searchParams;
+    if (searchParams.get("includeAllStudents") === "1") {
+      const rows = await completeGradeExportRows(searchParams);
+      return NextResponse.json({
+        rows,
+        total: rows.length,
+        totalCount: rows.length,
+        capped: false,
+        includesStudentsWithoutGrades: true,
+      });
+    }
     const where = buildGradeExportWhere(searchParams);
     const statusFilter = normalizeGradeStatusFilter(searchParams);
 

@@ -17,6 +17,7 @@ function must(condition, okMessage, failMessage) {
 
 const page = read("src/components/teacher-pro/grade-records.tsx");
 const api = read("src/lib/api.ts");
+const exportApi = read("src/app/api/grades/export/route.ts");
 const pkg = JSON.parse(read("package.json"));
 
 must(
@@ -61,6 +62,32 @@ must(
     page.includes('normalizeScore(grade.score)'),
   "تصدير سجل الدرجات يفصل درجة الطالب عن الدرجة الكاملة كقيم رقمية",
   "يجب ألا يصدّر سجل الدرجات الدرجة بصيغة 20/50 التي قد يفسرها Excel كتاريخ."
+);
+
+must(
+  page.includes('params.set("includeAllStudents", "1")') &&
+    page.includes('statusText: row.statusText || grade?.status || "لم يمتحن"') &&
+    page.includes('label: "الإجراء الحالي / المتوقع"'),
+  "واجهة التصدير تطلب التقرير الكامل وتعرض لم يمتحن والإجراء المتوقع",
+  "يجب أن يطلب تصدير سجل الدرجات كل طلاب الدورة لا سجلات الدرجات فقط."
+);
+
+must(
+  exportApi.includes("completeGradeExportRows") &&
+    exportApi.includes('statusText: grade?.status || "لم يمتحن"') &&
+    exportApi.includes("predictedMissingActionText") &&
+    exportApi.includes("includesStudentsWithoutGrades: true"),
+  "API التصدير يدمج طلاب الدورة بلا درجة داخل التقرير",
+  "يجب أن ينشئ API صفاً لكل طالب مرتبط بالامتحان حتى عند غياب سجل الدرجة."
+);
+
+must(
+  exportApi.includes('return "لا إجراء - الطالب مجاز"') &&
+    exportApi.includes('return "فصل تلقائي عند تسجيله غائباً"') &&
+    exportApi.includes("المتبقي المتوقع") &&
+    exportApi.includes("student.studentLeaves"),
+  "الإجراء المتوقع يراعي الإجازة والسماح والفصل وخصم الفرص",
+  "يجب ألا يعرض التقرير إجراءً عقابياً موحداً للحالات المحمية."
 );
 
 must(

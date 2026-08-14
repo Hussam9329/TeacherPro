@@ -84,6 +84,7 @@ type GradeExportRow = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   exam: any;
   classificationText: string;
+  statusText?: string;
 };
 
 const englishNumberFormatter = new Intl.NumberFormat("en-US");
@@ -111,12 +112,16 @@ const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
     value: ({ student }) => student?.telegram || "",
   },
   { key: "exam", label: "الامتحان", value: ({ exam }) => exam?.name || "" },
-  { key: "status", label: "الحالة", value: ({ grade }) => grade.status || "" },
+  {
+    key: "status",
+    label: "الحالة",
+    value: ({ grade, statusText }) => statusText || grade?.status || "",
+  },
   {
     key: "score",
     label: "درجة الطالب",
     value: ({ grade }) =>
-      grade.status === "درجة" ? (normalizeScore(grade.score) ?? "") : "",
+      grade?.status === "درجة" ? (normalizeScore(grade.score) ?? "") : "",
   },
   {
     key: "fullMark",
@@ -128,16 +133,16 @@ const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
   },
   {
     key: "accounting",
-    label: "محاسبة",
+    label: "الإجراء الحالي / المتوقع",
     value: ({ classificationText }) => classificationText,
   },
   {
     key: "checked",
     label: "مؤشر المحاسبة",
     value: ({ grade }) =>
-      grade.academicAccountingChecked ? "تمت مراجعة السجل (لا تغيّر الخصم)" : "",
+      grade?.academicAccountingChecked ? "تمت مراجعة السجل (لا تغيّر الخصم)" : "",
   },
-  { key: "notes", label: "ملاحظات", value: ({ grade }) => grade.notes || "" },
+  { key: "notes", label: "ملاحظات", value: ({ grade }) => grade?.notes || "" },
 ];
 
 export function GradeRecordsView() {
@@ -868,7 +873,13 @@ export function GradeRecordsView() {
     const student = studentById.get(grade.studentId);
     const exam = examById.get(grade.examId);
     const cls = exam ? classification(grade, exam, student) : { text: "" };
-    return { grade, student, exam, classificationText: cls.text };
+    return {
+      grade,
+      student,
+      exam,
+      classificationText: cls.text,
+      statusText: grade.status || "",
+    };
   });
 
   const fetchGradeExportRows = async (): Promise<GradeExportRow[]> => {
@@ -884,18 +895,47 @@ export function GradeRecordsView() {
       params.set("courseTerm", filterCourseTerm);
     if (filterStudyType) params.set("studyType", filterStudyType);
     if (filterNameLetter !== "all") params.set("nameLetter", filterNameLetter);
+    params.set("includeAllStudents", "1");
     const res = await fetch(`/api/grades/export?${params.toString()}`, {
       credentials: "same-origin",
     });
     if (!res.ok) throw new Error("grades export failed");
-    const json = (await res.json()) as { grades?: HydratedGrade[] };
-    return (json.grades || []).map((grade) => {
-      const student = grade.student || studentById.get(grade.studentId);
-      const exam =
+    const json = (await res.json()) as {
+      grades?: HydratedGrade[];
+      rows?: Array<{
+        grade: HydratedGrade | null;
+        student: Student;
+        exam: (typeof exams)[number];
+        statusText: string;
+        predictedActionText?: string;
+      }>;
+    };
+    const rows = json.rows || (json.grades || []).map((grade) => ({
+      grade,
+      student: grade.student || studentById.get(grade.studentId),
+      exam:
         (grade.exam as (typeof exams)[number] | undefined) ||
-        examById.get(grade.examId);
-      const cls = exam ? classification(grade, exam, student) : { text: "" };
-      return { grade, student, exam, classificationText: cls.text };
+        examById.get(grade.examId),
+      statusText: grade.status || "",
+      predictedActionText: "",
+    }));
+    return rows.map((row) => {
+      const grade = row.grade;
+      const student = row.student || (grade ? studentById.get(grade.studentId) : null);
+      const exam =
+        row.exam ||
+        (grade?.exam as (typeof exams)[number] | undefined) ||
+        (grade ? examById.get(grade.examId) : null);
+      const cls = grade && exam
+        ? classification(grade, exam, student || undefined)
+        : { text: "" };
+      return {
+        grade,
+        student,
+        exam,
+        classificationText: row.predictedActionText || cls.text,
+        statusText: row.statusText || grade?.status || "لم يمتحن",
+      };
     });
   };
 
@@ -1139,7 +1179,7 @@ export function GradeRecordsView() {
                 fetchRows={fetchGradeExportRows}
                 columns={gradeExportColumns}
                 triggerLabel="تصدير"
-                description="تقرير سجل الدرجات حسب الفلاتر الحالية"
+                description="تقرير كامل حسب الفلاتر الحالية، ويشمل طلاب الدورة الذين لم يمتحنوا والإجراء المتوقع بحقهم"
               />
             </div>
           </div>
