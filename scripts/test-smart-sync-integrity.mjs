@@ -9,6 +9,11 @@ const layout = read("src/components/teacher-pro/layout.tsx");
 const store = read("src/lib/teacher-store.ts");
 const missingNotes = read("src/components/teacher-pro/missing-students-notes.tsx");
 const calls = read("src/components/teacher-pro/follow-up.tsx");
+const silentRepairEndpoints = [
+  "/api/students/academic-repair",
+  "/api/students/fix-zero-opportunities",
+  "/api/students/clamp-opportunities",
+];
 
 const checks = [
   [
@@ -64,6 +69,13 @@ const checks = [
     store.includes("loadAllRequestSequence") &&
       store.includes("sectionLoadRequestSequence") &&
       store.includes("requestSequence !== loadAllRequestSequence"),
+  ],
+  [
+    "تحميل بيانات النظام لا ينفذ إصلاحاً أكاديمياً صامتاً أو يكتب قاعدة البيانات",
+    !store.includes("triggerAutoFixZeroOpportunities") &&
+      !store.includes("repairAbsentDiscountAccountingIfNeeded") &&
+      !store.includes("ACADEMIC_REPAIR_FLAG") &&
+      silentRepairEndpoints.every((endpoint) => !store.includes(endpoint)),
   ],
   [
     "صفحة ملاحظات الطلاب لا تستمع لكل تغييرات localStorage بلا فلترة",
