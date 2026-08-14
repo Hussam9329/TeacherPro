@@ -581,6 +581,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [callExamId, setCallExamId] = useState("");
   const [callStatusFilter, setCallStatusFilter] =
     useState<CallStatusFilter>("all");
+  const [callGradeFrom, setCallGradeFrom] = useState("");
+  const [callGradeTo, setCallGradeTo] = useState("");
   const [callGeneralSearch, setCallGeneralSearch] = useState("");
   const [callFilterSearch, setCallFilterSearch] = useState("");
   const [callGradePage, setCallGradePage] = useState(1);
@@ -621,6 +623,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   >({});
   const debouncedCallGeneralSearch = useDebouncedValue(callGeneralSearch, 300);
   const debouncedCallFilterSearch = useDebouncedValue(callFilterSearch, 300);
+  const debouncedCallGradeFrom = useDebouncedValue(callGradeFrom, 300);
+  const debouncedCallGradeTo = useDebouncedValue(callGradeTo, 300);
   const [pledgeSearch, setPledgeSearch] = useState("");
   const debouncedPledgeSearch = useDebouncedValue(pledgeSearch, 250);
   const [pledgeTypeFilter, setPledgeTypeFilter] =
@@ -654,6 +658,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   useEffect(() => {
     setCallExamId("");
     setCallStatusFilter("all");
+    setCallGradeFrom("");
+    setCallGradeTo("");
     setCallFilterSearch("");
     setCallGradePage(1);
     setCallGradeDisplayModes({});
@@ -661,6 +667,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   useEffect(() => {
     setCallStatusFilter("all");
+    setCallGradeFrom("");
+    setCallGradeTo("");
     setCallFilterSearch("");
     setCallGradePage(1);
     setCallGradeDisplayModes({});
@@ -726,6 +734,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           courseId: callCourseId,
           examId: callExamId,
           statusFilter: callStatusFilter,
+          gradeFrom: debouncedCallGradeFrom,
+          gradeTo: debouncedCallGradeTo,
           q: debouncedCallGeneralSearch,
           filterQ: debouncedCallFilterSearch,
           page: callGradePage,
@@ -788,6 +798,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     callCourseId,
     callExamId,
     callStatusFilter,
+    debouncedCallGradeFrom,
+    debouncedCallGradeTo,
     debouncedCallGeneralSearch,
     debouncedCallFilterSearch,
     callGradePage,
@@ -813,6 +825,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             courseId: callCourseId,
             examId: callExamId,
             statusFilter: callStatusFilter,
+            gradeFrom: debouncedCallGradeFrom,
+            gradeTo: debouncedCallGradeTo,
             q: debouncedCallGeneralSearch,
             filterQ: debouncedCallFilterSearch,
           },
@@ -839,6 +853,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     callCourseId,
     callExamId,
     callStatusFilter,
+    debouncedCallGradeFrom,
+    debouncedCallGradeTo,
     debouncedCallGeneralSearch,
     debouncedCallFilterSearch,
     syncKey,
@@ -946,6 +962,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     callCourseExams.find((exam) => exam.id === callExamId) || null;
   const callCourseSelected = Boolean(selectedCallCourse);
   const callExamSelected = Boolean(selectedCallExam);
+  const callGradeFromNumber = callGradeFrom.trim() ? Number(callGradeFrom) : null;
+  const callGradeToNumber = callGradeTo.trim() ? Number(callGradeTo) : null;
+  const callGradeRangeInvalid =
+    callGradeFromNumber !== null &&
+    Number.isFinite(callGradeFromNumber) &&
+    callGradeToNumber !== null &&
+    Number.isFinite(callGradeToNumber) &&
+    callGradeFromNumber > callGradeToNumber;
   const callExportDocumentTitle = selectedCallExam
     ? `${selectedCallCourse?.name || "الدورة"} - ${selectedCallExam.name}`
     : "المكالمات";
@@ -1302,6 +1326,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       courseId: callCourseId,
       examId: callExamId,
       statusFilter: callStatusFilter,
+      gradeFrom: debouncedCallGradeFrom,
+      gradeTo: debouncedCallGradeTo,
       q: debouncedCallGeneralSearch,
       filterQ: debouncedCallFilterSearch,
       pageSize: 200,
@@ -2654,6 +2680,44 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="tp-filter-field tp-filter-secondary">
+                  <Label htmlFor="follow-up-calls-grade-from">الدرجة من</Label>
+                  <Input
+                    id="follow-up-calls-grade-from"
+                    name="calls-grade-from"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={selectedCallExam?.fullMark}
+                    step="any"
+                    disabled={!callExamSelected}
+                    value={callGradeFrom}
+                    onChange={(event) => {
+                      setCallGradeFrom(event.target.value);
+                      setCallGradePage(1);
+                    }}
+                    placeholder="مثال: 20"
+                  />
+                </div>
+                <div className="tp-filter-field tp-filter-secondary">
+                  <Label htmlFor="follow-up-calls-grade-to">الدرجة إلى</Label>
+                  <Input
+                    id="follow-up-calls-grade-to"
+                    name="calls-grade-to"
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={selectedCallExam?.fullMark}
+                    step="any"
+                    disabled={!callExamSelected}
+                    value={callGradeTo}
+                    onChange={(event) => {
+                      setCallGradeTo(event.target.value);
+                      setCallGradePage(1);
+                    }}
+                    placeholder={`حتى ${selectedCallExam?.fullMark ?? "الدرجة الكاملة"}`}
+                  />
+                </div>
                 <div className="tp-filter-field tp-filter-search md:col-span-2">
                   <Label>بحث عام قبل الفرز</Label>
                   <Input
@@ -2704,6 +2768,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   )}
                 </div>
               </div>
+              {callGradeRangeInvalid ? (
+                <p className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm font-bold text-destructive">
+                  درجة «من» يجب ألا تكون أكبر من درجة «إلى».
+                </p>
+              ) : callGradeFrom || callGradeTo ? (
+                <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+                  نطاق الدرجة شامل للحدّين، وعند استخدامه تظهر الدرجات الرقمية فقط.
+                </p>
+              ) : null}
               {!callCourseSelected ? (
                 <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
                   اختر الدورة أولاً حتى يتم تفعيل الامتحانات وبقية الفلاتر.

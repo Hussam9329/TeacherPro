@@ -16,6 +16,10 @@ import {
 import { studentCourseScopeWhere } from "@/lib/student-scope";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
+import {
+  callGradeMatchesRange,
+  parseCallGradeRange,
+} from "@/lib/call-grade-range";
 
 export type CallStatusFilter =
   | "all"
@@ -434,6 +438,10 @@ export async function GET(req: NextRequest) {
     const courseId = normalizeListFilter(searchParams.get("courseId"));
     const examId = normalizeListFilter(searchParams.get("examId"));
     const statusFilter = normalizeCallStatusFilter(searchParams.get("statusFilter"));
+    const gradeRange = parseCallGradeRange(
+      searchParams.get("gradeFrom"),
+      searchParams.get("gradeTo"),
+    );
     const generalSearch = String(searchParams.get("q") || "").trim();
     const filterSearch = String(searchParams.get("filterQ") || "").trim();
     const page = parsePositiveInt(searchParams.get("page"), 1, 1_000_000);
@@ -591,6 +599,7 @@ export async function GET(req: NextRequest) {
       const impactKind = classifyCallImpact(grade, exam, student, leaves);
       const kind = gradeKindForCalls(impactKind);
       if (!gradeMatchesStatusFilter(statusFilter, kind, impactKind, grade)) return [];
+      if (!callGradeMatchesRange(grade, gradeRange)) return [];
       const values = searchableValues({ student, grade, exam, kind });
       if (generalSearch && !includesSearch(generalSearch, values)) return [];
       if (filterSearch && !includesSearch(filterSearch, values)) return [];

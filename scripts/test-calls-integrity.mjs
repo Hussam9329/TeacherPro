@@ -11,6 +11,7 @@ const files = {
   callUniqueMigration: 'prisma/migrations/20260708162000_student_call_unique_key/migration.sql',
   profileLog: 'src/app/api/students/profile-log/route.ts',
   profileDialog: 'src/components/teacher-pro/student-profile-dialog.tsx',
+  gradeRange: 'src/lib/call-grade-range.ts',
 };
 
 const read = (file) => fs.readFileSync(file, 'utf8');
@@ -33,6 +34,7 @@ const prisma = read(files.prisma);
 const callUniqueMigration = read(files.callUniqueMigration);
 const profileLog = read(files.profileLog);
 const profileDialog = read(files.profileDialog);
+const gradeRange = read(files.gradeRange);
 
 assert(
   followUp.includes('const callRows = callRowsFromDb;'),
@@ -181,6 +183,27 @@ assert(
     followUp.includes('dispatchLocal: false') &&
     followUp.includes('scopes: ["follow-up", "students", "dashboard", "logs"]'),
   'حفظ حالة الاتصال محمي من طلبات Sync الأقدم ولا يعيد تحميل نفس التبويب فوراً',
+);
+
+assert(
+  followUp.includes('الدرجة من') &&
+    followUp.includes('الدرجة إلى') &&
+    followUp.includes('debouncedCallGradeFrom') &&
+    followUp.includes('debouncedCallGradeTo'),
+  'تبويبة المكالمات تحتوي فلتر درجة من/إلى مؤجل حتى لا يرسل طلباً مع كل ضغطة',
+);
+assert(
+  api.includes('gradeFrom: query.gradeFrom') &&
+    api.includes('gradeTo: query.gradeTo') &&
+    candidates.includes('callGradeMatchesRange(grade, gradeRange)') &&
+    stats.includes('callGradeMatchesRange(grade, gradeRange)'),
+  'نطاق الدرجة ينتقل إلى القائمة والتصدير والإحصائيات بنفس المنطق',
+);
+assert(
+  gradeRange.includes('score < range.from') &&
+    gradeRange.includes('score > range.to') &&
+    gradeRange.includes('grade?.status !== "درجة"'),
+  'نطاق الدرجة شامل للحدين ويستبعد الحالات غير الرقمية عند تفعيله',
 );
 
 if (process.exitCode) {

@@ -15,6 +15,10 @@ import {
   parseCourseIds,
 } from "@/lib/grade-classification";
 import { studentCourseScopeWhere } from "@/lib/student-scope";
+import {
+  callGradeMatchesRange,
+  parseCallGradeRange,
+} from "@/lib/call-grade-range";
 
 type CallStatusFilter =
   | "all"
@@ -239,6 +243,10 @@ export async function GET(req: NextRequest) {
     const courseId = normalizeListFilter(searchParams.get("courseId"));
     const examId = normalizeListFilter(searchParams.get("examId"));
     const statusFilter = normalizeCallStatusFilter(searchParams.get("statusFilter"));
+    const gradeRange = parseCallGradeRange(
+      searchParams.get("gradeFrom"),
+      searchParams.get("gradeTo"),
+    );
     const generalSearch = String(searchParams.get("q") || "").trim();
     const filterSearch = String(searchParams.get("filterQ") || "").trim();
 
@@ -373,6 +381,7 @@ export async function GET(req: NextRequest) {
       const grade = gradeByStudentId.get(student.id);
       const studentLeaves = leavesByStudentId.get(student.id) || [];
       if (!gradeMatchesStatusFilter(statusFilter, grade, exam, student, studentLeaves)) return false;
+      if (!callGradeMatchesRange(grade, gradeRange)) return false;
       if (
         generalSearch &&
         !includesSearch(generalSearch, searchableValues(student, grade, exam, studentLeaves))

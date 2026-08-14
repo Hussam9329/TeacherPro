@@ -935,6 +935,8 @@ export interface CallStatsQuery {
   courseId?: string;
   examId?: string;
   statusFilter?: string;
+  gradeFrom?: string;
+  gradeTo?: string;
   q?: string;
   filterQ?: string;
 }
@@ -1943,6 +1945,8 @@ export const callStatsApi = {
       courseId: query.courseId,
       examId: query.examId,
       statusFilter: query.statusFilter,
+      gradeFrom: query.gradeFrom,
+      gradeTo: query.gradeTo,
       q: query.q,
       filterQ: query.filterQ,
     });
@@ -1959,6 +1963,8 @@ export const callCandidatesApi = {
       courseId: query.courseId,
       examId: query.examId,
       statusFilter: query.statusFilter,
+      gradeFrom: query.gradeFrom,
+      gradeTo: query.gradeTo,
       q: query.q,
       filterQ: query.filterQ,
       page: query.page ?? 1,
