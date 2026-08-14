@@ -7,6 +7,9 @@ const files = {
   courseChaptersRoute: "src/app/api/course-chapters/route.ts",
   activateRoute: "src/app/api/course-chapters/activate/route.ts",
   fixZeroRoute: "src/app/api/students/fix-zero-opportunities/route.ts",
+  secondChapterTransitionRoute:
+    "src/app/api/course-chapters/second-chapter-transition/route.ts",
+  secondChapterTransitionPolicy: "src/lib/second-chapter-transition.ts",
   api: "src/lib/api.ts",
   migration:
     "prisma/migrations/20260712190000_atomic_student_codes_and_active_chapter_guard/migration.sql",
@@ -30,6 +33,10 @@ const chaptersRoute = read(files.chaptersRoute);
 const courseChaptersRoute = read(files.courseChaptersRoute);
 const activateRoute = read(files.activateRoute);
 const fixZeroRoute = read(files.fixZeroRoute);
+const secondChapterTransitionRoute = read(files.secondChapterTransitionRoute);
+const secondChapterTransitionPolicy = read(
+  files.secondChapterTransitionPolicy,
+);
 const api = read(files.api);
 const migration = read(files.migration);
 const packageJson = read(files.packageJson);
@@ -166,17 +173,54 @@ assert(
   "صفحة الفصول تملك بحث وفلاتر مفهومة للدورات والفصول",
 );
 assert(
-  chaptersView.includes("معاينة وإصلاح") &&
+  chaptersView.includes("معاينة الإصلاح الآمن") &&
     chaptersView.includes("/api/students/fix-zero-opportunities") &&
-    chaptersView.includes("mode=include-dismissed"),
-  "إصلاح فرص الطلاب المعطوبة يفتح معاينة ويستدعي الوضع الشامل include-dismissed",
+    chaptersView.includes("previewOnly: true") &&
+    chaptersView.includes("previewToken: repairPreview.previewToken") &&
+    !chaptersView.includes("mode=include-dismissed"),
+  "إصلاح فرص 0/0 يقرأ معاينة حقيقية ثم يرسل token التأكيد بلا وضع جماعي خطير",
 );
 assert(
-  fixZeroRoute.includes("mode") &&
-    fixZeroRoute.includes("include-dismissed") &&
-    fixZeroRoute.includes('"نشط", "مفصول"') &&
-    fixZeroRoute.includes("recalculateAllStudentsAcademicState"),
-  "إصلاح فرص الطلاب يصلح النشطين والمفصولين، يستثني المؤرشفين، ويعيد احتساب الحالة الأكاديمية",
+  fixZeroRoute.includes('status: "نشط"') &&
+    fixZeroRoute.includes("opportunities: 0") &&
+    fixZeroRoute.includes("baseOpportunities: 0") &&
+    fixZeroRoute.includes("buildMutationPreviewToken") &&
+    fixZeroRoute.includes("withSerializableTransaction") &&
+    !fixZeroRoute.includes("include-dismissed") &&
+    !fixZeroRoute.includes("recalculateAllStudentsAcademicState"),
+  "إصلاح فرص الطلاب محصور بالنشطين 0/0 ومؤكد بمعاينة ذرية بلا إعادة احتساب شاملة",
+);
+assert(
+  chaptersView.includes(
+    "/api/course-chapters/second-chapter-transition",
+  ) &&
+    chaptersView.includes("تنفيذ الانتقال الآن") &&
+    chaptersView.includes("previewToken: transitionPreview.previewToken"),
+  "واجهة الفصول تعرض انتقال الدورتين بمعاينة وتأكيد من قاعدة البيانات",
+);
+assert(
+  secondChapterTransitionRoute.includes('"الدورة الصيفية"') &&
+    secondChapterTransitionRoute.includes('"طلاب الاعفاء"') &&
+    secondChapterTransitionRoute.includes('"الفصل الثاني - الانسجة"') &&
+    secondChapterTransitionRoute.includes("TARGET_OPPORTUNITIES = 3") &&
+    secondChapterTransitionRoute.includes("withSerializableTransaction") &&
+    secondChapterTransitionRoute.includes("buildMutationPreviewToken") &&
+    secondChapterTransitionRoute.includes(
+      "SECOND_CHAPTER_TRANSITION_MARKER_ID",
+    ) &&
+    secondChapterTransitionRoute.includes("existingTransitionMarker") &&
+    secondChapterTransitionRoute.includes("existingTransitionNote") &&
+    secondChapterTransitionRoute.includes("تم تنفيذ انتقال الدورتين مسبقاً") &&
+    secondChapterTransitionPolicy.includes(
+      "second-chapter-transition-snapshot",
+    ) &&
+    secondChapterTransitionRoute.includes('status: "نشط"') &&
+    secondChapterTransitionRoute.includes("archived: false") &&
+    secondChapterTransitionPolicy.includes("تسوية تاريخية:") &&
+    !secondChapterTransitionRoute.includes(
+      "recalculateAllStudentsAcademicState",
+    ),
+  "انتقال الدورتين ذري ولمرة واحدة ويحفظ الحالة السابقة ثم يبدأ 3/3 بعد تسوية آثار الفصل السابق",
 );
 
 assert(
