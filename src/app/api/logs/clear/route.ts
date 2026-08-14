@@ -13,6 +13,10 @@ import { writeSecurityAudit } from '@/lib/security-audit';
 import { ensureLogClearBackupTable, insertLogClearBackup } from '@/lib/log-clear-backups';
 import { recalculateStudentsAcademicState } from '@/lib/academic-recalculate-server';
 import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
+import {
+  SECOND_CHAPTER_PROTECTED_OPPORTUNITY_REASONS,
+  SECOND_CHAPTER_TRANSITION_MARKER_ID,
+} from '@/lib/second-chapter-transition';
 
 const CLEAR_SCOPE_DEFINITIONS = {
   'audit-all': {
@@ -121,6 +125,7 @@ function buildAuditWhere(scopes: ClearScopeId[], dateFrom: Date | null, dateToEx
 
   const where: Prisma.AuditLogWhereInput = {
     ...buildDateFilter('time', dateFrom, dateToExclusive),
+    id: { not: SECOND_CHAPTER_TRANSITION_MARKER_ID },
   };
 
   if (!hasAllAudit) {
@@ -136,6 +141,14 @@ function buildOpportunityWhere(scopes: ClearScopeId[], dateFrom: Date | null, da
   if (!scopes.some((scope) => CLEAR_SCOPE_DEFINITIONS[scope].includesOpportunity)) return null;
   return {
     ...buildDateFilter('date', dateFrom, dateToExclusive),
+    OR: [
+      { reason: null },
+      {
+        reason: {
+          notIn: [...SECOND_CHAPTER_PROTECTED_OPPORTUNITY_REASONS],
+        },
+      },
+    ],
   };
 }
 
