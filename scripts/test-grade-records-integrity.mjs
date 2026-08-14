@@ -74,7 +74,8 @@ must(
 
 must(
   exportApi.includes("completeGradeExportRows") &&
-    exportApi.includes('statusText: grade?.status || "لم يمتحن"') &&
+    exportApi.includes('grade?.status || "لم يمتحن"') &&
+    exportApi.includes('gradeKind === "excused" ? "مجاز"') &&
     exportApi.includes("predictedMissingActionText") &&
     exportApi.includes("includesStudentsWithoutGrades: true"),
   "API التصدير يدمج طلاب الدورة بلا درجة داخل التقرير",
@@ -88,6 +89,15 @@ must(
     exportApi.includes("student.studentLeaves"),
   "الإجراء المتوقع يراعي الإجازة والسماح والفصل وخصم الفرص",
   "يجب ألا يعرض التقرير إجراءً عقابياً موحداً للحالات المحمية."
+);
+
+must(
+    exportApi.includes("protectedGradeActionText") &&
+    exportApi.includes('gradeKind === "excused" ? "مجاز"') &&
+    exportApi.includes("protectedGradeActionText(gradeKind)") &&
+    page.includes("row.predictedActionText || cls.text"),
+  "تصدير المجاز يعتمد تصنيف الخادم ويعرض لا إجراء بدلاً من مخصوم",
+  "يجب ألا يعيد المتصفح تصنيف الطالب المجاز كمخصوم عند نقص كاش الإجازات."
 );
 
 must(

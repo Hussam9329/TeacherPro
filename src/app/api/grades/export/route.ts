@@ -10,6 +10,7 @@ import { normalizeArabicText } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
 import {
   classifyGradeAcademicImpact,
+  type GradeClassificationKind,
   gradeMatchesStatusFilterUnified,
   parseCourseIds,
 } from "@/lib/grade-classification";
@@ -215,11 +216,33 @@ function leaveAppliesToExam(
   return leave.examId === exam.id;
 }
 
-function exportClassificationKind(grade: GradeWithRelations): string {
+function exportClassificationKind(
+  grade: GradeWithRelations,
+): GradeClassificationKind {
   return classifyGradeAcademicImpact(grade, grade.exam, {
     student: grade.student,
     leaves: grade.student.studentLeaves,
   });
+}
+
+function protectedGradeActionText(kind: GradeClassificationKind): string {
+  if (kind === "academic-effect-excluded") {
+    return "لا إجراء - مستبعد من الأثر الأكاديمي";
+  }
+  if (kind === "excused") return "لا إجراء - الطالب مجاز";
+  if (kind === "before-registration") {
+    return "لا إجراء - الامتحان قبل تسجيل الطالب";
+  }
+  if (kind === "grace-period") {
+    return "لا إجراء - الطالب ضمن فترة السماح";
+  }
+  if (kind === "unavailable-exam") {
+    return "لا إجراء حالياً - الامتحان غير متاح أو غير محتسب";
+  }
+  if (kind === "no-discount-protected") {
+    return "لا إجراء - الامتحان بلا خصم";
+  }
+  return "";
 }
 
 function gradeMatchesExportStatusFilter(
@@ -432,13 +455,24 @@ async function completeGradeExportRows(searchParams: URLSearchParams) {
       const hydratedGrade = { ...grade, student, exam } as GradeWithRelations;
       if (!gradeMatchesExportStatusFilter(statusFilter, hydratedGrade)) continue;
     }
+    const gradeKind = grade
+      ? exportClassificationKind({
+          ...grade,
+          student,
+          exam,
+        } as GradeWithRelations)
+      : null;
     rows.push({
       grade,
       student,
       exam,
-      statusText: grade?.status || "لم يمتحن",
-      predictedActionText: grade
-        ? ""
+      // A leave is authoritative even if an old grade marker still says
+      // absent/score. The exported report must not show an excused student as
+      // deducted because a client cache does not contain the leave row.
+      statusText:
+        gradeKind === "excused" ? "مجاز" : grade?.status || "لم يمتحن",
+      predictedActionText: gradeKind !== null
+        ? protectedGradeActionText(gradeKind)
         : predictedMissingActionText(student, exam),
     });
   }
