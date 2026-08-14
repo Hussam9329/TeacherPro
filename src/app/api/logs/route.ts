@@ -7,6 +7,7 @@ import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { routeErrorResponse } from '@/lib/route-helpers';
 import { extractAuditEntityIds, formatAuditLogDisplay } from '@/lib/audit-log-display';
+import { SECOND_CHAPTER_TRANSITION_MARKER_ID } from '@/lib/second-chapter-transition';
 
 /**
  * Whitelist of (module, action) pairs the CLIENT is allowed to write.
@@ -287,6 +288,15 @@ export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+  if (id === SECOND_CHAPTER_TRANSITION_MARKER_ID) {
+    return NextResponse.json(
+      {
+        error:
+          'هذا السجل يحمي انتقال الدورتين إلى الفصل الثاني من التكرار، لذلك لا يمكن حذفه.',
+      },
+      { status: 409 },
+    );
+  }
 
   // Record who deleted what before we wipe it, so the audit trail
   // records the deletion itself.
