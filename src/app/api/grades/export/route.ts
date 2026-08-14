@@ -136,6 +136,14 @@ type CompleteExportExam = Prisma.ExamGetPayload<{
 
 type CompleteExportGrade = Prisma.GradeGetPayload<Record<string, never>>;
 
+type CompleteGradeExportRow = {
+  grade: CompleteExportGrade | null;
+  student: CompleteExportStudent;
+  exam: CompleteExportExam;
+  statusText: string;
+  predictedActionText: string;
+};
+
 const databaseComputedGradeFilters = new Set<GradeStatusFilter>([
   "excused",
   "grace-period",
@@ -409,7 +417,7 @@ async function completeGradeExportRows(searchParams: URLSearchParams) {
     grades.map((grade) => [`${grade.studentId}:${grade.examId}`, grade]),
   );
 
-  const rows = [];
+  const rows: CompleteGradeExportRow[] = [];
   for (const { student, exam } of eligiblePairs) {
     const storedGrade =
       gradeByStudentExam.get(`${student.id}:${exam.id}`) || null;
