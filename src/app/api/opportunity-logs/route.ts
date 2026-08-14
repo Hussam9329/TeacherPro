@@ -11,6 +11,7 @@ import { withSerializableTransaction } from '@/lib/serializable-transaction';
 import { buildMutationPreviewToken } from '@/lib/mutation-preview-token';
 import { buildStudentAcademicImpactToken } from '@/lib/student-academic-impact-token';
 import type { Prisma } from '@prisma/client';
+import { isSecondChapterProtectedOpportunityReason } from '@/lib/second-chapter-transition';
 
 function hasPermission(principal: AuthPrincipal, permission: string): boolean {
   return principal.isAdmin || principal.permissions.includes(permission);
@@ -204,6 +205,9 @@ export async function DELETE(req: NextRequest) {
       const preview = await buildOpportunityLogDeletePreview(tx, id);
       if (!preview) return { notFound: true } as const;
       const existingLog = preview.log;
+      if (isSecondChapterProtectedOpportunityReason(existingLog.reason)) {
+        return { protectedTransitionLog: true } as const;
+      }
       if (
         !hasPermission(principal, 'opportunities.manage') &&
         (!isAutomaticOpportunityPayload(existingLog) ||
@@ -251,6 +255,12 @@ export async function DELETE(req: NextRequest) {
       return { ok: true, deleted: deleted.count, studentIds: [existingLog.studentId], academicRecalculation };
     });
     if ('notFound' in result) return NextResponse.json({ ok: true, notFound: true });
+    if ('protectedTransitionLog' in result) {
+      return validationError(
+        'هذه الحركة تحفظ بداية فرص الفصل الثاني وتحمي الطلاب من آثار الفصل السابق، لذلك لا يمكن حذفها.',
+        409,
+      );
+    }
     if ('forbidden' in result) return forbiddenResponse();
     if ('previewConflict' in result && result.previewConflict) {
       const { previewToken, requiresFreshPreview, log } = result.previewConflict;
