@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback, startTransition } from "react";
 import type { Exam } from "@/lib/teacher-store";
 import {
   examApi,
@@ -223,7 +223,10 @@ export function ExamNewView() {
           }
           return;
         }
-        setContextRows(payload.rows);
+        // استخدام startTransition لتحديث البيانات بدون حظر الواجهة
+        startTransition(() => {
+          setContextRows(payload.rows);
+        });
       })
       .catch(() => {
         if (!controller.signal.aborted && !silent) {
@@ -290,7 +293,13 @@ export function ExamNewView() {
       return;
     }
     setForm(emptyForm());
-    emitTeacherProDataChanged({ source: "local-mutation", reason: "exam-created", scopes: ["exams", "grades", "opportunities", "follow-up", "dashboard"] });
+    // إصلاح: استخدام dispatchLocal لضمان تحديث الواجهة فوراً بعد الإضافة
+    emitTeacherProDataChanged({ 
+      source: "local-mutation", 
+      reason: "exam-created", 
+      scopes: ["exams", "grades", "opportunities", "follow-up", "dashboard"],
+      dispatchLocal: true  // ← إضافة هذا السطر لإصلاح المشكلة
+    });
     toast.success("تمت إضافة الامتحان من بيانات النظام");
   });
 
