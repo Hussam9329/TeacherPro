@@ -1,0 +1,599 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import React, { useEffect, useMemo, useState } from "react";
+     4→     4→import type { Exam } from "@/lib/teacher-store";
+     5→     5→import {
+     6→     6→  examApi,
+     7→     7→  examCreateContextApi,
+     8→     8→  type ExamCreateContextRow,
+     9→     9→} from "@/lib/api";
+    10→    10→import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
+    11→    11→import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+    12→    12→import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+    13→    13→import { Button } from "@/components/ui/button";
+    14→    14→import { Input } from "@/components/ui/input";
+    15→    15→import { DateInput } from "@/components/ui/date-input";
+    16→    16→import { Badge } from "@/components/ui/badge";
+    17→    17→import { Label } from "@/components/ui/label";
+    18→    18→import {
+    19→    19→  Select,
+    20→    20→  SelectContent,
+    21→    21→  SelectItem,
+    22→    22→  SelectTrigger,
+    23→    23→  SelectValue,
+    24→    24→} from "@/components/ui/select";
+    25→    25→import { Checkbox } from "@/components/ui/checkbox";
+    26→    26→import { toast } from "@/lib/user-toast";
+    27→    27→import { toLatinDigits } from "@/lib/format";
+    28→    28→import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
+    29→    29→import { useActionLock } from "@/hooks/use-action-lock";
+    30→    30→import { normalizeExamSiteValue } from "@/lib/exam-utils";
+    31→    31→import { baghdadTodayKey } from "@/lib/baghdad-time";
+    32→    32→
+    33→    33→type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
+    34→    34→const EXAM_MAIN_SITE_OPTIONS: string[] = [...MAIN_SITE_OPTIONS];
+    35→    35→
+    36→    36→type ExamFormState = {
+    37→    37→  name: string;
+    38→    38→  type: "يومي" | "تراكمي" | "فاينل";
+    39→    39→  courseIds: string[];
+    40→    40→  mainSites: string[];
+    41→    41→  date: string;
+    42→    42→  fullMark: number;
+    43→    43→  passMark: number;
+    44→    44→  discountMark: number;
+    45→    45→  opportunitiesPenaltyNum: number;
+    46→    46→  dismissalGrade: string;
+    47→    47→  noDiscount: boolean;
+    48→    48→  statusMode: ExamStatusMode;
+    49→    49→  scheduledActivateAt: string;
+    50→    50→};
+    51→    51→
+    52→    52→function todayISO() {
+    53→    53→  return baghdadTodayKey();
+    54→    54→}
+    55→    55→
+    56→    56→function defaultDateTimeForDate(date: string) {
+    57→    57→  return `${date || todayISO()}T08:00`;
+    58→    58→}
+    59→    59→
+    60→    60→function numberInputValue(value: number | string) {
+    61→    61→  return Number(value) === 0 ? "" : String(value);
+    62→    62→}
+    63→    63→
+    64→    64→function formatRangeNumber(value: number) {
+    65→    65→  if (!Number.isFinite(value)) return "—";
+    66→    66→  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
+    67→    67→}
+    68→    68→
+    69→    69→type JudgmentPreviewItem = {
+    70→    70→  title: string;
+    71→    71→  description: string;
+    72→    72→  tone: "ok" | "warn" | "danger" | "info";
+    73→    73→};
+    74→    74→
+    75→    75→function buildJudgmentPreview(state: ExamFormState): JudgmentPreviewItem[] {
+    76→    76→  const fullMark = Number(state.fullMark || 0);
+    77→    77→  const passMark = Number(state.passMark || 0);
+    78→    78→  const discountMark = Number(state.discountMark || 0);
+    79→    79→  const penalty = Number(state.opportunitiesPenaltyNum || 0);
+    80→    80→  const isFinalExam = state.type === "فاينل";
+    81→    81→  const noDiscount = Boolean(state.noDiscount);
+    82→    82→  const dismissalGradeRaw = state.dismissalGrade === "" ? null : Number(state.dismissalGrade);
+    83→    83→  const dismissalGrade = Number.isFinite(Number(dismissalGradeRaw)) ? Number(dismissalGradeRaw) : null;
+    84→    84→  const items: JudgmentPreviewItem[] = [];
+    85→    85→
+    86→    86→  if (noDiscount) {
+    87→    87→    items.push({
+    88→    88→      title: `الدرجات من 0 إلى ${formatRangeNumber(fullMark)}`,
+    89→    89→      description: `لا تخصم فرص. من ${formatRangeNumber(passMark)} فما فوق تظهر ناجح، وأقل من ذلك تظهر بدون خصم.`,
+    90→    90→      tone: "info",
+    91→    91→    });
+    92→    92→    items.push({ title: "الغياب", description: "لا يخصم فرص لأن الامتحان بدون خصم.", tone: "info" });
+    93→    93→    items.push({ title: "الغش", description: "يبقى إجراءً خطيراً: أول غش يفصل مؤقتاً ويصفر الفرص، والغش المتكرر يفصل نهائياً.", tone: "danger" });
+    94→    94→    return items;
+    95→    95→  }
+    96→    96→
+    97→    97→  if (isFinalExam) {
+    98→    98→    if (dismissalGrade !== null) {
+    99→    99→      items.push({ title: `من 0 إلى ${formatRangeNumber(dismissalGrade)}`, description: "فصل مؤقت حسب درجة الفصل في الفاينل.", tone: "danger" });
+   100→   100→      if (dismissalGrade >= passMark) {
+   101→   101→        items.push({ title: "تنبيه تداخل", description: "درجة الفصل تساوي أو تتجاوز درجة النجاح، وهذا يجعل حكم الفصل يتداخل مع النجاح. راجع القيم قبل الحفظ.", tone: "danger" });
+   102→   102→      }
+   103→   103→      items.push({ title: `أكبر من ${formatRangeNumber(dismissalGrade)} وأقل من ${formatRangeNumber(passMark)}`, description: "راسب في الفاينل بدون خصم فرص مباشر.", tone: "warn" });
+   104→   104→    } else {
+   105→   105→      items.push({ title: "درجة 0", description: "فصل مؤقت في الفاينل.", tone: "danger" });
+   106→   106→      items.push({ title: `أكبر من 0 وأقل من ${formatRangeNumber(passMark)}`, description: "راسب.", tone: "warn" });
+   107→   107→    }
+   108→   108→    items.push({ title: `من ${formatRangeNumber(passMark)} فما فوق`, description: "ناجح.", tone: "ok" });
+   109→   109→    items.push({ title: "الغياب", description: "فصل مؤقت لأنه غياب ضمن فاينل.", tone: "danger" });
+   110→   110→    items.push({ title: "الغش", description: "أول غش يفصل مؤقتاً ويصفر الفرص، والغش المتكرر يفصل نهائياً.", tone: "danger" });
+   111→   111→    return items;
+   112→   112→  }
+   113→   113→
+   114→   114→  items.push({ title: `من 0 إلى ${formatRangeNumber(discountMark)}`, description: `مخصوم: يخصم ${formatRangeNumber(penalty)} فرصة من الطالب.`, tone: "danger" });
+   115→   115→  items.push({ title: `أكبر من ${formatRangeNumber(discountMark)} وأقل من ${formatRangeNumber(passMark)}`, description: "راسب/محاسبة رسوب بدون خصم فرص مباشر.", tone: "warn" });
+   116→   116→  items.push({ title: `من ${formatRangeNumber(passMark)} فما فوق`, description: "ناجح.", tone: "ok" });
+   117→   117→  items.push({ title: "الغياب", description: `مخصوم: يخصم ${formatRangeNumber(penalty)} فرصة.`, tone: "danger" });
+   118→   118→  items.push({ title: "الغش", description: "أول غش يفصل مؤقتاً ويصفر الفرص، والغش المتكرر يفصل نهائياً.", tone: "danger" });
+   119→   119→  return items;
+   120→   120→}
+   121→   121→
+   122→   122→function judgmentToneClass(tone: JudgmentPreviewItem["tone"]) {
+   123→   123→  if (tone === "ok") return "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-100";
+   124→   124→  if (tone === "danger") return "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-100";
+   125→   125→  if (tone === "warn") return "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100";
+   126→   126→  return "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100";
+   127→   127→}
+   128→   128→
+   129→   129→function emptyForm(): ExamFormState {
+   130→   130→  return {
+   131→   131→    name: "",
+   132→   132→    type: "يومي",
+   133→   133→    courseIds: [],
+   134→   134→    mainSites: [],
+   135→   135→    date: todayISO(),
+   136→   136→    fullMark: 100,
+   137→   137→    passMark: 60,
+   138→   138→    discountMark: 45,
+   139→   139→    opportunitiesPenaltyNum: 1,
+   140→   140→    dismissalGrade: "",
+   141→   141→    noDiscount: false,
+   142→   142→    statusMode: "نشط",
+   143→   143→    scheduledActivateAt: "",
+   144→   144→  };
+   145→   145→}
+   146→   146→
+   147→   147→function toggleSelection(values: string[], value: string): string[] {
+   148→   148→  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+   149→   149→}
+   150→   150→
+   151→   151→function applyStatus(form: ExamFormState) {
+   152→   152→  if (form.statusMode === "نشط") {
+   153→   153→    return { active: true, scheduledActivateAt: "", scheduledDeactivateAt: "" };
+   154→   154→  }
+   155→   155→  if (form.statusMode === "معطل") {
+   156→   156→    return { active: false, scheduledActivateAt: "", scheduledDeactivateAt: "" };
+   157→   157→  }
+   158→   158→  return { active: false, scheduledActivateAt: form.scheduledActivateAt, scheduledDeactivateAt: "" };
+   159→   159→}
+   160→   160→
+   161→   161→function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
+   162→   162→  const isFinalExam = form.type === "فاينل";
+   163→   163→  const noDiscount = Boolean(form.noDiscount);
+   164→   164→  return {
+   165→   165→    name: form.name.trim(),
+   166→   166→    type: form.type,
+   167→   167→    courseIds: form.courseIds,
+   168→   168→    mainSite: form.mainSites.join(","),
+   169→   169→    date: form.date,
+   170→   170→    fullMark: form.fullMark,
+   171→   171→    passMark: form.passMark,
+   172→   172→    discountMark: isFinalExam || noDiscount ? 0 : form.discountMark,
+   173→   173→    opportunitiesPenalty: noDiscount ? 0 : (isFinalExam ? "فصل مؤقت" : form.opportunitiesPenaltyNum),
+   174→   174→    dismissalGrade: !noDiscount && isFinalExam && form.dismissalGrade ? Number(form.dismissalGrade) : null,
+   175→   175→    noDiscount,
+   176→   176→    ...applyStatus(form),
+   177→   177→  };
+   178→   178→}
+   179→   179→
+   180→   180→function selectedCourseBlockers(rows: ExamCreateContextRow[], selectedIds: string[]): string[] {
+   181→   181→  return selectedIds.flatMap((id) => {
+   182→   182→    const row = rows.find((item) => item.id === id);
+   183→   183→    if (!row) return [`الدورة ${id} غير موجودة في سياق بيانات النظام`];
+   184→   184→    return row.canSelectForExam ? [] : row.blockers.map((blocker) => `${String(row.course?.name || row.id)}: ${blocker}`);
+   185→   185→  });
+   186→   186→}
+   187→   187→
+   188→   188→function selectedSiteActiveStudentCount(rows: ExamCreateContextRow[], selectedCourseIds: string[], selectedSites: string[]): number | null {
+   189→   189→  if (selectedCourseIds.length === 0 || selectedSites.length === 0) return null;
+   190→   190→  const selectedRows = rows.filter((row) => selectedCourseIds.includes(row.id));
+   191→   191→  const normalizedSites = selectedSites.map(normalizeExamSiteValue).filter(Boolean);
+   192→   192→  const allSelected = EXAM_MAIN_SITE_OPTIONS.every((site) => normalizedSites.includes(normalizeExamSiteValue(site)));
+   193→   193→  if (allSelected) {
+   194→   194→    return selectedRows.reduce((sum, row) => sum + Number(row.activeStudents || 0), 0);
+   195→   195→  }
+   196→   196→  return selectedRows.reduce((sum, row) => {
+   197→   197→    return sum + normalizedSites.reduce((siteSum, site) => siteSum + Number(row.siteCounts?.[site] || 0), 0);
+   198→   198→  }, 0);
+   199→   199→}
+   200→   200→
+   201→   201→export function ExamNewView() {
+   202→   202→  const syncKey = useTeacherProSyncKey(["courses", "chapters", "students", "exams"]);
+   203→   203→  const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
+   204→   204→  const [form, setForm] = useState<ExamFormState>(() => emptyForm());
+   205→   205→  const [contextRows, setContextRows] = useState<ExamCreateContextRow[]>([]);
+   206→   206→  const [contextLoading, setContextLoading] = useState(true);
+   207→   207→  const [contextError, setContextError] = useState("");
+   208→   208→  const { locked: isAddingExam, runLocked: runAddExamLocked } = useActionLock();
+   209→   209→
+   210→   210→  useEffect(() => {
+   211→   211→    const controller = new AbortController();
+   212→   212→    const silent = isBackgroundSync();
+   213→   213→    if (!silent) setContextLoading(true);
+   214→   214→    if (!silent) setContextError("");
+   215→   215→    examCreateContextApi
+   216→   216→      .get({ signal: controller.signal, quietAbort: true })
+   217→   217→      .then((payload) => {
+   218→   218→        if (controller.signal.aborted) return;
+   219→   219→        if (!payload?.rows) {
+   220→   220→          if (!silent) {
+   221→   221→            setContextRows([]);
+   222→   222→            setContextError("تعذر تحميل سياق إضافة الامتحان من بيانات النظام.");
+   223→   223→          }
+   224→   224→          return;
+   225→   225→        }
+   226→   226→        setContextRows(payload.rows);
+   227→   227→      })
+   228→   228→      .catch(() => {
+   229→   229→        if (!controller.signal.aborted && !silent) {
+   230→   230→          setContextRows([]);
+   231→   231→          setContextError("تعذر تحميل سياق إضافة الامتحان من بيانات النظام.");
+   232→   232→        }
+   233→   233→      })
+   234→   234→      .finally(() => {
+   235→   235→        if (!controller.signal.aborted) setContextLoading(false);
+   236→   236→      });
+   237→   237→    return () => controller.abort();
+   238→   238→  }, [syncKey, isBackgroundSync]);
+   239→   239→
+   240→   240→  const selectableCourses = useMemo(
+   241→   241→    () => contextRows.filter((row) => row.canSelectForExam),
+   242→   242→    [contextRows],
+   243→   243→  );
+   244→   244→  const blockedCourses = useMemo(
+   245→   245→    () => contextRows.filter((row) => !row.canSelectForExam),
+   246→   246→    [contextRows],
+   247→   247→  );
+   248→   248→
+   249→   249→  const availableMainSitesFor = (_state: ExamFormState): string[] => EXAM_MAIN_SITE_OPTIONS;
+   250→   250→
+   251→   251→  const validateForm = (state: ExamFormState) => {
+   252→   252→    const fullMark = Number(state.fullMark);
+   253→   253→    const passMark = Number(state.passMark);
+   254→   254→    const isFinalExam = state.type === "فاينل";
+   255→   255→    const noDiscount = Boolean(state.noDiscount);
+   256→   256→    const discountMark = isFinalExam || noDiscount
+   257→   257→      ? 0
+   258→   258→      : Number(state.discountMark);
+   259→   259→    const opportunitiesPenalty = Number(state.opportunitiesPenaltyNum);
+   260→   260→    const dismissalGrade = state.dismissalGrade === "" ? null : Number(state.dismissalGrade);
+   261→   261→
+   262→   262→    if (contextLoading) return "انتظر تحميل سياق إضافة الامتحان من بيانات النظام";
+   263→   263→    if (contextError) return contextError;
+   264→   264→    if (!state.name.trim()) return "يرجى إدخال اسم الامتحان";
+   265→   265→    if (state.courseIds.length === 0) return "يرجى اختيار دورة واحدة على الأقل";
+   266→   266→    const blockers = selectedCourseBlockers(contextRows, state.courseIds);
+   267→   267→    if (blockers.length > 0) return `لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${blockers.join("، ")}`;
+   268→   268→    if (state.mainSites.length === 0) return "يرجى اختيار منطقة واحدة على الأقل أو اختيار الكل";
+   269→   269→    if (![fullMark, passMark, discountMark].every((value) => Number.isFinite(value) && Number.isInteger(value))) return "درجات الامتحان يجب أن تكون أعداداً صحيحة بدون كسور";
+   270→   270→    if (fullMark <= 0) return "الدرجة الكاملة يجب أن تكون أكبر من صفر";
+   271→   271→    if (passMark < 0 || passMark > fullMark) return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
+   272→   272→    if (!noDiscount && (discountMark < 0 || discountMark > fullMark)) return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
+   273→   273→    if (!noDiscount && !isFinalExam && passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
+   274→   274→    if (!noDiscount && !isFinalExam && (!Number.isInteger(opportunitiesPenalty) || opportunitiesPenalty <= 0)) return "خصم الفرص يجب أن يكون عدداً صحيحاً أكبر من صفر";
+   275→   275→    if (!noDiscount && isFinalExam && dismissalGrade !== null && (!Number.isInteger(dismissalGrade) || dismissalGrade < 0 || dismissalGrade > fullMark)) return "درجة الفصل يجب أن تكون عدداً صحيحاً بين صفر والدرجة الكاملة";
+   276→   276→    if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ ووقت التفعيل المجدول";
+   277→   277→    return null;
+   278→   278→  };
+   279→   279→
+   280→   280→  const handleSubmit = runAddExamLocked(async (e: React.FormEvent<HTMLFormElement>) => {
+   281→   281→    e.preventDefault();
+   282→   282→    const error = validateForm(form);
+   283→   283→    if (error) {
+   284→   284→      toast.error(error);
+   285→   285→      return;
+   286→   286→    }
+   287→   287→    const result = await examApi.add(buildExamPayload(form) as unknown as Record<string, unknown>);
+   288→   288→    if (!result.ok || result.queued) {
+   289→   289→      toast.error(result.error || "تعذر إضافة الامتحان من النظام.");
+   290→   290→      return;
+   291→   291→    }
+   292→   292→    setForm(emptyForm());
+   293→   293→    emitTeacherProDataChanged({ source: "local-mutation", reason: "exam-created", scopes: ["exams", "grades", "opportunities", "follow-up", "dashboard"] });
+   294→   294→    toast.success("تمت إضافة الامتحان من بيانات النظام");
+   295→   295→  });
+   296→   296→
+   297→   297→  const toggleCourseSelection = (state: ExamFormState, courseId: string): ExamFormState => ({
+   298→   298→    ...state,
+   299→   299→    courseIds: toggleSelection(state.courseIds, courseId),
+   300→   300→  });
+   301→   301→
+   302→   302→  const renderCourseSelector = (state: ExamFormState, setState: (updater: (prev: ExamFormState) => ExamFormState) => void, allId: string) => {
+   303→   303→    const allSelected = selectableCourses.length > 0 && selectableCourses.every((row) => state.courseIds.includes(row.id));
+   304→   304→    return (
+   305→   305→      <div className="space-y-3">
+   306→   306→        {contextLoading ? (
+   307→   307→          <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
+   308→   308→            جاري تحميل الدورات والفصول النشطة من بيانات النظام...
+   309→   309→          </div>
+   310→   310→        ) : contextError ? (
+   311→   311→          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+   312→   312→            {contextError}
+   313→   313→          </div>
+   314→   314→        ) : (
+   315→   315→          <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border p-3">
+   316→   316→            <div className="flex items-center gap-2 border-b pb-2">
+   317→   317→              <Checkbox
+   318→   318→                id={allId}
+   319→   319→                checked={allSelected}
+   320→   320→                disabled={selectableCourses.length === 0}
+   321→   321→                onCheckedChange={() => setState((prev) => ({ ...prev, courseIds: allSelected ? [] : selectableCourses.map((row) => row.id) }))}
+   322→   322→              />
+   323→   323→              <Label htmlFor={allId} className="text-sm font-bold">الكل للدورات الصالحة من بيانات النظام</Label>
+   324→   324→              <Badge variant="outline" className="text-[10px]">{selectableCourses.length} صالحة</Badge>
+   325→   325→            </div>
+   326→   326→            {contextRows.map((row) => {
+   327→   327→              const courseName = String(row.course?.name || row.id);
+   328→   328→              return (
+   329→   329→                <div key={row.id} className="space-y-1 rounded-xl border bg-background/60 p-2">
+   330→   330→                  <div className="flex items-center gap-2">
+   331→   331→                    <Checkbox
+   332→   332→                      id={`${allId}-${row.id}`}
+   333→   333→                      checked={state.courseIds.includes(row.id)}
+   334→   334→                      disabled={!row.canSelectForExam}
+   335→   335→                      onCheckedChange={() => setState((prev) => toggleCourseSelection(prev, row.id))}
+   336→   336→                    />
+   337→   337→                    <Label htmlFor={`${allId}-${row.id}`} className="text-sm font-bold">
+   338→   338→                      {courseName}
+   339→   339→                    </Label>
+   340→   340→                    <Badge variant={row.canSelectForExam ? "outline" : "destructive"} className="text-[10px]">
+   341→   341→                      {row.canSelectForExam ? "صالحة للامتحان" : "غير صالحة"}
+   342→   342→                    </Badge>
+   343→   343→                  </div>
+   344→   344→                  <div className="flex flex-wrap gap-1 pr-7 text-[11px] text-muted-foreground">
+   345→   345→                    <span>الطلاب النشطون: {row.activeStudents}</span>
+   346→   346→                    <span>الفصل النشط: {row.activeChapter?.name || "—"}</span>
+   347→   347→                    <span>فرص الفصل: {row.activeChapter?.opportunities ?? "—"}</span>
+   348→   348→                  </div>
+   349→   349→                  {row.blockers.length > 0 ? (
+   350→   350→                    <div className="pr-7 text-[11px] text-destructive">
+   351→   351→                      {row.blockers.join("، ")}
+   352→   352→                    </div>
+   353→   353→                  ) : null}
+   354→   354→                </div>
+   355→   355→              );
+   356→   356→            })}
+   357→   357→          </div>
+   358→   358→        )}
+   359→   359→        {blockedCourses.length > 0 && !contextLoading && !contextError && (
+   360→   360→          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+   361→   361→            <p className="font-bold">دورات مستبعدة من اختيار الكل</p>
+   362→   362→            <ul className="mt-2 list-disc space-y-1 pr-5">
+   363→   363→              {blockedCourses.slice(0, 6).map((row) => (
+   364→   364→                <li key={row.id}>
+   365→   365→                  {String(row.course?.name || row.id)}: {row.blockers.join("، ")}
+   366→   366→                </li>
+   367→   367→              ))}
+   368→   368→            </ul>
+   369→   369→          </div>
+   370→   370→        )}
+   371→   371→      </div>
+   372→   372→    );
+   373→   373→  };
+   374→   374→
+   375→   375→  const renderStatusControls = (state: ExamFormState, setState: (updater: (prev: ExamFormState) => ExamFormState) => void, prefix: string) => (
+   376→   376→    <>
+   377→   377→      <div className="tp-form-field tp-form-status space-y-2">
+   378→   378→        <Label htmlFor={`${prefix}-status`}>حالة الامتحان</Label>
+   379→   379→        <Select
+   380→   380→          value={state.statusMode}
+   381→   381→          onValueChange={(value) => setState((p) => ({
+   382→   382→            ...p,
+   383→   383→            statusMode: value as ExamStatusMode,
+   384→   384→            scheduledActivateAt: value === "تفعيل مجدول" && !p.scheduledActivateAt ? defaultDateTimeForDate(p.date) : p.scheduledActivateAt,
+   385→   385→          }))}
+   386→   386→        >
+   387→   387→          <SelectTrigger id={`${prefix}-status`}><SelectValue /></SelectTrigger>
+   388→   388→          <SelectContent>
+   389→   389→            <SelectItem value="نشط">نشط</SelectItem>
+   390→   390→            <SelectItem value="تفعيل مجدول">تفعيل مجدول</SelectItem>
+   391→   391→            <SelectItem value="معطل">معطل</SelectItem>
+   392→   392→          </SelectContent>
+   393→   393→        </Select>
+   394→   394→        <p className="text-xs text-muted-foreground">تعطيل الامتحان المجدول يتم من سجل الامتحانات بعد إضافة الامتحان.</p>
+   395→   395→      </div>
+   396→   396→      {state.statusMode === "تفعيل مجدول" && (
+   397→   397→        <div className="tp-form-field space-y-2">
+   398→   398→          <Label htmlFor={`${prefix}-activate`}>تاريخ ووقت التفعيل</Label>
+   399→   399→          <Input
+   400→   400→            id={`${prefix}-activate`}
+   401→   401→            type="datetime-local"
+   402→   402→            value={state.scheduledActivateAt}
+   403→   403→            onChange={(e) => setState((p) => ({ ...p, scheduledActivateAt: e.target.value }))}
+   404→   404→          />
+   405→   405→        </div>
+   406→   406→      )}
+   407→   407→    </>
+   408→   408→  );
+   409→   409→
+   410→   410→  const renderFormFields = (state: ExamFormState, setState: (updater: (prev: ExamFormState) => ExamFormState) => void, prefix: string) => {
+   411→   411→    const isFinalExam = state.type === "فاينل";
+   412→   412→    const noDiscount = Boolean(state.noDiscount);
+   413→   413→    const mainSitesForState = availableMainSitesFor(state);
+   414→   414→    const allMainSitesSelected = mainSitesForState.length > 0 && state.mainSites.length === mainSitesForState.length;
+   415→   415→    const matchedStudentsCount = selectedSiteActiveStudentCount(contextRows, state.courseIds, state.mainSites);
+   416→   416→    const judgmentPreview = buildJudgmentPreview(state);
+   417→   417→
+   418→   418→    return (
+   419→   419→      <div className="tp-exam-form-grid grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+   420→   420→        <div className="tp-form-field space-y-2">
+   421→   421→          <Label htmlFor={`${prefix}-name`}>اسم الامتحان</Label>
+   422→   422→          <Input id={`${prefix}-name`} value={state.name} onChange={(e) => setState((p) => ({ ...p, name: e.target.value }))} required placeholder="الامتحان الأول - الفصل الأول" />
+   423→   423→        </div>
+   424→   424→        <div className="tp-form-field space-y-2">
+   425→   425→          <Label htmlFor={`${prefix}-type`}>نوع الامتحان</Label>
+   426→   426→          <Select value={state.type} onValueChange={(v) => setState((p) => {
+   427→   427→            const nextType = v as ExamFormState["type"];
+   428→   428→            const nextIsFinalExam = nextType === "فاينل";
+   429→   429→            return {
+   430→   430→              ...p,
+   431→   431→              type: nextType,
+   432→   432→              discountMark: nextIsFinalExam || p.noDiscount ? 0 : (p.discountMark || 45),
+   433→   433→              opportunitiesPenaltyNum: nextIsFinalExam || p.noDiscount ? 0 : (p.opportunitiesPenaltyNum || 1),
+   434→   434→              dismissalGrade: nextIsFinalExam && !p.noDiscount ? p.dismissalGrade : "",
+   435→   435→            };
+   436→   436→          })}>
+   437→   437→            <SelectTrigger id={`${prefix}-type`}><SelectValue /></SelectTrigger>
+   438→   438→            <SelectContent>
+   439→   439→              <SelectItem value="يومي">يومي</SelectItem>
+   440→   440→              <SelectItem value="تراكمي">تراكمي</SelectItem>
+   441→   441→              <SelectItem value="فاينل">فاينل</SelectItem>
+   442→   442→            </SelectContent>
+   443→   443→          </Select>
+   444→   444→        </div>
+   445→   445→        <div className="tp-form-field space-y-2">
+   446→   446→          <Label htmlFor={`${prefix}-date`}>تاريخ الامتحان</Label>
+   447→   447→          <DateInput
+   448→   448→            id={`${prefix}-date`}
+   449→   449→            value={state.date}
+   450→   450→            onChange={(value) => setState((p) => ({
+   451→   451→              ...p,
+   452→   452→              date: value,
+   453→   453→              scheduledActivateAt: p.statusMode === "تفعيل مجدول" && (!p.scheduledActivateAt || p.scheduledActivateAt.startsWith(p.date))
+   454→   454→                ? defaultDateTimeForDate(value)
+   455→   455→                : p.scheduledActivateAt,
+   456→   456→            }))}
+   457→   457→          />
+   458→   458→        </div>
+   459→   459→        <div className="tp-form-field tp-form-field-tall space-y-2 md:col-span-2 xl:col-span-1">
+   460→   460→          <Label>الدورات</Label>
+   461→   461→          {renderCourseSelector(state, setState, `${prefix}-all-courses`)}
+   462→   462→        </div>
+   463→   463→        <div className="tp-form-field tp-form-field-tall space-y-2">
+   464→   464→          <Label>الموقع الرئيسي</Label>
+   465→   465→          <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-3">
+   466→   466→            <div className="flex items-center gap-2 border-b pb-2">
+   467→   467→              <Checkbox checked={allMainSitesSelected} onCheckedChange={() => setState((p) => ({ ...p, mainSites: allMainSitesSelected ? [] : [...mainSitesForState] }))} />
+   468→   468→              <span className="text-sm font-bold">الكل</span>
+   469→   469→            </div>
+   470→   470→            {mainSitesForState.map((site) => (
+   471→   471→              <div key={site} className="flex items-center gap-2">
+   472→   472→                <Checkbox checked={state.mainSites.includes(site)} onCheckedChange={() => setState((p) => ({ ...p, mainSites: toggleSelection(p.mainSites, site) }))} />
+   473→   473→                <span className="text-sm">{site}</span>
+   474→   474→              </div>
+   475→   475→            ))}
+   476→   476→          </div>
+   477→   477→          {matchedStudentsCount === 0 && (
+   478→   478→            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
+   479→   479→              لا يوجد طلاب نشطون ظاهرون من سياق النظام لهذه المواقع في الدورات المختارة. قد يتم إنشاء الامتحان بدون نتائج متوقعة.
+   480→   480→            </div>
+   481→   481→          )}
+   482→   482→          {matchedStudentsCount !== null && matchedStudentsCount > 0 && (
+   483→   483→            <p className="text-xs text-muted-foreground">
+   484→   484→              مؤشر الطلاب النشطين حسب الدورات والمواقع المختارة من النظام: {matchedStudentsCount}
+   485→   485→            </p>
+   486→   486→          )}
+   487→   487→        </div>
+   488→   488→        <div className="tp-form-policy space-y-2 rounded-lg border border-dashed p-3 md:col-span-2 xl:col-span-3">
+   489→   489→          <div className="flex items-start gap-2">
+   490→   490→            <Checkbox
+   491→   491→              id={`${prefix}-no-discount`}
+   492→   492→              checked={state.noDiscount}
+   493→   493→              onCheckedChange={(checked) => setState((p) => {
+   494→   494→                const enabled = Boolean(checked);
+   495→   495→                return {
+   496→   496→                  ...p,
+   497→   497→                  noDiscount: enabled,
+   498→   498→                  discountMark: enabled ? 0 : (p.discountMark || 45),
+   499→   499→                  opportunitiesPenaltyNum: enabled ? 0 : (p.opportunitiesPenaltyNum || 1),
+   500→   500→                  dismissalGrade: enabled ? "" : p.dismissalGrade,
+   501→   501→                };
+   502→   502→              })}
+   503→   503→            />
+   504→   504→            <div className="space-y-1">
+   505→   505→              <Label htmlFor={`${prefix}-no-discount`} className="cursor-pointer font-semibold">امتحان بدون خصم</Label>
+   506→   506→              <p className="text-xs text-muted-foreground">
+   507→   507→                عند تفعيل هذا الخيار لا تتم محاسبة الطالب على الدرجة أو الغياب في هذا الامتحان، وتتعطل حقول درجة الخصم وخصم الفرص ودرجة الفصل.
+   508→   508→              </p>
+   509→   509→            </div>
+   510→   510→          </div>
+   511→   511→        </div>
+   512→   512→        <div className="tp-form-field space-y-2"><Label>الدرجة الكاملة</Label><Input type="number" step={1} value={numberInputValue(state.fullMark)} onChange={(e) => setState((p) => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
+   513→   513→        <div className="tp-form-field space-y-2"><Label>درجة النجاح</Label><Input type="number" step={1} value={numberInputValue(state.passMark)} onChange={(e) => setState((p) => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
+   514→   514→        <div className="tp-form-field space-y-2">
+   515→   515→          <Label>درجة الخصم</Label>
+   516→   516→          <Input
+   517→   517→            type="number"
+   518→   518→            step={1}
+   519→   519→            value={isFinalExam || noDiscount ? "" : numberInputValue(state.discountMark)}
+   520→   520→            disabled={isFinalExam || noDiscount}
+   521→   521→            onChange={(e) => setState((p) => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 0 }))}
+   522→   522→          />
+   523→   523→          {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ الحكم يكون فقط من درجة الفصل.</p>}
+   524→   524→          {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
+   525→   525→          {!noDiscount && !isFinalExam && Number(state.passMark) <= Number(state.discountMark) && (
+   526→   526→            <p className="text-xs text-destructive">درجة النجاح يجب أن تكون أكبر من درجة الخصم.</p>
+   527→   527→          )}
+   528→   528→        </div>
+   529→   529→        <div className="tp-form-field space-y-2">
+   530→   530→          <Label>خصم الفرص</Label>
+   531→   531→          <Input
+   532→   532→            type="number"
+   533→   533→            min={0}
+   534→   534→            step={1}
+   535→   535→            value={isFinalExam || noDiscount ? "" : numberInputValue(state.opportunitiesPenaltyNum)}
+   536→   536→            disabled={isFinalExam || noDiscount}
+   537→   537→            onChange={(e) => setState((p) => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 0 }))}
+   538→   538→          />
+   539→   539→          {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ الغياب أو الغش أو درجة الفصل يعالج كفصل مؤقت فقط.</p>}
+   540→   540→          {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
+   541→   541→        </div>
+   542→   542→        {isFinalExam && <div className="tp-form-field space-y-2"><Label>درجة الفصل</Label><Input type="number" step={1} disabled={noDiscount} value={noDiscount ? "" : state.dismissalGrade} onChange={(e) => setState((p) => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} />{noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}</div>}
+   543→   543→        <div className="tp-form-preview space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4 md:col-span-2 xl:col-span-3">
+   544→   544→          <div>
+   545→   545→            <h3 className="font-bold">معاينة الحكم قبل الحفظ</h3>
+   546→   546→            <p className="text-xs text-muted-foreground">هذه المعاينة توضح كيف سيتعامل النظام مع الدرجات والغياب والغش حسب القيم الحالية.</p>
+   547→   547→          </div>
+   548→   548→          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+   549→   549→            {judgmentPreview.map((item) => (
+   550→   550→              <div key={`${item.title}-${item.description}`} className={`rounded-lg border p-3 text-sm ${judgmentToneClass(item.tone)}`}>
+   551→   551→                <p className="font-bold">{item.title}</p>
+   552→   552→                <p className="mt-1 text-xs leading-5">{item.description}</p>
+   553→   553→              </div>
+   554→   554→            ))}
+   555→   555→          </div>
+   556→   556→        </div>
+   557→   557→        {renderStatusControls(state, setState, prefix)}
+   558→   558→      </div>
+   559→   559→    );
+   560→   560→  };
+   561→   561→
+   562→   562→  return (
+   563→   563→    <div className="tp-exam-new space-y-6">
+   564→   564→      <Card className="tp-exam-new__shell">
+   565→   565→        <CardHeader className="tp-exam-new__header">
+   566→   566→          <CardTitle>إضافة امتحان جديد</CardTitle>
+   567→   567→        </CardHeader>
+   568→   568→        <CardContent className="tp-exam-new__content space-y-4">
+   569→   569→          <div className="tp-exam-new__stats grid grid-cols-2 gap-3 md:grid-cols-4">
+   570→   570→            <div className="rounded-2xl border bg-muted/30 p-3">
+   571→   571→              <p className="text-xs text-muted-foreground">الدورات الصالحة</p>
+   572→   572→              <p className="text-2xl font-black">{contextLoading ? "..." : selectableCourses.length}</p>
+   573→   573→            </div>
+   574→   574→            <div className="rounded-2xl border bg-muted/30 p-3">
+   575→   575→              <p className="text-xs text-muted-foreground">الدورات المستبعدة</p>
+   576→   576→              <p className="text-2xl font-black">{contextLoading ? "..." : blockedCourses.length}</p>
+   577→   577→            </div>
+   578→   578→            <div className="rounded-2xl border bg-muted/30 p-3">
+   579→   579→              <p className="text-xs text-muted-foreground">الطلاب النشطون</p>
+   580→   580→              <p className="text-2xl font-black">{contextLoading ? "..." : contextRows.reduce((sum, row) => sum + Number(row.activeStudents || 0), 0)}</p>
+   581→   581→            </div>
+   582→   582→            <div className="rounded-2xl border bg-muted/30 p-3">
+   583→   583→              <p className="text-xs text-muted-foreground">مصدر الصفحة</p>
+   584→   584→              <p className="text-sm font-bold text-emerald-600">بيانات النظام</p>
+   585→   585→            </div>
+   586→   586→          </div>
+   587→   587→
+   588→   588→          <form onSubmit={handleSubmit} className="tp-validation-form tp-long-form tp-exam-form tp-exam-new__form space-y-4">
+   589→   589→            {renderFormFields(form, setForm, "exam")}
+   590→   590→            <Button type="submit" disabled={isAddingExam || contextLoading || Boolean(contextError)} className="tp-form-submit w-full">
+   591→   591→              {isAddingExam ? "جاري الإضافة..." : "إضافة الامتحان"}
+   592→   592→            </Button>
+   593→   593→          </form>
+   594→   594→        </CardContent>
+   595→   595→      </Card>
+   596→   596→    </div>
+   597→   597→  );
+   598→   598→}
+   599→   599→
