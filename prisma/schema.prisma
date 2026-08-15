@@ -1,0 +1,421 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Course {
+  id        String   @id @default(cuid())
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  availablePrograms  String @default("[]") // JSON: ["منهج كامل","كورسات"]
+  availableStudyTypes String @default("[]") // JSON union: ["إلكتروني","حضوري","مدمج"]
+  studyTypesByProgram String @default("{}") // JSON: { "منهج كامل": ["إلكتروني"], "كورسات": ["حضوري"] }
+  locationConfig     String @default("{}") // JSON: { studyType: { scopes, baghdadMode, baghdadSites, provinces } }
+
+  students  Student[]
+  chapters  CourseChapter[]
+  examCourses ExamCourse[]
+}
+
+
+model Chapter {
+  id            String          @id @default(cuid())
+  name          String
+  opportunities Int             @default(0)
+  courseLinks   CourseChapter[]
+  opportunityLogs OpportunityLog[]
+}
+
+model CourseChapter {
+  id        String  @id @default(cuid())
+  active    Boolean @default(false)
+  archived  Boolean @default(false)
+  archive   String  @default("[]")
+  courseId  String
+  chapterId String
+  course    Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
+  @@index([chapterId])
+}
+
+model Student {
+  id              String   @id @default(cuid())
+  name            String
+  nameKey         String?  @unique
+  school          String   @default("")
+  gender          String
+  phone           String?
+  phoneKey        String?  @unique
+  parentPhone     String?
+  telegram        String?
+  telegramKey     String?  @unique
+
+  courseProgram   String?  // منهج كامل / كورسات
+  courseTerm      String?  // الكورس الأول / الكورس الثاني (فقط عند كورسات)
+  studyType       String?  // إلكتروني / حضوري / مدمج
+  locationScope   String?  // بغداد / محافظات
+  baghdadMode     String?  // عموم بغداد / بغداد - مخصص
+
+  mainSite        String?
+  subSite         String?
+  code            String   @unique
+  status          String   @default("نشط")
+  dismissalType   String?
+  dismissalReason String?
+  dismissalNotes  String?
+  opportunities   Int      @default(0)
+  baseOpportunities Int    @default(0)
+  accountingGraceDays Int   @default(0)
+  createdAt       DateTime @default(now())
+  courseId        String
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  grades          Grade[]
+  opportunityLogs OpportunityLog[]
+  studentLeaves   StudentLeave[]
+  studentCalls    StudentCall[]
+  studentNotes    StudentNote[]
+  correctionSheets CorrectionSheet[]
+  telegramExamSubmissions TelegramExamSubmission[]
+  studentLeaveGradeBackups StudentLeaveGradeBackup[]
+  enrollmentArchives StudentEnrollmentArchive[]
+
+  @@index([courseId])
+  @@index([status])
+  @@index([parentPhone])
+  @@index([mainSite])
+  @@index([subSite])
+}
+
+model Exam {
+  id                 String   @id @default(cuid())
+  name               String
+  type               String
+  courseIds          String   @default("[]")
+  mainSite           String?
+  date               DateTime
+  fullMark           Int
+  passMark           Int
+  discountMark       Int
+  opportunitiesPenalty String
+  dismissalGrade     Int?
+  noDiscount         Boolean @default(false)
+  active             Boolean @default(true)
+  scheduledActivateAt   DateTime?
+  scheduledDeactivateAt DateTime?
+  grades             Grade[]
+  correctionSheets   CorrectionSheet[]
+  opportunityLogs    OpportunityLog[]
+  studentLeaves      StudentLeave[]
+  studentCalls       StudentCall[]
+  telegramExamSubmissions TelegramExamSubmission[]
+  gradeEntryMissingNote GradeEntryMissingNote?
+  examCourses ExamCourse[]
+  studentLeaveGradeBackups StudentLeaveGradeBackup[]
+
+  @@index([type])
+  @@index([date])
+}
+
+model ExamCourse {
+  id       String @id @default(cuid())
+  examId   String
+  courseId String
+  exam     Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@unique([examId, courseId])
+  @@index([courseId])
+}
+
+model Grade {
+  id                String   @id @default(cuid())
+  status            String
+  score             Int?
+  notes             String?
+  academicAccountingChecked Boolean @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  studentId         String
+  examId            String
+  student           Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam              Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  telegramExamSubmissions TelegramExamSubmission[]
+
+  @@unique([studentId, examId])
+  @@index([examId])
+  @@index([status])
+  @@index([updatedAt])
+}
+
+model OpportunityLog {
+  id        String   @id @default(cuid())
+  action    String
+  amount    Int
+  requestedAmount Int?
+  appliedAmount Int?
+  balanceBefore Int?
+  balanceAfter Int?
+  reversalOfLogId String? @unique
+  reason    String?
+  date      DateTime @default(now())
+  chapterId String?
+  chapterNameSnapshot String?
+  studentId String
+  examId    String?
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam      Exam?    @relation(fields: [examId], references: [id], onDelete: SetNull)
+  chapter   Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+
+  @@index([studentId])
+  @@index([date])
+  @@index([chapterId])
+}
+
+model StudentLeave {
+  id        String    @id @default(cuid())
+  studentId String
+  examId    String?
+  leaveType String    @default("exam")
+  reason    String
+  studyType String    @default("")
+  date      DateTime  @default(now())
+  dateFrom  DateTime?
+  dateTo    DateTime?
+  notes     String    @default("")
+  createdAt DateTime  @default(now())
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam      Exam?     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  gradeBackups StudentLeaveGradeBackup[]
+
+  @@unique([studentId, examId])
+  @@index([studentId])
+  @@index([examId])
+  @@index([date])
+  @@index([dateFrom])
+  @@index([dateTo])
+}
+
+model StudentCall {
+  id          String    @id @default(cuid())
+  studentId   String
+  examId      String?
+  category    String    @default("")
+  target      String    @default("")
+  phone       String    @default("")
+  status      String    @default("")
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  notes       String    @default("")
+  createdAt   DateTime  @default(now())
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam        Exam?     @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, examId, category])
+  @@index([studentId])
+  @@index([examId])
+  @@index([createdAt])
+}
+
+model StudentNote {
+  id              String   @id @default(cuid())
+  studentId       String
+  kind            String   @default("")
+  text            String
+  date            DateTime @default(now())
+  sourceType      String   @default("")
+  sourceId        String   @default("")
+  dismissalKey    String   @default("")
+  dismissalType   String   @default("")
+  dismissalReason String   @default("")
+  dismissalDate   DateTime?
+  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([date])
+  @@index([sourceType])
+  @@index([sourceId])
+  @@index([dismissalKey])
+}
+
+model GradeEntryMissingNote {
+  id        String   @id @default(cuid())
+  examId    String   @unique
+  examName  String   @default("")
+  examDate  String   @default("")
+  text      String
+  userId    String?
+  userName  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([updatedAt])
+}
+
+model CorrectionSheet {
+  id               String   @id @default(cuid())
+  status           String
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  correctionErrors Int      @default(0)
+  sumErrors        Int      @default(0)
+  studentId        String
+  examId           String
+  correctorId      String
+  student          Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam             Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  corrector        AppUser  @relation(fields: [correctorId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, examId])
+  @@index([examId])
+  @@index([correctorId])
+}
+
+model TelegramExamSubmission {
+  id               String   @id @default(cuid())
+  studentId        String
+  examId           String
+  gradeId          String?
+  telegramUserId   String   @default("")
+  telegramUsername String   @default("")
+  telegramChatId   String   @default("")
+  matchType        String   @default("manual_review")
+  matchSource      String   @default("")
+  matchDetails     String   @default("")
+  sourceMessageIds String   @default("[]")
+  pages            String   @default("[]")
+  pageCount        Int      @default(0)
+  status           String   @default("بانتظار التصحيح")
+  notes            String   @default("")
+  submittedAt      DateTime?
+  receivedAt       DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  student          Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam             Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  grade            Grade?   @relation(fields: [gradeId], references: [id], onDelete: SetNull)
+  versions         TelegramExamSubmissionVersion[]
+
+  @@unique([studentId, examId])
+  @@index([gradeId])
+  @@index([examId])
+  @@index([studentId])
+  @@index([status])
+  @@index([receivedAt])
+}
+
+model TelegramExamSubmissionVersion {
+  id               String   @id @default(cuid())
+  submissionId     String
+  version          Int
+  sourceMessageIds String   @default("[]")
+  pages             String   @default("[]")
+  pageCount         Int      @default(0)
+  status            String   @default("بانتظار التصحيح")
+  notes             String   @default("")
+  telegramUserId    String   @default("")
+  telegramUsername  String   @default("")
+  telegramChatId    String   @default("")
+  submittedAt       DateTime?
+  receivedAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+  submission        TelegramExamSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, version])
+  @@index([submissionId, createdAt])
+}
+
+model StudentLeaveGradeBackup {
+  id                         String   @id @default(cuid())
+  leaveId                    String
+  studentId                  String
+  examId                     String
+  status                     String
+  score                      Int?
+  notes                      String?
+  academicAccountingChecked  Boolean  @default(false)
+  gradeCreatedAt             DateTime?
+  gradeUpdatedAt             DateTime?
+  createdAt                  DateTime @default(now())
+  leave                      StudentLeave @relation(fields: [leaveId], references: [id], onDelete: Cascade)
+  student                    Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  exam                       Exam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@unique([leaveId, studentId, examId])
+  @@index([leaveId])
+  @@index([studentId, examId])
+}
+
+
+model StudentEnrollmentArchive {
+  id              String   @id @default(cuid())
+  studentId       String
+  fromCourseId    String
+  fromCourseName  String   @default("")
+  toCourseId      String?
+  toCourseName    String   @default("")
+  resetKind       String
+  reason          String   @default("")
+  snapshot        String   @db.Text
+  createdById     String?
+  createdByName   String?
+  createdAt       DateTime @default(now())
+  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+  @@index([fromCourseId])
+  @@index([toCourseId])
+}
+
+model Role {
+  id          String    @id @default(cuid())
+  name        String
+  isDefault   Boolean   @default(false)
+  permissions String    @default("[]")
+  createdAt   DateTime  @default(now())
+  users       AppUser[]
+}
+
+model AppUser {
+  id               String   @id @default(cuid())
+  username         String   @unique
+  name             String
+  passwordHash     String?
+  role             String
+  roleId           String?
+  permissions      String   @default("[]")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  roleRef          Role?    @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  correctionSheets CorrectionSheet[]
+  logs             AuditLog[]
+}
+
+model PermissionCatalog {
+  id          String @id
+  label       String
+  category    String
+  level       String
+  description String
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  module    String
+  action    String
+  details   String?
+  time      DateTime @default(now())
+  userId    String?
+  userName  String?
+  user      AppUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([module])
+  @@index([time])
+}
