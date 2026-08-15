@@ -491,7 +491,8 @@ export function DismissedStudentsView() {
       delete next[student.id];
       return next;
     });
-    emitTeacherProDataChanged({ source: "local-mutation", reason: "dismissed-students-reactivate", scopes: ["students", "opportunities", "dismissed", "dashboard"] });
+    // إصلاح: استخدام dispatchLocal لضمان تحديث الواجهة فوراً
+    emitTeacherProDataChanged({ source: "local-mutation", reason: "dismissed-students-reactivate", scopes: ["students", "opportunities", "dismissed", "dashboard"], dispatchLocal: true });
     setDismissedListRefreshKey((value) => value + 1);
     toast.success("تمت إعادة تفعيل الطالب من بيانات النظام");
   };
@@ -590,7 +591,8 @@ export function DismissedStudentsView() {
       delete next[studentId];
       return next;
     });
-    emitTeacherProDataChanged({ source: "local-mutation", reason: "dismissed-students-note", scopes: ["students", "dismissed", "dashboard"] });
+    // إصلاح: استخدام dispatchLocal لضمان تحديث الواجهة فوراً
+    emitTeacherProDataChanged({ source: "local-mutation", reason: "dismissed-students-note", scopes: ["students", "dismissed", "dashboard"], dispatchLocal: true });
     setDismissedListRefreshKey((value) => value + 1);
     toast.success("تم حفظ ملاحظات الفصل من بيانات النظام");
   };

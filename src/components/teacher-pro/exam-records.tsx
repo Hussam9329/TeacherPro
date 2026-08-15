@@ -402,10 +402,12 @@ export function ExamRecordsView() {
 
   const refreshExamRecordsAfterMutation = async (reason: string) => {
     await loadFromServer();
+    // إصلاح: استخدام dispatchLocal لضمان تحديث الواجهة فوراً بعد التعديل
     emitTeacherProDataChanged({
       source: "local-mutation",
       reason,
       scopes: ["exams", "grades", "opportunities", "dashboard"],
+      dispatchLocal: true,  // ← إضافة هذا السطر لإصلاح المشكلة
     });
   };
 
