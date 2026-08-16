@@ -24,6 +24,17 @@ import {
   type GradeSmartNoteRecord,
 } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
+import {
+  confirmGradeEntryOfflineAttempt,
+  flushGradeEntryOfflineSaves,
+  getGradeEntryOfflineSaves,
+  markGradeEntryOfflineAttempted,
+  markGradeEntryOfflineAttention,
+  stageGradeEntryOfflineSave,
+  subscribeGradeEntryOffline,
+  type GradeEntryOfflineEvent,
+  type OfflineGradeDesired,
+} from "@/lib/grade-entry-offline-outbox";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -97,6 +108,7 @@ type GradeRowSavePhase =
   | "idle"
   | "dirty"
   | "saving"
+  | "queued"
   | "saved"
   | "pending"
   | "noncounted"
@@ -164,6 +176,32 @@ function normalizeGradeScoreInput(value: string, fullMark: number) {
   if (score < 0) return "0";
   if (score > fullMark) return String(fullMark);
   return normalized;
+}
+
+function offlineDesiredToDraft(desired: OfflineGradeDesired): DraftGrade {
+  return {
+    status: desired.status,
+    score:
+      desired.status === "درجة" && desired.score !== null
+        ? String(desired.score)
+        : "",
+    notes: desired.notes || "",
+  };
+}
+
+function draftMatchesOfflineDesired(
+  draft: DraftGrade | undefined,
+  desired: OfflineGradeDesired,
+): boolean {
+  if (!draft || draft.status !== desired.status) return false;
+  const score =
+    draft.status === "درجة"
+      ? Number(toLatinDigits(draft.score).trim())
+      : null;
+  return (
+    (draft.status === "درجة" ? score === desired.score : desired.score === null) &&
+    (draft.notes || "") === (desired.notes || "")
+  );
 }
 
 function formatGradeEntryTimestamp(value?: string | Date | null): string {
@@ -255,6 +293,7 @@ export function GradeEntryView() {
   const [entrySheetError, setEntrySheetError] = useState<string | null>(null);
   const [entrySheetRefreshKey, setEntrySheetRefreshKey] = useState(0);
   const [markingAllMissingAbsent, setMarkingAllMissingAbsent] = useState(false);
+  const draftsRef = useRef<Record<string, DraftGrade>>({});
   const gradeInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const selectedExamIdRef = useRef("");
   const entrySheetRequestSequenceRef = useRef(0);
@@ -271,6 +310,10 @@ export function GradeEntryView() {
   useEffect(() => {
     selectedExamIdRef.current = selectedExamId;
   }, [selectedExamId]);
+
+  useEffect(() => {
+    draftsRef.current = drafts;
+  }, [drafts]);
 
   useEffect(() => {
     if (dashboardQueryAppliedRef.current || typeof window === "undefined") return;
@@ -1293,7 +1336,7 @@ export function GradeEntryView() {
     attemptedRevision: number,
   ) => {
     const result = await gradeEntrySheetApi.get(examId);
-    if (!result || selectedExamIdRef.current !== examId) return false;
+    if (!result || selectedExamIdRef.current !== examId) return null;
 
     // أي طلب قراءة أقدم أصبح غير صالح بعد هذه القراءة الصريحة من بيانات النظام.
     entrySheetRequestSequenceRef.current += 1;
@@ -1323,7 +1366,7 @@ export function GradeEntryView() {
     const freshGrade = loadedGrades.find(
       (grade) => grade.studentId === studentId && grade.examId === examId,
     );
-    if (!gradeMatchesDraft(freshGrade, attemptedDraft)) return false;
+    if (!gradeMatchesDraft(freshGrade, attemptedDraft)) return null;
 
     const rowKey = `${examId}:${studentId}`;
     if ((draftRevisionRef.current[rowKey] || 0) === attemptedRevision) {
@@ -1335,7 +1378,7 @@ export function GradeEntryView() {
       setEditableRows((prev) => ({ ...prev, [studentId]: false }));
       markStudentSavedNow(studentId, "تم التحقق من حفظها");
     }
-    return true;
+    return freshGrade || null;
   };
 
   const saveGrade = async (
@@ -1436,6 +1479,18 @@ export function GradeEntryView() {
       try {
         const currentGrade =
           confirmedGradesRef.current.get(rowKey) || getGrade(studentId);
+        const offlineAttempt = stageGradeEntryOfflineSave({
+          studentId,
+          examId: examAtRequest.id,
+          status,
+          score,
+          notes: draft.notes,
+          expectedUpdatedAt: currentGrade?.updatedAt || "",
+          expectMissing: !currentGrade,
+        });
+        if (offlineAttempt) {
+          markGradeEntryOfflineAttempted(offlineAttempt);
+        }
         const result = await gradeApi.add({
           studentId,
           examId: examAtRequest.id,
@@ -1455,6 +1510,12 @@ export function GradeEntryView() {
             attemptedRevision,
           );
           if (reconciled) {
+            if (offlineAttempt) {
+              confirmGradeEntryOfflineAttempt(
+                offlineAttempt,
+                reconciled as unknown as Record<string, unknown>,
+              );
+            }
             emitGradeEntryServerSync("grade-entry-save-reconciled");
             if (!options.silent) {
               showGradeEntryNotice(
@@ -1463,6 +1524,37 @@ export function GradeEntryView() {
               );
             }
             return;
+          }
+
+          const shouldKeepOffline = Boolean(
+            offlineAttempt &&
+              (result.transient ||
+                result.outcomeUnknown ||
+                result.queued ||
+                (typeof navigator !== "undefined" && !navigator.onLine)),
+          );
+          if (shouldKeepOffline) {
+            setRowSaveStates((prev) => ({
+              ...prev,
+              [studentId]: {
+                phase: "queued",
+                message: "محفوظ محلياً — بانتظار الإنترنت",
+              },
+            }));
+            showGradeEntryNotice(
+              "info",
+              "انقطع الاتصال، لكن الدرجة محفوظة على هذا الجهاز وستُرسل تلقائياً عند رجوع الإنترنت.",
+            );
+            return;
+          }
+
+          if (offlineAttempt) {
+            markGradeEntryOfflineAttention(
+              offlineAttempt,
+              result.status === 409 ? "conflict" : "rejected",
+              result.error ||
+                "تعذر اعتماد الدرجة على الخادم. بقيت النسخة المحلية محفوظة للمراجعة.",
+            );
           }
           setRowSaveStates((prev) => ({
             ...prev,
@@ -1486,6 +1578,9 @@ export function GradeEntryView() {
         }
 
         if (payload.pendingSmartNote && payload.smartNote && !payload.grade) {
+          if (offlineAttempt) {
+            confirmGradeEntryOfflineAttempt(offlineAttempt, null);
+          }
           const isGracePending = payload.smartNote.category === "GRACE_SCORED";
           gradeMutationVersionRef.current += 1;
           setSavedRows((prev) => {
@@ -1520,6 +1615,13 @@ export function GradeEntryView() {
             attemptedRevision,
           );
           if (!reconciled) {
+            if (offlineAttempt) {
+              markGradeEntryOfflineAttention(
+                offlineAttempt,
+                "rejected",
+                "تعذر تأكيد نتيجة الحفظ. بقيت الدرجة محفوظة محلياً للمراجعة.",
+              );
+            }
             setRowSaveStates((prev) => ({
               ...prev,
               [studentId]: { phase: "error", message: "تعذر تأكيد الحفظ" },
@@ -1528,8 +1630,20 @@ export function GradeEntryView() {
               "error",
               "لم يرجع النظام سجل الدرجة النهائي، ولم يُعثر عليه عند التحقق من بيانات النظام.",
             );
+          } else if (offlineAttempt) {
+            confirmGradeEntryOfflineAttempt(
+              offlineAttempt,
+              reconciled as unknown as Record<string, unknown>,
+            );
           }
           return;
+        }
+
+        if (offlineAttempt) {
+          confirmGradeEntryOfflineAttempt(
+            offlineAttempt,
+            payload.grade as unknown as Record<string, unknown>,
+          );
         }
 
         gradeMutationVersionRef.current += 1;
@@ -1938,6 +2052,131 @@ export function GradeEntryView() {
     setRowSaveStates({});
     setReactivationWarningsAccepted({});
   };
+
+  useEffect(() => {
+    if (!selectedExamId) return;
+    const pending = getGradeEntryOfflineSaves(selectedExamId);
+    if (pending.length === 0) return;
+
+    setDrafts((current) => {
+      const next = { ...current };
+      pending.forEach((item) => {
+        if (!next[item.studentId]) {
+          next[item.studentId] = offlineDesiredToDraft(item.desired);
+        }
+      });
+      return next;
+    });
+    setEditableRows((current) => {
+      const next = { ...current };
+      pending.forEach((item) => {
+        next[item.studentId] = true;
+      });
+      return next;
+    });
+    setRowSaveStates((current) => {
+      const next = { ...current };
+      pending.forEach((item) => {
+        next[item.studentId] =
+          item.state === "pending"
+            ? {
+                phase: "queued",
+                message: "محفوظ محلياً — بانتظار المزامنة",
+              }
+            : {
+                phase: "error",
+                message:
+                  item.lastError ||
+                  "النسخة المحلية تحتاج مراجعة قبل إرسالها",
+              };
+      });
+      return next;
+    });
+
+    if (typeof navigator === "undefined" || navigator.onLine) {
+      void flushGradeEntryOfflineSaves();
+    }
+  }, [selectedExamId]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeGradeEntryOffline(
+      (event: GradeEntryOfflineEvent) => {
+        if (event.item.examId !== selectedExamIdRef.current) return;
+        const studentId = event.item.studentId;
+
+        if (event.type === "queued") {
+          setRowSaveStates((current) => ({
+            ...current,
+            [studentId]: {
+              phase: "queued",
+              message: "محفوظ محلياً — بانتظار المزامنة",
+            },
+          }));
+          return;
+        }
+
+        if (event.type === "conflict" || event.type === "rejected") {
+          setEditableRows((current) => ({ ...current, [studentId]: true }));
+          setRowSaveStates((current) => ({
+            ...current,
+            [studentId]: {
+              phase: "error",
+              message:
+                event.message ||
+                "الدرجة المحلية محفوظة لكنها تحتاج مراجعة",
+            },
+          }));
+          showGradeEntryNotice(
+            "error",
+            event.message ||
+              "تعذر مزامنة درجة محفوظة محلياً. لم يتم حذفها أو الكتابة فوق بيانات أحدث.",
+          );
+          return;
+        }
+
+        const data =
+          event.data && typeof event.data === "object"
+            ? (event.data as {
+                grade?: Grade | null;
+                smartNote?: GradeSmartNoteRecord | null;
+                academicRecalculation?: { students?: Student[] } | null;
+              })
+            : {};
+        if (data.grade) {
+          gradeMutationVersionRef.current += 1;
+          mergeServerGradeIntoEntrySheet(data.grade);
+        }
+        if (data.smartNote) {
+          mergeSmartNoteIntoPanel(data.smartNote);
+          setGradeSmartNotesRefreshKey((key) => key + 1);
+        }
+        if (data.academicRecalculation?.students?.length) {
+          mergeStudentsCache(data.academicRecalculation.students);
+        }
+
+        const currentDraft = draftsRef.current[studentId];
+        if (draftMatchesOfflineDesired(currentDraft, event.item.desired)) {
+          setDrafts((current) => {
+            const next = { ...current };
+            delete next[studentId];
+            return next;
+          });
+          setEditableRows((current) => ({ ...current, [studentId]: false }));
+          markStudentSavedNow(studentId, "تمت مزامنتها");
+        } else {
+          setRowSaveStates((current) => ({
+            ...current,
+            [studentId]: {
+              phase: "dirty",
+              message: "تمت مزامنة القيمة السابقة — يوجد تعديل أحدث",
+            },
+          }));
+        }
+        setEntrySheetRefreshKey((key) => key + 1);
+      },
+    );
+    return unsubscribe;
+  }, [showGradeEntryNotice]);
 
   return (
     <div className="tp-grade-entry-page space-y-6">
@@ -2630,6 +2869,8 @@ export function GradeEntryView() {
                               ? "tp-save-indicator--saving"
                               : savePhase === "saved"
                                 ? "tp-save-indicator--saved"
+                                : savePhase === "queued"
+                                  ? "border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100"
                                 : savePhase === "pending"
                                   ? "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
                                   : savePhase === "noncounted"
@@ -2639,6 +2880,9 @@ export function GradeEntryView() {
                         >
                           {savePhase === "saving"
                             ? "جاري الحفظ"
+                            : savePhase === "queued"
+                              ? effectiveSaveState?.message ||
+                                "محفوظ محلياً — بانتظار الإنترنت"
                             : savePhase === "pending"
                               ? effectiveSaveState?.message || "درجة معلّقة"
                               : savePhase === "noncounted"

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import { syncVersionApi } from "@/lib/api";
+import { flushGradeEntryOfflineSaves } from "@/lib/grade-entry-offline-outbox";
 import {
   announceTeacherProSyncPending,
   announceTeacherProSyncRefreshing,
@@ -1015,6 +1016,21 @@ export function TeacherProLayout() {
     }, 10 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, [isAuthenticated, restoreSession]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const flushOfflineGrades = () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      void flushGradeEntryOfflineSaves();
+    };
+    flushOfflineGrades();
+    window.addEventListener("online", flushOfflineGrades);
+    window.addEventListener("focus", flushOfflineGrades);
+    return () => {
+      window.removeEventListener("online", flushOfflineGrades);
+      window.removeEventListener("focus", flushOfflineGrades);
+    };
+  }, [isAuthenticated]);
 
   // منع تمرير الخلفية عند فتح القائمة على الموبايل
   useEffect(() => {

@@ -19,6 +19,8 @@ function must(condition, okMessage, failMessage = okMessage) {
 }
 
 const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
+const gradeEntryOfflineOutbox = read("src/lib/grade-entry-offline-outbox.ts");
+const teacherLayout = read("src/components/teacher-pro/layout.tsx");
 const api = read("src/lib/api.ts");
 const gradesRoute = read("src/app/api/grades/route.ts");
 const gradeWriteback = read("src/lib/academic-grade-writeback-server.ts");
@@ -72,6 +74,39 @@ must(
     gradeEntry.includes('phase: "saved"'),
   "الحفظ يميز المسودة والحفظ والفشل، ويتحقق من DB ويسلسل طلبات الطالب",
   "يجب منع شارة الحفظ الوهمية ومصالحة الفشل وتسلسل طلبات الصف الواحد.",
+);
+
+must(
+  gradeEntry.includes("stageGradeEntryOfflineSave") &&
+    gradeEntry.includes("markGradeEntryOfflineAttempted") &&
+    gradeEntry.includes("confirmGradeEntryOfflineAttempt") &&
+    gradeEntry.includes('phase: "queued"') &&
+    gradeEntry.includes("محفوظ محلياً — بانتظار الإنترنت") &&
+    gradeEntry.includes("getGradeEntryOfflineSaves(selectedExamId)") &&
+    gradeEntry.includes("subscribeGradeEntryOffline"),
+  "تسجيل الدرجات يحفظ آخر قيمة محلياً ويستعيدها ويعرض حالة انتظار الإنترنت",
+  "يجب أن تستمر الدرجة محلياً عبر انقطاع الشبكة وإعادة فتح ورقة الإدخال.",
+);
+
+must(
+  gradeEntryOfflineOutbox.includes('const STORAGE_KEY = "teacherpro-grade-entry-offline-v2"') &&
+    gradeEntryOfflineOutbox.includes('window.addEventListener("online"') &&
+    gradeEntryOfflineOutbox.includes("currentMatchesAttempted") &&
+    gradeEntryOfflineOutbox.includes("currentMatchesBaseline") &&
+    gradeEntryOfflineOutbox.includes('state: "conflict"') &&
+    gradeEntryOfflineOutbox.includes("desiredMatchesServerGrade") &&
+    gradeEntryOfflineOutbox.includes("confirmGradeEntryOfflineAttempt") &&
+    gradeEntryOfflineOutbox.includes("flushGradeEntryOfflineSaves"),
+  "طابور الدرجات المؤجل يصالح الرد المفقود ويمنع الكتابة فوق تعديل أحدث",
+  "المزامنة المؤجلة يجب أن تتحقق من الخادم قبل الإرسال وتحفظ التعارض للمراجعة.",
+);
+
+must(
+  teacherLayout.includes("flushGradeEntryOfflineSaves") &&
+    teacherLayout.includes('window.addEventListener("online", flushOfflineGrades)') &&
+    teacherLayout.includes('window.addEventListener("focus", flushOfflineGrades)'),
+  "المزامنة المؤجلة تعمل على مستوى التطبيق عند رجوع الإنترنت أو العودة للتبويب",
+  "يجب ألا تعتمد مزامنة الدرجات المؤجلة على بقاء صفحة تسجيل الدرجات مفتوحة فقط.",
 );
 
 must(
