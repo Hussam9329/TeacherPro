@@ -1,6 +1,7 @@
 "use client";
 
 import { gradeApi, type ApiResult } from "./api";
+import { GRADE_STATUSES, type GradeStatus } from "./academic-types";
 import {
   announceTeacherProSyncError,
   announceTeacherProSyncPending,
@@ -8,7 +9,8 @@ import {
   emitTeacherProDataChanged,
 } from "./teacherpro-sync";
 
-export type OfflineGradeStatus = "درجة" | "غائب" | "غش";
+export const OFFLINE_GRADE_STATUSES = GRADE_STATUSES;
+export type OfflineGradeStatus = GradeStatus;
 
 export type OfflineGradeDesired = {
   status: OfflineGradeStatus;
@@ -69,8 +71,9 @@ function makeRevision(): string {
 function normalizeDesired(value: unknown): OfflineGradeDesired | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
-  const status = String(record.status || "") as OfflineGradeStatus;
-  if (!(["درجة", "غائب", "غش"] as string[]).includes(status)) return null;
+  const rawStatus = String(record.status || "");
+  if (!(GRADE_STATUSES as readonly string[]).includes(rawStatus)) return null;
+  const status = rawStatus as OfflineGradeStatus;
   const rawScore = record.score;
   const numericScore =
     rawScore === null || rawScore === undefined || rawScore === ""

@@ -1,11 +1,15 @@
 export type StudentStatus = "نشط" | "مفصول" | "مؤرشف";
-export type GradeStatus =
-  | "درجة"
-  | "غائب"
-  | "غش"
-  | "مجاز"
-  | "ضمن فترة السماح"
-  | "قبل تسجيل الطالب";
+
+export const GRADE_STATUSES = [
+  "درجة",
+  "غائب",
+  "غش",
+  "مجاز",
+  "ضمن فترة السماح",
+  "قبل تسجيل الطالب",
+] as const;
+
+export type GradeStatus = (typeof GRADE_STATUSES)[number];
 export type ExamType = "يومي" | "تراكمي" | "فاينل";
 export type StudentLeaveType = "exam" | "period";
 

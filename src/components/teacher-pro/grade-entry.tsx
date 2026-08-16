@@ -24,6 +24,7 @@ import {
   type GradeSmartNoteRecord,
 } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
+import type { GradeStatus } from "@/lib/academic-types";
 import {
   confirmGradeEntryOfflineAttempt,
   flushGradeEntryOfflineSaves,
@@ -91,7 +92,7 @@ import {
 } from "@/lib/filter-sequence";
 
 type DraftGrade = {
-  status: "درجة" | "غائب" | "غش" | "مجاز" | "ضمن فترة السماح" | "قبل تسجيل الطالب";
+  status: GradeStatus;
   score: string;
   notes: string;
 };
