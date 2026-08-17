@@ -306,7 +306,7 @@ export interface Grade {
   id: string;
   studentId: string;
   examId: string;
-  status: "درجة" | "غائب" | "غش" | "مجاز" | "ضمن فترة السماح" | "قبل تسجيل الطالب";
+  status: "درجة" | "غائب" | "غش" | "مجاز" | "ضمن فترة السماح" | "قبل تسجيل الطالب" | "درجة معلّقة";
   score: number | null;
   notes: string;
   academicAccountingChecked: boolean;

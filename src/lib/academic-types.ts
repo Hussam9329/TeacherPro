@@ -7,6 +7,7 @@ export const GRADE_STATUSES = [
   "مجاز",
   "ضمن فترة السماح",
   "قبل تسجيل الطالب",
+  "درجة معلّقة",
 ] as const;
 
 export type GradeStatus = (typeof GRADE_STATUSES)[number];

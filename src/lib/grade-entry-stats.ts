@@ -53,6 +53,7 @@ export function countManualNumericGradesForExam(
  * - Numeric grades with status "درجة" and valid score ✅
  * - Pre-registration numeric grades (status "درجة" or "قبل تسجيل الطالب") ✅ 🆕
  * - Pending grades with status "درجة" but null score (ورقة معلقة)
+ * - Pending grades with status "درجة معلّقة" (الدرجات المعلقة للمراجعة) ✅🆕
  * 
  * Excludes ONLY purely automatic system statuses:
  * - "غائب" (absent - system generated)
@@ -60,8 +61,9 @@ export function countManualNumericGradesForExam(
  * - "مجاز" (on leave - system generated)
  * - "ضمن فترة السماح" (grace period - system generated)
  * 
- * IMPORTANT: "قبل تسجيل الطالب" WITH a numeric score IS included because
- * it was manually entered by the teacher! 🆕
+ * IMPORTANT: 
+ * - "قبل تسجيل الطالب" WITH a numeric score IS included because it was manually entered!
+ * - "درجة معلّقة" ALWAYS counts as pending regardless of score value!
  */
 export function countAllManualGradesForExam(
   grades: readonly GradeCountRow[],
@@ -87,6 +89,12 @@ export function countAllManualGradesForExam(
 
     // تخطي الحالات التلقائية البحتة للنظام
     if (purelyAutomaticStatuses.has(grade.status)) continue;
+
+    // === حالة 0: درجة معلّقة (درجة معلّقة) -> دائماً تُحتسب كمعلقة 🆕===
+    if (grade.status === "درجة معلّقة") {
+      pendingStudentIds.add(grade.studentId);
+      continue;
+    }
 
     // === حالة 1: درجة عادية محفوظة (درجة + رقمية) ===
     if (grade.status === "درجة") {
