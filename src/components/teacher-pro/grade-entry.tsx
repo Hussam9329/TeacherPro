@@ -84,6 +84,7 @@ import {
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
 import { isStudentCurrentlyInGrace } from "@/lib/student-grace";
+import { countManualNumericGradesForExam } from "@/lib/grade-entry-stats";
 import {
   examMatchesAcademicFilters,
   getAcademicCourseProgramFilterOptions,
@@ -569,6 +570,11 @@ export function GradeEntryView() {
     // دمج ذاكرة قديمة كان يعيد درجات وهمية غير موجودة في بيانات النظام.
     return entrySheetGrades.filter((grade) => grade.examId === selectedExamId);
   }, [entrySheetGrades, grades, selectedExamId]);
+
+  const manualNumericGradeCount = useMemo(
+    () => countManualNumericGradesForExam(entryGradesSource, selectedExamId),
+    [entryGradesSource, selectedExamId],
+  );
 
   const entryLeavesSource = useMemo(
     () => (selectedExam ? entrySheetLeaves : studentLeaves),
@@ -2444,15 +2450,46 @@ export function GradeEntryView() {
         <Card>
           <CardHeader className="gap-3">
             <div className="flex flex-col gap-3 lg:flex-row-reverse lg:items-end lg:justify-between">
-              <div className="w-full space-y-2 text-right lg:max-w-sm">
-                <Label htmlFor="grade-entry-search">
-                  بحث الطالب داخل الإدخال
-                </Label>
-                <GradeEntrySearchInput
-                  value={search}
-                  onCommit={commitSearch}
-                  onForwardTab={focusFirstGradeInput}
-                />
+              <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end lg:max-w-xl">
+                <div className="space-y-2 text-right">
+                  <Label htmlFor="grade-entry-search">
+                    بحث الطالب داخل الإدخال
+                  </Label>
+                  <GradeEntrySearchInput
+                    value={search}
+                    onCommit={commitSearch}
+                    onForwardTab={focusFirstGradeInput}
+                  />
+                </div>
+                <div
+                  className="flex min-h-[4rem] items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 text-right shadow-sm"
+                  data-manual-grade-count="true"
+                  role="status"
+                  aria-live="polite"
+                  aria-label={`عدد الدرجات المدخلة يدوياً: ${
+                    entrySheetLoading || entrySheetError
+                      ? "غير متاح الآن"
+                      : manualNumericGradeCount
+                  }`}
+                  title="يُحتسب فقط السجل الرقمي المحفوظ بحالة درجة، ولا تُحتسب الحالات التلقائية"
+                >
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-200">
+                      الدرجات المدخلة يدوياً
+                    </p>
+                    <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
+                      لا يشمل الحالات التلقائية
+                    </p>
+                  </div>
+                  <span
+                    className="shrink-0 text-2xl font-black tabular-nums text-emerald-700 dark:text-emerald-300"
+                    data-manual-grade-count-value="true"
+                  >
+                    {entrySheetLoading || entrySheetError
+                      ? "—"
+                      : manualNumericGradeCount}
+                  </span>
+                </div>
               </div>
               <div className="text-right">
                 <CardTitle>

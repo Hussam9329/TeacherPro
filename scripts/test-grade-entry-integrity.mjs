@@ -19,6 +19,7 @@ function must(condition, okMessage, failMessage = okMessage) {
 }
 
 const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
+const gradeEntryStats = read("src/lib/grade-entry-stats.ts");
 const gradeEntryOfflineOutbox = read("src/lib/grade-entry-offline-outbox.ts");
 const academicTypes = read("src/lib/academic-types.ts");
 const teacherLayout = read("src/components/teacher-pro/layout.tsx");
@@ -36,6 +37,19 @@ const profileDialog = read("src/components/teacher-pro/student-profile-dialog.ts
 const profileLogRoute = read("src/app/api/students/profile-log/route.ts");
 const profileStatsRoute = read("src/app/api/students/profile-stats/route.ts");
 const pkg = JSON.parse(read("package.json"));
+
+must(
+  gradeEntry.includes('import { countManualNumericGradesForExam } from "@/lib/grade-entry-stats"') &&
+    gradeEntry.includes("manualNumericGradeCount") &&
+    gradeEntry.includes('data-manual-grade-count="true"') &&
+    gradeEntry.includes("الدرجات المدخلة يدوياً") &&
+    gradeEntryStats.includes('grade.status !== "درجة"') &&
+    gradeEntryStats.includes('typeof grade.score !== "number"') &&
+    gradeEntryStats.includes("Number.isFinite(grade.score)") &&
+    gradeEntryStats.includes("gradedStudentIds.add(grade.studentId)"),
+  "عداد الدرجات اليدوية قريب من البحث ويستبعد حالات النظام غير الرقمية",
+  "يجب أن يحسب العداد الدرجات الرقمية المحفوظة فقط للامتحان المحدد دون الحالات التلقائية.",
+);
 
 must(
   gradeEntry.includes("gradeApi") &&
@@ -328,7 +342,12 @@ must(
 );
 
 must(
-  pkg.scripts?.["test:grade-entry-integrity"] === "node scripts/test-grade-entry-integrity.mjs",
+  String(pkg.scripts?.["test:grade-entry-integrity"] || "").includes(
+    "node scripts/test-grade-entry-integrity.mjs",
+  ) &&
+    String(pkg.scripts?.["test:grade-entry-integrity"] || "").includes(
+      "scripts/test-grade-entry-stats-behavior.mjs",
+    ),
   "سكريبت test:grade-entry-integrity مضاف إلى package.json",
   "يجب إضافة سكريبت رسمي لاختبار تسجيل الدرجات.",
 );
