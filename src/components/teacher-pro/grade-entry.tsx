@@ -84,7 +84,7 @@ import {
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
 import { isStudentCurrentlyInGrace } from "@/lib/student-grace";
-import { countManualNumericGradesForExam } from "@/lib/grade-entry-stats";
+import { countManualNumericGradesForExam, countAllManualGradesForExam } from "@/lib/grade-entry-stats";
 import {
   examMatchesAcademicFilters,
   getAcademicCourseProgramFilterOptions,
@@ -573,6 +573,11 @@ export function GradeEntryView() {
 
   const manualNumericGradeCount = useMemo(
     () => countManualNumericGradesForExam(entryGradesSource, selectedExamId),
+    [entryGradesSource, selectedExamId],
+  );
+
+  const allManualGradesCount = useMemo(
+    () => countAllManualGradesForExam(entryGradesSource, selectedExamId),
     [entryGradesSource, selectedExamId],
   );
 
@@ -2466,29 +2471,48 @@ export function GradeEntryView() {
                   data-manual-grade-count="true"
                   role="status"
                   aria-live="polite"
-                  aria-label={`عدد الدرجات المدخلة يدوياً: ${
+                  aria-label={`إجمالي الدرجات المدخلة: ${
                     entrySheetLoading || entrySheetError
                       ? "غير متاح الآن"
-                      : manualNumericGradeCount
+                      : allManualGradesCount.total
+                  }، منها رقمية: ${
+                    entrySheetLoading || entrySheetError
+                      ? "—"
+                      : allManualGradesCount.numeric
+                  }، ومعلقة: ${
+                    entrySheetLoading || entrySheetError
+                      ? "—"
+                      : allManualGradesCount.pending
                   }`}
-                  title="يُحتسب فقط السجل الرقمي المحفوظ بحالة درجة، ولا تُحتسب الحالات التلقائية"
+                  title="يُحتسب جميع السجلات اليدوية: الرقمية المحفوظة + المعلقة بانتظار الإدخال، ولا تُحتسب الحالات التلقائية"
                 >
                   <div className="min-w-0">
                     <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-200">
-                      الدرجات المدخلة يدوياً
+                      إجمالي الدرجات المدخلة يدوياً
                     </p>
                     <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
-                      لا يشمل الحالات التلقائية
+                      رقمية: {entrySheetLoading || entrySheetError ? "—" : allManualGradesCount.numeric} | 
+                      معلقة: {entrySheetLoading || entrySheetError ? "—" : allManualGradesCount.pending}
                     </p>
                   </div>
-                  <span
-                    className="shrink-0 text-2xl font-black tabular-nums text-emerald-700 dark:text-emerald-300"
-                    data-manual-grade-count-value="true"
-                  >
-                    {entrySheetLoading || entrySheetError
-                      ? "—"
-                      : manualNumericGradeCount}
-                  </span>
+                  <div className="shrink-0 flex items-center gap-2">
+                    <span
+                      className="text-2xl font-black tabular-nums text-emerald-700 dark:text-emerald-300"
+                      data-manual-grade-count-value="true"
+                    >
+                      {entrySheetLoading || entrySheetError
+                        ? "—"
+                        : allManualGradesCount.total}
+                    </span>
+                    {allManualGradesCount.pending > 0 && !entrySheetLoading && !entrySheetError && (
+                      <span
+                        className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-400/20 text-[10px] font-bold text-amber-700 dark:text-amber-300"
+                        title="درجات معلقة بانتظار الإدخال الكامل"
+                      >
+                        {allManualGradesCount.pending}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="text-right">
