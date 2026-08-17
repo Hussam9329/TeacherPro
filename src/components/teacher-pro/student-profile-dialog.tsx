@@ -27,6 +27,7 @@ import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hoo
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { formatAuditLogDisplay } from "@/lib/audit-log-display";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
+import { getStudentGraceDaysRemaining } from "@/lib/student-grace";
 import {
   filterStudentProfileGrades,
   getStudentProfileCardTarget,
@@ -1018,8 +1019,8 @@ export function StudentProfileDialog({
                     </div>
                     <div className="mt-4 rounded-2xl border p-3 text-xs leading-6 text-muted-foreground">
                       {isStudentCurrentlyInGrace(profileStudent)
-                        ? `الطالب ضمن فترة السماح. تنتهي في ${graceEndDate(profileStudent)}.`
-                        : `المحاسبة فعالة. فترة السماح: ${profileStudent.accountingGraceDays ?? 0} يوم.`}
+                        ? `الطالب ضمن فترة السماح. المتبقي ${getStudentGraceDaysRemaining(profileStudent)} يوم، وتنتهي في ${graceEndDate(profileStudent)}.`
+                        : "المحاسبة فعالة. السماح المتبقي: 0 يوم."}
                     </div>
                   </div>
                 </div>

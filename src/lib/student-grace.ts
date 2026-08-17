@@ -22,6 +22,14 @@ export type StudentGraceWindow = {
   source: "automatic" | "manual";
 };
 
+export type StudentGraceStatus = {
+  window: StudentGraceWindow | null;
+  remainingDays: number;
+  state: "unavailable" | "upcoming" | "active" | "expired";
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) return 0;
@@ -119,9 +127,44 @@ export function isExamWithinStudentGraceWindow(
   return isDateWithinStudentGraceWindow(student, exam.date);
 }
 
+/**
+ * يحسب العداد الذي يراه المستخدم من نافذة السماح الفعلية، لا من مدة السماح
+ * الأصلية المخزنة. مدة 12 يوماً تبقى محفوظة لحماية تفسير الامتحانات القديمة،
+ * بينما remainingDays ينخفض يومياً ويصبح صفراً عند نهاية النافذة.
+ */
+export function getStudentGraceStatus(
+  student: StudentGraceLike,
+  now: Date = new Date(),
+): StudentGraceStatus {
+  const window = getStudentGraceWindow(student);
+  const today = parseGraceDateOnly(now);
+  if (!window || !today) {
+    return { window, remainingDays: 0, state: "unavailable" };
+  }
+  if (today < window.start) {
+    return { window, remainingDays: 0, state: "upcoming" };
+  }
+  if (today >= window.endExclusive) {
+    return { window, remainingDays: 0, state: "expired" };
+  }
+
+  const remainingDays = Math.max(
+    0,
+    Math.ceil((window.endExclusive.getTime() - today.getTime()) / DAY_MS),
+  );
+  return { window, remainingDays, state: "active" };
+}
+
+export function getStudentGraceDaysRemaining(
+  student: StudentGraceLike,
+  now: Date = new Date(),
+): number {
+  return getStudentGraceStatus(student, now).remainingDays;
+}
+
 export function isStudentCurrentlyInGrace(
   student: StudentGraceLike,
   now: Date = new Date(),
 ): boolean {
-  return isDateWithinStudentGraceWindow(student, now);
+  return getStudentGraceStatus(student, now).state === "active";
 }

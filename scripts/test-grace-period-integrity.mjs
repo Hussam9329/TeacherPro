@@ -12,6 +12,9 @@ const students = read("src/app/api/students/route.ts");
 const updateImpact = read("src/app/api/students/update-impact/route.ts");
 const register = read("src/components/teacher-pro/student-register.tsx");
 const registry = read("src/components/teacher-pro/student-registry.tsx");
+const registryHelpers = read("src/components/teacher-pro/student-registry-helpers.ts");
+const registryResults = read("src/components/teacher-pro/student-registry-results.tsx");
+const studentProfile = read("src/components/teacher-pro/student-profile-dialog.tsx");
 const candidates = read("src/app/api/student-calls/candidates/route.ts");
 const stats = read("src/app/api/student-calls/stats/route.ts");
 const leaves = read("src/app/api/student-leaves/route.ts");
@@ -25,6 +28,14 @@ check(
   grace.includes("AUTOMATIC_NEW_STUDENT_GRACE_DAYS = 3") &&
     grace.includes('source: "manual"') &&
     grace.includes('source: "automatic"'),
+);
+check(
+  "المصدر الموحد يحسب الأيام المتبقية من تاريخ بغداد ويصفرها عند الانتهاء",
+  grace.includes("getStudentGraceStatus") &&
+    grace.includes("getStudentGraceDaysRemaining") &&
+    grace.includes('state: "active"') &&
+    grace.includes('state: "expired"') &&
+    grace.includes("window.endExclusive.getTime() - today.getTime()"),
 );
 check(
   "المحرك والتصنيف يعتمدان المصدر الموحد للسماح",
@@ -48,6 +59,26 @@ check(
   students.includes("graceDaysChanged || gracePeriodStartMode") &&
     updateImpact.includes("graceDaysChanged || gracePeriodStartMode") &&
     !students.includes("data.gracePeriodStartDate = new Date()"),
+);
+check(
+  "سجل الطالب يعرض السماح المتبقي لا مدة المنح الأصلية الثابتة",
+  registryHelpers.includes('label: "السماح المتبقي"') &&
+    registryHelpers.includes("formatStudentGraceRemaining(student)") &&
+    registryResults.includes('label="السماح المتبقي"') &&
+    !registryResults.includes("student.accountingGraceDays ?? 0") &&
+    studentProfile.includes("getStudentGraceDaysRemaining(profileStudent)") &&
+    studentProfile.includes("السماح المتبقي: 0 يوم"),
+);
+check(
+  "تجديد السماح بنفس عدد الأيام يبدأ نافذة جديدة ويخضع لمعاينة الأثر",
+  registry.includes("editGraceInputTouched") &&
+    registry.includes("editGraceRenewalRequested") &&
+    registry.includes("editGraceSettingsChanged") &&
+    registry.includes("editRegistrationDateChanged || editGraceSettingsChanged") &&
+    registry.includes('setGracePeriodStartMode("now")') &&
+    registry.includes("تجديد المدة المكتوبة من اليوم") &&
+    students.includes("graceDaysChanged || gracePeriodStartMode") &&
+    updateImpact.includes("graceDaysChanged || gracePeriodStartMode"),
 );
 check(
   "قوائم المكالمات تجلب تاريخ بدء السماح وتستبعد المحمي",

@@ -53,7 +53,9 @@ const MAX_ATTEMPTED_SNAPSHOTS = 12;
 const RETRY_DELAY_MS = 1200;
 
 let flushInFlight = false;
-let flushTimer: ReturnType<typeof window.setTimeout> | null = null;
+// This is a client module: window.setTimeout always returns a numeric handle.
+// ReturnType can resolve to NodeJS.Timeout while Vercel loads Node typings.
+let flushTimer: number | null = null;
 let browserEventsInstalled = false;
 
 function canUseStorage(): boolean {

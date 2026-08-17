@@ -127,6 +127,7 @@ import {
   isValidGraceDays,
   normalizeGraceDaysInput,
   reconcileRegistryRowsAfterMutation,
+  studentGraceRemainingDays,
   studentExportColumns,
   studentMatchesRegistrySearch,
   telegramLink,
@@ -423,6 +424,7 @@ export function StudentRegistryView() {
   const [gracePeriodStartMode, setGracePeriodStartMode] = useState<
     GracePeriodStartMode | ""
   >("");
+  const [editGraceInputTouched, setEditGraceInputTouched] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     id: "",
@@ -988,6 +990,23 @@ export function StudentRegistryView() {
     Number(editDialog.form.accountingGraceDays || 0) !==
       Number(editOriginalStudent.accountingGraceDays || 0),
   );
+  const editGraceRenewalRequested = Boolean(
+    editOriginalStudent &&
+      editGraceInputTouched &&
+      Number(editDialog.form.accountingGraceDays || 0) > 0 &&
+      !editGraceDaysChanged,
+  );
+  const editGraceSettingsChanged =
+    editGraceDaysChanged || editGraceRenewalRequested;
+  const editOriginalGraceRemainingDays = editOriginalStudent
+    ? studentGraceRemainingDays(editOriginalStudent)
+    : 0;
+  const editOriginalGraceDurationDays = Number(
+    editOriginalStudent?.accountingGraceDays || 0,
+  );
+  const editOriginalGraceActive = Boolean(
+    editOriginalStudent && isStudentCurrentlyInGrace(editOriginalStudent),
+  );
   const editAcademicImpactSignature = `${editDialog.id}|${editDialog.form.createdAt}|${Number(editDialog.form.accountingGraceDays || 0)}|${gracePeriodStartMode}`;
   const resetWillStartNewFile =
     editNeedsTransferPolicy && effectiveCourseTransferPolicy === "reset";
@@ -999,7 +1018,7 @@ export function StudentRegistryView() {
       !editTargetActiveChapter);
   const editNeedsAcademicImpactPreview =
     !resetWillStartNewFile &&
-    (editRegistrationDateChanged || editGraceDaysChanged);
+    (editRegistrationDateChanged || editGraceSettingsChanged);
   const hasCurrentAcademicImpactPreview =
     academicImpactPreviewSignature === editAcademicImpactSignature &&
     Boolean(academicImpactPreview);
@@ -1166,6 +1185,7 @@ export function StudentRegistryView() {
     setAcademicImpactPreviewSignature("");
     setAcademicImpactConfirmed(false);
     setGracePeriodStartMode("");
+    setEditGraceInputTouched(false);
     setEditDialog({
       open: true,
       id: student.id,
@@ -1175,6 +1195,7 @@ export function StudentRegistryView() {
 
   const updateEditForm = (key: keyof StudentEditForm, value: string) => {
     if (key === "accountingGraceDays") {
+      setEditGraceInputTouched(true);
       setGracePeriodStartMode("");
       setAcademicImpactPreview(null);
       setAcademicImpactPreviewSignature("");
@@ -1308,7 +1329,7 @@ export function StudentRegistryView() {
     const form = editDialog.form;
     let resolvedGracePeriodStartMode = gracePeriodStartMode;
     if (
-      editGraceDaysChanged &&
+      editGraceSettingsChanged &&
       Number(form.accountingGraceDays || 0) > 0 &&
       !resolvedGracePeriodStartMode
     ) {
@@ -1419,6 +1440,7 @@ export function StudentRegistryView() {
     setAcademicImpactPreviewSignature("");
     setAcademicImpactConfirmed(false);
     setGracePeriodStartMode("");
+    setEditGraceInputTouched(false);
     setServerRefreshKey((value) => value + 1);
     toast.success("تم تعديل بيانات الطالب", {
       description:
@@ -2480,6 +2502,8 @@ export function StudentRegistryView() {
           if (!open) {
             setEditOriginalStudent(null);
             setCourseTransferPolicy("");
+            setGracePeriodStartMode("");
+            setEditGraceInputTouched(false);
           }
         }}
       >
@@ -2544,7 +2568,7 @@ export function StudentRegistryView() {
                         </p>
                       </div>
                       <div className="rounded-2xl bg-background/80 p-3 text-center">
-                        <p className="text-xs text-muted-foreground">السماح</p>
+                        <p className="text-xs text-muted-foreground">مدة المنح المدخلة</p>
                         <p className="mt-1 font-black">
                           {editDialog.form.accountingGraceDays || "0"} يوم
                         </p>
@@ -3099,7 +3123,7 @@ export function StudentRegistryView() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="edit-accountingGraceDays">
-                        فترة السماح بالأيام
+                        مدة السماح اليدوية المسجلة / الجديدة
                       </Label>
                       <Input
                         id="edit-accountingGraceDays"
@@ -3120,11 +3144,69 @@ export function StudentRegistryView() {
                         className="h-12 rounded-2xl"
                       />
                       <p className="text-xs text-muted-foreground">
-                        لا يُحاسَب الطالب على الامتحانات أو الإخفاقات خلال هذه
-                        الأيام.
+                        هذا الحقل هو مدة المنح، وليس العداد المتبقي. عند تغييره
+                        تبدأ مدة جديدة بعد معاينة أثرها وتأكيدها.
                       </p>
                     </div>
                   </div>
+
+                  {editOriginalStudent && (
+                    <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground">السماح المتبقي الآن</p>
+                          <p className="mt-1 text-2xl font-black text-primary">
+                            {editOriginalGraceRemainingDays} يوم
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">المدة اليدوية المحفوظة</p>
+                          <p className="mt-1 text-lg font-black">
+                            {editOriginalGraceDurationDays} يوم
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">الحالة الفعلية</p>
+                          <p className="mt-1 font-black">
+                            {editOriginalGraceActive
+                              ? `نشطة حتى ${graceEndDate(editOriginalStudent)}`
+                              : "غير نشطة — المحاسبة فعالة"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {editOriginalGraceDurationDays > 0 &&
+                        !editOriginalGraceActive && (
+                          <div className="mt-4 flex flex-col gap-2 border-t border-primary/15 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-xs leading-6 text-muted-foreground">
+                              انتهت المدة السابقة. يمكنك تعديل العدد أعلاه، أو
+                              تجديد نفس العدد المكتوب ابتداءً من اليوم.
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="rounded-xl"
+                              onClick={() => {
+                                setEditGraceInputTouched(true);
+                                setGracePeriodStartMode("now");
+                                setAcademicImpactPreview(null);
+                                setAcademicImpactPreviewSignature("");
+                                setAcademicImpactConfirmed(false);
+                              }}
+                            >
+                              تجديد المدة المكتوبة من اليوم
+                            </Button>
+                          </div>
+                        )}
+
+                      {editGraceRenewalRequested && (
+                        <p className="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-800 dark:text-amber-200">
+                          سيتم إنشاء فترة سماح جديدة بالمدة المكتوبة، حتى لو كان
+                          عدد الأيام مساوياً للمدة السابقة.
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {editNeedsAcademicImpactPreview && (
                     <div className="mt-4 rounded-2xl border border-orange-300 bg-orange-50 p-4 text-sm text-orange-950 dark:border-orange-500/50 dark:bg-orange-950/20 dark:text-orange-100">
@@ -3190,9 +3272,12 @@ export function StudentRegistryView() {
               <Button
                 variant="outline"
                 className="tp-student-registry__dialog-button"
-                onClick={() =>
-                  setEditDialog({ open: false, id: "", form: emptyEditForm })
-                }
+                onClick={() => {
+                  setEditDialog({ open: false, id: "", form: emptyEditForm });
+                  setEditOriginalStudent(null);
+                  setGracePeriodStartMode("");
+                  setEditGraceInputTouched(false);
+                }}
               >
                 <X aria-hidden="true" className="size-4" />
                 إلغاء

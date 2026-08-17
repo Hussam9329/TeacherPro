@@ -15,6 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
+import { formatStudentGraceRemaining } from "./student-registry-helpers";
 
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
 
@@ -418,7 +419,7 @@ export function StudentRegistryResults({
                 <RegistryField label="الجنس" value={student.gender || "—"} />
                 <RegistryField label="الموقع" value={formatRegistryLocation(student)} />
                 <RegistryField label="الفرص" value={formatOpportunityBalance(student, { separator: " / " })} />
-                <RegistryField label="السماح" value={`${student.accountingGraceDays ?? 0} يوم`} />
+                <RegistryField label="السماح المتبقي" value={formatStudentGraceRemaining(student)} />
                 <RegistryField label="تاريخ الإضافة" value={formatAppDate(student.createdAt, student.createdAt || "—")} />
                 <RegistryField
                   label="تيليجرام"
@@ -538,7 +539,7 @@ export function StudentRegistryResults({
                 </td>
                 <td className="min-w-40 space-y-1 p-3 text-xs">
                   <p>الفرص: <strong>{formatOpportunityBalance(student, { separator: " / " })}</strong></p>
-                  <p>السماح: {student.accountingGraceDays ?? 0} يوم</p>
+                  <p>السماح المتبقي: {formatStudentGraceRemaining(student)}</p>
                   <p>التسجيل: {formatAppDate(student.createdAt, student.createdAt || "—")}</p>
                 </td>
                 <td className="min-w-64 space-y-2 p-3">
@@ -591,7 +592,7 @@ function CompactStudentRow({
         <RegistryField label="الجنس" value={student.gender || "—"} />
         <RegistryField label="الموقع" value={formatRegistryLocation(student)} />
         <RegistryField label="الفرص" value={formatOpportunityBalance(student, { separator: " / " })} />
-        <RegistryField label="السماح" value={`${student.accountingGraceDays ?? 0} يوم`} />
+        <RegistryField label="السماح المتبقي" value={formatStudentGraceRemaining(student)} />
         <RegistryField label="التسجيل" value={formatAppDate(student.createdAt, student.createdAt || "—")} />
       </div>
       <div className="mt-3 space-y-1 rounded-xl bg-muted/35 p-2 text-xs">

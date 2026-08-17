@@ -7,6 +7,7 @@ import {
   toLatinDigits,
 } from "@/lib/format";
 import {
+  getStudentGraceDaysRemaining,
   getStudentGraceWindow,
   isStudentCurrentlyInGrace as isStudentCurrentlyInGraceUnified,
 } from "@/lib/student-grace";
@@ -79,7 +80,7 @@ export const studentExportColumns: ExportColumn<any>[] = [
   { key: "dismissalType", label: "نوع الفصل", value: (student) => student.dismissalType || "", defaultSelected: false },
   { key: "dismissalReason", label: "سبب الفصل", value: (student) => student.dismissalReason || "", defaultSelected: false },
   { key: "opportunities", label: "الفرص", value: (student) => student.opportunities ?? "" },
-  { key: "grace", label: "فترة السماح", value: (student) => `${student.accountingGraceDays ?? 0} يوم` },
+  { key: "grace", label: "السماح المتبقي", value: (student) => formatStudentGraceRemaining(student) },
   { key: "createdAt", label: "تاريخ التسجيل", value: (student) => formatAppDate(student.createdAt) },
   { key: "phone", label: "الهاتف", value: (student) => student.phone || "" },
   { key: "parentPhone", label: "ولي الأمر", value: (student) => student.parentPhone || "" },
@@ -226,6 +227,20 @@ export function graceEndDate(student: Student): string {
 
 export function isStudentCurrentlyInGrace(student: Student): boolean {
   return isStudentCurrentlyInGraceUnified(student);
+}
+
+export function studentGraceRemainingDays(
+  student: Student,
+  now: Date = new Date(),
+): number {
+  return getStudentGraceDaysRemaining(student, now);
+}
+
+export function formatStudentGraceRemaining(
+  student: Student,
+  now: Date = new Date(),
+): string {
+  return `${studentGraceRemainingDays(student, now)} يوم`;
 }
 
 export function studentMatchesRegistrySearch(

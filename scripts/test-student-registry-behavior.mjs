@@ -98,6 +98,7 @@ const opportunitySnapshots = loadTypeScriptModule(
 const registryViewHelpers = loadTypeScriptModule(
   "src/components/teacher-pro/student-registry-helpers.ts",
 );
+const studentGrace = loadTypeScriptModule("src/lib/student-grace.ts");
 const studentExportPagination = loadTypeScriptModule(
   "src/lib/student-export-pagination.ts",
 );
@@ -666,4 +667,48 @@ test("mutation reconciliation immediately removes stale filtered rows", () => {
   assert.equal(retained.rows[1].name, "Updated");
   assert.equal(retained.totalDelta, 0);
   assert.equal(original[1].name, "Old");
+});
+
+test("grace remaining days decrease by Baghdad calendar day and stop at zero", () => {
+  const student = {
+    createdAt: "2026-08-01",
+    accountingGraceDays: 12,
+    gracePeriodStartDate: "2026-08-01",
+  };
+
+  assert.equal(
+    studentGrace.getStudentGraceDaysRemaining(
+      student,
+      new Date("2026-08-01T12:00:00.000Z"),
+    ),
+    12,
+  );
+  assert.equal(
+    studentGrace.getStudentGraceDaysRemaining(
+      student,
+      new Date("2026-08-07T12:00:00.000Z"),
+    ),
+    6,
+  );
+  assert.equal(
+    studentGrace.getStudentGraceDaysRemaining(
+      student,
+      new Date("2026-08-12T12:00:00.000Z"),
+    ),
+    1,
+  );
+  assert.equal(
+    studentGrace.getStudentGraceDaysRemaining(
+      student,
+      new Date("2026-08-13T12:00:00.000Z"),
+    ),
+    0,
+  );
+  assert.equal(
+    studentGrace.isStudentCurrentlyInGrace(
+      student,
+      new Date("2026-08-13T12:00:00.000Z"),
+    ),
+    false,
+  );
 });

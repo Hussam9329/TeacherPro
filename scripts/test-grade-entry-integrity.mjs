@@ -105,6 +105,8 @@ must(
 );
 must(
   gradeEntryOfflineOutbox.includes('const STORAGE_KEY = "teacherpro-grade-entry-offline-v2"') &&
+    gradeEntryOfflineOutbox.includes("let flushTimer: number | null = null") &&
+    !gradeEntryOfflineOutbox.includes("ReturnType<typeof window.setTimeout>") &&
     gradeEntryOfflineOutbox.includes('window.addEventListener("online"') &&
     gradeEntryOfflineOutbox.includes("currentMatchesAttempted") &&
     gradeEntryOfflineOutbox.includes("currentMatchesBaseline") &&
@@ -112,8 +114,8 @@ must(
     gradeEntryOfflineOutbox.includes("desiredMatchesServerGrade") &&
     gradeEntryOfflineOutbox.includes("confirmGradeEntryOfflineAttempt") &&
     gradeEntryOfflineOutbox.includes("flushGradeEntryOfflineSaves"),
-  "طابور الدرجات المؤجل يصالح الرد المفقود ويمنع الكتابة فوق تعديل أحدث",
-  "المزامنة المؤجلة يجب أن تتحقق من الخادم قبل الإرسال وتحفظ التعارض للمراجعة.",
+  "طابور الدرجات المؤجل يستخدم مؤقت متصفح صحيح ويصالح الرد المفقود دون الكتابة فوق تعديل أحدث",
+  "المزامنة المؤجلة يجب أن تستخدم رقم مؤقت المتصفح وتتحقق من الخادم قبل الإرسال وتحفظ التعارض للمراجعة.",
 );
 
 must(
