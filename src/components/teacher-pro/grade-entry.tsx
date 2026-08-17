@@ -2471,16 +2471,16 @@ export function GradeEntryView() {
                   data-manual-grade-count="true"
                   role="status"
                   aria-live="polite"
-                  aria-label={`إجمالي الدرجات المدخلة يدوياً: ${
+                  aria-label={`إجمالي الأوراق المدخلة يدوياً: ${
                     entrySheetLoading || entrySheetError
                       ? "غير متاح الآن"
-                      : allManualGradesCount.total
+                      : allManualGradesCount.total + gradeSmartNotesTotal
                   }`}
-                  title="يُحتسب جميع السجلات اليدوية: الرقمية + قبل التسجيل + المعلقة. لا تُحتسب الحالات التلقائية (غياب، إجازة، فترة سماح)"
+                  title="يُحتسب جميع السجلات اليدوية: الرقمية + قبل التسجيل + المعلقة + المفصولين + المجازين + فترة السماح. لا تُحتسب الحالات التلقائية (غياب تلقائي فقط)"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-[12px] font-bold text-emerald-800 dark:text-emerald-200">
-                      📊 الدرجات المدخلة يدوياً
+                      📊 الأوراق المدخلة يدوياً
                     </p>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] leading-tight text-muted-foreground">
                       <span className="inline-flex items-center gap-1">
@@ -2508,6 +2508,34 @@ export function GradeEntryView() {
                           </strong>
                         </span>
                       )}
+                      {/* Smart Notes من السجل المنظّم */}
+                      {(gradeSmartNoteCategoryCounts?.DISMISSED_PENDING || 0) > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                          مفصولين: 
+                          <strong className="text-red-700 dark:text-red-300">
+                            {gradeSmartNoteCategoryCounts.DISMISSED_PENDING}
+                          </strong>
+                        </span>
+                      )}
+                      {(gradeSmartNoteCategoryCounts?.LEAVE_PENDING || 0) > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+                          مجازين: 
+                          <strong className="text-purple-700 dark:text-purple-300">
+                            {gradeSmartNoteCategoryCounts.LEAVE_PENDING}
+                          </strong>
+                        </span>
+                      )}
+                      {(gradeSmartNoteCategoryCounts?.GRACE_SCORED || 0) > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-cyan-500" />
+                          فترة سماح: 
+                          <strong className="text-cyan-700 dark:text-cyan-300">
+                            {gradeSmartNoteCategoryCounts.GRACE_SCORED}
+                          </strong>
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
@@ -2517,7 +2545,7 @@ export function GradeEntryView() {
                     >
                       {entrySheetLoading || entrySheetError
                         ? "—"
-                        : allManualGradesCount.total}
+                        : allManualGradesCount.total + gradeSmartNotesTotal}
                     </span>
                     {/* شارة للدرجات المعلقة */}
                     {allManualGradesCount.pending > 0 && !entrySheetLoading && !entrySheetError && (
@@ -2535,6 +2563,15 @@ export function GradeEntryView() {
                         title="درجات أُدخلت قبل تسجيل الطالب (محفوظة في السجل)"
                       >
                         📅{allManualGradesCount.preRegistration}
+                      </span>
+                    )}
+                    {/* شارة للسجل المنظّم (Smart Notes) */}
+                    {gradeSmartNotesTotal > 0 && !entrySheetLoading && !entrySheetError && (
+                      <span
+                        className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-400/30 text-[11px] font-bold text-violet-700 dark:text-violet-300 animate-pulse"
+                        title="أوراق في السجل المنظّم (مفصولين، مجازين، فترة سماح)"
+                      >
+                        📋{gradeSmartNotesTotal}
                       </span>
                     )}
                   </div>
