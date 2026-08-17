@@ -2967,6 +2967,14 @@ button[data-slot="button"][class*="text-destructive"] svg {
 .tp-exam-records-page > .space-y-3 { scroll-margin-top: 6rem; }
 .tp-exam-records-page [data-slot="card"] { transition: border-color .18s ease, box-shadow .18s ease; }
 .tp-exam-records-page [data-slot="card"]:focus-within { border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
+/* Performance: skip layout/paint work only for collapsed off-screen exam cards.
+   Expanded cards stay fully rendered so focus/scroll behavior is unchanged. */
+@supports (content-visibility: auto) {
+  .tp-exam-records-page .tp-exam-record-card-collapsed {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 250px;
+  }
+}
 @media (max-width: 767px) {
   .tp-exam-records-page { gap: 1rem; }
   .tp-exam-records-page [data-slot="dialog-footer"] button { width: 100%; }
