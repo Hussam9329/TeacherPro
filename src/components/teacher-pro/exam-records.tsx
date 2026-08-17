@@ -831,7 +831,10 @@ export function ExamRecordsView() {
 
   const handleEditExam = async (editDialog: FullExamEditState) => {
     const error = validateEditExam(editDialog);
-    if (error) return toast.error(error);
+    if (error) {
+      toast.error(error);
+      return;
+    }
     const isFinalExam = editDialog.type === "فاينل";
     const noDiscount = Boolean(editDialog.noDiscount);
     const statusPatch =

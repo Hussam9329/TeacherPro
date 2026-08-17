@@ -75,6 +75,14 @@ must(
 );
 
 must(
+  page.includes("if (error) {") &&
+    page.includes("toast.error(error);") &&
+    !page.includes("return toast.error(error)"),
+  "حفظ تعديل الامتحان يرجع Promise<void> ولا يمرر معرّف Toast إلى الـDialog",
+  "يجب فصل toast.error عن return حتى يطابق handleEditExam عقدة onSave في TypeScript."
+);
+
+must(
   page.includes("gradesByExamId") &&
     page.includes("studentById") &&
     page.includes("examById") &&
