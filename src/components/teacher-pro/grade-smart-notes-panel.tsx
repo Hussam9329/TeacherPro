@@ -46,9 +46,9 @@ const CATEGORY_META: Record<
     icon: CheckCircle2,
   },
   BEFORE_REGISTRATION_PENDING: {
-    title: "درجات قبل تسجيل الطالب معلّقة",
-    shortTitle: "قبل تسجيل الطالب",
-    decision: "لم تُسجّل كدرجة لأنها تسبق تسجيل الطالب؛ حُفظت للمراجعة فقط.",
+    title: "درجات امتحانات سابقة لتسجيل الطالب",
+    shortTitle: "امتحان سابق للتسجيل",
+    decision: "سُجّلت في سجل الطالب دون خصم أو فصل لأنها تسبق تاريخ تسجيله.",
     className:
       "border-amber-200 bg-amber-50/80 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100",
     icon: CalendarClock,

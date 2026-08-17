@@ -34,7 +34,9 @@ function uniqueIds(values: Array<string | null | undefined>): string[] {
 
 /**
  * Converts grace-protected absences to an explicit scoreless grace marker,
- * removes impossible pre-registration absences, and removes related call rows.
+ * converts impossible pre-registration absences, and removes related call rows.
+ * Manually entered numeric grades before registration remain real Grade rows;
+ * their permanent academic exclusion is handled by the unified writeback.
  * Call this inside the
  * same transaction as grace/registration changes, before academic
  * recalculation, so no request can observe a protected student as absent.
@@ -71,7 +73,7 @@ export async function repairProtectedAbsencesForStudents(
   })) as ProtectedGradeCandidate[];
   const beforeRegistration = candidates.filter(
     (grade) =>
-      (!options.onlyAbsences || grade.status === "غائب") &&
+      grade.status === "غائب" &&
       !isExamOnOrAfterStudentRegistration(grade.student, grade.exam),
   );
   const withinGrace = candidates.filter(

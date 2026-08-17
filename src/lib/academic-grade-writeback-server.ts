@@ -7,6 +7,11 @@ import {
 } from "@/lib/academic-recalculate-server";
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { baghdadDateKey } from "@/lib/baghdad-time";
+import {
+  isPreRegistrationNumericGrade,
+  PRE_REGISTRATION_GRADE_EXCLUSION_REASON,
+  PRE_REGISTRATION_GRADE_EXCLUSION_SOURCE,
+} from "@/lib/pre-registration-grade";
 
 export type AcademicGradeWritebackStatus =
   | "درجة"
@@ -235,7 +240,26 @@ export async function syncAcademicGradeWriteback(
       404,
     );
 
-  if (student.status === "مفصول" && !input.allowDismissedExistingGradeCorrection) {
+  const studentCreatedAtStr = student.createdAt.toISOString();
+  const examDateStr = exam.date.toISOString();
+  const studentGraceStartStr = student.gracePeriodStartDate
+    ? student.gracePeriodStartDate.toISOString()
+    : null;
+  const examOnOrAfterRegistration = isExamOnOrAfterStudentRegistration(
+    { createdAt: studentCreatedAtStr },
+    { date: examDateStr },
+  );
+  const preRegistrationNumericGrade = isPreRegistrationNumericGrade({
+    examOnOrAfterRegistration,
+    status,
+    score,
+  });
+
+  if (
+    student.status === "مفصول" &&
+    !input.allowDismissedExistingGradeCorrection &&
+    !preRegistrationNumericGrade
+  ) {
     throw new AcademicGradeWritebackError(
       "الطالب مفصول ولا يمكن اعتماد درجة جديدة له. أعد تفعيله أولاً من الإجراء المخصص.",
     );
@@ -278,7 +302,8 @@ export async function syncAcademicGradeWriteback(
 
   if (
     input.blockOnLeave !== false &&
-    (score !== undefined || status !== "درجة")
+    (score !== undefined || status !== "درجة") &&
+    !preRegistrationNumericGrade
   ) {
     const blockedByLeave = await hasBlockingLeave(client, studentId, exam);
     if (blockedByLeave) {
@@ -290,9 +315,10 @@ export async function syncAcademicGradeWriteback(
 
   // GRACE PERIOD & PRE-REGISTRATION PROTECTION:
   //
-  // 1. PRE-REGISTRATION: If the exam date is BEFORE the student's
-  //    registration date (createdAt), block scores/absence/cheating and allow
-  //    only the scoreless server marker "قبل تسجيل الطالب".
+  // 1. PRE-REGISTRATION: A manually entered numeric score is saved as a real
+  //    Grade immediately, but permanently excluded from every academic effect.
+  //    Automatic absence/cheating remains blocked; the scoreless marker
+  //    "قبل تسجيل الطالب" is still allowed for batch missing-entry protection.
   //
   // 2. GRACE PERIOD: If the exam falls within the student's grace
   //    period, block "غائب" and allow the server-generated
@@ -301,16 +327,11 @@ export async function syncAcademicGradeWriteback(
   //
   // "درجة" (actual score) and "غش" (cheating) are still allowed during
   // grace period.
-  const studentCreatedAtStr = student.createdAt.toISOString();
-  const examDateStr = exam.date.toISOString();
-  const studentGraceStartStr = student.gracePeriodStartDate ? student.gracePeriodStartDate.toISOString() : null;
-
-  const examOnOrAfterRegistration = isExamOnOrAfterStudentRegistration(
-    { createdAt: studentCreatedAtStr },
-    { date: examDateStr },
-  );
-
-  if (!examOnOrAfterRegistration && status !== "قبل تسجيل الطالب") {
+  if (
+    !examOnOrAfterRegistration &&
+    status !== "قبل تسجيل الطالب" &&
+    !preRegistrationNumericGrade
+  ) {
     throw new AcademicGradeWritebackError(
       "لا يمكن تسجيل درجة أو غياب لهذا الطالب لأن الامتحان أقدم من تاريخ تسجيله. " +
       "الطالب لم يكن مسجلاً في النظام عند إجراء هذا الامتحان.",
@@ -368,6 +389,18 @@ export async function syncAcademicGradeWriteback(
         score === null
       ));
 
+  const preRegistrationExclusion = preRegistrationNumericGrade
+    ? {
+        academicEffectExcluded: true,
+        academicEffectExclusionReason:
+          PRE_REGISTRATION_GRADE_EXCLUSION_REASON,
+        academicEffectExclusionSource:
+          PRE_REGISTRATION_GRADE_EXCLUSION_SOURCE,
+        // هذه درجة مباشرة وليست درجة ناتجة من قرار ملاحظة ذكية قديمة.
+        smartNoteId: null,
+      }
+    : {};
+
   const grade = await client.grade.upsert({
     where: { studentId_examId: { studentId, examId } },
     update: {
@@ -379,6 +412,7 @@ export async function syncAcademicGradeWriteback(
             academicAccountingChecked: Boolean(input.academicAccountingChecked),
           }
         : {}),
+      ...preRegistrationExclusion,
     },
     create: {
       studentId,
@@ -387,6 +421,7 @@ export async function syncAcademicGradeWriteback(
       score: status === "درجة" ? (score ?? null) : null,
       notes: notes || null,
       academicAccountingChecked: Boolean(input.academicAccountingChecked),
+      ...preRegistrationExclusion,
     },
   });
 

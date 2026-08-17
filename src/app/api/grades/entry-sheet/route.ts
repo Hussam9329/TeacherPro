@@ -101,9 +101,9 @@ export async function GET(req: NextRequest) {
       orderBy: { name: "asc" },
     });
 
-    // Keep pre-registration students in the entry sheet. Their numeric attempt
-    // is captured as BEFORE_REGISTRATION_PENDING rather than a Grade, so the
-    // operator can record the information without creating academic effects.
+    // Keep pre-registration students in the entry sheet. A manually entered
+    // numeric score is saved as a real Grade, with a permanent academic-effect
+    // exclusion, so it remains visible without causing a deduction or dismissal.
     const possibleStudents = possibleStudentsRaw.map((s) => ({
       ...s,
       createdAt:

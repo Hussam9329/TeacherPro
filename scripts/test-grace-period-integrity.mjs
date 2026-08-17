@@ -94,8 +94,10 @@ check(
     leaves.includes('backup.status === "غائب"'),
 );
 check(
-  "إصلاح الإنتاج يحول غياب السماح وكل سجل سابق للتسجيل ويحذف المكالمات ثم يعيد الاحتساب",
+  "إصلاح الإنتاج يحول الغيابات المحمية ويحافظ على الدرجات الرقمية السابقة للتسجيل",
   repairHelper.includes('grade.status === "غائب"') &&
+    repairHelper.includes('grade.status === "غائب" &&') &&
+    !repairHelper.includes('(!options.onlyAbsences || grade.status === "غائب")') &&
     repairHelper.includes("studentCall.deleteMany") &&
     repairHelper.includes('status: "ضمن فترة السماح"') &&
     repairHelper.includes('status: "قبل تسجيل الطالب"') &&

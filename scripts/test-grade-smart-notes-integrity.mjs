@@ -20,6 +20,12 @@ const [
   vercelConfig,
   correctionSheetsRoute,
   telegramSubmissionsRoute,
+  gradeWriteback,
+  preRegistrationHelper,
+  preRegistrationPromotion,
+  preRegistrationPromotionRoute,
+  protectedAbsenceRepair,
+  smartNotesPanel,
 ] =
   await Promise.all([
     read("prisma/schema.prisma"),
@@ -34,6 +40,12 @@ const [
     read("vercel.json"),
     read("src/app/api/correction-sheets/route.ts"),
     read("src/app/api/telegram-exam-submissions/route.ts"),
+    read("src/lib/academic-grade-writeback-server.ts"),
+    read("src/lib/pre-registration-grade.ts"),
+    read("src/lib/pre-registration-grade-promotion-server.ts"),
+    read("src/app/api/grades/promote-pre-registration/route.ts"),
+    read("src/lib/grace-period-repair-server.ts"),
+    read("src/components/teacher-pro/grade-smart-notes-panel.tsx"),
   ]);
 
 for (const category of [
@@ -82,6 +94,60 @@ assert.match(gradesRoute, /smartNote\.status === "PROCESSED"[\s\S]*isStudentCurr
 assert.match(gradesRoute, /grandfatheredGraceGrade:\s*true/);
 assert.match(gradesRoute, /score:\s*numericAttempt\.score[\s\S]*academicRecalculation:\s*null/);
 
+const numericAttemptInspection = gradesRoute.slice(
+  gradesRoute.indexOf("async function inspectNumericGradeAttempt"),
+  gradesRoute.indexOf("function dateKey"),
+);
+assert.doesNotMatch(
+  numericAttemptInspection,
+  /category\s*=\s*"BEFORE_REGISTRATION_PENDING"/,
+);
+assert.match(numericAttemptInspection, /if \(!beforeRegistration\)/);
+assert.match(
+  gradeWriteback,
+  /isPreRegistrationNumericGrade\([\s\S]*preRegistrationNumericGrade/,
+);
+assert.match(
+  gradeWriteback,
+  /status !== "قبل تسجيل الطالب" &&[\s\S]*!preRegistrationNumericGrade/,
+);
+assert.match(
+  gradeWriteback,
+  /academicEffectExcluded:\s*true[\s\S]*PRE_REGISTRATION_GRADE_EXCLUSION_REASON[\s\S]*PRE_REGISTRATION_GRADE_EXCLUSION_SOURCE/,
+);
+assert.match(
+  preRegistrationHelper,
+  /input\.status === "درجة"[\s\S]*typeof input\.score === "number"/,
+);
+assert.match(
+  protectedAbsenceRepair,
+  /grade\.status === "غائب" &&[\s\S]*!isExamOnOrAfterStudentRegistration/,
+);
+assert.doesNotMatch(
+  protectedAbsenceRepair,
+  /\(!options\.onlyAbsences \|\| grade\.status === "غائب"\)/,
+);
+assert.match(
+  preRegistrationPromotion,
+  /category:\s*"BEFORE_REGISTRATION_PENDING"[\s\S]*status:\s*"درجة"[\s\S]*academicEffectExcluded:\s*true/,
+);
+assert.match(
+  preRegistrationPromotion,
+  /status:\s*"PROCESSED"[\s\S]*processedResolution\(false\)/,
+);
+assert.match(
+  preRegistrationPromotion,
+  /existing\?\.status === "درجة"[\s\S]*processedResolution\(true\)/,
+);
+assert.match(
+  preRegistrationPromotionRoute,
+  /requirePermission\(req, "grades\.edit"\)[\s\S]*promotePendingPreRegistrationGrades/,
+);
+assert.match(
+  smartNotesPanel,
+  /سُجّلت في سجل الطالب دون خصم أو فصل لأنها تسبق تاريخ تسجيله/,
+);
+
 assert.match(graceExpiryHelper, /category:\s*"GRACE_SCORED"/);
 assert.match(graceExpiryHelper, /status:\s*"PENDING"/);
 assert.match(graceExpiryHelper, /today\s*>=\s*graceWindow\.endExclusive/);
@@ -120,6 +186,7 @@ assert.match(notesRoute, /updatedAt: expectedDate/);
 assert.match(notesRoute, /requiresFreshNote:\s*true/);
 
 assert.match(entrySheet, /Keep pre-registration students in the entry sheet/);
+assert.match(entrySheet, /saved as a real Grade/);
 assert.doesNotMatch(entrySheet, /isExamOnOrAfterStudentRegistration/);
 
 console.log("Grade smart notes integrity checks passed.");

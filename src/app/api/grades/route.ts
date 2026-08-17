@@ -313,18 +313,20 @@ async function inspectNumericGradeAttempt(
 
   let category: NumericGradeAttemptContext["category"] = null;
   let reason = "";
-  if (beforeRegistration) {
-    category = "BEFORE_REGISTRATION_PENDING";
-    reason = "محاولة إدخال درجة لامتحان يسبق تسجيل الطالب في النظام.";
-  } else if (onLeave) {
-    category = "LEAVE_PENDING";
-    reason = "محاولة إدخال درجة لطالب لديه إجازة تغطي هذا الامتحان.";
-  } else if (student.status === "مفصول") {
-    category = "DISMISSED_PENDING";
-    reason = "محاولة إدخال درجة رقمية لطالب مفصول؛ حُفظت للمراجعة دون أثر أكاديمي.";
-  } else if (withinGrace) {
-    category = "GRACE_SCORED";
-    reason = "درجة حقيقية داخل فترة السماح؛ محفوظة للمتابعة دون أثر أكاديمي.";
+  // الامتحان السابق للتسجيل حالة تاريخية بلا أثر أكاديمي، لكنه لا يلغي
+  // الرقم الذي أدخله الموظف. يمر مباشرة إلى Grade ويُوسم بالاستثناء الدائم
+  // داخل syncAcademicGradeWriteback، حتى لو كان الطالب حالياً مجازاً أو مفصولاً.
+  if (!beforeRegistration) {
+    if (onLeave) {
+      category = "LEAVE_PENDING";
+      reason = "محاولة إدخال درجة لطالب لديه إجازة تغطي هذا الامتحان.";
+    } else if (student.status === "مفصول") {
+      category = "DISMISSED_PENDING";
+      reason = "محاولة إدخال درجة رقمية لطالب مفصول؛ حُفظت للمراجعة دون أثر أكاديمي.";
+    } else if (withinGrace) {
+      category = "GRACE_SCORED";
+      reason = "درجة حقيقية داخل فترة السماح؛ محفوظة للمتابعة دون أثر أكاديمي.";
+    }
   }
 
   return { student, exam, category, reason, score };
