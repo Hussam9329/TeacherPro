@@ -2467,49 +2467,74 @@ export function GradeEntryView() {
                   />
                 </div>
                 <div
-                  className="flex min-h-[4rem] items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 text-right shadow-sm"
+                  className="flex min-h-[4.5rem] items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-gradient-to-l from-emerald-500/10 to-transparent px-4 py-3 text-right shadow-sm"
                   data-manual-grade-count="true"
                   role="status"
                   aria-live="polite"
-                  aria-label={`إجمالي الدرجات المدخلة: ${
+                  aria-label={`إجمالي الدرجات المدخلة يدوياً: ${
                     entrySheetLoading || entrySheetError
                       ? "غير متاح الآن"
                       : allManualGradesCount.total
-                  }، منها رقمية: ${
-                    entrySheetLoading || entrySheetError
-                      ? "—"
-                      : allManualGradesCount.numeric
-                  }، ومعلقة: ${
-                    entrySheetLoading || entrySheetError
-                      ? "—"
-                      : allManualGradesCount.pending
                   }`}
-                  title="يُحتسب جميع السجلات اليدوية: الرقمية المحفوظة + المعلقة بانتظار الإدخال، ولا تُحتسب الحالات التلقائية"
+                  title="يُحتسب جميع السجلات اليدوية: الرقمية + قبل التسجيل + المعلقة. لا تُحتسب الحالات التلقائية (غياب، إجازة، فترة سماح)"
                 >
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-200">
-                      إجمالي الدرجات المدخلة يدوياً
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[12px] font-bold text-emerald-800 dark:text-emerald-200">
+                      📊 الدرجات المدخلة يدوياً
                     </p>
-                    <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
-                      رقمية: {entrySheetLoading || entrySheetError ? "—" : allManualGradesCount.numeric} | 
-                      معلقة: {entrySheetLoading || entrySheetError ? "—" : allManualGradesCount.pending}
-                    </p>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] leading-tight text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        رقمية: 
+                        <strong className="text-emerald-700 dark:text-emerald-300">
+                          {entrySheetLoading || entrySheetError ? "—" : allManualGradesCount.numeric}
+                        </strong>
+                      </span>
+                      {allManualGradesCount.preRegistration > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                          قبل التسجيل: 
+                          <strong className="text-blue-700 dark:text-blue-300">
+                            {allManualGradesCount.preRegistration}
+                          </strong>
+                        </span>
+                      )}
+                      {allManualGradesCount.pending > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                          معلقة: 
+                          <strong className="text-amber-700 dark:text-amber-300">
+                            {allManualGradesCount.pending}
+                          </strong>
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
                     <span
-                      className="text-2xl font-black tabular-nums text-emerald-700 dark:text-emerald-300"
+                      className="text-3xl font-black tabular-nums text-emerald-700 dark:text-emerald-300"
                       data-manual-grade-count-value="true"
                     >
                       {entrySheetLoading || entrySheetError
                         ? "—"
                         : allManualGradesCount.total}
                     </span>
+                    {/* شارة للدرجات المعلقة */}
                     {allManualGradesCount.pending > 0 && !entrySheetLoading && !entrySheetError && (
                       <span
-                        className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-400/20 text-[10px] font-bold text-amber-700 dark:text-amber-300"
-                        title="درجات معلقة بانتظار الإدخال الكامل"
+                        className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-400/30 text-[11px] font-bold text-amber-700 dark:text-amber-300 animate-pulse"
+                        title="درجات معلقة بانتظار إكمال الإدخال"
                       >
-                        {allManualGradesCount.pending}
+                        ⏳{allManualGradesCount.pending}
+                      </span>
+                    )}
+                    {/* شارة لدرجات قبل التسجيل */}
+                    {allManualGradesCount.preRegistration > 0 && !entrySheetLoading && !entrySheetError && (
+                      <span
+                        className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-400/30 text-[11px] font-bold text-blue-700 dark:text-blue-300"
+                        title="درجات أُدخلت قبل تسجيل الطالب (محفوظة في السجل)"
+                      >
+                        📅{allManualGradesCount.preRegistration}
                       </span>
                     )}
                   </div>
