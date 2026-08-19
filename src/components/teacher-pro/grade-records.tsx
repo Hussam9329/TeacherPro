@@ -737,22 +737,49 @@ export function GradeRecordsView() {
     const grade = gradeForAction(editDialog.id);
     const exam = grade ? exams.find((item) => item.id === grade.examId) : null;
     if (!grade || !exam) return null;
-    const score =
+
+    // ROOT-CAUSE FIX: Explicit client-side guard. When the user picks a
+    // non-"درجة" status (غائب / غش), the score MUST be null. The dialog
+    // already disables the score input in that case, but this guard also
+    // catches the case where the user typed a number first and then
+    // switched the status — the typed number is silently dropped here
+    // and we surface an informational toast so the user understands why
+    // the saved row has no score.
+    const rawScore =
       editDialog.status === "درجة"
         ? Number(toLatinDigits(editDialog.score))
         : null;
+
     if (
       editDialog.status === "درجة" &&
-      (!Number.isFinite(score) ||
-        score === null ||
-        score < 0 ||
-        score > exam.fullMark ||
-        !Number.isInteger(score))
+      (!Number.isFinite(rawScore) ||
+        rawScore === null ||
+        rawScore < 0 ||
+        rawScore > exam.fullMark ||
+        !Number.isInteger(rawScore))
     ) {
       toast.error(`الدرجة يجب أن تكون عدداً صحيحاً بين 0 و ${exam.fullMark} بدون كسور`);
       return null;
     }
-    return { grade, score };
+
+    // If the existing grade had a numeric score and the user is switching
+    // to a non-"درجة" status, warn them that the score will be cleared.
+    // The actual clearing happens on the server (and in the DB trigger),
+    // but the user-facing toast makes the data loss visible.
+    if (
+      editDialog.status !== "درجة" &&
+      grade.score !== null &&
+      grade.score !== undefined &&
+      toLatinDigits(editDialog.score).trim() !== ""
+    ) {
+      // The user previously typed a score. Don't block the save (the server
+      // will reject it anyway), but the explicit feedback is friendlier.
+      toast.info(
+        `سيتم مسح الدرجة المحفوظة (${grade.score}) لأن الحالة الجديدة «${editDialog.status}» لا تقبل رقماً.`,
+      );
+    }
+
+    return { grade, score: rawScore };
   };
 
   const saveEditGradeUnchecked = async () => {

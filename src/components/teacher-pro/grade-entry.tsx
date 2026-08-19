@@ -1423,6 +1423,21 @@ export function GradeEntryView() {
         leave || beforeRegistration || dismissedAndLocked || graceNumericCapture,
       );
 
+    // ROOT-CAUSE FIX: Final client-side gate. Never let a contradictory
+    // (status != "درجة", score != null) payload leave the browser. The
+    // server has its own validation, the DB trigger is the last defense,
+    // but blocking here means the user sees the error instantly without
+    // a network round-trip.
+    if (status !== "درجة" && normalizedScore !== "") {
+      showGradeEntryNotice(
+        "error",
+        `تناقض في البيانات: لا يمكن حفظ درجة رقمية (${normalizedScore}) مع الحالة «${status}». امسح الرقم أو غيّر الحالة إلى «درجة».`,
+      );
+      // Auto-clean the draft so the next attempt saves correctly.
+      updateDraft(studentId, { ...draft, score: "" });
+      return;
+    }
+
     if (leave && !canCaptureAsSmartNote) {
       showGradeEntryNotice(
         "error",
@@ -2928,14 +2943,33 @@ export function GradeEntryView() {
                         disabled={structuredControlsDisabled}
                         onValueChange={(value) => {
                           const nextStatus = value as DraftGrade["status"];
+                          // ROOT-CAUSE FIX: When switching to a non-"درجة"
+                          // status (غائب / غش), the score MUST be cleared.
+                          // We do this client-side too so the user immediately
+                          // sees the empty input and the saved draft sent to
+                          // the API never carries a stale numeric score.
+                          const hadNumericScore =
+                            draft.status === "درجة" &&
+                            toLatinDigits(draft.score).trim() !== "";
                           const nextDraft = {
                             ...draft,
                             status: nextStatus,
                             score: nextStatus === "درجة" ? draft.score : "",
                           };
                           updateDraft(student.id, nextDraft);
-                          if (nextStatus !== "درجة")
+                          if (nextStatus !== "درجة") {
+                            // If the row previously had a real numeric score,
+                            // explicitly inform the user that switching to
+                            // غائب/غش will erase it. The save still proceeds
+                            // automatically — this is informational only.
+                            if (hadNumericScore) {
+                              showGradeEntryNotice(
+                                "info",
+                                `تم تبديل الحالة إلى «${nextStatus}» ومسح الدرجة السابقة. لا يمكن لطالب غائب أو غاش أن يحمل درجة رقمية.`,
+                              );
+                            }
                             autoSaveGrade(student.id, nextDraft);
+                          }
                         }}
                       >
                         <SelectTrigger className="h-10">

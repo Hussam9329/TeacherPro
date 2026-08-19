@@ -19,6 +19,7 @@ import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
+import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
 
 const MAX_STUDENTS_PER_REQUEST = 2_000;
 
@@ -45,6 +46,21 @@ export async function POST(req: NextRequest) {
 
     const examExists = await db.exam.count({ where: { id: examId } });
     if (!examExists) return validationError("الامتحان غير موجود", 404);
+
+    // ROOT-CAUSE FIX: This batch endpoint always sends status != "درجة"
+    // (it only ever writes "غائب", "ضمن فترة السماح", or "قبل تسجيل الطالب")
+    // and always sends score = null. We assert this invariant here so that
+    // any future refactor that accidentally passes a score will fail loudly
+    // with a clear Arabic message instead of silently persisting a
+    // contradictory row.
+    try {
+      assertGradeStatusScoreConsistency("غائب", null);
+    } catch (error) {
+      if (error instanceof AcademicGradeWritebackError) {
+        return validationError(error.message, error.status);
+      }
+      throw error;
+    }
 
     // One SERIALIZABLE transaction owns the entire batch. Grade writes are
     // validated one by one, then all affected students are recalculated once.

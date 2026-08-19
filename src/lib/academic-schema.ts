@@ -35,6 +35,48 @@ const ACADEMIC_SCHEMA_STATEMENTS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS "Student_nameKey_key" ON "Student"("nameKey")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "Student_phoneKey_key" ON "Student"("phoneKey")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "Student_telegramKey_key" ON "Student"("telegramKey")`,
+
+  // ---------------------------------------------------------------------------
+  // ROOT-CAUSE FIX: Grade status ↔ score consistency safety net.
+  // ---------------------------------------------------------------------------
+  // Even though the CHECK constraint `Grade_status_score_consistency`
+  // (added by migration 20260712143000) already rejects contradictory rows
+  // (status != 'درجة' AND score IS NOT NULL), and the application layer
+  // also validates via `assertGradeStatusScoreConsistency`, this trigger is
+  // the FINAL defense. It silently coerces score = NULL whenever a non-'درجة'
+  // status is persisted, so a buggy caller or a hand-written SQL UPDATE can
+  // never produce the contradiction. The CHECK constraint never even fires
+  // for this case because the trigger runs BEFORE the constraint check.
+  //
+  // The first statement is a one-time cleanup of any legacy contradictory
+  // rows that pre-date the CHECK constraint. It is idempotent.
+  `UPDATE "Grade"
+   SET "score" = NULL
+   WHERE "status" IS DISTINCT FROM 'درجة'
+     AND "score" IS NOT NULL`,
+
+  `CREATE OR REPLACE FUNCTION "enforce_grade_status_score_consistency"()
+   RETURNS trigger
+   LANGUAGE plpgsql
+   AS $$
+   BEGIN
+     IF NEW."status" IS NULL THEN
+       RAISE EXCEPTION 'Grade.status cannot be NULL';
+     END IF;
+     NEW."status" := btrim(NEW."status");
+     IF NEW."status" <> 'درجة' AND NEW."score" IS NOT NULL THEN
+       NEW."score" := NULL;
+     END IF;
+     RETURN NEW;
+   END;
+   $$`,
+
+  `DROP TRIGGER IF EXISTS "Grade_enforce_status_score_consistency" ON "Grade"`,
+
+  `CREATE TRIGGER "Grade_enforce_status_score_consistency"
+   BEFORE INSERT OR UPDATE OF "status", "score" ON "Grade"
+   FOR EACH ROW
+   EXECUTE FUNCTION "enforce_grade_status_score_consistency"()`,
 ] as const;
 
 let ensurePromise: Promise<void> | null = null;

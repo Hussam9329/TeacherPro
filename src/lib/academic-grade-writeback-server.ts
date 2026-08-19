@@ -12,6 +12,7 @@ import {
   PRE_REGISTRATION_GRADE_EXCLUSION_REASON,
   PRE_REGISTRATION_GRADE_EXCLUSION_SOURCE,
 } from "@/lib/pre-registration-grade";
+import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
 
 export type AcademicGradeWritebackStatus =
   | "درجة"
@@ -202,10 +203,21 @@ export async function syncAcademicGradeWriteback(
 
   const status = normalizeAcademicGradeStatus(input.status);
   const scoreWasProvided = input.score !== undefined;
-  // Non-numeric states never consume or validate a stale numeric value from the client.
-  const score = status === "درجة" ? parseNumericScore(input.score) : null;
 
-  if (status === "درجة" && score === undefined && !input.allowBlankGrade) {
+  // ROOT-CAUSE FIX: Enforce status/score consistency at the SINGLE writeback
+  // chokepoint that every grade-writing path goes through. If the caller
+  // passed a non-"درجة" status together with a non-null score, the assertion
+  // throws an AcademicGradeWritebackError with a clear Arabic message. The DB
+  // trigger (migration 20260820090000) and the CHECK constraint
+  // `Grade_status_score_consistency` remain as the final safety nets.
+  assertGradeStatusScoreConsistency(status, input.score);
+
+  // Non-numeric states never consume or validate a stale numeric value from the client.
+  const parsedScore =
+    status === "درجة" ? parseNumericScore(input.score) : null;
+  const score = parsedScore === undefined ? null : parsedScore;
+
+  if (status === "درجة" && parsedScore === undefined && !input.allowBlankGrade) {
     return null;
   }
 

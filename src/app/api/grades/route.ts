@@ -35,6 +35,7 @@ import {
   upsertGradeSmartNote,
 } from "@/lib/grade-smart-notes-server";
 import { reconcileExpiredGracePendingGrades } from "@/lib/grade-smart-note-grace-expiry-server";
+import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
 
 function parsePositiveInt(
   value: string | null,
@@ -578,6 +579,19 @@ export async function POST(req: NextRequest) {
       return validationError("حالة الدرجة غير صحيحة");
     }
 
+    // ROOT-CAUSE FIX: Reject any contradictory (status != "درجة", score != null)
+    // payload BEFORE we enter the transaction. The DB trigger and CHECK
+    // constraint are the last line of defense, but a clean Arabic error here
+    // is far more useful than a raw Postgres CHECK violation surfaced later.
+    try {
+      assertGradeStatusScoreConsistency(body.status, body.score);
+    } catch (error) {
+      if (error instanceof AcademicGradeWritebackError) {
+        return validationError(error.message, error.status);
+      }
+      throw error;
+    }
+
     // Q100 FIX: Use SERIALIZABLE isolation with retry to prevent concurrent
     // recalculation conflicts. Two parallel writes to the same student
     // (e.g. teacher edits a grade while admin adds an opportunity) would
@@ -915,6 +929,38 @@ export async function PUT(req: NextRequest) {
 
     if (body.status !== undefined && !["درجة", "غائب", "غش"].includes(String(body.status))) {
       return validationError("حالة الدرجة غير صحيحة");
+    }
+
+    // ROOT-CAUSE FIX: Even on PUT, never accept a contradictory
+    // (status != "درجة", score != null) payload. The effective score may
+    // come from the request body OR the existing row when the caller only
+    // sends `status` — so we validate BOTH branches explicitly below.
+    try {
+      // Branch A: caller supplied a new score in this request.
+      if (body.score !== undefined) {
+        assertGradeStatusScoreConsistency(body.status, body.score);
+      }
+      // Branch B: caller changed status but did not send a new score.
+      // In that case the writeback layer preserves the existing score,
+      // which would create a contradiction if the new status is not "درجة".
+      // Reject this explicitly so the caller knows to send score: null.
+      else if (
+        body.status !== undefined &&
+        String(body.status).trim() !== "درجة" &&
+        targetGrade.score !== null &&
+        targetGrade.score !== undefined
+      ) {
+        throw new AcademicGradeWritebackError(
+          `لا يمكن تغيير الحالة إلى «${body.status}» لأن الطالب لديه درجة رقمية محفوظة (${targetGrade.score}). ` +
+            `أرسل الحقل score: null مع الطلب لمسح الدرجة، أو غيّر الحالة إلى «درجة» مع درجة جديدة.`,
+          400,
+        );
+      }
+    } catch (error) {
+      if (error instanceof AcademicGradeWritebackError) {
+        return validationError(error.message, error.status);
+      }
+      throw error;
     }
 
     // Q100 FIX: SERIALIZABLE isolation with retry on conflict.

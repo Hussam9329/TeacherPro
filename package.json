@@ -54,7 +54,8 @@
     "test:opportunity-source-integrity": "node scripts/test-opportunity-source-integrity.mjs",
     "test:student-transfer-lifecycle-integrity": "node scripts/test-student-transfer-lifecycle-integrity.mjs",
     "test:grade-exam-policy-integrity": "node scripts/test-grade-exam-policy-integrity.mjs",
-    "test:deployment-migration-integrity": "node scripts/test-deployment-migration-integrity.mjs"
+    "test:deployment-migration-integrity": "node scripts/test-deployment-migration-integrity.mjs",
+    "verify:grade-score-consistency": "node scripts/verify_grade_score_consistency.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1080.0",

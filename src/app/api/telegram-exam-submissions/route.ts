@@ -26,6 +26,7 @@ import {
   syncAcademicGradeWriteback,
 } from "@/lib/academic-grade-writeback-server";
 import { writeRequestAuditLog, writeSystemAuditLog } from "@/lib/audit-log-server";
+import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
 
 type IncomingPage = {
   [key: string]: unknown;
@@ -824,6 +825,24 @@ export async function PUT(req: NextRequest) {
       return validationError(
         "هذا المستلم يحتاج مراجعة يدوية قبل اعتماده كمكتمل. أكد المراجعة اليدوية ثم أعد المحاولة.",
       );
+    }
+
+    // ROOT-CAUSE FIX: When the caller asks to persist a grade through this
+    // endpoint, never accept a contradictory (status != "درجة", score != null)
+    // payload. The Telegram bot or the corrector UI could otherwise push a
+    // score that contradicts the chosen status.
+    if (hasAcademicGradeWritebackPayload(body as Record<string, unknown>)) {
+      try {
+        assertGradeStatusScoreConsistency(
+          readAcademicGradeWritebackStatus(body as Record<string, unknown>, "درجة"),
+          readAcademicGradeWritebackScore(body as Record<string, unknown>),
+        );
+      } catch (error) {
+        if (error instanceof AcademicGradeWritebackError) {
+          return validationError(error.message, error.status);
+        }
+        throw error;
+      }
     }
 
     // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
