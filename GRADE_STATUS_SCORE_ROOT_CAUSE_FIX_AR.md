@@ -506,4 +506,76 @@ Response:
 
 كل منها الآن ممنوع في عدة طبقات حماية، وجميع البيانات التاريخية نُظّفت في الإنتاج.
 
+---
+
+## 11. الإصلاح الرابع (2026-08-20) — منع ظهور "فصل" على طالب مجاز في الواجهة
+
+### المشكلة الرابعة المُكتشفة
+بعد الإصلاح الثالث، أبلغ المستخدم عن الطالبة «روان ياسر عبدالاله علوان» (BIO-2401): في سجل الدرجات، الدرجة `status="مجاز"` + `notes="الطالب مجاز من هذا الامتحان."` ✅، لكن في العمود الأيمن يظهر لها شارة **"فصل"** خطأً!
+
+### السبب الجذري الحقيقي
+في `teacher-store.ts` الـ `classification` function، الكود كان:
+1. يفحص `academicEffectExcluded` → false
+2. يفحص `StudentLeave` في الـ store → **لا يجد شيئاً** (لأن روان ليس لها StudentLeave record في DB)
+3. لا يوجد فرع صريح لـ `status="مجاز"` → يتجاوز
+4. يصل إلى: `score = Number(grade.score) || 0` = 0 (لأن `score=null`)
+5. `exam.type === "فاينل"` → true (الامتحان 16 فاينل)
+6. `score === 0` → true
+7. → يرجع `{ text: "فصل", kind: "dismissal" }` ❌
+
+**السبب العميق:** Migration `20260820110000` حوّل `status="غائب"` → `status="مجاز"` عندما وجد StudentLeave، لكنه **لم يُنشئ StudentLeave records** للدرجات التي كانت `status="مجاز"` بالفعل (دون leave فعلي). الـ `classification` function كان يعتمد على StudentLeave لتحديد "مجاز"، فلم يجد شيئاً.
+
+### الفحص الإنتاجي
+```sql
+SELECT * FROM "StudentLeave" WHERE "studentId" = 'cmre0vbul000dld04gk9ncazf'
+-- 0 records! روان ليس لها أي StudentLeave رغم status="مجاز"
+```
+
+### الإصلاح — 3 طبقات
+
+#### الطبقة 1: `teacher-store.ts` — فرع صريح لـ `status="مجاز"`
+أُضيف قبل أي فحص score-based:
+```typescript
+if (grade?.status === "مجاز")
+  return { text: "مجاز", type: "info", kind: "excused" };
+```
+كذلك حماية إضافية لـ `"ضمن فترة السماح"` و `"قبل تسجيل الطالب"` بنفس النمط — هذه حالات marker يضعها الـ server ويجب ألا تصل أبداً لفحص score.
+
+#### الطبقة 2: Migration `20260820120000_backfill_student_leaves_for_excused_grades`
+إنشاء StudentLeave records لكل درجة `status="مجاز"` + `notes="الطالب مجاز من هذا الامتحان."` بدون StudentLeave فعلي:
+- `leaveType="exam"`
+- `reason="مجاز تلقائياً من تسوية تاريخية"`
+- IDs deterministic: `'backfill_leave_<studentId>_<examId>'`
+- `ON CONFLICT DO NOTHING` (idempotent)
+
+#### الطبقة 3: `academic-schema.ts`
+نفس عبارة INSERT أُضيفت إلى schema-repair لتُطبّق تلقائياً على كل نشر.
+
+### التحقق الحيّ على الإنتاج
+
+| المقياس | قبل | بعد |
+|---|---|---|
+| StudentLeave records | 408 | **684** (+276 backfilled) |
+| Orphan `status="مجاز"` بدون StudentLeave | 276 | **0** |
+| روان StudentLeave | غير موجود | ✅ `backfill_leave_cmre0vbul000dld04gk9ncazf_cmsnbgea70003jy04tc1sba3t` |
+| روان `classification` في الواجهة | "فصل" ❌ | "مجاز" ✅ |
+
+### الملفات المُعدّلة في الإصلاح الرابع
+| الملف | النوع | الوصف |
+|---|---|---|
+| `src/lib/teacher-store.ts` | معدّل | إضافة فرع `status="مجاز"` + حماية `"ضمن فترة السماح"` و `"قبل تسجيل الطالب"` |
+| `prisma/migrations/20260820120000_backfill_student_leaves_for_excused_grades/migration.sql` | جديد | إنشاء 276 StudentLeave record |
+| `src/lib/academic-schema.ts` | معدّل | إضافة عبارة INSERT للتطبيق التلقائي |
+
+### الخلاصة الكلية للإصلاحات الأربعة
+المشاكل الأربع كانت مترابطة لكنها ظاهرت مختلفتان:
+
+1. **تناقض الحالة × الدرجة** — الإصلاح الأول.
+2. **تناقض الحالة × الملاحظات** (status="درجة" + ملاحظة غياب) — الإصلاح الثاني.
+3. **تناقض الإجازة × الغياب** (status="غائب" + إجازة فعلية) — الإصلاح الثالث.
+4. **عدم تطابق `status="مجاز"` مع StudentLeave record** — الإصلاح الرابع.
+
+كل منها الآن ممنوع في عدة طبقات حماية، وجميع البيانات التاريخية نُظّفت وصُحّحت في الإنتاج.
+
+
 
