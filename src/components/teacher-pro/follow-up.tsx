@@ -68,7 +68,7 @@ type CallCategory =
   | "protected"
   | "missing";
 type CallStatusFilter =
-  "all" | "absent" | "discounted" | "failed" | "cheating" | "passed" | "full";
+  "all" | "absent" | "discounted" | "failed" | "cheating" | "passed" | "full" | "protected";
 type CallGradeDisplayMode = "latest" | "latest-two" | "all";
 type CallBadgeTone = "deducted" | "warning" | "safe" | "success" | "neutral";
 type CallBadgeInfo = { label: string; tone: CallBadgeTone; detail?: string };
@@ -170,6 +170,7 @@ const callStatusFilterLabels: Record<CallStatusFilter, string> = {
   cheating: "طلاب الغش",
   passed: "الطلاب الناجحين",
   full: "الدرجات الكاملة",
+  protected: "المحميون (مجاز/سماح/قبل التسجيل)",
 };
 
 const callStatusFilterOptions = Object.keys(
@@ -177,6 +178,8 @@ const callStatusFilterOptions = Object.keys(
 ) as CallStatusFilter[];
 
 function callStatusSupportsGradeRange(status: CallStatusFilter): boolean {
+  // "absent" و "cheating" ليس لديهما درجة رقمية. "protected" قد يحمل
+  // درجة فعلية (مثل درجات ما قبل التسجيل) لذا ندعم نطاق الدرجة لها.
   return status !== "absent" && status !== "cheating";
 }
 

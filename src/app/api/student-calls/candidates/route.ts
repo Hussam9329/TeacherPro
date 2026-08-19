@@ -33,7 +33,8 @@ export type CallStatusFilter =
   | "failed"
   | "cheating"
   | "passed"
-  | "full";
+  | "full"
+  | "protected";
 
 type CallKind =
   | "absent"
@@ -117,7 +118,12 @@ type DbLeaveLite = {
 };
 
 const CALL_STUDENT_NOTE_CATEGORY = "call-student-note";
-const NON_DISPLAY_CALL_KINDS = new Set<CallKind>(["missing", "protected"]);
+// ROOT-CAUSE FIX (الإصلاح السابع — شمل المحميين في فلتر "كل الحالات"):
+// سابقاً "protected" كان ضمن NON_DISPLAY_CALL_KINDS فلم يكن يظهر إطلاقاً.
+// الآن نُبقي فقط "missing" (لا توجد درجة) كمستثنى، ونسمح بعرض المحميين
+// (مجاز، ضمن السماح، قبل التسجيل، no-discount-protected، academic-effect-excluded)
+// ليطابق عددي سجل الدرجات في صفحة المكالمات.
+const NON_DISPLAY_CALL_KINDS = new Set<CallKind>(["missing"]);
 
 function normalizeCallStatusFilter(value: string | null): CallStatusFilter {
   const normalized = normalizeListFilter(value);
@@ -130,7 +136,8 @@ function normalizeCallStatusFilter(value: string | null): CallStatusFilter {
     normalized === "failed" ||
     normalized === "cheating" ||
     normalized === "passed" ||
-    normalized === "full"
+    normalized === "full" ||
+    normalized === "protected"
   ) {
     return normalized;
   }
@@ -355,6 +362,8 @@ function gradeMatchesStatusFilter(
   absenceSource?: CallAbsenceSource | null,
 ): boolean {
   if (filter === "all") {
+    // ROOT-CAUSE FIX: شمل المحميين (مجاز، ضمن السماح، قبل التسجيل) في
+    // فلتر "كل الحالات" ليطابق عددي سجل الدرجات. فقط missing مستثنى.
     return Boolean(absenceSource) || !NON_DISPLAY_CALL_KINDS.has(kind);
   }
   if (filter === "absent") return Boolean(absenceSource);
@@ -363,6 +372,7 @@ function gradeMatchesStatusFilter(
   if (filter === "failed") {
     return !isDeductedImpact(impactKind) && (kind === "failed" || kind === "academic-accounting");
   }
+  if (filter === "protected") return kind === "protected";
   return kind === filter;
 }
 

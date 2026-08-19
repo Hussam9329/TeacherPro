@@ -32,7 +32,8 @@ type CallStatusFilter =
   | "failed"
   | "cheating"
   | "passed"
-  | "full";
+  | "full"
+  | "protected";
 
 type ContactStatus = "" | "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
 
@@ -110,7 +111,8 @@ function normalizeCallStatusFilter(value: string | null): CallStatusFilter {
     normalized === "failed" ||
     normalized === "cheating" ||
     normalized === "passed" ||
-    normalized === "full"
+    normalized === "full" ||
+    normalized === "protected"
   ) {
     return normalized;
   }
@@ -188,8 +190,14 @@ function gradeMatchesStatusFilter(
   if (!grade && !absenceSource) return false;
   const impactKind = classifyCallImpact(grade, exam, student, leaves);
   const kind = absenceSource ? "absent" : gradeKindForCalls(impactKind);
+  // ROOT-CAUSE FIX (الإصلاح السابع — شمل المحميين في فلتر "كل الحالات"):
+  // سابقاً: فلتر "all" كان يستثني kind === "missing" و kind === "protected".
+  // الآن: يستثني فقط "missing" (لا توجد درجة). أما المحميون (مجاز، ضمن
+  // السماح، قبل التسجيل، no-discount-protected، academic-effect-excluded)
+  // فيُعرضون في "كل الحالات" ليطابق عددي سجل الدرجات. يمكن للمستخدم
+  // استخدام فلتر "protected" لعرضهم منفصلين، أو الفلاتر الأخرى لاستثنائهم.
   if (filter === "all") {
-    return Boolean(absenceSource) || (kind !== "missing" && kind !== "protected");
+    return Boolean(absenceSource) || kind !== "missing";
   }
   if (filter === "absent") return Boolean(absenceSource);
   if (filter === "discounted") return isDeductedImpact(impactKind);
@@ -197,6 +205,7 @@ function gradeMatchesStatusFilter(
   if (filter === "failed") {
     return !isDeductedImpact(impactKind) && (kind === "failed" || kind === "academic-accounting");
   }
+  if (filter === "protected") return kind === "protected";
   return kind === filter;
 }
 
