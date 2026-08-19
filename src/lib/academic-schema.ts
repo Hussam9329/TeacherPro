@@ -189,6 +189,76 @@ const ACADEMIC_SCHEMA_STATEMENTS = [
          AND sl."examId" = g."examId"
      )
    ON CONFLICT ("studentId", "examId") DO NOTHING`,
+
+  // ---------------------------------------------------------------------------
+  // ROOT-CAUSE FIX (الإصلاح الخامس -graded row with stale excused note):
+  // Replace stale excused note on graded rows. The previous cleanup patterns
+  // looked for absence phrases ("تسجيل جماعي كغائب") but missed the excused
+  // variant ("تسجيل تلقائي: الطالب مجاز من هذا الامتحان").
+  // ---------------------------------------------------------------------------
+  `UPDATE "Grade"
+   SET "notes" = 'تم تصحيح الدرجة يدوياً بدلاً من التسجيل التلقائي السابق.'
+   WHERE "status" = 'درجة'
+     AND "score" IS NOT NULL
+     AND (
+       "notes" LIKE '%تسجيل تلقائي%مجاز%'
+       OR "notes" LIKE '%الطالب مجاز من هذا الامتحان%'
+     )`,
+
+  // ---------------------------------------------------------------------------
+  // ROOT-CAUSE FIX (الإصلاح الخامس - status with active leave):
+  // Convert 'ضمن فترة السماح' / 'قبل تسجيل الطالب' to 'مجاز' when an active
+  // exam-leave exists. The leave is more authoritative than the grace-period
+  // or pre-registration marker.
+  // ---------------------------------------------------------------------------
+  `UPDATE "Grade" AS g
+   SET
+     "status" = 'مجاز',
+     "notes" = 'الطالب مجاز من هذا الامتحان.'
+   FROM "StudentLeave" AS sl
+   WHERE sl."studentId" = g."studentId"
+     AND sl."examId" = g."examId"
+     AND g."status" IN ('ضمن فترة السماح', 'قبل تسجيل الطالب')`,
+
+  // ---------------------------------------------------------------------------
+  // ROOT-CAUSE FIX (الإصلاح الخامس - orphan مجاز without note):
+  // Set the proper note on orphan 'مجاز' grades (empty notes + no StudentLeave).
+  // The next statement then backfills the StudentLeave record.
+  // ---------------------------------------------------------------------------
+  `UPDATE "Grade"
+   SET "notes" = 'الطالب مجاز من هذا الامتحان.'
+   WHERE "status" = 'مجاز'
+     AND (notes IS NULL OR notes = '')
+     AND NOT EXISTS (
+       SELECT 1 FROM "StudentLeave" sl
+       WHERE sl."studentId" = "Grade"."studentId"
+         AND sl."examId" = "Grade"."examId"
+     )`,
+
+  // Re-run backfill (now catches orphan مجاز rows that just got the proper note).
+  // The idempotent INSERT ON CONFLICT DO NOTHING means re-running is safe.
+  `INSERT INTO "StudentLeave" ("id", "studentId", "examId", "leaveType", "reason", "studyType", "date", "dateFrom", "dateTo", "notes", "createdAt")
+   SELECT
+     'backfill_leave_' || g."studentId" || '_' || g."examId",
+     g."studentId",
+     g."examId",
+     'exam',
+     'مجاز تلقائياً من تسوية تاريخية',
+     '',
+     g."updatedAt",
+     NULL,
+     NULL,
+     'تم إنشاء هذا السجل تلقائياً من تسوية تاريخية للدرجات المحوّلة من غائب إلى مجاز.',
+     NOW()
+   FROM "Grade" g
+   WHERE g."status" = 'مجاز'
+     AND g."notes" = 'الطالب مجاز من هذا الامتحان.'
+     AND NOT EXISTS (
+       SELECT 1 FROM "StudentLeave" sl
+       WHERE sl."studentId" = g."studentId"
+         AND sl."examId" = g."examId"
+     )
+   ON CONFLICT ("studentId", "examId") DO NOTHING`,
 ] as const;
 
 let ensurePromise: Promise<void> | null = null;
