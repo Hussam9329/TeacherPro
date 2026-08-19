@@ -110,6 +110,66 @@ function buildGradeExportWhere(
   return and.length > 0 ? { AND: and } : {};
 }
 
+/**
+ * ROOT-CAUSE FIX (الإصلاح السادس — تطابق تصدير الدرجات مع فلتر المكالمات):
+ *
+ * When an examId filter is present, load the exam's courseIds and add a
+ * `student.courseId IN exam.courseIds` filter automatically. This makes
+ * the grade-records export match the behavior of the calls page, which
+ * uses `studentCourseScopeWhere(courseId, ...)` to only show students
+ * currently in the exam's course.
+ *
+ * Without this fix, the export counts 1785 rows for exam 16 (including 72
+ * historical grades of students who transferred to another course) while
+ * the calls page shows 1713 (only current course students). The user
+ * sees a discrepancy of 72 with no explanation.
+ *
+ * The fix preserves backward compatibility:
+ *   - If examId is not set → no extra filter (same as before).
+ *   - If examId is set but the exam has no courseIds → no extra filter
+ *     (we cannot restrict, same as before).
+ *   - If the caller already passed courseId explicitly → no extra filter
+ *     (the caller knows what they want; we don't override).
+ *
+ * Returns the Prisma.GradeWhereInput to use for the query.
+ */
+async function buildGradeExportWhereWithExamCourseFilter(
+  searchParams: URLSearchParams,
+): Promise<Prisma.GradeWhereInput> {
+  const where = buildGradeExportWhere(searchParams);
+
+  const examId = normalizeListFilter(searchParams.get("examId"));
+  const explicitCourseId = normalizeListFilter(searchParams.get("courseId"));
+
+  // If the caller already passed a courseId filter, don't override it.
+  if (!examId || explicitCourseId) return where;
+
+  // Load the exam's courseIds and add a student.courseId filter.
+  const exam = await db.exam.findUnique({
+    where: { id: examId },
+    select: { courseIds: true },
+  });
+  if (!exam) return where;
+
+  const examCourseIds = parseCourseIds(exam.courseIds);
+  if (examCourseIds.length === 0) return where;
+
+  // Merge the course filter into the existing where clause.
+  const existingStudentFilter =
+    (where as { student?: { is?: Prisma.StudentWhereInput } }).student?.is;
+  const courseFilter: Prisma.StudentWhereInput = {
+    courseId: { in: examCourseIds },
+  };
+  const mergedStudentFilter = existingStudentFilter
+    ? { AND: [existingStudentFilter, courseFilter] }
+    : courseFilter;
+
+  return {
+    ...(where as Record<string, unknown>),
+    student: { is: mergedStudentFilter },
+  } as Prisma.GradeWhereInput;
+}
+
 type GradeStatusFilter =
   | "all"
   | "excused"
@@ -495,7 +555,7 @@ export async function GET(req: NextRequest) {
         includesStudentsWithoutGrades: true,
       });
     }
-    const where = buildGradeExportWhere(searchParams);
+    const where = await buildGradeExportWhereWithExamCourseFilter(searchParams);
     const statusFilter = normalizeGradeStatusFilter(searchParams);
 
     if (databaseComputedGradeFilters.has(statusFilter)) {

@@ -145,6 +145,55 @@ function buildGradeWhere(
   return and.length > 0 ? { AND: and } : {};
 }
 
+/**
+ * ROOT-CAUSE FIX (الإصلاح السادس — تطابق سجل الدرجات مع فلتر المكالمات):
+ *
+ * Wrapper around buildGradeWhere that auto-adds a `student.courseId IN
+ * exam.courseIds` filter when an `examId` is present but no explicit
+ * `courseId` was passed. This makes the grade-records page match the
+ * behavior of the calls page, which uses `studentCourseScopeWhere`.
+ *
+ * Without this fix, grade-records shows 1785 rows for exam 16 (including
+ * 72 historical grades of students who transferred out), while the calls
+ * page shows 1713 (current course students only).
+ */
+async function buildGradeWhereWithExamCourseFilter(
+  searchParams: URLSearchParams,
+): Promise<Prisma.GradeWhereInput> {
+  const where = buildGradeWhere(searchParams);
+
+  const examId = normalizeListFilter(searchParams.get("examId"));
+  const explicitCourseId = normalizeListFilter(searchParams.get("courseId"));
+
+  // If the caller already passed a courseId filter, don't override it.
+  if (!examId || explicitCourseId) return where;
+
+  // Load the exam's courseIds and add a student.courseId filter.
+  const exam = await db.exam.findUnique({
+    where: { id: examId },
+    select: { courseIds: true },
+  });
+  if (!exam) return where;
+
+  const parsedCourseIds = examCourseIds(exam.courseIds);
+  if (parsedCourseIds.length === 0) return where;
+
+  // Merge the course filter into the existing where clause.
+  const existingStudentFilter =
+    (where as { student?: { is?: Prisma.StudentWhereInput } }).student?.is;
+  const courseFilter: Prisma.StudentWhereInput = {
+    courseId: { in: parsedCourseIds },
+  };
+  const mergedStudentFilter = existingStudentFilter
+    ? { AND: [existingStudentFilter, courseFilter] }
+    : courseFilter;
+
+  return {
+    ...(where as Record<string, unknown>),
+    student: { is: mergedStudentFilter },
+  } as Prisma.GradeWhereInput;
+}
+
 type GradeStatusFilter =
   | "all"
   | "excused"
@@ -490,7 +539,7 @@ export async function GET(req: NextRequest) {
     // The old UI-only filters (full mark / discounted / failed / accounting / grace)
     // must be computed over the complete database result, then paginated after that.
     // Otherwise page 1 only is filtered locally and totals/exports become incomplete.
-    const where = buildGradeWhere(searchParams);
+    const where = await buildGradeWhereWithExamCourseFilter(searchParams);
     const needsDatabaseComputedFilter =
       databaseComputedGradeFilters.has(statusFilter);
 
