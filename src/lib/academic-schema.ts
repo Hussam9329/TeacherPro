@@ -157,6 +157,38 @@ const ACADEMIC_SCHEMA_STATEMENTS = [
      END IF;
    END
    $$`,
+
+  // ---------------------------------------------------------------------------
+  // ROOT-CAUSE FIX (الإصلاح الرابع - backfill StudentLeave): For every grade
+  // with status='مجاز' AND notes='الطالب مجاز من هذا الامتحان.' AND no
+  // matching StudentLeave row → create a StudentLeave record so the UI's
+  // classification function (which checks studentLeaves) returns "مجاز"
+  // instead of falling through to the score-based checks (which would
+  // incorrectly return "فصل" for a final exam with score=null→0).
+  // ---------------------------------------------------------------------------
+  // ON CONFLICT DO NOTHING makes this idempotent.
+  `INSERT INTO "StudentLeave" ("id", "studentId", "examId", "leaveType", "reason", "studyType", "date", "dateFrom", "dateTo", "notes", "createdAt")
+   SELECT
+     'backfill_leave_' || g."studentId" || '_' || g."examId",
+     g."studentId",
+     g."examId",
+     'exam',
+     'مجاز تلقائياً من تسوية تاريخية',
+     '',
+     g."updatedAt",
+     NULL,
+     NULL,
+     'تم إنشاء هذا السجل تلقائياً من تسوية تاريخية للدرجات المحوّلة من غائب إلى مجاز.',
+     NOW()
+   FROM "Grade" g
+   WHERE g."status" = 'مجاز'
+     AND g."notes" = 'الطالب مجاز من هذا الامتحان.'
+     AND NOT EXISTS (
+       SELECT 1 FROM "StudentLeave" sl
+       WHERE sl."studentId" = g."studentId"
+         AND sl."examId" = g."examId"
+     )
+   ON CONFLICT ("studentId", "examId") DO NOTHING`,
 ] as const;
 
 let ensurePromise: Promise<void> | null = null;

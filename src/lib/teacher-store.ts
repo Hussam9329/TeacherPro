@@ -3330,6 +3330,21 @@ export const useTeacherStore = create<TeacherState>()(
           )
         )
           return { text: "مجاز", type: "info", kind: "excused" };
+        // ROOT-CAUSE FIX (الإصلاح الرابع): if the grade itself carries
+        // status="مجاز", classify it as "مجاز" regardless of whether a
+        // matching StudentLeave record is loaded in the store. Previously,
+        // a grade with status="مجاز" but no StudentLeave in the store
+        // would fall through to the score-based checks. For a final exam
+        // (type="فاينل") with score=null→0, this would incorrectly return
+        // "فصل" — exactly the bug reported for روان ياسر عبدالاله علوان
+        // (BIO-2401) on 2026-08-20.
+        //
+        // This also defends against any historical row where status="مجاز"
+        // was set without creating a StudentLeave record (e.g., the
+        // 20260820110000 migration converted غائب→مجاز but did not create
+        // the corresponding StudentLeave rows).
+        if (grade?.status === "مجاز")
+          return { text: "مجاز", type: "info", kind: "excused" };
         if (!grade || !isGradeEntered(grade, exam))
           return { text: "غير مسجل", type: "neutral", kind: "missing" };
         if (student && !isExamOnOrAfterStudentRegistration(student, exam))
@@ -3338,6 +3353,13 @@ export const useTeacherStore = create<TeacherState>()(
           return { text: "غير محتسب", type: "info", kind: "unavailable-exam" };
         if (student && isExamWithinStudentGracePeriod(student, exam))
           return { text: "ضمن السماح", type: "info", kind: "grace" };
+        // Same defensive guard for "ضمن فترة السماح" and "قبل تسجيل الطالب"
+        // — these are server-set marker statuses and should never fall
+        // through to the score-based checks.
+        if (grade.status === "ضمن فترة السماح")
+          return { text: "ضمن السماح", type: "info", kind: "grace" };
+        if (grade.status === "قبل تسجيل الطالب")
+          return { text: "قبل التسجيل", type: "info", kind: "before-registration" };
         if (grade.status === "غش")
           return { text: "غش", type: "danger", kind: "cheat" };
         if (exam.noDiscount) {
