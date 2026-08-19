@@ -104,14 +104,15 @@ const ACADEMIC_SCHEMA_STATEMENTS = [
   // ROOT-CAUSE FIX (excused students with stale absence notes): Clean up
   // rows where status='مجاز' but notes contains an automatic batch-absence
   // phrase. Replace with an authoritative excused note.
+  // Broader LIKE patterns with % between words to catch whitespace variations.
   // ---------------------------------------------------------------------------
   `UPDATE "Grade"
    SET "notes" = 'الطالب مجاز من هذا الامتحان.'
    WHERE "status" = 'مجاز'
      AND (
-       COALESCE("notes", '') LIKE '%تسجيل جماعي كغائب%'
-       OR COALESCE("notes", '') LIKE '%تسجيل تلقائي: الامتحان يسبق%'
-       OR COALESCE("notes", '') LIKE '%تسجيل تلقائي: الطالب ضمن فترة السماح%'
+       COALESCE("notes", '') LIKE '%تسجيل%كغائب%'
+       OR COALESCE("notes", '') LIKE '%تسجيل تلقائي%'
+       OR COALESCE("notes", '') LIKE '%جماعي%كغائب%'
      )`,
 
   // ---------------------------------------------------------------------------
@@ -130,19 +131,32 @@ const ACADEMIC_SCHEMA_STATEMENTS = [
      AND sl."examId" = g."examId"
      AND g."status" IN ('غائب', 'غش')`,
 
-  `UPDATE "Grade" AS g
-   SET
-     "status" = 'مجاز',
-     "notes" = 'الطالب مجاز من هذا الامتحان.'
-   FROM "StudentLeave" AS sl
-   JOIN "Exam" AS e ON e."id" = g."examId"
-   WHERE sl."studentId" = g."studentId"
-     AND sl."leaveType" = 'period'
-     AND sl."dateFrom" IS NOT NULL
-     AND sl."dateTo" IS NOT NULL
-     AND e."date" >= sl."dateFrom"
-     AND e."date" <= sl."dateTo"
-     AND g."status" IN ('غائب', 'غش')`,
+  // Period leaves: use a subquery to collect target IDs because Postgres
+  // UPDATE ... FROM does not allow joining the target table from the FROM
+  // clause. The DO block is idempotent and safe to re-run.
+  `DO $$
+   DECLARE
+     target_ids text[];
+   BEGIN
+     SELECT array_agg(DISTINCT g.id) INTO target_ids
+     FROM "Grade" g
+     JOIN "StudentLeave" sl ON sl."studentId" = g."studentId"
+     JOIN "Exam" e ON e."id" = g."examId"
+     WHERE sl."leaveType" = 'period'
+       AND sl."dateFrom" IS NOT NULL
+       AND sl."dateTo" IS NOT NULL
+       AND e."date" >= sl."dateFrom"
+       AND e."date" <= sl."dateTo"
+       AND g."status" IN ('غائب', 'غش');
+     IF target_ids IS NOT NULL AND array_length(target_ids, 1) > 0 THEN
+       UPDATE "Grade"
+       SET
+         "status" = 'مجاز',
+         "notes" = 'الطالب مجاز من هذا الامتحان.'
+       WHERE id = ANY(target_ids);
+     END IF;
+   END
+   $$`,
 ] as const;
 
 let ensurePromise: Promise<void> | null = null;
