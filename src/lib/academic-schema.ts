@@ -77,6 +77,28 @@ const ACADEMIC_SCHEMA_STATEMENTS = [
    BEFORE INSERT OR UPDATE OF "status", "score" ON "Grade"
    FOR EACH ROW
    EXECUTE FUNCTION "enforce_grade_status_score_consistency"()`,
+
+  // ---------------------------------------------------------------------------
+  // ROOT-CAUSE FIX (stale absence notes): One-time cleanup of graded rows
+  // whose notes column still contains an automatic batch-absence phrase.
+  // ---------------------------------------------------------------------------
+  // The mark-missing-absent endpoint sets notes to "تسجيل جماعي كغائب...".
+  // If the teacher later corrects such a row to a real numeric grade, the
+  // notes column was NOT being cleared, leaving the row with status='درجة',
+  // score=100, and a contradictory note saying the student was absent.
+  //
+  // The application layer (sanitizeStaleAbsenceNotes) prevents this going
+  // forward. This statement cleans up any historical rows that already
+  // have the contradiction. Idempotent — safe to run on every deploy.
+  `UPDATE "Grade"
+   SET "notes" = 'تم تصحيح الدرجة يدوياً بدلاً من التسجيل التلقائي السابق.'
+   WHERE "status" = 'درجة'
+     AND "score" IS NOT NULL
+     AND (
+       COALESCE("notes", '') LIKE '%تسجيل جماعي كغائب%'
+       OR COALESCE("notes", '') LIKE '%تسجيل تلقائي: الامتحان يسبق%'
+       OR COALESCE("notes", '') LIKE '%تسجيل تلقائي: الطالب ضمن فترة السماح%'
+     )`,
 ] as const;
 
 let ensurePromise: Promise<void> | null = null;

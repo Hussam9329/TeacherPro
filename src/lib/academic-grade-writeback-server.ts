@@ -14,6 +14,120 @@ import {
 } from "@/lib/pre-registration-grade";
 import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
 
+// ----------------------------------------------------------------------------
+// Stale Absence Notes — ROOT-CAUSE FIX
+// ----------------------------------------------------------------------------
+// Phrases that mark a Grade row as having been set by an AUTOMATIC batch
+// operation (mark-missing-absent endpoint or a grace-period migration).
+// When the teacher later corrects such a row to a real numeric grade, these
+// phrases become stale and contradictory — the row now has status="درجة"
+// with a real score, but a note saying "this student was absent".
+//
+// We detect and clear them whenever the row transitions from a non-"درجة"
+// status to "درجة", unless the caller explicitly provided a new notes string
+// that does NOT match any of these patterns.
+const STALE_AUTOMATIC_ABSENCE_NOTES_PATTERNS = [
+  "تسجيل جماعي كغائب",
+  "تسجيل تلقائي: الامتحان يسبق تاريخ تسجيل الطالب",
+  "تسجيل تلقائي: الطالب ضمن فترة السماح لهذا الامتحان",
+  "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
+] as const;
+
+function notesContainsStalePhrase(notes: string | null | undefined): boolean {
+  if (!notes) return false;
+  return STALE_AUTOMATIC_ABSENCE_NOTES_PATTERNS.some((phrase) =>
+    notes.includes(phrase),
+  );
+}
+
+/**
+ * Decide what `notes` value to persist, given the previous state and the
+ * caller-supplied next state. Returns one of:
+ *
+ *   - undefined    → caller did not provide notes, leave existing notes alone.
+ *   - ""           → clear notes (write empty string).
+ *   - "<text>"     → write this text.
+ *
+ * Rules:
+ *
+ *  1. If the status transitions from a non-"درجة" marker to "درجة"
+ *     (teacher is correcting an absent/cheating row into a real grade),
+ *     AND the caller-supplied notes are missing, empty, OR match the
+ *     previous notes (echoed back unchanged) → replace with a fresh
+ *     "تم تصحيح الدرجة يدوياً" note. This is the bug we are fixing.
+ *
+ *  2. Otherwise, return the caller-supplied notes unchanged. A user-typed
+ *     note is always preserved exactly.
+ *
+ *  3. As an additional safety net: even if the status did NOT change,
+ *     if the resulting notes string still contains one of the stale
+ *     automatic-absence phrases AND the row's status is "درجة" with a
+ *     real score → clear it. This catches any future regression that
+ *     somehow leaks a stale phrase onto a graded row.
+ */
+function sanitizeStaleAbsenceNotes(input: {
+  previousStatus: string | null;
+  previousNotes: string | null;
+  nextStatus: string;
+  nextNotes: string | undefined;
+}): string | undefined {
+  const { previousStatus, previousNotes, nextStatus, nextNotes } = input;
+
+  // The caller's resolved notes value (may be undefined = no change).
+  const callerNotes =
+    nextNotes === undefined
+      ? undefined
+      : String(nextNotes || "");
+
+  // Did the row transition from a non-"درجة" marker to "درجة"?
+  const transitionedToScoredGrade =
+    previousStatus &&
+    previousStatus !== "درجة" &&
+    nextStatus === "درجة";
+
+  // Did the caller "echo back" the previous notes unchanged? This happens
+  // when the grade-entry UI initializes draft.notes from the existing row
+  // and then saves without the user touching the notes field.
+  const echoedPreviousNotes =
+    callerNotes !== undefined &&
+    previousNotes !== null &&
+    callerNotes === previousNotes;
+
+  // Safety net: does the resulting notes still contain a stale phrase?
+  const resultingNotesContainsStalePhrase =
+    notesContainsStalePhrase(callerNotes) ||
+    (callerNotes === undefined && notesContainsStalePhrase(previousNotes));
+
+  // Rule 1: teacher corrected an absent/cheating row to a real grade,
+  // and either didn't provide fresh notes, or echoed the old ones back.
+  // Replace with a clean "corrected manually" note.
+  if (
+    transitionedToScoredGrade &&
+    (callerNotes === undefined || callerNotes === "" || echoedPreviousNotes)
+  ) {
+    return "تم تصحيح الدرجة يدوياً بدلاً من التسجيل التلقائي السابق.";
+  }
+
+  // Rule 3: safety net — clear any stale phrase that somehow ended up on
+  // a graded row. This catches historical data even without a status change.
+  if (
+    nextStatus === "درجة" &&
+    resultingNotesContainsStalePhrase &&
+    (callerNotes === undefined || callerNotes === "" || notesContainsStalePhrase(callerNotes))
+  ) {
+    // If the caller explicitly provided a non-stale note, keep it.
+    if (callerNotes && !notesContainsStalePhrase(callerNotes)) {
+      return callerNotes;
+    }
+    // Otherwise clear it — the previous stale phrase has no business
+    // sitting on a graded row.
+    return callerNotes === "" ? "" : "تم تصحيح الدرجة يدوياً.";
+  }
+
+  // Rule 2: default — keep the caller's notes unchanged.
+  return callerNotes;
+}
+
 export type AcademicGradeWritebackStatus =
   | "درجة"
   | "غائب"
@@ -392,6 +506,29 @@ export async function syncAcademicGradeWriteback(
         : undefined
       : String(input.notes || "");
 
+  // ROOT-CAUSE FIX (stale absence notes): When the teacher corrects an
+  // absent / cheating / excused row into a real numeric grade, the previous
+  // automatic "تسجيل جماعي كغائب" / "تسجيل تلقائي" note becomes stale and
+  // contradictory (the row now has status="درجة" with a real score but a
+  // note saying the student was absent). Detect this transition and replace
+  // the stale note with a fresh "corrected manually" note.
+  //
+  // The fix only triggers when the caller did not provide a fresh notes
+  // string (or echoed the same one back), so a user-typed note is always
+  // preserved. This handles the production case where grade-entry.tsx
+  // passes `notes: draft.notes` and draft.notes was initialized from the
+  // existing row's stale absence note.
+  const existingGrade = await client.grade.findUnique({
+    where: { studentId_examId: { studentId, examId } },
+    select: { status: true, notes: true },
+  });
+  const sanitizedNotes = sanitizeStaleAbsenceNotes({
+    previousStatus: existingGrade?.status ?? null,
+    previousNotes: existingGrade?.notes ?? null,
+    nextStatus: status,
+    nextNotes: notes,
+  });
+
   const shouldWriteScore =
     status !== "درجة" ||
     (scoreWasProvided &&
@@ -418,7 +555,7 @@ export async function syncAcademicGradeWriteback(
     update: {
       status,
       ...(shouldWriteScore ? { score: status === "درجة" ? score : null } : {}),
-      ...(notes !== undefined ? { notes } : {}),
+      ...(sanitizedNotes !== undefined ? { notes: sanitizedNotes } : {}),
       ...(input.academicAccountingChecked !== undefined
         ? {
             academicAccountingChecked: Boolean(input.academicAccountingChecked),
@@ -431,7 +568,7 @@ export async function syncAcademicGradeWriteback(
       examId,
       status,
       score: status === "درجة" ? (score ?? null) : null,
-      notes: notes || null,
+      notes: sanitizedNotes || null,
       academicAccountingChecked: Boolean(input.academicAccountingChecked),
       ...preRegistrationExclusion,
     },

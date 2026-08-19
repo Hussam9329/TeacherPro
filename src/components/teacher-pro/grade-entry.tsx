@@ -2911,9 +2911,34 @@ export function GradeEntryView() {
                               `درجة الطالب يجب أن تكون بين 0 و ${selectedExam.fullMark}`,
                             );
                           }
+                          // ROOT-CAUSE FIX: When the teacher types a new score
+                          // for a student whose previous status was a marker
+                          // (غائب / غش / مجاز / ضمن السماح / قبل التسجيل),
+                          // the draft.notes was initialized from the existing
+                          // row's stale "تسجيل جماعي كغائب" note. Sending that
+                          // note back to the API would leave the saved row with
+                          // a real numeric grade BUT a contradictory "absent"
+                          // note. Clear the notes here so the server gets a
+                          // fresh empty value and applies its own sanitization
+                          // (which will replace with "تم تصحيح الدرجة يدوياً").
+                          const existing = getGrade(student.id);
+                          const previousStatusWasMarker = Boolean(
+                            existing && existing.status !== "درجة",
+                          );
+                          const hadStaleAbsenceNote =
+                            previousStatusWasMarker &&
+                            (
+                              (existing?.notes || "").includes("تسجيل جماعي كغائب") ||
+                              (existing?.notes || "").includes("تسجيل تلقائي")
+                            );
                           updateDraft(student.id, {
                             score: nextScore,
                             status: "درجة",
+                            // Clear the stale note when transitioning from a
+                            // marker status to a real grade. A user-typed
+                            // note in the same row will be re-typed and
+                            // saved as a fresh value.
+                            ...(hadStaleAbsenceNote ? { notes: "" } : {}),
                           });
                         }}
                         onBlur={() => autoSaveGrade(student.id)}

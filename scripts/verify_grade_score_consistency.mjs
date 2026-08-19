@@ -73,8 +73,52 @@ async function main() {
   console.log(`  صفوف بحالة غير معروفة:        ${unknownStatusRows.length}`);
   console.log(`  صفوف متناقضة (status!=درجة, score!=NULL): ${contradictoryRows.length}\n`);
 
-  if (contradictoryRows.length === 0 && unknownStatusRows.length === 0) {
-    console.log('✅ قاعدة البيانات نظيفة — لا يوجد أي تناقض بين الحالة والدرجة.');
+  // 3. Stale absence notes check — graded rows whose notes still mention
+  //    an automatic batch-absence phrase. This is the second root-cause
+  //    bug we fixed on 2026-08-20.
+  const staleNotesRows = await db.grade.findMany({
+    where: {
+      status: 'درجة',
+      score: { not: null },
+      OR: [
+        { notes: { contains: 'تسجيل جماعي كغائب' } },
+        { notes: { contains: 'تسجيل تلقائي: الامتحان يسبق' } },
+        { notes: { contains: 'تسجيل تلقائي: الطالب ضمن فترة السماح' } },
+      ],
+    },
+    select: {
+      id: true,
+      studentId: true,
+      examId: true,
+      status: true,
+      score: true,
+      notes: true,
+      updatedAt: true,
+    },
+    orderBy: { updatedAt: 'desc' },
+    take: 50,
+  });
+
+  console.log(`  صفوف بملاحظة غياب قديمة على درجة فعلية: ${staleNotesRows.length}`);
+  if (staleNotesRows.length > 0) {
+    console.log(`\n--- عينة من الصفوف ذات الملاحظات المتناقضة ---`);
+    for (const row of staleNotesRows.slice(0, 10)) {
+      console.log(
+        `  - id=${row.id}\n` +
+        `    studentId=${row.studentId}  examId=${row.examId}\n` +
+        `    status="${row.status}"  score=${row.score}\n` +
+        `    notes="${(row.notes || '').slice(0, 100)}"\n` +
+        `    updatedAt=${row.updatedAt.toISOString()}`,
+      );
+    }
+    if (staleNotesRows.length > 10) {
+      console.log(`  ... و ${staleNotesRows.length - 10} صف آخر.`);
+    }
+    console.log();
+  }
+
+  if (contradictoryRows.length === 0 && unknownStatusRows.length === 0 && staleNotesRows.length === 0) {
+    console.log('✅ قاعدة البيانات نظيفة — لا يوجد أي تناقض بين الحالة والدرجة ولا ملاحظات غياب قديمة.');
     await db.$disconnect();
     process.exit(0);
   }
@@ -97,15 +141,26 @@ async function main() {
   }
 
   console.log('🔧 الإصلاح الموصى به:');
-  console.log('   1. شغّل migration: 20260820090000_grade_status_score_safety_trigger');
+  console.log('   1. لتناقض الحالة × الدرجة:');
+  console.log('      migration 20260820090000_grade_status_score_safety_trigger');
   console.log('      (يقوم بتنظيف الصفوف المتناقضة تلقائياً ويضيف Trigger لمنع تكرارها)');
-  console.log('   2. أو نفّذ يدوياً:');
+  console.log('   2. لملاحظات الغياب القديمة على درجات فعلية:');
+  console.log('      migration 20260820100000_clean_stale_absence_notes');
+  console.log('      (يستبدل النص القديم بـ "تم تصحيح الدرجة يدوياً...")');
+  console.log('   3. أو نفّذ يدوياً:');
   console.log('      UPDATE "Grade" SET "score" = NULL');
   console.log('      WHERE "status" IS DISTINCT FROM \'درجة\' AND "score" IS NOT NULL;');
-  console.log('   3. أعِد تشغيل هذا السكربت للتأكد من نجاح التنظيف.');
+  console.log('      UPDATE "Grade" SET "notes" = \'تم تصحيح الدرجة يدوياً...\'');
+  console.log('      WHERE "status" = \'درجة\' AND "score" IS NOT NULL');
+  console.log('        AND "notes" LIKE \'%تسجيل جماعي كغائب%\';');
+  console.log('   4. أعِد تشغيل هذا السكربت للتأكد من نجاح التنظيف.');
 
   await db.$disconnect();
-  process.exit(contradictoryRows.length > 0 ? 1 : 0);
+  process.exit(
+    contradictoryRows.length > 0 || staleNotesRows.length > 0 || unknownStatusRows.length > 0
+      ? 1
+      : 0,
+  );
 }
 
 main().catch(async (error) => {
