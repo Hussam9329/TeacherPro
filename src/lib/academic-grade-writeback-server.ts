@@ -70,8 +70,17 @@ function sanitizeStaleAbsenceNotes(input: {
   previousNotes: string | null;
   nextStatus: string;
   nextNotes: string | undefined;
+  coercedToExcusedDueToLeave?: boolean;
+  excusedLeaveReason?: string;
 }): string | undefined {
-  const { previousStatus, previousNotes, nextStatus, nextNotes } = input;
+  const {
+    previousStatus,
+    previousNotes,
+    nextStatus,
+    nextNotes,
+    coercedToExcusedDueToLeave,
+    excusedLeaveReason,
+  } = input;
 
   // The caller's resolved notes value (may be undefined = no change).
   const callerNotes =
@@ -98,6 +107,17 @@ function sanitizeStaleAbsenceNotes(input: {
     notesContainsStalePhrase(callerNotes) ||
     (callerNotes === undefined && notesContainsStalePhrase(previousNotes));
 
+  // ROOT-CAUSE FIX (leave + absence coercion): if the caller tried to
+  // mark an excused student as absent/cheating, we coerced the status to
+  // "مجاز". Replace the stale absence note with an authoritative excused
+  // note so the row never displays "تسجيل جماعي كغائب" on a "مجاز" record.
+  if (coercedToExcusedDueToLeave) {
+    const reason = excusedLeaveReason?.trim();
+    return reason
+      ? `الطالب مجاز من هذا الامتحان: ${reason}`
+      : "الطالب مجاز من هذا الامتحان.";
+  }
+
   // Rule 1: teacher corrected an absent/cheating row to a real grade,
   // and either didn't provide fresh notes, or echoed the old ones back.
   // Replace with a clean "corrected manually" note.
@@ -106,6 +126,21 @@ function sanitizeStaleAbsenceNotes(input: {
     (callerNotes === undefined || callerNotes === "" || echoedPreviousNotes)
   ) {
     return "تم تصحيح الدرجة يدوياً بدلاً من التسجيل التلقائي السابق.";
+  }
+
+  // ROOT-CAUSE FIX (status="مجاز" with stale absence note): if the
+  // resulting row is "مجاز" but the notes still contain a stale absence
+  // phrase, replace it with the authoritative excused note. This catches
+  // historical rows that already have the contradiction.
+  if (
+    nextStatus === "مجاز" &&
+    resultingNotesContainsStalePhrase &&
+    (callerNotes === undefined || callerNotes === "" || notesContainsStalePhrase(callerNotes))
+  ) {
+    if (callerNotes && !notesContainsStalePhrase(callerNotes)) {
+      return callerNotes;
+    }
+    return "الطالب مجاز من هذا الامتحان.";
   }
 
   // Rule 3: safety net — clear any stale phrase that somehow ended up on
@@ -315,7 +350,14 @@ export async function syncAcademicGradeWriteback(
     );
   }
 
-  const status = normalizeAcademicGradeStatus(input.status);
+  const normalizedStatus = normalizeAcademicGradeStatus(input.status);
+  let status: AcademicGradeWritebackStatus = normalizedStatus;
+  // ROOT-CAUSE FIX (leave + absence contradiction): when the caller tries to
+  // write a non-"درجة" marker status (غائب / غش) and the student has an
+  // active leave, we coerce the status to "مجاز" instead of throwing. These
+  // flags remember the coercion so we can also fix the notes field below.
+  let coercedToExcusedDueToLeave = false;
+  let excusedLeaveReason = "";
   const scoreWasProvided = input.score !== undefined;
 
   // ROOT-CAUSE FIX: Enforce status/score consistency at the SINGLE writeback
@@ -433,9 +475,43 @@ export async function syncAcademicGradeWriteback(
   ) {
     const blockedByLeave = await hasBlockingLeave(client, studentId, exam);
     if (blockedByLeave) {
-      throw new AcademicGradeWritebackError(
-        "لا يمكن اعتماد درجة لطالب مجاز من هذا الامتحان.",
-      );
+      // ROOT-CAUSE FIX (leave + absence contradiction): Previously this
+      // branch threw an error, leaving the calling code in a contradictory
+      // state. The mark-missing-absent batch endpoint, for instance,
+      // already wrote status="غائب" with notes="تسجيل جماعي كغائب" before
+      // this check fired — so the throw left the bad row in place.
+      //
+      // Now: if the caller is trying to write a NON-"درجة" marker status
+      // (غائب / غش) and the student has a leave for this exam, silently
+      // COERCE the status to "مجاز" instead of throwing. This is exactly
+      // the user's expectation: "the student is excused, so the grade
+      // should reflect that". The throw still fires for actual numeric
+      // grade attempts (status="درجة") because that would silently erase
+      // a typed-in score.
+      //
+      // (Existing GradeSmartNote flows already handle the "درجة" path
+      // separately — those calls opt out via blockOnLeave: false.)
+      if (status === "غائب" || status === "غش") {
+        // Convert the status to "مجاز" and let the rest of the writeback
+        // proceed normally. The notes will be sanitized below to remove
+        // the stale "تسجيل جماعي كغائب" phrase.
+        const leaveRow = await client.studentLeave.findFirst({
+          where: {
+            studentId,
+            OR: [{ examId }, { leaveType: "period" }],
+          },
+          select: { reason: true, leaveType: true },
+        });
+        coercedToExcusedDueToLeave = true;
+        excusedLeaveReason = leaveRow?.reason || "";
+        // Mutate `status` so the rest of the function (notes sanitization,
+        // upsert, score handling) sees "مجاز".
+        status = "مجاز";
+      } else {
+        throw new AcademicGradeWritebackError(
+          "لا يمكن اعتماد درجة لطالب مجاز من هذا الامتحان.",
+        );
+      }
     }
   }
 
@@ -527,6 +603,8 @@ export async function syncAcademicGradeWriteback(
     previousNotes: existingGrade?.notes ?? null,
     nextStatus: status,
     nextNotes: notes,
+    coercedToExcusedDueToLeave,
+    excusedLeaveReason,
   });
 
   const shouldWriteScore =

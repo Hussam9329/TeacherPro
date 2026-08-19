@@ -99,6 +99,50 @@ const ACADEMIC_SCHEMA_STATEMENTS = [
        OR COALESCE("notes", '') LIKE '%تسجيل تلقائي: الامتحان يسبق%'
        OR COALESCE("notes", '') LIKE '%تسجيل تلقائي: الطالب ضمن فترة السماح%'
      )`,
+
+  // ---------------------------------------------------------------------------
+  // ROOT-CAUSE FIX (excused students with stale absence notes): Clean up
+  // rows where status='مجاز' but notes contains an automatic batch-absence
+  // phrase. Replace with an authoritative excused note.
+  // ---------------------------------------------------------------------------
+  `UPDATE "Grade"
+   SET "notes" = 'الطالب مجاز من هذا الامتحان.'
+   WHERE "status" = 'مجاز'
+     AND (
+       COALESCE("notes", '') LIKE '%تسجيل جماعي كغائب%'
+       OR COALESCE("notes", '') LIKE '%تسجيل تلقائي: الامتحان يسبق%'
+       OR COALESCE("notes", '') LIKE '%تسجيل تلقائي: الطالب ضمن فترة السماح%'
+     )`,
+
+  // ---------------------------------------------------------------------------
+  // ROOT-CAUSE FIX (excused students with absent status): The CRITICAL fix.
+  // If a student has an active StudentLeave for an exam, but their grade
+  // status is still 'غائب' or 'غش', the academic recalc would treat it as
+  // a real absence → false opportunity deduction or false dismissal.
+  // Convert status to 'مجاز' and set the authoritative excused note.
+  // ---------------------------------------------------------------------------
+  `UPDATE "Grade" AS g
+   SET
+     "status" = 'مجاز',
+     "notes" = 'الطالب مجاز من هذا الامتحان.'
+   FROM "StudentLeave" AS sl
+   WHERE sl."studentId" = g."studentId"
+     AND sl."examId" = g."examId"
+     AND g."status" IN ('غائب', 'غش')`,
+
+  `UPDATE "Grade" AS g
+   SET
+     "status" = 'مجاز',
+     "notes" = 'الطالب مجاز من هذا الامتحان.'
+   FROM "StudentLeave" AS sl
+   JOIN "Exam" AS e ON e."id" = g."examId"
+   WHERE sl."studentId" = g."studentId"
+     AND sl."leaveType" = 'period'
+     AND sl."dateFrom" IS NOT NULL
+     AND sl."dateTo" IS NOT NULL
+     AND e."date" >= sl."dateFrom"
+     AND e."date" <= sl."dateTo"
+     AND g."status" IN ('غائب', 'غش')`,
 ] as const;
 
 let ensurePromise: Promise<void> | null = null;

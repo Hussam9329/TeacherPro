@@ -99,6 +99,42 @@ export async function POST(req: NextRequest) {
           if (!student) throw new AcademicGradeWritebackError("الطالب غير موجود.", 404);
           if (!exam) throw new AcademicGradeWritebackError("الامتحان غير موجود.", 404);
 
+          // ROOT-CAUSE FIX: Skip students who have an active leave for this
+          // exam (or for the exam's date range). Previously, the batch
+          // endpoint would set status="غائب" with notes="تسجيل جماعي كغائب"
+          // BEFORE syncAcademicGradeWriteback's blockOnLeave check fired,
+          // leaving a contradictory row on the student's record: status
+          // eventually converted to "مجاز" (or stayed "غائب") but the
+          // stale "تسجيل جماعي كغائب" note remained. Worse, when the leave
+          // was added AFTER the batch absence, the grade stayed "غائب" and
+          // the recalc treated it as a real absence → false dismissal.
+          //
+          // Now: we look up any active StudentLeave BEFORE writing any
+          // grade, and skip the student entirely. The student's leave is
+          // authoritative — they should not be marked absent.
+          const blockingLeave = await tx.studentLeave.findFirst({
+            where: {
+              studentId,
+              OR: [{ examId }, { leaveType: "period" }],
+            },
+            select: { id: true, leaveType: true, dateFrom: true, dateTo: true, examId: true },
+          });
+          if (blockingLeave) {
+            // Double-check period leaves actually cover the exam date.
+            let leaveCoversExam = false;
+            if (blockingLeave.leaveType === "exam") {
+              leaveCoversExam = blockingLeave.examId === examId;
+            } else if (blockingLeave.leaveType === "period" && blockingLeave.dateFrom && blockingLeave.dateTo) {
+              const examDate = exam.date instanceof Date ? exam.date : new Date(String(exam.date));
+              leaveCoversExam =
+                examDate >= blockingLeave.dateFrom && examDate <= blockingLeave.dateTo;
+            }
+            if (leaveCoversExam) {
+              skippedStudentIds.push(studentId);
+              continue;
+            }
+          }
+
           const registeredForExam = isExamOnOrAfterStudentRegistration(student, exam);
           const withinGrace =
             registeredForExam && isExamWithinStudentGraceWindow(student, exam);
