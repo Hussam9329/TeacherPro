@@ -39,16 +39,15 @@ const profileStatsRoute = read("src/app/api/students/profile-stats/route.ts");
 const pkg = JSON.parse(read("package.json"));
 
 must(
-  gradeEntry.includes('import { countManualNumericGradesForExam } from "@/lib/grade-entry-stats"') &&
-    gradeEntry.includes("manualNumericGradeCount") &&
+  gradeEntry.includes('import { countAllManualGradesForExam } from "@/lib/grade-entry-stats"') &&
+    !gradeEntry.includes("manualNumericGradeCount") &&
     gradeEntry.includes('data-manual-grade-count="true"') &&
-    gradeEntry.includes("الدرجات المدخلة يدوياً") &&
-    gradeEntryStats.includes('grade.status !== "درجة"') &&
-    gradeEntryStats.includes('typeof grade.score !== "number"') &&
-    gradeEntryStats.includes("Number.isFinite(grade.score)") &&
-    gradeEntryStats.includes("gradedStudentIds.add(grade.studentId)"),
-  "عداد الدرجات اليدوية قريب من البحث ويستبعد حالات النظام غير الرقمية",
-  "يجب أن يحسب العداد الدرجات الرقمية المحفوظة فقط للامتحان المحدد دون الحالات التلقائية.",
+    gradeEntry.includes("الأوراق المدخلة يدوياً") &&
+    gradeEntryStats.includes("purelyAutomaticStatuses") &&
+    gradeEntryStats.includes("numericStudentIds") &&
+    gradeEntryStats.includes("pendingStudentIds"),
+  "عداد الإدخال اليدوي يعرض الرقمية والمعلقة وما قبل التسجيل ويستبعد الحالات التلقائية",
+  "يجب أن يعتمد العداد الموحد الحالي دون إبقاء العداد الرقمي القديم الميت.",
 );
 
 must(

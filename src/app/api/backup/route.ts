@@ -5,10 +5,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { requireAnyPermission, requirePermission, getAuthPrincipal } from '@/lib/server-auth';
 import { db } from '@/lib/db';
-import { findManyOrEmpty, routeErrorResponse, validationError, isMissingDatabaseObjectError } from '@/lib/route-helpers';
-import { withFollowupTables } from '@/lib/followup-schema';
-import { ensureExamSchema } from '@/lib/exam-schema';
-import { ensureAcademicSchema } from '@/lib/academic-schema';
+import { routeErrorResponse, validationError } from '@/lib/route-helpers';
+import { assertDatabaseSchemaReady } from '@/lib/schema-readiness';
 import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
 import { writeSystemAuditLog } from '@/lib/audit-log-server';
 
@@ -69,8 +67,7 @@ export async function GET(req: NextRequest) {
   if (rateLimitError) return rateLimitError;
 
   try {
-    await ensureExamSchema();
-    await ensureAcademicSchema();
+    await assertDatabaseSchemaReady();
 
     const [
       courses,
@@ -104,10 +101,10 @@ export async function GET(req: NextRequest) {
       db.examCourse.findMany(),
       db.grade.findMany(),
       db.opportunityLog.findMany(),
-      withFollowupTables(() => db.studentLeave.findMany(), 'StudentLeave'),
-      withFollowupTables(() => db.studentCall.findMany(), 'StudentCall'),
-      withFollowupTables(() => db.studentNote.findMany(), 'StudentNote'),
-      findManyOrEmpty(db.correctionSheet.findMany(), 'CorrectionSheet'),
+      db.studentLeave.findMany(),
+      db.studentCall.findMany(),
+      db.studentNote.findMany(),
+      db.correctionSheet.findMany(),
       db.appUser.findMany({
         select: {
           id: true,
@@ -126,12 +123,12 @@ export async function GET(req: NextRequest) {
       // Now export the full audit log to preserve complete accountability.
       db.auditLog.findMany({ orderBy: { time: 'asc' } }),
       // v5 additions
-      findManyOrEmpty(db.telegramExamSubmission.findMany(), 'TelegramExamSubmission'),
-      findManyOrEmpty(db.studentLeaveGradeBackup.findMany(), 'StudentLeaveGradeBackup'),
-      findManyOrEmpty(db.studentEnrollmentArchive.findMany(), 'StudentEnrollmentArchive'),
-      findManyOrEmpty(db.gradeEntryMissingNote.findMany(), 'GradeEntryMissingNote'),
-      findManyOrEmpty(db.permissionCatalog.findMany(), 'PermissionCatalog'),
-      findManyOrEmpty(db.gradeSmartNote.findMany(), 'GradeSmartNote'),
+      db.telegramExamSubmission.findMany(),
+      db.studentLeaveGradeBackup.findMany(),
+      db.studentEnrollmentArchive.findMany(),
+      db.gradeEntryMissingNote.findMany(),
+      db.permissionCatalog.findMany(),
+      db.gradeSmartNote.findMany(),
     ]);
 
     return NextResponse.json({
@@ -240,8 +237,7 @@ export async function POST(req: NextRequest) {
   if (rateLimitError) return rateLimitError;
 
   try {
-    await ensureExamSchema();
-    await ensureAcademicSchema();
+    await assertDatabaseSchemaReady();
 
     // 3. Parse body
     let body: unknown;
@@ -382,24 +378,24 @@ async function collectTableCounts(): Promise<Record<string, number>> {
   const queries: Array<[string, Promise<number>]> = [
     ['roles', db.role.count()],
     ['users', db.appUser.count()],
-    ['permissionCatalog', safeCount(() => db.permissionCatalog.count())],
+    ['permissionCatalog', db.permissionCatalog.count()],
     ['courses', db.course.count()],
     ['chapters', db.chapter.count()],
     ['courseChapters', db.courseChapter.count()],
     ['exams', db.exam.count()],
     ['examCourses', db.examCourse.count()],
     ['students', db.student.count()],
-    ['gradeSmartNotes', safeCount(() => db.gradeSmartNote.count())],
+    ['gradeSmartNotes', db.gradeSmartNote.count()],
     ['grades', db.grade.count()],
     ['opportunityLogs', db.opportunityLog.count()],
-    ['studentLeaves', safeCount(() => db.studentLeave.count())],
-    ['studentLeaveGradeBackups', safeCount(() => db.studentLeaveGradeBackup.count())],
-    ['studentCalls', safeCount(() => db.studentCall.count())],
-    ['studentNotes', safeCount(() => db.studentNote.count())],
-    ['gradeEntryMissingNotes', safeCount(() => db.gradeEntryMissingNote.count())],
-    ['correctionSheets', safeCount(() => db.correctionSheet.count())],
-    ['telegramExamSubmissions', safeCount(() => db.telegramExamSubmission.count())],
-    ['studentEnrollmentArchives', safeCount(() => db.studentEnrollmentArchive.count())],
+    ['studentLeaves', db.studentLeave.count()],
+    ['studentLeaveGradeBackups', db.studentLeaveGradeBackup.count()],
+    ['studentCalls', db.studentCall.count()],
+    ['studentNotes', db.studentNote.count()],
+    ['gradeEntryMissingNotes', db.gradeEntryMissingNote.count()],
+    ['correctionSheets', db.correctionSheet.count()],
+    ['telegramExamSubmissions', db.telegramExamSubmission.count()],
+    ['studentEnrollmentArchives', db.studentEnrollmentArchive.count()],
     ['logs', db.auditLog.count()],
   ];
 
@@ -408,15 +404,6 @@ async function collectTableCounts(): Promise<Record<string, number>> {
     counts[queries[i][0]] = r.status === 'fulfilled' ? r.value : -1;
   });
   return counts;
-}
-
-async function safeCount<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } catch (err) {
-    if (isMissingDatabaseObjectError(err)) return 0 as T;
-    throw err;
-  }
 }
 
 type RestoreResult = {
@@ -499,7 +486,10 @@ async function truncateTable(tx: TxClient, table: string): Promise<void> {
   const tableName = PRISMA_TABLE_NAMES[table];
   if (!tableName) throw new Error(`Unknown table: ${table}`);
 
-  await tx.$executeRawUnsafe(`TRUNCATE TABLE "${tableName}" RESTART IDENTITY CASCADE;`);
+  // tableName comes exclusively from the closed PRISMA_TABLE_NAMES mapping.
+  await tx.$executeRaw(
+    Prisma.raw(`TRUNCATE TABLE "${tableName}" RESTART IDENTITY CASCADE;`),
+  );
 }
 
 async function restoreTable(

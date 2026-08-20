@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
-import { withFollowupTables } from '@/lib/followup-schema';
+import { withDatabaseSchema } from '@/lib/schema-readiness';
 
 function readListPagination(req: NextRequest, fallbackPageSize = 100, maxPageSize = 500) {
   const searchParams = new URL(req.url).searchParams;
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const { page, pageSize, skip } = readListPagination(req);
-    const [totalCount, studentNotes] = await withFollowupTables(
+    const [totalCount, studentNotes] = await withDatabaseSchema(
       () => Promise.all([
         db.studentNote.count(),
         db.studentNote.findMany({ orderBy: { date: 'desc' }, skip, take: pageSize }),
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     const textError = requireText(data.text, 'نص الملاحظة');
     if (textError) return validationError(textError);
     // Never trust client-provided IDs on create. The server owns primary keys.
-    const studentNote = await withFollowupTables(
+    const studentNote = await withDatabaseSchema(
       () => db.studentNote.create({ data }),
       'StudentNote',
     );
@@ -106,7 +106,7 @@ export async function PUT(req: NextRequest) {
     if (updates.dismissalType !== undefined) data.dismissalType = String(updates.dismissalType ?? '');
     if (updates.dismissalReason !== undefined) data.dismissalReason = String(updates.dismissalReason ?? '');
     if (updates.dismissalDate !== undefined) data.dismissalDate = optionalDate(updates.dismissalDate);
-    const studentNote = await withFollowupTables(
+    const studentNote = await withDatabaseSchema(
       () => db.studentNote.update({ where: { id: String(id) }, data }),
       'StudentNote',
     );
@@ -124,7 +124,7 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد الملاحظة المطلوبة');
-    await withFollowupTables(() => db.studentNote.delete({ where: { id } }), 'StudentNote');
+    await withDatabaseSchema(() => db.studentNote.delete({ where: { id } }), 'StudentNote');
     return NextResponse.json({ ok: true });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر حذف الملاحظة حالياً.');

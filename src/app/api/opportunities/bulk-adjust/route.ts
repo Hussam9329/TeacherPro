@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthPrincipal, requirePermission } from "@/lib/server-auth";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
-import { withFollowupTables } from "@/lib/followup-schema";
+import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { normalizeBoolean } from "@/lib/opportunity-filters-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
@@ -203,7 +203,7 @@ async function handleFilterBasedBulkAdjust(
   } as const;
   const submittedPreviewToken = normalizeText(body.previewToken, 200);
 
-  const result = await withFollowupTables(
+  const result = await withDatabaseSchema(
     async () =>
       withSerializableTransaction(async (tx) => {
         const preview = await buildBulkOpportunityPreview(tx, previewInput);
@@ -511,7 +511,7 @@ export async function POST(req: NextRequest) {
       return validationError("لا توجد تغييرات جماعية لحفظها");
     }
 
-    const result = await withFollowupTables(
+    const result = await withDatabaseSchema(
       async () =>
         withSerializableTransaction(async (tx) => {
           const allStudentIds = Array.from(

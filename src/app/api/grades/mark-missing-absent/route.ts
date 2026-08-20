@@ -7,8 +7,7 @@ import type { Grade } from "@prisma/client";
 import type { AcademicStudent } from "@/lib/academic-types";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
-import { ensureExamSchema } from "@/lib/exam-schema";
-import { ensureFollowupTables } from "@/lib/followup-schema";
+import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import {
   AcademicGradeWritebackError,
   syncAcademicGradeWriteback,
@@ -28,8 +27,7 @@ export async function POST(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    await ensureExamSchema();
-    await ensureFollowupTables();
+    await assertDatabaseSchemaReady();
 
     const body = (await req.json()) as Record<string, unknown>;
     const examId = String(body.examId || "").trim();

@@ -11,10 +11,7 @@ import {
   routeErrorResponse,
   validationError,
 } from "@/lib/route-helpers";
-import {
-  ensureFollowupTables,
-  withFollowupTables,
-} from "@/lib/followup-schema";
+import { withDatabaseSchema } from "@/lib/schema-readiness";
 import {
   recalculateStudentsAcademicState,
   type AcademicServerRecalculationResult,
@@ -547,7 +544,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const { page, pageSize, skip } = readListPagination(req);
-    const [totalCount, studentLeaves] = await withFollowupTables(
+    const [totalCount, studentLeaves] = await withDatabaseSchema(
       () =>
         Promise.all([
           db.studentLeave.count(),
@@ -582,13 +579,12 @@ export async function POST(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    await ensureFollowupTables();
     const body = await req.json();
     const data = normalizeLeavePayload(body);
     const payloadError = validateLeavePayload(data);
     if (payloadError) return validationError(payloadError);
 
-    const result = await withFollowupTables<LeaveCreateResult>(
+    const result = await withDatabaseSchema<LeaveCreateResult>(
       () =>
         withSerializableTransaction(async (tx) => {
           // Q68 FIX: Verify the exam belongs to the student's course.
@@ -760,12 +756,11 @@ export async function PUT(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    await ensureFollowupTables();
     const body = await req.json();
     const id = String(body.id || "").trim();
     if (!id) return validationError("تعذر تحديد الإجازة المطلوبة");
 
-    const result = await withFollowupTables<LeaveUpdateResult>(
+    const result = await withDatabaseSchema<LeaveUpdateResult>(
       () =>
         withSerializableTransaction(async (tx) => {
           const existingLeave = await tx.studentLeave.findUnique({
@@ -977,7 +972,7 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) return validationError("تعذر تحديد الإجازة المطلوبة");
-    const result = await withFollowupTables<LeaveDeleteResult>(
+    const result = await withDatabaseSchema<LeaveDeleteResult>(
       () =>
         withSerializableTransaction(async (tx) => {
           const existingLeave = await tx.studentLeave.findUnique({

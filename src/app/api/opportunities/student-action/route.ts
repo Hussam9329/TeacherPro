@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/server-auth";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
-import { withFollowupTables } from "@/lib/followup-schema";
+import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
-    const result = await withFollowupTables(
+    const result = await withDatabaseSchema(
       async () =>
         withSerializableTransaction(async (tx) => {
           const sourceLog = actionType === "undo"

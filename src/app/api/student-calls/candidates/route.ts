@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
-import { withFollowupTables } from "@/lib/followup-schema";
+import { withDatabaseSchema } from "@/lib/schema-readiness";
 import {
   classifyGradeAcademicImpact,
   type GradeClassificationKind,
@@ -739,7 +739,7 @@ export async function GET(req: NextRequest) {
     );
 
     const [recentGrades, relevantLeaves, studentCalls] = (pagedStudentIds.length
-      ? await withFollowupTables(
+      ? await withDatabaseSchema(
           () =>
             Promise.all([
               db.grade.findMany({

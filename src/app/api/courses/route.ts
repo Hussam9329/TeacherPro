@@ -32,10 +32,10 @@ import {
 } from "@/lib/course-config";
 import { IRAQI_PROVINCES, normalizeIraqiProvinceName } from "@/lib/iraq";
 import {
-  ensureExamCourseLinksSchema,
   parseCourseIds,
 } from "@/lib/exam-course-links";
 import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
+import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 
 function formatLinkedStudentCount(count: number): string {
   return `${count} طالب`;
@@ -823,7 +823,7 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get("id");
     if (!id) return validationError("تعذر تحديد الدورة المطلوبة");
 
-    await ensureExamCourseLinksSchema();
+    await assertDatabaseSchemaReady();
     const result = await withSerializableTransaction(async (tx) => {
       const course = await tx.course.findUnique({
         where: { id },

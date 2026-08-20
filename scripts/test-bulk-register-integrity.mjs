@@ -71,9 +71,12 @@ assert(
 assert(
   bulkRoute.includes("retryStudentCodeConflict") &&
     /allocateStudentCodes\(\s*tx,\s*normalizedRows\.length,/s.test(bulkRoute) &&
+    bulkRoute.includes("assertDatabaseSchemaReady") &&
     codeSequence.includes(`nextval('"Student_code_seq"')`) &&
+    !codeSequence.includes("CREATE SEQUENCE") &&
+    !codeSequence.includes("setval(") &&
     migration.includes('CREATE SEQUENCE IF NOT EXISTS "Student_code_seq"'),
-  "التسجيل الجماعي يحجز الأكواد ذرّياً من Sequence ويعيد transaction تلقائياً عند تعارض legacy",
+  "التسجيل الجماعي يحجز الأكواد ذرّياً من Sequence مملوكة للـmigrations بدون runtime DDL",
 );
 assert(
   bulkRoute.includes('source: "database"') && bulkRoute.includes("warnings"),

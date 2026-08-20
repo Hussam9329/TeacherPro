@@ -84,7 +84,7 @@ import {
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
 import { isStudentCurrentlyInGrace } from "@/lib/student-grace";
-import { countManualNumericGradesForExam, countAllManualGradesForExam } from "@/lib/grade-entry-stats";
+import { countAllManualGradesForExam } from "@/lib/grade-entry-stats";
 import {
   examMatchesAcademicFilters,
   getAcademicCourseProgramFilterOptions,
@@ -570,11 +570,6 @@ export function GradeEntryView() {
     // دمج ذاكرة قديمة كان يعيد درجات وهمية غير موجودة في بيانات النظام.
     return entrySheetGrades.filter((grade) => grade.examId === selectedExamId);
   }, [entrySheetGrades, grades, selectedExamId]);
-
-  const manualNumericGradeCount = useMemo(
-    () => countManualNumericGradesForExam(entryGradesSource, selectedExamId),
-    [entryGradesSource, selectedExamId],
-  );
 
   const allManualGradesCount = useMemo(
     () => countAllManualGradesForExam(entryGradesSource, selectedExamId),
@@ -1580,7 +1575,7 @@ export function GradeEntryView() {
               offlineAttempt,
               result.status === 409 ? "conflict" : "rejected",
               result.error ||
-                "تعذر اعتماد الدرجة على الخادم. بقيت النسخة المحلية محفوظة للمراجعة.",
+                "تعذر اعتماد الدرجة في النظام. بقيت النسخة المحلية محفوظة للمراجعة.",
             );
           }
           setRowSaveStates((prev) => ({

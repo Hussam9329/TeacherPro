@@ -2,9 +2,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuth } from "@/lib/server-auth";
-import { routeErrorResponse, isMissingDatabaseObjectError } from "@/lib/route-helpers";
+import { routeErrorResponse } from "@/lib/route-helpers";
+import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 
 // ============================================================================
 // Performance optimization: previously this endpoint ran 19 separate Prisma
@@ -16,9 +18,8 @@ import { routeErrorResponse, isMissingDatabaseObjectError } from "@/lib/route-he
 // same keys, same types, same version fingerprint format — so the client's
 // cache matching logic is unaffected.
 //
-// Tables that may not exist on older databases (gradeEntryMissingNote,
-// telegramExamSubmission) are queried via COALESCE with a sub-select that
-// returns 0/NULL if the table is missing, so the endpoint is self-healing.
+// Schema readiness is checked before this consolidated query. Missing tables
+// are deployment errors and must never be disguised as legitimate zero counts.
 // ============================================================================
 
 type SyncVersionRow = {
@@ -94,17 +95,9 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    let row: SyncVersionRow | null = null;
-    try {
-      const rows = await db.$queryRawUnsafe<SyncVersionRow[]>(SYNC_VERSION_SQL);
-      row = rows[0] ?? null;
-    } catch (error) {
-      // If a table is missing (older database without a migration), fall back
-      // to per-table queries that catch individually. This keeps the endpoint
-      // working during the transition period.
-      if (!isMissingDatabaseObjectError(error)) throw error;
-      row = await fallbackSequentialQuery();
-    }
+    await assertDatabaseSchemaReady();
+    const rows = await db.$queryRaw<SyncVersionRow[]>(Prisma.raw(SYNC_VERSION_SQL));
+    const row = rows[0] ?? null;
 
     if (!row) {
       return NextResponse.json(
@@ -174,56 +167,4 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     return routeErrorResponse(error, "تعذر فحص إصدار مزامنة البيانات.");
   }
-}
-
-// Fallback for older databases missing one of the tables. Runs individual
-// count queries with try/catch so a single missing table doesn't break the
-// whole endpoint. This is slower than the unified SQL but still correct.
-async function fallbackSequentialQuery(): Promise<SyncVersionRow> {
-  const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
-    try { return await fn(); } catch { return fallback; }
-  };
-
-  const [
-    courses, chapters, courseChapters, students, exams, grades,
-    opportunityLogs, studentLeaves, studentCalls, studentNotes,
-    correctionSheets, telegramSubmissions, users, roles, auditLogs,
-    gradesMax, telegramMax, missingNotesMax, auditLogsMax,
-    gradeSmartNotes, gradeSmartNotesMax,
-  ] = await Promise.all([
-    safe(() => db.course.count(), 0),
-    safe(() => db.chapter.count(), 0),
-    safe(() => db.courseChapter.count(), 0),
-    safe(() => db.student.count(), 0),
-    safe(() => db.exam.count(), 0),
-    safe(() => db.grade.count(), 0),
-    safe(() => db.opportunityLog.count(), 0),
-    safe(() => db.studentLeave.count(), 0),
-    safe(() => db.studentCall.count(), 0),
-    safe(() => db.studentNote.count(), 0),
-    safe(() => db.correctionSheet.count(), 0),
-    safe(() => db.telegramExamSubmission.count(), 0),
-    safe(() => db.appUser.count(), 0),
-    safe(() => db.role.count(), 0),
-    safe(() => db.auditLog.count(), 0),
-    safe(async () => (await db.grade.aggregate({ _max: { updatedAt: true } }))._max.updatedAt, null),
-    safe(async () => (await db.telegramExamSubmission.aggregate({ _max: { updatedAt: true } }))._max.updatedAt, null),
-    safe(async () => (await db.gradeEntryMissingNote.aggregate({ _max: { updatedAt: true } }))._max.updatedAt, null),
-    safe(async () => (await db.auditLog.aggregate({ _max: { time: true } }))._max.time, null),
-    safe(() => db.gradeSmartNote.count(), 0),
-    safe(async () => (await db.gradeSmartNote.aggregate({ _max: { updatedAt: true } }))._max.updatedAt, null),
-  ]);
-
-  return {
-    courses: BigInt(courses), chapters: BigInt(chapters), coursechapters: BigInt(courseChapters),
-    students: BigInt(students), exams: BigInt(exams), grades: BigInt(grades),
-    opportunitylogs: BigInt(opportunityLogs), studentleaves: BigInt(studentLeaves),
-    studentcalls: BigInt(studentCalls), studentnotes: BigInt(studentNotes),
-    correctionsheets: BigInt(correctionSheets), telegramsubmissions: BigInt(telegramSubmissions),
-    users: BigInt(users), roles: BigInt(roles), auditlogs: BigInt(auditLogs),
-    gradesmartnotes: BigInt(gradeSmartNotes),
-    gradesmax: gradesMax, telegramsubmissionsmax: telegramMax,
-    missingnotesmax: missingNotesMax, auditlogsmax: auditLogsMax,
-    gradesmartnotesmax: gradeSmartNotesMax,
-  };
 }

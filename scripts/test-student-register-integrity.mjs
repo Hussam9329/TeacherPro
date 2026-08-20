@@ -95,8 +95,11 @@ assert(
   codeSequence.includes(`nextval('"Student_code_seq"')`) &&
     codeSequence.includes("isStudentCodeUniqueConflict") &&
     codeSequence.includes("maxAttempts = 5") &&
+    !codeSequence.includes("CREATE SEQUENCE") &&
+    !codeSequence.includes("setval(") &&
+    studentsRoute.includes("assertDatabaseSchemaReady") &&
     migration.includes('CREATE SEQUENCE IF NOT EXISTS "Student_code_seq"'),
-  "Sequence كود الطالب مهيأة بترحيل قاعدة البيانات مع retry تلقائي",
+  "Sequence كود الطالب مهيأة بالـmigrations فقط مع retry ذري بدون runtime DDL",
 );
 assert(
   studentsRoute.includes("course.active === false"),

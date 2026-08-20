@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
-import { ensureExamSchema } from '@/lib/exam-schema';
+import { assertDatabaseSchemaReady } from '@/lib/schema-readiness';
 import { routeErrorResponse } from '@/lib/route-helpers';
 
 /**
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    await ensureExamSchema();
+    await assertDatabaseSchemaReady();
     const [total, completed, pending, totals] = await Promise.all([
       db.correctionSheet.count(),
       db.correctionSheet.count({ where: { status: 'مكتمل' } }),

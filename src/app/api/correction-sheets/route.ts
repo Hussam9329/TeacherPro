@@ -9,7 +9,7 @@ import {
   routeErrorResponse,
   validationError,
 } from "@/lib/route-helpers";
-import { ensureExamSchema } from "@/lib/exam-schema";
+import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import {
   AcademicGradeWritebackError,
   hasAcademicGradeWritebackPayload,
@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    await ensureExamSchema();
+    await assertDatabaseSchemaReady();
     const { parsePagination } = await import("@/lib/pagination");
     const { page, limit, skip } = parsePagination(req);
     const [correctionSheets, totalCount] = await Promise.all([

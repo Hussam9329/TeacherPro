@@ -21,7 +21,7 @@ const leaves = read("src/app/api/student-leaves/route.ts");
 const repair = read("scripts/repair-grace-period-data.ts");
 const repairHelper = read("src/lib/grace-period-repair-server.ts");
 const academicRepair = read("src/app/api/students/academic-repair/route.ts");
-const schemaGuard = read("src/lib/academic-schema.ts");
+const schemaReadiness = read("src/lib/schema-readiness.ts");
 
 check(
   "المصدر الموحد يطبق 3 أيام تلقائية ويجعل السماح اليدوي بديلاً عنها",
@@ -120,8 +120,10 @@ check(
     academicRepair.includes("deletedCalls"),
 );
 check(
-  "حارس قاعدة البيانات يضيف عمود بدء السماح عند الحاجة",
-  schemaGuard.includes('ADD COLUMN IF NOT EXISTS "gracePeriodStartDate"'),
+  "حارس قاعدة البيانات لا يغير المخطط ويتطلب migration المصالحة",
+  schemaReadiness.includes("20260820140000_schema_authority_reconciliation") &&
+    schemaReadiness.includes('FROM "_prisma_migrations"') &&
+    !schemaReadiness.includes("$executeRaw"),
 );
 
 let failed = 0;

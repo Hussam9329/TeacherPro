@@ -9,7 +9,7 @@ import {
   routeErrorResponse,
   validationError,
 } from "@/lib/route-helpers";
-import { withFollowupTables } from "@/lib/followup-schema";
+import { withDatabaseSchema } from "@/lib/schema-readiness";
 import {
   callCategoryAliasesForCurrentGrade,
   retainedCallCategory,
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const { page, pageSize, skip } = readListPagination(req);
-    const [totalCount, studentCalls] = await withFollowupTables(
+    const [totalCount, studentCalls] = await withDatabaseSchema(
       () => Promise.all([
         db.studentCall.count(),
         db.studentCall.findMany({ orderBy: { createdAt: "desc" }, skip, take: pageSize }),
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
 
     // Upsert by the logical call key, not by client-provided IDs.
     // This prevents duplicate call rows when the user changes status quickly or retries after a network failure.
-    const result = await withFollowupTables(
+    const result = await withDatabaseSchema(
       () =>
         db.$transaction(async (tx) => {
           const currentGrade = data.examId
@@ -233,7 +233,7 @@ export async function PUT(req: NextRequest) {
     if (updates.completedAt !== undefined)
       data.completedAt = dateOrNull(updates.completedAt);
     if (updates.notes !== undefined) data.notes = String(updates.notes ?? "");
-    const studentCall = await withFollowupTables(
+    const studentCall = await withDatabaseSchema(
       () => db.studentCall.update({ where: { id: String(id) }, data }),
       "StudentCall",
     );
@@ -251,7 +251,7 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) return validationError("تعذر تحديد المكالمة المطلوبة");
-    await withFollowupTables(
+    await withDatabaseSchema(
       () => db.studentCall.delete({ where: { id } }),
       "StudentCall",
     );

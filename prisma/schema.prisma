@@ -459,3 +459,25 @@ model AuditLog {
   @@index([module])
   @@index([time])
 }
+
+model LogClearBackup {
+  id               String    @id
+  createdAt        DateTime  @default(now())
+  createdById      String?
+  createdByName    String?
+  scopeIds         String
+  scopeLabels      String
+  dateFrom         String?
+  dateTo           String?
+  rangeLabel       String
+  auditLogs        String    @db.Text
+  opportunityLogs  String    @db.Text
+  auditCount       Int       @default(0)
+  opportunityCount Int       @default(0)
+  restoredAt       DateTime?
+  restoredById     String?
+  restoredByName   String?
+
+  @@index([createdAt])
+  @@index([restoredAt])
+}

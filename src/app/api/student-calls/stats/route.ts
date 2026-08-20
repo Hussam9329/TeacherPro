@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
-import { withFollowupTables } from "@/lib/followup-schema";
+import { withDatabaseSchema } from "@/lib/schema-readiness";
 import {
   classifyGradeAcademicImpact,
   type GradeClassificationKind,
@@ -312,7 +312,7 @@ export async function GET(req: NextRequest) {
       scoredAttempts,
       correctionAttempts,
       submissionAttempts,
-    ] = await withFollowupTables(
+    ] = await withDatabaseSchema(
       () =>
         Promise.all([
           db.student.findMany({

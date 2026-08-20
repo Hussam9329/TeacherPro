@@ -1,7 +1,14 @@
 import fs from "node:fs";
+import path from "node:path";
 
-function read(file) {
-  return fs.readFileSync(file, "utf8");
+const root = process.cwd();
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+
+function walk(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const target = path.join(directory, entry.name);
+    return entry.isDirectory() ? walk(target) : [target];
+  });
 }
 
 function check(condition, message) {
@@ -13,139 +20,146 @@ function check(condition, message) {
   }
 }
 
+const reconciliationMigrationName =
+  "20260820140000_schema_authority_reconciliation";
+const initialBridgeMigrationName = "20260601000000_initial_schema_bridge";
+const reconciliationMigrationPath = path.join(
+  "prisma/migrations",
+  reconciliationMigrationName,
+  "migration.sql",
+);
+
 const pkg = JSON.parse(read("package.json"));
 const buildScript = read("scripts/vercel-build.mjs");
-const academicRepairRoute = read("src/app/api/students/academic-repair/route.ts");
+const preflightScript = read("scripts/preflight-schema-reconciliation.mjs");
+const schemaReadiness = read("src/lib/schema-readiness.ts");
 const routeHelpers = read("src/lib/route-helpers.ts");
-const studentsRoute = read("src/app/api/students/route.ts");
-const api = read("src/lib/api.ts");
-const outbox = read("src/lib/mutation-outbox.ts");
-const examSchema = read("src/lib/exam-schema.ts");
-const gradeExamMigration = read(
-  "prisma/migrations/20260712143000_grade_exam_integrity/migration.sql",
+const prismaSchema = read("prisma/schema.prisma");
+const reconciliationMigration = read(reconciliationMigrationPath);
+const initialBridgeMigration = read(
+  path.join("prisma/migrations", initialBridgeMigrationName, "migration.sql"),
 );
-const missingRuntimeColumnsMigration = read(
-  "prisma/migrations/20260712185000_missing_runtime_columns/migration.sql",
-);
-const academicSchema = read("src/lib/academic-schema.ts");
-const gracePeriodMigration = read(
-  "prisma/migrations/20260713220000_grace_period_start_date/migration.sql",
-);
-const schemaRepairLock = read("src/lib/schema-repair-lock.ts");
+const migrationLock = read("prisma/migrations/migration_lock.toml");
 const examStatsRoute = read("src/app/api/exams/stats/route.ts");
+const opportunityLogsRoute = read("src/app/api/opportunity-logs/route.ts");
+const clearLogsRoute = read("src/app/api/logs/clear/route.ts");
+const restoreLogsRoute = read("src/app/api/logs/restore/route.ts");
+const studentsRoute = read("src/app/api/students/route.ts");
+const bulkStudentsRoute = read("src/app/api/students/bulk/route.ts");
+
+const runtimeFiles = [
+  ...walk(path.join(root, "src/app")),
+  ...walk(path.join(root, "src/lib")),
+].filter((file) => /\.(?:ts|tsx)$/.test(file));
+const runtimeDdlPattern =
+  /\b(?:CREATE(?:\s+OR\s+REPLACE)?|ALTER|DROP)\s+(?:UNIQUE\s+)?(?:TABLE|INDEX|CONSTRAINT|COLUMN|SEQUENCE|TYPE|VIEW|SCHEMA|FUNCTION|TRIGGER|EXTENSION)\b/i;
+const runtimeDdlFiles = runtimeFiles
+  .filter((file) => runtimeDdlPattern.test(fs.readFileSync(file, "utf8")))
+  .map((file) => path.relative(root, file));
 
 check(
-  pkg.scripts?.["vercel-build"] === "node scripts/vercel-build.mjs",
-  "Vercel uses the guarded deployment runner",
-);
-check(
   pkg.scripts?.build === "node scripts/vercel-build.mjs" &&
-    typeof pkg.scripts?.["build:app"] === "string",
-  "both default and Vercel builds use the guarded migration runner",
+    pkg.scripts?.["vercel-build"] === "node scripts/vercel-build.mjs",
+  "default and Vercel builds use the guarded deployment runner",
 );
 check(
-  buildScript.includes('["prisma", ["migrate", "deploy"]') ||
-    buildScript.includes('run("prisma", ["migrate", "deploy"]'),
-  "deployment runs prisma migrate deploy",
+  pkg.scripts?.["db:migrate"] === "prisma migrate dev" &&
+    pkg.scripts?.["db:deploy"] === "prisma migrate deploy" &&
+    pkg.scripts?.["db:status"] === "prisma migrate status" &&
+    pkg.scripts?.["db:push"] === undefined &&
+    pkg.scripts?.["db:baseline:existing"] === undefined,
+  "package scripts expose migration workflows without db push or blind baselining",
 );
 check(
-  buildScript.includes("TEACHERPRO_RUN_MIGRATIONS") &&
-    buildScript.indexOf("TEACHERPRO_RUN_MIGRATIONS") <
-      buildScript.indexOf('run("prisma", ["migrate", "deploy"]'),
-  "production migrations require an explicit deployment opt-in",
+  buildScript.includes("isVercelProduction") &&
+    buildScript.includes("Production requires TEACHERPRO_RUN_MIGRATIONS=true") &&
+    buildScript.indexOf('run("next", ["build"]') <
+      buildScript.indexOf('run("prisma", ["migrate", "deploy"]') &&
+    buildScript.indexOf('run("prisma", ["migrate", "deploy"]') <
+      buildScript.indexOf('run("prisma", ["migrate", "status"]'),
+  "production compiles, deploys migrations, verifies status, and refuses migration-disabled publication",
 );
 check(
-  buildScript.includes("DIRECT_URL") && buildScript.includes("DATABASE_URL"),
-  "deployment supports direct migration URL and requires database URL",
+  buildScript.includes('runNode("scripts/preflight-schema-reconciliation.mjs"') &&
+    buildScript.indexOf('runNode("scripts/preflight-schema-reconciliation.mjs"') <
+      buildScript.indexOf('run("prisma", ["migrate", "deploy"]') &&
+    preflightScript.includes('await client.query("BEGIN READ ONLY")') &&
+    preflightScript.includes("legacy orphan rows") &&
+    preflightScript.includes("StudentEnrollmentArchive.studentId -> Student.id") &&
+    !/\b(?:DELETE|UPDATE|INSERT)\b\s+(?:FROM|INTO|\")/i.test(preflightScript),
+  "a read-only orphan preflight blocks unsafe constraint reconciliation before migration deploy",
 );
 check(
-  buildScript.includes("hasUnresolvedKnownMigration") &&
-    buildScript.includes("20260712143000_grade_exam_integrity") &&
-    buildScript.includes("20260712190000_atomic_student_codes_and_active_chapter_guard") &&
-    buildScript.includes("20260712220000_student_enrollment_archives") &&
-    buildScript.includes('"--rolled-back"'),
-  "deployment safely recovers every known interrupted idempotent migration",
-);
-const migrationColumnCreation = gradeExamMigration.indexOf(
-  'ADD COLUMN IF NOT EXISTS "scheduledActivateAt"',
-);
-const migrationColumnUse = gradeExamMigration.indexOf(
-  '"scheduledActivateAt" = NULL',
+  buildScript.includes('INITIAL_SCHEMA_BRIDGE = "20260601000000_initial_schema_bridge"') &&
+    buildScript.includes("getInitialSchemaBridgeState") &&
+    buildScript.includes('["migrate", "resolve", "--applied", INITIAL_SCHEMA_BRIDGE]') &&
+    buildScript.includes('initialSchemaBridgeState === "existing"'),
+  "existing production is explicitly baselined while an empty database executes the bridge migration",
 );
 check(
-  migrationColumnCreation >= 0 &&
-    migrationColumnUse >= 0 &&
-    migrationColumnCreation < migrationColumnUse,
-  "grade/exam migration creates scheduling columns before using them",
+  buildScript.includes("DIRECT_URL") &&
+    buildScript.includes("redactDatabaseUrl") &&
+    !buildScript.includes('replace(/:[^:@]+@/'),
+  "deployment uses a direct migration URL when available and safely redacts credentials",
 );
 check(
-  examSchema.includes('ADD COLUMN IF NOT EXISTS "scheduledActivateAt"') &&
-    examSchema.includes('ADD COLUMN IF NOT EXISTS "scheduledDeactivateAt"'),
-  "runtime Exam schema repair includes both scheduling columns",
+  schemaReadiness.includes(reconciliationMigrationName) &&
+    schemaReadiness.includes('FROM "_prisma_migrations"') &&
+    schemaReadiness.includes('"finished_at" IS NOT NULL') &&
+    schemaReadiness.includes('"rolled_back_at" IS NULL') &&
+    !schemaReadiness.includes("$executeRaw"),
+  "runtime readiness is a cached read-only check for the reconciliation migration",
 );
-for (const requiredColumn of [
-  '"baseOpportunities"',
-  '"accountingGraceDays"',
-  '"nameKey"',
-  '"phoneKey"',
-  '"telegramKey"',
-  '"archived"',
-  '"archive"',
+check(
+  runtimeDdlFiles.length === 0,
+  `application runtime contains no schema DDL${runtimeDdlFiles.length ? `: ${runtimeDdlFiles.join(", ")}` : ""}`,
+);
+for (const retiredFile of [
+  "src/lib/academic-schema.ts",
+  "src/lib/exam-schema.ts",
+  "src/lib/followup-schema.ts",
+  "src/lib/grade-entry-missing-note-schema.ts",
+  "src/lib/telegram-submission-schema.ts",
+  "src/lib/schema-repair-lock.ts",
 ]) {
-  check(
-    missingRuntimeColumnsMigration.includes(`ADD COLUMN IF NOT EXISTS ${requiredColumn}`) &&
-      academicSchema.includes(`ADD COLUMN IF NOT EXISTS ${requiredColumn}`),
-    `missing runtime column ${requiredColumn} is repaired by migration and runtime guard`,
-  );
+  check(!fs.existsSync(path.join(root, retiredFile)), `${retiredFile} is retired`);
 }
 check(
-  gracePeriodMigration.includes('ADD COLUMN IF NOT EXISTS "gracePeriodStartDate"') &&
-    academicSchema.includes('ADD COLUMN IF NOT EXISTS "gracePeriodStartDate"'),
-  "gracePeriodStartDate is repaired by migration and runtime guard",
+  initialBridgeMigration.includes('CREATE TABLE IF NOT EXISTS "Course"') &&
+    initialBridgeMigration.includes('CREATE TABLE IF NOT EXISTS "Student"') &&
+    initialBridgeMigration.includes('CREATE TABLE IF NOT EXISTS "Exam"') &&
+    initialBridgeMigration.includes('CREATE TABLE IF NOT EXISTS "Grade"') &&
+    initialBridgeMigration.includes('CREATE TABLE IF NOT EXISTS "AuditLog"') &&
+    migrationLock.includes('provider = "postgresql"'),
+  "migration history can bootstrap an empty PostgreSQL database before historical ALTER migrations",
 );
 check(
-  academicRepairRoute.includes("repairProtectedAbsencesForStudents") &&
-    academicRepairRoute.includes("EXPLICIT_ACADEMIC_REPAIR_SCOPES") &&
-    academicRepairRoute.includes("retiredMaintenanceEndpoint: true") &&
-    !academicRepairRoute.includes("recalculateAllStudentsAcademicState"),
-  "administrative repairs require an explicit scope and the legacy global recalculation is retired",
-);
-check(
-  schemaRepairLock.includes("pg_advisory_xact_lock") &&
-    schemaRepairLock.includes("db.$transaction"),
-  "runtime DDL is serialized across serverless instances",
-);
-check(
-  examStatsRoute.includes("await ensureExamSchema()"),
-  "exam statistics repairs required schema before its first Prisma query",
-);
-check(
-  buildScript.indexOf('run("next", ["build"]') <
-    buildScript.indexOf('run("prisma", ["migrate", "deploy"]'),
-  "application compiles before the production database is changed",
+  prismaSchema.includes("model LogClearBackup") &&
+    reconciliationMigration.includes('CREATE TABLE IF NOT EXISTS "LogClearBackup"') &&
+    reconciliationMigration.includes('CREATE SEQUENCE IF NOT EXISTS "Student_code_seq"') &&
+    reconciliationMigration.includes("TeacherPro schema reconciliation failed") &&
+    reconciliationMigration.includes("Grade_enforce_status_score_consistency") &&
+    reconciliationMigration.includes("Grade_status_score_consistency") &&
+    reconciliationMigration.includes('VALIDATE CONSTRAINT "StudentEnrollmentArchive_studentId_fkey"') &&
+    reconciliationMigration.includes('VALIDATE CONSTRAINT "StudentLeave_studentId_fkey"'),
+  "the final runtime-only objects and compatibility constraints are versioned and sealed by migration",
 );
 check(
   routeHelpers.includes("DATABASE_MIGRATION_REQUIRED") &&
-    routeHelpers.includes("X-TeacherPro-Retryable") &&
-    routeHelpers.includes("retryable: false"),
-  "schema mismatch response is structured and explicitly non-retryable",
+    routeHelpers.includes("isDatabaseMigrationRequiredError") &&
+    routeHelpers.includes("databaseMigrationRequiredResponse") &&
+    routeHelpers.includes("X-TeacherPro-Retryable"),
+  "schema mismatch responses are structured 503 errors and explicitly non-retryable",
 );
 check(
-  (studentsRoute.match(/databaseMigrationRequiredResponse\(/g) || []).length >= 2,
-  "student create and update use the protected migration response",
-);
-check(
-  api.includes("isTransientHttpResponse") &&
-    (api.match(/transient: isTransientHttpResponse\(res\)/g) || []).length >= 3,
-  "POST/PUT/DELETE retry logic honors server retryability",
-);
-check(
-  outbox.includes("responseIsExplicitlyNonRetryable") &&
-    outbox.includes("sameQueuedMutation") &&
-    outbox.includes("purgeMaintenanceRepairMutations(readOutbox())") &&
-    outbox.includes("dedupeQueuedMutations(") &&
-    outbox.includes("x-teacherpro-retryable"),
-  "persistent outbox drops schema mismatch and maintenance repairs before deduplicating historical mutations",
+  examStatsRoute.includes("await assertDatabaseSchemaReady()") &&
+    opportunityLogsRoute.includes("await assertDatabaseSchemaReady()") &&
+    clearLogsRoute.includes("await assertDatabaseSchemaReady()") &&
+    restoreLogsRoute.includes("await assertDatabaseSchemaReady()") &&
+    studentsRoute.includes("await assertDatabaseSchemaReady()") &&
+    bulkStudentsRoute.includes("await assertDatabaseSchemaReady()") &&
+    !opportunityLogsRoute.includes("$executeRawUnsafe"),
+  "representative read, statistics, and destructive routes use the read-only schema guard",
 );
 
 if (process.exitCode) process.exit(process.exitCode);

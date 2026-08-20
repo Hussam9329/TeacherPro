@@ -24,15 +24,35 @@ function run(name, args, env = process.env) {
   if (result.status !== 0) fail(`${name} exited with code ${result.status ?? "unknown"}. Deployment stopped before incompatible code could go live.`);
 }
 
+function runNode(script, env = process.env) {
+  console.log(`\n[TeacherPro Deploy] node ${script}\n`);
+  const result = spawnSync(process.execPath, [script], {
+    stdio: "inherit",
+    env,
+    shell: false,
+  });
+  if (result.error) fail(`${script} failed to start: ${result.error.message}`);
+  if (result.status !== 0) fail(`${script} exited with code ${result.status ?? "unknown"}. Deployment stopped without changing legacy data.`);
+}
+
 run("prisma", ["generate"]);
 
 // Compile first. If application compilation fails, the production database is
 // left untouched and the previous deployment keeps running on its old schema.
 run("next", ["build"]);
 
-// Publishing application code must never mutate production data implicitly.
-// Database migrations are an explicit, separately authorized deployment action.
-if (String(process.env.TEACHERPRO_RUN_MIGRATIONS || "").trim() !== "true") {
+// A production deployment is valid only when its migrations run in the same
+// guarded build. Preview/local builds may compile without touching a database.
+const migrationsEnabled =
+  String(process.env.TEACHERPRO_RUN_MIGRATIONS || "").trim() === "true";
+const isVercelProduction =
+  String(process.env.VERCEL_ENV || "").trim() === "production";
+
+if (!migrationsEnabled && isVercelProduction) {
+  fail("Production requires TEACHERPRO_RUN_MIGRATIONS=true. Deployment stopped before code/schema divergence.");
+}
+
+if (!migrationsEnabled) {
   console.log("\n[TeacherPro Deploy] Database migrations skipped (explicit opt-in not enabled).\n");
   process.exit(0);
 }
@@ -57,7 +77,18 @@ function deriveDirectUrl(url) {
 }
 
 const directUrl = String(process.env.DIRECT_URL || "").trim() || deriveDirectUrl(databaseUrl);
-console.log(`\n[TeacherPro Deploy] Using migration URL: ${directUrl.replace(/:[^:@]+@/, ":****@")}\n`);
+function redactDatabaseUrl(value) {
+  try {
+    const parsed = new URL(value);
+    if (parsed.username) parsed.username = "configured-user";
+    if (parsed.password) parsed.password = "configured-password";
+    return parsed.toString();
+  } catch {
+    return "configured database URL";
+  }
+}
+
+console.log(`\n[TeacherPro Deploy] Using migration URL: ${redactDatabaseUrl(directUrl)}\n`);
 
 // Neon auto-suspends idle databases after ~5 min. The first connection takes
 // longer than the 10s pg_advisory_lock timeout, so we warm up the DB with a
@@ -97,6 +128,73 @@ const RECOVERABLE_IDEMPOTENT_MIGRATIONS = [
   "20260712190000_atomic_student_codes_and_active_chapter_guard",
   "20260712220000_student_enrollment_archives",
 ];
+
+const INITIAL_SCHEMA_BRIDGE = "20260601000000_initial_schema_bridge";
+
+function getInitialSchemaBridgeState(url) {
+  const probe = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `
+        const { Client } = require("pg");
+        const client = new Client({
+          connectionString: process.env.TEACHERPRO_MIGRATION_PROBE_URL,
+          ssl: { rejectUnauthorized: false },
+          connectionTimeoutMillis: 30000,
+        });
+        const coreTables = ["Course", "Student", "Exam", "Grade", "AuditLog"];
+        (async () => {
+          await client.connect();
+          const tables = await client.query(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ANY($1::text[])",
+            [coreTables],
+          );
+          let migrationApplied = false;
+          try {
+            const migration = await client.query(
+              'SELECT 1 FROM "_prisma_migrations" WHERE migration_name = $1 AND finished_at IS NOT NULL AND rolled_back_at IS NULL LIMIT 1',
+              [process.env.TEACHERPRO_MIGRATION_PROBE_NAME],
+            );
+            migrationApplied = migration.rowCount > 0;
+          } catch (error) {
+            if (!error || error.code !== "42P01") throw error;
+          }
+          if (migrationApplied) process.exitCode = 40;
+          else if (tables.rowCount === 0) process.exitCode = 41;
+          else if (tables.rowCount === coreTables.length) process.exitCode = 42;
+          else {
+            console.error("partial base schema:", tables.rows.map((row) => row.table_name).sort().join(", "));
+            process.exitCode = 43;
+          }
+          await client.end();
+        })().catch(async (error) => {
+          console.error("initial baseline probe error:", error.message);
+          await client.end().catch(() => undefined);
+          process.exit(1);
+        });
+      `,
+    ],
+    {
+      stdio: "inherit",
+      shell: false,
+      env: {
+        ...process.env,
+        TEACHERPRO_MIGRATION_PROBE_URL: url,
+        TEACHERPRO_MIGRATION_PROBE_NAME: INITIAL_SCHEMA_BRIDGE,
+      },
+    },
+  );
+
+  if (probe.error) fail(`Initial baseline probe failed to start: ${probe.error.message}`);
+  if (probe.status === 40) return "applied";
+  if (probe.status === 41) return "empty";
+  if (probe.status === 42) return "existing";
+  if (probe.status === 43) {
+    fail("The database has a partial base schema. Initial baseline was not marked applied and migrations were not started.");
+  }
+  fail(`Initial baseline probe exited with code ${probe.status ?? "unknown"}.`);
+}
 
 /**
  * The original form of the grade/exam migration referenced Exam scheduling
@@ -167,6 +265,20 @@ const migrationEnv = {
   DATABASE_URL: directUrl,
 };
 
+runNode("scripts/preflight-schema-reconciliation.mjs", migrationEnv);
+
+const initialSchemaBridgeState = getInitialSchemaBridgeState(directUrl);
+if (initialSchemaBridgeState === "existing") {
+  console.log(
+    `\n[TeacherPro Deploy] Baselining existing production schema: ${INITIAL_SCHEMA_BRIDGE}\n`,
+  );
+  run(
+    "prisma",
+    ["migrate", "resolve", "--applied", INITIAL_SCHEMA_BRIDGE],
+    migrationEnv,
+  );
+}
+
 for (const migrationName of RECOVERABLE_IDEMPOTENT_MIGRATIONS) {
   if (hasUnresolvedKnownMigration(directUrl, migrationName)) {
     console.log(
@@ -184,11 +296,4 @@ for (const migrationName of RECOVERABLE_IDEMPOTENT_MIGRATIONS) {
 // migration failure keeps the previous deployment active instead of allowing
 // code and database schema to diverge.
 run("prisma", ["migrate", "deploy"], migrationEnv);
-
-// Idempotent production repair: remove historical absences that are invalid
-// under the authoritative automatic/manual grace rules, remove their call
-// records, and recalculate opportunities/statuses before the new deployment
-// can be published.
-// NOTE: tsx is not installed in production. The repair script is run
-// manually via the /api/students/academic-repair endpoint instead.
-// run("tsx", ["scripts/repair-grace-period-data.ts"], migrationEnv);
+run("prisma", ["migrate", "status"], migrationEnv);

@@ -13,7 +13,8 @@ import {
   type CourseLocationConfig,
   type StudyType,
 } from '@/lib/course-config';
-import { ensureExamCourseLinksSchema, parseCourseIds } from '@/lib/exam-course-links';
+import { parseCourseIds } from '@/lib/exam-course-links';
+import { assertDatabaseSchemaReady } from '@/lib/schema-readiness';
 import { baghdadDateKey, baghdadTodayKey } from '@/lib/baghdad-time';
 
 function dateOnly(value: Date | string | null | undefined): string {
@@ -84,7 +85,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    await ensureExamCourseLinksSchema();
+    await assertDatabaseSchemaReady();
 
     const [courses, students, exams, courseChapters] = await Promise.all([
       db.course.findMany({ orderBy: { createdAt: 'desc' } }),

@@ -4,7 +4,6 @@ export function validationError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-
 export const DATABASE_MIGRATION_REQUIRED_CODE = 'DATABASE_MIGRATION_REQUIRED';
 
 /**
@@ -63,29 +62,36 @@ export function normalizeRouteError(error: unknown, fallback = 'تعذر تنف�
 
 export function routeErrorResponse(error: unknown, fallback?: string, status = 500) {
   console.error('[API] route error:', error);
+  if (isDatabaseMigrationRequiredError(error) || isMissingDatabaseObjectError(error)) {
+    const message = isDatabaseMigrationRequiredError(error)
+      ? String((error as { message?: string }).message || fallback || 'قاعدة البيانات تحتاج تحديثاً قبل متابعة العملية.')
+      : 'مخطط قاعدة البيانات لا يطابق إصدار التطبيق. شغّل prisma migrate deploy ثم أعد المحاولة.';
+    return databaseMigrationRequiredResponse(message);
+  }
   return NextResponse.json({ error: normalizeRouteError(error, fallback) }, { status });
 }
 
+export function isDatabaseMigrationRequiredError(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === DATABASE_MIGRATION_REQUIRED_CODE;
+}
+
 export function isMissingDatabaseObjectError(error: unknown): boolean {
-  const err = error as { code?: string; message?: string };
+  const err = error as {
+    code?: string;
+    message?: string;
+    meta?: { code?: string; database_error?: string };
+  };
   const message = String(err?.message || error || '').toLowerCase();
+  const databaseCode = String(err?.meta?.code || '');
+  const databaseMessage = String(err?.meta?.database_error || '').toLowerCase();
 
   return err?.code === 'P2021'
     || err?.code === 'P2022'
-    || message.includes('does not exist')
+    || databaseCode === '42P01'
+    || databaseCode === '42703'
     || message.includes('no such table')
     || /relation .* does not exist/.test(message)
-    || /column .* does not exist/.test(message);
-}
-
-export async function findManyOrEmpty<T>(query: PromiseLike<T[]>, label: string): Promise<T[]> {
-  try {
-    return await query;
-  } catch (error) {
-    if (isMissingDatabaseObjectError(error)) {
-      console.warn(`[API] ${label} table/column is unavailable. Returning an empty list until database migrations are applied.`, error);
-      return [];
-    }
-    throw error;
-  }
+    || /column .* does not exist/.test(message)
+    || /relation .* does not exist/.test(databaseMessage)
+    || /column .* does not exist/.test(databaseMessage);
 }

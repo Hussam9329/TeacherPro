@@ -4,15 +4,8 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/server-auth";
-import {
-  isMissingDatabaseObjectError,
-  routeErrorResponse,
-} from "@/lib/route-helpers";
-import {
-  ensureTelegramSubmissionSchema,
-  resetTelegramSubmissionSchemaEnsureCache,
-  telegramSubmissionSchemaMessage,
-} from "@/lib/telegram-submission-schema";
+import { routeErrorResponse } from "@/lib/route-helpers";
+import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 
 /**
  * إحصائيات مستلمات البوت من بيانات النظام مباشرة.
@@ -23,22 +16,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const schemaReady = await ensureTelegramSubmissionSchema();
-    if (!schemaReady.ok) {
-      resetTelegramSubmissionSchemaEnsureCache();
-      return NextResponse.json({
-        total: 0,
-        pending: 0,
-        inReview: 0,
-        done: 0,
-        manualReview: 0,
-        totalPages: 0,
-        migrationRequired: true,
-        message: telegramSubmissionSchemaMessage,
-        source: "database" as const,
-        generatedAt: new Date().toISOString(),
-      });
-    }
+    await assertDatabaseSchemaReady();
 
     const [total, pending, inReview, done, manualReview, pages] =
       await Promise.all([
@@ -65,21 +43,6 @@ export async function GET(req: NextRequest) {
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    if (isMissingDatabaseObjectError(error)) {
-      resetTelegramSubmissionSchemaEnsureCache();
-      return NextResponse.json({
-        total: 0,
-        pending: 0,
-        inReview: 0,
-        done: 0,
-        manualReview: 0,
-        totalPages: 0,
-        migrationRequired: true,
-        message: telegramSubmissionSchemaMessage,
-        source: "database" as const,
-        generatedAt: new Date().toISOString(),
-      });
-    }
     return routeErrorResponse(
       error,
       "تعذر تحميل إحصائيات مستلمات البوت من بيانات النظام.",

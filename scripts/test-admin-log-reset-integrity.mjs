@@ -15,6 +15,11 @@ const clearRoute = read("src/app/api/logs/clear/route.ts");
 const restoreRoute = read("src/app/api/logs/restore/route.ts");
 const logsRoute = read("src/app/api/logs/route.ts");
 const opportunityLogsRoute = read("src/app/api/opportunity-logs/route.ts");
+const schemaReadiness = read("src/lib/schema-readiness.ts");
+const prismaSchema = read("prisma/schema.prisma");
+const schemaMigration = read(
+  "prisma/migrations/20260820140000_schema_authority_reconciliation/migration.sql",
+);
 const transitionPolicy = read("src/lib/second-chapter-transition.ts");
 const store = read("src/lib/teacher-store.ts");
 const pkg = JSON.parse(read("package.json"));
@@ -37,8 +42,10 @@ must(
 );
 
 must(
-  clearRoute.includes("ensureLogClearBackupTable") &&
+  clearRoute.includes("assertDatabaseSchemaReady") &&
     clearRoute.includes("insertLogClearBackup") &&
+    prismaSchema.includes("model LogClearBackup") &&
+    schemaMigration.includes('CREATE TABLE IF NOT EXISTS "LogClearBackup"') &&
     clearRoute.includes("verifyPassword") &&
     clearRoute.includes("checkApiRateLimit") &&
     clearRoute.includes("إجراءات الحسابات والصلاحيات والأمان وتسجيل الدخول"),
@@ -60,12 +67,20 @@ must(
 );
 
 must(
-  restoreRoute.includes("ensureLogClearBackupTable") &&
+  restoreRoute.includes("assertDatabaseSchemaReady") &&
     restoreRoute.includes("restoredAt") &&
     restoreRoute.includes("createMany") &&
     restoreRoute.includes("verifyPassword"),
   "API استعادة التصفير يعيد السجلات من آخر نسخة احتياطية ويمنع الاستعادة المكررة",
   "logs/restore يجب أن يعيد السجلات من النسخة الاحتياطية ويعلمها restoredAt.",
+);
+
+must(
+  schemaReadiness.includes("_prisma_migrations") &&
+    !clearRoute.includes("CREATE TABLE") &&
+    !restoreRoute.includes("CREATE TABLE"),
+  "مسارات التصفير والاستعادة تفحص migration فقط ولا تنشئ جداول أثناء الطلب",
+  "يجب أن تكون بنية جدول النسخ الاحتياطية ضمن migrations فقط.",
 );
 
 must(

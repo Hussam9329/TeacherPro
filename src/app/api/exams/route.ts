@@ -7,7 +7,7 @@ import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { parseBaghdadDateOnly, parseBaghdadDateTime } from '@/lib/baghdad-time';
 import { getExamEntryAvailability } from '@/lib/exam-utils';
-import { ensureExamSchema } from '@/lib/exam-schema';
+import { assertDatabaseSchemaReady } from '@/lib/schema-readiness';
 import { canonicalCourseIds, parseCourseIds, syncExamCourseLinks } from '@/lib/exam-course-links';
 import { recalculateStudentsForExam } from '@/lib/academic-recalculate-server';
 import { writeRequestAuditLog } from '@/lib/audit-log-server';
@@ -152,7 +152,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    await ensureExamSchema();
+    await assertDatabaseSchemaReady();
     const { isPaginatedRequest, parsePagination } = await import('@/lib/pagination');
     if (isPaginatedRequest(req)) {
       const { page, limit, skip } = parsePagination(req);
@@ -189,7 +189,7 @@ export async function POST(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    await ensureExamSchema();
+    await assertDatabaseSchemaReady();
 
     const body = await req.json();
     const validationMessage = validateExamPayload(body);
@@ -260,7 +260,7 @@ export async function PUT(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    await ensureExamSchema();
+    await assertDatabaseSchemaReady();
 
     const body = await req.json();
     const {
@@ -505,7 +505,7 @@ export async function DELETE(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    await ensureExamSchema();
+    await assertDatabaseSchemaReady();
 
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');

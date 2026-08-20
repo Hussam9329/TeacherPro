@@ -5,15 +5,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/server-auth";
 import {
-  isMissingDatabaseObjectError,
   routeErrorResponse,
   validationError,
 } from "@/lib/route-helpers";
-import {
-  ensureTelegramSubmissionSchema,
-  resetTelegramSubmissionSchemaEnsureCache,
-  telegramSubmissionSchemaMessage,
-} from "@/lib/telegram-submission-schema";
+import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import { sanitizePhoneInput } from "@/lib/format";
 import { sanitizeTelegramInput } from "@/lib/student-utils";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
@@ -463,16 +458,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const schemaReady = await ensureTelegramSubmissionSchema();
-    if (!schemaReady.ok) {
-      resetTelegramSubmissionSchemaEnsureCache();
-      return NextResponse.json({
-        submissions: [],
-        migrationRequired: true,
-        message: telegramSubmissionSchemaMessage,
-        config: getBotIntegrationConfig(req),
-      });
-    }
+    await assertDatabaseSchemaReady();
 
     const { searchParams } = new URL(req.url);
     const examId = textValue(searchParams.get("examId"), 120);
@@ -499,15 +485,6 @@ export async function GET(req: NextRequest) {
       config: getBotIntegrationConfig(req),
     });
   } catch (error) {
-    if (isMissingDatabaseObjectError(error)) {
-      resetTelegramSubmissionSchemaEnsureCache();
-      return NextResponse.json({
-        submissions: [],
-        migrationRequired: true,
-        message: telegramSubmissionSchemaMessage,
-        config: getBotIntegrationConfig(req),
-      });
-    }
     return routeErrorResponse(
       error,
       "تعذر تحميل مستلمات البوت حالياً. تأكد من تشغيل migration الخاصة بها.",
@@ -529,14 +506,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const schemaReady = await ensureTelegramSubmissionSchema();
-    if (!schemaReady.ok) {
-      resetTelegramSubmissionSchemaEnsureCache();
-      return NextResponse.json(
-        { error: telegramSubmissionSchemaMessage },
-        { status: 503 },
-      );
-    }
+    await assertDatabaseSchemaReady();
 
     const body = await req.json();
     const studentId = textValue(body.studentId, 120);
@@ -786,14 +756,7 @@ export async function PUT(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const schemaReady = await ensureTelegramSubmissionSchema();
-    if (!schemaReady.ok) {
-      resetTelegramSubmissionSchemaEnsureCache();
-      return NextResponse.json(
-        { error: telegramSubmissionSchemaMessage },
-        { status: 503 },
-      );
-    }
+    await assertDatabaseSchemaReady();
 
     const body = await req.json();
     const id = textValue(body.id, 120);
@@ -931,14 +894,7 @@ export async function DELETE(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const schemaReady = await ensureTelegramSubmissionSchema();
-    if (!schemaReady.ok) {
-      resetTelegramSubmissionSchemaEnsureCache();
-      return NextResponse.json(
-        { error: telegramSubmissionSchemaMessage },
-        { status: 503 },
-      );
-    }
+    await assertDatabaseSchemaReady();
 
     const { searchParams } = new URL(req.url);
     const id = textValue(searchParams.get("id"), 120);

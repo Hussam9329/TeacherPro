@@ -10,10 +10,10 @@ import { routeErrorResponse } from '@/lib/route-helpers';
 import { ensureInitialAdminSeed } from '@/lib/admin-seed';
 import { writeSecurityAudit } from '@/lib/security-audit';
 import {
-  ensureLogClearBackupTable,
   parseBackupJsonArray,
   type LogClearBackupRow,
 } from '@/lib/log-clear-backups';
+import { assertDatabaseSchemaReady } from '@/lib/schema-readiness';
 import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
 import { recalculateStudentsAcademicState } from '@/lib/academic-recalculate-server';
 
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'رمز حساب الأدمن غير صحيح.' }, { status: 403 });
     }
 
-    await ensureLogClearBackupTable();
+    await assertDatabaseSchemaReady();
 
     const requestedBackupId = String(body.backupId ?? '').trim();
     const backups = requestedBackupId

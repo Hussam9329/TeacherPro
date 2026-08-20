@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { routeErrorResponse } from "@/lib/route-helpers";
-import { withGradeEntryMissingNoteSchema } from "@/lib/grade-entry-missing-note-schema";
+import { withDatabaseSchema } from "@/lib/schema-readiness";
 
 /**
  * إحصائيات ملاحظات الطلاب غير الموجودين.
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const notes = (await withGradeEntryMissingNoteSchema(() =>
+    const notes = (await withDatabaseSchema(() =>
       db.gradeEntryMissingNote.findMany({
         select: { examId: true, text: true },
       }),

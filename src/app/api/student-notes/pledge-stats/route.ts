@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
-import { withFollowupTables } from "@/lib/followup-schema";
+import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { routeErrorResponse } from "@/lib/route-helpers";
 
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const [dismissedStudents, pledgeNotes] = await withFollowupTables(
+    const [dismissedStudents, pledgeNotes] = await withDatabaseSchema(
       () =>
         Promise.all([
           db.student.findMany({

@@ -10,7 +10,8 @@ import { verifyPassword } from '@/lib/passwords';
 import { routeErrorResponse } from '@/lib/route-helpers';
 import { ensureInitialAdminSeed } from '@/lib/admin-seed';
 import { writeSecurityAudit } from '@/lib/security-audit';
-import { ensureLogClearBackupTable, insertLogClearBackup } from '@/lib/log-clear-backups';
+import { insertLogClearBackup } from '@/lib/log-clear-backups';
+import { assertDatabaseSchemaReady } from '@/lib/schema-readiness';
 import { recalculateStudentsAcademicState } from '@/lib/academic-recalculate-server';
 import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
 import {
@@ -217,7 +218,7 @@ export async function POST(req: NextRequest) {
       ? `${body.dateFrom ? String(body.dateFrom) : 'أول سجل'} إلى ${body.dateTo ? String(body.dateTo) : 'آخر سجل'}`
       : 'كل المدة';
 
-    await ensureLogClearBackupTable();
+    await assertDatabaseSchemaReady();
 
     const backupId = `lcb_${Date.now().toString(36)}_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
 

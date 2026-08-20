@@ -15,8 +15,7 @@ import {
   routeErrorResponse,
   validationError,
 } from "@/lib/route-helpers";
-import { ensureExamSchema } from "@/lib/exam-schema";
-import { ensureFollowupTables } from "@/lib/followup-schema";
+import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { gradeMatchesStatusFilterUnified } from "@/lib/grade-classification";
@@ -371,8 +370,8 @@ async function inspectNumericGradeAttempt(
   // - هناك تُحفظ كـ "درجة" عادية مع academicEffectExcluded = true
   // - هذا يضمن عدم ظهورها كـ "درجة معلّقة" في لوحة الدرجات الذكية
   //
-  // 🚫 لا تضف: else if (beforeRegistration) { category = "BEFORE_REGISTRATION_PENDING"; }
-  // هذا سيُعيد المشكلة التي أصلحناها!
+  // لا تضف مساراً يحوّل حالة ما قبل التسجيل إلى ملاحظة معلقة؛ هذا سيعيد
+  // المشكلة التي أصلحناها.
   //
   // الامتحان السابق للتسجيل حالة تاريخية بلا أثر أكاديمي، لكنه لا يلغي
   // الرقم الذي أدخله الموظف. يمر مباشرة إلى Grade ويُوسم بالاستثناء الدائم
@@ -615,8 +614,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await ensureExamSchema();
-    await ensureFollowupTables();
+    await assertDatabaseSchemaReady();
 
     const body = (await req.json()) as Record<string, unknown>;
     const studentId = String(body.studentId || "").trim();
@@ -926,8 +924,7 @@ export async function PUT(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    await ensureExamSchema();
-    await ensureFollowupTables();
+    await assertDatabaseSchemaReady();
 
     const body = (await req.json()) as Record<string, unknown>;
     const gradeId = String(body.id || "").trim();

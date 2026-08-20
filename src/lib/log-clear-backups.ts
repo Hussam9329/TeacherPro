@@ -1,5 +1,4 @@
-import { Prisma } from '@prisma/client';
-import { db } from '@/lib/db';
+import type { Prisma } from '@prisma/client';
 
 export type LogClearBackupInsert = {
   id: string;
@@ -33,45 +32,7 @@ export type LogClearBackupRow = {
   restoredByName: string | null;
 };
 
-type RawExecutor = {
-  $executeRawUnsafe: (query: string, ...values: unknown[]) => Promise<unknown>;
-};
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TransactionExecutor = any;
-
-export async function ensureLogClearBackupTable(client: RawExecutor = db): Promise<void> {
-  await client.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "LogClearBackup" (
-      "id" TEXT PRIMARY KEY,
-      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "createdById" TEXT,
-      "createdByName" TEXT,
-      "scopeIds" TEXT NOT NULL,
-      "scopeLabels" TEXT NOT NULL,
-      "dateFrom" TEXT,
-      "dateTo" TEXT,
-      "rangeLabel" TEXT NOT NULL,
-      "auditLogs" TEXT NOT NULL,
-      "opportunityLogs" TEXT NOT NULL,
-      "auditCount" INTEGER NOT NULL DEFAULT 0,
-      "opportunityCount" INTEGER NOT NULL DEFAULT 0,
-      "restoredAt" TIMESTAMP(3),
-      "restoredById" TEXT,
-      "restoredByName" TEXT
-    )
-  `);
-
-  await client.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS "LogClearBackup_createdAt_idx"
-    ON "LogClearBackup" ("createdAt")
-  `);
-
-  await client.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS "LogClearBackup_restoredAt_idx"
-    ON "LogClearBackup" ("restoredAt")
-  `);
-}
+type TransactionExecutor = Pick<Prisma.TransactionClient, '$executeRaw'>;
 
 export async function insertLogClearBackup(tx: TransactionExecutor, backup: LogClearBackupInsert): Promise<void> {
   await tx.$executeRaw`

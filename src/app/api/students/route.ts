@@ -17,6 +17,7 @@ import {
 import { getRequiredTextError } from "@/lib/validation";
 import {
   databaseMigrationRequiredResponse,
+  isDatabaseMigrationRequiredError,
   isMissingDatabaseObjectError,
 } from "@/lib/route-helpers";
 import {
@@ -35,9 +36,9 @@ import { archiveAndResetStudentEnrollment } from "@/lib/student-enrollment-archi
 import { buildStudentAcademicImpactToken } from "@/lib/student-academic-impact-token";
 import {
   allocateStudentCodes,
-  ensureStudentCodeSequenceReady,
   retryStudentCodeConflict,
 } from "@/lib/student-code-sequence";
+import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import {
   normalizeGracePeriodStartMode,
   resolveManualGraceStartDate,
@@ -129,6 +130,11 @@ class StudentIntegrityError extends Error {
 }
 
 function getPrismaStudentErrorResponse(error: unknown) {
+  if (isDatabaseMigrationRequiredError(error)) {
+    return databaseMigrationRequiredResponse(
+      String((error as Error).message || "قاعدة البيانات تحتاج تحديثاً."),
+    );
+  }
   if (error instanceof StudentIntegrityError) {
     return NextResponse.json(
       { error: error.message },
@@ -486,7 +492,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await ensureStudentCodeSequenceReady();
+    await assertDatabaseSchemaReady();
     const created = await retryStudentCodeConflict(() =>
       withSerializableTransaction(async (tx) => {
         // Re-read the course and active chapter inside the same serializable

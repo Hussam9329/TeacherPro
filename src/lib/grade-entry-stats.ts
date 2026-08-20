@@ -6,47 +6,6 @@ type GradeCountRow = Pick<
 >;
 
 /**
- * Counts the official numeric grades entered for one exam.
- *
- * Automatic rows such as grace-period, absence, leave use a non-numeric status
- * and are deliberately not included. A manually entered zero still counts.
- * 
- * NOTE: Pre-registration grades with status "درجة" ARE included because they
- * were manually entered by the teacher. Only pure automatic statuses are excluded.
- */
-export function countManualNumericGradesForExam(
-  grades: readonly GradeCountRow[],
-  examId: string,
-) {
-  if (!examId) return 0;
-
-  const gradedStudentIds = new Set<string>();
-  
-  // الحالات التلقائية البحتة التي يجب استبعادها فقط
-  // (الدرجات قبل التسجيل التي أدخلها المعلم يدوياً تُحتسب!)
-  const purelyAutomaticStatuses = new Set([
-    "غائب",      // غياب تلقائي
-    "غش",        // غش تلقائي
-    "مجاز",      // إجازة تلقائية
-    "ضمن فترة السماح", // فترة سماح تلقائية
-  ]);
-
-  for (const grade of grades) {
-    if (
-      grade.examId !== examId ||
-      grade.status !== "درجة" ||
-      typeof grade.score !== "number" ||
-      !Number.isFinite(grade.score)
-    ) {
-      continue;
-    }
-    gradedStudentIds.add(grade.studentId);
-  }
-
-  return gradedStudentIds.size;
-}
-
-/**
  * Counts ALL manual grades for an exam including pending ones.
  * 
  * This includes:

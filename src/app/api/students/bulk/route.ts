@@ -23,9 +23,14 @@ import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import {
   allocateStudentCodes,
-  ensureStudentCodeSequenceReady,
   retryStudentCodeConflict,
 } from "@/lib/student-code-sequence";
+import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
+import {
+  isDatabaseMigrationRequiredError,
+  isMissingDatabaseObjectError,
+  routeErrorResponse,
+} from "@/lib/route-helpers";
 import { resolveManualGraceStartDate } from "@/lib/student-grace";
 import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
 
@@ -107,6 +112,12 @@ class BulkStudentIntegrityError extends Error {
 }
 
 function getPrismaStudentErrorResponse(error: unknown) {
+  if (
+    isDatabaseMigrationRequiredError(error) ||
+    isMissingDatabaseObjectError(error)
+  ) {
+    return routeErrorResponse(error);
+  }
   if (error instanceof BulkStudentIntegrityError) {
     return NextResponse.json(
       { error: error.message },
@@ -428,7 +439,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await ensureStudentCodeSequenceReady();
+    await assertDatabaseSchemaReady();
     const result = await retryStudentCodeConflict(() =>
       withSerializableTransaction(async (tx) => {
         // Re-read courses and active chapters inside the creation transaction.

@@ -6,10 +6,12 @@ import { getAuthPrincipal, requireAnyPermission, requirePermission } from '@/lib
 import { db } from '@/lib/db';
 import { routeErrorResponse, validationError } from '@/lib/route-helpers';
 import {
-  ensureGradeEntryMissingNoteSchema,
-  gradeEntryMissingNoteSchemaMessage,
-  withGradeEntryMissingNoteSchema,
-} from '@/lib/grade-entry-missing-note-schema';
+  assertDatabaseSchemaReady,
+  withDatabaseSchema,
+} from '@/lib/schema-readiness';
+
+const gradeEntryMissingNoteErrorMessage =
+  'تعذر الوصول إلى ملاحظات الطلاب غير الموجودين من بيانات النظام.';
 
 type NoteRow = {
   id: string;
@@ -42,7 +44,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const notes = await withGradeEntryMissingNoteSchema(async () =>
+    const notes = await withDatabaseSchema(async () =>
       db.gradeEntryMissingNote.findMany({
         orderBy: { updatedAt: 'desc' },
         take: 500,
@@ -50,7 +52,7 @@ export async function GET(req: NextRequest) {
     );
     return NextResponse.json({ notes: notes.map(normalize) });
   } catch (error) {
-    return routeErrorResponse(error, gradeEntryMissingNoteSchemaMessage);
+    return routeErrorResponse(error, gradeEntryMissingNoteErrorMessage);
   }
 }
 
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest) {
 
     const examName = (String(body?.examName ?? '').trim() || exam.name).slice(0, 200);
     const examDate = (String(body?.examDate ?? '').trim() || exam.date.toISOString()).slice(0, 30);
-    const note = await withGradeEntryMissingNoteSchema(() =>
+    const note = await withDatabaseSchema(() =>
       db.gradeEntryMissingNote.upsert({
         where: { examId },
         create: {
@@ -133,7 +135,7 @@ export async function PATCH(req: NextRequest) {
       return validationError('نسخة الملاحظة غير صالحة. حدّث الصفحة ثم حاول مجدداً.');
     }
 
-    const note = await withGradeEntryMissingNoteSchema(async () =>
+    const note = await withDatabaseSchema(async () =>
       db.$transaction(async (tx) => {
         const updated = await tx.gradeEntryMissingNote.updateMany({
           where: { id, updatedAt: new Date(expectedUpdatedAt) },
@@ -180,7 +182,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    await ensureGradeEntryMissingNoteSchema();
+    await assertDatabaseSchemaReady();
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     const examId = searchParams.get('examId');
