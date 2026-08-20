@@ -127,6 +127,7 @@ const RECOVERABLE_IDEMPOTENT_MIGRATIONS = [
   "20260712143000_grade_exam_integrity",
   "20260712190000_atomic_student_codes_and_active_chapter_guard",
   "20260712220000_student_enrollment_archives",
+  "20260712234500_operational_integrity_hardening",
 ];
 
 const INITIAL_SCHEMA_BRIDGE = "20260601000000_initial_schema_bridge";
@@ -197,11 +198,10 @@ function getInitialSchemaBridgeState(url) {
 }
 
 /**
- * The original form of the grade/exam migration referenced Exam scheduling
- * columns before creating them. If a production deployment already attempted
- * that file, Prisma records it as failed and refuses every later deployment
- * with P3009. Recover only that exact, known, idempotent migration; unknown
- * failed migrations must still stop deployment for manual review.
+ * A production deployment can be interrupted after an idempotent migration
+ * starts but before Prisma marks it complete. Recover only the exact, reviewed
+ * migrations above; unknown failed migrations must still stop deployment for
+ * manual review.
  */
 function hasUnresolvedKnownMigration(url, migrationName) {
   const probe = spawnSync(

@@ -23,6 +23,8 @@ function check(condition, message) {
 const reconciliationMigrationName =
   "20260820140000_schema_authority_reconciliation";
 const initialBridgeMigrationName = "20260601000000_initial_schema_bridge";
+const recoveredOperationalMigrationName =
+  "20260712234500_operational_integrity_hardening";
 const reconciliationMigrationPath = path.join(
   "prisma/migrations",
   reconciliationMigrationName,
@@ -38,6 +40,13 @@ const prismaSchema = read("prisma/schema.prisma");
 const reconciliationMigration = read(reconciliationMigrationPath);
 const initialBridgeMigration = read(
   path.join("prisma/migrations", initialBridgeMigrationName, "migration.sql"),
+);
+const recoveredOperationalMigration = read(
+  path.join(
+    "prisma/migrations",
+    recoveredOperationalMigrationName,
+    "migration.sql",
+  ),
 );
 const migrationLock = read("prisma/migrations/migration_lock.toml");
 const examStatsRoute = read("src/app/api/exams/stats/route.ts");
@@ -95,6 +104,13 @@ check(
     buildScript.includes('["migrate", "resolve", "--applied", INITIAL_SCHEMA_BRIDGE]') &&
     buildScript.includes('initialSchemaBridgeState === "existing"'),
   "existing production is explicitly baselined while an empty database executes the bridge migration",
+);
+check(
+  buildScript.includes(`"${recoveredOperationalMigrationName}"`) &&
+    buildScript.includes('["migrate", "resolve", "--rolled-back", migrationName]') &&
+    recoveredOperationalMigration.includes('CREATE OR REPLACE FUNCTION "guard_student_leave_integrity"()') &&
+    recoveredOperationalMigration.includes('CREATE TABLE IF NOT EXISTS "TelegramExamSubmissionVersion"'),
+  "the exact historical interrupted migration is present and recoverable through its reviewed idempotent path",
 );
 check(
   buildScript.includes("DIRECT_URL") &&
