@@ -38,6 +38,7 @@ export function mutationCanBeReplayed(
   const record = payload && typeof payload === "object"
     ? payload as Record<string, unknown>
     : {};
+  if (method === "POST" && record.previewOnly === true) return true;
   const hasGuard = [
     "previewToken",
     "academicImpactPreviewToken",

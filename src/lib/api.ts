@@ -160,13 +160,23 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
       }
     };
     const replaySafe = mutationCanBeReplayed(`/api/${endpoint}`, "POST", data);
+    const persistTransientFailure = !(
+      data &&
+      typeof data === "object" &&
+      (data as Record<string, unknown>).previewOnly === true
+    );
     const result = replaySafe
       ? await retryTransientMutation(runOnce)
       : await runOnce();
 
     // If all retries exhausted on a transient failure, queue to outbox
     // so the mutation survives page reloads and is retried when network returns.
-    if (!result.ok && result.transient && replaySafe) {
+    if (
+      !result.ok &&
+      result.transient &&
+      replaySafe &&
+      persistTransientFailure
+    ) {
       try {
         const { queueOnly } = require("./mutation-outbox");
         queueOnly({
@@ -1494,6 +1504,17 @@ export interface StudentRegisterContextResponse {
   source: "database";
 }
 
+export interface StudentBulkPreviewRow {
+  rowNumber: number;
+  duplicateMessage: string | null;
+  warnings: string[];
+}
+
+export interface StudentBulkPreviewResponse {
+  rows: StudentBulkPreviewRow[];
+  source: "database";
+}
+
 export const studentRegisterApi = {
   context: () =>
     apiGet<StudentRegisterContextResponse>("students/register-context"),
@@ -1567,6 +1588,10 @@ export const studentApi = {
   },
   bulkAdd: (students: Array<Record<string, unknown>>) =>
     apiPost("students/bulk", { students }),
+  bulkPreview: (students: Array<Record<string, unknown>>) =>
+    apiPost("students/bulk", { students, previewOnly: true }) as Promise<
+      ApiResult & { data?: StudentBulkPreviewResponse }
+    >,
   deleteImpact: (id: string) =>
     apiGet<StudentDeleteImpactResponse>(
       `students/delete-impact?id=${encodeURIComponent(id)}`,

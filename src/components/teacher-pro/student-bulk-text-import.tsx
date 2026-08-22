@@ -9,6 +9,7 @@ import {
 import {
   studentApi,
   studentRegisterApi,
+  type StudentBulkPreviewResponse,
   type StudentRegisterContextResponse,
   type StudentRegisterContextRow,
 } from "@/lib/api";
@@ -57,7 +58,6 @@ import {
 } from "@/lib/course-config";
 import { normalizeIraqiProvinceName } from "@/lib/iraq";
 import {
-  getStudentDuplicateMessage,
   normalizePhoneForDuplicate,
   normalizeStudentName,
   normalizeTelegramIdentifier,
@@ -105,7 +105,6 @@ type PreviewRow = {
   errors: string[];
   warnings: string[];
   activeChapterName?: string;
-  source?: "database";
 };
 
 type PreviewCategory =
@@ -301,6 +300,17 @@ function getBulkCreateResponse(data: unknown): {
     : {};
 }
 
+function getBulkPreviewResponse(
+  data: unknown,
+): StudentBulkPreviewResponse | null {
+  if (!data || typeof data !== "object") return null;
+  const candidate = data as Partial<StudentBulkPreviewResponse>;
+  if (candidate.source !== "database" || !Array.isArray(candidate.rows)) {
+    return null;
+  }
+  return candidate as StudentBulkPreviewResponse;
+}
+
 function phoneLabel(phone: string) {
   return phone || "—";
 }
@@ -332,11 +342,12 @@ export function StudentBulkTextImportView() {
     "bulk-import",
   ]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
-  const { students, loadFromServer, mergeStudentsCache } = useTeacherStore();
+  const { loadFromServer } = useTeacherStore();
   const [rawText, setRawText] = useState("");
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [previewDone, setPreviewDone] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importPolicy, setImportPolicy] = useState<ImportPolicy>("valid-only");
   const [registerContext, setRegisterContext] =
@@ -370,23 +381,6 @@ export function StudentBulkTextImportView() {
   useEffect(() => {
     void loadBulkContext(isBackgroundSync());
   }, [loadBulkContext, syncKey, isBackgroundSync]);
-
-  useEffect(() => {
-    let cancelled = false;
-    studentApi
-      .listAll()
-      .then((result) => {
-        if (!cancelled) {
-          mergeStudentsCache((result?.students || []) as unknown as Student[]);
-        }
-      })
-      .catch(() => {
-        // فحص التكرار المحلي يستخدم آخر بيانات مؤقتة متاح عند فشل الاتصال.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [mergeStudentsCache, syncKey]);
 
   const groupedPreviewRows = useMemo(() => {
     const groups: Record<PreviewCategory, PreviewRow[]> = {
@@ -426,12 +420,16 @@ export function StudentBulkTextImportView() {
   const canImport =
     previewDone &&
     summary.ready > 0 &&
+    !isPreviewing &&
     !isImporting &&
     !contextLoading &&
     Boolean(registerContext) &&
     (importPolicy === "valid-only" || summary.blockingRows === 0);
 
-  const contextRows = registerContext?.rows || [];
+  const contextRows = useMemo(
+    () => registerContext?.rows || [],
+    [registerContext],
+  );
   const contextCourses = useMemo(
     () => contextRows.map(normalizeRegisterContextCourse),
     [contextRows],
@@ -441,7 +439,8 @@ export function StudentBulkTextImportView() {
     [contextRows],
   );
 
-  const buildPreview = () => {
+  const buildPreview = async () => {
+    if (isPreviewing) return;
     if (contextLoading) {
       toast.error("انتظر اكتمال تحميل سياق التسجيل الجماعي من بيانات النظام");
       return;
@@ -461,6 +460,8 @@ export function StudentBulkTextImportView() {
       setPreviewDone(false);
       return;
     }
+    setPreviewRows([]);
+    setPreviewDone(false);
 
     const result: PreviewRow[] = parsedRows.map((cells, index) => {
       const errors: string[] = [];
@@ -596,26 +597,6 @@ export function StudentBulkTextImportView() {
         }
       }
 
-      const duplicateMessage = getStudentDuplicateMessage(students, {
-        name: nameRaw,
-        phone,
-        telegram,
-      });
-      if (duplicateMessage)
-        errors.push(duplicateMessage.replace("لا يمكن إضافة الطالب: ", ""));
-
-      const duplicateParentPhone = parentPhone
-        ? students.find(
-            (student) =>
-              normalizePhoneForDuplicate(student.parentPhone) === parentPhone,
-          )
-        : null;
-      if (duplicateParentPhone) {
-        warnings.push(
-          `رقم ولي الأمر موجود مسبقاً عند: ${duplicateParentPhone.name}`,
-        );
-      }
-
       const student: BulkStudentDraft | null =
         errors.length === 0 &&
         course &&
@@ -685,7 +666,6 @@ export function StudentBulkTextImportView() {
         errors,
         warnings,
         activeChapterName: courseRow?.activeChapter?.name || undefined,
-        source: "database" as const,
       };
     });
 
@@ -731,6 +711,67 @@ export function StudentBulkTextImportView() {
       }
     }
 
+    const databaseCandidates = result.filter(
+      (row): row is PreviewRow & { student: BulkStudentDraft } =>
+        Boolean(row.student) && row.errors.length === 0,
+    );
+    if (databaseCandidates.length > 0) {
+      setIsPreviewing(true);
+      try {
+        const databaseResult = await studentApi.bulkPreview(
+          databaseCandidates.map((row) => ({
+            ...row.student,
+            previewRowNumber: row.rowNumber,
+          })) as Array<Record<string, unknown>>,
+        );
+        if (!databaseResult.ok) {
+          toast.error("تعذر إكمال المعاينة من بيانات النظام", {
+            description:
+              databaseResult.error || "تحقق من الاتصال ثم حاول مرة أخرى.",
+          });
+          return;
+        }
+        const databasePreview = getBulkPreviewResponse(databaseResult.data);
+        if (!databasePreview) {
+          toast.error("وصلت نتيجة معاينة غير مكتملة من بيانات النظام", {
+            description: "أعد المحاولة قبل تنفيذ الإضافة.",
+          });
+          return;
+        }
+
+        const serverByRow = new Map(
+          databasePreview.rows.map((row) => [row.rowNumber, row]),
+        );
+        for (const row of databaseCandidates) {
+          const serverRow = serverByRow.get(row.rowNumber);
+          if (!serverRow) {
+            toast.error("تعذر مطابقة نتيجة المعاينة مع السطور", {
+              description: "أعد المحاولة قبل تنفيذ الإضافة.",
+            });
+            return;
+          }
+          if (serverRow.duplicateMessage) {
+            row.errors.push(
+              serverRow.duplicateMessage.replace(
+                /^لا يمكن إضافة الطالب:\s*/,
+                "",
+              ),
+            );
+          }
+          for (const warning of serverRow.warnings || []) {
+            if (!row.warnings.includes(warning)) row.warnings.push(warning);
+          }
+        }
+      } catch {
+        toast.error("تعذر الاتصال لإكمال المعاينة", {
+          description: "لم يتم اعتماد أي نتيجة. تحقق من الاتصال وحاول مجدداً.",
+        });
+        return;
+      } finally {
+        setIsPreviewing(false);
+      }
+    }
+
     setPreviewRows(result);
     setPreviewDone(true);
     const errorsCount = result.filter((row) => row.errors.length > 0).length;
@@ -742,7 +783,7 @@ export function StudentBulkTextImportView() {
         description: `جاهز ${readyCount} سطر، ويحتاج ${errorsCount} سطر إلى مراجعة`,
       });
     } else {
-      toast.success("المعاينة سليمة", {
+      toast.success("المعاينة سليمة من بيانات النظام", {
         description: `جاهز لإضافة ${result.length} طالب بعد التأكيد`,
       });
     }
@@ -920,6 +961,7 @@ export function StudentBulkTextImportView() {
                 type="button"
                 variant="outline"
                 onClick={() => setRawText(SAMPLE_TEXT)}
+                disabled={isPreviewing}
               >
                 وضع المثال
               </Button>
@@ -928,6 +970,7 @@ export function StudentBulkTextImportView() {
             <textarea
               dir="rtl"
               value={rawText}
+              disabled={isPreviewing}
               onChange={(event) => {
                 setRawText(event.target.value);
                 setPreviewDone(false);
@@ -966,16 +1009,23 @@ export function StudentBulkTextImportView() {
                     setPreviewRows([]);
                     setPreviewDone(false);
                   }}
+                  disabled={isPreviewing}
                 >
                   مسح
                 </Button>
                 <Button
                   type="button"
                   onClick={buildPreview}
-                  disabled={contextLoading || !registerContext}
+                  disabled={isPreviewing || contextLoading || !registerContext}
                 >
-                  <Eye className="ml-2 size-4" />
-                  معاينة وفحص
+                  {isPreviewing ? (
+                    <Loader2 className="ml-2 size-4 animate-spin" />
+                  ) : (
+                    <Eye className="ml-2 size-4" />
+                  )}
+                  {isPreviewing
+                    ? "جارٍ الفحص من بيانات النظام"
+                    : "معاينة وفحص"}
                 </Button>
               </div>
             </div>
@@ -997,8 +1047,8 @@ export function StudentBulkTextImportView() {
                 <div>
                   <h3 className="text-lg font-black">نتيجة المعاينة</h3>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    المعاينة مقسمة حتى يعرف المستخدم بالضبط ما الذي سيُستورد وما
-                    الذي يحتاج مراجعة.
+                    النتيجة مفحوصة مباشرةً من بيانات النظام حتى يعرف المستخدم
+                    ما الذي سيُستورد وما الذي يحتاج مراجعة.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">

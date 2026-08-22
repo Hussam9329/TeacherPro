@@ -15,6 +15,8 @@ const bulkView = read(
   "src/components/teacher-pro/student-bulk-text-import.tsx",
 );
 const api = read("src/lib/api.ts");
+const apiRateLimit = read("src/lib/api-rate-limit.ts");
+const mutationReplayPolicy = read("src/lib/mutation-replay-policy.ts");
 const codeSequence = read("src/lib/student-code-sequence.ts");
 const migration = read(
   "prisma/migrations/20260712190000_atomic_student_codes_and_active_chapter_guard/migration.sql",
@@ -55,10 +57,19 @@ assert(
 assert(
   bulkRoute.includes("duplicateConditions") &&
     bulkRoute.includes("where: { OR: duplicateConditions }") &&
+    !bulkRoute.includes("take: 50") &&
     !bulkRoute.includes(
       "select: { id: true, name: true, phone: true, telegram: true, code: true }",
     ),
-  "فحص التكرار في التسجيل الجماعي موجه بالمفاتيح الفريدة ولا يحمل كل الطلاب فقط للفحص",
+  "فحص التكرار موجه بالمفاتيح الفريدة ولا يتوقف بعد أول 50 نتيجة",
+);
+assert(
+  bulkRoute.includes("const previewOnly = body.previewOnly === true") &&
+    bulkRoute.includes("databasePreviewRows") &&
+    bulkRoute.includes('source: "database"') &&
+    bulkRoute.includes("API_RATE_LIMITS.bulkStudentsPreview") &&
+    apiRateLimit.includes("bulkStudentsPreview"),
+  "API المعاينة يفحص كل الأسطر من قاعدة البيانات بمعدل منفصل عن الحفظ",
 );
 assert(
   bulkRoute.includes("withSerializableTransaction") &&
@@ -96,8 +107,23 @@ assert(
 assert(
   bulkView.includes("contextLoading") &&
     bulkView.includes("contextError") &&
-    bulkView.includes("disabled={contextLoading || !registerContext}"),
+    bulkView.includes("isPreviewing || contextLoading || !registerContext"),
   "زر المعاينة لا يعمل قبل تحميل سياق قاعدة البيانات بوضوح",
+);
+assert(
+  bulkView.includes("await studentApi.bulkPreview") &&
+    bulkView.includes("جارٍ الفحص من بيانات النظام") &&
+    bulkView.includes("المعاينة سليمة من بيانات النظام") &&
+    !bulkView.includes(".listAll()") &&
+    !bulkView.includes("getStudentDuplicateMessage(students") &&
+    api.includes("bulkPreview:") &&
+    api.includes("previewOnly: true") &&
+    api.includes("persistTransientFailure"),
+  "المعاينة تنتظر فحص قاعدة البيانات ولا تعتمد على تنزيل كاش كل الطلاب",
+);
+assert(
+  mutationReplayPolicy.includes("record.previewOnly === true"),
+  "طلب المعاينة غير المعدّل قابل لإعادة المحاولة الآمنة عند انقطاع الاتصال",
 );
 assert(
   bulkView.includes("course.active === false") &&

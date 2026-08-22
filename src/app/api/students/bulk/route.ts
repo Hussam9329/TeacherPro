@@ -54,6 +54,7 @@ type BulkStudentPayload = {
   opportunities?: unknown;
   baseOpportunities?: unknown;
   accountingGraceDays?: unknown;
+  previewRowNumber?: unknown;
 };
 
 type BulkCourse = {
@@ -168,13 +169,17 @@ export async function POST(req: NextRequest) {
   const authError = await requirePermission(req, "students.add");
   if (authError) return authError;
 
+  const body = await req.json().catch(() => ({}));
+  const previewOnly = body.previewOnly === true;
+
   const rateLimitError = await checkApiRateLimit(
     req,
-    API_RATE_LIMITS.bulkStudents,
+    previewOnly
+      ? API_RATE_LIMITS.bulkStudentsPreview
+      : API_RATE_LIMITS.bulkStudents,
   );
   if (rateLimitError) return rateLimitError;
 
-  const body = await req.json().catch(() => ({}));
   const rows = Array.isArray(body.students)
     ? (body.students as BulkStudentPayload[])
     : [];
@@ -240,7 +245,13 @@ export async function POST(req: NextRequest) {
   }>;
 
   for (const [index, row] of rows.entries()) {
-    const rowNo = index + 1;
+    const requestedPreviewRowNumber = Number(row.previewRowNumber);
+    const rowNo =
+      previewOnly &&
+      Number.isInteger(requestedPreviewRowNumber) &&
+      requestedPreviewRowNumber > 0
+        ? requestedPreviewRowNumber
+        : index + 1;
     const name = asText(row.name);
     const school = asText(row.school);
     const gender = asText(row.gender);
@@ -408,34 +419,77 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const duplicateConditions: Record<string, string>[] = [];
-  for (const row of normalizedRows) {
-    if (row.uniqueKeys.nameKey)
-      duplicateConditions.push({ nameKey: row.uniqueKeys.nameKey });
-    if (row.uniqueKeys.phoneKey)
-      duplicateConditions.push({ phoneKey: row.uniqueKeys.phoneKey });
-    if (row.uniqueKeys.telegramKey)
-      duplicateConditions.push({ telegramKey: row.uniqueKeys.telegramKey });
-  }
-  const duplicateSource = duplicateConditions.length
-    ? await db.student.findMany({
-        where: { OR: duplicateConditions },
-        select: { id: true, name: true, phone: true, telegram: true },
-        take: 50,
-      })
+  const uniqueValues = (values: Array<string | null | undefined>) =>
+    Array.from(
+      new Set(values.filter((value): value is string => Boolean(value))),
+    );
+  const nameKeys = uniqueValues(
+    normalizedRows.map((row) => row.uniqueKeys.nameKey),
+  );
+  const phoneKeys = uniqueValues(
+    normalizedRows.map((row) => row.uniqueKeys.phoneKey),
+  );
+  const telegramKeys = uniqueValues(
+    normalizedRows.map((row) => row.uniqueKeys.telegramKey),
+  );
+  const parentPhones = previewOnly
+    ? uniqueValues(normalizedRows.map((row) => row.parentPhone))
     : [];
-  for (const row of normalizedRows) {
+  const duplicateConditions = [
+    ...(nameKeys.length ? [{ nameKey: { in: nameKeys } }] : []),
+    ...(phoneKeys.length ? [{ phoneKey: { in: phoneKeys } }] : []),
+    ...(telegramKeys.length ? [{ telegramKey: { in: telegramKeys } }] : []),
+  ];
+  const [duplicateSource, parentPhoneSource] = await Promise.all([
+    duplicateConditions.length
+      ? db.student.findMany({
+          where: { OR: duplicateConditions },
+          select: { id: true, name: true, phone: true, telegram: true },
+        })
+      : Promise.resolve([]),
+    parentPhones.length
+      ? db.student.findMany({
+          where: { parentPhone: { in: parentPhones } },
+          select: { name: true, parentPhone: true },
+          distinct: ["parentPhone"],
+        })
+      : Promise.resolve([]),
+  ]);
+  const databasePreviewRows = normalizedRows.map((row) => {
     const duplicateMessage = getStudentDuplicateMessage(duplicateSource, {
       name: asText(row.payload.name),
       phone: row.phone,
       telegram: row.telegram,
     });
-    if (duplicateMessage) {
-      return NextResponse.json(
-        { error: `السطر ${row.rowNo}: ${duplicateMessage}` },
-        { status: 409 },
-      );
-    }
+    const parentPhoneMatch = parentPhoneSource.find(
+      (student) => normalizeBulkPhone(student.parentPhone) === row.parentPhone,
+    );
+    return {
+      rowNumber: row.rowNo,
+      duplicateMessage,
+      warnings: parentPhoneMatch
+        ? [`رقم ولي الأمر موجود مسبقاً عند: ${parentPhoneMatch.name}`]
+        : [],
+    };
+  });
+
+  if (previewOnly) {
+    return NextResponse.json({
+      rows: databasePreviewRows,
+      source: "database",
+    });
+  }
+
+  const duplicateRow = databasePreviewRows.find(
+    (row) => row.duplicateMessage,
+  );
+  if (duplicateRow?.duplicateMessage) {
+    return NextResponse.json(
+      {
+        error: `السطر ${duplicateRow.rowNumber}: ${duplicateRow.duplicateMessage}`,
+      },
+      { status: 409 },
+    );
   }
 
   try {
