@@ -1612,7 +1612,7 @@ export function CoursesView() {
       >
         <DialogContent
           dir="rtl"
-          className="!left-0 !top-0 z-[70] h-dvh w-screen !max-w-none !translate-x-0 !translate-y-0 overflow-hidden rounded-none border-0 bg-background p-0 shadow-none sm:!max-w-none sm:p-0"
+          className="teacherpro-fullscreen-dialog left-0 top-0 z-[70] flex h-dvh max-h-dvh w-dvw max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-background p-0 shadow-none sm:w-dvw sm:max-w-none sm:rounded-none sm:p-0"
         >
           <div className="flex h-full min-h-0 flex-col">
             <DialogHeader className="shrink-0 border-b bg-background/95 px-5 py-5 text-right shadow-sm backdrop-blur md:px-8">

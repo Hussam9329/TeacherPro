@@ -589,7 +589,7 @@ export function DashboardView() {
               <Button
                 variant="outline"
                 size="sm"
-                className="min-w-56"
+                className="w-full sm:w-auto sm:min-w-56"
                 onClick={() => navigateFromDashboard("logs")}
               >
                 عرض المزيد من السجلات

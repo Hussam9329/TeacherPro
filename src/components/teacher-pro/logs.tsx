@@ -291,7 +291,7 @@ export function LogsView() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} aria-label="جدول سجلات النظام؛ يمكن تمريره أفقياً عند الحاجة">
             <table className="responsive-table text-sm">
               <thead>
                 <tr>

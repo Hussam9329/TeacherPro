@@ -1106,8 +1106,8 @@ export function OpportunitiesView() {
                     className="flex flex-col gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm transition-[border-color,box-shadow,background-color] duration-200 hover:border-primary/30 hover:shadow-lg lg:flex-row lg:items-center"
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-sm truncate">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="min-w-0 flex-1 break-words text-sm font-medium [overflow-wrap:anywhere]">
                           {student.name}
                         </p>
                         <Badge variant="outline" className="text-[10px]">
@@ -1409,7 +1409,7 @@ export function OpportunitiesView() {
                   </p>
                 </div>
               </div>
-              <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
+              <div className="max-h-[55dvh] space-y-3 overflow-y-auto pe-1">
                 {detailsLogsLoading ? (
                   <p className="empty-state py-8">
                     جاري تحميل سجل الطالب من بيانات النظام...

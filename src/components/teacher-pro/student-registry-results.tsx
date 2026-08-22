@@ -484,7 +484,7 @@ export function StudentRegistryResults({
           />
         ))}
       </div>
-      <div className="table-wrap tp-student-registry__table-wrap hidden lg:block" tabIndex={0}>
+      <div className="table-wrap tp-student-registry__table-wrap hidden lg:block" tabIndex={0} aria-label="جدول سجل الطلاب؛ يمكن تمريره أفقياً وعمودياً">
         <table className="responsive-table tp-student-registry__table min-w-[1120px] text-sm">
           <caption className="sr-only">
             نتائج سجل الطلاب حسب الفلاتر الحالية، وتشمل بيانات الدراسة والتواصل والحالة والإجراءات.

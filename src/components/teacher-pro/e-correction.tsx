@@ -1355,7 +1355,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
       >
         <DialogContent
           dir="rtl"
-          className="sm:max-w-5xl max-h-[90vh] overflow-hidden"
+          className="max-h-[calc(100dvh-1rem)] overflow-hidden sm:max-h-[calc(100dvh-2rem)] sm:max-w-5xl"
         >
           <DialogHeader>
             <DialogTitle>
@@ -1369,7 +1369,7 @@ TEACHERPRO_BOT_INGEST_TOKEN=${BOT_INGEST_TOKEN_PLACEHOLDER}`;
               صفحة • الاستلام {formatDateTime(botSubmissionDialog?.receivedAt)}
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="max-h-[68vh] pr-2">
+          <ScrollArea className="max-h-[calc(100dvh-13rem)] min-h-0 pe-2">
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                 <div className="rounded-2xl border bg-muted/30 p-3">

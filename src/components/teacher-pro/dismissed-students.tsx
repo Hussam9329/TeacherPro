@@ -925,7 +925,7 @@ export function DismissedStudentsView() {
           })}
         </div>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} aria-label="جدول الطلاب المفصولين؛ يمكن تمريره أفقياً عند الحاجة">
           <table className="responsive-table text-sm">
             <thead>
               <tr>

@@ -135,7 +135,7 @@ function ProfileLoadNotice({
       <p className="min-w-0 flex-1 break-words font-bold text-destructive">
         {error}{hasFallback ? " المعروض أدناه نسخة محلية احتياطية وقد تكون غير مكتملة." : ""}
       </p>
-      <button type="button" onClick={onRetry} className="min-h-10 rounded-xl border border-destructive/30 px-3 py-2 font-black text-destructive focus:outline-none focus:ring-2 focus:ring-destructive/30">
+      <button type="button" onClick={onRetry} className="min-h-11 max-w-full touch-manipulation rounded-xl border border-destructive/30 px-3 py-2 font-black text-destructive [overflow-wrap:anywhere] focus:outline-none focus:ring-2 focus:ring-destructive/30">
         إعادة المحاولة
       </button>
     </div>
@@ -901,7 +901,7 @@ export function StudentProfileDialog({
     <section
       ref={dialogRef}
       dir="rtl"
-      className="tp-student-profile fixed inset-0 z-[999] flex h-[100dvh] w-full max-w-full flex-col overflow-hidden bg-background text-foreground"
+      className="tp-student-profile fixed inset-0 z-[999] flex h-dvh w-dvw max-w-full flex-col overflow-hidden bg-background text-foreground"
       aria-labelledby="student-profile-title"
       aria-describedby="student-profile-description"
       aria-busy={statsPending || profileLogPending}
@@ -910,13 +910,13 @@ export function StudentProfileDialog({
       tabIndex={-1}
     >
       <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background">
-        <div className="tp-student-profile__header sticky top-0 z-30 shrink-0 border-b bg-background/95 p-4 text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:p-6">
+        <div className="tp-student-profile__header sticky top-0 z-30 shrink-0 border-b bg-background/95 px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6 sm:pb-6 sm:pt-[max(1.5rem,env(safe-area-inset-top))]">
           <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0 space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={profileStudent.status === "نشط" ? "default" : "destructive"}>{profileStudent.status}</Badge>
                 <Badge variant="outline">{profileStudent.code}</Badge>
-                <Badge variant="secondary" className="max-w-full truncate">{courseName(profileStudent.courseId)}</Badge>
+                <Badge variant="secondary" className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">{courseName(profileStudent.courseId)}</Badge>
                 <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary font-bold">فرص: {opportunityText}</Badge>
                 <Badge variant="outline" className="border-sky-300/60 bg-sky-500/10 font-bold text-sky-700 dark:text-sky-300">تاريخ الإضافة: {formatAppDate(profileStudent.createdAt, profileStudent.createdAt || "-")}</Badge>
               </div>
@@ -930,7 +930,7 @@ export function StudentProfileDialog({
                 ref={initialFocusRef}
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="inline-flex min-h-10 items-center gap-2 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-2 text-sm font-black text-primary shadow-sm transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-2 text-sm font-black text-primary shadow-sm transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/30"
                 aria-label="الرجوع من ملف الطالب"
               >
                 <ArrowRightIcon className="size-4" />
@@ -939,7 +939,7 @@ export function StudentProfileDialog({
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="inline-flex min-h-10 items-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 shadow-sm transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
+                className="inline-flex min-h-11 items-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 shadow-sm transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
                 aria-label="إغلاق ملف الطالب"
               >
                 إغلاق
@@ -968,7 +968,7 @@ export function StudentProfileDialog({
                   }}
                   aria-pressed={isActive}
                   aria-controls="student-profile-panel"
-                  className={`min-w-0 rounded-2xl border p-3 text-right shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md sm:rounded-3xl sm:p-4 ${
+                  className={`min-h-11 min-w-0 touch-manipulation rounded-2xl border p-3 text-right shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md sm:rounded-3xl sm:p-4 ${
                     isActive ? "border-primary/50 bg-primary/10 text-primary" : "bg-card/80 hover:border-primary/25"
                   }`}
                 >
@@ -1395,7 +1395,7 @@ export function StudentProfileDialog({
                 <button
                   type="button"
                   onClick={() => setTimelineVisibleCount((value) => value + 100)}
-                  className="mx-auto mt-4 block min-h-10 rounded-xl border px-4 py-2 text-sm font-black text-primary hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="mx-auto mt-4 block min-h-11 max-w-full touch-manipulation rounded-xl border px-4 py-2 text-sm font-black text-primary [overflow-wrap:anywhere] hover:bg-primary/5 focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
                   عرض المزيد ({fullStudentLog.length - visibleStudentLog.length} متبقٍ)
                 </button>

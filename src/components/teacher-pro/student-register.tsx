@@ -933,7 +933,7 @@ export function StudentRegisterView() {
                         )}
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-center md:min-w-72">
+                    <div className="grid grid-cols-1 gap-2 text-center min-[360px]:grid-cols-3 md:min-w-72">
                       <div className="rounded-2xl border bg-background/70 p-3">
                         <p className="text-[11px] text-muted-foreground">
                           الطلاب
@@ -1536,7 +1536,7 @@ export function StudentRegisterView() {
                   !registerContext ||
                   selectedCourseCannotRegister
                 }
-                className="h-14 min-w-56 rounded-2xl px-10 text-base font-black shadow-lg shadow-primary/20"
+                className="h-auto min-h-14 w-full rounded-2xl px-6 py-3 text-base font-black shadow-lg shadow-primary/20 sm:w-auto sm:min-w-56 sm:px-10"
               >
                 {isSubmitting ? (
                   <Loader2 className="ml-2 h-5 w-5 animate-spin" />

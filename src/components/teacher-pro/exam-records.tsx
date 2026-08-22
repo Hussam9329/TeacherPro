@@ -1085,7 +1085,7 @@ export function ExamRecordsView() {
   );
 
   const renderTable = () => (
-    <div className="table-wrap">
+    <div className="table-wrap" tabIndex={0} aria-label="جدول سجلات الامتحانات؛ يمكن تمريره أفقياً عند الحاجة">
       <table className="responsive-table text-sm">
         <thead>
           <tr>

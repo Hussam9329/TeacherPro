@@ -60,7 +60,7 @@ function DateInput({
   }, [disabled]);
 
   return (
-    <div className="relative w-full">
+    <div className="relative w-full max-w-full min-w-0">
       <input
         {...props}
         ref={inputRef}
@@ -78,19 +78,20 @@ function DateInput({
           onChange?.(/^\d{4}-\d{2}-\d{2}$/.test(nextValue) ? nextValue : "");
         }}
         className={cn(
-          "border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive flex h-10 w-full min-w-0 rounded-xl border bg-background/70 px-3.5 py-2 pl-10 text-sm shadow-xs backdrop-blur transition-[color,box-shadow,border-color,background-color] outline-none focus-visible:ring-[3px] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
+          "border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive flex h-11 w-full max-w-full min-w-0 rounded-xl border bg-background/70 px-3.5 py-2 pl-12 text-sm shadow-xs backdrop-blur transition-[color,box-shadow,border-color,background-color] outline-none focus-visible:ring-[3px] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50",
           className,
           props["aria-invalid"] && "border-destructive ring-destructive/20",
         )}
       />
       <button
         type="button"
+        data-slot="date-input-trigger"
         tabIndex={-1}
         disabled={disabled}
         aria-label={ariaLabel || placeholder}
         aria-controls={controlId}
         onClick={openPicker}
-        className="absolute left-2 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+        className="touch-target absolute left-0 top-1/2 inline-flex size-11 touch-manipulation -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
       >
         <CalendarDays className="size-4" aria-hidden="true" />
       </button>

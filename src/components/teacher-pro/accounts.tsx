@@ -58,10 +58,10 @@ const PERMISSION_CATEGORIES: string[] = [
   ...ALL_PERMISSION_CATEGORIES.filter(category => !PREFERRED_PERMISSION_CATEGORIES.includes(category)),
 ];
 
-const ACCOUNT_DIALOG_CONTENT_CLASS = 'max-h-[88vh] max-w-3xl overflow-hidden p-0 flex flex-col';
-const ACCOUNT_DIALOG_HEADER_CLASS = 'shrink-0 px-6 pt-6 pb-3';
-const ACCOUNT_DIALOG_BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-6 py-2 space-y-4';
-const ACCOUNT_DIALOG_FOOTER_CLASS = 'shrink-0 border-t bg-background/95 px-6 py-4';
+const ACCOUNT_DIALOG_CONTENT_CLASS = 'flex max-h-[calc(100dvh-1rem)] max-w-3xl flex-col overflow-hidden p-0 sm:max-h-[calc(100dvh-2rem)]';
+const ACCOUNT_DIALOG_HEADER_CLASS = 'shrink-0 px-4 pb-3 pt-4 sm:px-6 sm:pt-6';
+const ACCOUNT_DIALOG_BODY_CLASS = 'min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto px-4 py-2 sm:px-6';
+const ACCOUNT_DIALOG_FOOTER_CLASS = 'shrink-0 border-t bg-background/95 px-4 py-4 sm:px-6';
 
 const PERMISSION_LEVEL_LABELS: Record<PermissionEntry['level'], string> = {
   read: 'عرض',
@@ -219,7 +219,7 @@ function PermissionChecklist({
   };
 
   return (
-    <ScrollArea className="max-h-[52vh] rounded-xl border bg-muted/15 p-3">
+    <ScrollArea className="max-h-[52dvh] rounded-xl border bg-muted/15 p-3">
       <div className="space-y-4">
         {PERMISSION_CATEGORIES.map(cat => {
           const catPerms = catalogByCategory.get(cat);
@@ -1146,7 +1146,7 @@ function SecurityTab() {
           <CardTitle className="text-base">آخر تدقيق للحسابات والصلاحيات</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} aria-label="جدول الحسابات؛ يمكن تمريره أفقياً عند الحاجة">
             <table className="responsive-table min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b text-xs text-muted-foreground">

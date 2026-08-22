@@ -2511,7 +2511,7 @@ export function StudentRegistryView() {
           dir="rtl"
           className="teacherpro-fullscreen-dialog left-0 top-0 flex h-dvh max-h-dvh w-dvw max-w-none flex-col translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:max-w-none sm:rounded-none sm:p-0"
         >
-          <DialogHeader className="shrink-0 border-b border-border/70 bg-gradient-to-l from-primary/12 via-background to-muted/50 px-6 py-5 pr-16 text-right">
+          <DialogHeader className="shrink-0 border-b border-border/70 bg-gradient-to-l from-primary/12 via-background to-muted/50 px-6 py-5 pl-16 text-right">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <DialogTitle className="text-2xl font-black tracking-tight text-gradient-brand">
@@ -2540,10 +2540,10 @@ export function StudentRegistryView() {
                       {editDialog.form.name.trim().slice(0, 1) || "ط"}
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-lg font-black">
+                      <p className="break-words text-lg font-black [overflow-wrap:anywhere]">
                         {editDialog.form.name || "اسم الطالب"}
                       </p>
-                      <p className="truncate text-xs text-muted-foreground">
+                      <p className="break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">
                         {editDialog.form.school || "المدرسة غير محددة"}
                       </p>
                     </div>
@@ -2563,7 +2563,7 @@ export function StudentRegistryView() {
                     <div className="grid grid-cols-2 gap-2">
                       <div className="rounded-2xl bg-background/80 p-3 text-center">
                         <p className="text-xs text-muted-foreground">الهاتف</p>
-                        <p className="mt-1 truncate font-black">
+                        <p className="mt-1 break-words font-black [overflow-wrap:anywhere]">
                           {editDialog.form.phone || "—"}
                         </p>
                       </div>

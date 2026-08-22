@@ -1162,7 +1162,7 @@ export function StudentBulkTextImportView() {
                         </Badge>
                       </div>
 
-                      <div className="table-wrap max-h-[420px] overflow-auto">
+                      <div className="table-wrap max-h-[min(26rem,55dvh)] overflow-auto" tabIndex={0} aria-label="معاينة بيانات الاستيراد؛ يمكن تمريرها أفقياً وعمودياً">
                         <table className="responsive-table min-w-[980px] text-right text-sm">
                           <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                             <tr className="border-b">

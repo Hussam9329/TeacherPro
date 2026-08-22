@@ -1034,13 +1034,16 @@ export function TeacherProLayout() {
 
   // منع تمرير الخلفية عند فتح القائمة على الموبايل
   useEffect(() => {
-    if (sidebarOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+    const shouldLockBody =
+      sidebarOpen &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 1023px)").matches;
+    if (!shouldLockBody) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
     };
   }, [sidebarOpen]);
 
@@ -1192,13 +1195,15 @@ export function TeacherProLayout() {
   }
 
   return (
-    <div className="app-bg tp-readable-ui tp-semantic-colors flex h-dvh overflow-hidden bg-background" dir="rtl">
+    <div className="app-bg tp-readable-ui tp-semantic-colors tp-app-shell flex h-dvh overflow-hidden bg-background" dir="rtl">
       <a className="tp-skip-link" href="#teacherpro-main-content">
         تجاوز إلى المحتوى الرئيسي
       </a>
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+        <button
+          type="button"
+          aria-label="إغلاق القائمة الجانبية"
+          className="tp-sidebar-overlay fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -1206,7 +1211,7 @@ export function TeacherProLayout() {
       <aside
         aria-label="التنقل الرئيسي"
         className={cn(
-          "fixed lg:static inset-y-0 right-0 z-50 h-dvh w-[min(19rem,calc(100vw-1rem))] lg:h-auto lg:w-[18rem] bg-sidebar text-sidebar-foreground border-l border-sidebar-border flex flex-col transition-transform duration-300 overflow-hidden shadow-2xl lg:shadow-none",
+          "tp-app-sidebar fixed inset-y-0 right-0 z-50 flex h-dvh w-[min(19rem,calc(100dvw-0.75rem))] max-w-full flex-col overflow-hidden border-l border-sidebar-border bg-sidebar text-sidebar-foreground shadow-2xl transition-transform duration-300 lg:static lg:h-auto lg:w-[18rem] lg:shadow-none",
           sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0",
         )}
       >
@@ -1242,7 +1247,7 @@ export function TeacherProLayout() {
               <X className="w-5 h-5" />
             </Button>
           </div>
-          <div className="mt-3 flex items-center gap-2 rounded-xl border border-sidebar-border bg-white/[0.04] px-2.5 py-2">
+          <div className="mt-3 flex min-w-0 items-center gap-2 rounded-xl border border-sidebar-border bg-white/[0.04] px-2.5 py-2">
             <div
               className={cn(
                 "tp-connection-dot",
@@ -1252,20 +1257,19 @@ export function TeacherProLayout() {
               aria-label={connectionVisualLabel}
               title={connectionVisualDescription}
             />
-            <p className="truncate text-sm font-semibold text-sidebar-foreground">
+            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-sidebar-foreground">
               {user?.name || "غير مسجل"}
             </p>
             <Badge
               variant="secondary"
-              className="h-5 border-white/10 bg-white/10 px-1.5 text-[10px] text-sidebar-foreground"
+              className="min-h-5 max-w-24 shrink border-white/10 bg-white/10 px-1.5 text-[10px] leading-4 text-sidebar-foreground"
             >
               {user?.role || "-"}
             </Badge>
-            <div className="flex-1" />
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="size-9 shrink-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
               title="تسجيل الخروج"
               aria-label="تسجيل الخروج"
               onClick={() => {
@@ -1358,7 +1362,7 @@ export function TeacherProLayout() {
                     onClick={() => toggleFamily(family.title)}
                     aria-expanded={isFamilyOpen}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-right text-sm transition-all duration-200 group",
+                      "group flex min-h-11 w-full touch-manipulation items-center gap-2 rounded-xl px-2.5 py-2 text-right text-sm transition-all duration-200",
                       hasActiveItem
                         ? "bg-sidebar-primary/15 text-sidebar-foreground"
                         : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -1481,7 +1485,7 @@ export function TeacherProLayout() {
                     </div>
                     <div
                       className={cn(
-                        "text-[10px]",
+                        "truncate text-[10px] leading-4",
                         isActive
                           ? "text-sidebar-primary-foreground/70"
                           : "text-sidebar-foreground/40",
@@ -1514,27 +1518,28 @@ export function TeacherProLayout() {
       </aside>
 
       <main
-        className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        className="tp-app-main flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         aria-label="محتوى TeacherPro"
       >
-        <header className="sticky top-0 z-30 border-b border-border/70 bg-background/90 shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-background/78">
-          <div className="flex min-h-[4.5rem] items-center justify-between gap-3 px-3 py-2.5 md:min-h-[5.5rem] md:px-6 md:py-3">
-            <div className="flex min-w-0 flex-1 items-center gap-2.5 md:gap-3.5">
+        <header className="tp-app-header sticky top-0 z-30 border-b border-border/70 bg-background/90 shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-background/78">
+          <div className="tp-app-header__inner flex min-h-[4.5rem] min-w-0 items-center justify-between gap-2.5 px-3 py-2.5 md:min-h-[5.5rem] md:gap-3 md:px-6 md:py-3">
+            <div className="tp-app-header__identity flex min-w-0 flex-1 items-center gap-2.5 md:gap-3.5">
               <Button
                 variant="ghost"
                 size="icon"
-                className="shrink-0 lg:hidden"
+                className="tp-app-header__menu shrink-0 lg:hidden"
                 onClick={toggleSidebar}
+                aria-expanded={sidebarOpen}
                 aria-label="فتح القائمة الجانبية"
               >
                 <Menu className="h-5 w-5" />
               </Button>
 
-              <div className="hidden size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/[0.08] text-primary shadow-sm sm:flex md:size-12">
+              <div className="tp-app-header__page-icon hidden size-11 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-primary/[0.08] text-primary shadow-sm sm:flex md:size-12">
                 <CurrentMenuIcon className="size-5 md:size-[1.375rem]" />
               </div>
 
-              <div className="min-w-0 flex-1 text-right">
+              <div className="tp-app-header__copy min-w-0 flex-1 text-right">
                 <div className="mb-0.5 hidden items-center gap-1.5 text-[11px] font-semibold text-muted-foreground md:flex">
                   <span>TeacherPro</span>
                   <ChevronLeft className="size-3.5 opacity-45" />
@@ -1549,8 +1554,11 @@ export function TeacherProLayout() {
                   </span>
                 </div>
 
-                <div className="flex min-w-0 items-center gap-2">
-                  <h2 className="truncate text-base font-black tracking-tight text-gradient-brand md:text-xl">
+                <div className="tp-app-header__title-row flex min-w-0 items-center gap-2">
+                  <h2
+                    className="truncate text-base font-black tracking-tight text-gradient-brand md:text-xl"
+                    title={currentMenu?.title || "لوحة النظام"}
+                  >
                     {currentMenu?.title || "لوحة النظام"}
                   </h2>
                   <Badge
@@ -1561,13 +1569,13 @@ export function TeacherProLayout() {
                   </Badge>
                 </div>
 
-                <p className="mt-0.5 truncate text-[11px] leading-5 text-muted-foreground sm:text-xs">
+                <p className="tp-app-header__description mt-0.5 min-w-0 text-[11px] leading-5 text-muted-foreground sm:text-xs">
                   {currentPageDescription}
                 </p>
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <div className="tp-app-header__actions flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
               <div
                 className={cn(
                   "tp-connection-badge",
@@ -1609,7 +1617,7 @@ export function TeacherProLayout() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-9 shrink-0 gap-2 rounded-full px-2.5 sm:px-3"
+                  className="tp-app-header__search min-h-10 shrink-0 gap-2 rounded-full px-3"
                   title="الانتقال إلى بحث الصفحة (Ctrl+F)"
                   aria-label="الانتقال إلى خانة البحث في الصفحة الحالية"
                   onClick={() => {
@@ -1635,7 +1643,7 @@ export function TeacherProLayout() {
                 variant="outline"
                 size="icon"
                 onClick={toggleTheme}
-                className="shrink-0 rounded-full"
+                className="hidden shrink-0 rounded-full sm:inline-flex"
                 aria-label={theme === "dark" ? "تفعيل الوضع الصباحي" : "تفعيل الوضع الليلي"}
               >
                 {theme === "dark" ? (
@@ -1646,7 +1654,7 @@ export function TeacherProLayout() {
               </Button>
               <Badge
                 variant="secondary"
-                className="hidden max-w-44 shrink-0 truncate px-3 sm:flex"
+                className="hidden max-w-44 shrink-0 truncate px-3 xl:flex"
               >
                 {user?.name || "غير مسجل"}
               </Badge>
@@ -1664,9 +1672,9 @@ export function TeacherProLayout() {
           id="teacherpro-main-content"
           ref={mainScrollRef}
           tabIndex={-1}
-          className="app-scrollbar flex-1 overflow-y-auto overscroll-contain p-3 md:p-6 xl:p-8"
+          className="tp-app-scroll app-scrollbar min-w-0 flex-1 overflow-y-auto overflow-x-visible overscroll-contain p-3 md:p-5 xl:p-7"
         >
-          <div className="content-container space-y-4 md:space-y-6" data-teacherpro-active-content="true" data-teacherpro-section={currentSection}>
+          <div className="content-container tp-page-surface min-w-0 space-y-4 md:space-y-6" data-teacherpro-active-content="true" data-teacherpro-section={currentSection}>
             {dbLoading && <LoadingState />}
             {isAdmin || canAccess(currentSection) ? (
               <CurrentComponent />

@@ -1548,10 +1548,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               key={student.id}
               type="button"
               onClick={() => setLeaveStudentId(student.id)}
-              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-right text-sm transition ${leaveStudentId === student.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              className={`flex min-h-11 w-full min-w-0 touch-manipulation flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-right text-sm transition ${leaveStudentId === student.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
             >
-              <span>{student.name}</span>
-              <span className="text-xs opacity-80">{student.code}</span>
+              <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{student.name}</span>
+              <span className="shrink-0 break-all text-xs opacity-80">{student.code}</span>
             </button>
           ))}
         </div>
@@ -2096,7 +2096,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   ) : null}
                 </div>
 
-                <div className="min-w-[132px] rounded-2xl border bg-background px-4 py-3 text-center shadow-sm">
+                <div className="w-full min-w-0 rounded-2xl border bg-background px-4 py-3 text-center shadow-sm sm:w-auto sm:min-w-32">
                   <p className="text-[11px] font-bold text-muted-foreground">
                     الدرجة الحالية
                   </p>

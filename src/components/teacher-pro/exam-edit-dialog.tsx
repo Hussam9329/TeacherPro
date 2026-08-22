@@ -154,7 +154,7 @@ export function ExamEditDialog({
           <DialogTitle>تعديل الامتحان بالكامل</DialogTitle>
         </DialogHeader>
 
-        <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
+        <div className="min-h-0 max-h-[calc(100dvh-11rem)] space-y-4 overflow-y-auto pe-1 sm:max-h-[calc(100dvh-13rem)]">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-1 md:col-span-2">
               <Label htmlFor="edit-exam-name">اسم الامتحان</Label>

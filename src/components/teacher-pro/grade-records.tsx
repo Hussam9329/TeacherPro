@@ -1287,8 +1287,8 @@ export function GradeRecordsView() {
                 className="flex flex-col gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm transition-[border-color,box-shadow,background-color] duration-200 hover:border-primary/30 hover:shadow-lg lg:flex-row lg:items-center lg:justify-between"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-medium">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="min-w-0 flex-1 break-words text-sm font-medium [overflow-wrap:anywhere]">
                       {student.name}
                     </p>
                     <Badge variant="outline" className="text-[10px]">
@@ -1394,7 +1394,7 @@ export function GradeRecordsView() {
           })}
         </div>
       ) : (
-        <div className="table-wrap">
+        <div className="table-wrap" tabIndex={0} aria-label="جدول سجلات الدرجات؛ يمكن تمريره أفقياً عند الحاجة">
           <table className="responsive-table text-sm">
             <thead>
               <tr>

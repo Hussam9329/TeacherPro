@@ -198,12 +198,19 @@
   }
 
   html {
+    inline-size: 100%;
+    min-inline-size: 0;
     scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   body {
     @apply bg-background text-foreground;
+    inline-size: 100%;
+    min-inline-size: 0;
     min-height: 100dvh;
+    margin: 0;
     font-family: "Cairo", "Inter", "Segoe UI", Tahoma, sans-serif;
     font-feature-settings: "cv11", "ss01";
     text-rendering: optimizeLegibility;
@@ -212,6 +219,30 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.011em;
     line-height: 1.7;
+  }
+
+  body > *,
+  #__next,
+  [data-nextjs-scroll-focus-boundary] {
+    min-inline-size: 0;
+  }
+
+  :where(img, video, canvas, svg, iframe) {
+    max-inline-size: 100%;
+  }
+
+  :where(form, fieldset) {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  :where(button, input, select, textarea) {
+    max-inline-size: 100%;
+    font: inherit;
+  }
+
+  :where(button, [role="button"]) {
+    touch-action: manipulation;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -273,8 +304,11 @@
     min-height: 100dvh;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
-    padding: clamp(0.75rem, 2.5vw, 1.5rem);
+    overflow-x: clip;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-block: max(clamp(0.75rem, 2.5vw, 1.5rem), env(safe-area-inset-top)) max(clamp(0.75rem, 2.5vw, 1.5rem), env(safe-area-inset-bottom));
+    padding-inline: max(clamp(0.75rem, 2.5vw, 1.5rem), env(safe-area-inset-left)) max(clamp(0.75rem, 2.5vw, 1.5rem), env(safe-area-inset-right));
   }
 
   .tp-login-backdrop {
@@ -385,6 +419,9 @@
 
   .surface-card {
     @apply rounded-2xl border bg-card/90 shadow-sm backdrop-blur-xl transition-[border-color,box-shadow,background-color] duration-200;
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
     box-shadow: var(--shadow-card);
   }
 
@@ -429,6 +466,9 @@
 
   .filter-panel {
     @apply rounded-2xl border bg-card/80 p-4 shadow-sm backdrop-blur-xl;
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
   }
 
   /* TeacherPro filter layout -------------------------------------------------
@@ -436,6 +476,9 @@
      predictable order across all data pages. No filtering logic lives here. */
   .tp-filter-card {
     @apply overflow-hidden rounded-3xl border-primary/15 bg-card/90 shadow-sm;
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
   }
 
   .tp-filter-card > [data-slot="card-header"] {
@@ -518,7 +561,7 @@
 
   .tp-filter-actions {
     order: 20;
-    @apply flex min-w-0 items-end gap-2;
+    @apply flex min-w-0 flex-wrap items-end gap-2;
   }
 
   .tp-filter-actions > * {
@@ -965,10 +1008,29 @@
   .table-wrap {
     position: relative;
     isolation: isolate;
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
     @apply overflow-x-auto rounded-2xl border bg-card/80 shadow-sm;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-inline: contain;
-    scrollbar-gutter: stable;
+    touch-action: pan-x pan-y;
+  }
+
+  .table-wrap:focus-visible {
+    outline: 2px solid color-mix(in oklch, var(--ring) 70%, transparent);
+    outline-offset: 2px;
+  }
+
+  pre {
+    max-inline-size: 100%;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .table-wrap > table,
@@ -1075,6 +1137,93 @@
 
   .content-container {
     @apply mx-auto w-full max-w-[1600px];
+    min-inline-size: 0;
+  }
+
+  /* Unified application shell and responsive content boundary. */
+  .tp-app-shell,
+  .tp-app-main,
+  .tp-app-scroll,
+  .tp-page-surface,
+  [data-teacherpro-active-content="true"] {
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  .tp-app-shell {
+    overflow: clip;
+  }
+
+  .tp-app-sidebar {
+    max-inline-size: 100dvw;
+    padding-block-start: env(safe-area-inset-top);
+    padding-block-end: env(safe-area-inset-bottom);
+  }
+
+  .tp-sidebar-overlay {
+    inline-size: 100dvw;
+    max-inline-size: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+  }
+
+  .tp-app-header {
+    min-inline-size: 0;
+    padding-block-start: env(safe-area-inset-top);
+  }
+
+  .tp-app-header__inner,
+  .tp-app-header__identity,
+  .tp-app-header__copy,
+  .tp-app-header__title-row,
+  .tp-app-header__actions {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  .tp-app-header__description {
+    overflow-wrap: anywhere;
+  }
+
+  .tp-app-scroll {
+    padding-block-end: max(0.75rem, env(safe-area-inset-bottom));
+    padding-inline-start: max(0.75rem, env(safe-area-inset-left));
+    padding-inline-end: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  [data-teacherpro-active-content="true"] :where(.flex, .grid) > * {
+    min-inline-size: 0;
+  }
+
+  [data-teacherpro-active-content="true"] .flex.justify-between {
+    flex-wrap: wrap;
+  }
+
+  [data-teacherpro-active-content="true"] :where(td, th) {
+    overflow-wrap: anywhere;
+  }
+
+  [data-teacherpro-active-content="true"] :where(.flex):has(> [data-slot="button"] + [data-slot="button"]) {
+    min-inline-size: 0;
+    flex-wrap: wrap;
+  }
+
+  [data-teacherpro-active-content="true"] :where(
+    h1, h2, h3, h4, h5, h6, p, span, label, legend, dd, dt, li,
+    [data-slot="card-title"], [data-slot="card-description"],
+    [data-slot="dialog-title"], [data-slot="dialog-description"]
+  ) {
+    overflow-wrap: anywhere;
+  }
+
+  [data-teacherpro-active-content="true"] :where(
+    input, textarea, select, [role="combobox"], [data-slot="card"],
+    [data-slot="card-content"], [data-slot="tabs-content"]
+  ) {
+    min-inline-size: 0;
+    max-inline-size: 100%;
   }
 
   .page-enter {
@@ -1082,7 +1231,7 @@
   }
 
   .app-scrollbar {
-    scrollbar-gutter: stable;
+    min-inline-size: 0;
   }
 
   .app-scrollbar::-webkit-scrollbar {
@@ -1136,33 +1285,6 @@
   background-clip: content-box;
 }
 
-/* Unified destructive/delete buttons across legacy screens */
-button[data-slot="button"]:is(.text-red-600, .text-red-700, .text-rose-600, .text-rose-700, .text-destructive),
-button[data-slot="button"][class*="text-red-"],
-button[data-slot="button"][class*="text-rose-"],
-button[data-slot="button"][class*="text-destructive"] {
-  background: rgb(220 38 38) !important;
-  border-color: rgb(220 38 38) !important;
-  color: #fff !important;
-  box-shadow: 0 8px 18px rgba(220, 38, 38, 0.18) !important;
-}
-
-button[data-slot="button"]:is(.text-red-600, .text-red-700, .text-rose-600, .text-rose-700, .text-destructive):hover,
-button[data-slot="button"][class*="text-red-"]:hover,
-button[data-slot="button"][class*="text-rose-"]:hover,
-button[data-slot="button"][class*="text-destructive"]:hover {
-  background: rgb(185 28 28) !important;
-  border-color: rgb(185 28 28) !important;
-  color: #fff !important;
-}
-
-button[data-slot="button"]:is(.text-red-600, .text-red-700, .text-rose-600, .text-rose-700, .text-destructive) svg,
-button[data-slot="button"][class*="text-red-"] svg,
-button[data-slot="button"][class*="text-rose-"] svg,
-button[data-slot="button"][class*="text-destructive"] svg {
-  color: #fff !important;
-}
-
 /* تحسين التمرير على الهواتف */
 .overscroll-contain {
   -webkit-overflow-scrolling: touch;
@@ -1191,20 +1313,47 @@ button[data-slot="button"][class*="text-destructive"] svg {
 .kpi-info { --kpi-color: oklch(0.62 0.16 255); }
 
 
-/* تحسين مساحة الضغط على الهواتف لمنع لمس زر التعديل/الحذف بالخطأ */
+/* Touch targets without forcing every text button to a fixed width. */
 @media (pointer: coarse) {
-  button[data-slot="button"],
+  [data-slot="button"],
+  [data-slot="alert-dialog-action"],
+  [data-slot="alert-dialog-cancel"],
+  [data-slot="dialog-close"],
+  [data-slot="input"],
+  [data-slot="select-trigger"],
+  [data-slot="select-item"],
+  [data-slot="tabs-trigger"],
+  [data-slot="date-input-trigger"],
+  input[type="date"],
   .touch-target {
-    min-width: 44px;
-    min-height: 44px;
-    padding-inline: 0.75rem;
+    min-block-size: 44px;
+  }
+
+  [data-slot="button"][data-size="icon"],
+  [data-slot="dialog-close"],
+  [data-slot="date-input-trigger"],
+  .touch-target {
+    min-inline-size: 44px;
+  }
+
+  [data-slot="checkbox"],
+  [data-slot="radio-group-item"] {
+    position: relative;
+  }
+
+  [data-slot="checkbox"]::after,
+  [data-slot="radio-group-item"]::after {
+    content: "";
+    position: absolute;
+    inset: -0.75rem;
   }
 }
 
 @media (max-width: 640px) {
   .tp-login-screen {
     align-items: center;
-    padding: 0.75rem;
+    padding-block: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-bottom));
+    padding-inline: max(0.75rem, env(safe-area-inset-left)) max(0.75rem, env(safe-area-inset-right));
   }
 
   .tp-login-card {
@@ -1245,18 +1394,6 @@ button[data-slot="button"][class*="text-destructive"] svg {
     border-radius: 0.875rem;
   }
 
-  [data-sonner-toaster] {
-    inset-inline: 10px !important;
-    bottom: 10px !important;
-    top: auto !important;
-  }
-
-  [data-sonner-toast] {
-    max-width: calc(100vw - 20px) !important;
-    padding: 10px 12px !important;
-    font-size: 0.82rem !important;
-  }
-
   input,
   select,
   textarea,
@@ -1288,9 +1425,7 @@ button[data-slot="button"][class*="text-destructive"] svg {
   contain: layout paint style;
 }
 
-/* ─── تحسينات الهاتف ─────────────────────────────────────────────────── */
-
-/* منع zoom عند التركيز على input في iOS (font-size < 16px يسبب zoom) */
+/* Mobile-first interaction and layout safeguards. */
 @media (max-width: 640px) {
   input[type="text"],
   input[type="number"],
@@ -1301,98 +1436,111 @@ button[data-slot="button"][class*="text-destructive"] svg {
   input[type="url"],
   textarea,
   select {
-    font-size: 16px !important;
+    font-size: 16px;
   }
 
-  /* تقليل padding في الهاتف لاستغلال الشاشة */
-  .content-container {
-    max-width: 100%;
-  }
-
-  /* الأزرار أكبر للمس أسهل */
-  [data-slot="button"] {
-    min-height: 40px;
-  }
-
-  [data-slot="button"][data-size="sm"] {
-    min-height: 36px;
-  }
-
-  /* الجداول: horizontal scroll بدل ضغط الأعمدة */
-  .table-wrap, [class*="overflow-x"] {
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* منع overflow أفقي في الصفحة كلها */
-  body {
-    overflow-x: hidden;
-  }
-
-  /* الـ cards تاخذ عرض كامل */
+  .content-container,
   [data-slot="card"] {
-    width: 100%;
+    inline-size: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
   }
 
-  /* تقليل المسافات في الهاتف */
   .section-stack {
     gap: 0.75rem;
   }
 
-  /* الـ badges أصغر على الهاتف */
   [data-slot="badge"] {
-    font-size: 10px;
+    font-size: 0.6875rem;
   }
 
-  /* الحوارات العادية تتأقلم مع الهاتف بدون كسر fullscreen dialogs */
-  [data-slot="dialog-content"]:not(.teacherpro-fullscreen-dialog),
-  [data-slot="alert-dialog-content"] {
-    width: min(calc(100dvw - 1rem), 36rem) !important;
-    max-width: calc(100dvw - 1rem) !important;
-    max-height: calc(100dvh - 1rem) !important;
-    overflow-y: auto;
-    margin: 0.5rem !important;
-  }
-
-  /* الـ textarea أقل ارتفاع على الهاتف */
   textarea {
-    min-height: 80px;
+    min-block-size: 80px;
   }
 
-  /* tap highlight لون أوضح */
   * {
     -webkit-tap-highlight-color: rgba(147, 51, 234, 0.15);
   }
 
-  /* منع text selection accident على الأزرار */
-  button, a {
+  button,
+  a {
     -webkit-user-select: none;
     user-select: none;
   }
-
-  /* safe area يدار داخل shell حتى لا يكسر h-dvh أو الحوارات الكاملة */
-  .app-bg {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
 }
 
-/* تحسين الـ scroll على الهاتف */
 @media (max-width: 1024px) {
   .app-scrollbar {
     -webkit-overflow-scrolling: touch;
     scroll-behavior: auto;
   }
 
-  /* الـ sidebar أسرع في الإغلاق */
-  aside {
-    transition-duration: 200ms !important;
+  .tp-app-sidebar {
+    transition-duration: 200ms;
   }
 }
 
-/* منع pull-to-refresh على الصفحات التي فيها scroll داخلي */
-@media (max-width: 640px) {
-  .app-scrollbar {
-    overscroll-behavior: contain;
+@media (max-width: 479px) {
+  .tp-app-header__inner {
+    min-block-size: 4rem;
+    gap: 0.375rem;
+    padding-block: 0.5rem;
+    padding-inline: 0.5rem;
+  }
+
+  .tp-app-header__identity {
+    gap: 0.375rem;
+  }
+
+  .tp-app-header__menu,
+  .tp-app-header__search,
+  .tp-connection-badge {
+    min-inline-size: 2.5rem;
+    inline-size: 2.5rem;
+    padding-inline: 0;
+  }
+
+  .tp-app-header__description {
+    display: none;
+  }
+
+  .tp-app-header__title-row h2 {
+    font-size: clamp(0.875rem, 4.4vw, 1rem);
+    line-height: 1.35;
+  }
+
+  .tp-app-header__actions {
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+  }
+}
+
+@media (max-width: 339px) {
+  [data-teacherpro-active-content="true"] :is(.grid-cols-2, .grid-cols-3) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tp-login-header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-height: 640px) {
+  .tp-login-screen {
+    align-items: flex-start;
+  }
+
+  [data-slot="dialog-content"]:not(.teacherpro-fullscreen-dialog),
+  [data-slot="alert-dialog-content"] {
+    max-block-size: calc(100dvh - 0.5rem);
+  }
+}
+
+@media (pointer: fine) {
+  .app-scrollbar,
+  .table-wrap {
+    scrollbar-gutter: stable;
   }
 }
 
@@ -1640,7 +1788,8 @@ button[data-slot="button"][class*="text-destructive"] svg {
 
   .tp-save-manual-button {
     min-width: 6.5rem;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .tp-save-row[data-save-state="saving"] {
@@ -2250,7 +2399,7 @@ button[data-slot="button"][class*="text-destructive"] svg {
 }
 
 
-/* UIUX 23 — bulk import visual hierarchy */
+/* Bulk import layout contract. */
 .tp-bulk-import__shell {
   border-color: color-mix(in oklch, var(--primary) 16%, var(--border));
   box-shadow: 0 24px 70px -54px color-mix(in oklch, var(--foreground) 28%, transparent);
@@ -2316,7 +2465,7 @@ button[data-slot="button"][class*="text-destructive"] svg {
 }
 
 
-/* UIUX 24 — student registry visual order */
+/* Student registry layout contract. */
 .tp-student-registry {
   --registry-section-gap: 1rem;
   --registry-button-height: 2.75rem;
@@ -2478,7 +2627,7 @@ button[data-slot="button"][class*="text-destructive"] svg {
 }
 
 .tp-student-registry__table-wrap {
-  max-height: min(72vh, 48rem);
+  max-height: min(72dvh, 48rem);
   overflow: auto;
 }
 
@@ -2496,8 +2645,12 @@ button[data-slot="button"][class*="text-destructive"] svg {
 .tp-student-registry__action-button {
   width: 100%;
   min-width: 0;
+  min-height: 2.75rem;
+  height: auto;
   padding-inline: 0.65rem;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
   font-size: 0.75rem;
 }
 
@@ -2685,7 +2838,7 @@ button[data-slot="button"][class*="text-destructive"] svg {
 }
 
 
-/* UIUX 25 — student profile visual hierarchy */
+/* Student profile layout contract. */
 .tp-student-profile__header {
   border-color: color-mix(in oklch, var(--primary) 14%, var(--border));
   max-height: 50dvh;
@@ -2799,7 +2952,7 @@ button[data-slot="button"][class*="text-destructive"] svg {
 }
 
 
-/* UIUX 26 — dismissed students visual order */
+/* Dismissed students layout contract. */
 .tp-dismissed-students__stats > * {
   min-height: 6.1rem;
   box-shadow: none;
@@ -2861,7 +3014,7 @@ button[data-slot="button"][class*="text-destructive"] svg {
 }
 
 
-/* UIUX 27 — new exam visual hierarchy */
+/* New exam layout contract. */
 .tp-exam-new__shell {
   overflow: hidden;
   border-color: color-mix(in oklch, var(--primary) 16%, var(--border));
@@ -2934,147 +3087,315 @@ button[data-slot="button"][class*="text-destructive"] svg {
 }
 
 
-/* TeacherPro UI/UX Patch 28: grade-entry-layout */
-.tp-grade-entry-page > .tp-filter-card { border-color: color-mix(in srgb, var(--primary) 22%, transparent); }
-.tp-grade-entry-page > .tp-filter-card + * { scroll-margin-top: 6rem; }
-.tp-grade-entry-page > .grid { align-items: stretch; }
+/* Grade-entry page contract. */
+.tp-grade-entry-page > .tp-filter-card {
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.tp-grade-entry-page > .tp-filter-card + * {
+  scroll-margin-top: 6rem;
+}
+
+.tp-grade-entry-page > .grid {
+  align-items: stretch;
+}
+
 .tp-grade-entry-page > .grid > .card,
-.tp-grade-entry-page > [data-slot="card"] { box-shadow: 0 10px 28px -24px rgb(15 23 42 / .45); }
+.tp-grade-entry-page > [data-slot="card"] {
+  box-shadow: 0 10px 28px -24px rgb(15 23 42 / 0.45);
+}
+
 .tp-grade-entry-page .teacherpro-heavy-row {
   position: relative;
   overflow: hidden;
   border-inline-start-width: 3px;
   border-inline-start-color: color-mix(in srgb, var(--primary) 30%, transparent);
 }
+
 .tp-grade-entry-page .teacherpro-heavy-row:focus-within {
   border-inline-start-color: var(--primary);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
 }
-.tp-grade-entry-page .tp-save-guide { margin-block-end: 1.25rem; }
-@media (max-width: 767px) {
-  .tp-grade-entry-page { gap: 1rem; }
-  .tp-grade-entry-page .teacherpro-heavy-row { padding: .875rem; }
-  .tp-grade-entry-page .tp-save-manual-button { width: 100%; }
+
+.tp-grade-entry-page .tp-save-guide {
+  margin-block-end: 1.25rem;
 }
 
+/* Exam records page contract. */
+.tp-exam-records-page > .tp-filter-card {
+  position: relative;
+  overflow: hidden;
+}
 
-/* TeacherPro UI/UX Patch 29: exam-records-layout */
-.tp-exam-records-page > .tp-filter-card { position: relative; overflow: hidden; }
 .tp-exam-records-page > .tp-filter-card::before {
-  content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 3px; background: var(--primary);
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background: var(--primary);
 }
+
 .tp-exam-records-page > .grid,
-.tp-exam-records-page > .space-y-3 { scroll-margin-top: 6rem; }
-.tp-exam-records-page [data-slot="card"] { transition: border-color .18s ease, box-shadow .18s ease; }
-.tp-exam-records-page [data-slot="card"]:focus-within { border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
-/* Performance: skip layout/paint work only for collapsed off-screen exam cards.
-   Expanded cards stay fully rendered so focus/scroll behavior is unchanged. */
+.tp-exam-records-page > .space-y-3 {
+  scroll-margin-top: 6rem;
+}
+
+.tp-exam-records-page [data-slot="card"] {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.tp-exam-records-page [data-slot="card"]:focus-within {
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+/* Skip layout and paint work only for collapsed, off-screen exam cards. */
 @supports (content-visibility: auto) {
   .tp-exam-records-page .tp-exam-record-card-collapsed {
     content-visibility: auto;
     contain-intrinsic-size: auto 250px;
   }
 }
-@media (max-width: 767px) {
-  .tp-exam-records-page { gap: 1rem; }
-  .tp-exam-records-page [data-slot="dialog-footer"] button { width: 100%; }
+
+/* Grade records page contract. */
+.tp-grade-records-page > .grid:first-child {
+  align-items: stretch;
 }
 
-
-/* TeacherPro UI/UX Patch 30: grade-records-layout */
-.tp-grade-records-page > .grid:first-child { align-items: stretch; }
 .tp-grade-records-page > .grid:first-child > :first-child {
   border-color: color-mix(in srgb, var(--primary) 28%, transparent);
 }
-.tp-grade-records-page > .tp-filter-card { border-color: color-mix(in srgb, var(--primary) 20%, transparent); }
-.tp-grade-records-page .responsive-table tbody tr { scroll-margin-top: 7rem; }
+
+.tp-grade-records-page > .tp-filter-card {
+  border-color: color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.tp-grade-records-page .responsive-table tbody tr {
+  scroll-margin-top: 7rem;
+}
+
 .tp-grade-records-page .responsive-table td:first-child,
-.tp-grade-records-page .responsive-table th:first-child { font-weight: 700; }
-.tp-grade-records-page > .space-y-2 { display: grid; gap: .75rem; }
-@media (max-width: 767px) { .tp-grade-records-page { gap: 1rem; } }
+.tp-grade-records-page .responsive-table th:first-child {
+  font-weight: 700;
+}
 
+.tp-grade-records-page > .space-y-2 {
+  display: grid;
+  gap: 0.75rem;
+}
 
-/* TeacherPro UI/UX Patch 31: opportunities-layout */
-.tp-opportunities-page > .tp-filter-card { border-color: color-mix(in srgb, var(--primary) 22%, transparent); }
-.tp-opportunities-page > .grid { align-items: stretch; }
+/* Opportunities page contract. */
+.tp-opportunities-page > .tp-filter-card {
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.tp-opportunities-page > .grid {
+  align-items: stretch;
+}
+
 .tp-opportunities-page > .grid > [data-slot="card"]:first-child {
   border-color: color-mix(in srgb, var(--primary) 32%, transparent);
   background: color-mix(in srgb, var(--primary) 6%, var(--card));
 }
-.tp-opportunities-page > .grid > [data-slot="card"] { box-shadow: none; }
-.tp-opportunities-page > [data-slot="card"]:nth-last-of-type(2),
-.tp-opportunities-page > [data-slot="card"]:last-of-type { scroll-margin-top: 6rem; }
-.tp-opportunities-page .max-h-80 { scrollbar-gutter: stable; }
-@media (max-width: 767px) {
-  .tp-opportunities-page { gap: 1rem; }
-  .tp-opportunities-page .tp-filter-actions > * { width: 100%; }
+
+.tp-opportunities-page > .grid > [data-slot="card"] {
+  box-shadow: none;
 }
 
+.tp-opportunities-page > [data-slot="card"]:nth-last-of-type(2),
+.tp-opportunities-page > [data-slot="card"]:last-of-type {
+  scroll-margin-top: 6rem;
+}
 
-/* TeacherPro UI/UX Patch 32: e-correction-layout */
-.tp-e-correction-page > .grid { align-items: stretch; }
-.tp-e-correction-page > .grid > [data-slot="card"] { box-shadow: none; }
+.tp-opportunities-page .max-h-80 {
+  scrollbar-gutter: stable;
+}
+
+/* Electronic correction page contract. */
+.tp-e-correction-page > .grid {
+  align-items: stretch;
+}
+
+.tp-e-correction-page > .grid > [data-slot="card"] {
+  box-shadow: none;
+}
+
 .tp-e-correction-page > .grid > [data-slot="card"]:first-child {
   border-color: color-mix(in srgb, var(--primary) 30%, transparent);
   background: color-mix(in srgb, var(--primary) 6%, var(--card));
 }
-.tp-e-correction-page [role="tablist"] {
-  position: sticky; top: .5rem; z-index: 10; overflow-x: auto; justify-content: flex-start;
-  border: 1px solid var(--border); background: color-mix(in srgb, var(--background) 92%, transparent);
-  backdrop-filter: blur(10px); scrollbar-width: thin;
+
+.tp-e-correction-page [role="tablist"],
+.tp-accounts-page [role="tablist"] {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 10;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--background) 92%, transparent);
+  backdrop-filter: blur(10px);
+  scrollbar-width: thin;
 }
-.tp-e-correction-page [role="tab"] { flex: 0 0 auto; white-space: nowrap; }
-.tp-e-correction-page [data-state="active"][role="tab"] { font-weight: 800; }
-.tp-e-correction-page [role="tabpanel"] { scroll-margin-top: 6rem; }
-.tp-e-correction-page [role="tabpanel"] > .tp-filter-card { border-color: color-mix(in srgb, var(--primary) 18%, transparent); }
+
+.tp-e-correction-page [role="tab"],
+.tp-accounts-page [role="tab"] {
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.tp-e-correction-page [data-state="active"][role="tab"] {
+  font-weight: 800;
+}
+
+.tp-e-correction-page [role="tabpanel"],
+.tp-accounts-page [role="tabpanel"] {
+  scroll-margin-top: 6rem;
+}
+
+.tp-e-correction-page [role="tabpanel"] > .tp-filter-card {
+  border-color: color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* Follow-up pages contract. */
+.tp-follow-up-page--calls > .tp-follow-up-page__intro,
+.tp-follow-up-page--leaves > .tp-follow-up-page__intro,
+.tp-follow-up-page--pledges > .tp-follow-up-page__intro {
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.tp-follow-up-page--calls > .space-y-4 {
+  display: grid;
+  gap: 1rem;
+}
+
+.tp-follow-up-page--calls .tp-filter-card,
+.tp-follow-up-page--pledges .tp-filter-card {
+  scroll-margin-top: 6rem;
+}
+
+.tp-follow-up-page--calls .teacherpro-heavy-row {
+  border-inline-start: 3px solid color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+.tp-follow-up-page--calls .teacherpro-heavy-row:focus-within {
+  border-inline-start-color: var(--primary);
+}
+
+.tp-follow-up-page--leaves > .grid {
+  align-items: start;
+}
+
+.tp-follow-up-page--leaves > .grid > [data-slot="card"]:first-child {
+  border-color: color-mix(in srgb, var(--primary) 25%, transparent);
+}
+
+.tp-follow-up-page--leaves > .grid > [data-slot="card"]:last-child {
+  min-width: 0;
+}
+
+.tp-follow-up-page--leaves .tp-filter-card {
+  margin-block: 0.25rem;
+}
+
+.tp-follow-up-page--pledges > .grid {
+  align-items: stretch;
+}
+
+.tp-follow-up-page--pledges > .grid > [data-slot="card"] {
+  box-shadow: none;
+}
+
+.tp-follow-up-page--pledges > .grid > [data-slot="card"]:first-child {
+  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+@media (max-width: 1279px) {
+  .tp-follow-up-page--leaves > .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Accounts page contract. */
+.tp-accounts-page__intro {
+  padding-inline: 0.25rem;
+}
+
+.tp-accounts-page [role="tablist"] {
+  background: color-mix(in srgb, var(--background) 94%, transparent);
+}
+
+.tp-accounts-page [role="tabpanel"] > [data-slot="card"]:first-child {
+  border-color: color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+/* Logs page contract. */
+.tp-logs-page__filters {
+  position: relative;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.tp-logs-page__filters::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background: var(--primary);
+}
+
+.tp-logs-page .table-wrap {
+  scroll-margin-top: 6rem;
+}
+
+.tp-logs-page .responsive-table tbody tr {
+  scroll-margin-top: 7rem;
+}
+
+.tp-logs-page .responsive-table td:first-child,
+.tp-logs-page .responsive-table th:first-child {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tp-logs-page details {
+  border-radius: 0.75rem;
+}
+
+/* Shared narrow-screen rhythm for page-specific layouts. */
 @media (max-width: 767px) {
-  .tp-e-correction-page { gap: 1rem; }
-  .tp-e-correction-page [role="tablist"] { margin-inline: -.25rem; padding-inline: .25rem; }
+  .tp-grade-entry-page,
+  .tp-exam-records-page,
+  .tp-grade-records-page,
+  .tp-opportunities-page,
+  .tp-e-correction-page,
+  .tp-follow-up-page--calls,
+  .tp-follow-up-page--leaves,
+  .tp-follow-up-page--pledges,
+  .tp-accounts-page,
+  .tp-logs-page {
+    gap: 1rem;
+  }
+
+  .tp-grade-entry-page .teacherpro-heavy-row {
+    padding: 0.875rem;
+  }
+
+  .tp-grade-entry-page .tp-save-manual-button {
+    width: 100%;
+  }
+
+  .tp-follow-up-page--leaves .grid,
+  .tp-follow-up-page--pledges .grid {
+    gap: 0.75rem;
+  }
+
+  .tp-e-correction-page [role="tablist"],
+  .tp-accounts-page [role="tablist"] {
+    margin-inline: -0.25rem;
+    padding-inline: 0.25rem;
+  }
 }
-
-
-/* TeacherPro UI/UX Patch 33: calls layout */
-.tp-follow-up-page--calls > .tp-follow-up-page__intro { border-color: color-mix(in srgb, var(--primary) 22%, transparent); }
-.tp-follow-up-page--calls > .space-y-4 { display: grid; gap: 1rem; }
-.tp-follow-up-page--calls .tp-filter-card { scroll-margin-top: 6rem; }
-.tp-follow-up-page--calls .teacherpro-heavy-row { border-inline-start: 3px solid color-mix(in srgb, var(--primary) 24%, transparent); }
-.tp-follow-up-page--calls .teacherpro-heavy-row:focus-within { border-inline-start-color: var(--primary); }
-@media (max-width: 767px) { .tp-follow-up-page--calls { gap: 1rem; } .tp-follow-up-page--calls button { min-height: 2.75rem; } }
-
-
-/* TeacherPro UI/UX Patch 34: leaves layout */
-.tp-follow-up-page--leaves > .tp-follow-up-page__intro { border-color: color-mix(in srgb, var(--primary) 22%, transparent); }
-.tp-follow-up-page--leaves > .grid { align-items: start; }
-.tp-follow-up-page--leaves > .grid > [data-slot="card"]:first-child { border-color: color-mix(in srgb, var(--primary) 25%, transparent); }
-.tp-follow-up-page--leaves > .grid > [data-slot="card"]:last-child { min-width: 0; }
-.tp-follow-up-page--leaves .tp-filter-card { margin-block: .25rem; }
-@media (max-width: 1279px) { .tp-follow-up-page--leaves > .grid { grid-template-columns: 1fr; } }
-@media (max-width: 767px) { .tp-follow-up-page--leaves { gap: 1rem; } .tp-follow-up-page--leaves .grid { gap: .75rem; } .tp-follow-up-page--leaves button { min-height: 2.75rem; } }
-
-
-/* TeacherPro UI/UX Patch 35: pledges layout */
-.tp-follow-up-page--pledges > .tp-follow-up-page__intro { border-color: color-mix(in srgb, var(--primary) 22%, transparent); }
-.tp-follow-up-page--pledges > .grid { align-items: stretch; }
-.tp-follow-up-page--pledges > .grid > [data-slot="card"] { box-shadow: none; }
-.tp-follow-up-page--pledges > .grid > [data-slot="card"]:first-child { border-color: color-mix(in srgb, var(--primary) 28%, transparent); }
-.tp-follow-up-page--pledges .tp-filter-card { scroll-margin-top: 6rem; }
-@media (max-width: 767px) { .tp-follow-up-page--pledges { gap: 1rem; } .tp-follow-up-page--pledges .grid { gap: .75rem; } .tp-follow-up-page--pledges button { min-height: 2.75rem; } }
-
-
-/* TeacherPro UI/UX Patch 36: accounts layout */
-.tp-accounts-page__intro { padding-inline: .25rem; }
-.tp-accounts-page [role="tablist"] { position: sticky; top: .5rem; z-index: 10; overflow-x: auto; justify-content: flex-start; border: 1px solid var(--border); background: color-mix(in srgb, var(--background) 94%, transparent); backdrop-filter: blur(10px); scrollbar-width: thin; }
-.tp-accounts-page [role="tab"] { flex: 0 0 auto; min-width: max-content; white-space: nowrap; }
-.tp-accounts-page [role="tabpanel"] { scroll-margin-top: 6rem; }
-.tp-accounts-page [role="tabpanel"] > [data-slot="card"]:first-child { border-color: color-mix(in srgb, var(--primary) 20%, transparent); }
-@media (max-width: 767px) { .tp-accounts-page { gap: 1rem; } .tp-accounts-page [role="tablist"] { margin-inline: -.25rem; padding-inline: .25rem; } .tp-accounts-page [role="tabpanel"] button { min-height: 2.75rem; } }
-
-
-/* TeacherPro UI/UX Patch 37: logs layout */
-.tp-logs-page__filters { position: relative; overflow: hidden; border-color: color-mix(in srgb, var(--primary) 22%, transparent); }
-.tp-logs-page__filters::before { content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 3px; background: var(--primary); }
-.tp-logs-page .table-wrap { scroll-margin-top: 6rem; }
-.tp-logs-page .responsive-table tbody tr { scroll-margin-top: 7rem; }
-.tp-logs-page .responsive-table td:first-child, .tp-logs-page .responsive-table th:first-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.tp-logs-page details { border-radius: .75rem; }
-@media (max-width: 767px) { .tp-logs-page { gap: 1rem; } .tp-logs-page .tp-filter-actions > * { width: 100%; } .tp-logs-page button { min-height: 2.75rem; } }

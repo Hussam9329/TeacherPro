@@ -176,7 +176,7 @@ export function GradeSmartNotesPanel({
                     })
                   }
                   aria-pressed={selected}
-                  className={`rounded-2xl border p-4 text-start transition hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${meta.className} ${selected ? "ring-2 ring-violet-500 ring-offset-2 ring-offset-background" : ""}`}
+                  className={`min-h-11 min-w-0 touch-manipulation rounded-2xl border p-4 text-start transition [overflow-wrap:anywhere] hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${meta.className} ${selected ? "ring-2 ring-violet-500 ring-offset-2 ring-offset-background" : ""}`}
                 >
                   <span className="flex items-start justify-between gap-3">
                     <span>

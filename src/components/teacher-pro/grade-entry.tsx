@@ -2203,7 +2203,7 @@ export function GradeEntryView() {
   return (
     <div className="tp-grade-entry-page space-y-6">
       {gradeEntryNotice && (
-        <div className="pointer-events-none fixed right-4 top-4 z-[100] w-[calc(100vw-2rem)] max-w-sm print:hidden sm:right-6 sm:top-6">
+        <div className="pointer-events-none fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[100] mx-auto w-[calc(100dvw-1.5rem)] max-w-sm print:hidden sm:inset-x-auto sm:right-6 sm:mx-0 sm:top-[max(1.5rem,env(safe-area-inset-top))] sm:w-[calc(100dvw-3rem)]">
           <div
             role={gradeEntryNotice.type === "error" ? "alert" : "status"}
             className={`pointer-events-auto rounded-2xl border p-3 text-sm shadow-2xl backdrop-blur-md ${
@@ -2214,13 +2214,13 @@ export function GradeEntryView() {
                   : "border-sky-200 bg-sky-50/95 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/90 dark:text-sky-50"
             }`}
           >
-            <div className="flex items-start justify-between gap-3">
-              <span className="leading-6">{gradeEntryNotice.message}</span>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <span className="min-w-0 flex-1 break-words leading-6 [overflow-wrap:anywhere]">{gradeEntryNotice.message}</span>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 shrink-0 px-2"
+                className="shrink-0 px-3"
                 onClick={() => setGradeEntryNotice(null)}
               >
                 إخفاء
@@ -2769,7 +2769,7 @@ export function GradeEntryView() {
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-bold">
+                          <p className="min-w-0 break-words text-sm font-bold [overflow-wrap:anywhere]">
                             {student.name}
                           </p>
                           <Badge variant="outline" className="text-[10px]">
