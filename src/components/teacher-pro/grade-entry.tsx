@@ -2464,8 +2464,8 @@ export function GradeEntryView() {
       {selectedExam && (
         <Card>
           <CardHeader className="gap-3">
-            <div className="flex flex-col gap-3 lg:flex-row-reverse lg:items-end lg:justify-between">
-              <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_12rem] sm:items-end lg:max-w-xl">
+            <div className="flex flex-col gap-4 xl:flex-row-reverse xl:items-end xl:justify-between">
+              <div className="grid w-full gap-3 lg:grid-cols-[minmax(14rem,1fr)_minmax(18rem,1fr)] lg:items-stretch xl:max-w-3xl">
                 <div className="space-y-2 text-right">
                   <Label htmlFor="grade-entry-search">
                     بحث الطالب داخل الإدخال
@@ -2477,7 +2477,7 @@ export function GradeEntryView() {
                   />
                 </div>
                 <div
-                  className="flex min-h-[4.5rem] items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-gradient-to-l from-emerald-500/10 to-transparent px-4 py-3 text-right shadow-sm"
+                  className="grid min-h-[5.5rem] w-full grid-cols-[minmax(0,1fr)_auto] items-stretch gap-3 rounded-xl border border-emerald-500/25 bg-gradient-to-l from-emerald-500/10 to-transparent p-3 text-right shadow-sm sm:p-4"
                   data-manual-grade-count="true"
                   role="status"
                   aria-live="polite"
@@ -2489,101 +2489,75 @@ export function GradeEntryView() {
                   title="يُحتسب جميع السجلات اليدوية: الرقمية + قبل التسجيل + المعلقة + المفصولين + المجازين + فترة السماح. لا تُحتسب الحالات التلقائية (غياب تلقائي فقط)"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-bold text-emerald-800 dark:text-emerald-200">
-                      📊 الأوراق المدخلة يدوياً
+                    <p className="flex min-w-0 items-center gap-1.5 text-xs font-black leading-5 text-emerald-800 dark:text-emerald-200">
+                      <span aria-hidden="true">📊</span>
+                      <span>الأوراق المدخلة يدوياً</span>
                     </p>
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] leading-tight text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        رقمية: 
-                        <strong className="text-emerald-700 dark:text-emerald-300">
+                    <div className="mt-2 flex min-w-0 flex-wrap gap-1.5 text-muted-foreground">
+                      <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[10px] leading-none">
+                        <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+                        <span>رقمية</span>
+                        <strong className="font-black tabular-nums text-emerald-700 dark:text-emerald-300">
                           {entrySheetLoading || entrySheetError ? "—" : allManualGradesCount.numeric}
                         </strong>
                       </span>
                       {allManualGradesCount.preRegistration > 0 && (
-                        <span className="inline-flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                          قبل التسجيل: 
-                          <strong className="text-blue-700 dark:text-blue-300">
+                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-1 text-[10px] leading-none">
+                          <span className="size-1.5 shrink-0 rounded-full bg-blue-500" aria-hidden="true" />
+                          <span>قبل التسجيل</span>
+                          <strong className="font-black tabular-nums text-blue-700 dark:text-blue-300">
                             {allManualGradesCount.preRegistration}
                           </strong>
                         </span>
                       )}
                       {allManualGradesCount.pending > 0 && (
-                        <span className="inline-flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                          معلقة: 
-                          <strong className="text-amber-700 dark:text-amber-300">
+                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[10px] leading-none">
+                          <span className="size-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />
+                          <span>معلقة</span>
+                          <strong className="font-black tabular-nums text-amber-700 dark:text-amber-300">
                             {allManualGradesCount.pending}
                           </strong>
                         </span>
                       )}
                       {/* Smart Notes من السجل المنظّم */}
                       {(gradeSmartNoteCategoryCounts?.DISMISSED_PENDING || 0) > 0 && (
-                        <span className="inline-flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-                          مفصولين: 
-                          <strong className="text-red-700 dark:text-red-300">
+                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-red-500/20 bg-red-500/10 px-2 py-1 text-[10px] leading-none">
+                          <span className="size-1.5 shrink-0 rounded-full bg-red-500" aria-hidden="true" />
+                          <span>مفصولين</span>
+                          <strong className="font-black tabular-nums text-red-700 dark:text-red-300">
                             {gradeSmartNoteCategoryCounts.DISMISSED_PENDING}
                           </strong>
                         </span>
                       )}
                       {(gradeSmartNoteCategoryCounts?.LEAVE_PENDING || 0) > 0 && (
-                        <span className="inline-flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
-                          مجازين: 
-                          <strong className="text-purple-700 dark:text-purple-300">
+                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[10px] leading-none">
+                          <span className="size-1.5 shrink-0 rounded-full bg-purple-500" aria-hidden="true" />
+                          <span>مجازين</span>
+                          <strong className="font-black tabular-nums text-purple-700 dark:text-purple-300">
                             {gradeSmartNoteCategoryCounts.LEAVE_PENDING}
                           </strong>
                         </span>
                       )}
                       {(gradeSmartNoteCategoryCounts?.GRACE_SCORED || 0) > 0 && (
-                        <span className="inline-flex items-center gap-1">
-                          <span className="h-1.5 w-1.5 rounded-full bg-cyan-500" />
-                          فترة سماح: 
-                          <strong className="text-cyan-700 dark:text-cyan-300">
+                        <span className="inline-flex min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[10px] leading-none">
+                          <span className="size-1.5 shrink-0 rounded-full bg-cyan-500" aria-hidden="true" />
+                          <span>فترة سماح</span>
+                          <strong className="font-black tabular-nums text-cyan-700 dark:text-cyan-300">
                             {gradeSmartNoteCategoryCounts.GRACE_SCORED}
                           </strong>
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="shrink-0 flex items-center gap-2">
+                  <div className="grid min-h-14 min-w-16 shrink-0 place-items-center self-stretch rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2">
                     <span
-                      className="text-3xl font-black tabular-nums text-emerald-700 dark:text-emerald-300"
+                      className="text-3xl font-black leading-none tabular-nums text-emerald-700 dark:text-emerald-300"
                       data-manual-grade-count-value="true"
                     >
                       {entrySheetLoading || entrySheetError
                         ? "—"
                         : allManualGradesCount.total + gradeSmartNotesTotal}
                     </span>
-                    {/* شارة للدرجات المعلقة */}
-                    {allManualGradesCount.pending > 0 && !entrySheetLoading && !entrySheetError && (
-                      <span
-                        className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-400/30 text-[11px] font-bold text-amber-700 dark:text-amber-300 animate-pulse"
-                        title="درجات معلقة بانتظار إكمال الإدخال"
-                      >
-                        ⏳{allManualGradesCount.pending}
-                      </span>
-                    )}
-                    {/* شارة لدرجات قبل التسجيل */}
-                    {allManualGradesCount.preRegistration > 0 && !entrySheetLoading && !entrySheetError && (
-                      <span
-                        className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-400/30 text-[11px] font-bold text-blue-700 dark:text-blue-300"
-                        title="درجات أُدخلت قبل تسجيل الطالب (محفوظة في السجل)"
-                      >
-                        📅{allManualGradesCount.preRegistration}
-                      </span>
-                    )}
-                    {/* شارة للسجل المنظّم (Smart Notes) */}
-                    {gradeSmartNotesTotal > 0 && !entrySheetLoading && !entrySheetError && (
-                      <span
-                        className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-400/30 text-[11px] font-bold text-violet-700 dark:text-violet-300 animate-pulse"
-                        title="أوراق في السجل المنظّم (مفصولين، مجازين، فترة سماح)"
-                      >
-                        📋{gradeSmartNotesTotal}
-                      </span>
-                    )}
                   </div>
                 </div>
               </div>

@@ -1373,9 +1373,11 @@ export function TeacherProLayout() {
                     </span>
                     <Badge
                       variant="secondary"
-                      className="h-5 border-white/10 bg-white/10 px-1.5 text-[10px] text-sidebar-foreground"
+                      className="inline-grid size-7 shrink-0 place-items-center flex-nowrap border-white/10 bg-white/10 p-0 text-center text-[11px] font-black leading-none whitespace-nowrap tabular-nums text-sidebar-foreground"
                     >
-                      {family.items.length}
+                      <span className="block leading-none">
+                        {family.items.length}
+                      </span>
                     </Badge>
                     <ChevronDown
                       className={cn(

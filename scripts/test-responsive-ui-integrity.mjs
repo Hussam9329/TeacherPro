@@ -165,6 +165,12 @@ pass(/<button[\s\S]*?tp-sidebar-overlay/.test(layout), "TeacherPro layout: mobil
 includesAll(courses, ["teacherpro-fullscreen-dialog", "w-dvw", "h-dvh", "max-h-dvh"], "Course full-screen dialog");
 includesAll(profileDialog, ["h-dvh", "w-dvw", "safe-area-inset"], "Student profile dialog");
 includesAll(gradeEntry, ["100dvw", "safe-area-inset-top", "max-w-sm", "flex-wrap"], "Grade-entry notice");
+includesAll(gradeEntry, [
+  "lg:grid-cols-[minmax(14rem,1fr)_minmax(18rem,1fr)]",
+  "grid-cols-[minmax(0,1fr)_auto]",
+  "min-h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full",
+  'data-manual-grade-count-value="true"',
+], "Grade-entry manual statistics card");
 
 // No Tailwind force-prefixes for layout sizing; they make cascade repair brittle.
 const forcedLayoutUtility = /(?:^|[\s"'`])(?:(?:sm|md|lg|xl|2xl|landscape|portrait):)*!(?:w-|min-w-|max-w-|h-|min-h-|max-h-|p-|px-|py-|m-|mx-|my-|inset-|left-|right-|top-|bottom-|translate-|overflow-)/gm;
@@ -197,6 +203,11 @@ for (const file of teacherProFiles.filter((file) => !file.endsWith("export-dialo
 
 // Raw interactive controls that bypass the shared Button still need explicit mobile ergonomics.
 includesAll(layout, ["group flex min-h-11 w-full touch-manipulation", "tp-sidebar-overlay"], "Sidebar raw controls");
+includesAll(layout, [
+  "inline-grid size-7 shrink-0 place-items-center",
+  "p-0 text-center text-[11px] font-black leading-none",
+  "whitespace-nowrap tabular-nums",
+], "Sidebar family count alignment");
 includesAll(profileDialog, ["min-h-11 max-w-full touch-manipulation", "min-h-11 min-w-0 touch-manipulation"], "Student profile raw controls");
 includesAll(followUp, ["flex min-h-11 w-full min-w-0 touch-manipulation"], "Follow-up student picker");
 includesAll(smartNotes, ["min-h-11 min-w-0 touch-manipulation"], "Smart-note category controls");
