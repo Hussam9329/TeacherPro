@@ -3170,7 +3170,7 @@ export function StudentRegistryView() {
                           <p className="mt-1 font-black">
                             {editOriginalGraceActive
                               ? `نشطة حتى ${graceEndDate(editOriginalStudent)}`
-                              : "غير نشطة — المحاسبة فعالة"}
+                              : "فترة السماح منتهية — الطالب خاضع للمحاسبة"}
                           </p>
                         </div>
                       </div>
