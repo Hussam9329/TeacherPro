@@ -229,9 +229,12 @@ async function countActiveExamsWithMissingGrades(
           END AS grace_days
       ) grace
       WHERE policy.exam_date >= grace.registration_date
-        AND NOT (
-          policy.exam_date >= grace.grace_start
-          AND policy.exam_date < grace.grace_start + grace.grace_days
+        AND (
+          student."gracePeriodEndedAt" IS NOT NULL
+          OR NOT (
+            policy.exam_date >= grace.grace_start
+            AND policy.exam_date < grace.grace_start + grace.grace_days
+          )
         )
         AND (
           policy.all_sites

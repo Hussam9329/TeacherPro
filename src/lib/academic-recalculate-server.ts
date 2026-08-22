@@ -65,6 +65,7 @@ function mapStudent(student: {
   createdAt: Date;
   accountingGraceDays: number;
   gracePeriodStartDate?: Date | null;
+  gracePeriodEndedAt?: Date | null;
 }): AcademicStudent {
   return {
     id: student.id,
@@ -78,6 +79,7 @@ function mapStudent(student: {
     createdAt: dateString(student.createdAt),
     accountingGraceDays: Number(student.accountingGraceDays || 0),
     gracePeriodStartDate: student.gracePeriodStartDate ? dateString(student.gracePeriodStartDate) : null,
+    gracePeriodEndedAt: student.gracePeriodEndedAt ? dateString(student.gracePeriodEndedAt) : null,
   };
 }
 
@@ -368,6 +370,7 @@ async function loadAcademicStateForStudents(
         createdAt: true,
         accountingGraceDays: true,
         gracePeriodStartDate: true,
+        gracePeriodEndedAt: true,
       },
     }),
     client.grade.findMany({
@@ -595,6 +598,7 @@ export async function previewStudentAcademicUpdate(
     createdAt?: Date;
     accountingGraceDays?: number;
     gracePeriodStartDate?: Date | null;
+    gracePeriodEndedAt?: Date | null;
   },
   options: { tx?: Prisma.TransactionClient } = {},
 ): Promise<StudentAcademicUpdatePreview | null> {
@@ -623,6 +627,13 @@ export async function previewStudentAcademicUpdate(
       ? {
           gracePeriodStartDate: changes.gracePeriodStartDate
             ? dateString(changes.gracePeriodStartDate)
+            : null,
+        }
+      : {}),
+    ...(changes.gracePeriodEndedAt !== undefined
+      ? {
+          gracePeriodEndedAt: changes.gracePeriodEndedAt
+            ? dateString(changes.gracePeriodEndedAt)
             : null,
         }
       : {}),

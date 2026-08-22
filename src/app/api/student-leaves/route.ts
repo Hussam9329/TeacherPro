@@ -418,6 +418,7 @@ async function restoreGradesForLeave(
             createdAt: true,
             accountingGraceDays: true,
             gracePeriodStartDate: true,
+            gracePeriodEndedAt: true,
           },
         })
       : [],

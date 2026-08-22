@@ -57,6 +57,7 @@ export async function ensureProtectedGradeMarkers(
         createdAt: true,
         accountingGraceDays: true,
         gracePeriodStartDate: true,
+        gracePeriodEndedAt: true,
         mainSite: true,
         subSite: true,
         locationScope: true,

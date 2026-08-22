@@ -31,6 +31,7 @@ type StudentRow = {
   createdAt: Date;
   accountingGraceDays: number;
   gracePeriodStartDate: Date | null;
+  gracePeriodEndedAt: Date | null;
 };
 
 type GradeRow = {
@@ -164,6 +165,7 @@ export async function GET(req: NextRequest) {
               createdAt: true,
               accountingGraceDays: true,
               gracePeriodStartDate: true,
+              gracePeriodEndedAt: true,
             },
           },
         },

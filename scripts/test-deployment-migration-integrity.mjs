@@ -22,6 +22,8 @@ function check(condition, message) {
 
 const reconciliationMigrationName =
   "20260820140000_schema_authority_reconciliation";
+const requiredRuntimeMigrationName =
+  "20260822210000_end_grace_on_numeric_grade";
 const initialBridgeMigrationName = "20260601000000_initial_schema_bridge";
 const recoveredOperationalMigrationName =
   "20260712234500_operational_integrity_hardening";
@@ -119,12 +121,23 @@ check(
   "deployment uses a direct migration URL when available and safely redacts credentials",
 );
 check(
-  schemaReadiness.includes(reconciliationMigrationName) &&
+  schemaReadiness.includes(requiredRuntimeMigrationName) &&
     schemaReadiness.includes('FROM "_prisma_migrations"') &&
     schemaReadiness.includes('"finished_at" IS NOT NULL') &&
     schemaReadiness.includes('"rolled_back_at" IS NULL') &&
     !schemaReadiness.includes("$executeRaw"),
   "runtime readiness is a cached read-only check for the reconciliation migration",
+);
+check(
+  prismaSchema.includes("gracePeriodEndedAt DateTime?") &&
+    read(
+      path.join(
+        "prisma/migrations",
+        requiredRuntimeMigrationName,
+        "migration.sql",
+      ),
+    ).includes('ADD COLUMN IF NOT EXISTS "gracePeriodEndedAt"'),
+  "numeric-grade grace termination is versioned in the schema migration history",
 );
 check(
   runtimeDdlFiles.length === 0,

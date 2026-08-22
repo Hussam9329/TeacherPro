@@ -68,6 +68,7 @@ async function buildOpportunityLogDeletePreview(
           createdAt: true,
           accountingGraceDays: true,
           gracePeriodStartDate: true,
+          gracePeriodEndedAt: true,
         },
       },
     },

@@ -836,38 +836,7 @@ export function GradeEntryView() {
     return Boolean(
       student &&
         isStudentCurrentlyInGrace(student) &&
-        isExamWithinStudentGracePeriod(student, selectedExam),
-    );
-  };
-
-  const canCaptureGraceScoreDirectly = (studentId: string) => {
-    if (!isStudentInGraceForSelectedExam(studentId)) return false;
-    const existing = getGrade(studentId);
-    if (
-      existing?.status !== "درجة" ||
-      existing.academicEffectExcluded !== true
-    ) {
-      return true;
-    }
-
-    // توافق بيانات الإنتاج القديمة: كانت درجة السماح تُنشأ رسمياً ومستبعدة
-    // فوراً. نبقي إدخالها مباشراً ما دام السماح نشطاً، لكن لا نعمم ذلك على
-    // الدرجات التاريخية المستبعدة لأسباب أخرى.
-    const source = String(existing.academicEffectExclusionSource || "");
-    const graceSourcePrefix = "GradeSmartNote:GRACE_SCORED:";
-    if (!source.startsWith(graceSourcePrefix)) return false;
-
-    // المصدر لا يُكتب على Grade إلا عند معالجة GRACE_SCORED وربطها كسجل
-    // رسمي. وإذا كانت الملاحظة ضمن الصفحة المحمّلة نتحقق أيضاً من حالتها؛
-    // غيابها طبيعي لأن لوحة الملاحظات مجزأة ولا تجلب كل سجلات الامتحان.
-    const smartNoteId = source.slice(graceSourcePrefix.length);
-    const loadedSmartNote = gradeSmartNotes.find(
-      (note) => note.id === smartNoteId,
-    );
-    return (
-      !loadedSmartNote ||
-      (loadedSmartNote.category === "GRACE_SCORED" &&
-        loadedSmartNote.status === "PROCESSED")
+        isExamOnOrAfterStudentRegistration(student, selectedExam),
     );
   };
 
@@ -1110,8 +1079,7 @@ export function GradeEntryView() {
         const protectedNumericCapture = Boolean(
           leave ||
             !isExamOnOrAfterStudentRegistration(student, selectedExam) ||
-            student.status === "مفصول" ||
-            canCaptureGraceScoreDirectly(student.id),
+            student.status === "مفصول",
         );
         if (!canEditGradeForStudent(student.id) && !protectedNumericCapture)
           return false;
@@ -1184,12 +1152,14 @@ export function GradeEntryView() {
     grade?: Grade | null;
     smartNote?: GradeSmartNoteRecord | null;
     pendingSmartNote?: boolean;
+    graceEnded?: boolean;
     academicRecalculation?: { students?: Student[] } | null;
   } =>
     (result.data || {}) as {
       grade?: Grade | null;
       smartNote?: GradeSmartNoteRecord | null;
       pendingSmartNote?: boolean;
+      graceEnded?: boolean;
       academicRecalculation?: { students?: Student[] } | null;
     };
 
@@ -1411,11 +1381,10 @@ export function GradeEntryView() {
       student && !isExamOnOrAfterStudentRegistration(student, selectedExam),
     );
     const dismissedAndLocked = student?.status === "مفصول";
-    const graceNumericCapture = canCaptureGraceScoreDirectly(studentId);
     const canCaptureAsSmartNote =
       status === "درجة" &&
       Boolean(
-        leave || beforeRegistration || dismissedAndLocked || graceNumericCapture,
+        leave || beforeRegistration || dismissedAndLocked,
       );
 
     // ROOT-CAUSE FIX: Final client-side gate. Never let a contradictory
@@ -1464,7 +1433,6 @@ export function GradeEntryView() {
 
     if (
       !options.skipReactivationWarning &&
-      !graceNumericCapture &&
       needsReactivationWarning(studentId, draft)
     ) {
       requestReactivatedStudentGradeEdit(
@@ -1598,6 +1566,9 @@ export function GradeEntryView() {
           mergeSmartNoteIntoPanel(payload.smartNote);
           setGradeSmartNotesRefreshKey((key) => key + 1);
         }
+        if (payload.graceEnded) {
+          setGradeSmartNotesRefreshKey((key) => key + 1);
+        }
 
         if (payload.pendingSmartNote && payload.smartNote && !payload.grade) {
           if (offlineAttempt) {
@@ -1706,11 +1677,11 @@ export function GradeEntryView() {
           }));
         }
         emitGradeEntryServerSync("grade-entry-save");
-        if (!options.silent && !graceNumericCapture) {
+        if (!options.silent) {
           showGradeEntryNotice(
             "success",
-            payload.smartNote?.category === "GRACE_SCORED"
-              ? "تم حفظ الدرجة للمتابعة فقط؛ لن تخصم فرصة ولن تسبب فصلاً."
+            payload.graceEnded
+              ? "تم حفظ الدرجة وإنهاء فترة السماح؛ بدأت محاسبة الطالب من هذه الدرجة."
               : "تم حفظ الدرجة في بيانات النظام وإعادة احتساب الطالب",
           );
         }
@@ -1740,8 +1711,7 @@ export function GradeEntryView() {
         getStudentLeaveForSelectedExam(studentId) ||
           (student &&
             !isExamOnOrAfterStudentRegistration(student, selectedExam)) ||
-          student?.status === "مفصول" ||
-          canCaptureGraceScoreDirectly(studentId),
+          student?.status === "مفصول",
       );
     if (!canEditGradeForStudent(studentId) && !protectedNumericCapture) return;
     const existing = getGrade(studentId);
@@ -1769,7 +1739,6 @@ export function GradeEntryView() {
     }
 
     if (
-      !canCaptureGraceScoreDirectly(studentId) &&
       needsReactivationWarning(studentId, draft)
     ) {
       requestReactivatedStudentGradeEdit(
@@ -2704,8 +2673,8 @@ export function GradeEntryView() {
                             : "idle");
                   const examBeforeRegistration =
                     !isExamOnOrAfterStudentRegistration(student, selectedExam);
-                  const graceNumericCapture =
-                    canCaptureGraceScoreDirectly(student.id);
+                  const studentInGrace =
+                    isStudentInGraceForSelectedExam(student.id);
                   const canEditPersistedGrade =
                     canEditGradeForStudent(student.id) &&
                     !examBeforeRegistration &&
@@ -2714,8 +2683,7 @@ export function GradeEntryView() {
                   const protectedNumericCapture = Boolean(
                     leave ||
                       examBeforeRegistration ||
-                      student.status === "مفصول" ||
-                      graceNumericCapture,
+                      student.status === "مفصول",
                   );
                   const rowLocked = Boolean(
                     entered &&
@@ -2728,7 +2696,7 @@ export function GradeEntryView() {
                     rowLocked ||
                     (!canEditPersistedGrade && !protectedNumericCapture);
                   const structuredControlsDisabled =
-                    rowLocked || !canEditPersistedGrade || graceNumericCapture;
+                    rowLocked || !canEditPersistedGrade;
                   const notesInputDisabled =
                     rowLocked ||
                     (!canEditPersistedGrade && !protectedNumericCapture);
@@ -2738,7 +2706,7 @@ export function GradeEntryView() {
                       className="teacherpro-heavy-row tp-save-row grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]"
                       data-save-state={savePhase}
                       data-grace-direct-entry={
-                        graceNumericCapture ? "true" : undefined
+                        studentInGrace ? "true" : undefined
                       }
                     >
                       <div className="min-w-0">
@@ -2758,7 +2726,7 @@ export function GradeEntryView() {
                             </Badge>
                           )}
                           {!leave &&
-                            graceNumericCapture && (
+                            studentInGrace && (
                               <Badge variant="outline" className="text-[10px]">
                                 ضمن فترة السماح
                               </Badge>
@@ -2841,12 +2809,12 @@ export function GradeEntryView() {
                             {leave.reason ? `: ${leave.reason}` : ""}
                           </p>
                         )}
-                        {!leave &&
-                          graceNumericCapture && (
+                          {!leave &&
+                          studentInGrace && (
                             <p className="mt-1 text-[11px] text-sky-700 dark:text-sky-300">
-                              هذا الامتحان داخل فترة السماح؛ أدخل الدرجة مباشرة
-                              وستبقى معلّقة حتى انتهاء السماح، دون خصم فرص أو
-                              فصل.
+                              الطالب ضمن فترة السماح؛ عند إدخال درجة رقمية
+                              ستنتهي فترة السماح فوراً وتبدأ المحاسبة من نفس
+                              الدرجة.
                             </p>
                           )}
                         {student.status === "مفصول" &&
@@ -3048,8 +3016,8 @@ export function GradeEntryView() {
                                       "تعديل غير محفوظ"
                                     : leave
                                       ? "الطالب مجاز — الرقم سيُعلّق"
-                                      : graceNumericCapture
-                                        ? "أدخل الدرجة — ستُعلّق تلقائياً"
+                                      : studentInGrace
+                                        ? "أدخل الدرجة — ستبدأ المحاسبة"
                                         : savePhase === "idle" && entered
                                           ? "جاهز للتعديل"
                                           : savedRows[student.id] ||

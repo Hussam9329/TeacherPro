@@ -849,11 +849,13 @@ export interface StudentAcademicUpdateImpactResponse {
     createdAt: string;
     accountingGraceDays: number;
     gracePeriodStartDate?: string | null;
+    gracePeriodEndedAt?: string | null;
   };
   proposed: {
     createdAt: string;
     accountingGraceDays: number;
     gracePeriodStartDate?: string | null;
+    gracePeriodEndedAt?: string | null;
   };
   impact: {
     totalGrades: number;

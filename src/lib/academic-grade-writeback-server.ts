@@ -13,6 +13,8 @@ import {
   PRE_REGISTRATION_GRADE_EXCLUSION_SOURCE,
 } from "@/lib/pre-registration-grade";
 import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
+import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { shouldEndGraceForNumericGrade } from "@/lib/grace-grade-activation";
 
 // ----------------------------------------------------------------------------
 // Stale Absence Notes — ROOT-CAUSE FIX
@@ -200,6 +202,7 @@ export interface AcademicGradeWritebackResult {
     updatedAt: Date;
   };
   academicRecalculation: AcademicServerRecalculationResult;
+  graceEnded: boolean;
 }
 
 export interface AcademicGradeWritebackInput {
@@ -350,6 +353,16 @@ export async function syncAcademicGradeWriteback(
     );
   }
 
+  // Every accepted grade write must be atomic, including callers that do not
+  // already own a transaction. This guarantees that ending grace, replacing
+  // the placeholder, and recalculating the student either all succeed or all
+  // roll back together.
+  if (!input.tx) {
+    return withSerializableTransaction((tx) =>
+      syncAcademicGradeWriteback({ ...input, tx }),
+    );
+  }
+
   const normalizedStatus = normalizeAcademicGradeStatus(input.status);
   let status: AcademicGradeWritebackStatus = normalizedStatus;
   // ROOT-CAUSE FIX (leave + absence contradiction): when the caller tries to
@@ -377,11 +390,19 @@ export async function syncAcademicGradeWriteback(
     return null;
   }
 
-  const client = input.tx || db;
+  const client = input.tx;
   const [student, exam] = await Promise.all([
     client.student.findUnique({
       where: { id: studentId },
-      select: { id: true, courseId: true, status: true, createdAt: true, accountingGraceDays: true, gracePeriodStartDate: true },
+      select: {
+        id: true,
+        courseId: true,
+        status: true,
+        createdAt: true,
+        accountingGraceDays: true,
+        gracePeriodStartDate: true,
+        gracePeriodEndedAt: true,
+      },
     }),
     client.exam.findUnique({
       where: { id: examId },
@@ -413,6 +434,9 @@ export async function syncAcademicGradeWriteback(
   const studentGraceStartStr = student.gracePeriodStartDate
     ? student.gracePeriodStartDate.toISOString()
     : null;
+  const studentGraceEndedAtStr = student.gracePeriodEndedAt
+    ? student.gracePeriodEndedAt.toISOString()
+    : null;
   const examOnOrAfterRegistration = isExamOnOrAfterStudentRegistration(
     { createdAt: studentCreatedAtStr },
     { date: examDateStr },
@@ -422,6 +446,52 @@ export async function syncAcademicGradeWriteback(
     status,
     score,
   });
+
+  // CORE RULE: a successfully validated real numeric grade (zero included)
+  // ends the student's currently active grace period immediately. Historical
+  // pre-registration scores remain excluded and cannot establish continuity.
+  // The same transaction then saves and recalculates this grade as the first
+  // chargeable grade of the continuing student.
+  const shouldEndGrace = shouldEndGraceForNumericGrade({
+    student,
+    status,
+    score,
+    examOnOrAfterRegistration,
+  });
+  let graceEnded = false;
+  if (shouldEndGrace) {
+    const endedAt = new Date();
+    const ended = await client.student.updateMany({
+      where: {
+        id: studentId,
+        gracePeriodEndedAt: null,
+      },
+      data: {
+        accountingGraceDays: 0,
+        gracePeriodStartDate: null,
+        gracePeriodEndedAt: endedAt,
+      },
+    });
+    graceEnded = ended.count > 0;
+
+    // Retire legacy pending grace attempts for this student. Once grace is
+    // explicitly ended they must not remain stuck as pending work, and they
+    // are not promoted retroactively. Other smart-note categories and already
+    // resolved historical records are untouched.
+    await client.gradeSmartNote.updateMany({
+      where: {
+        studentId,
+        category: "GRACE_SCORED",
+        status: "PENDING",
+      },
+      data: {
+        status: "REJECTED",
+        resolution:
+          "أُلغي التعليق لأن إدخال درجة رقمية أنهى فترة السماح واعتمد الدرجة للمحاسبة الأكاديمية.",
+        resolvedAt: endedAt,
+      },
+    });
+  }
 
   if (
     student.status === "مفصول" &&
@@ -551,7 +621,12 @@ export async function syncAcademicGradeWriteback(
   if (
     status === "غائب" &&
     isExamWithinStudentGraceWindow(
-      { createdAt: studentCreatedAtStr, accountingGraceDays: student.accountingGraceDays, gracePeriodStartDate: studentGraceStartStr },
+      {
+        createdAt: studentCreatedAtStr,
+        accountingGraceDays: student.accountingGraceDays,
+        gracePeriodStartDate: studentGraceStartStr,
+        gracePeriodEndedAt: studentGraceEndedAtStr,
+      },
       { date: examDateStr },
     )
   ) {
@@ -565,7 +640,12 @@ export async function syncAcademicGradeWriteback(
   if (
     status === "ضمن فترة السماح" &&
     !isExamWithinStudentGraceWindow(
-      { createdAt: studentCreatedAtStr, accountingGraceDays: student.accountingGraceDays, gracePeriodStartDate: studentGraceStartStr },
+      {
+        createdAt: studentCreatedAtStr,
+        accountingGraceDays: student.accountingGraceDays,
+        gracePeriodStartDate: studentGraceStartStr,
+        gracePeriodEndedAt: studentGraceEndedAtStr,
+      },
       { date: examDateStr },
     )
   ) {
@@ -596,8 +676,34 @@ export async function syncAcademicGradeWriteback(
   // existing row's stale absence note.
   const existingGrade = await client.grade.findUnique({
     where: { studentId_examId: { studentId, examId } },
-    select: { status: true, notes: true },
+    select: {
+      status: true,
+      notes: true,
+      smartNoteId: true,
+      academicEffectExclusionSource: true,
+    },
   });
+
+  if (
+    graceEnded &&
+    existingGrade?.smartNoteId &&
+    String(existingGrade.academicEffectExclusionSource || "").startsWith(
+      "GradeSmartNote:GRACE_SCORED:",
+    )
+  ) {
+    await client.gradeSmartNote.updateMany({
+      where: {
+        id: existingGrade.smartNoteId,
+        category: "GRACE_SCORED",
+      },
+      data: {
+        status: "REJECTED",
+        resolution:
+          "استُبدلت الدرجة التاريخية بدرجة رسمية جديدة أنهت فترة السماح وبدأت المحاسبة الأكاديمية.",
+        resolvedAt: new Date(),
+      },
+    });
+  }
   const sanitizedNotes = sanitizeStaleAbsenceNotes({
     previousStatus: existingGrade?.status ?? null,
     previousNotes: existingGrade?.notes ?? null,
@@ -627,6 +733,14 @@ export async function syncAcademicGradeWriteback(
         smartNoteId: null,
       }
     : {};
+  const graceActivationData = graceEnded
+    ? {
+        academicEffectExcluded: false,
+        academicEffectExclusionReason: null,
+        academicEffectExclusionSource: null,
+        smartNoteId: null,
+      }
+    : {};
 
   const grade = await client.grade.upsert({
     where: { studentId_examId: { studentId, examId } },
@@ -640,6 +754,7 @@ export async function syncAcademicGradeWriteback(
           }
         : {}),
       ...preRegistrationExclusion,
+      ...graceActivationData,
     },
     create: {
       studentId,
@@ -649,6 +764,7 @@ export async function syncAcademicGradeWriteback(
       notes: sanitizedNotes || null,
       academicAccountingChecked: Boolean(input.academicAccountingChecked),
       ...preRegistrationExclusion,
+      ...graceActivationData,
     },
   });
 
@@ -664,5 +780,5 @@ export async function syncAcademicGradeWriteback(
         input.tx ? { tx: input.tx } : {},
       );
 
-  return { grade, academicRecalculation };
+  return { grade, academicRecalculation, graceEnded };
 }

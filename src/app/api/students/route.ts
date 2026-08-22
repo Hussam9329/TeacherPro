@@ -92,6 +92,8 @@ const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
   "dismissalNotes",
   // gracePeriodStartDate is set by the backend only (when graceDays changes)
   "gracePeriodStartDate",
+  // gracePeriodEndedAt is owned by the grade engine/manual grace restart.
+  "gracePeriodEndedAt",
   // Prisma relation objects that may be present after GET /api/students include: { course: true }
   "course",
   "grades",
@@ -790,6 +792,9 @@ export async function PUT(req: NextRequest) {
                   ? data.createdAt
                   : currentStudent.createdAt,
             });
+      // Granting a new manual grace period explicitly reopens grace after a
+      // previous numeric grade may have ended it.
+      data.gracePeriodEndedAt = null;
     }
   }
 
@@ -1163,6 +1168,7 @@ export async function PUT(req: NextRequest) {
         transactionData.dismissalType = "";
         transactionData.dismissalReason = "";
         transactionData.dismissalNotes = "";
+        transactionData.gracePeriodEndedAt = null;
         // الطالب الجديد يبدأ من لحظة النقل/إعادة البداية؛ هذا يمنع امتحانات
         // الملف القديم من العودة إلى التأثير مستقبلاً.
         transactionData.createdAt = new Date();

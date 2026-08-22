@@ -14,6 +14,7 @@ type ProtectedGradeCandidate = {
     createdAt: Date;
     accountingGraceDays: number;
     gracePeriodStartDate: Date | null;
+    gracePeriodEndedAt: Date | null;
   };
   exam: { date: Date };
 };
@@ -66,6 +67,7 @@ export async function repairProtectedAbsencesForStudents(
           createdAt: true,
           accountingGraceDays: true,
           gracePeriodStartDate: true,
+          gracePeriodEndedAt: true,
         },
       },
       exam: { select: { date: true } },

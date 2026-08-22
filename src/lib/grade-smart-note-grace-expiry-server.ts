@@ -130,6 +130,7 @@ export async function reconcileExpiredGracePendingGrades(
           createdAt: true,
           accountingGraceDays: true,
           gracePeriodStartDate: true,
+          gracePeriodEndedAt: true,
         },
       },
       exam: { select: { fullMark: true } },

@@ -4,7 +4,6 @@ export const maxDuration = 60;
 
 import {
   isExamWithinStudentGraceWindow,
-  isStudentCurrentlyInGrace,
 } from "@/lib/student-grace";
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
@@ -33,7 +32,6 @@ import {
   type GradeSmartNoteCategory,
   upsertGradeSmartNote,
 } from "@/lib/grade-smart-notes-server";
-import { reconcileExpiredGracePendingGrades } from "@/lib/grade-smart-note-grace-expiry-server";
 import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
 
 function parsePositiveInt(
@@ -240,6 +238,7 @@ type NumericGradeAttemptContext = {
     createdAt: Date;
     accountingGraceDays: number;
     gracePeriodStartDate: Date | null;
+    gracePeriodEndedAt: Date | null;
   };
   exam: {
     id: string;
@@ -302,6 +301,7 @@ async function inspectNumericGradeAttempt(
         createdAt: true,
         accountingGraceDays: true,
         gracePeriodStartDate: true,
+        gracePeriodEndedAt: true,
       },
     }),
     tx.exam.findUnique({
@@ -358,7 +358,6 @@ async function inspectNumericGradeAttempt(
   });
   const beforeRegistration = isExamBeforeStudentRegistration(student, exam);
   const onLeave = leaves.some((leave) => leaveAppliesToExam(leave, exam));
-  const withinGrace = isExamWithinGracePeriod(student, exam);
 
   let category: NumericGradeAttemptContext["category"] = null;
   let reason = "";
@@ -383,9 +382,6 @@ async function inspectNumericGradeAttempt(
     } else if (student.status === "مفصول") {
       category = "DISMISSED_PENDING";
       reason = "محاولة إدخال درجة رقمية لطالب مفصول؛ حُفظت للمراجعة دون أثر أكاديمي.";
-    } else if (withinGrace) {
-      category = "GRACE_SCORED";
-      reason = "درجة حقيقية داخل فترة السماح؛ محفوظة للمتابعة دون أثر أكاديمي.";
     }
   }
 
@@ -426,6 +422,7 @@ function isExamWithinGracePeriod(
     createdAt?: Date | string | null;
     accountingGraceDays?: number | null;
     gracePeriodStartDate?: Date | string | null;
+    gracePeriodEndedAt?: Date | string | null;
   },
   exam: { date?: Date | string | null },
 ): boolean {
@@ -651,12 +648,10 @@ export async function POST(req: NextRequest) {
           select: { updatedAt: true },
         });
 
-        // Protected numeric attempts are captured as structured smart notes
-        // before optimistic-concurrency checks. They do not affect academic
-        // accounting. A grace attempt remains PENDING while the student's
-        // current grace window is open, then is promoted automatically to an
-        // excluded Grade. If the window already ended, promotion happens in
-        // this same transaction so the UI never reports a false pending save.
+        // Leave and dismissal attempts remain structured smart notes. Grace
+        // is intentionally not intercepted here: every real numeric grade now
+        // reaches the shared writeback, which atomically ends grace and counts
+        // that same grade.
         const numericAttempt =
           String(body.status || "") === "درجة"
             ? await inspectNumericGradeAttempt(
@@ -685,48 +680,6 @@ export async function POST(req: NextRequest) {
             const resolvedGrade = await tx.grade.findUnique({
               where: { smartNoteId: smartNote.id },
             });
-            // Compatibility with the first smart-note deployment: it created
-            // a PROCESSED excluded Grade immediately. Do not delete or demote
-            // those production rows. While grace is still open, a new direct
-            // entry simply corrects the linked score and note in place, while
-            // preserving PROCESSED + every permanent exclusion field.
-            if (
-              smartNote.category === "GRACE_SCORED" &&
-              smartNote.status === "PROCESSED" &&
-              resolvedGrade &&
-              isStudentCurrentlyInGrace(numericAttempt.student)
-            ) {
-              const [updatedGrade, updatedSmartNote] = await Promise.all([
-                tx.grade.update({
-                  where: { id: resolvedGrade.id },
-                  data: {
-                    status: "درجة",
-                    score: numericAttempt.score,
-                    notes: numericAttempt.reason,
-                  },
-                }),
-                tx.gradeSmartNote.update({
-                  where: { id: smartNote.id },
-                  data: {
-                    score: numericAttempt.score,
-                    reason: numericAttempt.reason,
-                    attemptedById: principal.id,
-                    attemptedByName: principal.name || principal.username,
-                    attemptedAt: new Date(),
-                  },
-                }),
-              ]);
-              return {
-                capturedAsSmartNote: false as const,
-                pendingSmartNote: false as const,
-                grade: updatedGrade,
-                smartNote: updatedSmartNote,
-                academicRecalculation: null,
-                grandfatheredGraceGrade: true as const,
-                message:
-                  "تم تحديث الدرجة مباشرة مع بقائها مستبعدة دائماً من الأثر الأكاديمي.",
-              };
-            }
             if (resolvedGrade) {
               return {
                 capturedAsSmartNote: false as const,
@@ -751,47 +704,6 @@ export async function POST(req: NextRequest) {
                 smartNote.resolution ||
                 "هذه المحاولة عولجت مسبقاً ولا يمكن فتحها مجدداً من ورقة الإدخال.",
             };
-          }
-
-          if (numericAttempt.category === "GRACE_SCORED") {
-            const graceMigration = await reconcileExpiredGracePendingGrades({
-              tx,
-              noteIds: [smartNote.id],
-              actor: {
-                id: principal.id,
-                name: principal.name || principal.username,
-              },
-            });
-            const resolvedSmartNote = await tx.gradeSmartNote.findUnique({
-              where: { id: smartNote.id },
-              include: { resolutionGrade: true },
-            });
-            if (
-              graceMigration.processed > 0 &&
-              resolvedSmartNote?.resolutionGrade
-            ) {
-              return {
-                capturedAsSmartNote: false as const,
-                pendingSmartNote: false as const,
-                grade: resolvedSmartNote.resolutionGrade,
-                smartNote: resolvedSmartNote,
-                academicRecalculation: null,
-                message:
-                  "انتهت فترة السماح؛ نُقلت الدرجة مباشرة إلى سجل الطالب وهي مستبعدة دائماً من الأثر الأكاديمي.",
-              };
-            }
-            if (graceMigration.conflicts > 0) {
-              return {
-                capturedAsSmartNote: true as const,
-                pendingSmartNote: false as const,
-                smartNoteConflict: true as const,
-                grade: null,
-                smartNote: resolvedSmartNote || smartNote,
-                academicRecalculation: null,
-                message:
-                  "لم تُستبدل الدرجة لأن للطالب سجلاً فعلياً محفوظاً لهذا الامتحان.",
-              };
-            }
           }
 
           return {
@@ -875,6 +787,7 @@ export async function POST(req: NextRequest) {
       examId: result.grade.examId,
       status: result.grade.status,
       score: result.grade.score,
+      graceEnded: "graceEnded" in result ? result.graceEnded : false,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
       smartNoteId: result.smartNote?.id || null,
     });

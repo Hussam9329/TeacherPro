@@ -35,6 +35,7 @@ export async function buildStudentAcademicImpactToken(
       createdAt: true,
       accountingGraceDays: true,
       gracePeriodStartDate: true,
+      gracePeriodEndedAt: true,
       dismissalType: true,
       dismissalReason: true,
       dismissalNotes: true,
@@ -151,7 +152,7 @@ export async function buildStudentAcademicImpactToken(
   ]);
 
   const payload = {
-    version: 3,
+    version: 4,
     student,
     proposedCreatedAt: dayKey(input.proposedCreatedAt),
     proposedGraceStartDate: input.proposedGraceStartDate

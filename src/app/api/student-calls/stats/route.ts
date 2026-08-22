@@ -53,6 +53,7 @@ type DbStudentLite = {
   createdAt: Date;
   accountingGraceDays: number;
   gracePeriodStartDate: Date | null;
+  gracePeriodEndedAt: Date | null;
 };
 
 type DbGradeLite = {
@@ -333,6 +334,7 @@ export async function GET(req: NextRequest) {
               createdAt: true,
               accountingGraceDays: true,
               gracePeriodStartDate: true,
+              gracePeriodEndedAt: true,
             },
           }),
           db.grade.findMany({

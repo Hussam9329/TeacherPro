@@ -105,6 +105,7 @@ export const STUDENT_PROFILE_STUDENT_SELECT = {
   baseOpportunities: true,
   accountingGraceDays: true,
   gracePeriodStartDate: true,
+  gracePeriodEndedAt: true,
   createdAt: true,
   courseId: true,
 } satisfies Prisma.StudentSelect;
@@ -222,7 +223,7 @@ export function buildStudentProfileDataVersion(input: {
     "telegram", "courseProgram", "courseTerm", "studyType", "locationScope",
     "baghdadMode", "mainSite", "subSite", "code", "status", "dismissalType",
     "dismissalReason", "dismissalNotes", "opportunities", "baseOpportunities",
-    "accountingGraceDays", "gracePeriodStartDate", "createdAt",
+    "accountingGraceDays", "gracePeriodStartDate", "gracePeriodEndedAt", "createdAt",
   ];
   const student = Object.fromEntries(
     studentKeys.map((key) => [key, input.student[key] ?? null]),

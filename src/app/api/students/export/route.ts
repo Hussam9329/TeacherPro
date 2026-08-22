@@ -34,6 +34,7 @@ const studentExportSelect = {
   baseOpportunities: true,
   accountingGraceDays: true,
   gracePeriodStartDate: true,
+  gracePeriodEndedAt: true,
   createdAt: true,
   courseId: true,
   course: { select: { name: true } },

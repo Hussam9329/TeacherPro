@@ -59,6 +59,7 @@ export type StudentGraceLike = {
   createdAt?: Date | string | null;
   accountingGraceDays?: number | null;
   gracePeriodStartDate?: Date | string | null;
+  gracePeriodEndedAt?: Date | string | null;
 };
 
 export type StudentLeaveLike = {

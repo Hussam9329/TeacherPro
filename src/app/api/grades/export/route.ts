@@ -249,6 +249,7 @@ function isExamWithinGracePeriod(
     createdAt?: Date | string | null;
     accountingGraceDays?: number | null;
     gracePeriodStartDate?: Date | string | null;
+    gracePeriodEndedAt?: Date | string | null;
   },
   exam: { date?: Date | string | null },
 ): boolean {

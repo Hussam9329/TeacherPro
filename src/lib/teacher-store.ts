@@ -121,6 +121,7 @@ export interface Student {
   baseOpportunities: number;
   accountingGraceDays: number;
   gracePeriodStartDate?: string | null;
+  gracePeriodEndedAt?: string | null;
   /** Server-side snapshot used by إدارة الفرص so actions never depend on stale course-chapter cache. */
   hasActiveChapter?: boolean;
   activeChapterConflictCount?: number;
@@ -145,7 +146,10 @@ export interface Student {
 export type CourseTransferPolicy = "reset" | "keep";
 
 export type StudentUpdatePayload = Partial<
-  Omit<Student, "id" | "code" | "gracePeriodStartDate">
+  Omit<
+    Student,
+    "id" | "code" | "gracePeriodStartDate" | "gracePeriodEndedAt"
+  >
 > & {
   gracePeriodStartMode?: "registration" | "now";
   /**
@@ -1419,6 +1423,9 @@ function normalizeStudentRecord(st: Record<string, unknown>): Student {
     gracePeriodStartDate: st.gracePeriodStartDate
       ? baghdadDateKey(st.gracePeriodStartDate as string | Date)
       : null,
+    gracePeriodEndedAt: st.gracePeriodEndedAt
+      ? String(st.gracePeriodEndedAt)
+      : null,
     dismissalNotes: String(st.dismissalNotes || ""),
     createdAt: st.createdAt
       ? baghdadDateKey(st.createdAt as string | Date) || todayISO()
@@ -1679,7 +1686,10 @@ function parseDateOnly(value: string | undefined | null): Date | null {
 function isExamWithinStudentGracePeriod(
   student: Pick<
     Student,
-    "createdAt" | "accountingGraceDays" | "gracePeriodStartDate"
+    | "createdAt"
+    | "accountingGraceDays"
+    | "gracePeriodStartDate"
+    | "gracePeriodEndedAt"
   >,
   exam: Pick<Exam, "date">,
 ): boolean {

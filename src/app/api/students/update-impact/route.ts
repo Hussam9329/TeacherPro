@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
           createdAt: true,
           accountingGraceDays: true,
           gracePeriodStartDate: true,
+          gracePeriodEndedAt: true,
         },
       });
       if (!student) {
@@ -109,9 +110,16 @@ export async function POST(req: NextRequest) {
                 createdAt: proposedCreatedAt,
               })
             : student.gracePeriodStartDate;
+      const proposedGraceEndedAt =
+        proposedGraceDays > 0 && (graceDaysChanged || gracePeriodStartMode)
+          ? null
+          : student.gracePeriodEndedAt;
       const graceStartChanged =
         dayKey(proposedGraceStartDate) !== dayKey(student.gracePeriodStartDate);
-      const graceChanged = graceDaysChanged || graceStartChanged;
+      const graceEndChanged =
+        dayKey(proposedGraceEndedAt) !== dayKey(student.gracePeriodEndedAt);
+      const graceChanged =
+        graceDaysChanged || graceStartChanged || graceEndChanged;
 
       const [grades, leaves, projection, previewToken] = await Promise.all([
         tx.grade.findMany({
@@ -126,6 +134,7 @@ export async function POST(req: NextRequest) {
             createdAt: proposedCreatedAt,
             accountingGraceDays: proposedGraceDays,
             gracePeriodStartDate: proposedGraceStartDate,
+            gracePeriodEndedAt: proposedGraceEndedAt,
           },
           { tx },
         ),
@@ -141,11 +150,13 @@ export async function POST(req: NextRequest) {
         createdAt: student.createdAt,
         accountingGraceDays: student.accountingGraceDays,
         gracePeriodStartDate: student.gracePeriodStartDate,
+        gracePeriodEndedAt: student.gracePeriodEndedAt,
       };
       const projectedStudent = {
         createdAt: proposedCreatedAt,
         accountingGraceDays: proposedGraceDays,
         gracePeriodStartDate: proposedGraceStartDate,
+        gracePeriodEndedAt: proposedGraceEndedAt,
       };
 
       const changes = grades
@@ -201,11 +212,13 @@ export async function POST(req: NextRequest) {
           createdAt: dayKey(student.createdAt),
           accountingGraceDays: Number(student.accountingGraceDays || 0),
           gracePeriodStartDate: dayKey(student.gracePeriodStartDate),
+          gracePeriodEndedAt: student.gracePeriodEndedAt?.toISOString() || null,
         },
         proposed: {
           createdAt: dayKey(proposedCreatedAt),
           accountingGraceDays: proposedGraceDays,
           gracePeriodStartDate: dayKey(proposedGraceStartDate),
+          gracePeriodEndedAt: proposedGraceEndedAt?.toISOString() || null,
         },
         impact: {
           totalGrades: grades.length,

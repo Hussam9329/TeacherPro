@@ -242,19 +242,14 @@ must(
   gradeEntry.includes('import { isStudentCurrentlyInGrace } from "@/lib/student-grace"') &&
     gradeEntry.includes("isStudentCurrentlyInGrace(student)") &&
     gradeEntry.includes('data-grace-direct-entry=') &&
-    gradeEntry.includes("const canCaptureGraceScoreDirectly") &&
-    gradeEntry.includes('existing.academicEffectExcluded !== true') &&
-    gradeEntry.includes('const graceSourcePrefix = "GradeSmartNote:GRACE_SCORED:"') &&
-    gradeEntry.includes("if (!source.startsWith(graceSourcePrefix)) return false") &&
-    gradeEntry.includes('loadedSmartNote.category === "GRACE_SCORED"') &&
-    gradeEntry.includes('loadedSmartNote.status === "PROCESSED"') &&
-    gradeEntry.includes("student.status === \"مفصول\" ||\n                      graceNumericCapture") &&
-    gradeEntry.includes("rowLocked || !canEditPersistedGrade || graceNumericCapture") &&
-    gradeEntry.includes('message: isGracePending\n                ? "درجة معلّقة — ضمن فترة السماح"') &&
-    gradeEntry.includes("if (!isGracePending && !options.silent)") &&
-    gradeEntry.includes("if (!options.silent && !graceNumericCapture)"),
-  "طالب السماح يملك إدخالاً رقمياً مباشراً بلا زر تعديل أو تنبيه وتظهر درجته معلّقة",
-  "يجب إبقاء حقل طالب السماح مفتوحاً للحفظ المباشر مع منع زر التعديل والتنبيهات وتمييز الدرجة المعلّقة.",
+    gradeEntry.includes("const studentInGrace") &&
+    gradeEntry.includes("وتبدأ المحاسبة من نفس") &&
+    gradeEntry.includes("تم حفظ الدرجة وإنهاء فترة السماح") &&
+    gradeEntry.includes("payload.graceEnded") &&
+    !gradeEntry.includes("const canCaptureGraceScoreDirectly") &&
+    !gradeEntry.includes("graceNumericCapture"),
+  "طالب السماح يدخل درجة رسمية تنهي السماح وتبدأ المحاسبة فوراً",
+  "يجب أن يبقى الحقل مفتوحاً وأن يوضح أن الدرجة نفسها ستُنهي السماح وتُحتسب.",
 );
 
 must(

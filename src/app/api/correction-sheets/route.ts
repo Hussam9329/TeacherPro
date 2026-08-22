@@ -147,6 +147,7 @@ export async function POST(req: NextRequest) {
       return {
         correctionSheet,
         grade: gradeWriteback?.grade || null,
+        graceEnded: gradeWriteback?.graceEnded || false,
         academicRecalculation: gradeWriteback?.academicRecalculation || null,
       };
     });
@@ -156,6 +157,7 @@ export async function POST(req: NextRequest) {
       examId: result.correctionSheet.examId,
       gradeId: result.grade?.id,
       wroteGrade: Boolean(result.grade),
+      graceEnded: result.graceEnded,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
     });
     return NextResponse.json(result, { status: 201 });
@@ -216,6 +218,7 @@ export async function PUT(req: NextRequest) {
       return {
         correctionSheet,
         grade: gradeWriteback?.grade || null,
+        graceEnded: gradeWriteback?.graceEnded || false,
         academicRecalculation: gradeWriteback?.academicRecalculation || null,
       };
     });
@@ -225,6 +228,7 @@ export async function PUT(req: NextRequest) {
       examId: result.correctionSheet.examId,
       gradeId: result.grade?.id,
       wroteGrade: Boolean(result.grade),
+      graceEnded: result.graceEnded,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
     });
     return NextResponse.json(result);

@@ -71,6 +71,7 @@ type DbStudentLite = {
   baseOpportunities: number;
   accountingGraceDays: number;
   gracePeriodStartDate: Date | null;
+  gracePeriodEndedAt: Date | null;
   createdAt: Date;
   courseId: string;
 };
@@ -545,6 +546,7 @@ export async function GET(req: NextRequest) {
         baseOpportunities: true,
         accountingGraceDays: true,
         gracePeriodStartDate: true,
+        gracePeriodEndedAt: true,
         createdAt: true,
         courseId: true,
       },
@@ -594,6 +596,7 @@ export async function GET(req: NextRequest) {
             baseOpportunities: true,
             accountingGraceDays: true,
             gracePeriodStartDate: true,
+            gracePeriodEndedAt: true,
             createdAt: true,
             courseId: true,
           },

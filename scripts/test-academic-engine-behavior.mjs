@@ -192,6 +192,30 @@ function recalculatedStudent(input) {
   console.log("✅ حالة ضمن فترة السماح لا تخصم ولا تفصل");
 }
 
+{
+  const result = recalculatedStudent(
+    state({
+      students: [
+        student({
+          createdAt: "2026-02-01T00:00:00.000Z",
+          gracePeriodEndedAt: "2026-02-02T09:00:00.000Z",
+        }),
+      ],
+      exams: [
+        exam({
+          type: "يومي",
+          date: "2026-02-02T00:00:00.000Z",
+          opportunitiesPenalty: 1,
+        }),
+      ],
+      grades: [grade({ score: 10 })],
+    }),
+  );
+  assert.equal(result.status, "نشط");
+  assert.equal(result.opportunities, 2);
+  console.log("✅ إنهاء السماح يجعل نفس الدرجة الرقمية مؤثرة أكاديمياً");
+}
+
 assert.equal(examPenaltyValue({ noDiscount: false, opportunitiesPenalty: 0 }), 1);
 assert.equal(
   isAutomaticOpportunityLog({ action: "خصم تلقائي", reason: "" }),

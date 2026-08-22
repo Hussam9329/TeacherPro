@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
                 createdAt: true,
                 accountingGraceDays: true,
                 gracePeriodStartDate: true,
+                gracePeriodEndedAt: true,
               },
             }),
             tx.exam.findUnique({

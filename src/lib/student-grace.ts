@@ -9,6 +9,7 @@ export type StudentGraceLike = {
   createdAt?: Date | string | null;
   accountingGraceDays?: number | string | null;
   gracePeriodStartDate?: Date | string | null;
+  gracePeriodEndedAt?: Date | string | null;
 };
 
 export type ExamDateLike = {
@@ -81,6 +82,12 @@ export function resolveManualGraceStartDate(args: {
 export function getStudentGraceWindow(
   student: StudentGraceLike,
 ): StudentGraceWindow | null {
+  // A real numeric grade (or an explicit administrative termination) ends
+  // grace permanently for the current enrollment. Zero days alone cannot
+  // represent that state because zero normally means the automatic 3-day
+  // new-student window applies.
+  if (student.gracePeriodEndedAt) return null;
+
   const registrationStart = parseGraceDateOnly(student.createdAt);
   if (!registrationStart) return null;
 

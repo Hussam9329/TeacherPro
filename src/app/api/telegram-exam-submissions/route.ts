@@ -584,7 +584,11 @@ export async function POST(req: NextRequest) {
       // creation entirely. The submission record is still saved (so
       // the admin knows the student tried to submit), but no grade
       // is created. The submission's gradeId stays null.
-      let gradeWriteback: { grade: { id: string; studentId: string; examId: string; status: string; score: number | null } | null; academicRecalculation?: { students: Array<{ id: string }> } | null } | null = null;
+      let gradeWriteback: {
+        grade: { id: string; studentId: string; examId: string; status: string; score: number | null } | null;
+        academicRecalculation?: { students: Array<{ id: string }> } | null;
+        graceEnded?: boolean;
+      } | null = null;
       let skippedDueToLeave = false;
 
       // Check for exam-specific leave
@@ -629,7 +633,11 @@ export async function POST(req: NextRequest) {
           allowBlankGrade: true,
           preserveExistingScoreWhenBlank: true,
           blockOnLeave: true, // Q70: redundant safety — we already checked above
-        }) as { grade: { id: string; studentId: string; examId: string; status: string; score: number | null } | null; academicRecalculation?: { students: Array<{ id: string }> } | null };
+        }) as {
+          grade: { id: string; studentId: string; examId: string; status: string; score: number | null } | null;
+          academicRecalculation?: { students: Array<{ id: string }> } | null;
+          graceEnded?: boolean;
+        };
       }
       if (!gradeWriteback) {
         throw new AcademicGradeWritebackError(
@@ -716,6 +724,7 @@ export async function POST(req: NextRequest) {
       return {
         submission,
         grade,
+        graceEnded: gradeWriteback?.graceEnded || false,
         academicRecalculation: gradeWriteback?.academicRecalculation || null,
       };
     });
@@ -726,6 +735,7 @@ export async function POST(req: NextRequest) {
       examId: result.submission.examId,
       gradeId: result.grade?.id ?? null,
       gradeSkippedDueToLeave: !result.grade,
+      graceEnded: result.graceEnded,
       matchType: result.submission.matchType,
       status: result.submission.status,
       pageCount: result.submission.pageCount,
@@ -739,6 +749,7 @@ export async function POST(req: NextRequest) {
           result.submission as unknown as Record<string, unknown>,
         ),
         grade: result.grade,
+        graceEnded: result.graceEnded,
         academicRecalculation: result.academicRecalculation,
       },
       { status: 201 },
@@ -860,6 +871,7 @@ export async function PUT(req: NextRequest) {
       return {
         submission,
         grade: gradeWriteback?.grade || null,
+        graceEnded: gradeWriteback?.graceEnded || false,
         academicRecalculation,
       };
     });
@@ -870,6 +882,7 @@ export async function PUT(req: NextRequest) {
       examId: result.submission.examId,
       gradeId: result.grade?.id,
       wroteGrade: Boolean(result.grade),
+      graceEnded: result.graceEnded,
       status: result.submission.status,
       matchType: result.submission.matchType,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
@@ -879,6 +892,7 @@ export async function PUT(req: NextRequest) {
         result.submission as unknown as Record<string, unknown>,
       ),
       grade: result.grade,
+      graceEnded: result.graceEnded,
       academicRecalculation: result.academicRecalculation,
     });
   } catch (error) {

@@ -22,6 +22,11 @@ const repair = read("scripts/repair-grace-period-data.ts");
 const repairHelper = read("src/lib/grace-period-repair-server.ts");
 const academicRepair = read("src/app/api/students/academic-repair/route.ts");
 const schemaReadiness = read("src/lib/schema-readiness.ts");
+const schema = read("prisma/schema.prisma");
+const gradesRoute = read("src/app/api/grades/route.ts");
+const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
+const graceActivation = read("src/lib/grace-grade-activation.ts");
+const dashboardStats = read("src/app/api/stats/route.ts");
 
 check(
   "المصدر الموحد يطبق 3 أيام تلقائية ويجعل السماح اليدوي بديلاً عنها",
@@ -46,6 +51,35 @@ check(
   "حفظ الغياب محمي بالسماح اليدوي/التلقائي",
   writeback.includes("isExamWithinStudentGraceWindow") &&
     writeback.includes('status === "غائب"'),
+);
+check(
+  "الدرجة الرقمية تنهي السماح ذرياً وتُحتسب من نفس العملية",
+  schema.includes("gracePeriodEndedAt DateTime?") &&
+    grace.includes("if (student.gracePeriodEndedAt) return null") &&
+    writeback.includes("const shouldEndGrace") &&
+    writeback.includes('status === "درجة"') &&
+    writeback.includes("score !== null") &&
+    writeback.includes("shouldEndGraceForNumericGrade") &&
+    graceActivation.includes("isStudentCurrentlyInGrace(input.student, input.now)") &&
+    writeback.includes("accountingGraceDays: 0") &&
+    writeback.includes("gracePeriodEndedAt: endedAt") &&
+    writeback.includes("recalculateStudentsAcademicState") &&
+    gradesRoute.includes("reaches the shared writeback") &&
+    !gradesRoute.slice(
+      gradesRoute.indexOf("async function inspectNumericGradeAttempt"),
+      gradesRoute.indexOf("function dateKey"),
+    ).includes('category = "GRACE_SCORED"'),
+);
+check(
+  "واجهة الدرجات تشرح إنهاء السماح ولا تعرض الدرجة الجديدة كمعلقة",
+  gradeEntry.includes("وتبدأ المحاسبة من نفس") &&
+    gradeEntry.includes("تم حفظ الدرجة وإنهاء فترة السماح") &&
+    !gradeEntry.includes("const canCaptureGraceScoreDirectly"),
+);
+check(
+  "إحصائيات لوحة التحكم تحترم إنهاء السماح ولا تعيد حمايته بصيغة SQL قديمة",
+  dashboardStats.includes('student."gracePeriodEndedAt" IS NOT NULL') &&
+    dashboardStats.includes("OR NOT ("),
 );
 check(
   "التسجيل والتعديل يدعمان اختيار تاريخ التسجيل أو اليوم",
@@ -121,7 +155,7 @@ check(
 );
 check(
   "حارس قاعدة البيانات لا يغير المخطط ويتطلب migration المصالحة",
-  schemaReadiness.includes("20260820140000_schema_authority_reconciliation") &&
+  schemaReadiness.includes("20260822210000_end_grace_on_numeric_grade") &&
     schemaReadiness.includes('FROM "_prisma_migrations"') &&
     !schemaReadiness.includes("$executeRaw"),
 );

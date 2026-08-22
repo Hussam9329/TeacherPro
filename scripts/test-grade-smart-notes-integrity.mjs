@@ -80,20 +80,6 @@ assert.match(blockedSource, /grade:\s*null/);
 assert.match(blockedSource, /academicRecalculation:\s*null/);
 assert.match(gradesRoute, /NextResponse\.json\(result, \{ status: 202 \}\)/);
 
-const graceBranch = gradesRoute.indexOf(
-  'numericAttempt.category === "GRACE_SCORED"',
-);
-assert.ok(graceBranch > blockedBranch && graceBranch < writebackCall);
-const graceSource = gradesRoute.slice(graceBranch, writebackCall);
-assert.match(graceSource, /reconcileExpiredGracePendingGrades\(/);
-assert.match(graceSource, /noteIds:\s*\[smartNote\.id\]/);
-assert.match(graceSource, /graceMigration\.processed\s*>\s*0/);
-assert.match(graceSource, /pendingSmartNote:\s*false/);
-assert.match(graceSource, /smartNoteConflict:\s*true/);
-assert.match(gradesRoute, /smartNote\.status === "PROCESSED"[\s\S]*isStudentCurrentlyInGrace\(numericAttempt\.student\)/);
-assert.match(gradesRoute, /grandfatheredGraceGrade:\s*true/);
-assert.match(gradesRoute, /score:\s*numericAttempt\.score[\s\S]*academicRecalculation:\s*null/);
-
 const numericAttemptInspection = gradesRoute.slice(
   gradesRoute.indexOf("async function inspectNumericGradeAttempt"),
   gradesRoute.indexOf("function dateKey"),
@@ -102,7 +88,19 @@ assert.doesNotMatch(
   numericAttemptInspection,
   /category\s*=\s*"BEFORE_REGISTRATION_PENDING"/,
 );
+assert.doesNotMatch(
+  numericAttemptInspection,
+  /category\s*=\s*"GRACE_SCORED"/,
+);
 assert.match(numericAttemptInspection, /if \(!beforeRegistration\)/);
+assert.match(
+  gradeWriteback,
+  /const shouldEndGrace\s*=\s*shouldEndGraceForNumericGrade\([\s\S]*accountingGraceDays:\s*0[\s\S]*gracePeriodEndedAt:\s*endedAt/,
+);
+assert.match(
+  gradeWriteback,
+  /category:\s*"GRACE_SCORED"[\s\S]*status:\s*"PENDING"[\s\S]*status:\s*"REJECTED"/,
+);
 assert.match(
   gradeWriteback,
   /isPreRegistrationNumericGrade\([\s\S]*preRegistrationNumericGrade/,
