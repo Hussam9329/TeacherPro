@@ -5,10 +5,6 @@ import {
   parseGraceDateOnly,
 } from "@/lib/student-grace";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
-import {
-  GRACE_SCORED_GRADE_EXCLUSION_REASON,
-  gradeSmartNoteExclusionSource,
-} from "@/lib/grade-smart-notes-server";
 
 export type GracePendingGradeResolutionActor = {
   id?: string | null;
@@ -93,6 +89,18 @@ function isGracePlaceholder(grade: {
 export async function reconcileExpiredGracePendingGrades(
   input: ReconcileExpiredGracePendingGradesInput = {},
 ): Promise<GracePendingGradeMigrationResult> {
+
+// GRACE_SCORED is historical-only. Normal recalculation and the old internal
+// endpoint must never settle it implicitly; only the reviewed one-time
+// migration command may run this converter.
+if (process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION !== "1") {
+  return {
+    legacyMigrationDisabled: true,
+    processed: 0,
+    message: "GRACE_SCORED settlement is available only through maintenance:grace:migrate",
+  } as never;
+}
+
   if (!input.tx) {
     return withSerializableTransaction((tx) =>
       reconcileExpiredGracePendingGrades({ ...input, tx }),
@@ -216,12 +224,9 @@ export async function reconcileExpiredGracePendingGrades(
         ? `درجة مؤجلة خلال فترة السماح: ${note.reason}`
         : "درجة مؤجلة خلال فترة سماح الطالب.",
       academicAccountingChecked: false,
-      academicEffectExcluded: true,
-      academicEffectExclusionReason: GRACE_SCORED_GRADE_EXCLUSION_REASON,
-      academicEffectExclusionSource: gradeSmartNoteExclusionSource(
-        "GRACE_SCORED",
-        note.id,
-      ),
+      academicEffectExcluded: false,
+      academicEffectExclusionReason: null,
+      academicEffectExclusionSource: null,
       smartNoteId: note.id,
     } as const;
 

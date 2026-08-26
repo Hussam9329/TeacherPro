@@ -3,10 +3,5 @@
   "installCommand": "npm ci --legacy-peer-deps",
   "buildCommand": "npm run vercel-build",
   "outputDirectory": ".next",
-  "crons": [
-    {
-      "path": "/api/internal/grace-smart-notes/settle",
-      "schedule": "5 21 * * *"
-    }
-  ]
+  "crons": []
 }

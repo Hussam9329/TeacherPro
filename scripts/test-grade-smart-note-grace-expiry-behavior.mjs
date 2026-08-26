@@ -49,7 +49,6 @@ const {
   path.join(root, "src/lib/grade-smart-note-grace-expiry-server.ts"),
 );
 const {
-  GRACE_SCORED_GRADE_EXCLUSION_REASON,
   upsertGradeSmartNote,
 } = require(path.join(root, "src/lib/grade-smart-notes-server.ts"));
 
@@ -178,23 +177,249 @@ function gracePlaceholder(overrides = {}) {
   };
 }
 
-test("grace numeric attempt stays pending while the Baghdad grace window is open", async () => {
-  const tx = fakeTransaction({
-    notes: [graceNote()],
-    grades: [gracePlaceholder()],
-  });
+test("legacy GRACE_SCORED settlement never runs implicitly", async () => {
+  const previousFlag = process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+  delete process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+  try {
+    const tx = fakeTransaction({
+      notes: [graceNote()],
+      grades: [gracePlaceholder()],
+    });
 
-  const result = await reconcileExpiredGracePendingGrades({
-    tx,
-    now: new Date("2026-08-03T08:00:00.000Z"),
-  });
+    const result = await reconcileExpiredGracePendingGrades({
+      tx,
+      now: new Date("2026-08-10T08:00:00.000Z"),
+    });
 
-  assert.equal(result.processed, 0);
-  assert.equal(result.stillInGrace, 1);
-  assert.equal(tx.state.notes[0].status, "PENDING");
-  assert.equal(tx.state.grades[0].id, "placeholder-grade");
-  assert.equal(tx.state.grades[0].status, "ضمن فترة السماح");
-  assert.equal(tx.state.grades[0].score, null);
+    assert.equal(result.legacyMigrationDisabled, true);
+    assert.equal(result.processed, 0);
+    assert.equal(tx.state.notes[0].status, "PENDING");
+    assert.equal(tx.state.grades[0].status, "ضمن فترة السماح");
+    assert.equal(tx.state.grades[0].score, null);
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+    } else {
+      process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = previousFlag;
+    }
+  }
+});
+
+test("explicit migration settles an expired attempt into a counted grade", async () => {
+  const previousFlag = process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+  process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = "1";
+  try {
+    const tx = fakeTransaction({
+      notes: [graceNote()],
+      grades: [gracePlaceholder()],
+    });
+    const now = new Date("2026-08-10T08:00:00.000Z");
+
+    const result = await reconcileExpiredGracePendingGrades({ tx, now });
+
+    assert.equal(result.processed, 1);
+    assert.equal(tx.state.grades.length, 1);
+    assert.equal(tx.state.grades[0].id, "placeholder-grade");
+    assert.equal(tx.state.grades[0].status, "درجة");
+    assert.equal(tx.state.grades[0].score, 74);
+    assert.equal(tx.state.grades[0].academicEffectExcluded, false);
+    assert.equal(tx.state.grades[0].academicEffectExclusionReason, null);
+    assert.equal(tx.state.grades[0].academicEffectExclusionSource, null);
+    assert.equal(tx.state.grades[0].smartNoteId, "grace-note-1");
+    assert.equal(tx.state.notes[0].status, "PROCESSED");
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+    } else {
+      process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = previousFlag;
+    }
+  }
+});
+
+test("explicit migration is idempotent and upgrades a zero score", async () => {
+  const previousFlag = process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+  process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = "1";
+  try {
+    const tx = fakeTransaction({
+      notes: [graceNote({ score: 0 })],
+      grades: [gracePlaceholder()],
+    });
+    const now = new Date("2026-08-04T08:00:00.000Z");
+
+    const first = await reconcileExpiredGracePendingGrades({ tx, now });
+    const second = await reconcileExpiredGracePendingGrades({ tx, now });
+
+    assert.equal(first.processed, 1);
+    assert.equal(first.conflicts, 0);
+    assert.equal(second.processed, 0);
+    assert.equal(tx.state.grades.length, 1);
+    assert.equal(tx.state.grades[0].status, "درجة");
+    assert.equal(tx.state.grades[0].score, 0);
+    assert.equal(tx.state.grades[0].academicEffectExcluded, false);
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+    } else {
+      process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = previousFlag;
+    }
+  }
+});
+
+test("explicit migration boundary follows Baghdad midnight, not the server's UTC day", async () => {
+  const previousFlag = process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+  process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = "1";
+  try {
+    const tx = fakeTransaction({
+      notes: [graceNote()],
+      grades: [gracePlaceholder()],
+    });
+
+    const beforeMidnight = await reconcileExpiredGracePendingGrades({
+      tx,
+      now: new Date("2026-08-03T20:59:00.000Z"),
+    });
+    const afterMidnight = await reconcileExpiredGracePendingGrades({
+      tx,
+      now: new Date("2026-08-03T21:00:00.000Z"),
+    });
+
+    assert.equal(beforeMidnight.processed, 0);
+    assert.equal(beforeMidnight.stillInGrace, 1);
+    assert.equal(afterMidnight.processed, 1);
+    assert.equal(tx.state.grades[0].status, "درجة");
+    assert.equal(tx.state.grades[0].academicEffectExcluded, false);
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+    } else {
+      process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = previousFlag;
+    }
+  }
+});
+
+test("explicit migration creates a counted Grade when no placeholder exists", async () => {
+  const previousFlag = process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+  process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = "1";
+  try {
+    const tx = fakeTransaction({ notes: [graceNote()], grades: [] });
+
+    const result = await reconcileExpiredGracePendingGrades({
+      tx,
+      now: new Date("2026-08-10T08:00:00.000Z"),
+    });
+
+    assert.equal(result.processed, 1);
+    assert.equal(tx.state.grades.length, 1);
+    assert.equal(tx.state.grades[0].status, "درجة");
+    assert.equal(tx.state.grades[0].score, 74);
+    assert.equal(tx.state.grades[0].academicEffectExcluded, false);
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+    } else {
+      process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = previousFlag;
+    }
+  }
+});
+
+test("changing the grace window settles an attempt whose exam left that window", async () => {
+  const previousFlag = process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+  process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = "1";
+  try {
+    const tx = fakeTransaction({
+      notes: [
+        graceNote({
+          student: {
+            createdAt: "2026-08-01T00:00:00.000Z",
+            accountingGraceDays: 5,
+            gracePeriodStartDate: "2026-08-05T00:00:00.000Z",
+          },
+        }),
+      ],
+      grades: [gracePlaceholder()],
+    });
+
+    const result = await reconcileExpiredGracePendingGrades({
+      tx,
+      // The new window is still open, but the captured exam (Aug 2) is no
+      // longer covered by it, so the historical attempt settles as counted.
+      now: new Date("2026-08-06T08:00:00.000Z"),
+    });
+
+    assert.equal(result.processed, 1);
+    assert.equal(tx.state.grades[0].score, 74);
+    assert.equal(tx.state.grades[0].academicEffectExcluded, false);
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+    } else {
+      process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = previousFlag;
+    }
+  }
+});
+
+test("a real Grade wins at grace expiry and is never overwritten", async () => {
+  const previousFlag = process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+  process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = "1";
+  try {
+    const tx = fakeTransaction({
+      notes: [graceNote({ score: 14 })],
+      grades: [
+        gracePlaceholder({
+          id: "official-grade",
+          status: "درجة",
+          score: 91,
+        }),
+      ],
+    });
+
+    const result = await reconcileExpiredGracePendingGrades({
+      tx,
+      now: new Date("2026-08-10T08:00:00.000Z"),
+    });
+
+    assert.equal(result.processed, 0);
+    assert.equal(result.conflicts, 1);
+    assert.equal(tx.state.grades.length, 1);
+    assert.equal(tx.state.grades[0].score, 91);
+    assert.equal(tx.state.grades[0].academicEffectExcluded, false);
+    assert.equal(tx.state.notes[0].status, "CONFLICT");
+    assert.match(tx.state.notes[0].resolution, /لم يُستبدل السجل الموجود/);
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+    } else {
+      process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = previousFlag;
+    }
+  }
+});
+
+test("a score above the exam's current full mark is rejected without writing Grade", async () => {
+  const previousFlag = process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+  process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = "1";
+  try {
+    const tx = fakeTransaction({
+      notes: [graceNote({ score: 74, exam: { fullMark: 50 } })],
+      grades: [gracePlaceholder()],
+    });
+
+    const result = await reconcileExpiredGracePendingGrades({
+      tx,
+      now: new Date("2026-08-10T08:00:00.000Z"),
+    });
+
+    assert.equal(result.processed, 0);
+    assert.equal(result.rejected, 1);
+    assert.equal(tx.state.notes[0].status, "REJECTED");
+    assert.equal(tx.state.grades[0].status, "ضمن فترة السماح");
+    assert.equal(tx.state.grades[0].score, null);
+  } finally {
+    if (previousFlag === undefined) {
+      delete process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION;
+    } else {
+      process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION = previousFlag;
+    }
+  }
 });
 
 test("a stale retry cannot reopen a resolved smart note", async () => {
@@ -232,140 +457,4 @@ test("a stale retry cannot reopen a resolved smart note", async () => {
 
   assert.equal(result, resolved);
   assert.equal(upsertCalled, false);
-});
-
-test("expiry upgrades the same grace placeholder once and permanently excludes it", async () => {
-  const tx = fakeTransaction({
-    notes: [graceNote({ score: 0 })],
-    grades: [gracePlaceholder()],
-  });
-  const now = new Date("2026-08-04T08:00:00.000Z");
-
-  const first = await reconcileExpiredGracePendingGrades({ tx, now });
-  const second = await reconcileExpiredGracePendingGrades({ tx, now });
-
-  assert.equal(first.processed, 1);
-  assert.equal(first.conflicts, 0);
-  assert.equal(second.processed, 0);
-  assert.equal(tx.state.grades.length, 1);
-  assert.equal(tx.state.grades[0].id, "placeholder-grade");
-  assert.equal(tx.state.grades[0].status, "درجة");
-  assert.equal(tx.state.grades[0].score, 0);
-  assert.equal(tx.state.grades[0].academicEffectExcluded, true);
-  assert.equal(
-    tx.state.grades[0].academicEffectExclusionReason,
-    GRACE_SCORED_GRADE_EXCLUSION_REASON,
-  );
-  assert.equal(
-    tx.state.grades[0].academicEffectExclusionSource,
-    "GradeSmartNote:GRACE_SCORED:grace-note-1",
-  );
-  assert.equal(tx.state.grades[0].smartNoteId, "grace-note-1");
-  assert.equal(tx.state.notes[0].status, "PROCESSED");
-});
-
-test("expiry boundary follows Baghdad midnight, not the server's UTC day", async () => {
-  const tx = fakeTransaction({
-    notes: [graceNote()],
-    grades: [gracePlaceholder()],
-  });
-
-  const beforeMidnight = await reconcileExpiredGracePendingGrades({
-    tx,
-    now: new Date("2026-08-03T20:59:00.000Z"),
-  });
-  const afterMidnight = await reconcileExpiredGracePendingGrades({
-    tx,
-    now: new Date("2026-08-03T21:00:00.000Z"),
-  });
-
-  assert.equal(beforeMidnight.processed, 0);
-  assert.equal(beforeMidnight.stillInGrace, 1);
-  assert.equal(afterMidnight.processed, 1);
-  assert.equal(tx.state.grades[0].status, "درجة");
-});
-
-test("expiry creates an excluded Grade when no automatic placeholder exists", async () => {
-  const tx = fakeTransaction({ notes: [graceNote()], grades: [] });
-
-  const result = await reconcileExpiredGracePendingGrades({
-    tx,
-    now: new Date("2026-08-10T08:00:00.000Z"),
-  });
-
-  assert.equal(result.processed, 1);
-  assert.equal(tx.state.grades.length, 1);
-  assert.equal(tx.state.grades[0].status, "درجة");
-  assert.equal(tx.state.grades[0].score, 74);
-  assert.equal(tx.state.grades[0].academicEffectExcluded, true);
-});
-
-test("changing the grace window settles an attempt whose exam left that window", async () => {
-  const tx = fakeTransaction({
-    notes: [
-      graceNote({
-        student: {
-          createdAt: "2026-08-01T00:00:00.000Z",
-          accountingGraceDays: 5,
-          gracePeriodStartDate: "2026-08-05T00:00:00.000Z",
-        },
-      }),
-    ],
-    grades: [gracePlaceholder()],
-  });
-
-  const result = await reconcileExpiredGracePendingGrades({
-    tx,
-    // The new window is still open, but the captured exam (Aug 2) is no
-    // longer covered by it. The historical exclusion is preserved.
-    now: new Date("2026-08-06T08:00:00.000Z"),
-  });
-
-  assert.equal(result.processed, 1);
-  assert.equal(tx.state.grades[0].score, 74);
-  assert.equal(tx.state.grades[0].academicEffectExcluded, true);
-});
-
-test("a real Grade wins at grace expiry and is never overwritten", async () => {
-  const tx = fakeTransaction({
-    notes: [graceNote({ score: 14 })],
-    grades: [
-      gracePlaceholder({
-        id: "official-grade",
-        status: "درجة",
-        score: 91,
-      }),
-    ],
-  });
-
-  const result = await reconcileExpiredGracePendingGrades({
-    tx,
-    now: new Date("2026-08-10T08:00:00.000Z"),
-  });
-
-  assert.equal(result.processed, 0);
-  assert.equal(result.conflicts, 1);
-  assert.equal(tx.state.grades.length, 1);
-  assert.equal(tx.state.grades[0].score, 91);
-  assert.equal(tx.state.grades[0].academicEffectExcluded, false);
-  assert.equal(tx.state.notes[0].status, "CONFLICT");
-  assert.match(tx.state.notes[0].resolution, /لم يُستبدل السجل الموجود/);
-});
-
-test("a score above the exam's current full mark is rejected without writing Grade", async () => {
-  const tx = fakeTransaction({
-    notes: [graceNote({ score: 74, exam: { fullMark: 50 } })],
-    grades: [gracePlaceholder()],
-  });
-
-  const result = await reconcileExpiredGracePendingGrades({
-    tx,
-    now: new Date("2026-08-10T08:00:00.000Z"),
-  });
-
-  assert.equal(result.processed, 0);
-  assert.equal(result.rejected, 1);
-  assert.equal(tx.state.notes[0].status, "REJECTED");
-  assert.equal(tx.state.grades[0].status, "ضمن فترة السماح");
-  assert.equal(tx.state.grades[0].score, null);
 });

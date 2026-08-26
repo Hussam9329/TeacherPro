@@ -38,9 +38,9 @@ const CATEGORY_META: Record<
     icon: UserRoundX,
   },
   GRACE_SCORED: {
-    title: "درجات ضمن فترة السماح",
+    title: "تعارضات درجات السماح القديمة",
     shortTitle: "ضمن فترة السماح",
-    decision: "محفوظة للمتابعة فقط، ولا تخصم فرصة ولا تسبب فصلاً.",
+    decision: "سجلات قديمة للمراجعة فقط؛ النظام لا ينشئ حالات سماح معلّقة جديدة.",
     className:
       "border-sky-200 bg-sky-50/80 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/25 dark:text-sky-100",
     icon: CheckCircle2,

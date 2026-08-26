@@ -1586,7 +1586,7 @@ export function GradeEntryView() {
             [studentId]: {
               phase: "pending",
               message: isGracePending
-                ? "درجة معلّقة — ضمن فترة السماح"
+                ? "تعارض قديم لدرجة سماح — بانتظار المراجعة"
                 : "درجة معلّقة — لم تُسجّل كدرجة",
             },
           }));
@@ -1664,7 +1664,7 @@ export function GradeEntryView() {
               ...prev,
               [studentId]: {
                 phase: "noncounted",
-                message: "محفوظة للمتابعة — غير محتسبة",
+                message: "سجل قديم بانتظار الترحيل أو حلّ التعارض",
               },
             }));
           } else {
@@ -3007,7 +3007,7 @@ export function GradeEntryView() {
                               ? effectiveSaveState?.message || "درجة معلّقة"
                               : savePhase === "noncounted"
                                 ? effectiveSaveState?.message ||
-                                  "محفوظة للمتابعة — غير محتسبة"
+                                  "سجل قديم بانتظار الترحيل أو حلّ التعارض"
                                 : savePhase === "error"
                                   ? effectiveSaveState?.message ||
                                     "غير محفوظ — أعد المحاولة"

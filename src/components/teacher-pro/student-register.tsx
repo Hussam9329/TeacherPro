@@ -446,7 +446,7 @@ export function StudentRegisterView() {
 
   const gracePeriodDescription = useMemo(() => {
     if (accountingGraceDays <= 0) {
-      return `هذا الطالب سيحاسب من تاريخ ${formattedGraceStart} ولا توجد فترة سماح`;
+      return `هذا الطالب سيحاسب من تاريخ ${formattedGraceStart} وتُطبّق فترة السماح التلقائية (3 أيام)`;
     }
     return `هذا الطالب لن يحاسب من تاريخ ${formattedGraceStart} إلى تاريخ ${formattedGraceEnd}`;
   }, [formattedGraceStart, formattedGraceEnd, accountingGraceDays]);
@@ -1490,7 +1490,7 @@ export function StudentRegisterView() {
                         حسب عدد الأيام المدخل.
                       </>
                     ) : (
-                      "لا توجد أيام سماح عند اختيار 0."
+                      "لا يوجد سماح يدوي؛ تُطبّق 3 أيام تلقائيًا عند اختيار 0."
                     )}
                   </p>
                 </div>

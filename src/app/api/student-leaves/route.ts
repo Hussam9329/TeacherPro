@@ -344,6 +344,9 @@ async function writeExcusedGradeMarkers(
 ): Promise<number> {
   if (!examIds.length) return 0;
   for (const examId of examIds) {
+    // This direct restoration remains inside the leave transaction. The PostgreSQL
+    // trigger tp_end_active_grace_on_numeric_grade_trg atomically closes any active
+    // grace period, clears grace exclusion, and rejects legacy GRACE_SCORED notes.
     await tx.grade.upsert({
       where: { studentId_examId: { studentId, examId } },
       update: {

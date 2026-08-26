@@ -152,8 +152,12 @@ assert.match(graceExpiryHelper, /today\s*>=\s*graceWindow\.endExclusive/);
 assert.match(graceExpiryHelper, /examSnapshotDate\s*&&\s*!examStillInsideCurrentWindow/);
 assert.match(graceExpiryHelper, /eligibleRemaining/);
 assert.match(graceExpiryHelper, /status:\s*GRACE_PLACEHOLDER_STATUS/);
-assert.match(graceExpiryHelper, /academicEffectExcluded:\s*true/);
-assert.match(graceExpiryHelper, /gradeSmartNoteExclusionSource\([\s\S]*"GRACE_SCORED"/);
+// GRACE_SCORED settlement is historical-only: implicitly disabled everywhere
+// and, when explicitly enabled, converted grades are counted (never excluded).
+assert.match(graceExpiryHelper, /ALLOW_LEGACY_GRACE_SCORED_MIGRATION/);
+assert.match(graceExpiryHelper, /legacyMigrationDisabled/);
+assert.match(graceExpiryHelper, /academicEffectExcluded:\s*false/);
+assert.doesNotMatch(graceExpiryHelper, /gradeSmartNoteExclusionSource/);
 assert.match(graceExpiryHelper, /status:\s*"CONFLICT"/);
 assert.match(graceExpiryHelper, /note\.score\s*>\s*fullMark/);
 
@@ -161,8 +165,9 @@ assert.match(academicRecalculation, /reconcileExpiredGracePendingGrades\([\s\S]*
 assert.match(graceCronRoute, /process\.env\.CRON_SECRET/);
 assert.match(graceCronRoute, /timingSafeEqual/);
 assert.match(graceCronRoute, /reconcileExpiredGracePendingGrades\(/);
-assert.match(vercelConfig, /api\/internal\/grace-smart-notes\/settle/);
-assert.match(vercelConfig, /5 21 \* \* \*/);
+// The legacy daily cron must stay retired; settlement is explicit-only.
+assert.doesNotMatch(vercelConfig, /grace-smart-notes/);
+assert.doesNotMatch(vercelConfig, /5 21 \* \* \*/);
 
 // Ordinary user-facing GET endpoints must remain read-only. Grace settlement
 // is write-triggered or performed by the authenticated internal cron only.
