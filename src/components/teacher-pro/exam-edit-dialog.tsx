@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { Course, CourseChapter, Exam } from "@/lib/teacher-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,10 @@ import { baghdadTodayKey, toBaghdadDateTimeLocal } from "@/lib/baghdad-time";
 import { getExamStatus, hasActiveChapterLink, splitSelection } from "@/lib/exam-utils";
 import { toLatinDigits } from "@/lib/format";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
+import {
+  validateExamForm,
+  type ExamValidationResult,
+} from "@/lib/exam-form-validation";
 
 export type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
 
@@ -91,6 +95,56 @@ function createEditState(exam: Exam): FullExamEditState {
   };
 }
 
+function ExamEditFieldError({
+  id,
+  message,
+}: {
+  id: string;
+  message?: string;
+}) {
+  if (!message) return null;
+  return (
+    <p id={id} role="alert" className="text-xs font-medium text-destructive">
+      {message}
+    </p>
+  );
+}
+
+export function validateFullExamEditState(
+  state: FullExamEditState,
+  courses: Course[],
+  courseChapters: CourseChapter[],
+): ExamValidationResult {
+  const courseNameById = new Map(
+    courses.map((course) => [course.id, course.name] as const),
+  );
+  const invalidCourses = state.courseIds.filter(
+    (courseId) => !hasActiveChapterLink(courseChapters, courseId),
+  );
+
+  return validateExamForm({
+    name: state.name,
+    type: state.type,
+    courseIds: state.courseIds,
+    mainSites: state.mainSites,
+    date: state.date,
+    fullMark: state.fullMark,
+    passMark: state.passMark,
+    discountMark: state.discountMark,
+    opportunitiesPenalty: state.opportunitiesPenaltyNum,
+    dismissalGrade: state.dismissalGrade,
+    noDiscount: state.noDiscount,
+    statusMode: state.statusMode,
+    scheduledActivateAt: state.scheduledActivateAt,
+    courseSelectionError:
+      invalidCourses.length > 0
+        ? `لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourses
+            .map((courseId) => courseNameById.get(courseId) || courseId)
+            .join("، ")}`
+        : null,
+  });
+}
+
 export function ExamEditDialog({
   exam,
   courses,
@@ -112,8 +166,20 @@ export function ExamEditDialog({
     createEditState(exam),
   );
 
+  const formValidation = useMemo(
+    () => validateFullExamEditState(editDialog, courses, courseChapters),
+    [courseChapters, courses, editDialog],
+  );
+  const isFormValid = formValidation.isValid;
+  const fieldErrors = formValidation.fieldErrors;
+
   const isFinalExam = editDialog.type === "فاينل";
   const noDiscount = Boolean(editDialog.noDiscount);
+  const numericFullMark = Number(toLatinDigits(editDialog.fullMark));
+  const fullMarkMax =
+    Number.isInteger(numericFullMark) && numericFullMark > 0
+      ? numericFullMark
+      : undefined;
   const mainSitesForEdit = MAIN_SITE_OPTIONS;
   const eligibleCourses = courses.filter((course) =>
     hasActiveChapterLink(courseChapters, course.id),
@@ -151,9 +217,17 @@ export function ExamEditDialog({
                 id="edit-exam-name"
                 className={lightInputClass}
                 value={editDialog.name}
+                aria-invalid={Boolean(fieldErrors.name)}
+                aria-describedby={
+                  fieldErrors.name ? "edit-exam-name-error" : undefined
+                }
                 onChange={(e) =>
                   setEditDialog((prev) => ({ ...prev, name: e.target.value }))
                 }
+              />
+              <ExamEditFieldError
+                id="edit-exam-name-error"
+                message={fieldErrors.name}
               />
             </div>
 
@@ -168,11 +242,16 @@ export function ExamEditDialog({
                     discountMark:
                       value === "فاينل" || prev.noDiscount
                         ? "0"
-                        : prev.discountMark || "45",
+                        : prev.discountMark && prev.discountMark !== "0"
+                          ? prev.discountMark
+                          : "45",
                     opportunitiesPenaltyNum:
                       value === "فاينل" || prev.noDiscount
                         ? "0"
-                        : prev.opportunitiesPenaltyNum || "1",
+                        : prev.opportunitiesPenaltyNum &&
+                            prev.opportunitiesPenaltyNum !== "0"
+                          ? prev.opportunitiesPenaltyNum
+                          : "1",
                     dismissalGrade:
                       value === "فاينل" && !prev.noDiscount
                         ? prev.dismissalGrade
@@ -197,6 +276,10 @@ export function ExamEditDialog({
                 id="edit-exam-date"
                 className={lightInputClass}
                 value={editDialog.date}
+                aria-invalid={Boolean(fieldErrors.date)}
+                aria-describedby={
+                  fieldErrors.date ? "edit-exam-date-error" : undefined
+                }
                 onChange={(value) =>
                   setEditDialog((prev) => ({
                     ...prev,
@@ -208,9 +291,19 @@ export function ExamEditDialog({
                   }))
                 }
               />
+              <ExamEditFieldError
+                id="edit-exam-date-error"
+                message={fieldErrors.date}
+              />
             </div>
 
-            <div className="space-y-1 md:col-span-2">
+            <div
+              className="space-y-1 md:col-span-2"
+              role="group"
+              aria-describedby={
+                fieldErrors.courseIds ? "edit-exam-courses-error" : undefined
+              }
+            >
               <Label>الدورات</Label>
               <div className="max-h-44 space-y-2 overflow-y-auto rounded-xl border p-3">
                 <label className="flex items-center gap-2 border-b pb-2 text-sm font-bold">
@@ -257,9 +350,19 @@ export function ExamEditDialog({
                   );
                 })}
               </div>
+              <ExamEditFieldError
+                id="edit-exam-courses-error"
+                message={fieldErrors.courseIds}
+              />
             </div>
 
-            <div className="space-y-1 md:col-span-2">
+            <div
+              className="space-y-1 md:col-span-2"
+              role="group"
+              aria-describedby={
+                fieldErrors.mainSites ? "edit-exam-sites-error" : undefined
+              }
+            >
               <Label>الموقع</Label>
               <div className="max-h-44 space-y-2 overflow-y-auto rounded-xl border p-3">
                 <label className="flex items-center gap-2 border-b pb-2 text-sm font-bold">
@@ -289,15 +392,27 @@ export function ExamEditDialog({
                   </label>
                 ))}
               </div>
+              <ExamEditFieldError
+                id="edit-exam-sites-error"
+                message={fieldErrors.mainSites}
+              />
             </div>
 
             <div className="space-y-1">
-              <Label>الدرجة الكاملة</Label>
+              <Label htmlFor="edit-exam-full-mark">الدرجة الكاملة</Label>
               <Input
+                id="edit-exam-full-mark"
                 type="number"
+                min={1}
                 step={1}
                 className={lightInputClass}
                 value={editDialog.fullMark}
+                aria-invalid={Boolean(fieldErrors.fullMark)}
+                aria-describedby={
+                  fieldErrors.fullMark
+                    ? "edit-exam-full-mark-error"
+                    : undefined
+                }
                 onChange={(e) =>
                   setEditDialog((prev) => ({
                     ...prev,
@@ -305,20 +420,37 @@ export function ExamEditDialog({
                   }))
                 }
               />
+              <ExamEditFieldError
+                id="edit-exam-full-mark-error"
+                message={fieldErrors.fullMark}
+              />
             </div>
             <div className="space-y-1">
-              <Label>درجة النجاح</Label>
+              <Label htmlFor="edit-exam-pass-mark">درجة النجاح</Label>
               <Input
+                id="edit-exam-pass-mark"
                 type="number"
+                min={0}
+                max={fullMarkMax}
                 step={1}
                 className={lightInputClass}
                 value={editDialog.passMark}
+                aria-invalid={Boolean(fieldErrors.passMark)}
+                aria-describedby={
+                  fieldErrors.passMark
+                    ? "edit-exam-pass-mark-error"
+                    : undefined
+                }
                 onChange={(e) =>
                   setEditDialog((prev) => ({
                     ...prev,
                     passMark: toLatinDigits(e.target.value),
                   }))
                 }
+              />
+              <ExamEditFieldError
+                id="edit-exam-pass-mark-error"
+                message={fieldErrors.passMark}
               />
             </div>
 
@@ -359,13 +491,22 @@ export function ExamEditDialog({
             </div>
 
             <div className="space-y-1">
-              <Label>درجة الخصم</Label>
+              <Label htmlFor="edit-exam-discount-mark">درجة الخصم</Label>
               <Input
+                id="edit-exam-discount-mark"
                 type="number"
+                min={0}
+                max={fullMarkMax}
                 step={1}
                 className={lightInputClass}
                 disabled={isFinalExam || noDiscount}
                 value={isFinalExam || noDiscount ? "0" : editDialog.discountMark}
+                aria-invalid={Boolean(fieldErrors.discountMark)}
+                aria-describedby={
+                  fieldErrors.discountMark
+                    ? "edit-exam-discount-mark-error"
+                    : undefined
+                }
                 onChange={(e) =>
                   setEditDialog((prev) => ({
                     ...prev,
@@ -383,19 +524,20 @@ export function ExamEditDialog({
                   معطل في الفاينل؛ الحكم يكون من درجة الفصل.
                 </p>
               )}
-              {!noDiscount &&
-                !isFinalExam &&
-                Number(editDialog.passMark) <= Number(editDialog.discountMark) && (
-                  <p className="text-xs text-destructive">
-                    درجة النجاح يجب أن تكون أكبر من درجة الخصم.
-                  </p>
-                )}
+              <ExamEditFieldError
+                id="edit-exam-discount-mark-error"
+                message={fieldErrors.discountMark}
+              />
             </div>
 
             <div className="space-y-1">
-              <Label>خصم الفرص</Label>
+              <Label htmlFor="edit-exam-opportunities-penalty">
+                خصم الفرص
+              </Label>
               <Input
+                id="edit-exam-opportunities-penalty"
                 type="number"
+                min={1}
                 step={1}
                 className={lightInputClass}
                 disabled={isFinalExam || noDiscount}
@@ -403,6 +545,12 @@ export function ExamEditDialog({
                   isFinalExam || noDiscount
                     ? "0"
                     : editDialog.opportunitiesPenaltyNum
+                }
+                aria-invalid={Boolean(fieldErrors.opportunitiesPenalty)}
+                aria-describedby={
+                  fieldErrors.opportunitiesPenalty
+                    ? "edit-exam-opportunities-penalty-error"
+                    : undefined
                 }
                 onChange={(e) =>
                   setEditDialog((prev) => ({
@@ -421,17 +569,30 @@ export function ExamEditDialog({
                   معطل في الفاينل؛ يعالج الفصل من درجة الفصل أو الغياب/الغش.
                 </p>
               )}
+              <ExamEditFieldError
+                id="edit-exam-opportunities-penalty-error"
+                message={fieldErrors.opportunitiesPenalty}
+              />
             </div>
 
             {isFinalExam && (
               <div className="space-y-1">
-                <Label>درجة الفصل</Label>
+                <Label htmlFor="edit-exam-dismissal-grade">درجة الفصل</Label>
                 <Input
+                  id="edit-exam-dismissal-grade"
                   type="number"
+                  min={0}
+                  max={fullMarkMax}
                   step={1}
                   className={lightInputClass}
                   disabled={noDiscount}
                   value={noDiscount ? "" : editDialog.dismissalGrade}
+                  aria-invalid={Boolean(fieldErrors.dismissalGrade)}
+                  aria-describedby={
+                    fieldErrors.dismissalGrade
+                      ? "edit-exam-dismissal-grade-error"
+                      : undefined
+                  }
                   onChange={(e) =>
                     setEditDialog((prev) => ({
                       ...prev,
@@ -444,6 +605,10 @@ export function ExamEditDialog({
                     معطل لأن الامتحان بدون خصم.
                   </p>
                 )}
+                <ExamEditFieldError
+                  id="edit-exam-dismissal-grade-error"
+                  message={fieldErrors.dismissalGrade}
+                />
               </div>
             )}
 
@@ -475,11 +640,20 @@ export function ExamEditDialog({
 
             {editDialog.statusMode === "تفعيل مجدول" && (
               <div className="space-y-1">
-                <Label>تاريخ ووقت التفعيل</Label>
+                <Label htmlFor="edit-exam-scheduled-activate-at">
+                  تاريخ ووقت التفعيل
+                </Label>
                 <Input
+                  id="edit-exam-scheduled-activate-at"
                   type="datetime-local"
                   className={lightInputClass}
                   value={editDialog.scheduledActivateAt}
+                  aria-invalid={Boolean(fieldErrors.scheduledActivateAt)}
+                  aria-describedby={
+                    fieldErrors.scheduledActivateAt
+                      ? "edit-exam-scheduled-activate-at-error"
+                      : undefined
+                  }
                   onChange={(e) =>
                     setEditDialog((prev) => ({
                       ...prev,
@@ -487,18 +661,38 @@ export function ExamEditDialog({
                     }))
                   }
                 />
+                <ExamEditFieldError
+                  id="edit-exam-scheduled-activate-at-error"
+                  message={fieldErrors.scheduledActivateAt}
+                />
               </div>
             )}
           </div>
         </div>
+
+        {!isFormValid && formValidation.firstError ? (
+          <div
+            id="edit-exam-validation-summary"
+            role="alert"
+            aria-live="polite"
+            className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-medium text-destructive"
+          >
+            لا يمكن حفظ التعديل حالياً: {formValidation.firstError}
+          </div>
+        ) : null}
 
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={isMutating}>
             إلغاء
           </Button>
           <Button
-            onClick={() => void onSave(editDialog)}
-            disabled={isMutating}
+            onClick={() => {
+              if (isFormValid) void onSave(editDialog);
+            }}
+            disabled={isMutating || !isFormValid}
+            aria-describedby={
+              !isFormValid ? "edit-exam-validation-summary" : undefined
+            }
           >
             {isMutating ? "جاري..." : "حفظ التعديل الكامل"}
           </Button>

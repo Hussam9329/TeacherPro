@@ -75,11 +75,23 @@ must(
 );
 
 must(
-  page.includes("if (error) {") &&
-    page.includes("toast.error(error);") &&
-    !page.includes("return toast.error(error)"),
-  "حفظ تعديل الامتحان يرجع Promise<void> ولا يمرر معرّف Toast إلى الـDialog",
-  "يجب فصل toast.error عن return حتى يطابق handleEditExam عقدة onSave في TypeScript."
+  page.includes("validateFullExamEditState") &&
+    page.includes("if (!validation.isValid)") &&
+    page.includes("toast.error(validation.firstError") &&
+    !page.includes("return toast.error("),
+  "حفظ تعديل الامتحان يعيد التحقق دفاعياً ولا يمرر معرّف Toast إلى الـDialog",
+  "يجب إعادة التحقق عند الحفظ وفصل toast.error عن return حتى يطابق عقدة onSave."
+);
+
+must(
+  editDialog.includes("validateExamForm") &&
+    editDialog.includes("const isFormValid = formValidation.isValid") &&
+    editDialog.includes("disabled={isMutating || !isFormValid}") &&
+    editDialog.includes('id="edit-exam-validation-summary"') &&
+    editDialog.includes("aria-invalid") &&
+    page.includes("validateFullExamEditState("),
+  "نافذة التعديل تعرض أخطاء لحظية وتعطل زر الحفظ بنفس المدقق المستخدم عند التنفيذ",
+  "يجب أن تتطابق صلاحية زر التعديل مع التحقق الدفاعي عند الحفظ."
 );
 
 must(

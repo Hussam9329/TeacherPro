@@ -36,7 +36,6 @@ import {
   formatGradeScore,
   getExamEntryAvailability,
   getExamStatus,
-  hasActiveChapterLink,
   splitSelection,
   type ExamStatusLabel,
 } from "@/lib/exam-utils";
@@ -45,7 +44,11 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { examApi, examStatsApi, type ApiResult, type ExamRecordStat } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
-import { ExamEditDialog, type FullExamEditState } from "./exam-edit-dialog";
+import {
+  ExamEditDialog,
+  validateFullExamEditState,
+  type FullExamEditState,
+} from "./exam-edit-dialog";
 
 const examGradeExportColumns: ExportColumn<any>[] = [
   { key: "index", label: "#", value: (row) => Number(row.index ?? 0) + 1 },
@@ -690,52 +693,6 @@ export function ExamRecordsView() {
     [examById],
   );
 
-  const validateEditExam = (state: FullExamEditState) => {
-    const fullMark = Number(toLatinDigits(state.fullMark));
-    const passMark = Number(toLatinDigits(state.passMark));
-    const isFinalExam = state.type === "فاينل";
-    const noDiscount = Boolean(state.noDiscount);
-    const discountMark =
-      isFinalExam || noDiscount ? 0 : Number(toLatinDigits(state.discountMark));
-    const opportunitiesPenalty = Number(toLatinDigits(state.opportunitiesPenaltyNum));
-    const dismissalGrade = state.dismissalGrade.trim()
-      ? Number(toLatinDigits(state.dismissalGrade))
-      : null;
-    if (!state.name.trim()) return "اسم الامتحان مطلوب";
-    if (state.courseIds.length === 0) return "اختر دورة واحدة على الأقل";
-    const invalidCourses = state.courseIds.filter(
-      (courseId) => !hasActiveChapterLink(courseChapters, courseId),
-    );
-    if (invalidCourses.length > 0)
-      return `لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourses.map(courseName).join("، ")}`;
-    if (state.mainSites.length === 0) return "اختر موقعاً واحداً على الأقل";
-    if (![fullMark, passMark, discountMark].every((value) => Number.isFinite(value) && Number.isInteger(value)))
-      return "درجات الامتحان يجب أن تكون أعداداً صحيحة بدون كسور";
-    if (fullMark <= 0) return "الدرجة الكاملة يجب أن تكون أكبر من صفر";
-    if (passMark < 0 || passMark > fullMark)
-      return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
-    if (!noDiscount && (discountMark < 0 || discountMark > fullMark))
-      return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
-    if (!noDiscount && !isFinalExam && passMark <= discountMark)
-      return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
-    if (
-      !noDiscount &&
-      !isFinalExam &&
-      (!Number.isInteger(opportunitiesPenalty) || opportunitiesPenalty <= 0)
-    )
-      return "خصم الفرص يجب أن يكون عدداً صحيحاً أكبر من صفر";
-    if (
-      !noDiscount &&
-      isFinalExam &&
-      dismissalGrade !== null &&
-      (!Number.isInteger(dismissalGrade) || dismissalGrade < 0 || dismissalGrade > fullMark)
-    )
-      return "درجة الفصل يجب أن تكون عدداً صحيحاً بين صفر والدرجة الكاملة";
-    if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt)
-      return "حدد تاريخ ووقت التفعيل المجدول";
-    return null;
-  };
-
   const updateExamWithActivationConfirmation = useCallback(
     async (
       examId: string,
@@ -784,9 +741,13 @@ export function ExamRecordsView() {
   );
 
   const handleEditExam = async (editDialog: FullExamEditState) => {
-    const error = validateEditExam(editDialog);
-    if (error) {
-      toast.error(error);
+    const validation = validateFullExamEditState(
+      editDialog,
+      courses,
+      courseChapters,
+    );
+    if (!validation.isValid) {
+      toast.error(validation.firstError || "راجع بيانات الامتحان قبل الحفظ");
       return;
     }
     const isFinalExam = editDialog.type === "فاينل";
@@ -821,7 +782,7 @@ export function ExamRecordsView() {
         ? 0
         : isFinalExam
           ? "فصل مؤقت"
-          : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum) || 1),
+          : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum)),
       dismissalGrade:
         !noDiscount && isFinalExam && editDialog.dismissalGrade
           ? Number(toLatinDigits(editDialog.dismissalGrade))

@@ -29,6 +29,11 @@ import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { normalizeExamSiteValue } from "@/lib/exam-utils";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
+import {
+  validateExamForm,
+  validateExamGradePolicy,
+  type ExamValidationResult,
+} from "@/lib/exam-form-validation";
 
 type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
 const EXAM_MAIN_SITE_OPTIONS: string[] = [...MAIN_SITE_OPTIONS];
@@ -39,10 +44,10 @@ type ExamFormState = {
   courseIds: string[];
   mainSites: string[];
   date: string;
-  fullMark: number;
-  passMark: number;
-  discountMark: number;
-  opportunitiesPenaltyNum: number;
+  fullMark: string;
+  passMark: string;
+  discountMark: string;
+  opportunitiesPenaltyNum: string;
   dismissalGrade: string;
   noDiscount: boolean;
   statusMode: ExamStatusMode;
@@ -57,10 +62,6 @@ function defaultDateTimeForDate(date: string) {
   return `${date || todayISO()}T08:00`;
 }
 
-function numberInputValue(value: number | string) {
-  return Number(value) === 0 ? "" : String(value);
-}
-
 function formatRangeNumber(value: number) {
   if (!Number.isFinite(value)) return "—";
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, "");
@@ -73,14 +74,41 @@ type JudgmentPreviewItem = {
 };
 
 function buildJudgmentPreview(state: ExamFormState): JudgmentPreviewItem[] {
-  const fullMark = Number(state.fullMark || 0);
-  const passMark = Number(state.passMark || 0);
-  const discountMark = Number(state.discountMark || 0);
-  const penalty = Number(state.opportunitiesPenaltyNum || 0);
+  const gradeValidation = validateExamGradePolicy({
+    type: state.type,
+    noDiscount: state.noDiscount,
+    fullMark: state.fullMark,
+    passMark: state.passMark,
+    discountMark: state.discountMark,
+    opportunitiesPenalty: state.opportunitiesPenaltyNum,
+    dismissalGrade: state.dismissalGrade,
+  });
+  const { values } = gradeValidation;
+  if (
+    !gradeValidation.isValid ||
+    values.fullMark === null ||
+    values.passMark === null ||
+    values.discountMark === null ||
+    values.opportunitiesPenalty === null
+  ) {
+    return [
+      {
+        title: "أكمل قيم الدرجات",
+        description:
+          gradeValidation.firstError ||
+          "أدخل قيماً صحيحة حتى تظهر معاينة الحكم الأكاديمي.",
+        tone: "warn",
+      },
+    ];
+  }
+
+  const fullMark = values.fullMark;
+  const passMark = values.passMark;
+  const discountMark = values.discountMark;
+  const penalty = values.opportunitiesPenalty;
+  const dismissalGrade = values.dismissalGrade;
   const isFinalExam = state.type === "فاينل";
   const noDiscount = Boolean(state.noDiscount);
-  const dismissalGradeRaw = state.dismissalGrade === "" ? null : Number(state.dismissalGrade);
-  const dismissalGrade = Number.isFinite(Number(dismissalGradeRaw)) ? Number(dismissalGradeRaw) : null;
   const items: JudgmentPreviewItem[] = [];
 
   if (noDiscount) {
@@ -126,6 +154,15 @@ function judgmentToneClass(tone: JudgmentPreviewItem["tone"]) {
   return "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100";
 }
 
+function ExamFieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return (
+    <p id={id} role="alert" className="text-xs font-medium text-destructive">
+      {message}
+    </p>
+  );
+}
+
 function emptyForm(): ExamFormState {
   return {
     name: "",
@@ -133,10 +170,10 @@ function emptyForm(): ExamFormState {
     courseIds: [],
     mainSites: [],
     date: todayISO(),
-    fullMark: 100,
-    passMark: 60,
-    discountMark: 45,
-    opportunitiesPenaltyNum: 1,
+    fullMark: "100",
+    passMark: "60",
+    discountMark: "45",
+    opportunitiesPenaltyNum: "1",
     dismissalGrade: "",
     noDiscount: false,
     statusMode: "نشط",
@@ -167,11 +204,21 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
     courseIds: form.courseIds,
     mainSite: form.mainSites.join(","),
     date: form.date,
-    fullMark: form.fullMark,
-    passMark: form.passMark,
-    discountMark: isFinalExam || noDiscount ? 0 : form.discountMark,
-    opportunitiesPenalty: noDiscount ? 0 : (isFinalExam ? "فصل مؤقت" : form.opportunitiesPenaltyNum),
-    dismissalGrade: !noDiscount && isFinalExam && form.dismissalGrade ? Number(form.dismissalGrade) : null,
+    fullMark: Number(toLatinDigits(form.fullMark)),
+    passMark: Number(toLatinDigits(form.passMark)),
+    discountMark:
+      isFinalExam || noDiscount
+        ? 0
+        : Number(toLatinDigits(form.discountMark)),
+    opportunitiesPenalty: noDiscount
+      ? 0
+      : isFinalExam
+        ? "فصل مؤقت"
+        : Number(toLatinDigits(form.opportunitiesPenaltyNum)),
+    dismissalGrade:
+      !noDiscount && isFinalExam && form.dismissalGrade.trim()
+        ? Number(toLatinDigits(form.dismissalGrade))
+        : null,
     noDiscount,
     ...applyStatus(form),
   };
@@ -251,40 +298,46 @@ export function ExamNewView() {
 
   const availableMainSitesFor = (_state: ExamFormState): string[] => EXAM_MAIN_SITE_OPTIONS;
 
-  const validateForm = (state: ExamFormState) => {
-    const fullMark = Number(state.fullMark);
-    const passMark = Number(state.passMark);
-    const isFinalExam = state.type === "فاينل";
-    const noDiscount = Boolean(state.noDiscount);
-    const discountMark = isFinalExam || noDiscount
-      ? 0
-      : Number(state.discountMark);
-    const opportunitiesPenalty = Number(state.opportunitiesPenaltyNum);
-    const dismissalGrade = state.dismissalGrade === "" ? null : Number(state.dismissalGrade);
+  const validateForm = useCallback(
+    (state: ExamFormState): ExamValidationResult => {
+      const blockers = selectedCourseBlockers(contextRows, state.courseIds);
+      return validateExamForm({
+        name: state.name,
+        type: state.type,
+        courseIds: state.courseIds,
+        mainSites: state.mainSites,
+        date: state.date,
+        fullMark: state.fullMark,
+        passMark: state.passMark,
+        discountMark: state.discountMark,
+        opportunitiesPenalty: state.opportunitiesPenaltyNum,
+        dismissalGrade: state.dismissalGrade,
+        noDiscount: state.noDiscount,
+        statusMode: state.statusMode,
+        scheduledActivateAt: state.scheduledActivateAt,
+        preflightError: contextLoading
+          ? "انتظر تحميل سياق إضافة الامتحان من بيانات النظام"
+          : contextError || null,
+        courseSelectionError:
+          blockers.length > 0
+            ? `لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${blockers.join("، ")}`
+            : null,
+      });
+    },
+    [contextError, contextLoading, contextRows],
+  );
 
-    if (contextLoading) return "انتظر تحميل سياق إضافة الامتحان من بيانات النظام";
-    if (contextError) return contextError;
-    if (!state.name.trim()) return "يرجى إدخال اسم الامتحان";
-    if (state.courseIds.length === 0) return "يرجى اختيار دورة واحدة على الأقل";
-    const blockers = selectedCourseBlockers(contextRows, state.courseIds);
-    if (blockers.length > 0) return `لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${blockers.join("، ")}`;
-    if (state.mainSites.length === 0) return "يرجى اختيار منطقة واحدة على الأقل أو اختيار الكل";
-    if (![fullMark, passMark, discountMark].every((value) => Number.isFinite(value) && Number.isInteger(value))) return "درجات الامتحان يجب أن تكون أعداداً صحيحة بدون كسور";
-    if (fullMark <= 0) return "الدرجة الكاملة يجب أن تكون أكبر من صفر";
-    if (passMark < 0 || passMark > fullMark) return "درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة";
-    if (!noDiscount && (discountMark < 0 || discountMark > fullMark)) return "درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة";
-    if (!noDiscount && !isFinalExam && passMark <= discountMark) return "درجة النجاح يجب أن تكون أكبر من درجة الخصم";
-    if (!noDiscount && !isFinalExam && (!Number.isInteger(opportunitiesPenalty) || opportunitiesPenalty <= 0)) return "خصم الفرص يجب أن يكون عدداً صحيحاً أكبر من صفر";
-    if (!noDiscount && isFinalExam && dismissalGrade !== null && (!Number.isInteger(dismissalGrade) || dismissalGrade < 0 || dismissalGrade > fullMark)) return "درجة الفصل يجب أن تكون عدداً صحيحاً بين صفر والدرجة الكاملة";
-    if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt) return "حدد تاريخ ووقت التفعيل المجدول";
-    return null;
-  };
+  const formValidation = useMemo(
+    () => validateForm(form),
+    [form, validateForm],
+  );
+  const isFormValid = formValidation.isValid;
 
   const handleSubmit = runAddExamLocked(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const error = validateForm(form);
-    if (error) {
-      toast.error(error);
+    const validation = validateForm(form);
+    if (!validation.isValid) {
+      toast.error(validation.firstError || "راجع بيانات الامتحان قبل الحفظ");
       return;
     }
     const result = await examApi.add(buildExamPayload(form) as unknown as Record<string, unknown>);
@@ -409,7 +462,19 @@ export function ExamNewView() {
             id={`${prefix}-activate`}
             type="datetime-local"
             value={state.scheduledActivateAt}
+            aria-invalid={Boolean(
+              formValidation.fieldErrors.scheduledActivateAt,
+            )}
+            aria-describedby={
+              formValidation.fieldErrors.scheduledActivateAt
+                ? `${prefix}-activate-error`
+                : undefined
+            }
             onChange={(e) => setState((p) => ({ ...p, scheduledActivateAt: e.target.value }))}
+          />
+          <ExamFieldError
+            id={`${prefix}-activate-error`}
+            message={formValidation.fieldErrors.scheduledActivateAt}
           />
         </div>
       )}
@@ -423,12 +488,34 @@ export function ExamNewView() {
     const allMainSitesSelected = mainSitesForState.length > 0 && state.mainSites.length === mainSitesForState.length;
     const matchedStudentsCount = selectedSiteActiveStudentCount(contextRows, state.courseIds, state.mainSites);
     const judgmentPreview = buildJudgmentPreview(state);
+    const numericFullMark = Number(toLatinDigits(state.fullMark));
+    const fullMarkMax =
+      Number.isInteger(numericFullMark) && numericFullMark > 0
+        ? numericFullMark
+        : undefined;
+    const fieldErrors = formValidation.fieldErrors;
 
     return (
       <div className="tp-exam-form-grid grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="tp-form-field space-y-2">
           <Label htmlFor={`${prefix}-name`}>اسم الامتحان</Label>
-          <Input id={`${prefix}-name`} value={state.name} onChange={(e) => setState((p) => ({ ...p, name: e.target.value }))} required placeholder="الامتحان الأول - الفصل الأول" />
+          <Input
+            id={`${prefix}-name`}
+            value={state.name}
+            aria-invalid={Boolean(fieldErrors.name)}
+            aria-describedby={
+              fieldErrors.name ? `${prefix}-name-error` : undefined
+            }
+            onChange={(e) =>
+              setState((p) => ({ ...p, name: e.target.value }))
+            }
+            required
+            placeholder="الامتحان الأول - الفصل الأول"
+          />
+          <ExamFieldError
+            id={`${prefix}-name-error`}
+            message={fieldErrors.name}
+          />
         </div>
         <div className="tp-form-field space-y-2">
           <Label htmlFor={`${prefix}-type`}>نوع الامتحان</Label>
@@ -438,8 +525,19 @@ export function ExamNewView() {
             return {
               ...p,
               type: nextType,
-              discountMark: nextIsFinalExam || p.noDiscount ? 0 : (p.discountMark || 45),
-              opportunitiesPenaltyNum: nextIsFinalExam || p.noDiscount ? 0 : (p.opportunitiesPenaltyNum || 1),
+              discountMark:
+                nextIsFinalExam || p.noDiscount
+                  ? "0"
+                  : p.discountMark && p.discountMark !== "0"
+                    ? p.discountMark
+                    : "45",
+              opportunitiesPenaltyNum:
+                nextIsFinalExam || p.noDiscount
+                  ? "0"
+                  : p.opportunitiesPenaltyNum &&
+                      p.opportunitiesPenaltyNum !== "0"
+                    ? p.opportunitiesPenaltyNum
+                    : "1",
               dismissalGrade: nextIsFinalExam && !p.noDiscount ? p.dismissalGrade : "",
             };
           })}>
@@ -456,6 +554,10 @@ export function ExamNewView() {
           <DateInput
             id={`${prefix}-date`}
             value={state.date}
+            aria-invalid={Boolean(fieldErrors.date)}
+            aria-describedby={
+              fieldErrors.date ? `${prefix}-date-error` : undefined
+            }
             onChange={(value) => setState((p) => ({
               ...p,
               date: value,
@@ -464,12 +566,32 @@ export function ExamNewView() {
                 : p.scheduledActivateAt,
             }))}
           />
+          <ExamFieldError
+            id={`${prefix}-date-error`}
+            message={fieldErrors.date}
+          />
         </div>
-        <div className="tp-form-field tp-form-field-tall space-y-2 md:col-span-2 xl:col-span-1">
+        <div
+          className="tp-form-field tp-form-field-tall space-y-2 md:col-span-2 xl:col-span-1"
+          role="group"
+          aria-describedby={
+            fieldErrors.courseIds ? `${prefix}-courses-error` : undefined
+          }
+        >
           <Label>الدورات</Label>
           {renderCourseSelector(state, setState, `${prefix}-all-courses`)}
+          <ExamFieldError
+            id={`${prefix}-courses-error`}
+            message={fieldErrors.courseIds}
+          />
         </div>
-        <div className="tp-form-field tp-form-field-tall space-y-2">
+        <div
+          className="tp-form-field tp-form-field-tall space-y-2"
+          role="group"
+          aria-describedby={
+            fieldErrors.mainSites ? `${prefix}-sites-error` : undefined
+          }
+        >
           <Label>الموقع الرئيسي</Label>
           <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-3">
             <div className="flex items-center gap-2 border-b pb-2">
@@ -493,6 +615,10 @@ export function ExamNewView() {
               مؤشر الطلاب النشطين حسب الدورات والمواقع المختارة من النظام: {matchedStudentsCount}
             </p>
           )}
+          <ExamFieldError
+            id={`${prefix}-sites-error`}
+            message={fieldErrors.mainSites}
+          />
         </div>
         <div className="tp-form-policy space-y-2 rounded-lg border border-dashed p-3 md:col-span-2 xl:col-span-3">
           <div className="flex items-start gap-2">
@@ -504,8 +630,19 @@ export function ExamNewView() {
                 return {
                   ...p,
                   noDiscount: enabled,
-                  discountMark: enabled ? 0 : (p.discountMark || 45),
-                  opportunitiesPenaltyNum: enabled ? 0 : (p.opportunitiesPenaltyNum || 1),
+                  discountMark:
+                    enabled || p.type === "فاينل"
+                      ? "0"
+                      : p.discountMark && p.discountMark !== "0"
+                        ? p.discountMark
+                        : "45",
+                  opportunitiesPenaltyNum:
+                    enabled || p.type === "فاينل"
+                      ? "0"
+                      : p.opportunitiesPenaltyNum &&
+                          p.opportunitiesPenaltyNum !== "0"
+                        ? p.opportunitiesPenaltyNum
+                        : "1",
                   dismissalGrade: enabled ? "" : p.dismissalGrade,
                 };
               })}
@@ -518,37 +655,149 @@ export function ExamNewView() {
             </div>
           </div>
         </div>
-        <div className="tp-form-field space-y-2"><Label>الدرجة الكاملة</Label><Input type="number" step={1} value={numberInputValue(state.fullMark)} onChange={(e) => setState((p) => ({ ...p, fullMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
-        <div className="tp-form-field space-y-2"><Label>درجة النجاح</Label><Input type="number" step={1} value={numberInputValue(state.passMark)} onChange={(e) => setState((p) => ({ ...p, passMark: Number(toLatinDigits(e.target.value)) || 0 }))} /></div>
         <div className="tp-form-field space-y-2">
-          <Label>درجة الخصم</Label>
+          <Label htmlFor={`${prefix}-full-mark`}>الدرجة الكاملة</Label>
           <Input
+            id={`${prefix}-full-mark`}
             type="number"
+            min={1}
             step={1}
-            value={isFinalExam || noDiscount ? "" : numberInputValue(state.discountMark)}
+            value={state.fullMark}
+            aria-invalid={Boolean(fieldErrors.fullMark)}
+            aria-describedby={
+              fieldErrors.fullMark
+                ? `${prefix}-full-mark-error`
+                : undefined
+            }
+            onChange={(e) =>
+              setState((p) => ({
+                ...p,
+                fullMark: toLatinDigits(e.target.value),
+              }))
+            }
+          />
+          <ExamFieldError
+            id={`${prefix}-full-mark-error`}
+            message={fieldErrors.fullMark}
+          />
+        </div>
+        <div className="tp-form-field space-y-2">
+          <Label htmlFor={`${prefix}-pass-mark`}>درجة النجاح</Label>
+          <Input
+            id={`${prefix}-pass-mark`}
+            type="number"
+            min={0}
+            max={fullMarkMax}
+            step={1}
+            value={state.passMark}
+            aria-invalid={Boolean(fieldErrors.passMark)}
+            aria-describedby={
+              fieldErrors.passMark
+                ? `${prefix}-pass-mark-error`
+                : undefined
+            }
+            onChange={(e) =>
+              setState((p) => ({
+                ...p,
+                passMark: toLatinDigits(e.target.value),
+              }))
+            }
+          />
+          <ExamFieldError
+            id={`${prefix}-pass-mark-error`}
+            message={fieldErrors.passMark}
+          />
+        </div>
+        <div className="tp-form-field space-y-2">
+          <Label htmlFor={`${prefix}-discount-mark`}>درجة الخصم</Label>
+          <Input
+            id={`${prefix}-discount-mark`}
+            type="number"
+            min={0}
+            max={fullMarkMax}
+            step={1}
+            value={isFinalExam || noDiscount ? "0" : state.discountMark}
             disabled={isFinalExam || noDiscount}
-            onChange={(e) => setState((p) => ({ ...p, discountMark: Number(toLatinDigits(e.target.value)) || 0 }))}
+            aria-invalid={Boolean(fieldErrors.discountMark)}
+            aria-describedby={
+              fieldErrors.discountMark
+                ? `${prefix}-discount-mark-error`
+                : undefined
+            }
+            onChange={(e) =>
+              setState((p) => ({
+                ...p,
+                discountMark: toLatinDigits(e.target.value),
+              }))
+            }
           />
           {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ الحكم يكون فقط من درجة الفصل.</p>}
           {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
-          {!noDiscount && !isFinalExam && Number(state.passMark) <= Number(state.discountMark) && (
-            <p className="text-xs text-destructive">درجة النجاح يجب أن تكون أكبر من درجة الخصم.</p>
-          )}
+          <ExamFieldError
+            id={`${prefix}-discount-mark-error`}
+            message={fieldErrors.discountMark}
+          />
         </div>
         <div className="tp-form-field space-y-2">
-          <Label>خصم الفرص</Label>
+          <Label htmlFor={`${prefix}-opportunities-penalty`}>خصم الفرص</Label>
           <Input
+            id={`${prefix}-opportunities-penalty`}
             type="number"
-            min={0}
+            min={1}
             step={1}
-            value={isFinalExam || noDiscount ? "" : numberInputValue(state.opportunitiesPenaltyNum)}
+            value={isFinalExam || noDiscount ? "0" : state.opportunitiesPenaltyNum}
             disabled={isFinalExam || noDiscount}
-            onChange={(e) => setState((p) => ({ ...p, opportunitiesPenaltyNum: Number(toLatinDigits(e.target.value)) || 0 }))}
+            aria-invalid={Boolean(fieldErrors.opportunitiesPenalty)}
+            aria-describedby={
+              fieldErrors.opportunitiesPenalty
+                ? `${prefix}-opportunities-penalty-error`
+                : undefined
+            }
+            onChange={(e) =>
+              setState((p) => ({
+                ...p,
+                opportunitiesPenaltyNum: toLatinDigits(e.target.value),
+              }))
+            }
           />
           {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ الغياب أو الغش أو درجة الفصل يعالج كفصل مؤقت فقط.</p>}
           {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
+          <ExamFieldError
+            id={`${prefix}-opportunities-penalty-error`}
+            message={fieldErrors.opportunitiesPenalty}
+          />
         </div>
-        {isFinalExam && <div className="tp-form-field space-y-2"><Label>درجة الفصل</Label><Input type="number" step={1} disabled={noDiscount} value={noDiscount ? "" : state.dismissalGrade} onChange={(e) => setState((p) => ({ ...p, dismissalGrade: toLatinDigits(e.target.value) }))} />{noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}</div>}
+        {isFinalExam && (
+          <div className="tp-form-field space-y-2">
+            <Label htmlFor={`${prefix}-dismissal-grade`}>درجة الفصل</Label>
+            <Input
+              id={`${prefix}-dismissal-grade`}
+              type="number"
+              min={0}
+              max={fullMarkMax}
+              step={1}
+              disabled={noDiscount}
+              value={noDiscount ? "" : state.dismissalGrade}
+              aria-invalid={Boolean(fieldErrors.dismissalGrade)}
+              aria-describedby={
+                fieldErrors.dismissalGrade
+                  ? `${prefix}-dismissal-grade-error`
+                  : undefined
+              }
+              onChange={(e) =>
+                setState((p) => ({
+                  ...p,
+                  dismissalGrade: toLatinDigits(e.target.value),
+                }))
+              }
+            />
+            {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
+            <ExamFieldError
+              id={`${prefix}-dismissal-grade-error`}
+              message={fieldErrors.dismissalGrade}
+            />
+          </div>
+        )}
         <div className="tp-form-preview space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4 md:col-span-2 xl:col-span-3">
           <div>
             <h3 className="font-bold">معاينة الحكم قبل الحفظ</h3>
@@ -596,7 +845,24 @@ export function ExamNewView() {
 
           <form onSubmit={handleSubmit} className="tp-validation-form tp-long-form tp-exam-form tp-exam-new__form space-y-4">
             {renderFormFields(form, setForm, "exam")}
-            <Button type="submit" disabled={isAddingExam || contextLoading || Boolean(contextError)} className="tp-form-submit w-full">
+            {!isFormValid && formValidation.firstError ? (
+              <div
+                id="exam-new-validation-summary"
+                role={contextLoading ? "status" : "alert"}
+                aria-live="polite"
+                className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-medium text-destructive"
+              >
+                لا يمكن إضافة الامتحان حالياً: {formValidation.firstError}
+              </div>
+            ) : null}
+            <Button
+              type="submit"
+              disabled={isAddingExam || !isFormValid}
+              aria-describedby={
+                !isFormValid ? "exam-new-validation-summary" : undefined
+              }
+              className="tp-form-submit w-full"
+            >
               {isAddingExam ? "جاري الإضافة..." : "إضافة الامتحان"}
             </Button>
           </form>

@@ -23,6 +23,7 @@ function must(condition, okMessage, failMessage) {
 
 const page = read("src/components/teacher-pro/exam-new.tsx");
 const route = read("src/app/api/exams/route.ts");
+const validator = read("src/lib/exam-form-validation.ts");
 const contextRoute = read("src/app/api/exams/create-context/route.ts");
 const api = read("src/lib/api.ts");
 const pkg = JSON.parse(read("package.json"));
@@ -95,10 +96,33 @@ must(
 );
 
 must(
-  route.includes("يجب اختيار منطقة واحدة على الأقل") &&
-    route.includes("selectedMainSites"),
-  "API إضافة الامتحان يتحقق من اختيار منطقة واحدة على الأقل",
-  "يجب أن يرفض السيرفر امتحاناً بلا موقع رئيسي.",
+  route.includes("selectedMainSites") &&
+    route.includes("validateExamForm") &&
+    validator.includes("يجب اختيار منطقة واحدة على الأقل"),
+  "API إضافة الامتحان يتحقق من اختيار منطقة واحدة على الأقل عبر المدقق المشترك",
+  "يجب أن يرفض السيرفر امتحاناً بلا موقع رئيسي عبر المدقق المشترك.",
+);
+
+must(
+  page.includes("validateExamForm") &&
+    page.includes("const isFormValid = formValidation.isValid") &&
+    page.includes("disabled={isAddingExam || !isFormValid}") &&
+    page.includes('id="exam-new-validation-summary"') &&
+    page.includes("aria-invalid") &&
+    validator.includes("passMark > fullMark"),
+  "نموذج الإضافة يتحقق لحظياً ويعطل الحفظ مع رسائل حقل واضحة",
+  "يجب ربط صفحة الإضافة بالمدقق المشترك وتعطيل زر الإضافة عند أي قيمة غير منطقية.",
+);
+
+must(
+  route.includes("validatedGradeValues") &&
+    route.includes("normalizePatchedExamNumber") &&
+    route.includes("parsed === null ? value : parsed") &&
+    route.includes("noDiscount || isFinalExam ? 0") &&
+    route.includes("? 'فصل مؤقت'") &&
+    !route.includes("Number(body.passMark || 50)"),
+  "API يحفظ القيم الموثقة بدون تحويل الصفر الصحيح إلى قيمة افتراضية",
+  "يجب ألا يستخدم API معامل || مع درجات قد تكون صفراً، وأن يوحد قيم الفاينل المعطلة.",
 );
 
 must(
@@ -111,6 +135,14 @@ must(
 
 must(
   pkg.scripts &&
+    pkg.scripts["test:exam-form-validation"] ===
+      "node --experimental-strip-types --test scripts/test-exam-form-validation-behavior.mjs",
+  "اختبار سلوكي لمدقق نموذج الامتحان مضاف إلى package.json",
+  "يجب إضافة اختبار سلوكي رسمي لقواعد نموذج الامتحان.",
+);
+
+must(
+  pkg.scripts &&
     pkg.scripts["test:exam-new-integrity"] === "node scripts/test-exam-new-integrity.mjs",
   "سكريبت test:exam-new-integrity مضاف إلى package.json",
   "يجب إضافة سكريبت رسمي لاختبار صفحة إضافة امتحان.",
@@ -118,6 +150,7 @@ must(
 
 must(
   pkg.scripts &&
+    String(pkg.scripts["test:side-effects"] || "").includes("test:exam-form-validation") &&
     String(pkg.scripts["test:side-effects"] || "").includes("test:exam-new-integrity"),
   "اختبار side-effects يشمل صفحة إضافة امتحان",
   "يجب أن يشمل test:side-effects اختبار صفحة إضافة امتحان.",

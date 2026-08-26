@@ -16,6 +16,11 @@ import { buildMutationPreviewToken } from '@/lib/mutation-preview-token';
 import { withSerializableTransaction } from '@/lib/serializable-transaction';
 import { ensureProtectedGradeMarkers } from '@/lib/protected-grade-markers-server';
 import { repairProtectedAbsencesForStudents } from '@/lib/grace-period-repair-server';
+import {
+  parseExamNumber,
+  validateExamForm,
+  validateExamGradePolicy,
+} from '@/lib/exam-form-validation';
 
 function parseBoolean(value: unknown): boolean {
   return value === true || value === 'true' || value === '1' || value === 1;
@@ -116,33 +121,80 @@ async function courseSelectionProblems(
 }
 
 function validateExamPayload(body: Record<string, unknown>) {
-  const nameError = requireText(body.name, 'اسم الامتحان');
-  if (nameError) return nameError;
-  if (!['يومي', 'تراكمي', 'فاينل'].includes(String(body.type ?? ''))) return 'نوع الامتحان غير صحيح';
-  if (parseCourseIds(body.courseIds).length === 0) return 'يجب اختيار دورة واحدة على الأقل';
+  const parsedCourseIds = parseCourseIds(body.courseIds);
   const selectedMainSites = String(body.mainSite ?? '')
     .split(',')
     .map((site) => site.trim())
     .filter(Boolean);
-  if (selectedMainSites.length === 0) return 'يجب اختيار منطقة واحدة على الأقل';
-  const examDate = parseBaghdadDateOnly(body.date as string | Date | null | undefined);
-  if (!examDate) return 'تاريخ الامتحان غير صحيح';
   const noDiscount = parseBoolean(body.noDiscount);
-  const fullMark = Number(body.fullMark ?? 100);
-  const passMark = Number(body.passMark ?? 50);
-  const discountMark = noDiscount ? 0 : Number(body.discountMark ?? 0);
-  if (![fullMark, passMark, discountMark].every((value) => Number.isFinite(value) && Number.isInteger(value))) return 'درجات الامتحان يجب أن تكون أعداداً صحيحة بدون كسور';
-  if (fullMark <= 0) return 'الدرجة الكاملة يجب أن تكون أكبر من صفر';
-  if (passMark < 0 || passMark > fullMark) return 'درجة النجاح يجب أن تكون بين صفر والدرجة الكاملة';
-  if (!noDiscount && (discountMark < 0 || discountMark > fullMark)) return 'درجة الخصم يجب أن تكون بين صفر والدرجة الكاملة';
-  if (!noDiscount && String(body.type) !== 'فاينل' && passMark <= discountMark) return 'درجة النجاح يجب أن تكون أكبر من درجة الخصم';
-  const penalty = Number(body.opportunitiesPenalty ?? 1);
-  if (!noDiscount && String(body.type) !== 'فاينل' && (!Number.isInteger(penalty) || penalty <= 0)) return 'خصم الفرص يجب أن يكون عدداً صحيحاً أكبر من صفر';
-  if (!noDiscount && String(body.type) === 'فاينل' && body.dismissalGrade !== null && body.dismissalGrade !== undefined && body.dismissalGrade !== '') {
-    const dismissalGrade = Number(body.dismissalGrade);
-    if (!Number.isInteger(dismissalGrade) || dismissalGrade < 0 || dismissalGrade > fullMark) return 'درجة الفصل يجب أن تكون عدداً صحيحاً بين صفر والدرجة الكاملة';
+  const validation = validateExamForm({
+    name: body.name,
+    type: body.type,
+    courseIds: parsedCourseIds,
+    mainSites: selectedMainSites,
+    date: body.date,
+    fullMark: body.fullMark ?? 100,
+    passMark: body.passMark ?? 50,
+    discountMark: body.discountMark ?? 0,
+    opportunitiesPenalty: body.opportunitiesPenalty ?? 1,
+    dismissalGrade: body.dismissalGrade,
+    noDiscount,
+  });
+  if (!validation.isValid) return validation.firstError;
+
+  const examDate = parseBaghdadDateOnly(
+    body.date as string | Date | null | undefined,
+  );
+  return examDate ? null : 'تاريخ الامتحان غير صحيح';
+}
+
+type ValidatedExamGradeValues = {
+  fullMark: number;
+  passMark: number;
+  discountMark: number;
+  opportunitiesPenalty: number;
+  dismissalGrade: number | null;
+};
+
+function validatedGradeValues(
+  body: Record<string, unknown>,
+): ValidatedExamGradeValues {
+  const validation = validateExamGradePolicy({
+    type: body.type,
+    noDiscount: parseBoolean(body.noDiscount),
+    fullMark: body.fullMark ?? 100,
+    passMark: body.passMark ?? 50,
+    discountMark: body.discountMark ?? 0,
+    opportunitiesPenalty: body.opportunitiesPenalty ?? 1,
+    dismissalGrade: body.dismissalGrade,
+  });
+  const { values } = validation;
+  if (
+    !validation.isValid ||
+    values.fullMark === null ||
+    values.passMark === null ||
+    values.discountMark === null ||
+    values.opportunitiesPenalty === null
+  ) {
+    throw new Error(
+      `Exam grade values reached persistence without validation: ${validation.firstError || 'unknown validation error'}`,
+    );
   }
-  return null;
+  return {
+    fullMark: values.fullMark,
+    passMark: values.passMark,
+    discountMark: values.discountMark,
+    opportunitiesPenalty: values.opportunitiesPenalty,
+    dismissalGrade: values.dismissalGrade,
+  };
+}
+
+function normalizePatchedExamNumber(value: unknown): unknown {
+  const parsed = parseExamNumber(value);
+  // Preserve invalid/blank input for candidate validation instead of silently
+  // coercing it to zero with Number(""). Valid values are canonicalized so
+  // Arabic/Persian digits and numeric strings are persisted as numbers.
+  return parsed === null ? value : parsed;
 }
 
 export async function GET(req: NextRequest) {
@@ -198,6 +250,8 @@ export async function POST(req: NextRequest) {
       return validationError(`لا يمكن حفظ الامتحان بسبب مشاكل الدورات: ${courseProblems.join('، ')}`);
     }
     const noDiscount = parseBoolean(body.noDiscount);
+    const isFinalExam = String(body.type) === 'فاينل';
+    const gradeValues = validatedGradeValues(body);
     const examDate = parseBaghdadDateOnly(body.date as string | Date | null | undefined);
     if (!examDate) return validationError('تاريخ الامتحان غير صحيح');
     const scheduledActivateAt = body.scheduledActivateAt ? parseBaghdadDateTime(String(body.scheduledActivateAt)) : null;
@@ -211,19 +265,25 @@ export async function POST(req: NextRequest) {
     const exam = await withSerializableTransaction(async (tx) => {
       const createdExam = await tx.exam.create({
         data: {
-        name: String(body.name ?? '').trim(),
-        type: body.type,
-        courseIds: JSON.stringify(parsedCourseIds),
-        mainSite: body.mainSite,
-        date: examDate,
-        fullMark: Number(body.fullMark || 100),
-        passMark: Number(body.passMark || 50),
-        discountMark: noDiscount ? 0 : Number(body.discountMark || 0),
-        opportunitiesPenalty: noDiscount ? '0' : String(body.opportunitiesPenalty ?? 1),
-        dismissalGrade: !noDiscount && String(body.type) === 'فاينل' && body.dismissalGrade !== null && body.dismissalGrade !== undefined ? Number(body.dismissalGrade) : null,
-        noDiscount,
-        active: effectiveStoredActive,
-        scheduledActivateAt,
+          name: String(body.name ?? '').trim(),
+          type: body.type,
+          courseIds: JSON.stringify(parsedCourseIds),
+          mainSite: body.mainSite,
+          date: examDate,
+          fullMark: gradeValues.fullMark,
+          passMark: gradeValues.passMark,
+          discountMark:
+            noDiscount || isFinalExam ? 0 : gradeValues.discountMark,
+          opportunitiesPenalty: noDiscount
+            ? '0'
+            : isFinalExam
+              ? 'فصل مؤقت'
+              : String(gradeValues.opportunitiesPenalty),
+          dismissalGrade:
+            !noDiscount && isFinalExam ? gradeValues.dismissalGrade : null,
+          noDiscount,
+          active: effectiveStoredActive,
+          scheduledActivateAt,
         },
       });
       await syncExamCourseLinks(tx, createdExam.id, parsedCourseIds);
@@ -287,11 +347,31 @@ export async function PUT(req: NextRequest) {
       if (!parsedDate) return validationError('تاريخ الامتحان غير صحيح');
       normalizedPatch.date = parsedDate;
     }
-    if (normalizedPatch.fullMark !== undefined) normalizedPatch.fullMark = Number(normalizedPatch.fullMark);
-    if (normalizedPatch.passMark !== undefined) normalizedPatch.passMark = Number(normalizedPatch.passMark);
-    if (normalizedPatch.discountMark !== undefined) normalizedPatch.discountMark = Number(normalizedPatch.discountMark);
-    if (normalizedPatch.opportunitiesPenalty !== undefined) normalizedPatch.opportunitiesPenalty = String(normalizedPatch.opportunitiesPenalty);
-    if (normalizedPatch.dismissalGrade !== undefined) normalizedPatch.dismissalGrade = normalizedPatch.dismissalGrade === null || normalizedPatch.dismissalGrade === "" ? null : Number(normalizedPatch.dismissalGrade);
+    if (normalizedPatch.fullMark !== undefined) {
+      normalizedPatch.fullMark = normalizePatchedExamNumber(normalizedPatch.fullMark);
+    }
+    if (normalizedPatch.passMark !== undefined) {
+      normalizedPatch.passMark = normalizePatchedExamNumber(normalizedPatch.passMark);
+    }
+    if (normalizedPatch.discountMark !== undefined) {
+      normalizedPatch.discountMark = normalizePatchedExamNumber(normalizedPatch.discountMark);
+    }
+    if (normalizedPatch.opportunitiesPenalty !== undefined) {
+      const normalizedPenalty = normalizePatchedExamNumber(
+        normalizedPatch.opportunitiesPenalty,
+      );
+      normalizedPatch.opportunitiesPenalty =
+        typeof normalizedPenalty === 'number'
+          ? String(normalizedPenalty)
+          : normalizedPenalty;
+    }
+    if (normalizedPatch.dismissalGrade !== undefined) {
+      normalizedPatch.dismissalGrade =
+        normalizedPatch.dismissalGrade === null ||
+        normalizedPatch.dismissalGrade === ''
+          ? null
+          : normalizePatchedExamNumber(normalizedPatch.dismissalGrade);
+    }
     if (normalizedPatch.noDiscount !== undefined) normalizedPatch.noDiscount = parseBoolean(normalizedPatch.noDiscount);
     if (normalizedPatch.scheduledActivateAt !== undefined) normalizedPatch.scheduledActivateAt = normalizedPatch.scheduledActivateAt ? parseBaghdadDateTime(String(normalizedPatch.scheduledActivateAt)) : null;
     if (normalizedPatch.active !== undefined) normalizedPatch.active = parseBoolean(normalizedPatch.active);
@@ -312,12 +392,18 @@ export async function PUT(req: NextRequest) {
         return { editConflict: true } as const;
       }
       const data = { ...normalizedPatch };
-      const effectiveNoDiscount = Boolean(data.noDiscount ?? existingExam.noDiscount);
+      const effectiveNoDiscount = Boolean(
+        data.noDiscount ?? existingExam.noDiscount,
+      );
+      const effectiveType = String(data.type ?? existingExam.type);
       if (effectiveNoDiscount) {
         data.discountMark = 0;
         data.opportunitiesPenalty = '0';
         data.dismissalGrade = null;
-      } else if (String(data.type ?? existingExam.type) !== 'فاينل') {
+      } else if (effectiveType === 'فاينل') {
+        data.discountMark = 0;
+        data.opportunitiesPenalty = 'فصل مؤقت';
+      } else {
         data.dismissalGrade = null;
       }
 
@@ -325,6 +411,26 @@ export async function PUT(req: NextRequest) {
       const candidateValidationMessage = validateExamPayload(candidateExam);
       if (candidateValidationMessage) {
         return { validationMessage: candidateValidationMessage } as const;
+      }
+      const candidateGradeValues = validatedGradeValues(candidateExam);
+      if (data.fullMark !== undefined) {
+        data.fullMark = candidateGradeValues.fullMark;
+      }
+      if (data.passMark !== undefined) {
+        data.passMark = candidateGradeValues.passMark;
+      }
+      if (!effectiveNoDiscount && effectiveType !== 'فاينل') {
+        if (data.discountMark !== undefined) {
+          data.discountMark = candidateGradeValues.discountMark;
+        }
+        if (data.opportunitiesPenalty !== undefined) {
+          data.opportunitiesPenalty = String(
+            candidateGradeValues.opportunitiesPenalty,
+          );
+        }
+      }
+      if (!effectiveNoDiscount && effectiveType === 'فاينل') {
+        data.dismissalGrade = candidateGradeValues.dismissalGrade;
       }
 
       // Never make an existing numeric grade invalid by lowering fullMark.

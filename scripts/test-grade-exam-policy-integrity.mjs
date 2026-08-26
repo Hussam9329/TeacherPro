@@ -23,6 +23,8 @@ const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
 const gradeRecords = read("src/components/teacher-pro/grade-records.tsx");
 const examNew = read("src/components/teacher-pro/exam-new.tsx");
 const examRecords = read("src/components/teacher-pro/exam-records.tsx");
+const examEditDialog = read("src/components/teacher-pro/exam-edit-dialog.tsx");
+const examFormValidation = read("src/lib/exam-form-validation.ts");
 const leaveRoute = read("src/app/api/student-leaves/route.ts");
 const migration = read("prisma/migrations/20260712143000_grade_exam_integrity/migration.sql");
 const graceStatusMigration = read("prisma/migrations/20260722223000_allow_grace_grade_status/migration.sql");
@@ -66,11 +68,23 @@ must(
 must(
   writeback.includes("Number.isInteger(numeric)") &&
     writeback.includes("الدرجات الكسرية غير مدعومة") &&
-    examNew.includes("Number.isInteger") &&
-    examRecords.includes("Number.isInteger") &&
+    examFormValidation.includes("Number.isInteger") &&
+    examNew.includes("validateExamForm") &&
+    examEditDialog.includes("validateExamForm") &&
+    examRoute.includes("validateExamForm") &&
     !writeback.includes("Math.trunc(numeric)"),
-  "الدرجات الكسرية تُرفض بوضوح ولا تُقص بصمت في أي مسار",
-  "يجب رفض الكسور في العقدة الموحدة والواجهات بدل Math.trunc.",
+  "الدرجات الكسرية تُرفض بوضوح عبر المدقق المشترك ولا تُقص بصمت",
+  "يجب رفض الكسور في العقدة الموحدة والواجهات وAPI بدل Math.trunc.",
+);
+
+must(
+  examFormValidation.includes("passMark > fullMark") &&
+    examNew.includes("disabled={isAddingExam || !isFormValid}") &&
+    examEditDialog.includes("disabled={isMutating || !isFormValid}") &&
+    examRecords.includes("validateFullExamEditState") &&
+    examRoute.includes("validatedGradeValues"),
+  "حدود درجة النجاح موحدة في الإضافة والتعديل وAPI مع تعطيل الحفظ غير الصالح",
+  "يجب تطبيق passMark <= fullMark في كل مداخل الامتحان من مصدر واحد للحقيقة.",
 );
 
 must(
