@@ -112,7 +112,6 @@ model Exam {
   noDiscount         Boolean @default(false)
   active             Boolean @default(true)
   scheduledActivateAt   DateTime?
-  scheduledDeactivateAt DateTime?
   grades             Grade[]
   correctionSheets   CorrectionSheet[]
   opportunityLogs    OpportunityLog[]

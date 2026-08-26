@@ -254,7 +254,7 @@ export function buildStudentProfileDataVersion(input: {
       "createdAt", "updatedAt", "exam.id", "exam.name", "exam.type", "exam.date",
       "exam.fullMark", "exam.passMark", "exam.discountMark", "exam.opportunitiesPenalty",
       "exam.dismissalGrade", "exam.noDiscount", "exam.active",
-      "exam.scheduledActivateAt", "exam.scheduledDeactivateAt",
+      "exam.scheduledActivateAt",
     ]),
     opportunityLogs: orderedFacts(input.opportunityLogs, [
       "id", "examId", "action", "amount", "reason", "date", "chapterId",

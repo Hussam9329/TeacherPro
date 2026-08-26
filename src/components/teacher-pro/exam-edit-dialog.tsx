@@ -27,7 +27,7 @@ import { getExamStatus, hasActiveChapterLink, splitSelection } from "@/lib/exam-
 import { toLatinDigits } from "@/lib/format";
 import { MAIN_SITE_OPTIONS } from "@/lib/iraq";
 
-export type ExamStatusMode = "نشط" | "تفعيل مجدول" | "تعطيل مجدول" | "معطل";
+export type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
 
 export type FullExamEditState = {
   id: string;
@@ -44,7 +44,6 @@ export type FullExamEditState = {
   noDiscount: boolean;
   statusMode: ExamStatusMode;
   scheduledActivateAt: string;
-  scheduledDeactivateAt: string;
 };
 
 function toDateTimeLocalValue(value?: string | null) {
@@ -53,13 +52,6 @@ function toDateTimeLocalValue(value?: string | null) {
 
 function defaultDateTimeForDate(date: string) {
   return `${date || baghdadTodayKey()}T08:00`;
-}
-
-function defaultDeactivateDateTime(exam: Exam) {
-  return (
-    toDateTimeLocalValue(exam.scheduledDeactivateAt) ||
-    `${exam.date || baghdadTodayKey()}T08:00`
-  );
 }
 
 function statusModeFromExam(exam: Exam): ExamStatusMode {
@@ -96,9 +88,6 @@ function createEditState(exam: Exam): FullExamEditState {
     scheduledActivateAt:
       toDateTimeLocalValue(exam.scheduledActivateAt) ||
       defaultDateTimeForDate(exam.date),
-    scheduledDeactivateAt:
-      toDateTimeLocalValue(exam.scheduledDeactivateAt) ||
-      defaultDeactivateDateTime(exam),
   };
 }
 
@@ -216,10 +205,6 @@ export function ExamEditDialog({
                       prev.statusMode === "تفعيل مجدول"
                         ? defaultDateTimeForDate(value)
                         : prev.scheduledActivateAt,
-                    scheduledDeactivateAt:
-                      prev.statusMode === "تعطيل مجدول"
-                        ? defaultDateTimeForDate(value)
-                        : prev.scheduledDeactivateAt,
                   }))
                 }
               />
@@ -474,10 +459,6 @@ export function ExamEditDialog({
                       value === "تفعيل مجدول" && !prev.scheduledActivateAt
                         ? defaultDateTimeForDate(prev.date)
                         : prev.scheduledActivateAt,
-                    scheduledDeactivateAt:
-                      value === "تعطيل مجدول" && !prev.scheduledDeactivateAt
-                        ? defaultDateTimeForDate(prev.date)
-                        : prev.scheduledDeactivateAt,
                   }))
                 }
               >
@@ -487,7 +468,6 @@ export function ExamEditDialog({
                 <SelectContent className={lightSelectContentClass}>
                   <SelectItem value="نشط">نشط</SelectItem>
                   <SelectItem value="تفعيل مجدول">تفعيل مجدول</SelectItem>
-                  <SelectItem value="تعطيل مجدول">تعطيل مجدول</SelectItem>
                   <SelectItem value="معطل">معطل</SelectItem>
                 </SelectContent>
               </Select>
@@ -504,22 +484,6 @@ export function ExamEditDialog({
                     setEditDialog((prev) => ({
                       ...prev,
                       scheduledActivateAt: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-            )}
-            {editDialog.statusMode === "تعطيل مجدول" && (
-              <div className="space-y-1">
-                <Label>تاريخ ووقت التعطيل</Label>
-                <Input
-                  type="datetime-local"
-                  className={lightInputClass}
-                  value={editDialog.scheduledDeactivateAt}
-                  onChange={(e) =>
-                    setEditDialog((prev) => ({
-                      ...prev,
-                      scheduledDeactivateAt: e.target.value,
                     }))
                   }
                 />

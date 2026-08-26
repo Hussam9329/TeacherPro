@@ -248,7 +248,6 @@ type NumericGradeAttemptContext = {
     courseIds: string;
     active: boolean;
     scheduledActivateAt: Date | null;
-    scheduledDeactivateAt: Date | null;
   };
   category: GradeSmartNoteCategory | null;
   reason: string;
@@ -314,7 +313,6 @@ async function inspectNumericGradeAttempt(
         courseIds: true,
         active: true,
         scheduledActivateAt: true,
-        scheduledDeactivateAt: true,
       },
     }),
   ]);

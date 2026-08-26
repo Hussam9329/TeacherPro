@@ -12,7 +12,6 @@ export type ExamLike = {
   active: boolean;
   date?: string | Date | null;
   scheduledActivateAt?: string | Date | null;
-  scheduledDeactivateAt?: string | Date | null;
 };
 
 export type ExamForGradeRange = {
@@ -34,13 +33,12 @@ export type StudentRegistrationLike = {
   createdAt?: string | Date | null;
 };
 
-export type ExamStatusLabel = 'نشط' | 'تفعيل مجدول' | 'تعطيل مجدول' | 'معطل';
+export type ExamStatusLabel = 'نشط' | 'تفعيل مجدول' | 'معطل';
 
 export type ExamEntryAvailabilityCode =
   | 'available'
   | 'scheduled-activation'
   | 'inactive'
-  | 'scheduled-deactivation-passed'
   | 'future-exam-date';
 
 export type ExamEntryAvailability = {
@@ -86,15 +84,12 @@ export function isExamOnOrAfterStudentRegistration(student: StudentRegistrationL
 
 export function getExamStatus(exam: ExamLike, now = new Date()): ExamStatusLabel {
   const activateAt = parseBaghdadDateTime(exam.scheduledActivateAt);
-  const deactivateAt = parseBaghdadDateTime(exam.scheduledDeactivateAt);
 
   // A future activation is authoritative even if a stale client also sent active=true.
   if (activateAt && activateAt > now) return 'تفعيل مجدول';
-  if (deactivateAt && deactivateAt <= now) return 'معطل';
 
   const effectivelyActive = Boolean(exam.active || (activateAt && activateAt <= now));
   if (!effectivelyActive) return 'معطل';
-  if (deactivateAt && deactivateAt > now) return 'تعطيل مجدول';
   return 'نشط';
 }
 
@@ -108,13 +103,10 @@ export function getExamEntryAvailability(exam: ExamLike, now = new Date()): Exam
     };
   }
   if (status === 'معطل') {
-    const deactivateAt = parseBaghdadDateTime(exam.scheduledDeactivateAt);
     return {
       available: false,
-      code: deactivateAt && deactivateAt <= now ? 'scheduled-deactivation-passed' : 'inactive',
-      reason: deactivateAt && deactivateAt <= now
-        ? 'انتهى وقت إتاحة الامتحان المجدول.'
-        : 'الامتحان معطل ولا يقبل درجات حالياً.',
+      code: 'inactive',
+      reason: 'الامتحان معطل ولا يقبل درجات حالياً.',
     };
   }
 

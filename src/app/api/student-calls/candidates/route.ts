@@ -106,7 +106,6 @@ type DbExamLite = {
   noDiscount: boolean;
   active: boolean;
   scheduledActivateAt: Date | null;
-  scheduledDeactivateAt: Date | null;
 };
 
 type DbLeaveLite = {
@@ -491,7 +490,6 @@ export async function GET(req: NextRequest) {
         noDiscount: true,
         active: true,
         scheduledActivateAt: true,
-        scheduledDeactivateAt: true,
       },
     });
     if (!exam || !examIncludesCourse(exam, courseId)) return emptyResponse(page, pageSize);
@@ -512,7 +510,6 @@ export async function GET(req: NextRequest) {
         noDiscount: true,
         active: true,
         scheduledActivateAt: true,
-        scheduledDeactivateAt: true,
       },
       orderBy: [{ date: "desc" }, { name: "asc" }],
     })) as DbExamLite[]).filter((item) => examIncludesCourse(item, courseId));

@@ -131,7 +131,6 @@ export async function buildStudentAcademicImpactToken(
         noDiscount: true,
         active: true,
         scheduledActivateAt: true,
-        scheduledDeactivateAt: true,
       },
       orderBy: { id: "asc" },
     }),

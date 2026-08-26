@@ -39,7 +39,6 @@ function academicExamSnapshot(exam: {
   noDiscount?: unknown;
   active?: unknown;
   scheduledActivateAt?: unknown;
-  scheduledDeactivateAt?: unknown;
 }): Record<string, string> {
   return {
     type: String(exam.type ?? ''),
@@ -53,7 +52,6 @@ function academicExamSnapshot(exam: {
     noDiscount: String(parseBoolean(exam.noDiscount)),
     active: String(parseBoolean(exam.active)),
     scheduledActivateAt: canonicalDateTime(exam.scheduledActivateAt),
-    scheduledDeactivateAt: canonicalDateTime(exam.scheduledDeactivateAt),
   };
 }
 
@@ -203,7 +201,6 @@ export async function POST(req: NextRequest) {
     const examDate = parseBaghdadDateOnly(body.date as string | Date | null | undefined);
     if (!examDate) return validationError('تاريخ الامتحان غير صحيح');
     const scheduledActivateAt = body.scheduledActivateAt ? parseBaghdadDateTime(String(body.scheduledActivateAt)) : null;
-    const scheduledDeactivateAt = body.scheduledDeactivateAt ? parseBaghdadDateTime(String(body.scheduledDeactivateAt)) : null;
     const requestedActive = body.active === undefined ? true : parseBoolean(body.active);
     const effectiveStoredActive = Boolean(scheduledActivateAt && scheduledActivateAt > new Date()) ? false : requestedActive;
     // Student creation uses the same SERIALIZABLE helper. Keeping exam
@@ -227,7 +224,6 @@ export async function POST(req: NextRequest) {
         noDiscount,
         active: effectiveStoredActive,
         scheduledActivateAt,
-        scheduledDeactivateAt,
         },
       });
       await syncExamCourseLinks(tx, createdExam.id, parsedCourseIds);
@@ -274,7 +270,7 @@ export async function PUT(req: NextRequest) {
     const allowedUpdateKeys = new Set([
       'name', 'type', 'courseIds', 'mainSite', 'date', 'fullMark', 'passMark',
       'discountMark', 'opportunitiesPenalty', 'dismissalGrade', 'noDiscount',
-      'active', 'scheduledActivateAt', 'scheduledDeactivateAt',
+      'active', 'scheduledActivateAt',
     ]);
     for (const key of Object.keys(normalizedPatch)) {
       if (!allowedUpdateKeys.has(key)) delete normalizedPatch[key];
@@ -298,7 +294,6 @@ export async function PUT(req: NextRequest) {
     if (normalizedPatch.dismissalGrade !== undefined) normalizedPatch.dismissalGrade = normalizedPatch.dismissalGrade === null || normalizedPatch.dismissalGrade === "" ? null : Number(normalizedPatch.dismissalGrade);
     if (normalizedPatch.noDiscount !== undefined) normalizedPatch.noDiscount = parseBoolean(normalizedPatch.noDiscount);
     if (normalizedPatch.scheduledActivateAt !== undefined) normalizedPatch.scheduledActivateAt = normalizedPatch.scheduledActivateAt ? parseBaghdadDateTime(String(normalizedPatch.scheduledActivateAt)) : null;
-    if (normalizedPatch.scheduledDeactivateAt !== undefined) normalizedPatch.scheduledDeactivateAt = normalizedPatch.scheduledDeactivateAt ? parseBaghdadDateTime(String(normalizedPatch.scheduledDeactivateAt)) : null;
     if (normalizedPatch.active !== undefined) normalizedPatch.active = parseBoolean(normalizedPatch.active);
     if (normalizedPatch.scheduledActivateAt instanceof Date && normalizedPatch.scheduledActivateAt > new Date()) normalizedPatch.active = false;
 

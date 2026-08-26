@@ -150,12 +150,12 @@ function toggleSelection(values: string[], value: string): string[] {
 
 function applyStatus(form: ExamFormState) {
   if (form.statusMode === "نشط") {
-    return { active: true, scheduledActivateAt: "", scheduledDeactivateAt: "" };
+    return { active: true, scheduledActivateAt: "" };
   }
   if (form.statusMode === "معطل") {
-    return { active: false, scheduledActivateAt: "", scheduledDeactivateAt: "" };
+    return { active: false, scheduledActivateAt: "" };
   }
-  return { active: false, scheduledActivateAt: form.scheduledActivateAt, scheduledDeactivateAt: "" };
+  return { active: false, scheduledActivateAt: form.scheduledActivateAt };
 }
 
 function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
@@ -400,7 +400,7 @@ export function ExamNewView() {
             <SelectItem value="معطل">معطل</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">تعطيل الامتحان المجدول يتم من سجل الامتحانات بعد إضافة الامتحان.</p>
+        <p className="text-xs text-muted-foreground">تعطيل الامتحان يتم فورياً من سجل الامتحانات عند الحاجة.</p>
       </div>
       {state.statusMode === "تفعيل مجدول" && (
         <div className="tp-form-field space-y-2">

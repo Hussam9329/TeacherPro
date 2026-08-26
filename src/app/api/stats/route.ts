@@ -64,7 +64,6 @@ type ExamAlertRow = {
   fullMark: number;
   active: boolean;
   scheduledActivateAt: Date | null;
-  scheduledDeactivateAt: Date | null;
 };
 
 type StatsClient = Prisma.TransactionClient;
@@ -130,7 +129,6 @@ async function countActiveExamsWithMissingGrades(
       fullMark: true,
       active: true,
       scheduledActivateAt: true,
-      scheduledDeactivateAt: true,
     },
     orderBy: [{ date: "desc" }, { id: "asc" }],
   })) as ExamAlertRow[];

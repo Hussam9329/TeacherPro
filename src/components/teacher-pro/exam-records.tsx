@@ -25,19 +25,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+
 import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import {
-  baghdadTodayKey,
   formatBaghdadDateTime,
-  toBaghdadDateTimeLocal,
 } from "@/lib/baghdad-time";
 import { useActionLock } from "@/hooks/use-action-lock";
 import {
@@ -86,10 +78,6 @@ type ExamDetailItem = {
   value: React.ReactNode;
 };
 
-function toDateTimeLocalValue(value?: string | null) {
-  return toBaghdadDateTimeLocal(value);
-}
-
 function formatDateTime(value?: string | null) {
   return formatBaghdadDateTime(value);
 }
@@ -100,13 +88,6 @@ function getEntryAvailability(exam: Exam) {
     ...availability,
     answer: availability.available ? "نعم" : "لا",
   };
-}
-
-function defaultDeactivateDateTime(exam: Exam) {
-  return (
-    toDateTimeLocalValue(exam.scheduledDeactivateAt) ||
-    `${exam.date || baghdadTodayKey()}T08:00`
-  );
 }
 
 type ExamRecordVisualProps = {
@@ -125,7 +106,6 @@ type ExamRecordVisualProps = {
   mutating: boolean;
   onToggleDetails: (examId: string) => void;
   onToggleActive: (exam: Exam) => void | Promise<void>;
-  onScheduleDeactivate: (examId: string) => void;
   onEdit: (examId: string) => void;
   onDelete: (examId: string) => void;
   buildExamExportRows: (exam: Exam) => any[];
@@ -187,10 +167,6 @@ function buildExamDetails({
       value: exam.noDiscount ? "معطل" : (exam.dismissalGrade ?? "—"),
     },
     { label: "تفعيل مجدول", value: formatDateTime(exam.scheduledActivateAt) },
-    {
-      label: "تعطيل مجدول",
-      value: formatDateTime(exam.scheduledDeactivateAt),
-    },
     { label: "عدد سجلات الدرجات", value: totalStat },
   ];
 }
@@ -255,7 +231,6 @@ const ExamRecordActions = React.memo(function ExamRecordActions({
   totalRowCount,
   buildExamExportRows,
   onToggleActive,
-  onScheduleDeactivate,
   onEdit,
   onDelete,
 }: Pick<
@@ -265,7 +240,6 @@ const ExamRecordActions = React.memo(function ExamRecordActions({
   | "totalRowCount"
   | "buildExamExportRows"
   | "onToggleActive"
-  | "onScheduleDeactivate"
   | "onEdit"
   | "onDelete"
 >) {
@@ -297,14 +271,6 @@ const ExamRecordActions = React.memo(function ExamRecordActions({
         disabled={mutating}
       >
         {mutating ? "جاري..." : exam.active ? "تعطيل الآن" : "تفعيل الآن"}
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => onScheduleDeactivate(exam.id)}
-        disabled={mutating}
-      >
-        تعطيل مجدول
       </Button>
       <Button
         variant="secondary"
@@ -343,7 +309,6 @@ const ExamRecordCard = React.memo(function ExamRecordCard(props: ExamRecordVisua
     mutating,
     onToggleDetails,
     onToggleActive,
-    onScheduleDeactivate,
     onEdit,
     onDelete,
     buildExamExportRows,
@@ -387,7 +352,6 @@ const ExamRecordCard = React.memo(function ExamRecordCard(props: ExamRecordVisua
               totalRowCount={totalRowCount}
               buildExamExportRows={buildExamExportRows}
               onToggleActive={onToggleActive}
-              onScheduleDeactivate={onScheduleDeactivate}
               onEdit={onEdit}
               onDelete={onDelete}
             />
@@ -429,7 +393,6 @@ const ExamRecordTableRow = React.memo(function ExamRecordTableRow(props: ExamRec
     mutating,
     onToggleDetails,
     onToggleActive,
-    onScheduleDeactivate,
     onEdit,
     onDelete,
     buildExamExportRows,
@@ -479,7 +442,6 @@ const ExamRecordTableRow = React.memo(function ExamRecordTableRow(props: ExamRec
             totalRowCount={totalRowCount}
             buildExamExportRows={buildExamExportRows}
             onToggleActive={onToggleActive}
-            onScheduleDeactivate={onScheduleDeactivate}
             onEdit={onEdit}
             onDelete={onDelete}
           />
@@ -551,12 +513,6 @@ export function ExamRecordsView() {
     dependentCount: 0,
   });
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
-  const [deactivateDialog, setDeactivateDialog] = useState({
-    open: false,
-    id: "",
-    name: "",
-    scheduledDeactivateAt: "",
-  });
   const [clockTick, setClockTick] = useState(0);
   const [expandedExamIds, setExpandedExamIds] = useState<Record<string, boolean>>({});
   const [mutatingExamIds, setMutatingExamIds] = useState<Record<string, boolean>>({});
@@ -777,8 +733,6 @@ export function ExamRecordsView() {
       return "درجة الفصل يجب أن تكون عدداً صحيحاً بين صفر والدرجة الكاملة";
     if (state.statusMode === "تفعيل مجدول" && !state.scheduledActivateAt)
       return "حدد تاريخ ووقت التفعيل المجدول";
-    if (state.statusMode === "تعطيل مجدول" && !state.scheduledDeactivateAt)
-      return "حدد تاريخ ووقت التعطيل المجدول";
     return null;
   };
 
@@ -839,24 +793,16 @@ export function ExamRecordsView() {
     const noDiscount = Boolean(editDialog.noDiscount);
     const statusPatch =
       editDialog.statusMode === "نشط"
-        ? { active: true, scheduledActivateAt: "", scheduledDeactivateAt: "" }
+        ? { active: true, scheduledActivateAt: "" }
         : editDialog.statusMode === "معطل"
           ? {
               active: false,
               scheduledActivateAt: "",
-              scheduledDeactivateAt: "",
             }
-          : editDialog.statusMode === "تفعيل مجدول"
-            ? {
-                active: false,
-                scheduledActivateAt: editDialog.scheduledActivateAt,
-                scheduledDeactivateAt: "",
-              }
-            : {
-                active: true,
-                scheduledActivateAt: "",
-                scheduledDeactivateAt: editDialog.scheduledDeactivateAt,
-              };
+          : {
+              active: false,
+              scheduledActivateAt: editDialog.scheduledActivateAt,
+            };
 
     setExamMutating(editDialog.id, true);
     const result = await updateExamWithActivationConfirmation(editDialog.id, {
@@ -894,69 +840,6 @@ export function ExamRecordsView() {
     setEditingExamId(null);
     await refreshExamRecordsAfterMutation("exam-records-edit");
     toast.success("تم تعديل الامتحان من بيانات النظام وإعادة الاحتساب");
-  };
-
-  const openScheduleDeactivateDialog = useCallback(
-    (examId: string) => {
-      const exam = examById.get(String(examId));
-      if (!exam) return;
-      setDeactivateDialog({
-        open: true,
-        id: exam.id,
-        name: exam.name,
-        scheduledDeactivateAt: defaultDeactivateDateTime(exam),
-      });
-    },
-    [examById],
-  );
-
-  const handleScheduleDeactivate = async () => {
-    if (!deactivateDialog.scheduledDeactivateAt) {
-      toast.error("حدد تاريخ ووقت التعطيل المجدول");
-      return;
-    }
-    setExamMutating(deactivateDialog.id, true);
-    const result = await updateExamWithActivationConfirmation(deactivateDialog.id, {
-      active: true,
-      scheduledActivateAt: "",
-      scheduledDeactivateAt: deactivateDialog.scheduledDeactivateAt,
-    });
-    setExamMutating(deactivateDialog.id, false);
-    if (!result) return;
-    if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر جدولة تعطيل الامتحان من النظام.");
-      return;
-    }
-    setDeactivateDialog({
-      open: false,
-      id: "",
-      name: "",
-      scheduledDeactivateAt: "",
-    });
-    await refreshExamRecordsAfterMutation("exam-records-schedule-deactivate");
-    toast.success("تمت جدولة تعطيل الامتحان من بيانات النظام");
-  };
-
-  const handleClearScheduledDeactivate = async () => {
-    setExamMutating(deactivateDialog.id, true);
-    const result = await updateExamWithActivationConfirmation(
-      deactivateDialog.id,
-      { scheduledDeactivateAt: "" },
-    );
-    setExamMutating(deactivateDialog.id, false);
-    if (!result) return;
-    if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر إلغاء التعطيل المجدول من النظام.");
-      return;
-    }
-    setDeactivateDialog({
-      open: false,
-      id: "",
-      name: "",
-      scheduledDeactivateAt: "",
-    });
-    await refreshExamRecordsAfterMutation("exam-records-clear-schedule");
-    toast.success("تم إلغاء التعطيل المجدول من بيانات النظام");
   };
 
   const openDeleteExamDialog = useCallback(
@@ -1027,7 +910,6 @@ export function ExamRecordsView() {
       const result = await updateExamWithActivationConfirmation(exam.id, {
         active: enabling,
         scheduledActivateAt: "",
-        scheduledDeactivateAt: "",
       });
       setExamMutating(exam.id, false);
       if (!result) return;
@@ -1069,7 +951,6 @@ export function ExamRecordsView() {
             mutating={isExamMutating(exam.id)}
             onToggleDetails={toggleExamDetails}
             onToggleActive={handleToggleExamActive}
-            onScheduleDeactivate={openScheduleDeactivateDialog}
             onEdit={openEditExamDialog}
             onDelete={openDeleteExamDialog}
             buildExamExportRows={buildExamExportRows}
@@ -1121,7 +1002,6 @@ export function ExamRecordsView() {
                 mutating={isExamMutating(exam.id)}
                 onToggleDetails={toggleExamDetails}
                 onToggleActive={handleToggleExamActive}
-                onScheduleDeactivate={openScheduleDeactivateDialog}
                 onEdit={openEditExamDialog}
                 onDelete={openDeleteExamDialog}
                 buildExamExportRows={buildExamExportRows}
@@ -1202,7 +1082,6 @@ export function ExamRecordsView() {
                   <SelectItem value="all">كل الحالات</SelectItem>
                   <SelectItem value="نشط">نشط</SelectItem>
                   <SelectItem value="تفعيل مجدول">تفعيل مجدول</SelectItem>
-                  <SelectItem value="تعطيل مجدول">تعطيل مجدول</SelectItem>
                   <SelectItem value="معطل">معطل</SelectItem>
                 </SelectContent>
               </Select>
@@ -1254,59 +1133,6 @@ export function ExamRecordsView() {
           onSave={handleEditExam}
         />
       ) : null}
-
-      <Dialog
-        open={deactivateDialog.open}
-        onOpenChange={(open) =>
-          setDeactivateDialog((prev) => ({ ...prev, open }))
-        }
-      >
-        <DialogContent dir="rtl">
-          <DialogHeader>
-            <DialogTitle>تعطيل مجدول للامتحان</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              سيبقى الامتحان نشطًا إلى أن يصل تاريخ ووقت التعطيل المحدد.
-            </p>
-            <div className="space-y-2">
-              <Label htmlFor="scheduled-deactivate-at">
-                تاريخ ووقت التعطيل
-              </Label>
-              <Input
-                id="scheduled-deactivate-at"
-                type="datetime-local"
-                value={deactivateDialog.scheduledDeactivateAt}
-                onChange={(e) =>
-                  setDeactivateDialog((prev) => ({
-                    ...prev,
-                    scheduledDeactivateAt: e.target.value,
-                  }))
-                }
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() =>
-                setDeactivateDialog({
-                  open: false,
-                  id: "",
-                  name: "",
-                  scheduledDeactivateAt: "",
-                })
-              }
-            >
-              إلغاء
-            </Button>
-            <Button variant="outline" onClick={() => void handleClearScheduledDeactivate()} disabled={isExamMutating(deactivateDialog.id)}>
-              إلغاء التعطيل المجدول
-            </Button>
-            <Button onClick={() => void handleScheduleDeactivate()} disabled={isExamMutating(deactivateDialog.id)}>حفظ الجدولة</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <AlertDialog
         open={deleteDialog.open}

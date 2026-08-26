@@ -44,7 +44,6 @@ export async function GET(req: NextRequest) {
         noDiscount: true,
         active: true,
         scheduledActivateAt: true,
-        scheduledDeactivateAt: true,
       },
       orderBy: [{ date: "desc" }, { name: "asc" }],
     });

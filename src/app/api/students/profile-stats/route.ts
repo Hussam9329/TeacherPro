@@ -45,7 +45,6 @@ const GRADE_SELECT = {
       noDiscount: true,
       active: true,
       scheduledActivateAt: true,
-      scheduledDeactivateAt: true,
     },
   },
 } as const;

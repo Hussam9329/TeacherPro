@@ -56,7 +56,6 @@ export interface AcademicExam {
   noDiscount: boolean;
   active: boolean;
   scheduledActivateAt?: string | null;
-  scheduledDeactivateAt?: string | null;
   courseIds?: string[]; // الامتحانات قد تكون مرتبطة بأكثر من دورة
 }
 

@@ -302,7 +302,6 @@ export interface Exam {
   noDiscount: boolean;
   active: boolean;
   scheduledActivateAt?: string;
-  scheduledDeactivateAt?: string;
   mutationToken?: string;
 }
 
@@ -2783,9 +2782,6 @@ export const useTeacherStore = create<TeacherState>()(
                 active: Boolean(ex.active),
                 scheduledActivateAt: normalizeDateTimeValue(
                   ex.scheduledActivateAt,
-                ),
-                scheduledDeactivateAt: normalizeDateTimeValue(
-                  ex.scheduledDeactivateAt,
                 ),
                 date: ex.date
                   ? baghdadDateKey(ex.date as string | Date) || todayISO()

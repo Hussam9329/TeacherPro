@@ -81,7 +81,6 @@ type DbExamLite = {
   noDiscount: boolean;
   active: boolean;
   scheduledActivateAt: Date | null;
-  scheduledDeactivateAt: Date | null;
 };
 
 type DbLeaveLite = {
@@ -294,7 +293,6 @@ export async function GET(req: NextRequest) {
         noDiscount: true,
         active: true,
         scheduledActivateAt: true,
-        scheduledDeactivateAt: true,
       },
     });
     if (!exam) return NextResponse.json(zeroStats);

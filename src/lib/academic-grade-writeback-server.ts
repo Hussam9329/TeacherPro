@@ -413,7 +413,6 @@ export async function syncAcademicGradeWriteback(
         courseIds: true,
         active: true,
         scheduledActivateAt: true,
-        scheduledDeactivateAt: true,
       },
     }),
   ]);

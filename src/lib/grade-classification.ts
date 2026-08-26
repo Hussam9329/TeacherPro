@@ -52,7 +52,6 @@ export type ExamLike = {
   noDiscount?: boolean | null;
   active?: boolean | null;
   scheduledActivateAt?: Date | string | null;
-  scheduledDeactivateAt?: Date | string | null;
 };
 
 export type StudentGraceLike = {
@@ -166,7 +165,6 @@ export function classifyGradeAcademicImpact(
     active: Boolean(exam.active),
     date: exam.date,
     scheduledActivateAt: exam.scheduledActivateAt,
-    scheduledDeactivateAt: exam.scheduledDeactivateAt,
   }).available) return "unavailable-exam";
   if (student && isExamWithinStudentGracePeriodUnified(student, exam)) return "grace-period";
   if (grade?.status === "غش") return "cheating";

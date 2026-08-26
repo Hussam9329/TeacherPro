@@ -96,7 +96,6 @@ function mapExam(exam: {
   noDiscount: boolean;
   active: boolean;
   scheduledActivateAt: Date | null;
-  scheduledDeactivateAt: Date | null;
   courseIds?: string;
 }): AcademicExam {
   let parsedCourseIds: string[] = [];
@@ -120,7 +119,6 @@ function mapExam(exam: {
     noDiscount: Boolean(exam.noDiscount),
     active: Boolean(exam.active),
     scheduledActivateAt: exam.scheduledActivateAt ? dateString(exam.scheduledActivateAt) : null,
-    scheduledDeactivateAt: exam.scheduledDeactivateAt ? dateString(exam.scheduledDeactivateAt) : null,
     courseIds: parsedCourseIds,
   };
 }
@@ -404,7 +402,6 @@ async function loadAcademicStateForStudents(
         noDiscount: true,
         active: true,
         scheduledActivateAt: true,
-        scheduledDeactivateAt: true,
         courseIds: true,
       },
     }),
