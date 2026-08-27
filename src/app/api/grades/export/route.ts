@@ -15,6 +15,13 @@ import {
   parseCourseIds,
 } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
+import {
+  examSiteDatabaseValues,
+  includesOutsideCountryExamSite,
+  isAllMainSitesSelection,
+  splitSelection,
+  studentMatchesExamMainSites,
+} from "@/lib/exam-utils";
 
 function buildGradeSearchWhere(
   rawQuery: string,
@@ -128,8 +135,7 @@ function buildGradeExportWhere(
  *   - If examId is not set → no extra filter (same as before).
  *   - If examId is set but the exam has no courseIds → no extra filter
  *     (we cannot restrict, same as before).
- *   - If the caller already passed courseId explicitly → no extra filter
- *     (the caller knows what they want; we don't override).
+ *   - An explicit courseId remains an additional intersection, never a bypass.
  *
  * Returns the Prisma.GradeWhereInput to use for the query.
  */
@@ -139,15 +145,16 @@ async function buildGradeExportWhereWithExamCourseFilter(
   const where = buildGradeExportWhere(searchParams);
 
   const examId = normalizeListFilter(searchParams.get("examId"));
-  const explicitCourseId = normalizeListFilter(searchParams.get("courseId"));
-
-  // If the caller already passed a courseId filter, don't override it.
-  if (!examId || explicitCourseId) return where;
+  // An explicit course filter is already part of `where`; keep it, but still
+  // intersect with the exam's own current course/site scope. Otherwise asking
+  // for examId + courseId can re-expose historical rows that no longer belong
+  // to the edited exam.
+  if (!examId) return where;
 
   // Load the exam's courseIds and add a student.courseId filter.
   const exam = await db.exam.findUnique({
     where: { id: examId },
-    select: { courseIds: true },
+    select: { courseIds: true, mainSite: true },
   });
   if (!exam) return where;
 
@@ -157,8 +164,30 @@ async function buildGradeExportWhereWithExamCourseFilter(
   // Merge the course filter into the existing where clause.
   const existingStudentFilter =
     (where as { student?: { is?: Prisma.StudentWhereInput } }).student?.is;
+  const selectedSites = splitSelection(String(exam.mainSite || ""));
+  const siteValues = examSiteDatabaseValues(selectedSites);
+  const includesOutsideCountry = includesOutsideCountryExamSite(selectedSites);
+  const siteClauses: Prisma.StudentWhereInput[] = [
+    { mainSite: { in: siteValues } },
+    { subSite: { in: siteValues } },
+    { locationScope: { in: siteValues } },
+    ...(includesOutsideCountry
+      ? [
+          { mainSite: { startsWith: "خارج القطر" } },
+          { subSite: { startsWith: "خارج القطر" } },
+          { locationScope: { startsWith: "خارج القطر" } },
+        ]
+      : []),
+  ];
   const courseFilter: Prisma.StudentWhereInput = {
-    courseId: { in: examCourseIds },
+    AND: [
+      { courseId: { in: examCourseIds } },
+      ...(!isAllMainSitesSelection(selectedSites) && siteValues.length
+        ? [{
+            OR: siteClauses,
+          } satisfies Prisma.StudentWhereInput]
+        : []),
+    ],
   };
   const mergedStudentFilter = existingStudentFilter
     ? { AND: [existingStudentFilter, courseFilter] }
@@ -485,7 +514,14 @@ async function completeGradeExportRows(searchParams: URLSearchParams) {
   const eligiblePairs = exams.flatMap((exam) => {
     const courseIds = completeExportExamCourseIds(exam);
     return students
-      .filter((student) => courseIds.includes(student.courseId))
+      .filter(
+        (student) =>
+          courseIds.includes(student.courseId) &&
+          studentMatchesExamMainSites(
+            student,
+            splitSelection(String(exam.mainSite || "")),
+          ),
+      )
       .map((student) => ({ student, exam }));
   });
   if (eligiblePairs.length === 0) return [];

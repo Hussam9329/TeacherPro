@@ -51,6 +51,7 @@ export async function migrateDismissedPendingGradesAfterActivation(
       examId: true,
       score: true,
       reason: true,
+      exam: { select: { fullMark: true } },
     },
   });
 
@@ -85,7 +86,12 @@ export async function migrateDismissedPendingGradesAfterActivation(
       continue;
     }
 
-    if (note.score === null || !Number.isInteger(note.score)) {
+    if (
+      note.score === null ||
+      !Number.isInteger(note.score) ||
+      note.score < 0 ||
+      note.score > Number(note.exam.fullMark || 0)
+    ) {
       const rejected = await tx.gradeSmartNote.updateMany({
         where: {
           id: note.id,
@@ -95,7 +101,7 @@ export async function migrateDismissedPendingGradesAfterActivation(
         data: {
           status: "REJECTED",
           resolution:
-            "تعذر نقل المحاولة لأنها لا تحتوي على درجة رقمية صحيحة؛ لم يُنشأ سجل درجة.",
+            `تعذر نقل المحاولة لأن درجتها لم تعد ضمن مدى الامتحان الحالي (0 - ${Number(note.exam.fullMark || 0)})؛ لم يُنشأ سجل درجة.`,
           resolutionById: actor.id || null,
           resolutionByName: actor.name || null,
           resolvedAt,

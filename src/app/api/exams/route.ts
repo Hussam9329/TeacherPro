@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
-import { parseBaghdadDateOnly, parseBaghdadDateTime } from '@/lib/baghdad-time';
+import { baghdadDateKey, parseBaghdadDateOnly, parseBaghdadDateTime } from '@/lib/baghdad-time';
 import { getExamEntryAvailability } from '@/lib/exam-utils';
 import { assertDatabaseSchemaReady } from '@/lib/schema-readiness';
 import { canonicalCourseIds, parseCourseIds, syncExamCourseLinks } from '@/lib/exam-course-links';
@@ -14,8 +14,12 @@ import { writeRequestAuditLog } from '@/lib/audit-log-server';
 import type { Prisma } from '@prisma/client';
 import { buildMutationPreviewToken } from '@/lib/mutation-preview-token';
 import { withSerializableTransaction } from '@/lib/serializable-transaction';
-import { ensureProtectedGradeMarkers } from '@/lib/protected-grade-markers-server';
+import {
+  ensureProtectedGradeMarkers,
+  reconcileProtectedGradeMarkersForExamEdit,
+} from '@/lib/protected-grade-markers-server';
 import { repairProtectedAbsencesForStudents } from '@/lib/grace-period-repair-server';
+import { settleDueScheduledExamActivations } from '@/lib/scheduled-exam-activation-server';
 import {
   parseExamNumber,
   validateExamForm,
@@ -35,6 +39,7 @@ function canonicalDateTime(value: unknown): string {
 function academicExamSnapshot(exam: {
   type?: unknown;
   courseIds?: unknown;
+  mainSite?: unknown;
   date?: unknown;
   fullMark?: unknown;
   passMark?: unknown;
@@ -48,6 +53,7 @@ function academicExamSnapshot(exam: {
   return {
     type: String(exam.type ?? ''),
     courseIds: canonicalCourseIds(exam.courseIds),
+    mainSite: String(exam.mainSite ?? ''),
     date: canonicalDateTime(exam.date),
     fullMark: String(Number(exam.fullMark ?? 0)),
     passMark: String(Number(exam.passMark ?? 0)),
@@ -64,6 +70,16 @@ function hasAcademicExamChange(before: unknown, after: unknown): boolean {
   const beforeSnapshot = academicExamSnapshot(before as Record<string, unknown>);
   const afterSnapshot = academicExamSnapshot(after as Record<string, unknown>);
   return Object.keys(beforeSnapshot).some((key) => beforeSnapshot[key] !== afterSnapshot[key]);
+}
+
+function hasProtectedMarkerScopeChange(before: unknown, after: unknown): boolean {
+  const left = before as Record<string, unknown>;
+  const right = after as Record<string, unknown>;
+  return (
+    canonicalCourseIds(left.courseIds) !== canonicalCourseIds(right.courseIds) ||
+    String(left.mainSite ?? '') !== String(right.mainSite ?? '') ||
+    canonicalDateTime(left.date) !== canonicalDateTime(right.date)
+  );
 }
 
 function examMutationToken(exam: Record<string, unknown>): string {
@@ -203,6 +219,10 @@ export async function GET(req: NextRequest) {
 
   try {
     await assertDatabaseSchemaReady();
+    // A scheduled exam becomes logically active as time passes. Materialize any
+    // due activation before returning the exam registry so persisted student
+    // opportunities/dismissal state cannot remain stale until a later write.
+    await settleDueScheduledExamActivations({ batchSize: 5 });
     const { isPaginatedRequest, parsePagination } = await import('@/lib/pagination');
     if (isPaginatedRequest(req)) {
       const { page, limit, skip } = parsePagination(req);
@@ -440,20 +460,52 @@ export async function PUT(req: NextRequest) {
         data.fullMark !== undefined &&
         Number(data.fullMark) !== Number(existingExam.fullMark)
       ) {
-        const invalidGradeStats = await tx.grade.aggregate({
-          where: {
-            examId: id,
-            status: 'درجة',
-            score: { gt: Number(candidateExam.fullMark) },
-          },
-          _count: { _all: true },
-          _max: { score: true },
-        });
-        if (invalidGradeStats._count._all > 0) {
+        const [invalidGradeStats, invalidPendingStats, invalidBackupStats] = await Promise.all([
+          tx.grade.aggregate({
+            where: {
+              examId: id,
+              status: 'درجة',
+              score: { gt: Number(candidateExam.fullMark) },
+            },
+            _count: { _all: true },
+            _max: { score: true },
+          }),
+          tx.gradeSmartNote.aggregate({
+            where: {
+              examId: id,
+              status: 'PENDING',
+              score: { gt: Number(candidateExam.fullMark) },
+            },
+            _count: { _all: true },
+            _max: { score: true },
+          }),
+          tx.studentLeaveGradeBackup.aggregate({
+            where: {
+              examId: id,
+              status: 'درجة',
+              score: { gt: Number(candidateExam.fullMark) },
+            },
+            _count: { _all: true },
+            _max: { score: true },
+          }),
+        ]);
+        const invalidGradeCount =
+          invalidGradeStats._count._all +
+          invalidPendingStats._count._all +
+          invalidBackupStats._count._all;
+        const highestStoredScore = Math.max(
+          Number(invalidGradeStats._max.score || 0),
+          Number(invalidPendingStats._max.score || 0),
+          Number(invalidBackupStats._max.score || 0),
+        );
+        if (invalidGradeCount > 0) {
           return {
             gradeRangeConflict: {
-              invalidGradeCount: invalidGradeStats._count._all,
-              highestStoredScore: Number(invalidGradeStats._max.score || 0),
+              invalidGradeCount,
+              invalidLiveGradeCount: invalidGradeStats._count._all,
+              invalidPendingGradeCount: invalidPendingStats._count._all,
+              invalidLeaveBackupCount: invalidBackupStats._count._all,
+              highestStoredScore,
               proposedFullMark: Number(candidateExam.fullMark),
             },
           } as const;
@@ -504,7 +556,76 @@ export async function PUT(req: NextRequest) {
 
       const exam = await tx.exam.update({ where: { id }, data });
       await syncExamCourseLinks(tx, exam.id, exam.courseIds);
-      await ensureProtectedGradeMarkers(tx, { examIds: [exam.id] });
+      if (normalizedPatch.name !== undefined || normalizedPatch.date !== undefined) {
+        await tx.gradeEntryMissingNote.updateMany({
+          where: { examId: exam.id },
+          data: {
+            examName: exam.name,
+            examDate: exam.date.toISOString(),
+          },
+        });
+      }
+      if (
+        normalizedPatch.name !== undefined &&
+        String(existingExam.name || '') !== String(exam.name || '')
+      ) {
+        // Renaming an exam is display/history synchronization, not an academic
+        // rule change. Keep the existing no-recalculation contract, but update
+        // textual opportunity-log references tied to this exam so profiles and
+        // dismissal reasons do not keep showing the obsolete exam name.
+        const oldName = String(existingExam.name || '');
+        const newName = String(exam.name || '');
+        if (oldName && newName) {
+          const namedLogs = await tx.opportunityLog.findMany({
+            where: { examId: exam.id, reason: { contains: oldName } },
+            select: { id: true, reason: true },
+          });
+          for (const log of namedLogs) {
+            const nextReason = String(log.reason || '').split(oldName).join(newName);
+            if (nextReason !== log.reason) {
+              await tx.opportunityLog.update({
+                where: { id: log.id },
+                data: { reason: nextReason },
+              });
+            }
+          }
+        }
+      }
+      if (normalizedPatch.date !== undefined) {
+        // Exam leaves are linked by examId, so their academic effect already
+        // follows the edited exam date. Only move display-date fields that were
+        // actually tracking the old exam day; preserve any intentionally custom
+        // administrative leave date instead of rewriting it blindly.
+        const oldExamDay = baghdadDateKey(existingExam.date);
+        const examLeaves = await tx.studentLeave.findMany({
+          where: { examId: exam.id, leaveType: 'exam' },
+          select: { id: true, date: true, dateFrom: true, dateTo: true },
+        });
+        for (const leave of examLeaves) {
+          const leaveDatePatch: Prisma.StudentLeaveUpdateInput = {};
+          if (baghdadDateKey(leave.date) === oldExamDay) leaveDatePatch.date = exam.date;
+          if (leave.dateFrom && baghdadDateKey(leave.dateFrom) === oldExamDay) {
+            leaveDatePatch.dateFrom = exam.date;
+          }
+          if (leave.dateTo && baghdadDateKey(leave.dateTo) === oldExamDay) {
+            leaveDatePatch.dateTo = exam.date;
+          }
+          if (Object.keys(leaveDatePatch).length > 0) {
+            await tx.studentLeave.update({
+              where: { id: leave.id },
+              data: leaveDatePatch,
+            });
+          }
+        }
+      }
+      const protectedScopeChanged = hasProtectedMarkerScopeChange(existingExam, exam);
+      const protectedMarkerReconciliation = protectedScopeChanged
+        ? await reconcileProtectedGradeMarkersForExamEdit(tx, exam.id)
+        : null;
+      await ensureProtectedGradeMarkers(tx, {
+        examIds: [exam.id],
+        includeAbsent: protectedScopeChanged,
+      });
       const examGradeStudents = await tx.grade.findMany({
         where: { examId: exam.id },
         distinct: ['studentId'],
@@ -525,6 +646,7 @@ export async function PUT(req: NextRequest) {
       return {
         exam,
         academicRecalculation,
+        protectedMarkerReconciliation,
         availability: candidateAvailability,
         wasAvailable,
       } as const;
@@ -548,14 +670,23 @@ export async function PUT(req: NextRequest) {
       );
     }
     if ('gradeRangeConflict' in result && result.gradeRangeConflict) {
-      const { invalidGradeCount, highestStoredScore, proposedFullMark } =
-        result.gradeRangeConflict;
+      const {
+        invalidGradeCount,
+        invalidLiveGradeCount,
+        invalidPendingGradeCount,
+        invalidLeaveBackupCount,
+        highestStoredScore,
+        proposedFullMark,
+      } = result.gradeRangeConflict;
       return NextResponse.json(
         {
-          error: `لا يمكن جعل الدرجة الكاملة ${proposedFullMark} لأن ${invalidGradeCount} درجة محفوظة تتجاوزها (أعلاها ${highestStoredScore}). لم تُعدّل أو تُحذف أي درجة. صحح الدرجات أولاً أو اختر درجة كاملة مناسبة.`,
+          error: `لا يمكن جعل الدرجة الكاملة ${proposedFullMark} لأن ${invalidGradeCount} درجة محفوظة/معلقة/احتياطية تتجاوزها (أعلاها ${highestStoredScore}). لم تُعدّل أو تُحذف أي درجة. صحح هذه الدرجات أولاً أو اختر درجة كاملة مناسبة.`,
           code: 'EXAM_FULL_MARK_BELOW_STORED_GRADES',
           retryable: false,
           invalidGradeCount,
+          invalidLiveGradeCount,
+          invalidPendingGradeCount,
+          invalidLeaveBackupCount,
           highestStoredScore,
           proposedFullMark,
         },

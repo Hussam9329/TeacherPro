@@ -2,6 +2,8 @@ import {
   isExamAvailableForEntry,
   isGradeEntered,
   isExamOnOrAfterStudentRegistration,
+  splitSelection,
+  studentMatchesExamMainSites,
 } from "./exam-utils";
 export { isExamWithinStudentGraceWindow } from "./student-grace";
 import { isExamWithinStudentGraceWindow } from "./student-grace";
@@ -659,11 +661,26 @@ export function recalculateAcademicState(
         const exam = examsById.get(grade.examId);
         if (!exam) return false;
         const examCourseIds = exam.courseIds || [];
-        return examCourseIds.includes(student.courseId);
+        return (
+          examCourseIds.includes(student.courseId) &&
+          studentMatchesExamMainSites(
+            student,
+            splitSelection(String(exam.mainSite || "")),
+          )
+        );
       })
-      .sort((a, b) =>
-        String(a.createdAt || "").localeCompare(String(b.createdAt || "")),
-      );
+      .sort((a, b) => {
+        const examA = examsById.get(a.examId);
+        const examB = examsById.get(b.examId);
+        const byExamDate = String(examA?.date || a.createdAt || "").localeCompare(
+          String(examB?.date || b.createdAt || ""),
+        );
+        if (byExamDate !== 0) return byExamDate;
+        const byExamId = String(examA?.id || a.examId).localeCompare(
+          String(examB?.id || b.examId),
+        );
+        return byExamId !== 0 ? byExamId : String(a.id).localeCompare(String(b.id));
+      });
 
     const resolvedAcademicLinksByLogId = new Map<
       string,
@@ -873,8 +890,11 @@ export function recalculateAcademicState(
         )
       )
         continue;
+      // Academic chronology belongs to the exam day, not to the timestamp at
+      // which a grade happened to be entered/edited. This is essential when an
+      // administrator corrects an exam date after grades already exist.
       const gradeEventDate = dayKey(
-        grade.updatedAt || grade.createdAt || exam.date || "",
+        exam.date || grade.updatedAt || grade.createdAt || "",
       );
       if (finalChanceStartDate && gradeEventDate < finalChanceStartDate)
         continue;

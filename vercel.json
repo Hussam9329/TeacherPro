@@ -3,5 +3,10 @@
   "installCommand": "npm ci --legacy-peer-deps",
   "buildCommand": "npm run vercel-build",
   "outputDirectory": ".next",
-  "crons": []
+  "crons": [
+    {
+      "path": "/api/internal/academic-maintenance",
+      "schedule": "0 0 * * *"
+    }
+  ]
 }

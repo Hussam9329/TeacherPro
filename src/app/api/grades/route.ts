@@ -26,7 +26,14 @@ import {
 } from "@/lib/academic-grade-writeback-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { baghdadDateKey } from "@/lib/baghdad-time";
-import { getExamEntryAvailability } from "@/lib/exam-utils";
+import {
+  examSiteDatabaseValues,
+  getExamEntryAvailability,
+  includesOutsideCountryExamSite,
+  isAllMainSitesSelection,
+  splitSelection,
+  studentMatchesExamMainSites,
+} from "@/lib/exam-utils";
 import {
   isProtectedSmartNoteHistoricalGrade,
   type GradeSmartNoteCategory,
@@ -145,9 +152,9 @@ function buildGradeWhere(
 /**
  * ROOT-CAUSE FIX (الإصلاح السادس — تطابق سجل الدرجات مع فلتر المكالمات):
  *
- * Wrapper around buildGradeWhere that auto-adds a `student.courseId IN
- * exam.courseIds` filter when an `examId` is present but no explicit
- * `courseId` was passed. This makes the grade-records page match the
+ * Wrapper around buildGradeWhere that intersects any `examId` request with
+ * the exam current course/site scope. An explicit course filter is kept but
+ * cannot bypass the exam scope. This makes the grade-records page match the
  * behavior of the calls page, which uses `studentCourseScopeWhere`.
  *
  * Without this fix, grade-records shows 1785 rows for exam 16 (including
@@ -160,15 +167,16 @@ async function buildGradeWhereWithExamCourseFilter(
   const where = buildGradeWhere(searchParams);
 
   const examId = normalizeListFilter(searchParams.get("examId"));
-  const explicitCourseId = normalizeListFilter(searchParams.get("courseId"));
-
-  // If the caller already passed a courseId filter, don't override it.
-  if (!examId || explicitCourseId) return where;
+  // An explicit course filter is already part of `where`; keep it, but still
+  // intersect with the exam's own current course/site scope. Otherwise asking
+  // for examId + courseId can re-expose historical rows that no longer belong
+  // to the edited exam.
+  if (!examId) return where;
 
   // Load the exam's courseIds and add a student.courseId filter.
   const exam = await db.exam.findUnique({
     where: { id: examId },
-    select: { courseIds: true },
+    select: { courseIds: true, mainSite: true },
   });
   if (!exam) return where;
 
@@ -178,8 +186,32 @@ async function buildGradeWhereWithExamCourseFilter(
   // Merge the course filter into the existing where clause.
   const existingStudentFilter =
     (where as { student?: { is?: Prisma.StudentWhereInput } }).student?.is;
+  const selectedSites = splitSelection(String(exam.mainSite || ""));
+  const siteValues = examSiteDatabaseValues(selectedSites);
+  const includesOutsideCountry = includesOutsideCountryExamSite(selectedSites);
+  const siteClauses: Prisma.StudentWhereInput[] = [
+    { mainSite: { in: siteValues } },
+    { subSite: { in: siteValues } },
+    { locationScope: { in: siteValues } },
+    ...(includesOutsideCountry
+      ? [
+          { mainSite: { startsWith: "خارج القطر" } },
+          { subSite: { startsWith: "خارج القطر" } },
+          { locationScope: { startsWith: "خارج القطر" } },
+        ]
+      : []),
+  ];
   const courseFilter: Prisma.StudentWhereInput = {
-    courseId: { in: parsedCourseIds },
+    AND: [
+      { courseId: { in: parsedCourseIds } },
+      ...(!isAllMainSitesSelection(selectedSites) && siteValues.length
+        ? [
+            {
+              OR: siteClauses,
+            } satisfies Prisma.StudentWhereInput,
+          ]
+        : []),
+    ],
   };
   const mergedStudentFilter = existingStudentFilter
     ? { AND: [existingStudentFilter, courseFilter] }
@@ -296,6 +328,9 @@ async function inspectNumericGradeAttempt(
         name: true,
         code: true,
         courseId: true,
+        mainSite: true,
+        subSite: true,
+        locationScope: true,
         status: true,
         createdAt: true,
         accountingGraceDays: true,
@@ -311,6 +346,7 @@ async function inspectNumericGradeAttempt(
         date: true,
         fullMark: true,
         courseIds: true,
+        mainSite: true,
         active: true,
         scheduledActivateAt: true,
       },
@@ -342,6 +378,9 @@ async function inspectNumericGradeAttempt(
   const linkedCourseIds = examCourseIds(exam.courseIds);
   if (linkedCourseIds.length > 0 && !linkedCourseIds.includes(student.courseId)) {
     throw new AcademicGradeWritebackError("الطالب ليس ضمن دورات هذا الامتحان.");
+  }
+  if (!studentMatchesExamMainSites(student, splitSelection(String(exam.mainSite || "")))) {
+    throw new AcademicGradeWritebackError("الطالب ليس ضمن موقع هذا الامتحان.");
   }
   const score = numericGradeScore(scoreValue, Number(exam.fullMark || 0));
   const beforeRegistration = isExamBeforeStudentRegistration(student, exam);

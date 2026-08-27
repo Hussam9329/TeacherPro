@@ -148,6 +148,39 @@ export function normalizeExamSiteValue(value?: string | null): string {
   return normalizeIraqiProvinceName(compact);
 }
 
+const EXAM_SITE_STORAGE_ALIASES: Record<string, string[]> = {
+  'أونلاين': ['أونلاين', 'اونلاين', 'إونلاين', 'الكتروني', 'إلكتروني'],
+  'أربيل': ['أربيل', 'اربيل'],
+  'الأنبار': ['الأنبار', 'الانبار'],
+  'البصرة': ['البصرة', 'البصره'],
+  'الديوانية': ['الديوانية', 'الديوانيه', 'القادسية'],
+  'الناصرية': ['الناصرية', 'ذي قار'],
+};
+
+/**
+ * Returns every legacy spelling that may still be stored for an exam site.
+ * Database filters cannot call normalizeExamSiteValue for each row, so the
+ * API uses this list to keep pagination/count/export aligned with the exact
+ * in-memory academic-engine matcher.
+ */
+export function examSiteDatabaseValues(selectedMainSites: string[]): string[] {
+  return Array.from(
+    new Set(
+      selectedMainSites.flatMap((site) => {
+        const raw = String(site || '').trim();
+        const normalized = normalizeExamSiteValue(raw);
+        return [raw, normalized, ...(EXAM_SITE_STORAGE_ALIASES[normalized] || [])];
+      }).filter(Boolean),
+    ),
+  );
+}
+
+export function includesOutsideCountryExamSite(selectedMainSites: string[]): boolean {
+  return selectedMainSites.some(
+    (site) => normalizeExamSiteValue(site) === 'خارج القطر',
+  );
+}
+
 export function isAllMainSitesSelection(selectedMainSites: string[]): boolean {
   const normalizedSelection = new Set(selectedMainSites.map(normalizeExamSiteValue).filter(Boolean));
   if (normalizedSelection.size === 0 || normalizedSelection.has('الكل')) return true;

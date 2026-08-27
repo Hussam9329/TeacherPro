@@ -45,7 +45,10 @@ import {
 } from "@/lib/student-grace";
 import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
-import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
+import {
+  ensureProtectedGradeMarkers,
+  reconcileProtectedGradeMarkersForStudentAcademicEdit,
+} from "@/lib/protected-grade-markers-server";
 import {
   buildStudentMutationToken,
   withStudentMutationToken,
@@ -1245,7 +1248,15 @@ export async function PUT(req: NextRequest) {
       }
 
       if (!transactionResetEnrollment && transactionAcademicInputsChanged) {
-        await ensureProtectedGradeMarkers(tx, { studentIds: [String(id)] });
+        // First remove/restore stale protection created under the old registration/grace
+        // dates, then rebuild the current protection set. includeAbsent makes a past
+        // exam that just left protection immediately accountable instead of leaving
+        // an empty row that batch absence would only repair later.
+        await reconcileProtectedGradeMarkersForStudentAcademicEdit(tx, [String(id)]);
+        await ensureProtectedGradeMarkers(tx, {
+          studentIds: [String(id)],
+          includeAbsent: true,
+        });
         await repairProtectedAbsencesForStudents(tx, [String(id)]);
         academicRecalculation = await recalculateStudentsAcademicState(
           [String(id)],

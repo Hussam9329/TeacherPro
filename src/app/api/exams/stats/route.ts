@@ -13,9 +13,16 @@ import {
 } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
+import { parseCourseIds } from "@/lib/exam-course-links";
+import {
+  splitSelection,
+  studentMatchesExamMainSites,
+} from "@/lib/exam-utils";
 
 type ExamRow = {
   id: string;
+  courseIds: string;
+  mainSite: string | null;
   type: string;
   date: Date;
   fullMark: number;
@@ -27,6 +34,10 @@ type ExamRow = {
 
 type StudentRow = {
   id: string;
+  courseId: string;
+  mainSite: string | null;
+  subSite: string | null;
+  locationScope: string | null;
   status: string;
   createdAt: Date;
   accountingGraceDays: number;
@@ -101,6 +112,8 @@ export async function GET(req: NextRequest) {
       where: examWhere,
       select: {
         id: true,
+        courseIds: true,
+        mainSite: true,
         type: true,
         date: true,
         fullMark: true,
@@ -161,6 +174,10 @@ export async function GET(req: NextRequest) {
           student: {
             select: {
               id: true,
+              courseId: true,
+              mainSite: true,
+              subSite: true,
+              locationScope: true,
               status: true,
               createdAt: true,
               accountingGraceDays: true,
@@ -198,6 +215,13 @@ export async function GET(req: NextRequest) {
     grades.forEach((grade) => {
       const exam = examById.get(grade.examId);
       if (!exam) return;
+      if (!parseCourseIds(exam.courseIds).includes(grade.student.courseId)) return;
+      if (
+        !studentMatchesExamMainSites(
+          grade.student,
+          splitSelection(String(exam.mainSite || "")),
+        )
+      ) return;
       const stat = statsByExamId[grade.examId] || { total: 0, passCount: 0, notPassedCount: 0, protectedCount: 0 };
       stat.total += 1;
       const relevantLeaves = (leavesByStudent.get(grade.studentId) || []).filter(

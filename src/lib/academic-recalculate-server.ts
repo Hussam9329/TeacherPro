@@ -56,6 +56,9 @@ function normalizeOpportunityPenalty(value: unknown): number | "فصل مؤقت"
 function mapStudent(student: {
   id: string;
   courseId: string;
+  mainSite?: string | null;
+  subSite?: string | null;
+  locationScope?: string | null;
   status: string;
   dismissalType: string | null;
   dismissalReason: string | null;
@@ -70,6 +73,9 @@ function mapStudent(student: {
   return {
     id: student.id,
     courseId: student.courseId,
+    mainSite: student.mainSite || null,
+    subSite: student.subSite || null,
+    locationScope: student.locationScope || null,
     status: student.status === "مفصول" || student.status === "مؤرشف" ? student.status : "نشط",
     dismissalType: nullableText(student.dismissalType),
     dismissalReason: nullableText(student.dismissalReason),
@@ -97,6 +103,7 @@ function mapExam(exam: {
   active: boolean;
   scheduledActivateAt: Date | null;
   courseIds?: string;
+  mainSite?: string | null;
 }): AcademicExam {
   let parsedCourseIds: string[] = [];
   try {
@@ -120,6 +127,7 @@ function mapExam(exam: {
     active: Boolean(exam.active),
     scheduledActivateAt: exam.scheduledActivateAt ? dateString(exam.scheduledActivateAt) : null,
     courseIds: parsedCourseIds,
+    mainSite: exam.mainSite || null,
   };
 }
 
@@ -359,6 +367,9 @@ async function loadAcademicStateForStudents(
       select: {
         id: true,
         courseId: true,
+        mainSite: true,
+        subSite: true,
+        locationScope: true,
         status: true,
         dismissalType: true,
         dismissalReason: true,
@@ -403,6 +414,7 @@ async function loadAcademicStateForStudents(
         active: true,
         scheduledActivateAt: true,
         courseIds: true,
+        mainSite: true,
       },
     }),
     client.courseChapter.findMany({

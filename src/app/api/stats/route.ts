@@ -9,6 +9,7 @@ import {
   requirePermissionPrincipal,
 } from "@/lib/server-auth";
 import { db } from "@/lib/db";
+import { settleDueScheduledExamActivations } from "@/lib/scheduled-exam-activation-server";
 import {
   databaseMigrationRequiredResponse,
   isMissingDatabaseObjectError,
@@ -503,6 +504,9 @@ export async function GET(req: NextRequest) {
   const canViewLogs = hasPermission(principalOrError, "logs.view");
 
   try {
+    // Dashboard is a natural authenticated heartbeat. Settle due scheduled
+    // activations first; the daily Vercel cron remains a no-traffic backstop.
+    await settleDueScheduledExamActivations({ batchSize: 5 });
     const snapshot = await db.$transaction(
       async (tx) => {
         const now = new Date();

@@ -1,6 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getExamEntryAvailability, isExamOnOrAfterStudentRegistration } from "@/lib/exam-utils";
+import {
+  getExamEntryAvailability,
+  isExamOnOrAfterStudentRegistration,
+  splitSelection,
+  studentMatchesExamMainSites,
+} from "@/lib/exam-utils";
 import {
   recalculateStudentsAcademicState,
   type AcademicServerRecalculationResult,
@@ -403,6 +408,9 @@ export async function syncAcademicGradeWriteback(
       select: {
         id: true,
         courseId: true,
+        mainSite: true,
+        subSite: true,
+        locationScope: true,
         status: true,
         createdAt: true,
         accountingGraceDays: true,
@@ -417,6 +425,7 @@ export async function syncAcademicGradeWriteback(
         date: true,
         fullMark: true,
         courseIds: true,
+        mainSite: true,
         active: true,
         scheduledActivateAt: true,
       },
@@ -525,6 +534,14 @@ export async function syncAcademicGradeWriteback(
   const courseIds = parseCourseIds(exam.courseIds);
   if (courseIds.length > 0 && !courseIds.includes(student.courseId)) {
     throw new AcademicGradeWritebackError("الطالب ليس ضمن دورات هذا الامتحان.");
+  }
+  if (
+    !studentMatchesExamMainSites(
+      student,
+      splitSelection(String(exam.mainSite || "")),
+    )
+  ) {
+    throw new AcademicGradeWritebackError("الطالب ليس ضمن موقع هذا الامتحان.");
   }
 
   if (status === "درجة") {

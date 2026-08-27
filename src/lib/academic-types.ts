@@ -31,6 +31,9 @@ export interface AcademicChapter {
 export interface AcademicStudent {
   id: string;
   courseId: string;
+  mainSite?: string | null;
+  subSite?: string | null;
+  locationScope?: string | null;
   status: StudentStatus;
   dismissalType: string;
   dismissalReason: string;
@@ -57,6 +60,7 @@ export interface AcademicExam {
   active: boolean;
   scheduledActivateAt?: string | null;
   courseIds?: string[]; // الامتحانات قد تكون مرتبطة بأكثر من دورة
+  mainSite?: string | null;
 }
 
 export interface AcademicGrade {

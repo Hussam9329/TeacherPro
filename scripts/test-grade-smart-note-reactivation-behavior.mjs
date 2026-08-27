@@ -168,11 +168,12 @@ function createFakeTransaction(initialNotes, initialGrades = []) {
                 new Date(b.attemptedAt).getTime() ||
               a.id.localeCompare(b.id),
           )
-          .map(({ id, examId, score, reason }) => ({
+          .map(({ id, examId, score, reason, examFullMark = 100 }) => ({
             id,
             examId,
             score,
             reason,
+            exam: { fullMark: examFullMark },
           }));
       },
       async updateMany({ where, data }) {
@@ -361,6 +362,25 @@ test("reactivation migrates only DISMISSED_PENDING once and records provenance",
     tx.state.notes.find((note) => note.id === "note-leave").status,
     "PENDING",
   );
+});
+
+
+test("a dismissed pending score above the current full mark is rejected", async () => {
+  const tx = createFakeTransaction([
+    smartNote({ score: 91, examFullMark: 80 }),
+  ]);
+
+  const result = await migrateDismissedPendingGradesAfterActivation(
+    tx,
+    "student-1",
+    { name: "مدير النظام" },
+  );
+
+  assert.equal(result.processed, 0);
+  assert.equal(result.conflicts, 1);
+  assert.equal(tx.state.grades.length, 0);
+  assert.equal(tx.state.notes[0].status, "REJECTED");
+  assert.match(tx.state.notes[0].resolution, /0 - 80/);
 });
 
 test("an official grade wins and the dismissed attempt becomes CONFLICT", async () => {

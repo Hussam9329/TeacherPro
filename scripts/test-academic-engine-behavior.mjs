@@ -51,6 +51,11 @@ const {
   isAutomaticOpportunityLog,
   recalculateAcademicState,
 } = require(path.join(root, "src/lib/academic-engine.ts"));
+const {
+  examSiteDatabaseValues,
+  includesOutsideCountryExamSite,
+  studentMatchesExamMainSites,
+} = require(path.join(root, "src/lib/exam-utils.ts"));
 
 const student = (overrides = {}) => ({
   id: "student-1",
@@ -121,6 +126,20 @@ function recalculatedStudent(input) {
   return recalculateAcademicState(input, new Set(["student-1"])).students.find(
     (item) => item.id === "student-1",
   );
+}
+
+{
+  assert.equal(
+    studentMatchesExamMainSites({ mainSite: "اربيل" }, ["أربيل"]),
+    true,
+  );
+  assert.equal(
+    studentMatchesExamMainSites({ locationScope: "خارج القطر - تركيا" }, ["خارج القطر"]),
+    true,
+  );
+  assert.ok(examSiteDatabaseValues(["الديوانية"]).includes("القادسية"));
+  assert.equal(includesOutsideCountryExamSite(["خارج القطر"]), true);
+  console.log("✅ تطبيع المواقع القديمة متطابق بين قاعدة البيانات والمحرك الأكاديمي");
 }
 
 {
@@ -214,6 +233,68 @@ function recalculatedStudent(input) {
   assert.equal(result.status, "نشط");
   assert.equal(result.opportunities, 2);
   console.log("✅ إنهاء السماح يجعل نفس الدرجة الرقمية مؤثرة أكاديمياً");
+}
+
+{
+  const outOfSiteStudent = student({ mainSite: "المنصور" });
+  const siteScopedExam = exam({
+    type: "يومي",
+    mainSite: "زيونة",
+    opportunitiesPenalty: 1,
+  });
+  const result = recalculatedStudent(
+    state({
+      students: [outOfSiteStudent],
+      exams: [siteScopedExam],
+      grades: [grade({ score: 10 })],
+    }),
+  );
+  assert.equal(result.status, "نشط");
+  assert.equal(result.opportunities, 3);
+  console.log("✅ الامتحان المقيد بموقع لا يؤثر أكاديمياً على طالب خارج الموقع");
+}
+
+{
+  const earlyExam = exam({
+    id: "exam-early",
+    name: "الامتحان المبكر",
+    type: "يومي",
+    date: "2026-02-01T00:00:00.000Z",
+    opportunitiesPenalty: 1,
+  });
+  const lateExam = exam({
+    id: "exam-late",
+    name: "الامتحان المتأخر",
+    type: "يومي",
+    date: "2026-02-10T00:00:00.000Z",
+    opportunitiesPenalty: 1,
+  });
+  const input = state({
+    students: [student({ opportunities: 2, baseOpportunities: 2 })],
+    exams: [earlyExam, lateExam],
+    grades: [
+      grade({
+        id: "grade-late",
+        examId: "exam-late",
+        score: 10,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      }),
+      grade({
+        id: "grade-early",
+        examId: "exam-early",
+        score: 10,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }),
+    ],
+    chapters: [{ id: "chapter-1", name: "الفصل الأول", opportunities: 2 }],
+  });
+  const recalculated = recalculateAcademicState(input, new Set(["student-1"]));
+  const automatic = recalculated.opportunityLogs.filter(isAutomaticOpportunityLog);
+  assert.equal(automatic[0]?.examId, "exam-early");
+  assert.equal(automatic[1]?.examId, "exam-late");
+  console.log("✅ ترتيب الأثر الأكاديمي يعتمد تاريخ الامتحان لا وقت إدخال الدرجة");
 }
 
 assert.equal(examPenaltyValue({ noDiscount: false, opportunitiesPenalty: 0 }), 1);
