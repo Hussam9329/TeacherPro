@@ -5,6 +5,7 @@ import {
   DISMISSED_TELEGRAM_DRAFT_MAX_LENGTH,
   buildBoundedTelegramDraft,
   buildDismissedHistoryAccess,
+  canUseDirectDismissedTelegramDraft,
   escapeDismissedHistoryHtml,
   isDismissalActionNote,
   isDismissalOpportunityLog,
@@ -126,6 +127,19 @@ test("Telegram drafts are bounded and preserve the safety notice", () => {
   assert.match(message, /^رأس الرسالة/);
   assert.match(message, /تم اختصار الرسالة بسبب حد تيليجرام/);
   assert.match(message, /توقيع الإدارة$/);
+});
+
+test("full Telegram history uses a file fallback before deep links become unsafe", () => {
+  assert.equal(canUseDirectDismissedTelegramDraft("سجل قصير"), true);
+  assert.equal(
+    canUseDirectDismissedTelegramDraft("تفاصيل سجل طويلة ".repeat(500)),
+    false,
+  );
+  assert.equal(
+    canUseDirectDismissedTelegramDraft("ع".repeat(1700)),
+    false,
+    "Arabic URI expansion must be checked even below the character cap",
+  );
 });
 
 test("HTML and exported filenames neutralize unsafe user content", () => {

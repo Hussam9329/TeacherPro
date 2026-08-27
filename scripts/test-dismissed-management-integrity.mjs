@@ -101,13 +101,17 @@ must(
 );
 
 must(
-  page.includes("buildBoundedTelegramDraft") &&
-    page.includes("ملخصاً آمناً") &&
+  page.includes("fullTelegramMessage") &&
+    page.includes("historyText(history)") &&
+    page.includes("canUseDirectDismissedTelegramDraft") &&
+    page.includes("downloadHistoryHtml(history)") &&
+    page.includes("تم تنزيل السجل الزمني الكامل بصيغة HTML") &&
     page.includes("if (!history) return") &&
     page.includes("window.location.assign") &&
     !page.includes("window.location.href =") &&
-    !page.includes("historyText(history)"),
-  "تيليجرام يرسل ملخصاً محدوداً ولا يسرّب تفاصيل السجل الداخلي أو fallback ناقص",
+    !page.includes("s.dismissalType") &&
+    helper.includes("DISMISSED_TELEGRAM_ENCODED_URI_MAX_LENGTH"),
+  "تيليجرام يرسل السجل الكامل ضمن الحد ويجهز ملفاً كاملاً عند تجاوز حد الرابط",
 );
 
 must(

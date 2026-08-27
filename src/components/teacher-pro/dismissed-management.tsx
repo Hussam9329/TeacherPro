@@ -14,6 +14,7 @@ import { formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import {
   buildBoundedTelegramDraft,
+  canUseDirectDismissedTelegramDraft,
   escapeDismissedHistoryHtml,
   safeDismissedHistoryFileName,
 } from "@/lib/dismissed-history";
@@ -80,7 +81,6 @@ type StudentHistory = {
     mainSite: string;
     subSite: string;
     status: string;
-    dismissalType: string;
     dismissalReason: string;
     dismissalNotes: string;
     opportunities: number;
@@ -149,23 +149,59 @@ function toneClasses(tone: TimelineEvent["tone"]) {
   return "border-border bg-muted/20";
 }
 
-function telegramMessage(history: StudentHistory) {
+function historyText(history: StudentHistory): string {
+  if (history.events.length === 0) {
+    return "لا توجد أحداث تفصيلية محفوظة لهذا الطالب.";
+  }
+
+  return history.events
+    .flatMap((event, index) => [
+      `${index + 1}) ${formatBaghdadDateTime(event.date)} — ${event.title}`,
+      ...event.details.map((detail) => `• ${detail}`),
+      "",
+    ])
+    .join("\n")
+    .trim();
+}
+
+function fullTelegramMessage(history: StudentHistory) {
+  const s = history.student;
+  return `السلام عليكم
+هذا هو السجل الكامل للطالب "${s.name}"
+
+بيانات الطالب
+الاسم: ${s.name}
+الكود: ${s.code}
+الدورة الحالية: ${s.courseName}
+تاريخ التسجيل: ${formatBaghdadDateTime(s.createdAt)}
+تاريخ الفصل: ${formatBaghdadDateTime(s.dismissalAt)}
+سبب الفصل: ${s.dismissalReason || "غير مسجل"}
+${s.dismissalNotes ? `ملاحظات الفصل: ${s.dismissalNotes}\n` : ""}
+السجل الزمني الكامل منذ التسجيل وحتى الفصل وما بعده
+
+${historyText(history)}
+
+إدارة حسن فلاح مدرس مادة الاحياء`;
+}
+
+function telegramAttachmentMessage(history: StudentHistory) {
   const s = history.student;
   const metrics = historyMetrics(history)
     .map((metric) => `${metric.label}: ${metric.value}`)
     .join("\n");
   const header = `السلام عليكم
-هذا هو سجل الطالب "${s.name}"
+هذا هو سجل الطالب الكامل "${s.name}"
 
 الكود: ${s.code}
 الدورة: ${s.courseName}
-نوع الفصل: ${s.dismissalType || "مفصول"}
 سبب الفصل: ${s.dismissalReason || "غير مسجل"}
 
-ملخص السجل المتاح`;
+تم تنزيل السجل الزمني الكامل بصيغة HTML على جهاز الإدارة لأن حجمه يتجاوز الحد الآمن لرابط تيليجرام. يرجى إرفاق الملف بهذه المحادثة.
+
+ملخص الملف`;
   return buildBoundedTelegramDraft({
     header,
-    timeline: `${metrics || "لا توجد أحداث متاحة"}\n\nللتفاصيل الكاملة يرجى مراجعة الإدارة.`,
+    timeline: metrics || "لا توجد أحداث متاحة",
     footer: "إدارة حسن فلاح مدرس مادة الاحياء",
   });
 }
@@ -251,7 +287,6 @@ function buildHtmlReport(history: StudentHistory) {
     ["الكورس", s.courseTerm || "—"],
     ["نوع البرنامج", s.studyType || "—"],
     ["الموقع", [s.locationScope, s.mainSite, s.subSite].filter(Boolean).join(" / ") || "—"],
-    ["نوع الفصل", s.dismissalType || "مفصول"],
     ["سبب الفصل", s.dismissalReason || "غير مسجل"],
     ["ملاحظات الفصل", s.dismissalNotes || "—"],
     ["تاريخ التسجيل", formatBaghdadDateTime(s.createdAt)],
@@ -298,7 +333,7 @@ body{margin:0;padding:24px}
 <body>
 <main class="page">
 <div class="no-print" style="display:flex;justify-content:flex-start;margin-bottom:12px"><button onclick="window.print()" style="border:1px solid #d1d5db;background:#fff;border-radius:10px;padding:8px 14px;cursor:pointer;font-weight:700">طباعة التقرير</button></div>
-<header class="header"><div class="brand"><h1>سجل الطالب المفصول</h1><p>إدارة حسن فلاح مدرس مادة الاحياء</p></div><div class="status">${escapeDismissedHistoryHtml(s.dismissalType || "مفصول")}</div></header>
+<header class="header"><div class="brand"><h1>سجل الطالب المفصول</h1><p>إدارة حسن فلاح مدرس مادة الاحياء</p></div><div class="status">مفصول</div></header>
 <div class="grid">${info.map(([k, v]) => `<div class="info-box"><b>${escapeDismissedHistoryHtml(k)}</b><span>${escapeDismissedHistoryHtml(v)}</span></div>`).join("")}</div>
 <div class="summary">${metrics.map((metric) => `<div class="metric"><strong>${metric.value}</strong><span>${escapeDismissedHistoryHtml(metric.label)}</span></div>`).join("")}</div>
 <h2 class="section-title">السجل الزمني الكامل</h2>
@@ -307,6 +342,20 @@ ${eventRows}
 </main>
 </body>
 </html>`;
+}
+
+function downloadHistoryHtml(history: StudentHistory) {
+  const blob = new Blob([buildHtmlReport(history)], {
+    type: "text/html;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${safeDismissedHistoryFileName(`سجل-${history.student.name}-${history.student.code}`)}.html`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function DismissedManagementView() {
@@ -465,7 +514,12 @@ export function DismissedManagementView() {
 
     const history = await loadHistory(student.id);
     if (!history) return;
-    const message = telegramMessage(history);
+    const completeMessage = fullTelegramMessage(history);
+    const sendDirectly = canUseDirectDismissedTelegramDraft(completeMessage);
+    if (!sendDirectly) downloadHistoryHtml(history);
+    const message = sendDirectly
+      ? completeMessage
+      : telegramAttachmentMessage(history);
 
     window.location.assign(
       `tg://resolve?domain=${encodeURIComponent(username)}&text=${encodeURIComponent(message)}`,
@@ -475,18 +529,7 @@ export function DismissedManagementView() {
   const exportHtml = async (student: Student) => {
     const history = await loadHistory(student.id);
     if (!history) return;
-
-    const blob = new Blob([buildHtmlReport(history)], {
-      type: "text/html;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${safeDismissedHistoryFileName(`سجل-${student.name}-${student.code}`)}.html`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadHistoryHtml(history);
   };
 
   const courseOptions = useMemo(
@@ -620,9 +663,7 @@ export function DismissedManagementView() {
                       <h3 className="text-lg font-black leading-tight">
                         {student.name}
                       </h3>
-                      <Badge variant="destructive">
-                        {student.dismissalType || "مفصول"}
-                      </Badge>
+                      <Badge variant="destructive">مفصول</Badge>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span>الكود: {student.code}</span>
@@ -726,9 +767,9 @@ export function DismissedManagementView() {
 
                 {student.telegram ? (
                   <p className="text-[11px] text-muted-foreground">
-                    زر تيليجرام يفتح محادثة الطالب في التطبيق مع رسالة جاهزة
-                    تتضمن ملخصاً آمناً وتوقيع الإدارة. التفاصيل الداخلية
-                    الكاملة تبقى في تصدير HTML المصرح به.
+                    زر تيليجرام يرسل السجل المصرح به كاملاً عندما يسمح الحجم.
+                    للسجلات الطويلة ينزّل ملف HTML الكامل ويفتح المحادثة
+                    برسالة جاهزة لإرفاقه دون فقدان أي حدث.
                   </p>
                 ) : null}
 

@@ -383,9 +383,6 @@ function pushStudentNoteEvents(
       details: [
         sourceCourseDetail(courseName),
         text(note.text),
-        text(note.dismissalType)
-          ? `نوع الفصل المرتبط: ${text(note.dismissalType)}`
-          : "",
         text(note.dismissalReason)
           ? `سبب الفصل المرتبط: ${text(note.dismissalReason)}`
           : "",
@@ -934,7 +931,6 @@ export async function GET(req: NextRequest) {
         title: "حالة الفصل الحالية",
         details: [
           sourceCourseDetail(currentCourseName),
-          student.dismissalType ? `نوع الفصل: ${student.dismissalType}` : "",
           student.dismissalReason
             ? `السبب: ${student.dismissalReason}`
             : "لا يوجد سبب فصل مسجل",
@@ -973,7 +969,6 @@ export async function GET(req: NextRequest) {
         mainSite: student.mainSite || "",
         subSite: student.subSite || "",
         status: student.status,
-        dismissalType: student.dismissalType || "",
         dismissalReason: student.dismissalReason || "",
         dismissalNotes: student.dismissalNotes || "",
         opportunities: student.opportunities,

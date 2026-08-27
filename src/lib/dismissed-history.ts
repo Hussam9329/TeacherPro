@@ -10,6 +10,7 @@ type DismissalNoteLike = {
 };
 
 export const DISMISSED_TELEGRAM_DRAFT_MAX_LENGTH = 1800;
+export const DISMISSED_TELEGRAM_ENCODED_URI_MAX_LENGTH = 8000;
 
 type TelegramDraftParts = {
   header: string;
@@ -128,6 +129,21 @@ export function buildBoundedTelegramDraft({
     .slice(0, availableTimelineLength)
     .trimEnd();
   return `${prefix}${clippedTimeline}…${suffix}`;
+}
+
+/**
+ * Telegram deep links encode Arabic text very aggressively. Enforce both a
+ * readable-message limit and an encoded URI limit so the OS/browser does not
+ * silently truncate or reject the hand-off to Telegram.
+ */
+export function canUseDirectDismissedTelegramDraft(
+  message: string,
+): boolean {
+  return (
+    message.length <= DISMISSED_TELEGRAM_DRAFT_MAX_LENGTH &&
+    encodeURIComponent(message).length <=
+      DISMISSED_TELEGRAM_ENCODED_URI_MAX_LENGTH
+  );
 }
 
 export function escapeDismissedHistoryHtml(value: unknown): string {
