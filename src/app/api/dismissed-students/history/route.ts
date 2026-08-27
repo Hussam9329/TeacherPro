@@ -10,6 +10,7 @@ import { formatAppDate } from "@/lib/format";
 import { parseStudentEnrollmentArchiveSnapshot } from "@/lib/student-enrollment-archive-server";
 import {
   buildDismissedHistoryAccess,
+  classifyDismissedOpportunityMovement,
   isDismissalActionNote,
   isDismissalOpportunityLog,
   type DismissedHistoryAccess,
@@ -169,15 +170,17 @@ function pushOpportunityEvents(
     const amount = integer(log.amount);
     const action = text(log.action);
     const reason = text(log.reason);
+    const movement = classifyDismissedOpportunityMovement({ action, amount });
+    const movementAmount = Math.abs(amount);
     const exam = record(log.exam);
     const chapter = record(log.chapter);
     const chapterName = text(log.chapterNameSnapshot) || text(chapter.name);
     const title = dismissal
       ? "فصل الطالب"
-      : amount < 0
-        ? `فقدان ${Math.abs(amount)} ${Math.abs(amount) === 1 ? "فرصة" : "فرص"}`
-        : amount > 0
-          ? `إضافة ${amount} ${amount === 1 ? "فرصة" : "فرص"}`
+      : movement === "deduction" && movementAmount > 0
+        ? `فقدان ${movementAmount} ${movementAmount === 1 ? "فرصة" : "فرص"}`
+        : movement === "addition" && movementAmount > 0
+          ? `إضافة ${movementAmount} ${movementAmount === 1 ? "فرصة" : "فرص"}`
           : `حركة فرصة: ${action || "إجراء"}`;
 
     events.push({
@@ -196,7 +199,12 @@ function pushOpportunityEvents(
           ? `تاريخ الامتحان: ${detailDate(exam.date)}`
           : "",
       ].filter(Boolean),
-      tone: dismissal ? "danger" : amount < 0 ? "warning" : "info",
+      tone:
+        dismissal
+          ? "danger"
+          : movement === "deduction"
+            ? "warning"
+            : "info",
     });
   }
 }

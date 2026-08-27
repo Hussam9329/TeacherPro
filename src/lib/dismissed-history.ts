@@ -9,6 +9,12 @@ type DismissalNoteLike = {
   dismissalType?: unknown;
 };
 
+type OpportunityMovementLike = {
+  action?: unknown;
+  amount?: unknown;
+  title?: unknown;
+};
+
 export const DISMISSED_TELEGRAM_DRAFT_MAX_LENGTH = 1800;
 export const DISMISSED_TELEGRAM_ENCODED_URI_MAX_LENGTH = 8000;
 export const DISMISSED_TELEGRAM_SINGLE_MESSAGE_MAX_LENGTH = 3800;
@@ -107,6 +113,34 @@ export function isDismissalActionNote(note: DismissalNoteLike): boolean {
     /^(?:فصل الطالب|تم فصل الطالب)(?:\s|$|\(|:)/u.test(noteText) ||
     Boolean(cleanText(note.dismissalType) && noteText.startsWith("فصل"))
   );
+}
+
+export function classifyDismissedOpportunityMovement({
+  action: actionValue,
+  amount: amountValue,
+  title: titleValue,
+}: OpportunityMovementLike): "deduction" | "addition" | "neutral" {
+  const action = cleanText(actionValue);
+  const title = cleanText(titleValue);
+  if (
+    action === "خصم" ||
+    action === "خصم تلقائي" ||
+    title.startsWith("فقدان")
+  ) {
+    return "deduction";
+  }
+  if (
+    action === "إضافة" ||
+    action === "إعادة تعيين" ||
+    action === "إعادة تفعيل" ||
+    title.startsWith("إضافة")
+  ) {
+    return "addition";
+  }
+  const amount = Number(amountValue);
+  if (Number.isFinite(amount) && amount < 0) return "deduction";
+  if (Number.isFinite(amount) && amount > 0) return "addition";
+  return "neutral";
 }
 
 export function buildBoundedTelegramDraft({
@@ -213,37 +247,29 @@ function compactOpportunityAction(
   const reason = detailValue(details, "السبب");
   const title = cleanText(event.title);
   const action = detailValue(details, "الإجراء المسجل");
+  const movement = classifyDismissedOpportunityMovement({
+    action,
+    amount,
+    title,
+  });
 
   let result = "";
   if (title === "فصل الطالب" || action === "فصل تلقائي") {
     result = "تم فصل الطالب";
-  } else if (
-    action === "خصم" ||
-    action === "خصم تلقائي" ||
-    title.startsWith("فقدان")
-  ) {
+  } else if (movement === "deduction") {
     result =
       count === 1
         ? "تم خصم فرصة"
         : count > 1
           ? `تم خصم ${count} فرص`
           : "تم خصم فرصة";
-  } else if (
-    action === "إضافة" ||
-    action === "إعادة تعيين" ||
-    action === "إعادة تفعيل" ||
-    title.startsWith("إضافة")
-  ) {
+  } else if (movement === "addition") {
     result =
       count === 1
         ? "تمت إضافة فرصة"
         : count > 1
           ? `تمت إضافة ${count} فرص`
           : action;
-  } else if (Number.isFinite(amount) && amount < 0) {
-    result = count === 1 ? "تم خصم فرصة" : `تم خصم ${count} فرص`;
-  } else if (Number.isFinite(amount) && amount > 0) {
-    result = count === 1 ? "تمت إضافة فرصة" : `تمت إضافة ${count} فرص`;
   } else {
     result = action || title;
   }

@@ -120,6 +120,13 @@ must(
 );
 
 must(
+  route.includes("classifyDismissedOpportunityMovement") &&
+    route.includes('movement === "deduction"') &&
+    helper.includes("classifyDismissedOpportunityMovement"),
+  "السجل المرئي وتقرير تيليجرام يصنفان الخصم والإضافة من نوع الإجراء لا إشارة المقدار القديم",
+);
+
+must(
   page.includes("escapeDismissedHistoryHtml") &&
     page.includes("safeDismissedHistoryFileName") &&
     page.includes("URL.revokeObjectURL") &&

@@ -8,6 +8,7 @@ import {
   buildDismissedHistoryAccess,
   canUseDirectDismissedTelegramDraft,
   canUseSingleDismissedTelegramMessage,
+  classifyDismissedOpportunityMovement,
   escapeDismissedHistoryHtml,
   isDismissalActionNote,
   isDismissalOpportunityLog,
@@ -194,6 +195,20 @@ test("professional Telegram report consolidates exams and follows action semanti
   assert.match(message, /الإجراء: تم خصم فرصة — السبب: غياب في الامتحان/);
   assert.equal((message.match(/الامتحان 2 —/g) || []).length, 1);
   assert.doesNotMatch(message, /تمت إضافة فرصة|المصحح|حالة التصحيح|HTML/);
+});
+
+test("automatic deductions are deductions even when legacy amounts are positive", () => {
+  assert.equal(
+    classifyDismissedOpportunityMovement({
+      action: "خصم تلقائي",
+      amount: 1,
+    }),
+    "deduction",
+  );
+  assert.equal(
+    classifyDismissedOpportunityMovement({ action: "إضافة", amount: -2 }),
+    "addition",
+  );
 });
 
 test("pending and post-dismissal grades stay inside one exam entry", () => {
