@@ -13,6 +13,7 @@ import {
 import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { shouldEndGraceForNumericGrade } from "@/lib/grace-grade-activation";
+import { endLeavesCoveringExamForGrade } from "@/lib/student-leave-grade-override-server";
 
 // ----------------------------------------------------------------------------
 // Stale Absence Notes — ROOT-CAUSE FIX
@@ -204,6 +205,8 @@ export interface AcademicGradeWritebackResult {
   /** True when the exam predates registration and the student's registration
    *  date was moved back to the exam date so this numeric grade counts. */
   registrationBackdated: boolean;
+  /** True when a typed numeric grade ended the leave(s) covering the exam. */
+  leaveEndedByGrade: boolean;
 }
 
 export interface AcademicGradeWritebackInput {
@@ -372,6 +375,8 @@ export async function syncAcademicGradeWriteback(
   // flags remember the coercion so we can also fix the notes field below.
   let coercedToExcusedDueToLeave = false;
   let excusedLeaveReason = "";
+  /** True when a typed numeric grade ended the covering leave(s). */
+  let leaveEndedByGrade = false;
   const scoreWasProvided = input.score !== undefined;
 
   // ROOT-CAUSE FIX: Enforce status/score consistency at the SINGLE writeback
@@ -582,26 +587,23 @@ export async function syncAcademicGradeWriteback(
   ) {
     const blockedByLeave = await hasBlockingLeave(client, studentId, exam);
     if (blockedByLeave) {
-      // ROOT-CAUSE FIX (leave + absence contradiction): Previously this
-      // branch threw an error, leaving the calling code in a contradictory
-      // state. The mark-missing-absent batch endpoint, for instance,
-      // already wrote status="غائب" with notes="تسجيل جماعي كغائب" before
-      // this check fired — so the throw left the bad row in place.
-      //
-      // Now: if the caller is trying to write a NON-"درجة" marker status
-      // (غائب / غش) and the student has a leave for this exam, silently
-      // COERCE the status to "مجاز" instead of throwing. This is exactly
-      // the user's expectation: "the student is excused, so the grade
-      // should reflect that". The throw still fires for actual numeric
-      // grade attempts (status="درجة") because that would silently erase
-      // a typed-in score.
-      //
-      // (Existing GradeSmartNote flows already handle the "درجة" path
-      // separately — those calls opt out via blockOnLeave: false.)
-      if (status === "غائب" || status === "غش") {
-        // Convert the status to "مجاز" and let the rest of the writeback
-        // proceed normally. The notes will be sanitized below to remove
-        // the stale "تسجيل جماعي كغائب" phrase.
+      // UNIFIED RULE: a real numeric grade (zero included) consciously
+      // overrides the leave — the covering leave(s) end inside this same
+      // transaction (مجاز markers cleared, backed-up grades restored) and the
+      // typed grade is then stored counted below. Absence/cheating attempts
+      // keep their coercion to "مجاز" so a leave can never be erased by a
+      // non-numeric marker.
+      if (status === "درجة" && typeof score === "number" && Number.isFinite(score)) {
+        const leaveOverride = await endLeavesCoveringExamForGrade(
+          client,
+          studentId,
+          exam,
+        );
+        leaveEndedByGrade = leaveOverride.endedLeaves > 0;
+      } else if (status === "غائب" || status === "غش") {
+        // ROOT-CAUSE FIX (leave + absence contradiction): silently COERCE the
+        // status to "مجاز" so the row reflects the excused state. Notes are
+        // sanitized below to remove the stale batch-absence phrase.
         const leaveRow = await client.studentLeave.findFirst({
           where: {
             studentId,
@@ -827,5 +829,11 @@ export async function syncAcademicGradeWriteback(
         input.tx ? { tx: input.tx } : {},
       );
 
-  return { grade, academicRecalculation, graceEnded, registrationBackdated };
+  return {
+    grade,
+    academicRecalculation,
+    graceEnded,
+    registrationBackdated,
+    leaveEndedByGrade,
+  };
 }

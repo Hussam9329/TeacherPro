@@ -1154,6 +1154,7 @@ export function GradeEntryView() {
     pendingSmartNote?: boolean;
     graceEnded?: boolean;
     registrationBackdated?: boolean;
+    leaveEndedByGrade?: boolean;
     academicRecalculation?: { students?: Student[] } | null;
   } =>
     (result.data || {}) as {
@@ -1162,6 +1163,7 @@ export function GradeEntryView() {
       pendingSmartNote?: boolean;
       graceEnded?: boolean;
       registrationBackdated?: boolean;
+      leaveEndedByGrade?: boolean;
       academicRecalculation?: { students?: Student[] } | null;
     };
 
@@ -1684,9 +1686,11 @@ export function GradeEntryView() {
             "success",
             payload.registrationBackdated
               ? "تم حفظ الدرجة محتسبة؛ قُدّم تاريخ تسجيل الطالب إلى تاريخ الامتحان وصُفّرت فترة السماح."
-              : payload.graceEnded
-                ? "تم حفظ الدرجة وإنهاء فترة السماح؛ بدأت محاسبة الطالب من هذه الدرجة."
-                : "تم حفظ الدرجة في بيانات النظام وإعادة احتساب الطالب",
+              : payload.leaveEndedByGrade
+                ? "تم حفظ الدرجة محتسبة وانتهت إجازة الطالب من هذا الامتحان."
+                : payload.graceEnded
+                  ? "تم حفظ الدرجة وإنهاء فترة السماح؛ بدأت محاسبة الطالب من هذه الدرجة."
+                  : "تم حفظ الدرجة في بيانات النظام وإعادة احتساب الطالب",
           );
         }
       } finally {
@@ -2809,8 +2813,8 @@ export function GradeEntryView() {
                         )}
                         {leave && (
                           <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-300">
-                            الطالب مجاز لهذا الامتحان. أي رقم تدخله سيُحفظ كدرجة
-                            معلّقة للمراجعة دون احتساب
+                            الطالب مجاز لهذا الامتحان. عند إدخال درجة رقمية
+                            ستنتهي إجازته وتُعتمد الدرجة محتسبة في سجله
                             {leave.reason ? `: ${leave.reason}` : ""}
                           </p>
                         )}

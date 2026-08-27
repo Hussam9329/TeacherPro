@@ -344,18 +344,7 @@ async function inspectNumericGradeAttempt(
     throw new AcademicGradeWritebackError("الطالب ليس ضمن دورات هذا الامتحان.");
   }
   const score = numericGradeScore(scoreValue, Number(exam.fullMark || 0));
-  const leaves = await tx.studentLeave.findMany({
-    where: { studentId },
-    select: {
-      examId: true,
-      leaveType: true,
-      date: true,
-      dateFrom: true,
-      dateTo: true,
-    },
-  });
   const beforeRegistration = isExamBeforeStudentRegistration(student, exam);
-  const onLeave = leaves.some((leave) => leaveAppliesToExam(leave, exam));
 
   let category: NumericGradeAttemptContext["category"] = null;
   let reason = "";
@@ -369,15 +358,11 @@ async function inspectNumericGradeAttempt(
   // - هذا يضمن عدم ظهورها كـ "درجة معلّقة" في لوحة الدرجات الذكية
   //
   // لا تضف مساراً يحوّل حالة ما قبل التسجيل إلى ملاحظة معلقة؛ هذا سيعيد
-  // المشكلة التي أصلحناها.
-  if (!beforeRegistration) {
-    if (onLeave) {
-      category = "LEAVE_PENDING";
-      reason = "محاولة إدخال درجة لطالب لديه إجازة تغطي هذا الامتحان.";
-    } else if (student.status === "مفصول") {
-      category = "DISMISSED_PENDING";
-      reason = "محاولة إدخال درجة رقمية لطالب مفصول؛ حُفظت للمراجعة دون أثر أكاديمي.";
-    }
+  // المشكلة التي أصلحناها. الإجازة كذلك: الدرجة الرقمية تمر مباشرة إلى
+  // syncAcademicGradeWriteback الذي ينهي الإجازة ويحفظ الدرجة محتسبة.
+  if (!beforeRegistration && student.status === "مفصول") {
+    category = "DISMISSED_PENDING";
+    reason = "محاولة إدخال درجة رقمية لطالب مفصول؛ حُفظت للمراجعة دون أثر أكاديمي.";
   }
 
   return { student, exam, category, reason, score };
@@ -785,6 +770,8 @@ export async function POST(req: NextRequest) {
       graceEnded: "graceEnded" in result ? result.graceEnded : false,
       registrationBackdated:
         "registrationBackdated" in result ? result.registrationBackdated : false,
+      leaveEndedByGrade:
+        "leaveEndedByGrade" in result ? result.leaveEndedByGrade : false,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
       smartNoteId: result.smartNote?.id || null,
     });

@@ -92,7 +92,13 @@ assert.doesNotMatch(
   numericAttemptInspection,
   /category\s*=\s*"GRACE_SCORED"/,
 );
-assert.match(numericAttemptInspection, /if \(!beforeRegistration\)/);
+// Numeric grades pass through to the writeback for dismissed capture only;
+// leave interception must stay retired so the writeback can end the leave.
+assert.match(
+  numericAttemptInspection,
+  /if \(!beforeRegistration && student\.status/,
+);
+assert.doesNotMatch(numericAttemptInspection, /LEAVE_PENDING/);
 assert.match(
   gradeWriteback,
   /const shouldEndGrace\s*=\s*shouldEndGraceForNumericGrade\([\s\S]*accountingGraceDays:\s*0[\s\S]*gracePeriodEndedAt:\s*endedAt/,
