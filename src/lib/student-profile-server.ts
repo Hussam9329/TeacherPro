@@ -349,7 +349,10 @@ export function sanitizeEnrollmentArchiveSnapshot(
     "toCourse",
     "activeCourseChapters",
   ]);
-  if (access.grades) allowed.add("grades");
+  if (access.grades) {
+    allowed.add("grades");
+    allowed.add("gradeSmartNotes");
+  }
   if (access.opportunities) allowed.add("opportunityLogs");
   if (access.followUp) {
     allowed.add("studentLeaves");
@@ -371,7 +374,10 @@ export function sanitizeEnrollmentArchiveSnapshot(
   const counts = snapshot.counts;
   if (counts && typeof counts === "object" && !Array.isArray(counts)) {
     const countKeys = new Set<string>();
-    if (access.grades) countKeys.add("grades");
+    if (access.grades) {
+      countKeys.add("grades");
+      countKeys.add("gradeSmartNotes");
+    }
     if (access.opportunities) countKeys.add("opportunityLogs");
     if (access.followUp) {
       countKeys.add("studentLeaves");

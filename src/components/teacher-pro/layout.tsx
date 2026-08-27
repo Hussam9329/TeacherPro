@@ -39,6 +39,7 @@ import {
   CalendarCheck,
   Handshake,
   Shield,
+  ShieldAlert,
   ScrollText,
   Sun,
   Moon,
@@ -105,6 +106,7 @@ const menuItems: {
     icon: UsersRound,
   },
   { id: "dismissed-students", title: "المفصولون", sub: "قائمة", icon: UserX },
+  { id: "dismissed-management", title: "إدارة المفصولين", sub: "السجل الكامل", icon: ShieldAlert },
   { id: "exam-new", title: "إضافة الامتحان", sub: "القواعد", icon: FileText },
   { id: "grade-entry", title: "تسجيل الدرجات", sub: "إدخال", icon: PenTool },
   { id: "exam-records", title: "سجل الامتحانات", sub: "PDF", icon: FileCheck },
@@ -125,7 +127,7 @@ const menuItems: {
 
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
   { title: "الدورات", itemIds: ["courses"] },
-  { title: "الفرص", itemIds: ["chapters", "opportunities"] },
+  { title: "الفرص", itemIds: ["chapters", "opportunities", "dismissed-management"] },
   { title: "الطلاب", itemIds: ["student-register", "student-bulk-import", "student-registry", "dismissed-students"] },
   {
     title: "الامتحانات والدرجات",
@@ -148,6 +150,7 @@ const sectionDescriptions: Partial<Record<SectionId, string>> = {
   "student-registry": "البحث في ملفات الطلاب ومراجعة بياناتهم وحالتهم.",
   "student-bulk-import": "إضافة مجموعة طلاب بعد لصق البيانات ومراجعتها قبل الحفظ.",
   "dismissed-students": "متابعة حالات الفصل والتعهدات وإعادة التفعيل.",
+  "dismissed-management": "إدارة الطلاب المفصولين من كل الدورات وعرض سجلهم الكامل والتواصل معهم وتصدير تقارير HTML.",
   "exam-new": "إنشاء امتحان وتحديد الدورات والمواقع وقواعد الدرجات.",
   "grade-entry": "إدخال درجات الطلاب ومتابعة حالات الحفظ والغياب.",
   "exam-records": "مراجعة الامتحانات السابقة وإعداداتها وحالتها.",
@@ -164,6 +167,7 @@ const sectionsWithPageSearch = new Set<SectionId>([
   "missing-students-notes",
   "student-registry",
   "dismissed-students",
+  "dismissed-management",
   "grade-entry",
   "exam-records",
   "grade-records",
@@ -195,6 +199,7 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   "student-registry": ["students", "courses", "opportunities", "grades", "follow-up", "dashboard"],
   "student-bulk-import": ["students", "courses", "opportunities", "bulk-import", "dashboard"],
   "dismissed-students": ["students", "grades", "opportunities", "dismissed", "dashboard"],
+  "dismissed-management": ["students", "grades", "opportunities", "dismissed", "follow-up", "dashboard"],
   "exam-new": ["exams", "courses", "grades", "dashboard"],
   "grade-entry": ["grades", "students", "exams", "opportunities", "grade-entry-notes", "dashboard"],
   "exam-records": ["exams", "courses", "grades", "students", "correction", "grade-entry-notes", "dashboard"],
@@ -222,6 +227,7 @@ const PAGE_OWNED_SYNC_SECTIONS = new Set<SectionId>([
   "student-registry",
   "student-bulk-import",
   "dismissed-students",
+  "dismissed-management",
   "exam-new",
   "grade-entry",
   "exam-records",
@@ -391,6 +397,7 @@ import { StudentRegisterView } from "./student-register";
 import { StudentBulkTextImportView } from "./student-bulk-text-import";
 import { StudentRegistryView } from "./student-registry";
 import { DismissedStudentsView } from "./dismissed-students";
+import { DismissedManagementView } from "./dismissed-management";
 import { ExamNewView } from "./exam-new";
 import { GradeEntryView } from "./grade-entry";
 import { MissingStudentsNotesView } from "./missing-students-notes";
@@ -411,6 +418,7 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "student-bulk-import": StudentBulkTextImportView,
   "student-registry": StudentRegistryView,
   "dismissed-students": DismissedStudentsView,
+  "dismissed-management": DismissedManagementView,
   "exam-new": ExamNewView,
   "grade-entry": GradeEntryView,
   "missing-students-notes": MissingStudentsNotesView,

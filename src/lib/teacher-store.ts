@@ -514,6 +514,7 @@ export type SectionId =
   | "student-bulk-import"
   | "student-registry"
   | "dismissed-students"
+  | "dismissed-management"
   | "exam-new"
   | "grade-entry"
   | "exam-records"
@@ -954,6 +955,7 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   "student-bulk-import": "students.add",
   "student-registry": "students.view",
   "dismissed-students": "students.view",
+  "dismissed-management": "students.view",
   "exam-new": "exams.add",
   "grade-entry": "grades.add",
   "exam-records": "exams.view",

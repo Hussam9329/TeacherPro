@@ -321,12 +321,14 @@ test("profile archive sections are removed according to the viewer's permissions
     {
       student: { id: "student-a" },
       grades: [{ id: "grade-a" }],
+      gradeSmartNotes: [{ id: "smart-note-a" }],
       opportunityLogs: [{ id: "opp-a" }],
       studentCalls: [{ id: "call-a" }],
       correctionSheets: [{ id: "sheet-a" }],
       auditLogs: [{ id: "audit-a" }],
       counts: {
         grades: 1,
+        gradeSmartNotes: 1,
         opportunityLogs: 1,
         studentCalls: 1,
         correctionSheets: 1,
@@ -335,8 +337,13 @@ test("profile archive sections are removed according to the viewer's permissions
     },
     access,
   );
-  assert.deepEqual(Object.keys(sanitized).sort(), ["counts", "grades", "student"]);
-  assert.deepEqual(sanitized.counts, { grades: 1 });
+  assert.deepEqual(Object.keys(sanitized).sort(), [
+    "counts",
+    "gradeSmartNotes",
+    "grades",
+    "student",
+  ]);
+  assert.deepEqual(sanitized.counts, { grades: 1, gradeSmartNotes: 1 });
 });
 
 test("profile student fields are redacted without students.view", () => {
