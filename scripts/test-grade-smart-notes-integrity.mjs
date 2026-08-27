@@ -109,9 +109,15 @@ assert.match(
   gradeWriteback,
   /status !== "قبل تسجيل الطالب" &&[\s\S]*!preRegistrationNumericGrade/,
 );
+// Pre-registration numeric grades backdate the student's registration to the
+// exam date and are stored counted; permanent exclusion is forbidden.
 assert.match(
   gradeWriteback,
-  /academicEffectExcluded:\s*true[\s\S]*PRE_REGISTRATION_GRADE_EXCLUSION_REASON[\s\S]*PRE_REGISTRATION_GRADE_EXCLUSION_SOURCE/,
+  /preRegistrationNumericGrade[\s\S]*createdAt:\s*exam\.date[\s\S]*accountingGraceDays:\s*0[\s\S]*gracePeriodStartDate:\s*null[\s\S]*gracePeriodEndedAt:\s*endedAt/,
+);
+assert.doesNotMatch(
+  gradeWriteback,
+  /PRE_REGISTRATION_GRADE_EXCLUSION_REASON/,
 );
 assert.match(
   preRegistrationHelper,
@@ -127,7 +133,7 @@ assert.doesNotMatch(
 );
 assert.match(
   preRegistrationPromotion,
-  /category:\s*"BEFORE_REGISTRATION_PENDING"[\s\S]*status:\s*"درجة"[\s\S]*academicEffectExcluded:\s*true/,
+  /createdAt:\s*note\.exam\.date[\s\S]*academicEffectExcluded:\s*false/,
 );
 assert.match(
   preRegistrationPromotion,
@@ -143,7 +149,7 @@ assert.match(
 );
 assert.match(
   smartNotesPanel,
-  /سُجّلت في سجل الطالب دون خصم أو فصل لأنها تسبق تاريخ تسجيله/,
+  /عند اعتمادها يُقدَّم تاريخ تسجيل الطالب إلى تاريخ الامتحان وتُحتسب الدرجة رسمياً/,
 );
 
 assert.match(graceExpiryHelper, /category:\s*"GRACE_SCORED"/);

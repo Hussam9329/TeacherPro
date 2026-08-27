@@ -1,6 +1,5 @@
 import type { Prisma } from "@prisma/client";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
-import { PRE_REGISTRATION_GRADE_EXCLUSION_REASON } from "@/lib/pre-registration-grade";
 
 const BATCH_SIZE = 500;
 
@@ -19,8 +18,8 @@ function unique(values: string[]) {
 
 function processedResolution(existing = false) {
   return existing
-    ? "الدرجة موجودة في سجل الطالب؛ ثُبّت استبعادها من الخصم والفصل وأُغلقت الملاحظة القديمة."
-    : "تم نقل الدرجة إلى سجل الطالب فوراً مع استبعادها الدائم من الخصم والفصل.";
+    ? "الدرجة موجودة في سجل الطالب؛ قُدّم تاريخ تسجيله إلى تاريخ الامتحان واعتُمدت الدرجة محتسبة وأُغلقت الملاحظة القديمة."
+    : "تم تقديم تاريخ تسجيل الطالب إلى تاريخ الامتحان واعتماد الدرجة محتسبةً في سجله.";
 }
 
 export async function promotePendingPreRegistrationGrades(
@@ -34,7 +33,7 @@ export async function promotePendingPreRegistrationGrades(
     },
     orderBy: [{ attemptedAt: "asc" }, { id: "asc" }],
     take: BATCH_SIZE,
-    include: { exam: { select: { fullMark: true } } },
+    include: { exam: { select: { fullMark: true, date: true } } },
   });
 
   let promoted = 0;
@@ -77,15 +76,25 @@ export async function promotePendingPreRegistrationGrades(
       },
     });
 
-    const source = `PreRegistrationGrade:SmartNote:${note.id}`;
+    // Unified rule: adopting a pre-registration numeric grade moves the
+    // student's registration date back to the exam date, ends grace, and
+    // counts the grade officially.
+    await tx.student.updateMany({
+      where: { id: note.studentId },
+      data: {
+        createdAt: note.exam.date,
+        accountingGraceDays: 0,
+        gracePeriodStartDate: null,
+        gracePeriodEndedAt: now,
+      },
+    });
     if (existing?.status === "درجة" && existing.score !== null) {
       await tx.grade.update({
         where: { id: existing.id },
         data: {
-          academicEffectExcluded: true,
-          academicEffectExclusionReason:
-            PRE_REGISTRATION_GRADE_EXCLUSION_REASON,
-          academicEffectExclusionSource: source,
+          academicEffectExcluded: false,
+          academicEffectExclusionReason: null,
+          academicEffectExclusionSource: null,
           ...(existing.smartNoteId ? {} : { smartNoteId: note.id }),
         },
       });
@@ -127,11 +136,10 @@ export async function promotePendingPreRegistrationGrades(
       status: "درجة",
       score,
       notes:
-        "درجة مدخلة يدوياً لامتحان سابق لتسجيل الطالب؛ محفوظة في السجل دون أثر أكاديمي.",
-      academicEffectExcluded: true,
-      academicEffectExclusionReason:
-        PRE_REGISTRATION_GRADE_EXCLUSION_REASON,
-      academicEffectExclusionSource: source,
+        "درجة مدخلة يدوياً لامتحان سابق لتسجيل الطالب؛ قُدّم تاريخ التسجيل إلى تاريخ الامتحان واعتُمدت الدرجة محتسبة.",
+      academicEffectExcluded: false,
+      academicEffectExclusionReason: null,
+      academicEffectExclusionSource: null,
       smartNoteId: note.id,
     } as const;
 

@@ -9,8 +9,6 @@ import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import {
   isPreRegistrationNumericGrade,
-  PRE_REGISTRATION_GRADE_EXCLUSION_REASON,
-  PRE_REGISTRATION_GRADE_EXCLUSION_SOURCE,
 } from "@/lib/pre-registration-grade";
 import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
@@ -203,6 +201,9 @@ export interface AcademicGradeWritebackResult {
   };
   academicRecalculation: AcademicServerRecalculationResult;
   graceEnded: boolean;
+  /** True when the exam predates registration and the student's registration
+   *  date was moved back to the exam date so this numeric grade counts. */
+  registrationBackdated: boolean;
 }
 
 export interface AcademicGradeWritebackInput {
@@ -537,6 +538,43 @@ export async function syncAcademicGradeWriteback(
     }
   }
 
+  // PRE-REGISTRATION RULE: a numeric grade for an exam that predates the
+  // student's registration moves the registration date back to the exam date,
+  // ends any grace period, and is stored as a fully counted official grade.
+  // Absence/cheating markers for such exams stay blocked; only manual numeric
+  // grades establish this continuity.
+  let registrationBackdated = false;
+  if (preRegistrationNumericGrade) {
+    const endedAt = new Date();
+    const backdated = await client.student.updateMany({
+      where: { id: studentId },
+      data: {
+        createdAt: exam.date,
+        accountingGraceDays: 0,
+        gracePeriodStartDate: null,
+        gracePeriodEndedAt: endedAt,
+      },
+    });
+    registrationBackdated = backdated.count > 0;
+
+    // Historical pending pre-registration attempts for this student are
+    // retired: the registration window now covers their exams and the grade
+    // being saved here is the authoritative record.
+    await client.gradeSmartNote.updateMany({
+      where: {
+        studentId,
+        category: "BEFORE_REGISTRATION_PENDING",
+        status: "PENDING",
+      },
+      data: {
+        status: "REJECTED",
+        resolution:
+          "أُلغي التعليق لأن إدخال درجة رسمية قدّم تاريخ تسجيل الطالب إلى تاريخ الامتحان واعتمد الدرجة في سجله.",
+        resolvedAt: endedAt,
+      },
+    });
+  }
+
   if (
     input.blockOnLeave !== false &&
     (score !== undefined || status !== "درجة") &&
@@ -586,8 +624,9 @@ export async function syncAcademicGradeWriteback(
 
   // GRACE PERIOD & PRE-REGISTRATION PROTECTION:
   //
-  // 1. PRE-REGISTRATION: A manually entered numeric score is saved as a real
-  //    Grade immediately, but permanently excluded from every academic effect.
+  // 1. PRE-REGISTRATION: A manually entered numeric score moves the student's
+  //    registration date back to the exam date, ends grace, and is saved as a
+  //    fully counted official Grade (see the backdating block above).
   //    Automatic absence/cheating remains blocked; the scoreless marker
   //    "قبل تسجيل الطالب" is still allowed for batch missing-entry protection.
   //
@@ -721,17 +760,26 @@ export async function syncAcademicGradeWriteback(
         score === null
       ));
 
-  const preRegistrationExclusion = preRegistrationNumericGrade
+  // A backdated pre-registration grade is a normal counted grade: after the
+  // registration date moved to the exam date, no exclusion may remain (both
+  // on this row and any older marker previously stored for the same exam).
+  const registrationActivationData = registrationBackdated
     ? {
-        academicEffectExcluded: true,
-        academicEffectExclusionReason:
-          PRE_REGISTRATION_GRADE_EXCLUSION_REASON,
-        academicEffectExclusionSource:
-          PRE_REGISTRATION_GRADE_EXCLUSION_SOURCE,
-        // هذه درجة مباشرة وليست درجة ناتجة من قرار ملاحظة ذكية قديمة.
-        smartNoteId: null,
+        academicEffectExcluded: false,
+        academicEffectExclusionReason: null as string | null,
+        academicEffectExclusionSource: null as string | null,
       }
     : {};
+  if (registrationBackdated) {
+    await client.grade.updateMany({
+      where: {
+        studentId,
+        examId,
+        academicEffectExcluded: true,
+      },
+      data: registrationActivationData,
+    });
+  }
   const graceActivationData = graceEnded
     ? {
         academicEffectExcluded: false,
@@ -752,7 +800,7 @@ export async function syncAcademicGradeWriteback(
             academicAccountingChecked: Boolean(input.academicAccountingChecked),
           }
         : {}),
-      ...preRegistrationExclusion,
+      ...registrationActivationData,
       ...graceActivationData,
     },
     create: {
@@ -762,7 +810,7 @@ export async function syncAcademicGradeWriteback(
       score: status === "درجة" ? (score ?? null) : null,
       notes: sanitizedNotes || null,
       academicAccountingChecked: Boolean(input.academicAccountingChecked),
-      ...preRegistrationExclusion,
+      ...registrationActivationData,
       ...graceActivationData,
     },
   });
@@ -779,5 +827,5 @@ export async function syncAcademicGradeWriteback(
         input.tx ? { tx: input.tx } : {},
       );
 
-  return { grade, academicRecalculation, graceEnded };
+  return { grade, academicRecalculation, graceEnded, registrationBackdated };
 }

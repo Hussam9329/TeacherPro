@@ -1153,6 +1153,7 @@ export function GradeEntryView() {
     smartNote?: GradeSmartNoteRecord | null;
     pendingSmartNote?: boolean;
     graceEnded?: boolean;
+    registrationBackdated?: boolean;
     academicRecalculation?: { students?: Student[] } | null;
   } =>
     (result.data || {}) as {
@@ -1160,6 +1161,7 @@ export function GradeEntryView() {
       smartNote?: GradeSmartNoteRecord | null;
       pendingSmartNote?: boolean;
       graceEnded?: boolean;
+      registrationBackdated?: boolean;
       academicRecalculation?: { students?: Student[] } | null;
     };
 
@@ -1680,9 +1682,11 @@ export function GradeEntryView() {
         if (!options.silent) {
           showGradeEntryNotice(
             "success",
-            payload.graceEnded
-              ? "تم حفظ الدرجة وإنهاء فترة السماح؛ بدأت محاسبة الطالب من هذه الدرجة."
-              : "تم حفظ الدرجة في بيانات النظام وإعادة احتساب الطالب",
+            payload.registrationBackdated
+              ? "تم حفظ الدرجة محتسبة؛ قُدّم تاريخ تسجيل الطالب إلى تاريخ الامتحان وصُفّرت فترة السماح."
+              : payload.graceEnded
+                ? "تم حفظ الدرجة وإنهاء فترة السماح؛ بدأت محاسبة الطالب من هذه الدرجة."
+                : "تم حفظ الدرجة في بيانات النظام وإعادة احتساب الطالب",
           );
         }
       } finally {
@@ -2796,10 +2800,11 @@ export function GradeEntryView() {
                           )}
                         {examBeforeRegistration && (
                           <p className="mt-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
-                            هذا الامتحان يسبق تاريخ تسجيل الطالب؛ حالته «قبل
-                            تسجيل الطالب» لا تقبل درجة أو غياباً رسمياً. يمكنك
-                            تدوين الرقم، وسيحفظه النظام كدرجة معلّقة للمراجعة دون
-                            احتساب.
+                            هذا الامتحان يسبق تاريخ تسجيل الطالب؛ عند إدخال
+                            درجة رقمية سيُقدَّم تاريخ تسجيله إلى تاريخ هذا
+                            الامتحان، وتُحتسب الدرجة رسمياً في سجله، وتُصفّر
+                            فترة السماح. الغياب والغش يبقيان غير متاحين لهذه
+                            الحالة.
                           </p>
                         )}
                         {leave && (

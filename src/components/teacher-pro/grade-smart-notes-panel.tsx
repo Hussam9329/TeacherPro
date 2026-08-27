@@ -48,7 +48,7 @@ const CATEGORY_META: Record<
   BEFORE_REGISTRATION_PENDING: {
     title: "درجات امتحانات سابقة لتسجيل الطالب",
     shortTitle: "امتحان سابق للتسجيل",
-    decision: "سُجّلت في سجل الطالب دون خصم أو فصل لأنها تسبق تاريخ تسجيله.",
+    decision: "عند اعتمادها يُقدَّم تاريخ تسجيل الطالب إلى تاريخ الامتحان وتُحتسب الدرجة رسمياً.",
     className:
       "border-amber-200 bg-amber-50/80 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100",
     icon: CalendarClock,

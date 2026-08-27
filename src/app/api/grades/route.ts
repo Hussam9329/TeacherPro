@@ -360,19 +360,16 @@ async function inspectNumericGradeAttempt(
   let category: NumericGradeAttemptContext["category"] = null;
   let reason = "";
   // ⚠️ مهم: الدرجات قبل التسجيل (beforeRegistration) لا يجب أن تكون معلقة أبداً!
-  // 
+  //
   // عندما يكون الامتحان قبل تاريخ تسجيل الطالب:
   // - category يبقى null (لا Smart Note!)
   // - الدرجة تمر مباشرة لـ syncAcademicGradeWriteback
-  // - هناك تُحفظ كـ "درجة" عادية مع academicEffectExcluded = true
+  // - هناك يُقدَّم تاريخ تسجيل الطالب إلى تاريخ الامتحان وتُصفّر فترة السماح
+  //   وتُحفظ الدرجة محتسبة رسمياً في سجله
   // - هذا يضمن عدم ظهورها كـ "درجة معلّقة" في لوحة الدرجات الذكية
   //
   // لا تضف مساراً يحوّل حالة ما قبل التسجيل إلى ملاحظة معلقة؛ هذا سيعيد
   // المشكلة التي أصلحناها.
-  //
-  // الامتحان السابق للتسجيل حالة تاريخية بلا أثر أكاديمي، لكنه لا يلغي
-  // الرقم الذي أدخله الموظف. يمر مباشرة إلى Grade ويُوسم بالاستثناء الدائم
-  // داخل syncAcademicGradeWriteback، حتى لو كان الطالب حالياً مجازاً أو مفصولاً.
   if (!beforeRegistration) {
     if (onLeave) {
       category = "LEAVE_PENDING";
@@ -786,6 +783,8 @@ export async function POST(req: NextRequest) {
       status: result.grade.status,
       score: result.grade.score,
       graceEnded: "graceEnded" in result ? result.graceEnded : false,
+      registrationBackdated:
+        "registrationBackdated" in result ? result.registrationBackdated : false,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
       smartNoteId: result.smartNote?.id || null,
     });
