@@ -26,6 +26,7 @@ import {
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { rejectPendingLeaveNotesForExams } from "@/lib/student-leave-grade-override-server";
 
 function readListPagination(
   req: NextRequest,
@@ -513,6 +514,7 @@ type LeaveUpdateResult = {
 
 type LeaveDeleteResult = {
   restoredGrades: RestoredGrade[];
+  retiredPendingNotes: number;
   academicRecalculation: AcademicServerRecalculationResult;
 };
 
@@ -981,10 +983,21 @@ export async function DELETE(req: NextRequest) {
         withSerializableTransaction(async (tx) => {
           const existingLeave = await tx.studentLeave.findUnique({
             where: { id },
-            select: { studentId: true },
           });
           if (!existingLeave) throw new Error("الإجازة المطلوبة غير موجودة");
           const restoredGrades = await restoreGradesForLeave(tx, id);
+          // Retire legacy pending leave notes for the exams this leave
+          // covered so no stale "pending grade" alert survives the deletion.
+          const affectedExamIds = await getAffectedExamIds(
+            tx,
+            normalizeStoredLeave(existingLeave),
+          );
+          const retiredPendingNotes = await rejectPendingLeaveNotesForExams(
+            tx,
+            existingLeave.studentId,
+            affectedExamIds,
+            "أُلغي التعليق لأن إجازة الطالب حُذفت واستُرجعت درجاته الأصلية.",
+          );
           await tx.studentLeave.delete({ where: { id } });
           const academicRecalculation = await recalculateStudentsAcademicState(
             uniqueIds([
@@ -993,7 +1006,7 @@ export async function DELETE(req: NextRequest) {
             ]),
             { tx },
           );
-          return { restoredGrades, academicRecalculation };
+          return { restoredGrades, retiredPendingNotes, academicRecalculation };
         }),
       "StudentLeave",
     );

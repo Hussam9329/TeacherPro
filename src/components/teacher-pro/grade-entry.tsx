@@ -1409,7 +1409,7 @@ export function GradeEntryView() {
     if (leave && !canCaptureAsSmartNote) {
       showGradeEntryNotice(
         "error",
-        `الطالب مجاز لهذا الامتحان؛ يمكن إدخال رقم فقط ليُحفظ كدرجة معلّقة${leave.reason ? `: ${leave.reason}` : ""}`,
+        `الطالب مجاز لهذا الامتحان؛ عند إدخال درجة رقمية ستنتهي إجازته وتُعتمد الدرجة محتسبة${leave.reason ? `: ${leave.reason}` : ""}`,
       );
       return;
     }
@@ -3024,7 +3024,7 @@ export function GradeEntryView() {
                                     ? effectiveSaveState?.message ||
                                       "تعديل غير محفوظ"
                                     : leave
-                                      ? "الطالب مجاز — الرقم سيُعلّق"
+                                      ? "الطالب مجاز — الدرجة تنهي الإجازة وتُحتسب"
                                       : studentInGrace
                                         ? "أدخل الدرجة — ستبدأ المحاسبة"
                                         : savePhase === "idle" && entered
@@ -3087,7 +3087,8 @@ export function GradeEntryView() {
                           >
                             {isSaving
                               ? "جارٍ الحفظ..."
-                              : protectedNumericCapture
+                              : protectedNumericCapture &&
+                                  student.status === "مفصول"
                                 ? "حفظ كدرجة معلّقة"
                                 : "حفظ الآن"}
                           </Button>

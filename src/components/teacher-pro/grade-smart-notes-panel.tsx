@@ -54,9 +54,9 @@ const CATEGORY_META: Record<
     icon: CalendarClock,
   },
   LEAVE_PENDING: {
-    title: "درجات طلاب مجازين معلّقة",
-    shortTitle: "الطالب مجاز",
-    decision: "لم تُسجّل كدرجة لأن الطالب مجاز؛ حُفظت للمراجعة فقط.",
+    title: "تعارضات إجازات تاريخية",
+    shortTitle: "سجل إجازة قديم",
+    decision: "سجلات قديمة للمراجعة فقط؛ إدخال درجة اليوم ينهي الإجازة ويعتمدها محتسبة.",
     className:
       "border-emerald-200 bg-emerald-50/80 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/25 dark:text-emerald-100",
     icon: FileWarning,
@@ -65,7 +65,7 @@ const CATEGORY_META: Record<
 
 const STATUS_LABELS: Record<GradeSmartNoteStatus, string> = {
   PENDING: "درجة معلّقة",
-  PROCESSED: "محفوظة دون احتساب",
+  PROCESSED: "معالجة ومغلقة",
   CONFLICT: "تحتاج معالجة تعارض",
   REJECTED: "مرفوضة بعد المراجعة",
 };
@@ -131,8 +131,10 @@ export function GradeSmartNotesPanel({
               لوحة الدرجات الذكية لهذا الامتحان
             </CardTitle>
             <p className="mt-1 max-w-3xl text-xs leading-6 text-muted-foreground">
-              تعرض المحاولات التي حفظها النظام للمراجعة، والدرجات المحفوظة دون
-              أثر أكاديمي. الدرجة المعلّقة ليست درجة معتمدة ولا تخصم فرصة.
+              تعرض السجلات التاريخية للمراجعة والدرجات المحفوظة دون أثر أكاديمي.
+              الإدخال الحالي لا يعلّق الدرجات: السماح والإجازة وما قبل التسجيل
+              تُعتمد درجاتها فوراً وتُحتسب، والمعلّق اليوم مخصص لحالات الفصل
+              فقط.
             </p>
           </div>
           <div className="flex items-center gap-2">

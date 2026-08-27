@@ -122,8 +122,8 @@ async function affectedExamIdsForLeave(
 async function restoreLeaveBackups(
   client: Prisma.TransactionClient,
   leave: LeaveRow,
+  examIds: string[],
 ): Promise<number> {
-  const examIds = await affectedExamIdsForLeave(client, leave);
   if (examIds.length) {
     await client.grade.deleteMany({
       where: {
@@ -225,15 +225,45 @@ async function restoreLeaveBackups(
   return restored;
 }
 
+/**
+ * Retires legacy pending LEAVE_PENDING smart notes for the exams a leave
+ * covered, so no stale "pending grade because of leave" alert survives after
+ * the leave itself is gone.
+ */
+export async function rejectPendingLeaveNotesForExams(
+  client: Prisma.TransactionClient,
+  studentId: string,
+  examIds: string[],
+  resolution: string,
+): Promise<number> {
+  if (!examIds.length) return 0;
+  const rejected = await client.gradeSmartNote.updateMany({
+    where: {
+      studentId,
+      category: "LEAVE_PENDING",
+      status: "PENDING",
+      examId: { in: examIds },
+    },
+    data: {
+      status: "REJECTED",
+      resolution,
+      resolvedAt: new Date(),
+    },
+  });
+  return rejected.count;
+}
+
 export type LeaveOverrideResult = {
   endedLeaves: number;
   restoredGrades: number;
+  retiredPendingNotes: number;
   endedLeaveReasons: string[];
 };
 
 /**
  * Ends every leave covering this exam for the student and restores the
  * pre-leave grade state, mirroring the official leave-deletion semantics.
+ * Legacy pending LEAVE_PENDING notes for the covered exams are retired too.
  * Runs inside the caller's transaction; the caller writes the typed grade
  * afterwards so it overrides whatever was restored for this exam.
  */
@@ -244,15 +274,24 @@ export async function endLeavesCoveringExamForGrade(
 ): Promise<LeaveOverrideResult> {
   const leaves = await findLeavesCoveringExam(client, studentId, exam);
   let restoredGrades = 0;
+  let retiredPendingNotes = 0;
   const endedLeaveReasons: string[] = [];
   for (const leave of leaves) {
-    restoredGrades += await restoreLeaveBackups(client, leave);
+    const examIds = await affectedExamIdsForLeave(client, leave);
+    restoredGrades += await restoreLeaveBackups(client, leave, examIds);
+    retiredPendingNotes += await rejectPendingLeaveNotesForExams(
+      client,
+      studentId,
+      examIds,
+      "أُلغي التعليق لأن إدخال درجة رسمية أنهى إجازة الطالب واعتُمد الدرجة محتسبة في سجله.",
+    );
     await client.studentLeave.delete({ where: { id: leave.id } });
     endedLeaveReasons.push(leave.reason);
   }
   return {
     endedLeaves: leaves.length,
     restoredGrades,
+    retiredPendingNotes,
     endedLeaveReasons,
   };
 }
