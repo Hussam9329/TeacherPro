@@ -8,8 +8,8 @@ import { db } from "@/lib/db";
 import { routeErrorResponse } from "@/lib/route-helpers";
 import {
   classifyGradeAcademicImpact,
-  dayKey,
   isProtectedGradeKind,
+  studentLeaveAppliesToExam,
 } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
@@ -224,8 +224,14 @@ export async function GET(req: NextRequest) {
       ) return;
       const stat = statsByExamId[grade.examId] || { total: 0, passCount: 0, notPassedCount: 0, protectedCount: 0 };
       stat.total += 1;
+      // الفلترة الصحيحة: إجازة تخص هذا الامتحان بالتحديد (إجازة امتحان بنفس
+      // المعرف أو إجازة فترة تغطي تاريخ الامتحان). الشرط القديم
+      // `leaveType === "period" && dayKey(exam.date)` كان يمرر أي إجازة فترة
+      // للطالب مهما كان تاريخها، واعتمد النظام بقاء التصحيح على إعادة التحقق
+      // داخل classifyGradeAcademicImpact. هنا نرشّح من المصدر حتى يبقى المسار
+      // صحيحاً بذاته ولا يعتمد على سلوك المصنف الداخلي.
       const relevantLeaves = (leavesByStudent.get(grade.studentId) || []).filter(
-        (leave) => leave.examId === grade.examId || (leave.leaveType === "period" && dayKey(exam.date)),
+        (leave) => studentLeaveAppliesToExam(leave, exam),
       );
       const kind = classifyForExamStats(grade, exam, relevantLeaves);
       if (kind === "pass") stat.passCount += 1;
