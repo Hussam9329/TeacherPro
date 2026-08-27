@@ -1579,6 +1579,7 @@ export function GradeEntryView() {
             confirmGradeEntryOfflineAttempt(offlineAttempt, null);
           }
           const isGracePending = payload.smartNote.category === "GRACE_SCORED";
+          const isDismissedPending = payload.smartNote.category === "DISMISSED_PENDING";
           gradeMutationVersionRef.current += 1;
           setSavedRows((prev) => {
             const next = { ...prev };
@@ -1591,14 +1592,29 @@ export function GradeEntryView() {
               phase: "pending",
               message: isGracePending
                 ? "تعارض قديم لدرجة سماح — بانتظار المراجعة"
-                : "درجة معلّقة — لم تُسجّل كدرجة",
+                : isDismissedPending
+                  ? "درجة طالب مفصول — حُفظت في قائمة المعلقة"
+                  : "درجة معلّقة — لم تُسجّل كدرجة",
             },
           }));
           emitGradeEntryServerSync("grade-entry-smart-note-captured");
-          if (!isGracePending && !options.silent) {
+          // Always show toast for pending notes (including dismissed students)
+          // even during silent/auto-save so the user sees clear feedback
+          if (isGracePending) {
+            // Grace pending: only show when not silent (preserves original behavior)
+            if (!options.silent) {
+              showGradeEntryNotice(
+                "info",
+                "حفظ النظام الرقم كدرجة معلّقة للمراجعة، ولم يسجله كدرجة أو يحتسب له أي أثر.",
+              );
+            }
+          } else {
+            // Dismissed pending + other pending: always show feedback
             showGradeEntryNotice(
-              "info",
-              "حفظ النظام الرقم كدرجة معلّقة للمراجعة، ولم يسجله كدرجة أو يحتسب له أي أثر.",
+              isDismissedPending ? "success" : "info",
+              isDismissedPending
+                ? "✅ تم حفظ درجة الطالب المفصول في قائمة الدرجات المعلقة للمراجعة."
+                : "حفظ النظام الرقم كدرجة معلّقة للمراجعة، ولم يسجله كدرجة أو يحتسب له أي أثر.",
             );
           }
           return;
