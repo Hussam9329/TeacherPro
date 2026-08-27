@@ -4,8 +4,10 @@ import test from "node:test";
 import {
   DISMISSED_TELEGRAM_DRAFT_MAX_LENGTH,
   buildBoundedTelegramDraft,
+  buildDismissedTelegramReport,
   buildDismissedHistoryAccess,
   canUseDirectDismissedTelegramDraft,
+  canUseSingleDismissedTelegramMessage,
   escapeDismissedHistoryHtml,
   isDismissalActionNote,
   isDismissalOpportunityLog,
@@ -129,6 +131,106 @@ test("Telegram drafts are bounded and preserve the safety notice", () => {
   assert.match(message, /توقيع الإدارة$/);
 });
 
+test("professional Telegram report consolidates exams and follows action semantics", () => {
+  const message = buildDismissedTelegramReport(
+    {
+      name: "شهد علي سامي ناجي",
+      code: "BIO-1061",
+      courseName: "الدورة الصيفية الثانية",
+      dismissalDate: "2026/8/20",
+      dismissalReason: "انتهاء الفرص",
+    },
+    [
+      {
+        date: "2026-07-05T10:00:00Z",
+        kind: "grade",
+        title: "درجة امتحان",
+        details: [
+          "الدورة: الدورة الصيفية الثانية",
+          "الامتحان: الامتحان 1",
+          "تاريخ الامتحان: 2026/07/05",
+          "الدرجة: 87 / 100",
+        ],
+      },
+      {
+        date: "2026-07-12T10:00:00Z",
+        kind: "grade",
+        title: "درجة امتحان",
+        details: [
+          "الدورة: الدورة الصيفية الثانية",
+          "الامتحان: الامتحان 2",
+          "تاريخ الامتحان: 2026/7/12",
+          "الحالة: غائب",
+        ],
+      },
+      {
+        date: "2026-07-12T12:00:00Z",
+        kind: "opportunity",
+        title: "إضافة 1 فرصة",
+        details: [
+          "الدورة: الدورة الصيفية الثانية",
+          "الإجراء المسجل: خصم تلقائي",
+          "التغيير في الرصيد: +1",
+          "السبب: غياب في الامتحان",
+          "الامتحان: الامتحان 2",
+          "تاريخ الامتحان: 2026/7/12",
+        ],
+      },
+      {
+        date: "2026-07-12T13:00:00Z",
+        kind: "correction",
+        title: "سجل تصحيح ورقة امتحان",
+        details: [
+          "الامتحان: الامتحان 2",
+          "حالة التصحيح: مكتمل",
+          "المصحح: موظف داخلي",
+        ],
+      },
+    ],
+  );
+
+  assert.match(message, /1\. الامتحان 1 — 2026\/7\/5\nالنتيجة: 87 من 100/);
+  assert.match(message, /2\. الامتحان 2 — 2026\/7\/12\nالنتيجة: غائب/);
+  assert.match(message, /الإجراء: تم خصم فرصة — السبب: غياب في الامتحان/);
+  assert.equal((message.match(/الامتحان 2 —/g) || []).length, 1);
+  assert.doesNotMatch(message, /تمت إضافة فرصة|المصحح|حالة التصحيح|HTML/);
+});
+
+test("pending and post-dismissal grades stay inside one exam entry", () => {
+  const message = buildDismissedTelegramReport(
+    {
+      name: "طالب",
+      code: "BIO-2",
+      courseName: "الدورة الحالية",
+    },
+    [
+      {
+        kind: "pending-grade",
+        details: [
+          "الدورة: الدورة الحالية",
+          "الامتحان: امتحان موحد",
+          "الدرجة المدخلة: 60 / 100",
+          "حالة المراجعة: PENDING",
+        ],
+      },
+      {
+        kind: "post-dismissal-grade",
+        details: [
+          "الدورة: الدورة الحالية",
+          "الامتحان: امتحان موحد",
+          "تاريخ الامتحان: 2026/8/2",
+          "الدرجة: 70 / 100",
+        ],
+      },
+    ],
+  );
+
+  assert.equal((message.match(/امتحان موحد —/g) || []).length, 1);
+  assert.match(message, /النتيجة: 70 من 100/);
+  assert.match(message, /تم تسجيل هذه النتيجة بعد الفصل/);
+  assert.match(message, /توجد درجة معلقة بعد الفصل: 60 من 100/);
+});
+
 test("full Telegram history uses a file fallback before deep links become unsafe", () => {
   assert.equal(canUseDirectDismissedTelegramDraft("سجل قصير"), true);
   assert.equal(
@@ -140,6 +242,8 @@ test("full Telegram history uses a file fallback before deep links become unsafe
     false,
     "Arabic URI expansion must be checked even below the character cap",
   );
+  assert.equal(canUseSingleDismissedTelegramMessage("سجل ".repeat(500)), true);
+  assert.equal(canUseSingleDismissedTelegramMessage("سجل ".repeat(1000)), false);
 });
 
 test("HTML and exported filenames neutralize unsafe user content", () => {

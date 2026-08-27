@@ -266,6 +266,9 @@ function pushSmartNoteEvents(
       details: [
         sourceCourseDetail(courseName),
         `الامتحان: ${text(note.examNameSnapshot) || text(exam.name) || "غير مسمى"}`,
+        text(exam.date) || exam.date instanceof Date
+          ? `تاريخ الامتحان: ${detailDate(exam.date)}`
+          : "",
         score !== null
           ? `الدرجة المدخلة: ${score}${fullMark !== null ? ` / ${fullMark}` : ""}`
           : "",

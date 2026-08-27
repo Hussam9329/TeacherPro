@@ -14,7 +14,9 @@ import { formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import {
   buildBoundedTelegramDraft,
+  buildDismissedTelegramReport,
   canUseDirectDismissedTelegramDraft,
+  canUseSingleDismissedTelegramMessage,
   escapeDismissedHistoryHtml,
   safeDismissedHistoryFileName,
 } from "@/lib/dismissed-history";
@@ -149,39 +151,21 @@ function toneClasses(tone: TimelineEvent["tone"]) {
   return "border-border bg-muted/20";
 }
 
-function historyText(history: StudentHistory): string {
-  if (history.events.length === 0) {
-    return "لا توجد أحداث تفصيلية محفوظة لهذا الطالب.";
-  }
-
-  return history.events
-    .flatMap((event, index) => [
-      `${index + 1}) ${formatBaghdadDateTime(event.date)} — ${event.title}`,
-      ...event.details.map((detail) => `• ${detail}`),
-      "",
-    ])
-    .join("\n")
-    .trim();
-}
-
 function fullTelegramMessage(history: StudentHistory) {
   const s = history.student;
-  return `السلام عليكم
-هذا هو السجل الكامل للطالب "${s.name}"
-
-بيانات الطالب
-الاسم: ${s.name}
-الكود: ${s.code}
-الدورة الحالية: ${s.courseName}
-تاريخ التسجيل: ${formatBaghdadDateTime(s.createdAt)}
-تاريخ الفصل: ${formatBaghdadDateTime(s.dismissalAt)}
-سبب الفصل: ${s.dismissalReason || "غير مسجل"}
-${s.dismissalNotes ? `ملاحظات الفصل: ${s.dismissalNotes}\n` : ""}
-السجل الزمني الكامل منذ التسجيل وحتى الفصل وما بعده
-
-${historyText(history)}
-
-إدارة حسن فلاح مدرس مادة الاحياء`;
+  const dismissalDateTime = formatBaghdadDateTime(s.dismissalAt);
+  return buildDismissedTelegramReport(
+    {
+      name: s.name,
+      code: s.code,
+      courseName: s.courseName,
+      dismissalDate:
+        dismissalDateTime === "—" ? "" : dismissalDateTime.split(" ")[0],
+      dismissalReason: s.dismissalReason,
+      dismissalNotes: s.dismissalNotes,
+    },
+    history.events,
+  );
 }
 
 function telegramAttachmentMessage(history: StudentHistory) {
@@ -202,7 +186,7 @@ function telegramAttachmentMessage(history: StudentHistory) {
   return buildBoundedTelegramDraft({
     header,
     timeline: metrics || "لا توجد أحداث متاحة",
-    footer: "إدارة حسن فلاح مدرس مادة الاحياء",
+    footer: "إدارة حسن فلاح مدرس مادة الأحياء",
   });
 }
 
@@ -515,14 +499,39 @@ export function DismissedManagementView() {
     const history = await loadHistory(student.id);
     if (!history) return;
     const completeMessage = fullTelegramMessage(history);
-    const sendDirectly = canUseDirectDismissedTelegramDraft(completeMessage);
-    if (!sendDirectly) downloadHistoryHtml(history);
-    const message = sendDirectly
-      ? completeMessage
-      : telegramAttachmentMessage(history);
+    if (canUseDirectDismissedTelegramDraft(completeMessage)) {
+      window.location.assign(
+        `tg://resolve?domain=${encodeURIComponent(username)}&text=${encodeURIComponent(completeMessage)}`,
+      );
+      return;
+    }
 
+    if (canUseSingleDismissedTelegramMessage(completeMessage)) {
+      try {
+        await navigator.clipboard.writeText(completeMessage);
+        window.alert(
+          "تم نسخ التقرير الدراسي الكامل. ستفتح محادثة الطالب الآن؛ الصق الرسالة ثم أرسلها.",
+        );
+        window.location.assign(
+          `tg://resolve?domain=${encodeURIComponent(username)}`,
+        );
+        return;
+      } catch {
+        downloadHistoryHtml(history);
+        window.alert(
+          "تعذر النسخ التلقائي، لذلك تم تنزيل التقرير الكامل كملف HTML. ستفتح المحادثة الآن لإرفاقه.",
+        );
+      }
+    } else {
+      downloadHistoryHtml(history);
+      window.alert(
+        "التقرير أطول من حد رسالة تيليجرام، لذلك تم تنزيله كاملاً كملف HTML. ستفتح المحادثة الآن لإرفاقه.",
+      );
+    }
+
+    const attachmentMessage = telegramAttachmentMessage(history);
     window.location.assign(
-      `tg://resolve?domain=${encodeURIComponent(username)}&text=${encodeURIComponent(message)}`,
+      `tg://resolve?domain=${encodeURIComponent(username)}&text=${encodeURIComponent(attachmentMessage)}`,
     );
   };
 
@@ -767,9 +776,10 @@ export function DismissedManagementView() {
 
                 {student.telegram ? (
                   <p className="text-[11px] text-muted-foreground">
-                    زر تيليجرام يرسل السجل المصرح به كاملاً عندما يسمح الحجم.
-                    للسجلات الطويلة ينزّل ملف HTML الكامل ويفتح المحادثة
-                    برسالة جاهزة لإرفاقه دون فقدان أي حدث.
+                    زر تيليجرام يجهز تقريراً مرتباً لكل امتحان ونتيجته أو
+                    غيابه والإجراء المرتبط به. عند تجاوز حد الرابط يُنسخ
+                    التقرير، وعند تجاوز حد الرسالة أو تعذر النسخ يُنزّل ملف
+                    HTML الكامل دون فقدان البيانات.
                   </p>
                 ) : null}
 
