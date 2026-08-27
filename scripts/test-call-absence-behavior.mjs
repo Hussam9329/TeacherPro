@@ -58,6 +58,7 @@ function createTypeScriptModuleLoader() {
 const loadTypeScriptModule = createTypeScriptModuleLoader();
 const absence = loadTypeScriptModule("src/lib/call-absence.ts");
 const range = loadTypeScriptModule("src/lib/call-grade-range.ts");
+const contact = loadTypeScriptModule("src/lib/call-contact-status.ts");
 const candidatesSource = fs.readFileSync(
   path.join(root, "src/app/api/student-calls/candidates/route.ts"),
   "utf8",
@@ -90,6 +91,36 @@ const absentGrade = {
   score: null,
   academicEffectExcluded: false,
 };
+
+test("contact status filters normalize known values and reject unknown values", () => {
+  assert.equal(contact.normalizeContactStatusFilter("contacted"), "contacted");
+  assert.equal(contact.normalizeContactStatusFilter("no-action"), "no-action");
+  assert.equal(contact.normalizeContactStatusFilter("unexpected"), "all");
+  assert.equal(contact.normalizeContactStatusFilter(null), "all");
+});
+
+test("legacy completed calls remain compatible with the contacted filter", () => {
+  assert.equal(
+    contact.normalizeContactStatus({ status: "", completed: true }),
+    "تم الاتصال",
+  );
+  assert.equal(
+    contact.normalizeContactStatus({ status: "حالة قديمة", completed: false }),
+    "",
+  );
+});
+
+test("every contact filter matches only its intended status", () => {
+  assert.equal(contact.contactStatusMatchesFilter("all", "لم يرد"), true);
+  assert.equal(contact.contactStatusMatchesFilter("no-action", ""), true);
+  assert.equal(
+    contact.contactStatusMatchesFilter("contacted", "تم الاتصال"),
+    true,
+  );
+  assert.equal(contact.contactStatusMatchesFilter("unanswered", "لم يرد"), true);
+  assert.equal(contact.contactStatusMatchesFilter("wrong", "الرقم خاطئ"), true);
+  assert.equal(contact.contactStatusMatchesFilter("wrong", "لم يرد"), false);
+});
 
 test("stored absent remains absent for inactive and no-discount exams", () => {
   assert.equal(

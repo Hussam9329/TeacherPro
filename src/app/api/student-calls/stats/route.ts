@@ -20,6 +20,11 @@ import {
   parseCallGradeRange,
 } from "@/lib/call-grade-range";
 import {
+  contactStatusMatchesFilter,
+  normalizeContactStatus,
+  normalizeContactStatusFilter,
+} from "@/lib/call-contact-status";
+import {
   buildImplicitCallAbsenceGrade,
   resolveCallAbsenceSource,
   type CallAbsenceSource,
@@ -34,8 +39,6 @@ type CallStatusFilter =
   | "passed"
   | "full"
   | "protected";
-
-type ContactStatus = "" | "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
 
 type DbStudentLite = {
   id: string;
@@ -127,16 +130,6 @@ function dayAfter(value: Date): Date {
   const next = startOfUtcDay(value);
   next.setUTCDate(next.getUTCDate() + 1);
   return next;
-}
-
-function normalizeContactStatus(
-  call: { status: string; completed: boolean } | undefined,
-): ContactStatus {
-  if (!call) return "";
-  const value = String(call.status || "").trim();
-  if (value === "تم الاتصال" || value === "لم يرد" || value === "الرقم خاطئ")
-    return value;
-  return call.completed ? "تم الاتصال" : "";
 }
 
 function isDeductedImpact(kind: GradeClassificationKind): boolean {
@@ -268,6 +261,9 @@ export async function GET(req: NextRequest) {
     const courseId = normalizeListFilter(searchParams.get("courseId"));
     const examId = normalizeListFilter(searchParams.get("examId"));
     const statusFilter = normalizeCallStatusFilter(searchParams.get("statusFilter"));
+    const contactStatusFilter = normalizeContactStatusFilter(
+      searchParams.get("contactStatusFilter"),
+    );
     const gradeRange = parseCallGradeRange(
       searchParams.get("gradeFrom"),
       searchParams.get("gradeTo"),
@@ -377,7 +373,7 @@ export async function GET(req: NextRequest) {
               examId,
               student: { is: studentCourseScopeWhere(courseId, "followup") },
             },
-            orderBy: { createdAt: "desc" },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
             select: {
               studentId: true,
               category: true,
@@ -507,6 +503,8 @@ export async function GET(req: NextRequest) {
         return false;
       }
       if (!callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)) return false;
+      const contactStatus = normalizeContactStatus(bestCallByStudentId.get(student.id));
+      if (!contactStatusMatchesFilter(contactStatusFilter, contactStatus)) return false;
       if (
         generalSearch &&
         !includesSearch(

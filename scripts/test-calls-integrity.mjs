@@ -12,6 +12,7 @@ const files = {
   profileLog: 'src/app/api/students/profile-log/route.ts',
   profileDialog: 'src/components/teacher-pro/student-profile-dialog.tsx',
   gradeRange: 'src/lib/call-grade-range.ts',
+  contactStatus: 'src/lib/call-contact-status.ts',
 };
 
 const read = (file) => fs.readFileSync(file, 'utf8');
@@ -35,6 +36,7 @@ const callUniqueMigration = read(files.callUniqueMigration);
 const profileLog = read(files.profileLog);
 const profileDialog = read(files.profileDialog);
 const gradeRange = read(files.gradeRange);
+const contactStatus = read(files.contactStatus);
 
 const callPageSizeMatch = followUp.match(/const CALL_PAGE_SIZE = (\d+);/);
 const callPageSize = Number(callPageSizeMatch?.[1] || 0);
@@ -230,6 +232,28 @@ assert(
   followUp.includes('gradeFrom: effectiveCallGradeFrom') &&
     followUp.includes('gradeTo: effectiveCallGradeTo'),
   'طلبات القائمة والإحصائيات والتصدير لا ترسل نطاقاً رقمياً متأخراً مع الغائبين أو الغش',
+);
+assert(
+  followUp.includes('حالة التواصل') &&
+    followUp.includes('contactStatusFilter: callContactStatusFilter') &&
+    api.includes('contactStatusFilter: query.contactStatusFilter'),
+  'فلتر حالة التواصل ينتقل من الواجهة إلى القائمة والإحصائيات والتصدير',
+);
+assert(
+  candidates.includes('contactStatusMatchesFilter(contactStatusFilter, contactStatus)') &&
+    stats.includes('contactStatusMatchesFilter(contactStatusFilter, contactStatus)') &&
+    contactStatus.includes('call.completed ? "تم الاتصال" : ""'),
+  'القائمة والإحصائيات تستخدمان منطقاً موحداً ومتوافقاً مع سجلات التواصل القديمة',
+);
+assert(
+  candidates.includes('orderBy: [{ createdAt: "desc" }, { id: "desc" }]') &&
+    stats.includes('orderBy: [{ createdAt: "desc" }, { id: "desc" }]'),
+  'اختيار أحدث حالة تواصل حتمي ومتطابق بين القائمة والإحصائيات',
+);
+assert(
+  followUp.includes('setCallContactFilterRefreshKey((current) => current + 1)') &&
+    followUp.includes('callContactStatusFilter !== "all"'),
+  'تحديث حالة طالب يعيد جلب النتائج عندما لا تعود مطابقة لفلتر التواصل النشط',
 );
 assert(
   followUp.includes('الطلاب الذين لم تُدخل') &&

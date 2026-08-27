@@ -21,6 +21,11 @@ import {
   parseCallGradeRange,
 } from "@/lib/call-grade-range";
 import {
+  contactStatusMatchesFilter,
+  normalizeContactStatus,
+  normalizeContactStatusFilter,
+} from "@/lib/call-contact-status";
+import {
   buildImplicitCallAbsenceGrade,
   resolveCallAbsenceSource,
   type CallAbsenceSource,
@@ -462,6 +467,9 @@ export async function GET(req: NextRequest) {
     const courseId = normalizeListFilter(searchParams.get("courseId"));
     const examId = normalizeListFilter(searchParams.get("examId"));
     const statusFilter = normalizeCallStatusFilter(searchParams.get("statusFilter"));
+    const contactStatusFilter = normalizeContactStatusFilter(
+      searchParams.get("contactStatusFilter"),
+    );
     const gradeRange = parseCallGradeRange(
       searchParams.get("gradeFrom"),
       searchParams.get("gradeTo"),
@@ -691,6 +699,60 @@ export async function GET(req: NextRequest) {
       selectedLeavesByStudentId.set(leave.studentId, list);
     });
 
+    const bestCallByStudentId = new Map<
+      string,
+      { status: string; completed: boolean }
+    >();
+    if (contactStatusFilter !== "all") {
+      const selectedExamCalls = await db.studentCall.findMany({
+        where: {
+          examId,
+          studentId: { in: candidateStudentIds },
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        select: {
+          studentId: true,
+          category: true,
+          status: true,
+          completed: true,
+        },
+      });
+      const studentById = new Map(
+        selectedStudents.map((student) => [student.id, student]),
+      );
+      selectedExamCalls.forEach((call) => {
+        const student = studentById.get(call.studentId);
+        if (!student) return;
+        const storedGrade = selectedGradeByStudentId.get(student.id);
+        const leaves = leavesForExam(selectedLeavesByStudentId, student.id, exam);
+        const absenceSource = resolveCallAbsenceSource({
+          grade: storedGrade,
+          exam,
+          student,
+          leaves,
+          hasAttemptEvidence: attemptEvidenceStudentIds.has(student.id),
+        });
+        const grade =
+          storedGrade ||
+          (absenceSource === "missing"
+            ? buildImplicitCallAbsenceGrade({
+                studentId: student.id,
+                examId: exam.id,
+                examDate: exam.date,
+              })
+            : undefined);
+        if (!grade) return;
+        const impactKind = classifyCallImpact(grade, exam, student, leaves);
+        const kind = absenceSource ? "absent" : gradeKindForCalls(impactKind);
+        const exactCategory =
+          absenceSource === "missing" ? "absent" : `grade:${grade.id}`;
+        if (call.category !== exactCategory && call.category !== kind) return;
+        if (!bestCallByStudentId.has(call.studentId)) {
+          bestCallByStudentId.set(call.studentId, call);
+        }
+      });
+    }
+
     const matching = selectedStudents.flatMap((student) => {
       const storedGrade = selectedGradeByStudentId.get(student.id);
       const leaves = leavesForExam(selectedLeavesByStudentId, student.id, exam);
@@ -715,6 +777,8 @@ export async function GET(req: NextRequest) {
       const kind = absenceSource ? "absent" : gradeKindForCalls(impactKind);
       if (!gradeMatchesStatusFilter(statusFilter, kind, impactKind, absenceSource)) return [];
       if (!callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)) return [];
+      const contactStatus = normalizeContactStatus(bestCallByStudentId.get(student.id));
+      if (!contactStatusMatchesFilter(contactStatusFilter, contactStatus)) return [];
       const values = searchableValues({ student, grade, exam, kind });
       if (generalSearch && !includesSearch(generalSearch, values)) return [];
       if (filterSearch && !includesSearch(filterSearch, values)) return [];
