@@ -59,6 +59,7 @@ const loadTypeScriptModule = createTypeScriptModuleLoader();
 const absence = loadTypeScriptModule("src/lib/call-absence.ts");
 const range = loadTypeScriptModule("src/lib/call-grade-range.ts");
 const contact = loadTypeScriptModule("src/lib/call-contact-status.ts");
+const notes = loadTypeScriptModule("src/lib/call-notes-filter.ts");
 const candidatesSource = fs.readFileSync(
   path.join(root, "src/app/api/student-calls/candidates/route.ts"),
   "utf8",
@@ -120,6 +121,37 @@ test("every contact filter matches only its intended status", () => {
   assert.equal(contact.contactStatusMatchesFilter("unanswered", "لم يرد"), true);
   assert.equal(contact.contactStatusMatchesFilter("wrong", "الرقم خاطئ"), true);
   assert.equal(contact.contactStatusMatchesFilter("wrong", "لم يرد"), false);
+});
+
+test("notes filter accepts only the supported value", () => {
+  assert.equal(notes.normalizeCallNotesFilter("with-notes"), "with-notes");
+  assert.equal(notes.normalizeCallNotesFilter("all"), "all");
+  assert.equal(notes.normalizeCallNotesFilter("unexpected"), "all");
+  assert.equal(notes.normalizeCallNotesFilter(null), "all");
+});
+
+test("notes filter counts only non-empty manual student notes", () => {
+  assert.equal(
+    notes.hasManualCallNote({
+      category: notes.CALL_STUDENT_NOTE_CATEGORY,
+      notes: "ملاحظة متابعة",
+    }),
+    true,
+  );
+  assert.equal(
+    notes.hasManualCallNote({
+      category: notes.CALL_STUDENT_NOTE_CATEGORY,
+      notes: "   ",
+    }),
+    false,
+  );
+  assert.equal(
+    notes.hasManualCallNote({
+      category: "grade:example",
+      notes: "نص تلقائي لإجراء الاتصال",
+    }),
+    false,
+  );
 });
 
 test("stored absent remains absent for inactive and no-discount exams", () => {

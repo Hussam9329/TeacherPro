@@ -943,6 +943,7 @@ export interface CallStatsQuery {
   examId?: string;
   statusFilter?: string;
   contactStatusFilter?: string;
+  notesFilter?: string;
   gradeFrom?: string;
   gradeTo?: string;
   q?: string;
@@ -1962,6 +1963,7 @@ export const callStatsApi = {
       examId: query.examId,
       statusFilter: query.statusFilter,
       contactStatusFilter: query.contactStatusFilter,
+      notesFilter: query.notesFilter,
       gradeFrom: query.gradeFrom,
       gradeTo: query.gradeTo,
       q: query.q,
@@ -1981,6 +1983,7 @@ export const callCandidatesApi = {
       examId: query.examId,
       statusFilter: query.statusFilter,
       contactStatusFilter: query.contactStatusFilter,
+      notesFilter: query.notesFilter,
       gradeFrom: query.gradeFrom,
       gradeTo: query.gradeTo,
       q: query.q,

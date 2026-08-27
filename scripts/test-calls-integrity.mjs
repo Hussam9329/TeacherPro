@@ -13,6 +13,7 @@ const files = {
   profileDialog: 'src/components/teacher-pro/student-profile-dialog.tsx',
   gradeRange: 'src/lib/call-grade-range.ts',
   contactStatus: 'src/lib/call-contact-status.ts',
+  notesFilter: 'src/lib/call-notes-filter.ts',
 };
 
 const read = (file) => fs.readFileSync(file, 'utf8');
@@ -37,6 +38,7 @@ const profileLog = read(files.profileLog);
 const profileDialog = read(files.profileDialog);
 const gradeRange = read(files.gradeRange);
 const contactStatus = read(files.contactStatus);
+const notesFilter = read(files.notesFilter);
 
 const callPageSizeMatch = followUp.match(/const CALL_PAGE_SIZE = (\d+);/);
 const callPageSize = Number(callPageSizeMatch?.[1] || 0);
@@ -251,9 +253,35 @@ assert(
   'اختيار أحدث حالة تواصل حتمي ومتطابق بين القائمة والإحصائيات',
 );
 assert(
-  followUp.includes('setCallContactFilterRefreshKey((current) => current + 1)') &&
+  followUp.includes('setCallFilterRefreshKey((current) => current + 1)') &&
     followUp.includes('callContactStatusFilter !== "all"'),
   'تحديث حالة طالب يعيد جلب النتائج عندما لا تعود مطابقة لفلتر التواصل النشط',
+);
+assert(
+  followUp.includes('الملاحظات') &&
+    followUp.includes('notesFilter: callNotesFilter') &&
+    api.includes('notesFilter: query.notesFilter'),
+  'فلتر الملاحظات ينتقل من الواجهة إلى القائمة والإحصائيات والتصدير',
+);
+assert(
+  candidates.includes('notesFilter === "with-notes"') &&
+    stats.includes('notesFilter === "with-notes"') &&
+    candidates.includes('studentIdsWithNotes.has(student.id)') &&
+    stats.includes('studentIdsWithNotes.has(student.id)') &&
+    notesFilter.includes('CALL_STUDENT_NOTE_CATEGORY'),
+  'القائمة والإحصائيات تعرضان فقط أصحاب الملاحظات اليدوية المحفوظة',
+);
+assert(
+  candidates.includes('studentId: { in: candidateStudentIds }') &&
+    stats.includes('studentId: { in: students.map((student) => student.id) }') &&
+    candidates.includes('if (notesFilter === "with-notes")') &&
+    stats.includes('if (notesFilter === "with-notes" && students.length > 0)'),
+  'استعلام الملاحظات لا يعمل إلا عند تفعيل الفلتر ويبقى محصوراً بطلاب الدورة',
+);
+assert(
+  followUp.includes('data?.deleted && callNotesFilter === "with-notes"') &&
+    followUp.includes('setCallFilterRefreshKey((current) => current + 1)'),
+  'حذف آخر ملاحظة يزيل الطالب من نتائج فلتر أصحاب الملاحظات مباشرة',
 );
 assert(
   followUp.includes('الطلاب الذين لم تُدخل') &&

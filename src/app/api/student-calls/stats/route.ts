@@ -25,6 +25,11 @@ import {
   normalizeContactStatusFilter,
 } from "@/lib/call-contact-status";
 import {
+  CALL_STUDENT_NOTE_CATEGORY,
+  hasManualCallNote,
+  normalizeCallNotesFilter,
+} from "@/lib/call-notes-filter";
+import {
   buildImplicitCallAbsenceGrade,
   resolveCallAbsenceSource,
   type CallAbsenceSource,
@@ -264,6 +269,7 @@ export async function GET(req: NextRequest) {
     const contactStatusFilter = normalizeContactStatusFilter(
       searchParams.get("contactStatusFilter"),
     );
+    const notesFilter = normalizeCallNotesFilter(searchParams.get("notesFilter"));
     const gradeRange = parseCallGradeRange(
       searchParams.get("gradeFrom"),
       searchParams.get("gradeTo"),
@@ -415,6 +421,20 @@ export async function GET(req: NextRequest) {
 
     const gradeByStudentId = new Map<string, DbGradeLite>();
     grades.forEach((grade) => gradeByStudentId.set(grade.studentId, grade));
+    const studentIdsWithNotes = new Set<string>();
+    if (notesFilter === "with-notes" && students.length > 0) {
+      const noteCalls = await db.studentCall.findMany({
+        where: {
+          studentId: { in: students.map((student) => student.id) },
+          category: CALL_STUDENT_NOTE_CATEGORY,
+          notes: { not: "" },
+        },
+        select: { studentId: true, category: true, notes: true },
+      });
+      noteCalls.forEach((call) => {
+        if (hasManualCallNote(call)) studentIdsWithNotes.add(call.studentId);
+      });
+    }
     const attemptEvidenceStudentIds = new Set([
       ...scoredAttempts.map((note) => note.studentId),
       ...correctionAttempts.map((sheet) => sheet.studentId),
@@ -505,6 +525,7 @@ export async function GET(req: NextRequest) {
       if (!callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)) return false;
       const contactStatus = normalizeContactStatus(bestCallByStudentId.get(student.id));
       if (!contactStatusMatchesFilter(contactStatusFilter, contactStatus)) return false;
+      if (notesFilter === "with-notes" && !studentIdsWithNotes.has(student.id)) return false;
       if (
         generalSearch &&
         !includesSearch(

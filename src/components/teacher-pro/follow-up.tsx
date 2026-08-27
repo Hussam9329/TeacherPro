@@ -76,6 +76,7 @@ type CallContactStatusFilter =
   | "contacted"
   | "unanswered"
   | "wrong";
+type CallNotesFilter = "all" | "with-notes";
 type CallBadgeTone = "deducted" | "warning" | "safe" | "success" | "neutral";
 type CallBadgeInfo = { label: string; tone: CallBadgeTone; detail?: string };
 type PledgeTypeFilter = "all" | "temporary" | "final";
@@ -194,6 +195,15 @@ const callContactStatusFilterLabels: Record<CallContactStatusFilter, string> = {
 const callContactStatusFilterOptions = Object.keys(
   callContactStatusFilterLabels,
 ) as CallContactStatusFilter[];
+
+const callNotesFilterLabels: Record<CallNotesFilter, string> = {
+  all: "كل الطلاب",
+  "with-notes": "لديهم ملاحظات",
+};
+
+const callNotesFilterOptions = Object.keys(
+  callNotesFilterLabels,
+) as CallNotesFilter[];
 
 function callStatusSupportsGradeRange(status: CallStatusFilter): boolean {
   // "absent" و "cheating" ليس لديهما درجة رقمية. "protected" قد يحمل
@@ -612,6 +622,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     useState<CallStatusFilter>("all");
   const [callContactStatusFilter, setCallContactStatusFilter] =
     useState<CallContactStatusFilter>("all");
+  const [callNotesFilter, setCallNotesFilter] =
+    useState<CallNotesFilter>("all");
   const [callGradeFrom, setCallGradeFrom] = useState("");
   const [callGradeTo, setCallGradeTo] = useState("");
   const [callGeneralSearch, setCallGeneralSearch] = useState("");
@@ -628,8 +640,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const callMutationVersionRef = useRef(0);
   const callCandidatesRequestSequenceRef = useRef(0);
   const callRowsRef = useRef<CallStudentRow[]>([]);
-  const [callContactFilterRefreshKey, setCallContactFilterRefreshKey] =
-    useState(0);
+  const [callFilterRefreshKey, setCallFilterRefreshKey] = useState(0);
   const [callNoteDrafts, setCallNoteDrafts] = useState<Record<string, string>>({});
   const [callServerPageInfo, setCallServerPageInfo] = useState({
     totalCount: 0,
@@ -699,6 +710,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     setCallExamId("");
     setCallStatusFilter("all");
     setCallContactStatusFilter("all");
+    setCallNotesFilter("all");
     setCallGradeFrom("");
     setCallGradeTo("");
     setCallFilterSearch("");
@@ -709,6 +721,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   useEffect(() => {
     setCallStatusFilter("all");
     setCallContactStatusFilter("all");
+    setCallNotesFilter("all");
     setCallGradeFrom("");
     setCallGradeTo("");
     setCallFilterSearch("");
@@ -778,6 +791,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           examId: callExamId,
           statusFilter: callStatusFilter,
           contactStatusFilter: callContactStatusFilter,
+          notesFilter: callNotesFilter,
           gradeFrom: effectiveCallGradeFrom,
           gradeTo: effectiveCallGradeTo,
           q: debouncedCallGeneralSearch,
@@ -849,12 +863,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     callExamId,
     callStatusFilter,
     callContactStatusFilter,
+    callNotesFilter,
     effectiveCallGradeFrom,
     effectiveCallGradeTo,
     debouncedCallGeneralSearch,
     debouncedCallFilterSearch,
     callGradePage,
-    callContactFilterRefreshKey,
+    callFilterRefreshKey,
     syncKey,
     isBackgroundSync,
   ]);
@@ -878,6 +893,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             examId: callExamId,
             statusFilter: callStatusFilter,
             contactStatusFilter: callContactStatusFilter,
+            notesFilter: callNotesFilter,
             gradeFrom: effectiveCallGradeFrom,
             gradeTo: effectiveCallGradeTo,
             q: debouncedCallGeneralSearch,
@@ -907,11 +923,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     callExamId,
     callStatusFilter,
     callContactStatusFilter,
+    callNotesFilter,
     effectiveCallGradeFrom,
     effectiveCallGradeTo,
     debouncedCallGeneralSearch,
     debouncedCallFilterSearch,
-    callContactFilterRefreshKey,
+    callFilterRefreshKey,
     syncKey,
     isBackgroundSync,
   ]);
@@ -1382,6 +1399,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       examId: callExamId,
       statusFilter: callStatusFilter,
       contactStatusFilter: callContactStatusFilter,
+      notesFilter: callNotesFilter,
       gradeFrom: effectiveCallGradeFrom,
       gradeTo: effectiveCallGradeTo,
       q: debouncedCallGeneralSearch,
@@ -1497,7 +1515,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       });
       if (callContactStatusFilter !== "all") {
         setCallGradePage(1);
-        setCallContactFilterRefreshKey((current) => current + 1);
+        setCallFilterRefreshKey((current) => current + 1);
       }
       toast.success("تم حفظ إجراء التواصل");
     } finally {
@@ -1532,6 +1550,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       }
       const data = result.data as { studentCall?: StudentCall | null; deleted?: boolean } | null;
       mergeSavedCall(payload, data?.studentCall || null, Boolean(data?.deleted));
+      if (data?.deleted && callNotesFilter === "with-notes") {
+        setCallGradePage(1);
+        setCallFilterRefreshKey((current) => current + 1);
+      }
       setCallNoteDrafts((current) => {
         const next = { ...current };
         delete next[row.student.id];
@@ -2762,6 +2784,28 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                       {callContactStatusFilterOptions.map((option) => (
                         <SelectItem key={option} value={option}>
                           {callContactStatusFilterLabels[option]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="tp-filter-field tp-filter-secondary">
+                  <Label>الملاحظات</Label>
+                  <Select
+                    value={callNotesFilter}
+                    disabled={!callExamSelected}
+                    onValueChange={(value) => {
+                      setCallNotesFilter(value as CallNotesFilter);
+                      setCallGradePage(1);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {callNotesFilterOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {callNotesFilterLabels[option]}
                         </SelectItem>
                       ))}
                     </SelectContent>

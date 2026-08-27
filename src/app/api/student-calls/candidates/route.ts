@@ -26,6 +26,11 @@ import {
   normalizeContactStatusFilter,
 } from "@/lib/call-contact-status";
 import {
+  CALL_STUDENT_NOTE_CATEGORY,
+  hasManualCallNote,
+  normalizeCallNotesFilter,
+} from "@/lib/call-notes-filter";
+import {
   buildImplicitCallAbsenceGrade,
   resolveCallAbsenceSource,
   type CallAbsenceSource,
@@ -122,7 +127,6 @@ type DbLeaveLite = {
   dateTo: Date | null;
 };
 
-const CALL_STUDENT_NOTE_CATEGORY = "call-student-note";
 // ROOT-CAUSE FIX (الإصلاح السابع — شمل المحميين في فلتر "كل الحالات"):
 // سابقاً "protected" كان ضمن NON_DISPLAY_CALL_KINDS فلم يكن يظهر إطلاقاً.
 // الآن نُبقي فقط "missing" (لا توجد درجة) كمستثنى، ونسمح بعرض المحميين
@@ -470,6 +474,7 @@ export async function GET(req: NextRequest) {
     const contactStatusFilter = normalizeContactStatusFilter(
       searchParams.get("contactStatusFilter"),
     );
+    const notesFilter = normalizeCallNotesFilter(searchParams.get("notesFilter"));
     const gradeRange = parseCallGradeRange(
       searchParams.get("gradeFrom"),
       searchParams.get("gradeTo"),
@@ -699,6 +704,21 @@ export async function GET(req: NextRequest) {
       selectedLeavesByStudentId.set(leave.studentId, list);
     });
 
+    const studentIdsWithNotes = new Set<string>();
+    if (notesFilter === "with-notes") {
+      const noteCalls = await db.studentCall.findMany({
+        where: {
+          studentId: { in: candidateStudentIds },
+          category: CALL_STUDENT_NOTE_CATEGORY,
+          notes: { not: "" },
+        },
+        select: { studentId: true, category: true, notes: true },
+      });
+      noteCalls.forEach((call) => {
+        if (hasManualCallNote(call)) studentIdsWithNotes.add(call.studentId);
+      });
+    }
+
     const bestCallByStudentId = new Map<
       string,
       { status: string; completed: boolean }
@@ -779,6 +799,7 @@ export async function GET(req: NextRequest) {
       if (!callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)) return [];
       const contactStatus = normalizeContactStatus(bestCallByStudentId.get(student.id));
       if (!contactStatusMatchesFilter(contactStatusFilter, contactStatus)) return [];
+      if (notesFilter === "with-notes" && !studentIdsWithNotes.has(student.id)) return [];
       const values = searchableValues({ student, grade, exam, kind });
       if (generalSearch && !includesSearch(generalSearch, values)) return [];
       if (filterSearch && !includesSearch(filterSearch, values)) return [];
