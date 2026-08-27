@@ -3090,24 +3090,31 @@ export function GradeEntryView() {
                             تعديل
                           </Button>
                         ) : (
-                          <Button
-                            size="sm"
-                            className="tp-save-manual-button"
-                            title="حفظ بيانات هذا الطالب مباشرة"
-                            onClick={() => void saveGrade(student.id)}
-                            disabled={
-                              (!canEditPersistedGrade &&
-                                !protectedNumericCapture) ||
-                              isSaving
-                            }
-                          >
-                            {isSaving
-                              ? "جارٍ الحفظ..."
-                              : protectedNumericCapture &&
-                                  student.status === "مفصول"
-                                ? "حفظ كدرجة معلّقة"
+                          protectedNumericCapture &&
+                          student.status === "مفصول" ? (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                ✓
+                              </span>
+                              <span>حفظ تلقائي عند الخروج</span>
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="tp-save-manual-button"
+                              title="حفظ بيانات هذا الطالب مباشرة"
+                              onClick={() => void saveGrade(student.id)}
+                              disabled={
+                                (!canEditPersistedGrade &&
+                                  !protectedNumericCapture) ||
+                                isSaving
+                              }
+                            >
+                              {isSaving
+                                ? "جارٍ الحفظ..."
                                 : "حفظ الآن"}
-                          </Button>
+                            </Button>
+                          )
                         )}
                       </div>
                     </div>
