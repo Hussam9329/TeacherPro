@@ -220,6 +220,8 @@ const SERVER_PERMISSION_EQUIVALENTS: Record<string, string[]> = {
   "chapters.delete": [],
 
   // Students: view-only alias; add/edit/delete must be granted explicitly
+  // إبقاء alias التبويب المحذوف مؤقتاً يمنع فقدان وصول حسابات قديمة،
+  // ولا يمنح صلاحية تعديل أو استرجاع لأن تلك العمليات تتطلب students.edit.
   "students.view": ["page.student-registry.view", "page.dismissed-students.view"],
   "students.add": ["page.student-register.view", "page.student-bulk-import.view"],
   "students.edit": ["students.dismiss", "students.reactivate"],

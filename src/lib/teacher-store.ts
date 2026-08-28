@@ -512,7 +512,6 @@ export type SectionId =
   | "student-register"
   | "student-bulk-import"
   | "student-registry"
-  | "dismissed-students"
   | "dismissed-management"
   | "exam-new"
   | "grade-entry"
@@ -953,7 +952,6 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   "student-register": "students.add",
   "student-bulk-import": "students.add",
   "student-registry": "students.view",
-  "dismissed-students": "students.view",
   "dismissed-management": "students.view",
   "exam-new": "exams.add",
   "grade-entry": "grades.add",
@@ -968,6 +966,12 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   accounts: "accounts.users.view",
   logs: "logs.view",
   "admin-log-reset": "logs.clear",
+};
+
+// توافق قراءة فقط للحسابات التي ما زالت تحمل صلاحية التبويب القديم.
+// إجراءات الاسترجاع والتعديل تبقى محمية منفصلاً بـ students.edit على الخادم.
+const SECTION_PERMISSION_EQUIVALENTS: Partial<Record<SectionId, string[]>> = {
+  "dismissed-management": ["page.dismissed-students.view"],
 };
 
 // ─── Default Roles ──────────────────────────────────────────────────────────
@@ -2340,13 +2344,17 @@ function toPersistedUiSnapshot(
     typeof state.currentUserId === "string" && state.currentUserId.trim()
       ? state.currentUserId
       : "u_admin";
+  const persistedSection =
+    state.currentSection === "dismissed-students"
+      ? "dismissed-management"
+      : state.currentSection;
   const currentSection =
-    typeof state.currentSection === "string" &&
+    typeof persistedSection === "string" &&
     Object.prototype.hasOwnProperty.call(
       SECTION_PERMISSIONS,
-      state.currentSection,
+      persistedSection,
     )
-      ? (state.currentSection as SectionId)
+      ? (persistedSection as SectionId)
       : "dashboard";
 
   return {
@@ -2718,7 +2726,6 @@ export const useTeacherStore = create<TeacherState>()(
               "student-bulk-import",
               "student-registry",
               "opportunities",
-              "dismissed-students",
               "follow-up",
               "follow-up-calls",
               "follow-up-leaves",
@@ -2759,7 +2766,6 @@ export const useTeacherStore = create<TeacherState>()(
               "follow-up-calls",
               "follow-up-leaves",
               "follow-up-pledges",
-              "dismissed-students",
             ].includes(section)
           ) {
             const [leavesData, callsData, notesData] = await Promise.all([
@@ -2985,7 +2991,10 @@ export const useTeacherStore = create<TeacherState>()(
         // Check if user has the required permission for this section
         const requiredPermission = SECTION_PERMISSIONS[section as SectionId];
         if (!requiredPermission) return false;
-        return user.permissions.includes(requiredPermission);
+        if (user.permissions.includes(requiredPermission)) return true;
+        return (SECTION_PERMISSION_EQUIVALENTS[section as SectionId] || []).some(
+          (permission) => user.permissions.includes(permission),
+        );
       },
       logout: () => {
         void authApi.logout();

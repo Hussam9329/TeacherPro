@@ -28,9 +28,7 @@ const exportDialog = read("src/components/teacher-pro/export-dialog.tsx");
 const logsView = read("src/components/teacher-pro/logs.tsx");
 const logsRoute = read("src/app/api/logs/route.ts");
 const opportunitiesRoute = read("src/app/api/opportunities/stats/route.ts");
-const dismissedRoute = read("src/app/api/dismissed-students/stats/route.ts");
 const opportunitiesView = read("src/components/teacher-pro/opportunities.tsx");
-const dismissedView = read("src/components/teacher-pro/dismissed-students.tsx");
 const registryView = read("src/components/teacher-pro/student-registry.tsx");
 const gradeRecordsView = read("src/components/teacher-pro/grade-records.tsx");
 const followUpView = read("src/components/teacher-pro/follow-up.tsx");
@@ -130,13 +128,12 @@ must(
 
 must(
   opportunitiesRoute.includes("system,") && opportunitiesRoute.includes("filtered,") &&
-    dismissedRoute.includes("system,") && dismissedRoute.includes("filtered,") &&
     logsRoute.includes("systemTotalCount"),
   "واجهات الإحصائيات المهمة ترجع إجمالي النظام منفصلاً عن نتائج الفلاتر",
 );
 
 must(
-  [opportunitiesView, dismissedView, registryView, gradeRecordsView, logsView].every((source) =>
+  [opportunitiesView, registryView, gradeRecordsView, logsView].every((source) =>
     source.includes("CountScopeSummary"),
   ),
   "الصفحات ذات العدادات الحساسة تعرض نطاق كل رقم بوضوح",

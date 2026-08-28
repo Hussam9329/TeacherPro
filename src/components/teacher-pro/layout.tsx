@@ -105,7 +105,6 @@ const menuItems: {
     sub: "لصق ومعاينة",
     icon: UsersRound,
   },
-  { id: "dismissed-students", title: "المفصولون", sub: "قائمة", icon: UserX },
   { id: "dismissed-management", title: "إدارة المفصولين", sub: "السجل الكامل", icon: ShieldAlert },
   { id: "exam-new", title: "إضافة الامتحان", sub: "القواعد", icon: FileText },
   { id: "grade-entry", title: "تسجيل الدرجات", sub: "إدخال", icon: PenTool },
@@ -128,7 +127,7 @@ const menuItems: {
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
   { title: "الدورات", itemIds: ["courses"] },
   { title: "الفرص", itemIds: ["chapters", "opportunities", "dismissed-management"] },
-  { title: "الطلاب", itemIds: ["student-register", "student-bulk-import", "student-registry", "dismissed-students"] },
+  { title: "الطلاب", itemIds: ["student-register", "student-bulk-import", "student-registry"] },
   {
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records", "missing-students-notes"],
@@ -149,7 +148,6 @@ const sectionDescriptions: Partial<Record<SectionId, string>> = {
   "student-register": "إضافة طالب جديد وربطه بالدورة والبرنامج والموقع المناسب.",
   "student-registry": "البحث في ملفات الطلاب ومراجعة بياناتهم وحالتهم.",
   "student-bulk-import": "إضافة مجموعة طلاب بعد لصق البيانات ومراجعتها قبل الحفظ.",
-  "dismissed-students": "متابعة حالات الفصل والتعهدات.",
   "dismissed-management": "إدارة الطلاب المفصولين من كل الدورات، واسترجاع المفصول بفرصتين، وعرض السجل الكامل والتواصل والتقارير.",
   "exam-new": "إنشاء امتحان وتحديد الدورات والمواقع وقواعد الدرجات.",
   "grade-entry": "إدخال درجات الطلاب ومتابعة حالات الحفظ والغياب.",
@@ -166,7 +164,6 @@ const sectionDescriptions: Partial<Record<SectionId, string>> = {
 const sectionsWithPageSearch = new Set<SectionId>([
   "missing-students-notes",
   "student-registry",
-  "dismissed-students",
   "dismissed-management",
   "grade-entry",
   "exam-records",
@@ -198,7 +195,6 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   "student-register": ["students", "courses", "opportunities", "dashboard"],
   "student-registry": ["students", "courses", "opportunities", "grades", "follow-up", "dashboard"],
   "student-bulk-import": ["students", "courses", "opportunities", "bulk-import", "dashboard"],
-  "dismissed-students": ["students", "grades", "opportunities", "dismissed", "dashboard"],
   "dismissed-management": ["students", "grades", "opportunities", "dismissed", "follow-up", "dashboard"],
   "exam-new": ["exams", "courses", "grades", "dashboard"],
   "grade-entry": ["grades", "students", "exams", "opportunities", "grade-entry-notes", "dashboard"],
@@ -226,7 +222,6 @@ const PAGE_OWNED_SYNC_SECTIONS = new Set<SectionId>([
   "chapters",
   "student-registry",
   "student-bulk-import",
-  "dismissed-students",
   "dismissed-management",
   "exam-new",
   "grade-entry",
@@ -382,6 +377,8 @@ function readSectionFromLocation(): SectionId | null {
   // Backward compatibility: redirect old section IDs
   if (value === 'whatsapp') return 'follow-up-calls' as SectionId;
   if (value === 'follow-up') return 'follow-up-leaves' as SectionId;
+  // التبويب القديم أزيل، لكن الروابط المحفوظة يجب أن تصل إلى بديله الرسمي.
+  if (value === 'dismissed-students') return 'dismissed-management' as SectionId;
   // التبويبة أزيلت من الواجهة؛ الروابط القديمة تنتقل للسجلات بأمان.
   if (value === 'admin-log-reset') return 'logs' as SectionId;
   if (value === 'course-new' || value === 'site-management') {
@@ -396,7 +393,6 @@ import { ChaptersView } from "./chapters";
 import { StudentRegisterView } from "./student-register";
 import { StudentBulkTextImportView } from "./student-bulk-text-import";
 import { StudentRegistryView } from "./student-registry";
-import { DismissedStudentsView } from "./dismissed-students";
 import { DismissedManagementView } from "./dismissed-management";
 import { ExamNewView } from "./exam-new";
 import { GradeEntryView } from "./grade-entry";
@@ -417,7 +413,6 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "student-register": StudentRegisterView,
   "student-bulk-import": StudentBulkTextImportView,
   "student-registry": StudentRegistryView,
-  "dismissed-students": DismissedStudentsView,
   "dismissed-management": DismissedManagementView,
   "exam-new": ExamNewView,
   "grade-entry": GradeEntryView,

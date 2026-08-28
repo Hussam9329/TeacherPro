@@ -19,9 +19,8 @@ const academicServer = read("src/lib/academic-recalculate-server.ts");
 const academicRepair = read("src/app/api/students/academic-repair/route.ts");
 const opportunitiesView = read("src/components/teacher-pro/opportunities.tsx");
 const registry = read("src/components/teacher-pro/student-registry.tsx");
-const dismissed = read("src/components/teacher-pro/dismissed-students.tsx");
 const dismissedListRoute = read(
-  "src/app/api/dismissed-students/list/route.ts",
+  "src/app/api/dismissed-management/list/route.ts",
 );
 const followUp = read("src/components/teacher-pro/follow-up.tsx");
 const profile = read("src/components/teacher-pro/student-profile-dialog.tsx");
@@ -108,7 +107,7 @@ check(
   "المحرك يواصل احترام التسويات التاريخية القديمة بينما مسار الاسترجاع التاريخي نفسه متقاعد ولا يغيّر حالة مفصول",
 );
 check(
-  [opportunitiesView, registry, dismissed, followUp, profile, bulkImport].every(
+  [opportunitiesView, registry, followUp, profile, bulkImport].every(
     (source) => source.includes("formatOpportunityBalance"),
   ),
   "كل صفحات العرض الرئيسية تستخدم نفس منسق الرصيد والسقف",
@@ -116,7 +115,6 @@ check(
 check(
   opportunitiesView.includes("opportunityMode: true") &&
     registry.includes("opportunityMode: true") &&
-    dismissed.includes("/api/dismissed-students/list?") &&
     dismissedListRoute.includes("attachStudentOpportunitySnapshots") &&
     followUp.match(/opportunityMode: true/g)?.length >= 2,
   "كل القوائم التي تعرض الفرص تطلب Snapshot الخادمي صراحة",

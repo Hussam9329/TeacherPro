@@ -15,7 +15,9 @@ function must(condition, success, failure = success) {
 }
 
 const page = read("src/components/teacher-pro/dismissed-management.tsx");
-const route = read("src/app/api/dismissed-students/history/route.ts");
+const route = read("src/app/api/dismissed-management/history/route.ts");
+const listRoute = read("src/app/api/dismissed-management/list/route.ts");
+const statsRoute = read("src/app/api/dismissed-management/stats/route.ts");
 const helper = read("src/lib/dismissed-history.ts");
 const profileServer = read("src/lib/student-profile-server.ts");
 const layout = read("src/components/teacher-pro/layout.tsx");
@@ -31,13 +33,34 @@ must(
 );
 
 must(
-  page.includes("/api/dismissed-students/list?") &&
+  page.includes("/api/dismissed-management/list?") &&
     page.includes("pageSize: String(PAGE_SIZE)") &&
     page.includes('params.set("courseId", courseId)') &&
     page.includes('params.set("q", debouncedSearch.trim())') &&
     page.includes("if (page > nextTotalPages)") &&
     page.includes("setPage(nextTotalPages)"),
   "القائمة تستخدم البحث والدورة والترقيم الخادمي وتصحح الصفحة الخارجة عن المدى",
+);
+
+must(
+  page.includes("/api/dismissed-management/stats?") &&
+    page.includes('params.set("notesFilter", notesFilter)') &&
+    page.includes('params.set("pledgeFilter", pledgeFilter)') &&
+    listRoute.includes("buildDismissedStudentWhere(searchParams)") &&
+    statsRoute.includes("buildDismissedStudentWhere(searchParams)") &&
+    statsRoute.includes("db.$transaction") &&
+    statsRoute.includes("withPledge") &&
+    statsRoute.includes("withoutPledge"),
+  "الإدارة تحتفظ بإحصائيات وفلاتر الملاحظات والتعهد من نفس المصدر الخادمي",
+);
+
+must(
+  page.includes("handleSaveDismissalNote") &&
+    page.includes("canEditDismissalNotes") &&
+    page.includes('student.status !== "مفصول"') &&
+    page.includes("expectedMutationToken: student.mutationToken") &&
+    page.includes('reason: "dismissed-management-note"'),
+  "تحرير ملاحظات الفصل انتقل إلى الإدارة مع صلاحية وSnapshot ومزامنة",
 );
 
 must(

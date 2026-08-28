@@ -2952,68 +2952,6 @@
 }
 
 
-/* Dismissed students layout contract. */
-.tp-dismissed-students__stats > * {
-  min-height: 6.1rem;
-  box-shadow: none;
-}
-
-.tp-dismissed-students__stats > :first-child {
-  grid-column: span 2;
-  border-color: color-mix(in oklch, var(--destructive) 28%, var(--border));
-  background: color-mix(in oklch, var(--destructive) 5%, var(--card));
-}
-
-.tp-dismissed-students__filters {
-  border-color: color-mix(in oklch, var(--destructive) 16%, var(--border));
-  box-shadow: 0 16px 48px -42px color-mix(in oklch, var(--destructive) 38%, transparent);
-}
-
-.tp-dismissed-students__cards > * {
-  min-width: 0;
-  box-shadow: none;
-}
-
-.tp-dismissed-students__cards > * > div {
-  position: relative;
-}
-
-.tp-dismissed-students__cards > * > div::before {
-  content: "";
-  position: absolute;
-  inset-block: 1rem;
-  inset-inline-start: 0;
-  width: 3px;
-  border-radius: 999px;
-  background: color-mix(in oklch, var(--destructive) 58%, transparent);
-}
-
-@media (min-width: 1024px) {
-  .tp-dismissed-students__stats > :first-child {
-    grid-column: span 2;
-  }
-}
-
-@media (max-width: 640px) {
-  .tp-dismissed-students__stats {
-    grid-template-columns: 1fr 1fr;
-    gap: 0.65rem;
-  }
-
-  .tp-dismissed-students__stats > :first-child {
-    grid-column: 1 / -1;
-  }
-
-  .tp-dismissed-students__cards {
-    gap: 0.75rem;
-  }
-
-  .tp-dismissed-students__cards button {
-    min-height: 2.75rem;
-  }
-}
-
-
 /* New exam layout contract. */
 .tp-exam-new__shell {
   overflow: hidden;

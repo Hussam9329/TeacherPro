@@ -48,7 +48,6 @@ import {
 } from "@/components/ui/select";
 import {
   Ban,
-  BookOpen,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -140,6 +139,27 @@ type ListResponse = {
   pageSize: number;
   totalPages: number;
   hasMore: boolean;
+};
+
+type NotesFilter = "all" | "with-notes" | "without-notes";
+type PledgeFilter = "all" | "with-pledge" | "without-pledge";
+
+type DismissedStats = {
+  total: number;
+  current: number;
+  former: number;
+  withNotes: number;
+  withPledge: number;
+  withoutPledge: number;
+};
+
+const EMPTY_DISMISSED_STATS: DismissedStats = {
+  total: 0,
+  current: 0,
+  former: 0,
+  withNotes: 0,
+  withPledge: 0,
+  withoutPledge: 0,
 };
 
 function phoneForWhatsApp(phone?: string) {
@@ -371,12 +391,19 @@ export function DismissedManagementView() {
   const debouncedSearch = useDebouncedValue(search, 180);
   const [courseId, setCourseId] = useState("");
   const [historyScope, setHistoryScope] = useState<"all" | "current" | "former">("all");
+  const [notesFilter, setNotesFilter] = useState<NotesFilter>("all");
+  const [pledgeFilter, setPledgeFilter] = useState<PledgeFilter>("all");
   const [page, setPage] = useState(1);
   const [students, setStudents] = useState<ManagedDismissalStudent[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [stats, setStats] = useState<DismissedStats>(EMPTY_DISMISSED_STATS);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState("");
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [savingNoteIds, setSavingNoteIds] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [histories, setHistories] = useState<Record<string, StudentHistory>>({});
   const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
@@ -393,6 +420,7 @@ export function DismissedManagementView() {
         actor.roleId === "role_admin" ||
         actor.permissions?.includes("students.edit")),
   );
+  const canEditDismissalNotes = canReactivate;
   const historyControllersRef = useRef<Map<string, AbortController>>(
     new Map(),
   );
@@ -405,11 +433,13 @@ export function DismissedManagementView() {
     });
     if (courseId) params.set("courseId", courseId);
     params.set("historyScope", historyScope);
+    if (notesFilter !== "all") params.set("notesFilter", notesFilter);
+    if (pledgeFilter !== "all") params.set("pledgeFilter", pledgeFilter);
     if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
 
     setLoading(true);
     setError("");
-    fetch(`/api/dismissed-students/list?${params.toString()}`, {
+    fetch(`/api/dismissed-management/list?${params.toString()}`, {
       credentials: "same-origin",
       signal: controller.signal,
     })
@@ -457,7 +487,48 @@ export function DismissedManagementView() {
       });
 
     return () => controller.abort();
-  }, [courseId, debouncedSearch, historyScope, page, mergeStudentsCache, syncKey]);
+  }, [courseId, debouncedSearch, historyScope, notesFilter, page, pledgeFilter, mergeStudentsCache, syncKey]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ historyScope });
+    if (courseId) params.set("courseId", courseId);
+    if (notesFilter !== "all") params.set("notesFilter", notesFilter);
+    if (pledgeFilter !== "all") params.set("pledgeFilter", pledgeFilter);
+    if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
+
+    setStatsLoading(true);
+    setStatsError("");
+    fetch(`/api/dismissed-management/stats?${params.toString()}`, {
+      credentials: "same-origin",
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        const payload = (await res.json().catch(() => null)) as
+          | { filtered?: DismissedStats; stats?: DismissedStats; error?: string }
+          | null;
+        if (!res.ok) {
+          throw new Error(payload?.error || "تعذر تحميل إحصائيات المفصولين.");
+        }
+        return payload;
+      })
+      .then((payload) => {
+        if (controller.signal.aborted) return;
+        setStats(payload?.filtered || payload?.stats || EMPTY_DISMISSED_STATS);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setStats(EMPTY_DISMISSED_STATS);
+        setStatsError(
+          err instanceof Error ? err.message : "تعذر تحميل إحصائيات المفصولين.",
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setStatsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [courseId, debouncedSearch, historyScope, notesFilter, pledgeFilter, syncKey]);
 
   useEffect(() => {
     const controllers = historyControllersRef.current;
@@ -481,7 +552,7 @@ export function DismissedManagementView() {
       setHistoryErrors((current) => ({ ...current, [studentId]: "" }));
       try {
         const res = await fetch(
-          `/api/dismissed-students/history?studentId=${encodeURIComponent(studentId)}`,
+          `/api/dismissed-management/history?studentId=${encodeURIComponent(studentId)}`,
           { credentials: "same-origin", signal: controller.signal },
         );
         const payload = (await res.json().catch(() => null)) as
@@ -577,6 +648,74 @@ export function DismissedManagementView() {
     downloadHistoryHtml(history);
   };
 
+  const handleSaveDismissalNote = async (student: ManagedDismissalStudent) => {
+    if (!canEditDismissalNotes) {
+      toast.error("لا تملك صلاحية تعديل ملاحظات الفصل.");
+      return;
+    }
+    if (student.status !== "مفصول") {
+      toast.warning("ملاحظات الفصل الحالية تُعدّل للطالب المفصول حالياً فقط.");
+      return;
+    }
+
+    const nextNote = String(
+      noteDrafts[student.id] ?? student.dismissalNotes ?? "",
+    ).trim();
+    setSavingNoteIds((current) => ({ ...current, [student.id]: true }));
+    try {
+      const result = await studentApi.update(student.id, {
+        dismissalNotes: nextNote,
+        expectedMutationToken: student.mutationToken || "",
+      });
+      if (!result.ok || result.queued) {
+        toast.error(result.error || "تعذر حفظ ملاحظات الفصل من النظام.");
+        return;
+      }
+
+      const updatedStudent = (result.data as { student?: ManagedDismissalStudent } | null)
+        ?.student;
+      if (!updatedStudent) {
+        toast.error("تم تنفيذ الطلب لكن تعذر قراءة سجل الطالب المحدث. حدّث الصفحة.");
+        return;
+      }
+
+      setStudents((current) =>
+        current.map((item) =>
+          item.id === updatedStudent.id
+            ? { ...item, ...updatedStudent }
+            : item,
+        ),
+      );
+      mergeStudentsCache([updatedStudent]);
+      setNoteDrafts((current) => {
+        const next = { ...current };
+        delete next[student.id];
+        return next;
+      });
+      setHistories((current) => {
+        const next = { ...current };
+        delete next[student.id];
+        return next;
+      });
+      setExpanded((current) => ({ ...current, [student.id]: false }));
+      emitTeacherProDataChanged({
+        source: "local-mutation",
+        reason: "dismissed-management-note",
+        scopes: ["students", "dismissed", "dashboard", "follow-up"],
+        dispatchLocal: true,
+      });
+      toast.success("تم حفظ ملاحظات الفصل من بيانات النظام.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "تعذر حفظ ملاحظات الفصل من النظام.",
+      );
+    } finally {
+      setSavingNoteIds((current) => ({ ...current, [student.id]: false }));
+    }
+  };
+
   const handleReactivate = runReactivateLocked(async (student: ManagedDismissalStudent) => {
     if (!canReactivate) {
       toast.error("لا تملك صلاحية استرجاع الطلاب المفصولين.");
@@ -645,15 +784,13 @@ export function DismissedManagementView() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <Card className="border-red-500/20">
           <CardContent className="flex items-center justify-between p-4">
             <div>
-              <p className="text-xs text-muted-foreground">
-                سجل الفصل حسب الفلترة
-              </p>
+              <p className="text-xs text-muted-foreground">حسب الفلترة</p>
               <p className="text-2xl font-black">
-                {loading ? "..." : totalCount}
+                {statsLoading ? "..." : stats.total}
               </p>
             </div>
             <Users className="size-7 text-red-500" />
@@ -662,24 +799,65 @@ export function DismissedManagementView() {
         <Card>
           <CardContent className="flex items-center justify-between p-4">
             <div>
-              <p className="text-xs text-muted-foreground">الدورة المختارة</p>
-              <p className="font-bold">
-                {courseId ? courseName(courseId) : "كل الدورات"}
+              <p className="text-xs text-muted-foreground">مفصول حالياً</p>
+              <p className="text-2xl font-black">
+                {statsLoading ? "..." : stats.current}
               </p>
             </div>
-            <BookOpen className="size-7 text-muted-foreground" />
+            <ShieldAlert className="size-7 text-red-500" />
           </CardContent>
         </Card>
         <Card>
           <CardContent className="flex items-center justify-between p-4">
             <div>
-              <p className="text-xs text-muted-foreground">المعروض في الصفحة</p>
-              <p className="text-2xl font-black">{students.length}</p>
+              <p className="text-xs text-muted-foreground">مفصول سابقاً</p>
+              <p className="text-2xl font-black">
+                {statsLoading ? "..." : stats.former}
+              </p>
+            </div>
+            <RotateCcw className="size-7 text-muted-foreground" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">مع ملاحظات</p>
+              <p className="text-2xl font-black">
+                {statsLoading ? "..." : stats.withNotes}
+              </p>
             </div>
             <FileClock className="size-7 text-muted-foreground" />
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">مع تعهد</p>
+              <p className="text-2xl font-black">
+                {statsLoading ? "..." : stats.withPledge}
+              </p>
+            </div>
+            <MessageCircle className="size-7 text-emerald-600" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">بدون تعهد</p>
+              <p className="text-2xl font-black">
+                {statsLoading ? "..." : stats.withoutPledge}
+              </p>
+            </div>
+            <Ban className="size-7 text-amber-600" />
+          </CardContent>
+        </Card>
       </div>
+
+      {statsError ? (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+          {statsError}
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -688,7 +866,7 @@ export function DismissedManagementView() {
             إدارة المفصولين
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <div className="space-y-1.5">
             <Label>الدورة</Label>
             <Select
@@ -727,6 +905,44 @@ export function DismissedManagementView() {
                 <SelectItem value="all">الكل</SelectItem>
                 <SelectItem value="current">مفصول حالياً</SelectItem>
                 <SelectItem value="former">مفصول سابقاً</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>ملاحظات الفصل</Label>
+            <Select
+              value={notesFilter}
+              onValueChange={(value) => {
+                setNotesFilter(value as NotesFilter);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">الكل</SelectItem>
+                <SelectItem value="with-notes">مع ملاحظات</SelectItem>
+                <SelectItem value="without-notes">بدون ملاحظات</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>التعهد</Label>
+            <Select
+              value={pledgeFilter}
+              onValueChange={(value) => {
+                setPledgeFilter(value as PledgeFilter);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">الكل</SelectItem>
+                <SelectItem value="with-pledge">مع تعهد</SelectItem>
+                <SelectItem value="without-pledge">بدون تعهد</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -817,6 +1033,42 @@ export function DismissedManagementView() {
                     ) : null}
                   </div>
                 </div>
+
+                {student.status === "مفصول" && canEditDismissalNotes ? (
+                  <div className="space-y-2 rounded-2xl border bg-muted/10 p-3">
+                    <Label htmlFor={`dismissal-note-${student.id}`}>
+                      ملاحظات الفصل
+                    </Label>
+                    <textarea
+                      id={`dismissal-note-${student.id}`}
+                      value={
+                        noteDrafts[student.id] ?? student.dismissalNotes ?? ""
+                      }
+                      onChange={(event) =>
+                        setNoteDrafts((current) => ({
+                          ...current,
+                          [student.id]: event.target.value,
+                        }))
+                      }
+                      className="min-h-24 w-full resize-y rounded-2xl border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary"
+                      placeholder="اكتب ملاحظات الفصل الخاصة بهذا الطالب..."
+                      disabled={Boolean(savingNoteIds[student.id])}
+                    />
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={Boolean(savingNoteIds[student.id])}
+                        onClick={() => void handleSaveDismissalNote(student)}
+                      >
+                        {savingNoteIds[student.id]
+                          ? "جاري حفظ الملاحظات..."
+                          : "حفظ الملاحظات"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   <div className="rounded-xl border p-3">

@@ -13,7 +13,6 @@ const check = (condition, message) => {
 const management = read("src/components/teacher-pro/dismissed-management.tsx");
 const registry = read("src/components/teacher-pro/student-registry.tsx");
 const registryResults = read("src/components/teacher-pro/student-registry-results.tsx");
-const oldDismissed = read("src/components/teacher-pro/dismissed-students.tsx");
 const opportunities = read("src/components/teacher-pro/opportunities.tsx");
 const followUp = read("src/components/teacher-pro/follow-up.tsx");
 const pledges = read("src/app/api/student-notes/pledges/route.ts");
@@ -47,12 +46,6 @@ check(
   "سجل الطلاب يحتفظ باستعادة المؤرشف فقط ولا يسترجع المفصول",
 );
 
-check(
-  !oldDismissed.includes('action: "reactivate"') &&
-  !oldDismissed.includes("handleReactivate") &&
-  oldDismissed.includes("إعادة التفعيل تتم حصراً من صفحة إدارة المفصولين"),
-  "صفحة المفصولين القديمة أصبحت متابعة فقط",
-);
 
 check(
   !opportunities.includes("reactivateDismissedOnAdd") &&
