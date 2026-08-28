@@ -35,7 +35,7 @@ import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { ExportDialog, type ExportColumn, type FullReportData } from "./export-dialog";
+import { ExportDialog, type ExportColumn, type StudentDetailsMap, type StudentGradeDetail, type StudentOpportunityLogDetail } from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { CountScopeSummary } from "./ui-kit";
 import {
@@ -49,22 +49,24 @@ import {
 } from "@/lib/student-grace";
 
 const opportunityExportColumns: ExportColumn<any>[] = [
-  { key: "student", label: "الطالب", value: (s) => s.name || "" },
-  { key: "code", label: "الكود", value: (s) => s.code || "" },
-  { key: "course", label: "الدورة", value: (s) => s.courseName || "" },
-  { key: "status", label: "الحالة", value: (s) => s.status || "" },
+  { key: "student", label: "الطالب", value: (s) => s.name || "", defaultSelected: true },
+  { key: "code", label: "الكود", value: (s) => s.code || "", defaultSelected: false },
+  { key: "course", label: "الدورة", value: (s) => s.courseName || "", defaultSelected: true },
+  { key: "status", label: "الحالة", value: (s) => s.status || "", defaultSelected: false },
   {
     key: "opportunities",
-    label: "فرص محفوظة",
+    label: "عدد الفرص",
     value: (s) => s.opportunities ?? "",
+    defaultSelected: true,
   },
   {
     key: "opportunityLimit",
     label: "سقف الفصل النشط",
     value: (s) => getOpportunityLimit(s) ?? "",
+    defaultSelected: false,
   },
-  { key: "phone", label: "الهاتف", value: (s) => s.phone || "" },
-  { key: "telegram", label: "التيليجرام", value: (s) => s.telegram || "" },
+  { key: "phone", label: "الهاتف", value: (s) => s.phone || "", defaultSelected: false },
+  { key: "telegram", label: "التيليجرام", value: (s) => s.telegram || "", defaultSelected: false },
 ];
 
 type OpportunityStudent = Student & {
@@ -801,86 +803,94 @@ export function OpportunitiesView() {
   };
 
   /**
-   * يجلب كل الطلاب المفلترين حسب فلاتر إدارة الفرص الحالية، ثم يستدعي
-   * profile-log لكل طالب على دفعات متوازية (6 طلبات في كل مرة) ويُرجع
-   * لقطة كاملة قابلة للحقن داخل قالب "التقرير الكلي HTML".
+   * يجلب تفاصيل كل طالب (درجاته في كل الامتحانات + سجل فرصه مع الأسباب)
+   * عبر profile-log، ويُرجع لقطة مُختصرة فقط — بدون ملاحظات أو مكالمات
+   * أو سجل تدقيق — لتبقى أحجام ملفات HTML صغيرة وقابلة للفتح أوفلاين.
    *
-   * الملف الناتج سيكون مستقلاً تماماً: لا يحتاج أي اتصال بـ API بعد التحميل.
+   * يُستدعى فقط عند تصدير HTML لربط زر "عرض التفاصيل" في كل صف.
    */
-  const fetchOpportunityFullReportData = async ({
-    signal,
-    onProgress,
-  }: {
-    signal: AbortSignal;
-    onProgress: (loaded: number, total: number) => void;
-  }): Promise<FullReportData> => {
-    const listResult = await studentApi.listAll({
-      courseId: filterCourseId,
-      opportunityStatus: filterStatus,
-      opportunityCount: filterOpportunityCount,
-      q: debouncedSearch,
-      opportunityMode: true,
-    });
-    const students = ((listResult?.students || []) as unknown as Student[]).map(
-      mapOpportunityExportRow,
-    );
-    const total = students.length;
+  const fetchOpportunityStudentDetails = async (
+    studentIds: string[],
+    { signal, onProgress }: { signal: AbortSignal; onProgress: (loaded: number, total: number) => void },
+  ): Promise<StudentDetailsMap> => {
+    const total = studentIds.length;
     onProgress(0, total);
-
-    // تجنّب ضغط الخادم: 6 طلبات متوازية كحد أقصى.
-    const concurrency = 6;
-    const profiles: Record<string, Record<string, unknown>> = {};
+    const result: StudentDetailsMap = {};
     let completed = 0;
 
-    const worker = async (queue: number[]) => {
+    const concurrency = 6;
+    const queue = [...studentIds];
+
+    const worker = async () => {
       while (queue.length > 0) {
-        const index = queue.shift();
-        if (typeof index !== "number") break;
-        const student = students[index];
-        const studentId = String(student?.id || "").trim();
-        if (!studentId) {
-          completed += 1;
-          onProgress(completed, total);
-          continue;
-        }
+        const studentId = queue.shift();
+        if (!studentId) break;
         if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+
         try {
           const profile = await studentProfileLogApi.get(studentId);
           if (profile) {
-            profiles[studentId] = profile as unknown as Record<string, unknown>;
+            const examMap = new Map<string, Record<string, unknown>>();
+            const exams = Array.isArray(profile.exams) ? profile.exams : [];
+            for (const exam of exams) {
+              const examRecord = exam as Record<string, unknown>;
+              const examId = String(examRecord.id || "");
+              if (examId) examMap.set(examId, examRecord);
+            }
+
+            const rawGrades = Array.isArray(profile.grades) ? profile.grades : [];
+            const grades: StudentGradeDetail[] = rawGrades.map((rawGrade) => {
+              const grade = rawGrade as Record<string, unknown>;
+              const exam = examMap.get(String(grade.examId || ""));
+              const score = grade.score;
+              const fullMark = exam?.fullMark;
+              return {
+                examName: String(exam?.name || "امتحان غير محدد"),
+                examType: String(exam?.type || ""),
+                examDate: String(exam?.date || ""),
+                score: score === null || score === undefined ? null : Number(score),
+                fullMark: fullMark === null || fullMark === undefined ? null : Number(fullMark),
+                status: String(grade.status || ""),
+                notes: grade.notes ? String(grade.notes) : null,
+              };
+            });
+
+            const rawLogs = Array.isArray(profile.opportunityLogs) ? profile.opportunityLogs : [];
+            const opportunityLogs: StudentOpportunityLogDetail[] = rawLogs.map((rawLog) => {
+              const log = rawLog as Record<string, unknown>;
+              const exam = examMap.get(String(log.examId || ""));
+              return {
+                action: String(log.action || ""),
+                amount: Number(log.amount || 0),
+                reason: log.reason ? String(log.reason) : null,
+                date: String(log.date || ""),
+                examName: exam?.name ? String(exam.name) : null,
+              };
+            });
+
+            result[studentId] = { grades, opportunityLogs };
           }
         } catch (error) {
           if (error instanceof Error && error.name === "AbortError") throw error;
-          // لا نوقف التصدير لطالب واحد؛ نكمل ونترك ملفه يُحمّل عند الطلب إن لزم.
           console.error(
             `[opportunities] profile-log failed for ${studentId}:`,
             error,
           );
         }
+
         completed += 1;
         onProgress(completed, total);
       }
     };
 
-    const queue = students.map((_, index) => index);
     await Promise.all(
-      Array.from({ length: Math.min(concurrency, Math.max(1, queue.length)) }, () =>
-        worker(queue),
+      Array.from(
+        { length: Math.min(concurrency, Math.max(1, studentIds.length)) },
+        () => worker(),
       ),
     );
 
-    const reportCourses = courses.map((course) => ({
-      id: course.id,
-      name: course.name,
-      courseProgram: course.availablePrograms,
-      studyType: course.availableStudyTypes,
-    }));
-
-    return {
-      students: students as unknown as Array<Record<string, unknown>>,
-      courses: reportCourses,
-      profiles,
-    };
+    return result;
   };
 
   return (
@@ -1001,15 +1011,14 @@ export function OpportunitiesView() {
                 fetchRows={fetchOpportunityExportRows}
                 columns={opportunityExportColumns}
                 triggerLabel="تصدير"
-                description="تقرير إدارة الفرص حسب الفلاتر الحالية"
-                fullReportHtml={{
-                  templateUrl: "/hfchances-teacherpro-full-report.html",
-                  fetchData: fetchOpportunityFullReportData,
-                  totalCount:
-                    typeof databaseStats?.filtered?.total === "number"
-                      ? databaseStats.filtered.total
-                      : null,
-                }}
+                description="تقرير إدارة الفرص حسب الفلاتر الحالية — زر HTML يضيف عمود تفاصيل لكل طالب"
+                fetchStudentDetails={fetchOpportunityStudentDetails}
+                getRowId={(s) => String((s as Record<string, unknown>)?.id ?? "")}
+                totalRowCount={
+                  typeof databaseStats?.filtered?.total === "number"
+                    ? databaseStats.filtered.total
+                    : null
+                }
               />
             </div>
           </div>

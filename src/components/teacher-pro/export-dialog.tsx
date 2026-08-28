@@ -29,6 +29,42 @@ export type ExportColumn<T = Record<string, unknown>> = {
 type ExportFormat = "csv" | "excel" | "html" | "pdf";
 type PageOrientation = "portrait" | "landscape";
 
+/* ============================ تفاصيل الطالب المضمّنة ============================ */
+export type StudentGradeDetail = {
+  examName: string;
+  examType: string;
+  examDate: string;
+  score: number | null;
+  fullMark: number | null;
+  status: string;
+  notes: string | null;
+};
+
+export type StudentOpportunityLogDetail = {
+  action: string;
+  amount: number;
+  reason: string | null;
+  date: string;
+  examName: string | null;
+};
+
+export type StudentDetails = {
+  grades: StudentGradeDetail[];
+  opportunityLogs: StudentOpportunityLogDetail[];
+};
+
+export type StudentDetailsMap = Record<string, StudentDetails>;
+
+export type ExportFetchContext = {
+  signal: AbortSignal;
+  onProgress: (loaded: number, total: number) => void;
+};
+
+export type StudentDetailsFetcher = (
+  studentIds: string[],
+  context: ExportFetchContext,
+) => Promise<StudentDetailsMap>;
+
 function normalizeExportValue(value: string | number | null | undefined): string | number {
   return typeof value === "string" ? humanizeTeacherProText(value) : value ?? "";
 }
@@ -89,16 +125,223 @@ function buildCsv<T>(rows: T[], columns: ExportColumn<T>[]): string {
   return "\uFEFF" + header + "\r\n" + body;
 }
 
-function buildTableRows<T>(rows: T[], columns: ExportColumn<T>[]): string {
+const DETAILS_COLUMN_KEY = "__student_details__";
+
+function buildTableRows<T>(
+  rows: T[],
+  columns: ExportColumn<T>[],
+  options: {
+    hasDetails?: boolean;
+    getRowId?: (row: T) => string;
+  } = {},
+): string {
+  const hasDetails = Boolean(options.hasDetails);
+  const getRowId =
+    options.getRowId ||
+    ((row: T) => String((row as Record<string, unknown>)?.id ?? ""));
+
   return rows
-    .map(
-      (row, rowIndex) =>
-        `<tr>${columns
-          .map((col) => `<td>${escapeHtml(String(normalizeExportValue(col.value(row, rowIndex))))}</td>`)
-          .join("")}</tr>`,
-    )
+    .map((row, rowIndex) => {
+      const cells = columns
+        .map((col) => {
+          if (col.key === DETAILS_COLUMN_KEY && hasDetails) {
+            const id = escapeHtml(getRowId(row));
+            return `<td class="tp-details-cell"><button type="button" class="tp-details-btn" data-sid="${id}">عرض التفاصيل</button></td>`;
+          }
+          const cellValue = normalizeExportValue(col.value(row, rowIndex));
+          return `<td>${escapeHtml(String(cellValue))}</td>`;
+        })
+        .join("");
+      return `<tr>${cells}</tr>`;
+    })
     .join("");
 }
+
+const DETAILS_MODAL_CSS = `
+  .tp-details-cell { text-align: center; white-space: nowrap; }
+  .tp-details-btn {
+    background: #111827; color: #fff; border: 0; border-radius: 6px;
+    padding: 5px 12px; cursor: pointer; font-size: 11px; font-weight: 700;
+    font-family: inherit;
+  }
+  .tp-details-btn:hover { background: #1f2937; }
+  .tp-modal-overlay {
+    position: fixed; inset: 0; background: rgba(15,23,42,.55);
+    display: none; align-items: flex-start; justify-content: center;
+    z-index: 100; padding: 24px 16px; overflow-y: auto;
+  }
+  .tp-modal-overlay.open { display: flex; }
+  .tp-modal {
+    background: #fff; border-radius: 14px; padding: 20px;
+    max-width: 920px; width: 100%; margin: auto;
+    box-shadow: 0 24px 60px rgba(15,23,42,.25);
+  }
+  .tp-modal-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 16px; padding-bottom: 10px;
+    border-bottom: 2px solid #111827;
+  }
+  .tp-modal-header h2 { font-size: 17px; margin: 0; color: #111827; }
+  .tp-modal-close {
+    background: #111827; color: #fff; border: 0; border-radius: 8px;
+    padding: 7px 14px; cursor: pointer; font-weight: 700; font-size: 12px;
+    font-family: inherit;
+  }
+  .tp-modal-close:hover { background: #1f2937; }
+  .tp-details-section { margin-bottom: 18px; }
+  .tp-details-section:last-child { margin-bottom: 0; }
+  .tp-details-section h3 {
+    font-size: 14px; margin: 0 0 8px; color: #111827;
+    border-right: 4px solid #111827; padding-right: 8px;
+  }
+  .tp-details-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .tp-details-table th, .tp-details-table td {
+    border: 1px solid #d1d5db; padding: 6px 8px; text-align: right;
+    vertical-align: top; line-height: 1.4; word-break: break-word;
+  }
+  .tp-details-table th { background: #f3f4f6; font-weight: 700; color: #111827; }
+  .tp-details-table tr:nth-child(even) { background: #fafafa; }
+  .tp-empty-row td { text-align: center !important; color: #6b7280; padding: 14px !important; }
+`;
+
+const DETAILS_MODAL_HTML = `
+<div id="tpDetailsModal" class="tp-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="tpModalTitle">
+  <div class="tp-modal">
+    <div class="tp-modal-header">
+      <h2 id="tpModalTitle">تفاصيل الطالب</h2>
+      <button type="button" class="tp-modal-close" id="tpModalClose">إغلاق</button>
+    </div>
+    <div class="tp-details-section">
+      <h3>الدرجات في كل الامتحانات</h3>
+      <table class="tp-details-table">
+        <thead>
+          <tr>
+            <th>الامتحان</th>
+            <th>النوع</th>
+            <th>التاريخ</th>
+            <th>الدرجة</th>
+            <th>الدرجة العظمى</th>
+            <th>الحالة</th>
+            <th>ملاحظات</th>
+          </tr>
+        </thead>
+        <tbody id="tpGradesBody"></tbody>
+      </table>
+    </div>
+    <div class="tp-details-section">
+      <h3>سجل الفرص (أسباب الفقدان والإضافة)</h3>
+      <table class="tp-details-table">
+        <thead>
+          <tr>
+            <th>الإجراء</th>
+            <th>العدد</th>
+            <th>السبب</th>
+            <th>التاريخ</th>
+            <th>الامتحان</th>
+          </tr>
+        </thead>
+        <tbody id="tpLogsBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+`;
+
+const DETAILS_MODAL_JS = `
+<script>
+(function(){
+  var DATA = window.STUDENT_DETAILS || {};
+  var overlay = document.getElementById('tpDetailsModal');
+  var titleEl = document.getElementById('tpModalTitle');
+  var gradesBody = document.getElementById('tpGradesBody');
+  var logsBody = document.getElementById('tpLogsBody');
+  var closeBtn = document.getElementById('tpModalClose');
+
+  function esc(s){
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function fmtNum(n){
+    return (n !== null && n !== undefined && !isNaN(Number(n))) ? Number(n) : '—';
+  }
+  function fmtDate(s){
+    if (!s) return '';
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return esc(s);
+    try {
+      return d.toLocaleDateString('ar-IQ-u-nu-latn', {day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Baghdad'});
+    } catch(e){ return esc(s); }
+  }
+
+  function showDetails(studentId, studentLabel){
+    var data = DATA[studentId];
+    titleEl.textContent = 'تفاصيل الطالب' + (studentLabel ? ' · ' + studentLabel : '');
+
+    if (data && data.grades && data.grades.length > 0) {
+      gradesBody.innerHTML = data.grades.map(function(g){
+        return '<tr>'
+          + '<td>' + esc(g.examName) + '</td>'
+          + '<td>' + esc(g.examType) + '</td>'
+          + '<td>' + fmtDate(g.examDate) + '</td>'
+          + '<td>' + fmtNum(g.score) + '</td>'
+          + '<td>' + fmtNum(g.fullMark) + '</td>'
+          + '<td>' + esc(g.status) + '</td>'
+          + '<td>' + esc(g.notes) + '</td>'
+          + '</tr>';
+      }).join('');
+    } else {
+      gradesBody.innerHTML = '<tr class="tp-empty-row"><td colspan="7">لا توجد درجات مسجلة لهذا الطالب</td></tr>';
+    }
+
+    if (data && data.opportunityLogs && data.opportunityLogs.length > 0) {
+      logsBody.innerHTML = data.opportunityLogs.map(function(l){
+        return '<tr>'
+          + '<td>' + esc(l.action) + '</td>'
+          + '<td>' + fmtNum(l.amount) + '</td>'
+          + '<td>' + esc(l.reason) + '</td>'
+          + '<td>' + fmtDate(l.date) + '</td>'
+          + '<td>' + esc(l.examName) + '</td>'
+          + '</tr>';
+      }).join('');
+    } else {
+      logsBody.innerHTML = '<tr class="tp-empty-row"><td colspan="5">لا يوجد سجل فرص لهذا الطالب</td></tr>';
+    }
+
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeDetails(){
+    overlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest && e.target.closest('.tp-details-btn');
+    if (btn) {
+      var sid = btn.getAttribute('data-sid') || '';
+      var row = btn.closest('tr');
+      var label = '';
+      if (row) {
+        var firstCell = row.querySelector('td:not(.tp-details-cell)');
+        if (firstCell) label = firstCell.textContent.trim();
+      }
+      showDetails(sid, label);
+    }
+  });
+
+  closeBtn.addEventListener('click', closeDetails);
+  overlay.addEventListener('click', function(e){
+    if (e.target === overlay) closeDetails();
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && overlay.classList.contains('open')) closeDetails();
+  });
+})();
+</script>
+`;
 
 function buildHtml<T>(
   rows: T[],
@@ -109,16 +352,41 @@ function buildHtml<T>(
     orientation?: PageOrientation;
     documentTitle?: string;
     safeUrlName?: string;
+    studentDetails?: StudentDetailsMap;
+    getRowId?: (row: T) => string;
   } = {},
 ): string {
   const documentTitle = options.documentTitle || title;
   const safeUrlName = options.safeUrlName || sanitizeExportFileName(documentTitle);
+  const hasDetails = Boolean(options.studentDetails);
+
+  // أضف عمود "التفاصيل" فقط عند وجود بيانات الطلاب، ولا يخضع لاختيار الـ checkbox.
+  const effectiveColumns: ExportColumn<T>[] = hasDetails
+    ? [
+        ...columns,
+        {
+          key: DETAILS_COLUMN_KEY,
+          label: "تفاصيل الطالب",
+          value: () => "",
+          locked: true,
+        },
+      ]
+    : columns;
+
   const printableToolbar = options.printable
     ? `<div class="toolbar"><button onclick="window.print()">طباعة / حفظ PDF</button><button onclick="window.close()">إغلاق</button></div>`
     : "";
   const printableScript = options.printable
     ? `<script>document.title=${escapeJsString(documentTitle)};try{window.history.replaceState(null,document.title,'/${encodeURIComponent(safeUrlName)}.pdf');}catch(e){}</script>`
     : "";
+
+  const detailsDataScript = hasDetails
+    ? `<script>window.STUDENT_DETAILS=${JSON.stringify(options.studentDetails || {})};</script>`
+    : "";
+  const detailsModalHtml = hasDetails ? DETAILS_MODAL_HTML : "";
+  const detailsModalJs = hasDetails ? DETAILS_MODAL_JS : "";
+  const detailsCss = hasDetails ? DETAILS_MODAL_CSS : "";
+
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${escapeHtml(humanizeTeacherProText(documentTitle))}</title><style>
   @page { size: A4 ${options.orientation || "portrait"}; margin: 10mm; }
   * { box-sizing: border-box; }
@@ -136,6 +404,7 @@ function buildHtml<T>(
   th { background: #f3f4f6; font-weight: 800; color: #111827; }
   tr:nth-child(even) { background: #fafafa; }
   a[href]::after { content: "" !important; }
+  ${detailsCss}
   @media print {
     html, body { width: 100%; margin: 0 !important; padding: 0 !important; background: white !important; }
     .toolbar { display: none !important; }
@@ -147,10 +416,14 @@ function buildHtml<T>(
     tr { page-break-inside: avoid; page-break-after: auto; }
     thead { display: table-header-group; }
     th, td { padding: 4px 5px; }
+    .tp-modal-overlay { display: none !important; }
   }
-  </style>${printableScript}</head><body>${printableToolbar}<main class="report"><header class="report-header"><h1>${escapeHtml(humanizeTeacherProText(title))}</h1><div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}</div></header><div class="table-wrap"><table><thead><tr>${columns
+  </style>${printableScript}</head><body>${printableToolbar}<main class="report"><header class="report-header"><h1>${escapeHtml(humanizeTeacherProText(title))}</h1><div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}${hasDetails ? " + تفاصيل" : ""}</div></header><div class="table-wrap"><table><thead><tr>${effectiveColumns
     .map((col) => `<th>${escapeHtml(humanizeTeacherProText(col.label))}</th>`)
-    .join("")}</tr></thead><tbody>${buildTableRows(rows, columns)}</tbody></table></div></main></body></html>`;
+    .join("")}</tr></thead><tbody>${buildTableRows(rows, effectiveColumns, {
+      hasDetails,
+      getRowId: options.getRowId,
+    })}</tbody></table></div></main>${detailsModalHtml}${detailsDataScript}${detailsModalJs}</body></html>`;
 }
 
 function downloadBlob(content: BlobPart | Blob, fileName: string, mime: string) {
@@ -191,31 +464,6 @@ const exportFormatIcons: Record<ExportFormat, React.ElementType> = {
   pdf: Printer,
 };
 
-export type FullReportProfile = Record<string, unknown>;
-
-export type FullReportData = {
-  students: Array<Record<string, unknown>>;
-  courses?: Array<Record<string, unknown>>;
-  profiles?: Record<string, FullReportProfile>;
-};
-
-export type ExportFetchContext = {
-  signal: AbortSignal;
-  onProgress: (loaded: number, total: number) => void;
-};
-
-export type FullReportHtmlConfig = {
-  /**
-   * عنوان القالب HTML داخل public/، مثل: "/hfchances-teacherpro-full-report.html"
-   * يُجلب في وقت التصدير ويُحقن بداخله TEACHERPRO_REPORT_DATA.
-   */
-  templateUrl: string;
-  /** يجلب كل الطلاب المفلترين + ملفاتهم الشخصية ويُرجع لقطة جاهزة للحقن. */
-  fetchData: (context: ExportFetchContext) => Promise<FullReportData>;
-  /** عدد طلابي يُتوقع تصديرهم (لإظهار العدّاد في الواجهة). */
-  totalCount?: number | null;
-};
-
 export function ExportDialog<T = Record<string, unknown>>({
   title,
   fileName,
@@ -231,7 +479,8 @@ export function ExportDialog<T = Record<string, unknown>>({
   fetchRows,
   totalRowCount,
   disabled = false,
-  fullReportHtml,
+  fetchStudentDetails,
+  getRowId,
 }: {
   title: string;
   fileName: string;
@@ -249,10 +498,13 @@ export function ExportDialog<T = Record<string, unknown>>({
   totalRowCount?: number | null;
   disabled?: boolean;
   /**
-   * عند تمريره يستبدل سلوك زر "تصدير HTML" لكي يُنتج ملف HTML
-   * قائم على قالب احترافي محقون بكل بيانات الطلاب المفلترين بدلاً من جدول HTML عام.
+   * عند تمريره يضيف زر "عرض التفاصيل" في كل صف عند تصدير HTML، يفتح نافذة
+   * تعرض درجات الطالب في كل الامتحانات + سجل الفرص. البيانات تُحقن داخل
+   * الملف نفسه (window.STUDENT_DETAILS) فيعمل الملف أوفلاين بدون API.
    */
-  fullReportHtml?: FullReportHtmlConfig;
+  fetchStudentDetails?: StudentDetailsFetcher;
+  /** يستخرج معرّف الطالب من كل صف لربطه بتفاصيله. افتراضياً row.id */
+  getRowId?: (row: T) => string;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedColumnKeys, setSelectedColumnKeys] = useState<string[]>(() =>
@@ -262,6 +514,7 @@ export function ExportDialog<T = Record<string, unknown>>({
   const [exportProgress, setExportProgress] = useState<{
     loaded: number;
     total: number;
+    phase: "rows" | "details";
   } | null>(null);
   const exportAbortController = useRef<AbortController | null>(null);
 
@@ -316,11 +569,11 @@ export function ExportDialog<T = Record<string, unknown>>({
     const controller = new AbortController();
     exportAbortController.current = controller;
     setExporting(true);
-    setExportProgress({ loaded: 0, total: Math.max(0, totalRowCount || 0) });
+    setExportProgress({ loaded: 0, total: Math.max(0, totalRowCount || 0), phase: "rows" });
     try {
       const loadedRows = await fetchRows({
         signal: controller.signal,
-        onProgress: (loaded, total) => setExportProgress({ loaded, total }),
+        onProgress: (loaded, total) => setExportProgress({ loaded, total, phase: "rows" }),
       });
       return loadedRows;
     } catch (error) {
@@ -330,6 +583,54 @@ export function ExportDialog<T = Record<string, unknown>>({
           error instanceof Error && error.message
             ? error.message
             : "تعذر تحميل بيانات التصدير الكاملة من النظام",
+        );
+      }
+      return null;
+    } finally {
+      if (exportAbortController.current === controller) {
+        exportAbortController.current = null;
+      }
+      setExporting(false);
+      setExportProgress(null);
+    }
+  };
+
+  /**
+   * يجلب تفاصيل كل طالب (درجاته + سجل فرصه) على دفعات متوازية ليبني ملف
+   * HTML مستقل يعمل أوفلاين. لا يُوقف العملية كاملة عند فشل طالب واحد.
+   */
+  const loadStudentDetails = async (
+    exportRows: T[],
+    controller: AbortController,
+  ): Promise<StudentDetailsMap | null> => {
+    if (!fetchStudentDetails || exportRows.length === 0) return null;
+    const idGetter = getRowId || ((row: T) => String((row as Record<string, unknown>)?.id ?? ""));
+    const studentIds = Array.from(
+      new Set(
+        exportRows
+          .map(idGetter)
+          .map((id) => String(id || "").trim())
+          .filter(Boolean),
+      ),
+    );
+    if (studentIds.length === 0) return null;
+
+    setExporting(true);
+    setExportProgress({ loaded: 0, total: studentIds.length, phase: "details" });
+    try {
+      const details = await fetchStudentDetails(studentIds, {
+        signal: controller.signal,
+        onProgress: (loaded, total) =>
+          setExportProgress({ loaded, total, phase: "details" }),
+      });
+      return details;
+    } catch (error) {
+      console.error("[ExportDialog] failed to fetch student details:", error);
+      if (!(error instanceof Error && error.name === "AbortError")) {
+        toast.error(
+          error instanceof Error && error.message
+            ? error.message
+            : "تعذر تحميل تفاصيل الطلاب من النظام",
         );
       }
       return null;
@@ -383,93 +684,33 @@ export function ExportDialog<T = Record<string, unknown>>({
     setOpen(false);
   };
 
-  const exportHtml = (exportRows: T[]) => {
+  const exportHtml = async (exportRows: T[]) => {
     if (!ensureExportable(exportRows)) return;
-    const html = buildHtml(exportRows, selectedColumns, title);
-    downloadBlob(html, `${safeFileName}.html`, "text/html;charset=utf-8");
-    toast.success(`تم تصدير ${exportRows.length} صف و ${selectedColumns.length} عمود بصيغة HTML`);
-    setOpen(false);
-  };
 
-  /**
-   * يبني ملف HTML "التقرير الكلي" اعتماداً على قالب احترافي داخل public/
-   * ويحقن بداخله window.TEACHERPRO_REPORT_DATA = { students, courses, profiles }
-   * بحيث يصبح الملف مستقلاً تماماً ولا يحتاج أي اتصال بـ API بعد التحميل.
-   *
-   * القالب لا يُعدَّل أبداً؛ نحقن فقط وسْم <script> إضافي قبل </body>.
-   */
-  const exportFullReportHtml = async () => {
-    if (!fullReportHtml) return false;
-    exportAbortController.current?.abort();
-    const controller = new AbortController();
-    exportAbortController.current = controller;
-    setExporting(true);
-    const expectedTotal =
-      typeof fullReportHtml.totalCount === "number"
-        ? fullReportHtml.totalCount
-        : typeof totalRowCount === "number"
-          ? totalRowCount
-          : 0;
-    setExportProgress({ loaded: 0, total: expectedTotal });
-    try {
-      const [templateText, reportData] = await Promise.all([
-        fetch(fullReportHtml.templateUrl, { cache: "no-store" }).then(
-          async (response) => {
-            if (!response.ok) {
-              throw new Error(
-                `تعذر تحميل قالب التقرير: ${response.status} ${response.statusText}`,
-              );
-            }
-            return response.text();
-          },
-        ),
-        fullReportHtml.fetchData({
-          signal: controller.signal,
-          onProgress: (loaded, total) =>
-            setExportProgress({ loaded, total: total || expectedTotal }),
-        }),
-      ]);
-
-      if (!Array.isArray(reportData?.students) || reportData.students.length === 0) {
-        toast.error("لا يوجد طلاب مطابقون للفلاتر الحالية للتصدير");
-        return false;
+    let detailsMap: StudentDetailsMap | null = null;
+    if (fetchStudentDetails) {
+      exportAbortController.current?.abort();
+      const controller = new AbortController();
+      exportAbortController.current = controller;
+      detailsMap = await loadStudentDetails(exportRows, controller);
+      if (exportAbortController.current === null && detailsMap === null) {
+        // تم الإلغاء أو فشل التحميل — لا نكمل التصدير.
+        return;
       }
-
-      const injectionScript = `<script>window.TEACHERPRO_REPORT_DATA=${JSON.stringify(
-        reportData,
-      )};</script>`;
-      const injectedHtml = templateText.replace(
-        /<\/body>\s*<\/html>\s*$/i,
-        `${injectionScript}\n</body>\n</html>`,
-      );
-
-      downloadBlob(
-        injectedHtml,
-        `${safeFileName}.html`,
-        "text/html;charset=utf-8",
-      );
-      toast.success(
-        `تم تصدير التقرير الكلي بـ ${reportData.students.length} طالباً بصيغة HTML`,
-      );
-      setOpen(false);
-      return true;
-    } catch (error) {
-      console.error("[ExportDialog] full report HTML export failed:", error);
-      if (!(error instanceof Error && error.name === "AbortError")) {
-        toast.error(
-          error instanceof Error && error.message
-            ? error.message
-            : "تعذر إنشاء تقرير HTML الكلي",
-        );
-      }
-      return false;
-    } finally {
-      if (exportAbortController.current === controller) {
-        exportAbortController.current = null;
-      }
-      setExporting(false);
-      setExportProgress(null);
     }
+
+    const html = buildHtml(exportRows, selectedColumns, title, {
+      studentDetails: detailsMap || undefined,
+      getRowId,
+    });
+    downloadBlob(html, `${safeFileName}.html`, "text/html;charset=utf-8");
+    const detailsNote = detailsMap
+      ? ` مع تفاصيل ${Object.keys(detailsMap).length} طالب`
+      : "";
+    toast.success(
+      `تم تصدير ${exportRows.length} صف و ${selectedColumns.length} عمود بصيغة HTML${detailsNote}`,
+    );
+    setOpen(false);
   };
 
   const exportPdf = (exportRows: T[], pendingWindow?: Window | null) => {
@@ -507,15 +748,6 @@ export function ExportDialog<T = Record<string, unknown>>({
       pendingPdfWindow.document.write("<p dir='rtl' style='font-family:sans-serif;padding:16px'>جاري تجهيز التقرير...</p>");
       pendingPdfWindow.document.close();
     }
-    // مسار "التقرير الكلي HTML" المستقل: يحقن كل البيانات المفلترة في القالب الاحترافي.
-    if (format === "html" && fullReportHtml) {
-      const ok = await exportFullReportHtml();
-      if (ok || exportAbortController.current === null) {
-        // إما نجح التصدير أو أُلغي؛ لا حاجة لفتح PDF في هذا المسار.
-      }
-      pendingPdfWindow?.close();
-      return;
-    }
     const exportRows = await loadExportRows();
     if (!exportRows) {
       pendingPdfWindow?.close();
@@ -523,7 +755,7 @@ export function ExportDialog<T = Record<string, unknown>>({
     }
     if (format === "csv") exportCsv(exportRows);
     if (format === "excel") exportExcel(exportRows);
-    if (format === "html") exportHtml(exportRows);
+    if (format === "html") await exportHtml(exportRows);
     if (format === "pdf") exportPdf(exportRows, pendingPdfWindow);
   };
 
@@ -538,6 +770,10 @@ export function ExportDialog<T = Record<string, unknown>>({
   const selectAllColumns = () => setSelectedColumnKeys(columns.map((column) => column.key));
   const clearOptionalColumns = () => setSelectedColumnKeys(columns.filter((column) => column.locked).map((column) => column.key));
   const resetColumns = () => setSelectedColumnKeys(defaultColumnKeys(columns, defaultSelectedColumnKeys));
+
+  const progressLabel = exportProgress?.phase === "details"
+    ? "جاري تحميل تفاصيل الطلاب (الدرجات وسجل الفرص)…"
+    : "جاري تحميل جميع الطلاب…";
 
   return (
     <Dialog
@@ -576,11 +812,7 @@ export function ExportDialog<T = Record<string, unknown>>({
               aria-live="polite"
             >
               <div className="flex items-center justify-between gap-3 text-sm">
-                <strong>
-                  {fullReportHtml
-                    ? "جاري تحميل الطلاب وملفاتهم الشخصية للتقرير الكلي…"
-                    : "جاري تحميل جميع الطلاب…"}
-                </strong>
+                <strong>{progressLabel}</strong>
                 <span>
                   {exportProgress.loaded} / {exportProgress.total || "…"}
                 </span>
@@ -632,37 +864,25 @@ export function ExportDialog<T = Record<string, unknown>>({
             </div>
             <p className="text-xs text-muted-foreground">
               سيتم تصدير الأعمدة المختارة فقط وبنفس ترتيبها الظاهر في هذه القائمة.
+              {fetchStudentDetails
+                ? " عند تصدير HTML يُضاف عمود «تفاصيل الطالب» تلقائياً لفتح درجات الطالب وسجل فرصه."
+                : ""}
             </p>
           </div>
         </div>
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:flex-wrap">
           {availableFormats.map((format) => {
             const Icon = exportFormatIcons[format];
-            const isFullReportHtml = format === "html" && Boolean(fullReportHtml);
-            const buttonDisabled =
-              exporting ||
-              (!fetchRows && rows.length === 0) ||
-              (!isFullReportHtml && selectedColumns.length === 0);
-            const buttonLabel = exporting
-              ? "جاري التحضير..."
-              : isFullReportHtml
-                ? "تصدير HTML شامل"
-                : exportFormatLabels[format];
             return (
               <Button
                 key={format}
                 variant="outline"
                 className="gap-2"
                 onClick={() => handleExport(format)}
-                disabled={buttonDisabled}
-                title={
-                  isFullReportHtml
-                    ? "يصدّر كل الطلاب المفلترين مع ملفاتهم الشخصية الكاملة داخل قالب HTML احترافي مستقل"
-                    : undefined
-                }
+                disabled={exporting || (!fetchRows && rows.length === 0) || selectedColumns.length === 0}
               >
                 <Icon className="h-4 w-4" />
-                {buttonLabel}
+                {exporting ? "جاري التحضير..." : exportFormatLabels[format]}
               </Button>
             );
           })}
