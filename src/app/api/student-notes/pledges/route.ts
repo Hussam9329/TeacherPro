@@ -10,6 +10,7 @@ import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-sna
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
+import { REACTIVATION_OPPORTUNITY_GRANT } from "@/lib/opportunity-balance";
 
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
@@ -56,10 +57,6 @@ function buildDismissalKey(parts: {
     normalizeDismissalText(parts.reason),
     dayKey(parts.date),
   ].join("::");
-}
-
-function dismissalGroupFromType(type: string | null | undefined) {
-  return String(type || "").includes("نهائي") ? "final" : "temporary";
 }
 
 function rowMatchesSearch(row: { student: Record<string, unknown>; dismissalInfo: DismissalInfo; note?: Record<string, unknown> | null }, query: string) {
@@ -131,7 +128,7 @@ function buildInfoForDismissedStudent(
   }>,
 ): DismissalInfo | null {
   if (student.status !== "مفصول") return null;
-  const type = student.dismissalType || "فصل مؤقت";
+  const type = "فصل";
   const reason = student.dismissalReason || type || "طالب مفصول";
   const normalizedReason = normalizeDismissalText(reason);
 
@@ -194,7 +191,7 @@ function buildInfoFromPledgeNote(
   },
   sourceLog?: { date: Date; exam?: { name: string } | null } | null,
 ): DismissalInfo {
-  const type = note.dismissalType || "فصل مؤقت";
+  const type = "فصل";
   const reason = note.dismissalReason || note.text || type;
   const sourceType = note.sourceType || "pledge-note";
   const sourceId = note.sourceId || note.id;
@@ -321,7 +318,7 @@ async function buildPledgeRows(searchParams: URLSearchParams) {
       key,
       student,
       dismissalInfo,
-      group: dismissalGroupFromType(dismissalInfo.type),
+      group: "dismissal",
       pledged: Boolean(linkedNote),
       note: linkedNote,
       reactivated: false,
@@ -342,7 +339,7 @@ async function buildPledgeRows(searchParams: URLSearchParams) {
       key,
       student: note.student,
       dismissalInfo,
-      group: dismissalGroupFromType(note.dismissalType || dismissalInfo.type),
+      group: "dismissal",
       pledged: true,
       note,
       reactivated: note.student.status !== "مفصول",
@@ -352,8 +349,7 @@ async function buildPledgeRows(searchParams: URLSearchParams) {
 
   const stats = {
     dismissed: dismissedStudents.length,
-    temporary: rows.filter((row) => row.group === "temporary" && (row.student as { status?: string }).status === "مفصول").length,
-    final: rows.filter((row) => row.group === "final" && (row.student as { status?: string }).status === "مفصول").length,
+    dismissal: rows.filter((row) => (row.student as { status?: string }).status === "مفصول").length,
     pledged: rows.filter((row) => Boolean(row.pledged)).length,
     reactivated: rows.filter((row) => Boolean(row.reactivated)).length,
     pending: rows.filter((row) => !row.pledged && (row.student as { status?: string }).status === "مفصول").length,
@@ -363,8 +359,7 @@ async function buildPledgeRows(searchParams: URLSearchParams) {
 
   const filtered = rows
     .filter((row) => {
-      if (typeFilter === "temporary" && row.group !== "temporary") return false;
-      if (typeFilter === "final" && row.group !== "final") return false;
+      if (typeFilter === "dismissal" && row.group !== "dismissal") return false;
       if (statusFilter === "pledged" && !row.pledged) return false;
       if (statusFilter === "pending" && row.pledged) return false;
       if (statusFilter === "reactivated" && !row.reactivated) return false;
@@ -374,8 +369,8 @@ async function buildPledgeRows(searchParams: URLSearchParams) {
       );
     })
     .sort((a, b) =>
-      `${a.pledged ? 1 : 0}-${a.group === "temporary" ? 0 : 1}-${(a.student as { name?: string }).name || ""}`.localeCompare(
-        `${b.pledged ? 1 : 0}-${b.group === "temporary" ? 0 : 1}-${(b.student as { name?: string }).name || ""}`,
+      `${a.pledged ? 1 : 0}-${(a.student as { name?: string }).name || ""}`.localeCompare(
+        `${b.pledged ? 1 : 0}-${(b.student as { name?: string }).name || ""}`,
         "ar",
       ),
     );
@@ -461,7 +456,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const type = cleanText(dismissalInfo.type) || "فصل مؤقت";
+    const type = "فصل";
     const reason = cleanText(dismissalInfo.reason) || "تعهد ولي الأمر";
     const sourceType = cleanText(dismissalInfo.sourceType) || "student-dismissal";
     const sourceId = cleanText(dismissalInfo.sourceId) || studentId;
@@ -513,6 +508,21 @@ export async function POST(req: NextRequest) {
 
       const shouldReactivate = student.status === "مفصول";
       const activeChapter = shouldReactivate ? await getActiveChapterForCourse(tx, student.courseId) : null;
+      if (
+        shouldReactivate &&
+        (!activeChapter ||
+          Number(activeChapter.opportunities || 0) <
+            REACTIVATION_OPPORTUNITY_GRANT)
+      ) {
+        throw Object.assign(
+          new Error("reactivation requires one active chapter with at least two opportunities"),
+          {
+            statusCode: 409,
+            userMessage:
+              "لا يمكن إعادة التفعيل بفرصتين قبل تثبيت فصل نشط واحد سقفه فرصتان على الأقل.",
+          },
+        );
+      }
 
       const updatedStudent = shouldReactivate
         ? await tx.student.update({
@@ -522,7 +532,7 @@ export async function POST(req: NextRequest) {
               dismissalType: "",
               dismissalReason: "",
               dismissalNotes: "",
-              opportunities: 1,
+              opportunities: REACTIVATION_OPPORTUNITY_GRANT,
             },
           })
         : student;
@@ -542,21 +552,21 @@ export async function POST(req: NextRequest) {
               examId: null,
               action: "إعادة تفعيل",
               amount: 0,
-              reason: "تثبيت إعادة التفعيل بعد تعهد ولي الأمر: لا يعاد فصل الطالب بسبب سجلات قديمة، وأي مخالفة جديدة بعد الفرصة تصبح نهائية",
+              reason: "تثبيت إعادة التفعيل بفرصتين بعد تعهد ولي الأمر: لا يعاد فصل الطالب بسبب سجلات قديمة؛ يبقى نشطاً عند الوصول إلى 0، ويفصل فقط عند مخالفة خصم جديدة تبدأ وهو بدون فرص",
               chapterId: activeChapter?.id || null,
               chapterNameSnapshot: activeChapter?.name || null,
             },
           })
         : null;
 
-      const finalChanceLog = shouldReactivate
+      const reactivationGrantLog = shouldReactivate
         ? await tx.opportunityLog.create({
             data: {
               studentId,
               examId: null,
-              action: "فرصة أخيرة بعد تعهد",
-              amount: 1,
-              reason: "إرجاع الطالب بعد تعهد ولي الأمر بفرصة واحدة فقط",
+              action: "إعادة تفعيل بفرصتين",
+              amount: REACTIVATION_OPPORTUNITY_GRANT,
+              reason: "إرجاع الطالب بعد تعهد ولي الأمر بفرصتين",
               chapterId: activeChapter?.id || null,
               chapterNameSnapshot: activeChapter?.name || null,
             },
@@ -593,7 +603,7 @@ export async function POST(req: NextRequest) {
         student: updatedStudent,
         studentNote: pledgeNote,
         actionNote,
-        opportunityLogs: [reactivationLog, finalChanceLog].filter(Boolean),
+        opportunityLogs: [reactivationLog, reactivationGrantLog].filter(Boolean),
         reactivated: shouldReactivate,
         pendingGradeMigration,
       };
@@ -610,12 +620,15 @@ export async function POST(req: NextRequest) {
       source: "database",
     });
   } catch (error) {
-    const err = error as { code?: string; statusCode?: number };
+    const err = error as { code?: string; statusCode?: number; userMessage?: string };
     if (err.code === "P2025") {
       return NextResponse.json({ error: "تعذر العثور على الطالب المطلوب." }, { status: 404 });
     }
     if (err.statusCode === 409) {
-      return NextResponse.json({ error: "لا يمكن تثبيت تعهد لطالب مؤرشف. استعد الطالب أولاً." }, { status: 409 });
+      return NextResponse.json(
+        { error: err.userMessage || "لا يمكن تثبيت تعهد لطالب مؤرشف. استعد الطالب أولاً." },
+        { status: 409 },
+      );
     }
     return routeErrorResponse(error, "تعذر تنفيذ إجراء التعهد حالياً.");
   }

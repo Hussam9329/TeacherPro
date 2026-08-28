@@ -8,6 +8,11 @@ import {
 export { isExamWithinStudentGraceWindow } from "./student-grace";
 import { isExamWithinStudentGraceWindow } from "./student-grace";
 import { baghdadDateKey, baghdadTodayKey } from "./baghdad-time";
+import {
+  applyOpportunityPenalty,
+  hasZeroBalanceViolationMarker,
+  REACTIVATION_OPPORTUNITY_GRANT,
+} from "./opportunity-balance";
 import type {
   AcademicChapter,
   AcademicCourseChapter,
@@ -126,20 +131,23 @@ export function isReactivationOpportunityLog(log: AcademicOpportunityLog): boole
   );
 }
 
-export function isFinalChanceOpportunityLog(log: AcademicOpportunityLog): boolean {
+export function isReactivationOpportunityGrantLog(log: AcademicOpportunityLog): boolean {
   return (
+    log.action === "إعادة تفعيل بفرصتين" ||
     log.action === "فرصة أخيرة بعد تعهد" ||
-    String(log.reason || "").includes("فرصة أخيرة")
+    String(log.reason || "").includes("فرصة أخيرة") ||
+    String(log.reason || "").includes("بفرصتين")
   );
 }
 
 export function isSystemAcademicReactivationLog(log: AcademicOpportunityLog): boolean {
   const reason = String(log.reason || "");
   return (
-    (isReactivationOpportunityLog(log) || isFinalChanceOpportunityLog(log)) &&
+    (isReactivationOpportunityLog(log) || isReactivationOpportunityGrantLog(log)) &&
     (reason.includes("تثبيت إعادة التفعيل") ||
       reason.includes("إرجاع الطالب بعد إعادة التفعيل") ||
-      reason.includes("بفرصة واحدة"))
+      reason.includes("بفرصة واحدة") ||
+      reason.includes("بفرصتين"))
   );
 }
 
@@ -328,7 +336,7 @@ export function classifyGradeImpact(
 
   if (grade.status === "غش") {
     return {
-      type: hasPriorDismissalEvent ? "final_dismissal" : "temporary_dismissal",
+      type: "dismissal",
       reason: hasPriorDismissalEvent
         ? `غش متكرر في امتحان: ${exam.name}`
         : `أول حالة غش في امتحان: ${exam.name}`,
@@ -344,27 +352,25 @@ export function classifyGradeImpact(
   if (grade.status === "غائب") {
     if (exam.type === "فاينل") {
       return {
-        type: "temporary_dismissal",
+        type: "dismissal",
         reason: `غياب ضمن درجة الفصل في امتحان ${exam.type}: ${exam.name}`,
         penalty: Math.max(0, opportunitiesBefore),
         priority: 75,
       };
     }
     const penalty = examPenaltyValue(exam);
-    if (hasPriorDismissalEvent) {
+    const opportunityEffect = applyOpportunityPenalty(
+      opportunitiesBefore,
+      penalty,
+    );
+    if (opportunityEffect.dismissalTrigger) {
       return {
-        type: "temporary_dismissal",
-        reason: `غياب في امتحان ${exam.type} بعد فصل سابق: ${exam.name}`,
+        type: "dismissal",
+        reason: hasPriorDismissalEvent
+          ? `غياب في امتحان ${exam.type} بعد فصل سابق والطالب بدون فرص: ${exam.name}`
+          : `مخالفة بعد انتهاء الفرص - غياب في امتحان ${exam.type}: ${exam.name}`,
         penalty,
-        priority: 85,
-      };
-    }
-    if (opportunitiesBefore - penalty <= 0) {
-      return {
-        type: "temporary_dismissal",
-        reason: `انتهاء الفرص بعد غياب في امتحان ${exam.type}: ${exam.name}`,
-        penalty,
-        priority: 60,
+        priority: hasPriorDismissalEvent ? 85 : 60,
       };
     }
     return {
@@ -380,7 +386,7 @@ export function classifyGradeImpact(
     if (exam.type === "فاينل") {
       if (score === 0) {
         return {
-          type: "temporary_dismissal",
+          type: "dismissal",
           reason: `درجة صفر في امتحان ${exam.type}: ${exam.name}`,
           penalty: Math.max(0, opportunitiesBefore),
           priority: 76,
@@ -388,7 +394,7 @@ export function classifyGradeImpact(
       }
       if (exam.dismissalGrade !== null && score <= exam.dismissalGrade) {
         return {
-          type: "temporary_dismissal",
+          type: "dismissal",
           reason: `درجة فصل (${score}): ${exam.name}`,
           penalty: Math.max(0, opportunitiesBefore),
           priority: 75,
@@ -399,20 +405,18 @@ export function classifyGradeImpact(
 
     if (score <= exam.discountMark) {
       const penalty = examPenaltyValue(exam);
-      if (hasPriorDismissalEvent) {
+      const opportunityEffect = applyOpportunityPenalty(
+        opportunitiesBefore,
+        penalty,
+      );
+      if (opportunityEffect.dismissalTrigger) {
         return {
-          type: "temporary_dismissal",
-          reason: `درجة خصم (${score}) بعد فصل سابق في امتحان ${exam.type}: ${exam.name}`,
+          type: "dismissal",
+          reason: hasPriorDismissalEvent
+            ? `درجة خصم (${score}) بعد فصل سابق والطالب بدون فرص في امتحان ${exam.type}: ${exam.name}`
+            : `مخالفة بعد انتهاء الفرص - درجة خصم (${score}) في امتحان: ${exam.name}`,
           penalty,
-          priority: 85,
-        };
-      }
-      if (opportunitiesBefore - penalty <= 0) {
-        return {
-          type: "temporary_dismissal",
-          reason: `انتهاء الفرص بعد درجة خصم (${score}) في امتحان: ${exam.name}`,
-          penalty,
-          priority: 60,
+          priority: hasPriorDismissalEvent ? 85 : 60,
         };
       }
       return {
@@ -632,6 +636,14 @@ export function recalculateAcademicState(
       (log) => String(log.reason || "").startsWith("تسوية تاريخية:"),
     );
 
+    const undoneManualOpportunityLogIds = new Set(
+      allStudentManualLogs
+        .map((log) =>
+          String(log.reason || "").match(/\[undo-ref:([^\]]+)\]/)?.[1] || "",
+        )
+        .filter(Boolean),
+    );
+
     const hasIndependentManualReactivation =
       student.status === "نشط" &&
       allStudentManualLogs.some((log) => {
@@ -750,31 +762,44 @@ export function recalculateAcademicState(
     let dismissalPriority = -1;
     let cheatCount = 0;
 
-    const hasFinalChancePledge = studentManualLogs.some(
-      isFinalChanceOpportunityLog,
+    const hasReactivationGrant = studentManualLogs.some(
+      isReactivationOpportunityGrantLog,
     );
-    let hasPriorDismissalEvent = manualDismissal || hasFinalChancePledge;
-    const finalChanceStartDate = latestStudentLogDate(
+    let hasPriorDismissalEvent = manualDismissal || hasReactivationGrant;
+    const reactivationStartDate = latestStudentLogDate(
       studentManualLogs,
-      isFinalChanceOpportunityLog,
+      isReactivationOpportunityGrantLog,
     );
-    studentManualLogs.forEach((log) => {
+    let manualZeroBalanceViolation: AcademicOpportunityLog | null = null;
+    for (const log of studentManualLogs) {
       if (
-        finalChanceStartDate &&
-        !isFinalChanceOpportunityLog(log) &&
-        dayKey(log.date) < finalChanceStartDate
+        reactivationStartDate &&
+        !isReactivationOpportunityGrantLog(log) &&
+        dayKey(log.date) < reactivationStartDate
       )
-        return;
+        continue;
       const amount = Math.abs(Number(log.amount || 0));
-      if (!amount && !isFinalChanceOpportunityLog(log)) return;
-      if (isFinalChanceOpportunityLog(log)) opportunities = amount || 1;
+      if (!amount && !isReactivationOpportunityGrantLog(log)) continue;
+      if (isReactivationOpportunityGrantLog(log)) {
+        opportunities = amount || REACTIVATION_OPPORTUNITY_GRANT;
+      }
       else if (log.action === "إضافة") opportunities += amount;
-      if (log.action === "خصم") opportunities -= amount;
+      if (log.action === "خصم") {
+        const effect = applyOpportunityPenalty(opportunities, amount);
+        if (
+          (effect.dismissalTrigger || hasZeroBalanceViolationMarker(log.reason)) &&
+          !undoneManualOpportunityLogIds.has(log.id) &&
+          !manualZeroBalanceViolation
+        ) {
+          manualZeroBalanceViolation = log;
+        }
+        opportunities = effect.after;
+      }
       if (log.action === "إعادة تعيين")
         opportunities = Number(
           activeChapter?.opportunities ?? student.baseOpportunities ?? 0,
         );
-    });
+    }
 
     const addAutomaticLog = (
       exam: AcademicExam,
@@ -822,46 +847,39 @@ export function recalculateAcademicState(
     };
 
     const setDismissal = (
-      type: string,
       reason: string,
       priority: number,
       exam?: AcademicExam,
       sourceId?: string,
     ) => {
-      const finalChanceViolation = hasFinalChancePledge && type === "فصل مؤقت";
-      const secondDismissalViolation =
-        hasPriorDismissalEvent && type === "فصل مؤقت";
-      const shouldBeFinal = finalChanceViolation || secondDismissalViolation;
-      const effectiveType = shouldBeFinal ? "فصل نهائي" : type;
-      const effectiveReason = finalChanceViolation
-        ? `عدم الالتزام بالتعهد السابق - ${reason}`
-        : secondDismissalViolation
-          ? `الفصل الثاني للطالب - ${reason}`
-          : reason;
-      const effectivePriority = shouldBeFinal
-        ? Math.max(priority, 90)
-        : priority;
-      if (effectivePriority >= dismissalPriority) {
-        dismissalType = effectiveType;
-        dismissalReason = effectiveReason;
-        dismissalPriority = effectivePriority;
+      if (priority >= dismissalPriority) {
+        dismissalType = "فصل";
+        dismissalReason = reason;
+        dismissalPriority = priority;
       }
       if (exam) {
         consumeAllRemainingOpportunities(
           exam,
           sourceId || exam.id,
-          effectiveReason,
+          reason,
         );
         addAutomaticLog(
           exam,
           sourceId || exam.id,
           "فصل تلقائي",
           0,
-          effectiveReason,
+          reason,
         );
       }
       hasPriorDismissalEvent = true;
     };
+
+    if (manualZeroBalanceViolation) {
+      setDismissal(
+        `مخالفة بعد انتهاء الفرص - خصم يدوي: ${manualZeroBalanceViolation.reason || "بدون سبب مسجل"}`,
+        60,
+      );
+    }
 
     const isProtectedLinkedSourceGrade = (grade: AcademicGrade): boolean => {
       return activeLinkedSources.some((link) =>
@@ -896,7 +914,7 @@ export function recalculateAcademicState(
       const gradeEventDate = dayKey(
         exam.date || grade.updatedAt || grade.createdAt || "",
       );
-      if (finalChanceStartDate && gradeEventDate < finalChanceStartDate)
+      if (reactivationStartDate && gradeEventDate < reactivationStartDate)
         continue;
       if (
         manualDismissal &&
@@ -932,7 +950,6 @@ export function recalculateAcademicState(
             );
           opportunities = 0;
           setDismissal(
-            "فصل مؤقت",
             `أول حالة غش في امتحان: ${exam.name}`,
             80,
             exam,
@@ -940,7 +957,6 @@ export function recalculateAcademicState(
           );
         } else {
           setDismissal(
-            "فصل نهائي",
             `غش متكرر في امتحان: ${exam.name}`,
             100,
             exam,
@@ -957,7 +973,6 @@ export function recalculateAcademicState(
       if (grade.status === "غائب") {
         if (exam.type === "فاينل") {
           setDismissal(
-            "فصل مؤقت",
             `غياب ضمن درجة الفصل في امتحان ${exam.type}: ${exam.name}`,
             75,
             exam,
@@ -965,27 +980,26 @@ export function recalculateAcademicState(
           );
         } else {
           const penalty = examPenaltyValue(exam);
-          opportunities -= penalty;
-          addAutomaticLog(
-            exam,
-            grade.id,
-            "خصم تلقائي",
+          const opportunityEffect = applyOpportunityPenalty(
+            opportunities,
             penalty,
-            `غياب في امتحان ${exam.type}: ${exam.name}`,
           );
-          if (hasPriorDismissalEvent) {
-            setDismissal(
-              "فصل مؤقت",
-              `غياب في امتحان ${exam.type} بعد فصل سابق: ${exam.name}`,
-              85,
+          opportunities = opportunityEffect.after;
+          if (opportunityEffect.deducted > 0) {
+            addAutomaticLog(
               exam,
               grade.id,
+              "خصم تلقائي",
+              opportunityEffect.deducted,
+              `غياب في امتحان ${exam.type}: ${exam.name}`,
             );
-          } else if (opportunities <= 0) {
+          }
+          if (opportunityEffect.dismissalTrigger) {
             setDismissal(
-              "فصل مؤقت",
-              `انتهاء الفرص بعد غياب في امتحان ${exam.type}: ${exam.name}`,
-              60,
+              hasPriorDismissalEvent
+                ? `غياب في امتحان ${exam.type} بعد فصل سابق والطالب بدون فرص: ${exam.name}`
+                : `مخالفة بعد انتهاء الفرص - غياب في امتحان ${exam.type}: ${exam.name}`,
+              hasPriorDismissalEvent ? 85 : 60,
               exam,
               grade.id,
             );
@@ -999,7 +1013,6 @@ export function recalculateAcademicState(
         if (exam.type === "فاينل") {
           if (score === 0) {
             setDismissal(
-              "فصل مؤقت",
               `درجة صفر في امتحان ${exam.type}: ${exam.name}`,
               76,
               exam,
@@ -1010,7 +1023,6 @@ export function recalculateAcademicState(
             score <= exam.dismissalGrade
           ) {
             setDismissal(
-              "فصل مؤقت",
               `درجة فصل (${score}): ${exam.name}`,
               75,
               exam,
@@ -1021,27 +1033,26 @@ export function recalculateAcademicState(
         }
         if (score <= exam.discountMark) {
           const penalty = examPenaltyValue(exam);
-          opportunities -= penalty;
-          addAutomaticLog(
-            exam,
-            grade.id,
-            "خصم تلقائي",
+          const opportunityEffect = applyOpportunityPenalty(
+            opportunities,
             penalty,
-            `درجة ${score} ضمن الخصم في امتحان: ${exam.name}`,
           );
-          if (hasPriorDismissalEvent) {
-            setDismissal(
-              "فصل مؤقت",
-              `درجة خصم (${score}) بعد فصل سابق في امتحان ${exam.type}: ${exam.name}`,
-              85,
+          opportunities = opportunityEffect.after;
+          if (opportunityEffect.deducted > 0) {
+            addAutomaticLog(
               exam,
               grade.id,
+              "خصم تلقائي",
+              opportunityEffect.deducted,
+              `درجة ${score} ضمن الخصم في امتحان: ${exam.name}`,
             );
-          } else if (opportunities <= 0) {
+          }
+          if (opportunityEffect.dismissalTrigger) {
             setDismissal(
-              "فصل مؤقت",
-              `انتهاء الفرص بعد درجة خصم (${score}) في امتحان: ${exam.name}`,
-              60,
+              hasPriorDismissalEvent
+                ? `درجة خصم (${score}) بعد فصل سابق والطالب بدون فرص في امتحان ${exam.type}: ${exam.name}`
+                : `مخالفة بعد انتهاء الفرص - درجة خصم (${score}) في امتحان: ${exam.name}`,
+              hasPriorDismissalEvent ? 85 : 60,
               exam,
               grade.id,
             );
@@ -1060,16 +1071,6 @@ export function recalculateAcademicState(
     if (opportunityCap > 0) {
       opportunities = Math.min(opportunities, opportunityCap);
     }
-    if (opportunities === 0 && opportunityCap > 0 && !dismissalType) {
-      setDismissal(
-        hasFinalChancePledge ? "فصل نهائي" : "فصل مؤقت",
-        hasFinalChancePledge
-          ? "عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة"
-          : "انتهاء الفرص",
-        hasFinalChancePledge ? 90 : 60,
-      );
-    }
-
     return {
       ...student,
       opportunities,

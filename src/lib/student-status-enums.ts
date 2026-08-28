@@ -16,12 +16,11 @@
 //   - "مؤرشف"   (archived)
 //
 // VALID dismissalType values (only meaningful when status === "مفصول"):
-//   - "فصل مؤقت"  (temporary dismissal)
-//   - "فصل نهائي" (final dismissal)
+//   - "فصل" (the single unified dismissal state)
 // ============================================================================
 
 export const STUDENT_STATUS_VALUES = ['نشط', 'مفصول', 'مؤرشف'] as const;
-export const DISMISSAL_TYPE_VALUES = ['فصل مؤقت', 'فصل نهائي'] as const;
+export const DISMISSAL_TYPE_VALUES = ['فصل'] as const;
 
 export type StudentStatus = (typeof STUDENT_STATUS_VALUES)[number];
 export type DismissalType = (typeof DISMISSAL_TYPE_VALUES)[number];

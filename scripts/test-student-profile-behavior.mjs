@@ -232,7 +232,7 @@ test("server activity counters do not double-count notes or final-chance logs", 
       { action: "فرصة أخيرة بعد تعهد", amount: 1 },
     ],
     studentNotes: [
-      { kind: "إجراء", text: "فصل الطالب (فصل مؤقت)", dismissalType: "فصل مؤقت" },
+      { kind: "إجراء", text: "فصل الطالب", dismissalType: "فصل" },
       { kind: "إجراء", text: "تعديل إداري", dismissalType: "" },
       { kind: "تعهد ولي الأمر", text: "تعهد", dismissalType: "" },
     ],

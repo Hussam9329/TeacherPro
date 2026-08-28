@@ -23,6 +23,8 @@ function check(condition, message) {
 const reconciliationMigrationName =
   "20260820140000_schema_authority_reconciliation";
 const requiredRuntimeMigrationName =
+  "20260828010000_unify_dismissal_and_zero_balance";
+const graceTerminationMigrationName =
   "20260822210000_end_grace_on_numeric_grade";
 const initialBridgeMigrationName = "20260601000000_initial_schema_bridge";
 const recoveredOperationalMigrationName =
@@ -133,7 +135,7 @@ check(
     read(
       path.join(
         "prisma/migrations",
-        requiredRuntimeMigrationName,
+        graceTerminationMigrationName,
         "migration.sql",
       ),
     ).includes('ADD COLUMN IF NOT EXISTS "gracePeriodEndedAt"'),

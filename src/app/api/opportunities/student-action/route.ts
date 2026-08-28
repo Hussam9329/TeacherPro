@@ -11,6 +11,7 @@ import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-ser
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { ZERO_BALANCE_VIOLATION_MARKER } from "@/lib/opportunity-balance";
 
 const MANUAL_ACTIONS = new Set(["إضافة", "خصم", "إعادة تعيين"]);
 
@@ -275,14 +276,19 @@ export async function POST(req: NextRequest) {
           // from the requested amount (i.e. clamping occurred).
           // Q75 FIX: For undo, embed [undo-ref:${sourceLog.id}] marker so we
           // can detect prior undos and prevent double-undo.
+          const zeroBalanceViolation =
+            actionType === "deduct" && balanceBefore === 0 && logAmount > 0;
+          const zeroBalanceMarker = zeroBalanceViolation
+            ? ` ${ZERO_BALANCE_VIOLATION_MARKER}`
+            : "";
           const finalReason = actionType === "reset"
             ? (reason || "إعادة تعيين الفرص من إدارة الفرص") +
               ` [قبل: ${balanceBefore} → بعد: ${balanceAfter}، فرق: ${actualAppliedAmount >= 0 ? "+" : ""}${actualAppliedAmount}]`
             : actionType === "undo"
               ? `تراجع موثق عن ${sourceLog?.action}: ${sourceLog?.reason || "بدون سبب"} [undo-ref:${sourceLog?.id}]`.slice(0, 2000)
               : (logAmount !== actualAppliedAmount
-                ? `${reason || ""} [مطلوب: ${logAmount}، مطبّق: ${actualAppliedAmount}، قبل: ${balanceBefore} → بعد: ${balanceAfter}]`
-                : reason);
+                ? `${reason || ""} [مطلوب: ${logAmount}، مطبّق: ${actualAppliedAmount}، قبل: ${balanceBefore} → بعد: ${balanceAfter}]${zeroBalanceMarker}`
+                : `${reason}${zeroBalanceMarker}`);
 
           const createdLog = await tx.opportunityLog.create({
             data: {

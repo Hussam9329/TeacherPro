@@ -155,7 +155,7 @@ export function buildCurrentDismissalInfo(
   actionNotes: DashboardDismissalActionNote[],
 ): DashboardDismissalInfo | null {
   if (student.status !== "مفصول") return null;
-  const type = student.dismissalType || "فصل مؤقت";
+  const type = student.dismissalType || "فصل";
   const reason = student.dismissalReason || type || "طالب مفصول";
   const normalizedReason = normalizeDismissalText(reason);
 

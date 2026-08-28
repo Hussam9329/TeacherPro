@@ -47,8 +47,10 @@ function nullableText(value: unknown): string {
   return value === null || value === undefined ? "" : String(value);
 }
 
-function normalizeOpportunityPenalty(value: unknown): number | "فصل مؤقت" {
-  if (value === "فصل مؤقت") return "فصل مؤقت";
+function normalizeOpportunityPenalty(value: unknown): number | "فصل" {
+  if (value === "فصل" || value === "فصل مؤقت" || value === "فصل نهائي") {
+    return "فصل";
+  }
   const numeric = Number(value ?? 0);
   return Number.isFinite(numeric) ? numeric : 0;
 }
@@ -762,6 +764,43 @@ export async function recalculateStudentsAcademicState(
     );
   }
   return persisted;
+}
+
+/** Pure multi-student preview used by guarded maintenance routes. It reads the
+ * same snapshot and runs the same engine as persistence, without repairing,
+ * settling, updating, or deleting anything. */
+export async function previewStudentsAcademicState(
+  rawStudentIds: Array<string | null | undefined>,
+  options: { tx?: Prisma.TransactionClient } = {},
+): Promise<AcademicServerRecalculationResult> {
+  const studentIds = uniqueIds(rawStudentIds);
+  if (!studentIds.length) {
+    return {
+      studentIds: [],
+      students: [],
+      opportunityLogs: [],
+      automaticOpportunityLogs: [],
+    };
+  }
+  const state = await loadAcademicStateForStudents(options.tx || db, studentIds);
+  const recalculableStudentIds = state.students
+    .filter((student) => student.status !== "مؤرشف")
+    .map((student) => student.id);
+  const result = recalculateAcademicState(state, new Set(recalculableStudentIds));
+  return {
+    studentIds: recalculableStudentIds,
+    students: result.students.filter((student) =>
+      recalculableStudentIds.includes(student.id),
+    ),
+    opportunityLogs: result.opportunityLogs.filter((log) =>
+      recalculableStudentIds.includes(log.studentId),
+    ),
+    automaticOpportunityLogs: result.opportunityLogs.filter(
+      (log) =>
+        recalculableStudentIds.includes(log.studentId) &&
+        isAutomaticOpportunityLog(log),
+    ),
+  };
 }
 
 export async function recalculateStudentsForExam(

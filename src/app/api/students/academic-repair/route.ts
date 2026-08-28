@@ -371,8 +371,7 @@ export async function PATCH(req: NextRequest) {
       const rows = fetchedRows.slice(0, limit);
       let restoredStudents = 0;
       let stillDismissed = 0;
-      let temporaryDismissals = 0;
-      let finalDismissals = 0;
+      let dismissals = 0;
       let convertedGrades = 0;
       let convertedBeforeRegistration = 0;
       let deletedCalls = 0;
@@ -391,8 +390,7 @@ export async function PATCH(req: NextRequest) {
             restoredStudents += 1;
           } else {
             stillDismissed += 1;
-            if (student.dismissalType === "فصل نهائي") finalDismissals += 1;
-            else temporaryDismissals += 1;
+            dismissals += 1;
           }
         }
       }
@@ -404,8 +402,7 @@ export async function PATCH(req: NextRequest) {
         hasMore,
         restoredStudents,
         stillDismissed,
-        temporaryDismissals,
-        finalDismissals,
+        dismissals,
         convertedGrades,
         convertedBeforeRegistration,
         deletedCalls,

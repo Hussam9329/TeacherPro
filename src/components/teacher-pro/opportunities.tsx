@@ -146,8 +146,6 @@ export function OpportunitiesView() {
         "dismissed",
         "has-opportunities",
         "no-opportunities",
-        "temporary-dismissal",
-        "final-dismissal",
       ].includes(status)
     ) {
       setFilterStatus(status);
@@ -378,8 +376,6 @@ export function OpportunitiesView() {
           dismissed: "طلاب مفصولون",
           "has-opportunities": "نشط ولديه فرص",
           "no-opportunities": "نشط بدون فرص",
-          "temporary-dismissal": "فصل مؤقت",
-          "final-dismissal": "فصل نهائي",
         } as Record<string, string>
       )[filterStatus] || "حالة مخصصة"
     : "كل الحالات";
@@ -860,8 +856,6 @@ export function OpportunitiesView() {
                     نشط ولديه فرص
                   </SelectItem>
                   <SelectItem value="no-opportunities">نشط بدون فرص</SelectItem>
-                  <SelectItem value="temporary-dismissal">فصل مؤقت</SelectItem>
-                  <SelectItem value="final-dismissal">فصل نهائي</SelectItem>
                 </SelectContent>
               </Select>
             </div>

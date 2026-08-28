@@ -15,7 +15,17 @@ const studentActionRoute = read('src/app/api/opportunities/student-action/route.
 const opportunityLogsRoute = read('src/app/api/opportunity-logs/route.ts');
 const opportunitySnapshotServer = read('src/lib/student-opportunity-snapshot-server.ts');
 const opportunityBalance = read('src/lib/opportunity-balance.ts');
+const academicEngine = read('src/lib/academic-engine.ts');
+const teacherStore = read('src/lib/teacher-store.ts');
+const gradeEntry = read('src/components/teacher-pro/grade-entry.tsx');
+const gradeRecords = read('src/components/teacher-pro/grade-records.tsx');
+const gradeExportRoute = read('src/app/api/grades/export/route.ts');
 const packageJson = read('package.json');
+const zeroBalanceRoute = read('src/app/api/internal/academic-integrity/zero-balance/route.ts');
+const zeroBalanceRepairScript = read('scripts/repair-zero-balance-law.mjs');
+const dismissalMigration = read('prisma/migrations/20260828010000_unify_dismissal_and_zero_balance/migration.sql');
+const statusActionRoute = read('src/app/api/students/status-action/route.ts');
+const pledgeRoute = read('src/app/api/student-notes/pledges/route.ts');
 
 check(
   opportunitiesView.includes('opportunityMode: true'),
@@ -111,6 +121,50 @@ check(
   opportunityBalance.includes('formatOpportunityBalance') &&
     opportunityBalance.includes('Object.prototype.hasOwnProperty.call(source, "opportunityLimit")'),
   'منسق العرض الموحد يحترم السقف الخادمي الصريح ولا يخفي الرصيد عند غياب السقف',
+);
+
+check(
+  opportunityBalance.includes('dismissalTrigger: penalty > 0 && before === 0') &&
+    academicEngine.includes('applyOpportunityPenalty') &&
+    !academicEngine.includes('opportunities === 0 && opportunityCap > 0 && !dismissalType'),
+  'قانون الفرص موحد: الوصول إلى صفر لا يفصل، والفصل فقط عند عقوبة جديدة تبدأ والرصيد صفر',
+);
+check(
+  opportunityBalance.includes('REACTIVATION_OPPORTUNITY_GRANT = 2') &&
+    statusActionRoute.includes('REACTIVATION_OPPORTUNITY_GRANT') &&
+    pledgeRoute.includes('REACTIVATION_OPPORTUNITY_GRANT'),
+  'إعادة التفعيل تمنح فرصتين بالضبط من ثابت موحد في كل المسارات',
+);
+check(
+  studentActionRoute.includes('ZERO_BALANCE_VIOLATION_MARKER') &&
+    bulkAdjustRoute.includes('ZERO_BALANCE_VIOLATION_MARKER') &&
+    academicEngine.includes('hasZeroBalanceViolationMarker'),
+  'الخصم اليدوي عند الصفر يحمل علامة تدقيق ثابتة للفردي والجماعي',
+);
+check(
+  zeroBalanceRoute.includes('previewToken') &&
+    zeroBalanceRoute.includes('withSerializableTransaction') &&
+    zeroBalanceRoute.includes('previewStudentsAcademicState') &&
+    zeroBalanceRepairScript.includes('--apply') &&
+    packageJson.includes('maintenance:zero-balance'),
+  'التسوية التاريخية معاينة أولاً ولا تُطبق إلا برمز معاينة مطابق',
+);
+check(
+  dismissalMigration.includes("NEW.\"dismissalType\" := 'فصل'") &&
+    dismissalMigration.includes('Student_normalize_dismissal_type') &&
+    dismissalMigration.includes("IN ('', 'فصل')"),
+  'ترحيل قاعدة البيانات يوحد الفصل ويحمي النشر المتدرج من القيم القديمة',
+);
+check(
+  teacherStore.includes('manualPenaltyEffect?.dismissalTrigger') &&
+    teacherStore.includes('penaltyEffectsByStudentId.get(student.id)?.dismissalTrigger'),
+  'الخصم اليدوي الفردي والجماعي يستخدم رصيد ما قبل الحدث ولا يفصل عند مجرد الوصول إلى صفر',
+);
+check(
+  gradeEntry.includes('applyOpportunityPenalty') &&
+    gradeRecords.includes('applyOpportunityPenalty') &&
+    gradeExportRoute.includes('بدون فرص، غير مفصول'),
+  'تحذيرات تعديل الدرجات والتصدير تعرض نفس قانون الصفر بدون تنبؤ فصل خاطئ',
 );
 
 check(

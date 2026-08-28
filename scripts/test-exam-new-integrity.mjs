@@ -119,7 +119,7 @@ must(
     route.includes("normalizePatchedExamNumber") &&
     route.includes("parsed === null ? value : parsed") &&
     route.includes("noDiscount || isFinalExam ? 0") &&
-    route.includes("? 'فصل مؤقت'") &&
+    route.includes("? 'فصل'") &&
     !route.includes("Number(body.passMark || 50)"),
   "API يحفظ القيم الموثقة بدون تحويل الصفر الصحيح إلى قيمة افتراضية",
   "يجب ألا يستخدم API معامل || مع درجات قد تكون صفراً، وأن يوحد قيم الفاينل المعطلة.",

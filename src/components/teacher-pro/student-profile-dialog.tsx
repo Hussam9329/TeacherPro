@@ -249,11 +249,11 @@ function gradeImpactLabel(kind: GradeClassificationKind, grade: Grade, exam?: Ex
   if (kind === "grace-period") return "لم يتم الخصم: الامتحان ضمن فترة السماح المحاسبية للطالب.";
   if (kind === "no-discount-protected") return "لم يتم الخصم: هذا الامتحان مضبوط كـ بدون خصم.";
   if (kind === "missing") return "لا توجد محاسبة لأن الدرجة غير مكتملة.";
-  if (kind === "cheating") return "غش: أول حالة تفصل مؤقتاً وتصفّر الفرص، والتكرار يفصل نهائياً.";
-  if (kind === "absent-dismissal") return "غائب: يعامل كفصل مؤقت لأنه غياب في امتحان فاينل.";
+  if (kind === "cheating") return "غش: يؤدي إلى فصل الطالب وتصفير الفرص.";
+  if (kind === "absent-dismissal") return "غائب: يؤدي إلى الفصل لأنه غياب في امتحان فاينل.";
   if (kind === "absent-deducted") return `غائب: تم احتسابه كغياب مخصوم، مقدار الخصم ${examPenaltyText(exam)} فرصة.`;
   if (kind === "discounted") return `درجة ضمن الخصم: تم خصم ${examPenaltyText(exam)} فرصة.`;
-  if (kind === "dismissal") return "درجة فصل/صفر: يعامل كفصل مؤقت ويستهلك الفرص المتبقية.";
+  if (kind === "dismissal") return "درجة فصل/صفر: تؤدي إلى فصل الطالب وتصفير الفرص.";
   if (kind === "academic-accounting") return "راسب غير مخصوم: محسوب أكاديمياً بدون خصم فرص مباشر.";
   if (kind === "failed") return "راسب بدون خصم فرص مباشر.";
   if (kind === "passed" || kind === "full-mark") return "ناجح: لا يوجد خصم.";

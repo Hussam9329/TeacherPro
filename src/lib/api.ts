@@ -739,8 +739,7 @@ export interface ExamStatsResponse {
 
 export interface PledgeStatsResponse {
   dismissed: number;
-  temporary: number;
-  final: number;
+  dismissal: number;
   pledged: number;
   pending: number;
   reactivated: number;
@@ -750,7 +749,7 @@ export interface PledgeStatsResponse {
 
 export interface PledgeRowsQuery {
   q?: string;
-  typeFilter?: "all" | "temporary" | "final";
+  typeFilter?: "all" | "dismissal";
   statusFilter?: "all" | "pledged" | "pending" | "reactivated";
 }
 

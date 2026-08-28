@@ -60,7 +60,8 @@
     "verify:grade-score-consistency": "node scripts/verify_grade_score_consistency.mjs",
     "test:responsive-ui-integrity": "node scripts/test-responsive-ui-integrity.mjs && node scripts/test-responsive-tailwind-compile.mjs",
     "test:exam-edit-academic-integrity": "node scripts/test-exam-edit-academic-integrity.mjs && node --test scripts/test-exam-academic-integrity-behavior.mjs",
-    "maintenance:protected-grades": "node scripts/repair-protected-grade-integrity.mjs"
+    "maintenance:protected-grades": "node scripts/repair-protected-grade-integrity.mjs",
+    "maintenance:zero-balance": "node scripts/repair-zero-balance-law.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1080.0",

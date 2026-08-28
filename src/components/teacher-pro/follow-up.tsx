@@ -79,7 +79,7 @@ type CallContactStatusFilter =
 type CallNotesFilter = "all" | "with-notes";
 type CallBadgeTone = "deducted" | "warning" | "safe" | "success" | "neutral";
 type CallBadgeInfo = { label: string; tone: CallBadgeTone; detail?: string };
-type PledgeTypeFilter = "all" | "temporary" | "final";
+type PledgeTypeFilter = "all" | "dismissal";
 type PledgeStatusFilter = "all" | "pledged" | "pending" | "reactivated";
 type ContactStatus = "" | "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
 
@@ -124,7 +124,7 @@ type PledgeRow = {
   key: string;
   student: Student;
   dismissalInfo: DismissalLinkInfo;
-  group: "temporary" | "final";
+  group: "dismissal";
   pledged: boolean;
   note?: StudentNote;
   reactivated: boolean;
@@ -134,7 +134,7 @@ const viewTitles: Record<FollowView, { title: string; description: string }> = {
   calls: {
     title: "المكالمات",
     description:
-      "متابعة الغياب والرسوب والدرجات والفصل المؤقت والنهائي عبر الاتصال.",
+      "متابعة الغياب والرسوب والدرجات والفصل عبر الاتصال.",
   },
   leaves: {
     title: "الإجازات",
@@ -142,7 +142,7 @@ const viewTitles: Record<FollowView, { title: string; description: string }> = {
   },
   pledges: {
     title: "تعهدات",
-    description: "فرز طلبة الفصل المؤقت والنهائي وتثبيت تعهد ولي الأمر.",
+    description: "متابعة طلبة الفصل وتثبيت تعهد ولي الأمر.",
   },
 };
 
@@ -1075,14 +1075,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return leave.examId === exam.id;
   };
 
-  const dismissalGroupFromType = (
-    type: string | null | undefined,
-  ): "temporary" | "final" => {
-    const text = String(type || "");
-    if (text.includes("نهائي") || text.includes("دائم")) return "final";
-    return "temporary";
-  };
-
   const effectiveStudentCalls = callPageStudentCalls;
 
   const callLogLookup = useMemo(() => {
@@ -1147,7 +1139,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     student: Student,
   ): DismissalLinkInfo | null => {
     if (student.status !== "مفصول") return null;
-    const type = student.dismissalType || "فصل مؤقت";
+    const type = student.dismissalType || "فصل";
     const reason = student.dismissalReason || type || "طالب مفصول";
     const normalizedReason = normalizeDismissalText(reason);
     const dismissalLogs = opportunityLogs
@@ -1223,7 +1215,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const sourceExam = sourceLog?.examId
       ? exams.find((exam) => exam.id === sourceLog.examId)
       : undefined;
-    const type = note.dismissalType || "فصل مؤقت";
+    const type = note.dismissalType || "فصل";
     const reason = note.dismissalReason || note.text || type;
     const sourceType = note.sourceType || "pledge-note";
     const sourceId = note.sourceId || note.id;
@@ -2441,7 +2433,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const renderPledgeRow = (row: PledgeRow) => {
-    const { student, dismissalInfo, group, pledged, reactivated } = row;
+    const { student, dismissalInfo, pledged, reactivated } = row;
     const rowKey = row.note?.id || row.key;
     const saving = Boolean(pledgeSavingKeys[rowKey]);
     const openingWhatsApp = Boolean(pledgeWhatsAppLoadingKeys[rowKey]);
@@ -2463,8 +2455,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           </p>
         </div>
         <div className="space-y-1">
-          <Badge variant={group === "final" ? "destructive" : "secondary"}>
-            {dismissalInfo.type || "فصل مؤقت"}
+          <Badge variant="destructive">
+            {dismissalInfo.type || "فصل"}
           </Badge>
           <p className="text-xs text-muted-foreground">
             حالة الطالب الآن: {student.status}
@@ -3051,14 +3043,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             </Card>
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">فصل مؤقت</p>
-                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.temporary)}</b>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">فصل نهائي</p>
-                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.final)}</b>
+                <p className="text-xs text-muted-foreground">ملفات الفصل</p>
+                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.dismissal)}</b>
               </CardContent>
             </Card>
             <Card>
@@ -3112,8 +3098,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">كل ملفات الفصل</SelectItem>
-                    <SelectItem value="temporary">طلبة الفصل المؤقت</SelectItem>
-                    <SelectItem value="final">طلبة الفصل النهائي</SelectItem>
+                    <SelectItem value="dismissal">طلبة الفصل</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

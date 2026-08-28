@@ -84,6 +84,7 @@ import {
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
 import { isStudentCurrentlyInGrace } from "@/lib/student-grace";
+import { applyOpportunityPenalty } from "@/lib/opportunity-balance";
 import { countAllManualGradesForExam } from "@/lib/grade-entry-stats";
 import {
   examMatchesAcademicFilters,
@@ -866,7 +867,7 @@ export function GradeEntryView() {
     studentOpportunities: number,
   ) => {
     if (!exam || exam.noDiscount) return 0;
-    if (exam.type === "فاينل" && exam.opportunitiesPenalty === "فصل مؤقت")
+    if (exam.type === "فاينل" && exam.opportunitiesPenalty === "فصل")
       return Math.max(1, studentOpportunities);
     return Math.max(0, Number(exam.opportunitiesPenalty || 0));
   };
@@ -905,10 +906,10 @@ export function GradeEntryView() {
         0,
         Number(student.opportunities || 0),
       );
-      return (
-        examPenaltyAmount(selectedExam, remainingOpportunities) >=
-        remainingOpportunities
-      );
+      return applyOpportunityPenalty(
+        remainingOpportunities,
+        examPenaltyAmount(selectedExam, remainingOpportunities),
+      ).dismissalTrigger;
     }
     return false;
   };
@@ -944,7 +945,7 @@ export function GradeEntryView() {
     const student = studentById.get(studentId);
     setPendingConfirm({
       title: "تأكيد تعديل درجة طالب مُعاد تنشيطه",
-      description: `درجة ${student?.name || "هذا الطالب"} الجديدة قد تستهلك الفرصة الأخيرة وتعيد الطالب إلى المفصولين. هل تريد المتابعة؟`,
+      description: `الطالب ${student?.name || "المحدد"} بدون فرص حالياً، وهذه النتيجة تستوجب خصم فرصة جديدة ولذلك ستعيده إلى المفصولين. هل تريد المتابعة؟`,
       confirmLabel: "متابعة",
       destructive: true,
       onConfirm: () => {

@@ -315,7 +315,7 @@ test("dashboard chapter and pledge policies keep conflicts and historical pledge
     key: "dismissal-current",
     sourceType: "opportunity-log",
     sourceId: "log-current",
-    type: "فصل مؤقت",
+    type: "فصل",
     reason: "نفاد الفرص",
     date: "2026-07-01",
   };

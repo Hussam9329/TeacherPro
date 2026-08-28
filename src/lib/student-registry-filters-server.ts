@@ -171,10 +171,6 @@ export async function buildStudentRegistryWhere(
     and.push({ status: "نشط", opportunities: { gt: 0 } });
   else if (opportunityStatus === "no-opportunities")
     and.push({ status: "نشط", opportunities: 0 });
-  else if (opportunityStatus === "temporary-dismissal")
-    and.push({ status: "مفصول", dismissalType: "فصل مؤقت" });
-  else if (opportunityStatus === "final-dismissal")
-    and.push({ status: "مفصول", dismissalType: "فصل نهائي" });
 
   if (opportunityCount !== "") {
     const count = Number(opportunityCount);

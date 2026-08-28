@@ -50,6 +50,10 @@ import {
 import { baghdadDateKey, baghdadTodayKey, toBaghdadDateTimeLocal } from "./baghdad-time";
 import { formatAppDate, toLatinDigits } from "./format";
 import { recalculateAcademicState } from "./academic-engine";
+import {
+  applyOpportunityPenalty,
+  REACTIVATION_OPPORTUNITY_GRANT,
+} from "./opportunity-balance";
 import { isExamWithinStudentGraceWindow } from "./student-grace";
 import {
   announceTeacherProSyncError,
@@ -297,7 +301,7 @@ export interface Exam {
   fullMark: number;
   passMark: number;
   discountMark: number;
-  opportunitiesPenalty: number | "فصل مؤقت";
+  opportunitiesPenalty: number | "فصل";
   dismissalGrade: number | null;
   noDiscount: boolean;
   active: boolean;
@@ -1765,10 +1769,11 @@ function isLinkedAcademicReactivationLog(log: OpportunityLog): boolean {
 function isSystemAcademicReactivationLog(log: OpportunityLog): boolean {
   const reason = String(log.reason || "");
   return (
-    (isReactivationOpportunityLog(log) || isFinalChanceOpportunityLog(log)) &&
+    (isReactivationOpportunityLog(log) || isReactivationOpportunityGrantLog(log)) &&
     (reason.includes("تثبيت إعادة التفعيل") ||
       reason.includes("إرجاع الطالب بعد إعادة التفعيل") ||
-      reason.includes("بفرصة واحدة"))
+      reason.includes("بفرصة واحدة") ||
+      reason.includes("بفرصتين"))
   );
 }
 
@@ -1984,10 +1989,12 @@ function isReactivationOpportunityLog(log: OpportunityLog): boolean {
   );
 }
 
-function isFinalChanceOpportunityLog(log: OpportunityLog): boolean {
+function isReactivationOpportunityGrantLog(log: OpportunityLog): boolean {
   return (
+    log.action === "إعادة تفعيل بفرصتين" ||
     log.action === "فرصة أخيرة بعد تعهد" ||
-    String(log.reason || "").includes("فرصة أخيرة")
+    String(log.reason || "").includes("فرصة أخيرة") ||
+    String(log.reason || "").includes("بفرصتين")
   );
 }
 
@@ -2001,15 +2008,6 @@ function latestStudentLogDate(
     .filter(Boolean)
     .sort();
   return dates.length ? dates[dates.length - 1] : "";
-}
-
-function hasFinalChanceForStudent(
-  logs: OpportunityLog[],
-  studentId: string,
-): boolean {
-  return logs.some(
-    (log) => log.studentId === studentId && isFinalChanceOpportunityLog(log),
-  );
 }
 
 function latestManualDismissalDateForStudent(
@@ -2773,8 +2771,10 @@ export const useTeacherStore = create<TeacherState>()(
                 passMark: Number(ex.passMark || 50),
                 discountMark: Number(ex.discountMark || 0),
                 opportunitiesPenalty:
-                  ex.opportunitiesPenalty === "فصل مؤقت"
-                    ? ("فصل مؤقت" as const)
+                  ex.opportunitiesPenalty === "فصل" ||
+                  ex.opportunitiesPenalty === "فصل مؤقت" ||
+                  ex.opportunitiesPenalty === "فصل نهائي"
+                    ? ("فصل" as const)
                     : Number(ex.opportunitiesPenalty || 1),
                 dismissalGrade:
                   ex.dismissalGrade === null || ex.dismissalGrade === undefined
@@ -4047,7 +4047,7 @@ export const useTeacherStore = create<TeacherState>()(
         });
         return true;
       },
-      dismissStudent: (studentId, type, reason, notes = "") => {
+      dismissStudent: (studentId, _type, reason, notes = "") => {
         const stateBefore = get();
         const studentBefore = stateBefore.students.find(
           (student) => student.id === studentId,
@@ -4056,15 +4056,8 @@ export const useTeacherStore = create<TeacherState>()(
           0,
           Math.trunc(Number(studentBefore?.opportunities || 0)),
         );
-        const finalChanceViolation = Boolean(
-          studentBefore &&
-          hasFinalChanceForStudent(stateBefore.opportunityLogs, studentId) &&
-          type === "فصل مؤقت",
-        );
-        const nextDismissalType = finalChanceViolation ? "فصل نهائي" : type;
-        const nextDismissalReason = finalChanceViolation
-          ? `عدم الالتزام بالتعهد السابق - ${reason}`
-          : reason;
+        const nextDismissalType = "فصل";
+        const nextDismissalReason = reason;
         const actionNote: StudentNote | null = studentBefore
           ? {
               id: uid("note"),
@@ -4143,11 +4136,11 @@ export const useTeacherStore = create<TeacherState>()(
         const studentBefore = stateBefore.students.find(
           (st) => st.id === studentId,
         );
-        const shouldGrantFinalChance = Boolean(
+        const shouldGrantReactivationOpportunities = Boolean(
           studentBefore?.status === "مفصول",
         );
         const academicReactivationSource =
-          studentBefore && shouldGrantFinalChance
+          studentBefore && shouldGrantReactivationOpportunities
             ? findAcademicReactivationSourceForStudent(
                 stateBefore,
                 studentBefore,
@@ -4163,22 +4156,22 @@ export const useTeacherStore = create<TeacherState>()(
               examId: academicReactivationSource?.sourceExamId || "",
               action: "إعادة تفعيل",
               amount: 0,
-              reason: `تثبيت إعادة التفعيل: لا يعاد فصل الطالب بسبب سجلات قديمة، وأي إجراء جديد بعد الفرصة يصبح نهائياً${academicReactivationLink}`,
+              reason: `تثبيت إعادة التفعيل بفرصتين: لا يعاد فصل الطالب بسبب سجلات قديمة؛ يبقى نشطاً عند الوصول إلى 0، ويفصل فقط عند مخالفة خصم جديدة تبدأ وهو بدون فرص${academicReactivationLink}`,
               date: todayISO(),
               chapterId:
                 stateBefore.activeChapterForCourse(studentBefore.courseId)
                   ?.id || "",
             }
           : null;
-        const finalChanceLog: OpportunityLog | null =
-          shouldGrantFinalChance && studentBefore
+        const reactivationGrantLog: OpportunityLog | null =
+          shouldGrantReactivationOpportunities && studentBefore
             ? {
                 id: uid("ol"),
                 studentId,
                 examId: academicReactivationSource?.sourceExamId || "",
-                action: "فرصة أخيرة بعد تعهد",
-                amount: 1,
-                reason: `إرجاع الطالب بعد إعادة التفعيل بفرصة واحدة فقط${academicReactivationLink}`,
+                action: "إعادة تفعيل بفرصتين",
+                amount: REACTIVATION_OPPORTUNITY_GRANT,
+                reason: `إرجاع الطالب بعد إعادة التفعيل بفرصتين${academicReactivationLink}`,
                 date: todayISO(),
                 chapterId:
                   stateBefore.activeChapterForCourse(studentBefore.courseId)
@@ -4190,8 +4183,8 @@ export const useTeacherStore = create<TeacherState>()(
               id: uid("note"),
               studentId,
               kind: "إجراء",
-              text: shouldGrantFinalChance
-                ? `إعادة تفعيل الطالب ومنحه فرصة واحدة بعد الفصل السابق: ${studentBefore.dismissalReason || studentBefore.dismissalType || "بدون سبب مسجل"}`
+              text: shouldGrantReactivationOpportunities
+                ? `إعادة تفعيل الطالب ومنحه فرصتين بعد الفصل السابق: ${studentBefore.dismissalReason || studentBefore.dismissalType || "بدون سبب مسجل"}`
                 : "إعادة تفعيل الطالب",
               date: todayISO(),
             }
@@ -4205,12 +4198,14 @@ export const useTeacherStore = create<TeacherState>()(
                   dismissalType: "",
                   dismissalReason: "",
                   dismissalNotes: "",
-                  opportunities: shouldGrantFinalChance ? 1 : st.opportunities,
+                  opportunities: shouldGrantReactivationOpportunities
+                    ? REACTIVATION_OPPORTUNITY_GRANT
+                    : st.opportunities,
                 }
               : st,
           ),
           opportunityLogs: (
-            [reactivationLog, finalChanceLog].filter(
+            [reactivationLog, reactivationGrantLog].filter(
               Boolean,
             ) as OpportunityLog[]
           ).concat(s.opportunityLogs),
@@ -4220,8 +4215,8 @@ export const useTeacherStore = create<TeacherState>()(
         }));
         get().logAction(
           "الطلاب",
-          shouldGrantFinalChance
-            ? "إعادة تفعيل بفرصة واحدة"
+          shouldGrantReactivationOpportunities
+            ? "إعادة تفعيل بفرصتين"
             : "إعادة تفعيل طالب",
           get().studentName(studentId),
         );
@@ -4231,7 +4226,9 @@ export const useTeacherStore = create<TeacherState>()(
             dismissalType: "",
             dismissalReason: "",
             dismissalNotes: "",
-            ...(shouldGrantFinalChance ? { opportunities: 1 } : {}),
+            ...(shouldGrantReactivationOpportunities
+              ? { opportunities: REACTIVATION_OPPORTUNITY_GRANT }
+              : {}),
           }),
         );
         if (reactivationLog)
@@ -4240,10 +4237,10 @@ export const useTeacherStore = create<TeacherState>()(
               reactivationLog as unknown as Record<string, unknown>,
             ),
           );
-        if (finalChanceLog)
+        if (reactivationGrantLog)
           syncToServer(get, () =>
             opportunityLogApi.add(
-              finalChanceLog as unknown as Record<string, unknown>,
+              reactivationGrantLog as unknown as Record<string, unknown>,
             ),
           );
         if (actionNote)
@@ -4768,12 +4765,21 @@ export const useTeacherStore = create<TeacherState>()(
             stateBefore.activeChapterForCourse(studentBefore?.courseId || "")
               ?.id || "",
         };
+        const manualPenaltyEffect =
+          signedAmount < 0
+            ? applyOpportunityPenalty(
+                studentBefore.opportunities,
+                normalizedAmount,
+              )
+            : null;
         set((s) => {
           const students = s.students.map((st) =>
             st.id === studentId
               ? {
                   ...st,
-                  opportunities: Math.max(0, st.opportunities + signedAmount),
+                  opportunities:
+                    manualPenaltyEffect?.after ??
+                    Math.max(0, st.opportunities + signedAmount),
                 }
               : st,
           );
@@ -4796,19 +4802,13 @@ export const useTeacherStore = create<TeacherState>()(
         );
         if (
           student &&
-          student.opportunities === 0 &&
+          manualPenaltyEffect?.dismissalTrigger &&
           student.status === "نشط"
         ) {
-          const hasFinalChance = hasFinalChanceForStudent(
-            get().opportunityLogs,
-            studentId,
-          );
           get().dismissStudent(
             studentId,
-            hasFinalChance ? "فصل نهائي" : "فصل مؤقت",
-            hasFinalChance
-              ? "عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة"
-              : "انتهاء الفرص",
+            "فصل",
+            "مخالفة جديدة بعد انتهاء الفرص",
           );
         }
       },
@@ -4860,15 +4860,22 @@ export const useTeacherStore = create<TeacherState>()(
         const eligibleStudentIds = new Set(
           eligibleStudents.map((student) => student.id),
         );
-        const opportunityLogsAfterAdjustment = [
-          ...logs,
-          ...stateBefore.opportunityLogs,
-        ];
+        const penaltyEffectsByStudentId = new Map(
+          eligibleStudents.map((student) => [
+            student.id,
+            signedAmount < 0
+              ? applyOpportunityPenalty(student.opportunities, normalizedAmount)
+              : null,
+          ]),
+        );
         const adjustedStudents = stateBefore.students.map((student) => {
           if (!eligibleStudentIds.has(student.id)) return student;
+          const penaltyEffect = penaltyEffectsByStudentId.get(student.id);
           return {
             ...student,
-            opportunities: Math.max(0, student.opportunities + signedAmount),
+            opportunities:
+              penaltyEffect?.after ??
+              Math.max(0, student.opportunities + signedAmount),
           };
         });
 
@@ -4876,18 +4883,12 @@ export const useTeacherStore = create<TeacherState>()(
           .filter(
             (student) =>
               eligibleStudentIds.has(student.id) &&
-              student.opportunities === 0 &&
+              penaltyEffectsByStudentId.get(student.id)?.dismissalTrigger &&
               student.status === "نشط",
           )
           .map((student) => {
-            const hasFinalChance = hasFinalChanceForStudent(
-              opportunityLogsAfterAdjustment,
-              student.id,
-            );
-            const dismissalType = hasFinalChance ? "فصل نهائي" : "فصل مؤقت";
-            const dismissalReason = hasFinalChance
-              ? "عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة"
-              : "انتهاء الفرص";
+            const dismissalType = "فصل";
+            const dismissalReason = "مخالفة جديدة بعد انتهاء الفرص";
             const note: StudentNote = {
               id: uid("note"),
               studentId: student.id,

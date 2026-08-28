@@ -16,26 +16,12 @@ async function collectDismissedStats(
   where: Prisma.StudentWhereInput,
 ): Promise<{
   total: number;
-  temporary: number;
-  final: number;
   withNotes: number;
   withPledge: number;
   withoutPledge: number;
 }> {
-  const [total, temporary, final, withNotes, pledgeRows] = await db.$transaction([
+  const [total, withNotes, pledgeRows] = await db.$transaction([
     db.student.count({ where }),
-    db.student.count({
-      where: composeDismissedStudentWhere([
-        where,
-        { dismissalType: "فصل مؤقت" },
-      ]),
-    }),
-    db.student.count({
-      where: composeDismissedStudentWhere([
-        where,
-        { dismissalType: "فصل نهائي" },
-      ]),
-    }),
     db.student.count({
       where: composeDismissedStudentWhere([
         where,
@@ -54,8 +40,6 @@ async function collectDismissedStats(
   const withPledge = pledgeRows.length;
   return {
     total,
-    temporary,
-    final,
     withNotes,
     withPledge,
     withoutPledge: Math.max(0, total - withPledge),

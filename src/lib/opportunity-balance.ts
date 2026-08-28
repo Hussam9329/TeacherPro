@@ -13,6 +13,47 @@ function normalizeOpportunityNumber(value: unknown): number | null {
   return Math.max(0, Math.trunc(numeric));
 }
 
+
+export type OpportunityPenaltyEffect = {
+  before: number;
+  penalty: number;
+  deducted: number;
+  after: number;
+  dismissalTrigger: boolean;
+};
+
+/** Every dismissed student returns with exactly two usable opportunities. */
+export const REACTIVATION_OPPORTUNITY_GRANT = 2;
+export const ZERO_BALANCE_VIOLATION_MARKER = "[zero-balance-violation]";
+
+export function hasZeroBalanceViolationMarker(value: unknown): boolean {
+  return String(value ?? "").includes(ZERO_BALANCE_VIOLATION_MARKER);
+}
+
+/**
+ * Unified opportunity-law helper. Reaching 0 is allowed and does not dismiss
+ * a student. Dismissal is triggered only by a NEW positive penalty while the
+ * student already starts that event at 0. Balances never become negative.
+ */
+export function applyOpportunityPenalty(
+  opportunitiesBefore: unknown,
+  penaltyValue: unknown,
+): OpportunityPenaltyEffect {
+  const before = normalizeOpportunityNumber(opportunitiesBefore) ?? 0;
+  const rawPenalty = Number(penaltyValue);
+  const penalty = Number.isFinite(rawPenalty)
+    ? Math.max(0, Math.trunc(Math.abs(rawPenalty)))
+    : 0;
+  const deducted = Math.min(before, penalty);
+  return {
+    before,
+    penalty,
+    deducted,
+    after: Math.max(0, before - penalty),
+    dismissalTrigger: penalty > 0 && before === 0,
+  };
+}
+
 export function getOpportunityBalance(
   source: OpportunityBalanceLike | null | undefined,
 ): number {

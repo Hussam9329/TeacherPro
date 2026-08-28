@@ -9,14 +9,6 @@ import { routeErrorResponse } from "@/lib/route-helpers";
 
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 
-function dismissalGroupFromType(
-  type: string | null | undefined,
-): "temporary" | "final" {
-  const text = String(type || "");
-  if (text.includes("نهائي") || text.includes("دائم")) return "final";
-  return "temporary";
-}
-
 /**
  * إحصائيات التعهدات من بيانات النظام مباشرة.
  * لا تستخدم قائمة الطلاب المحملة في الواجهة لأنها قد تكون صفحة واحدة فقط.
@@ -31,7 +23,7 @@ export async function GET(req: NextRequest) {
         Promise.all([
           db.student.findMany({
             where: { status: "مفصول" },
-            select: { id: true, dismissalType: true },
+            select: { id: true },
           }),
           db.studentNote.findMany({
             where: { kind: PLEDGE_NOTE_KIND },
@@ -54,15 +46,6 @@ export async function GET(req: NextRequest) {
         .map((note) => note.studentId),
     );
 
-    const temporary = dismissedStudents.filter(
-      (student) =>
-        dismissalGroupFromType(student.dismissalType || "فصل مؤقت") ===
-        "temporary",
-    ).length;
-    const final = dismissedStudents.filter(
-      (student) =>
-        dismissalGroupFromType(student.dismissalType || "فصل مؤقت") === "final",
-    ).length;
     const reactivated = pledgeNotes.filter(
       (note) =>
         note.student?.status &&
@@ -71,8 +54,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       dismissed: dismissedStudents.length,
-      temporary,
-      final,
+      dismissal: dismissedStudents.length,
       pledged: pledgeNotes.length,
       pending: Math.max(0, dismissedStudents.length - pledgedDismissedIds.size),
       reactivated,

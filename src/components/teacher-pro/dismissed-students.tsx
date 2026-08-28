@@ -24,7 +24,6 @@ import { baghdadDateKey } from "@/lib/baghdad-time";
 import { CountScopeSummary, StatCard } from "./ui-kit";
 import {
   Users,
-  Clock,
   Ban,
   ChevronLeft,
   ChevronRight,
@@ -42,8 +41,6 @@ type PledgeFilter = "all" | "with-pledge" | "without-pledge";
 
 type DismissedStats = {
   total: number;
-  temporary: number;
-  final: number;
   withNotes: number;
   withPledge: number;
   withoutPledge: number;
@@ -161,16 +158,12 @@ export function DismissedStudentsView() {
   const [reactivatingIds, setReactivatingIds] = useState<Record<string, boolean>>({});
   const [dismissedStats, setDismissedStats] = useState<DismissedStats>({
     total: 0,
-    temporary: 0,
-    final: 0,
     withNotes: 0,
     withPledge: 0,
     withoutPledge: 0,
   });
   const [systemDismissedStats, setSystemDismissedStats] = useState<DismissedStats>({
     total: 0,
-    temporary: 0,
-    final: 0,
     withNotes: 0,
     withPledge: 0,
     withoutPledge: 0,
@@ -344,8 +337,7 @@ export function DismissedStudentsView() {
       Array.from(
         new Set(
           [
-            "فصل مؤقت",
-            "فصل نهائي",
+            "فصل",
             ...dismissedServerStudents
               .filter((student) => student.status === "مفصول")
               .map(
@@ -678,22 +670,6 @@ export function DismissedStudentsView() {
           icon={Users}
           tone="danger"
           hint="كل الطلاب المفصولين"
-          scope="system"
-        />
-        <StatCard
-          label="فصل مؤقت"
-          value={dismissedStatsLoading ? "..." : systemDismissedStats.temporary}
-          icon={Clock}
-          tone="warning"
-          hint="من إجمالي النظام"
-          scope="system"
-        />
-        <StatCard
-          label="فصل نهائي"
-          value={dismissedStatsLoading ? "..." : systemDismissedStats.final}
-          icon={Ban}
-          tone="danger"
-          hint="من إجمالي النظام"
           scope="system"
         />
         <StatCard

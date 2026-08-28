@@ -391,7 +391,6 @@ export function StudentRegistryView() {
     student: Student | null;
     open: boolean;
   }>({ student: null, open: false });
-  const [dismissType, setDismissType] = useState("فصل مؤقت");
   const [dismissReason, setDismissReason] = useState("");
   const [dismissNotes, setDismissNotes] = useState("");
   const [reactivateDialog, setReactivateDialog] = useState<{
@@ -1557,17 +1556,8 @@ export function StudentRegistryView() {
     ? filtered
     : localFiltered.slice((page - 1) * pageSize, page * pageSize);
   const registryServerUnavailable = Boolean(serverStudentsError && !serverStudents);
-  const dismissHasFinalChance = Boolean(
-    dismissDialog.student &&
-      opportunityLogs.some(
-        (log) =>
-          log.studentId === dismissDialog.student?.id &&
-          log.action === "فرصة أخيرة بعد تعهد",
-      ),
-  );
   const closeDismissDialog = () => {
     setDismissDialog({ student: null, open: false });
-    setDismissType("فصل مؤقت");
     setDismissReason("");
     setDismissNotes("");
   };
@@ -1576,7 +1566,6 @@ export function StudentRegistryView() {
       toast.error("لا تملك صلاحية فصل الطلاب");
       return;
     }
-    setDismissType("فصل مؤقت");
     setDismissReason("");
     setDismissNotes("");
     setDismissDialog({ student, open: true });
@@ -1599,7 +1588,7 @@ export function StudentRegistryView() {
     const result = await studentApi.statusAction({
       action: "dismiss",
       studentId: dismissDialog.student.id,
-      dismissalType: dismissType,
+      dismissalType: "فصل",
       reason: dismissReason.trim(),
       notes: dismissNotes.trim(),
       expectedStatus: dismissDialog.student.status,
@@ -1615,22 +1604,10 @@ export function StudentRegistryView() {
     }
     closeDismissDialog();
     setServerRefreshKey((value) => value + 1);
-    const promotedToFinal = Boolean(
-      dismissType === "فصل مؤقت" &&
-        updatedStudent?.dismissalType === "فصل نهائي",
-    );
-    if (promotedToFinal) {
-      toast.warning("حوّل النظام الفصل المؤقت إلى فصل نهائي", {
-        description:
-          updatedStudent?.dismissalReason ||
-          "السبب: وجود فرصة أخيرة سابقة بعد تعهد.",
-      });
-    } else {
-      toast.success("تم فصل الطالب من بيانات النظام", {
-        description:
-          "تم حفظ حالة الطالب وسجل الفرص والملاحظة الإدارية داخل عملية واحدة.",
-      });
-    }
+    toast.success("تم فصل الطالب من بيانات النظام", {
+      description:
+        "تم حفظ حالة الطالب وسجل الفرص والملاحظة الإدارية داخل عملية واحدة.",
+    });
   });
 
   const handleReactivate = runStatusActionLocked(async (student: Student) => {
@@ -3442,33 +3419,7 @@ export function StudentRegistryView() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm leading-6 text-destructive">
-              عند تأكيد الفصل سيصبح رصيد فرص الطالب <strong>0</strong> فوراً، سواء اخترت فصلاً مؤقتاً أم نهائياً.
-            </div>
-            {dismissHasFinalChance && dismissType === "فصل مؤقت" && (
-              <div className="rounded-2xl border border-amber-400/50 bg-amber-500/10 p-3 text-sm font-bold leading-6 text-amber-800 dark:text-amber-200">
-                لدى الطالب سجل «فرصة أخيرة بعد تعهد»؛ لذلك سيحوّل النظام الفصل المؤقت إلى <strong>فصل نهائي</strong> ويثبت السبب مع عدم الالتزام بالتعهد السابق.
-              </div>
-            )}
-            {!dismissHasFinalChance && dismissType === "فصل مؤقت" && (
-              <div className="rounded-2xl border border-amber-300/60 bg-amber-500/5 p-3 text-xs leading-6 text-amber-800 dark:text-amber-200">
-                يتحقق النظام مجدداً عند الحفظ: إذا وُجدت فرصة أخيرة بعد تعهد في السجل الكامل، سيتحوّل هذا الاختيار تلقائياً إلى فصل نهائي بدلاً من الفصل المؤقت.
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="dismiss-type">نوع الفصل</Label>
-              <Select
-                name="type"
-                value={dismissType}
-                onValueChange={setDismissType}
-              >
-                <SelectTrigger id="dismiss-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="فصل مؤقت">فصل مؤقت</SelectItem>
-                  <SelectItem value="فصل نهائي">فصل نهائي</SelectItem>
-                </SelectContent>
-              </Select>
+              عند تأكيد الفصل سيصبح رصيد فرص الطالب <strong>0</strong> فوراً، ويُحفظ الإجراء كفصل موحّد.
             </div>
             <div className="space-y-2">
               <Label htmlFor="dismiss-reason">سبب الفصل</Label>

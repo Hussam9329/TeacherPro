@@ -19,6 +19,7 @@ import { attachStudentOpportunitySnapshotsWithClient } from "@/lib/student-oppor
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { buildBulkOpportunityPreview } from "@/lib/bulk-opportunity-preview-server";
 import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
+import { ZERO_BALANCE_VIOLATION_MARKER } from "@/lib/opportunity-balance";
 
 type StudentUpdatePayload = {
   id?: unknown;
@@ -100,7 +101,7 @@ function normalizeStudentUpdates(value: unknown) {
         item.dismissalType !== undefined ? String(item.dismissalType ?? "") : undefined;
       if (rawDismissalType !== undefined && !isValidDismissalType(rawDismissalType)) {
         throw new Error(
-          `قيمة نوع الفصل "${rawDismissalType}" غير صالحة. القيم المسموح بها: فصل مؤقت، فصل نهائي، أو فارغ.`,
+          `قيمة نوع الفصل "${rawDismissalType}" غير صالحة. القيم المسموح بها: فصل، أو فارغ.`,
         );
       }
       return {
@@ -307,7 +308,10 @@ async function handleFilterBasedBulkAdjust(
             studentId: student.id,
             action,
             amount,
-            reason,
+            reason:
+              actionType === "deduct" && student.opportunities === 0
+                ? `${reason} ${ZERO_BALANCE_VIOLATION_MARKER}`
+                : reason,
             date: now,
             chapterId: activeChapter.id,
             chapterNameSnapshot: activeChapter.name || null,
@@ -538,6 +542,9 @@ export async function POST(req: NextRequest) {
           const existingStudentIds = new Set(
             existingStudents.map((student) => student.id),
           );
+          const existingStudentById = new Map(
+            existingStudents.map((student) => [student.id, student]),
+          );
           const modifiableStudentIds = new Set(
             existingStudents
               .filter((student) => student.status !== "مؤرشف")
@@ -668,6 +675,11 @@ export async function POST(req: NextRequest) {
           const relationalSafeOpportunityLogs = safeOpportunityLogs.map(
             (log) => ({
               ...log,
+              reason:
+                log.action === "خصم" &&
+                existingStudentById.get(log.studentId)?.opportunities === 0
+                  ? `${log.reason || ""} ${ZERO_BALANCE_VIOLATION_MARKER}`.trim()
+                  : log.reason,
               examId:
                 log.examId && validExamIds.has(log.examId) ? log.examId : null,
               chapterId:

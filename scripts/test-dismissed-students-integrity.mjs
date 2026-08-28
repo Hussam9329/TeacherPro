@@ -139,7 +139,7 @@ must(
 must(
   (statusActionRoute.includes("db.$transaction") || statusActionRoute.includes("withSerializableTransaction")) &&
     statusActionRoute.includes('action !== "dismiss" && action !== "reactivate"') &&
-    statusActionRoute.includes("فرصة أخيرة بعد تعهد") &&
+    statusActionRoute.includes("إعادة تفعيل بفرصتين") &&
     statusActionRoute.includes("auditLog.create"),
   "API حالة الطالب ينفذ الفصل/إعادة التفعيل داخل transaction مع سجلات وتدقيق",
   "إعادة التفعيل والفصل يجب أن تبقى داخل transaction واحدة مع audit log.",

@@ -155,7 +155,7 @@ check(
 );
 check(
   "حارس قاعدة البيانات لا يغير المخطط ويتطلب migration المصالحة",
-  schemaReadiness.includes("20260822210000_end_grace_on_numeric_grade") &&
+  schemaReadiness.includes("20260828010000_unify_dismissal_and_zero_balance") &&
     schemaReadiness.includes('FROM "_prisma_migrations"') &&
     !schemaReadiness.includes("$executeRaw"),
 );

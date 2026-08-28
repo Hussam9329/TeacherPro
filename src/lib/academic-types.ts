@@ -54,7 +54,7 @@ export interface AcademicExam {
   fullMark: number;
   passMark: number;
   discountMark: number;
-  opportunitiesPenalty: number | "فصل مؤقت";
+  opportunitiesPenalty: number | "فصل";
   dismissalGrade: number | null;
   noDiscount: boolean;
   active: boolean;
@@ -138,8 +138,7 @@ export interface AcademicRecalculationResult {
 export type GradeImpactType =
   | "none"
   | "discount"
-  | "temporary_dismissal"
-  | "final_dismissal";
+  | "dismissal";
 
 export interface GradeImpact {
   type: GradeImpactType;
