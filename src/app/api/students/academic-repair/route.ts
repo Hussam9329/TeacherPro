@@ -14,7 +14,6 @@ import { db } from "@/lib/db";
 import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
 import { ensureProtectedGradeMarkers } from "@/lib/protected-grade-markers-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
-import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 
 function readBatchSize(req: NextRequest): number {
   const raw = new URL(req.url).searchParams.get("batchSize");
@@ -198,164 +197,23 @@ export async function PATCH(req: NextRequest) {
       });
     }
     if (scope === "restore-excess-dismissed") {
-      const requestedKeep = Number(searchParams.get("keep") || 209);
-      const keep = Math.max(0, Math.trunc(requestedKeep || 209));
-      const existingSettlements = await db.opportunityLog.findMany({
-        where: { reason: { startsWith: "تسوية تاريخية:" } },
-        select: { id: true, studentId: true },
-      });
-      if (existingSettlements.length > 0) {
-        await db.opportunityLog.updateMany({
-          where: { id: { in: existingSettlements.map((log) => log.id) } },
-          data: { action: "إعادة تعيين", amount: 1 },
-        });
-      }
-      const dismissed = await db.student.findMany({
-        where: { status: "مفصول" },
-        select: { id: true, createdAt: true },
-      });
-      const studentIds = dismissed.map((student) => student.id);
-      const [dismissalLogs, dismissalNotes] = studentIds.length
-        ? await Promise.all([
-            db.opportunityLog.findMany({
-              where: {
-                studentId: { in: studentIds },
-                OR: [
-                  { action: "فصل تلقائي" },
-                  { action: "خصم", reason: { startsWith: "فصل الطالب" } },
-                ],
-              },
-              select: { studentId: true, date: true },
-            }),
-            db.studentNote.findMany({
-              where: {
-                studentId: { in: studentIds },
-                OR: [
-                  { dismissalDate: { not: null } },
-                  { kind: "إجراء", text: { startsWith: "فصل الطالب" } },
-                ],
-              },
-              select: { studentId: true, date: true, dismissalDate: true },
-            }),
-          ])
-        : [[], []];
-      const latestDismissalTime = new Map<string, number>();
-      const remember = (studentId: string, value: Date | null | undefined) => {
-        const time = value instanceof Date ? value.getTime() : 0;
-        if (time > (latestDismissalTime.get(studentId) || 0)) {
-          latestDismissalTime.set(studentId, time);
-        }
-      };
-      for (const log of dismissalLogs) remember(log.studentId, log.date);
-      for (const note of dismissalNotes) {
-        remember(note.studentId, note.dismissalDate || note.date);
-      }
-      const sortedDismissed = [...dismissed].sort((a, b) => {
-        const timeDifference =
-          (latestDismissalTime.get(b.id) || b.createdAt.getTime()) -
-          (latestDismissalTime.get(a.id) || a.createdAt.getTime());
-        return timeDifference || b.id.localeCompare(a.id);
-      });
-      const keptStudents = sortedDismissed.slice(0, keep);
-      const restoredStudents = sortedDismissed.slice(keep);
-      const settlementAt = new Date();
-      let recalculatedStudents = 0;
-      let migratedPendingGrades = 0;
-      let pendingGradeConflicts = 0;
-
-      for (let index = 0; index < restoredStudents.length; index += 100) {
-        const group = restoredStudents.slice(index, index + 100);
-        const ids = group.map((student) => student.id);
-        const migration = await withSerializableTransaction(async (tx) => {
-          const transitioning = await tx.student.findMany({
-            where: { id: { in: ids }, status: "مفصول" },
-            select: { id: true },
-          });
-          const transitioningIds = transitioning.map((student) => student.id);
-          if (!transitioningIds.length)
-            return { processed: 0, conflicts: 0 };
-
-          await tx.student.updateMany({
-            where: { id: { in: transitioningIds }, status: "مفصول" },
-            data: {
-              status: "نشط",
-              dismissalReason: "",
-              dismissalNotes: "",
-            },
-          });
-          await tx.opportunityLog.createMany({
-            data: transitioningIds.map((studentId) => ({
-              id: `historical_settlement_${studentId}`,
-              studentId,
-              examId: null,
-              action: "إعادة تعيين",
-              amount: 1,
-              reason:
-                "تسوية تاريخية: تجاهل آثار الامتحانات السابقة للتسوية حتى عند تعديل درجاتها لاحقاً",
-              date: settlementAt,
-            })),
-            skipDuplicates: true,
-          });
-
-          let processed = 0;
-          let conflicts = 0;
-          for (const transitioningStudentId of transitioningIds) {
-            const migrated =
-              await migrateDismissedPendingGradesAfterActivation(
-                tx,
-                transitioningStudentId,
-                { name: "TeacherPro - التسوية الأكاديمية" },
-                settlementAt,
-              );
-            processed += migrated.processed;
-            conflicts += migrated.conflicts;
-          }
-          return { processed, conflicts };
-        });
-        migratedPendingGrades += migration.processed;
-        pendingGradeConflicts += migration.conflicts;
-      }
-
-      const settlementStudentIds = Array.from(
-        new Set([
-          ...existingSettlements.map((log) => log.studentId),
-          ...restoredStudents.map((student) => student.id),
-        ]),
+      return NextResponse.json(
+        {
+          error:
+            "تم إيقاف مسار استعادة المفصولين التاريخي. استرجاع أي طالب مفصول يتم حصراً من صفحة إدارة المفصولين.",
+          retiredDismissedReactivationPath: true,
+        },
+        { status: 410 },
       );
-      for (let index = 0; index < settlementStudentIds.length; index += 100) {
-        const recalculation = await recalculateStudentsAcademicState(
-          settlementStudentIds.slice(index, index + 100),
-        );
-        recalculatedStudents += recalculation.studentIds.length;
-      }
-
-      const result = {
-        ok: true,
-        previousDismissed: dismissed.length,
-        keptDismissed: keptStudents.length,
-        restoredStudents: restoredStudents.length,
-        recalculatedStudents,
-        migratedPendingGrades,
-        pendingGradeConflicts,
-      };
-      await writeRequestAuditLog(
-        req,
-        "الطلاب",
-        "تسوية الفصل التاريخي وإخفاء آثار الدرجات القديمة",
-        result,
-      );
-      return NextResponse.json({
-        ...result,
-        message: `تم إبقاء أحدث ${keptStudents.length} مفصولين واستعادة ${restoredStudents.length} طالباً مع تعطيل الأثر الرجعي للدرجات القديمة.`,
-        source: "database" as const,
-        generatedAt: new Date().toISOString(),
-      });
     }
 
     if (scope === "dismissed") {
       const batchSize = readBatchSize(req);
       const requestedLimit = Number(searchParams.get("limit") || 50);
-      const limit = Math.min(100, Math.max(1, Math.trunc(requestedLimit || 50)));
+      const limit = Math.min(
+        100,
+        Math.max(1, Math.trunc(requestedLimit || 50)),
+      );
       const afterId = String(searchParams.get("afterId") || "").trim();
       const fetchedRows = await db.student.findMany({
         where: {
@@ -368,28 +226,40 @@ export async function PATCH(req: NextRequest) {
       });
       const hasMore = fetchedRows.length > limit;
       const rows = fetchedRows.slice(0, limit);
-      let restoredStudents = 0;
-      let stillDismissed = 0;
+      let preservedDismissedStudents = 0;
       let convertedGrades = 0;
       let convertedBeforeRegistration = 0;
       let deletedCalls = 0;
 
       for (let index = 0; index < rows.length; index += batchSize) {
-        const studentIds = rows.slice(index, index + batchSize).map((row) => row.id);
-        await ensureProtectedGradeMarkers(db, { studentIds });
-        const repair = await repairProtectedAbsencesForStudents(db, studentIds);
-        const recalculation = await recalculateStudentsAcademicState(studentIds);
-        const batch = { repair, recalculation };
-        convertedGrades += batch.repair.convertedGrades;
-        convertedBeforeRegistration += batch.repair.convertedBeforeRegistration;
-        deletedCalls += batch.repair.deletedCalls;
-        for (const student of batch.recalculation.students) {
-          if (student.status !== "مفصول") {
-            restoredStudents += 1;
-          } else {
-            stillDismissed += 1;
+        const studentIds = rows
+          .slice(index, index + batchSize)
+          .map((row) => row.id);
+        const batch = await withSerializableTransaction(async (tx) => {
+          await ensureProtectedGradeMarkers(tx, { studentIds });
+          const repair = await repairProtectedAbsencesForStudents(
+            tx,
+            studentIds,
+          );
+          const recalculation = await recalculateStudentsAcademicState(
+            studentIds,
+            { tx },
+          );
+          const implicitReactivation = recalculation.students.find(
+            (student) => student.status !== "مفصول",
+          );
+          if (implicitReactivation) {
+            throw new Error(
+              `حارس مركزية الاسترجاع أوقف تغيير حالة الطالب ${implicitReactivation.id}. أُلغيت دفعة الصيانة بالكامل.`,
+            );
           }
-        }
+          return { repair, recalculation };
+        });
+        preservedDismissedStudents += batch.recalculation.students.length;
+        convertedGrades += batch.repair.convertedGrades;
+        convertedBeforeRegistration +=
+          batch.repair.convertedBeforeRegistration;
+        deletedCalls += batch.repair.deletedCalls;
       }
 
       const result = {
@@ -397,21 +267,21 @@ export async function PATCH(req: NextRequest) {
         reviewedDismissedStudents: rows.length,
         nextCursor: rows.at(-1)?.id || afterId || null,
         hasMore,
-        restoredStudents,
-        stillDismissed,
+        preservedDismissedStudents,
         convertedGrades,
         convertedBeforeRegistration,
         deletedCalls,
+        reactivatedStudents: 0,
       };
       await writeRequestAuditLog(
         req,
         "الطلاب",
-        "تدقيق المفصولين وتصحيح الفصل والفرص تلقائياً",
+        "إصلاح الحماية الأكاديمية للمفصولين دون تغيير حالتهم",
         result,
       );
       return NextResponse.json({
         ...result,
-        message: `تم تدقيق ${rows.length} مفصولاً: استُعيد ${restoredStudents} طالباً وثبت استحقاق فصل ${stillDismissed} طالباً.`,
+        message: `تم تدقيق حماية ${rows.length} طالب مفصول مع إبقائهم مفصولين. استرجاعهم متاح حصراً من إدارة المفصولين.`,
         source: "database" as const,
         generatedAt: new Date().toISOString(),
       });

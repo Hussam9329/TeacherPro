@@ -9,8 +9,12 @@ import React, {
 } from "react";
 import { useTeacherStore, type Student } from "@/lib/teacher-store";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useActionLock } from "@/hooks/use-action-lock";
 import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { formatBaghdadDateTime } from "@/lib/baghdad-time";
+import { studentApi } from "@/lib/api";
+import { toast } from "@/lib/user-toast";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import {
   buildBoundedTelegramDraft,
@@ -24,6 +28,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -45,6 +59,7 @@ import {
   GraduationCap,
   MessageCircle,
   Phone,
+  RotateCcw,
   Search,
   Send,
   ShieldAlert,
@@ -350,7 +365,7 @@ function downloadHistoryHtml(history: StudentHistory) {
 }
 
 export function DismissedManagementView() {
-  const { courses, courseName, mergeStudentsCache } = useTeacherStore();
+  const { courses, courseName, mergeStudentsCache, currentUser } = useTeacherStore();
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "dismissed", "follow-up"]);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 180);
@@ -366,6 +381,18 @@ export function DismissedManagementView() {
   const [histories, setHistories] = useState<Record<string, StudentHistory>>({});
   const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
   const [historyErrors, setHistoryErrors] = useState<Record<string, string>>({});
+  const [reactivateDialog, setReactivateDialog] = useState<{
+    student: ManagedDismissalStudent | null;
+    open: boolean;
+  }>({ student: null, open: false });
+  const { locked: isReactivating, runLocked: runReactivateLocked } = useActionLock();
+  const actor = currentUser();
+  const canReactivate = Boolean(
+    actor &&
+      (actor.username?.trim().toLowerCase() === "admin" ||
+        actor.roleId === "role_admin" ||
+        actor.permissions?.includes("students.edit")),
+  );
   const historyControllersRef = useRef<Map<string, AbortController>>(
     new Map(),
   );
@@ -549,6 +576,67 @@ export function DismissedManagementView() {
     if (!history) return;
     downloadHistoryHtml(history);
   };
+
+  const handleReactivate = runReactivateLocked(async (student: ManagedDismissalStudent) => {
+    if (!canReactivate) {
+      toast.error("لا تملك صلاحية استرجاع الطلاب المفصولين.");
+      return;
+    }
+    if (student.status !== "مفصول") {
+      setReactivateDialog({ student: null, open: false });
+      toast.warning("الطالب ليس مفصولاً حالياً؛ لم يتم تنفيذ أي تغيير.");
+      return;
+    }
+
+    const result = await studentApi.statusAction({
+      action: "reactivate",
+      studentId: student.id,
+      expectedStatus: student.status,
+      expectedMutationToken: student.mutationToken || "",
+    });
+    if (!result.ok || result.queued) {
+      toast.error(result.error || "تعذر استرجاع الطالب من بيانات النظام.");
+      return;
+    }
+
+    const updatedStudent = (result.data as { student?: Student } | null)?.student;
+    if (!updatedStudent) {
+      toast.error("تم تنفيذ العملية لكن تعذر قراءة حالة الطالب المحدثة. حدّث الصفحة.");
+      return;
+    }
+
+    mergeStudentsCache([updatedStudent]);
+    setStudents((current) => {
+      if (historyScope === "current") {
+        return current.filter((item) => item.id !== student.id);
+      }
+      return current.map((item) =>
+        item.id === student.id
+          ? {
+              ...item,
+              ...updatedStudent,
+              wasDismissed: true,
+              lastDismissalReason:
+                item.lastDismissalReason || student.dismissalReason || "",
+              lastDismissalAt: item.lastDismissalAt || student.lastDismissalAt || "",
+            }
+          : item,
+      );
+    });
+    if (historyScope === "current") {
+      setTotalCount((count) => Math.max(0, count - 1));
+    }
+    setReactivateDialog({ student: null, open: false });
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason: "dismissed-management-reactivate",
+      scopes: ["students", "opportunities", "dismissed", "dashboard", "follow-up"],
+      dispatchLocal: true,
+    });
+    toast.success("تم استرجاع الطالب", {
+      description: "أصبح الطالب نشطاً برصيد فرصتين. بقي سجل الفصل محفوظاً كـ«مفصول سابقاً».",
+    });
+  });
 
   const courseOptions = useMemo(
     () => [...courses].sort((a, b) => a.name.localeCompare(b.name, "ar")),
@@ -817,6 +905,17 @@ export function DismissedManagementView() {
                 ) : null}
 
                 <div className="flex flex-wrap gap-2 border-t pt-3">
+                  {student.status === "مفصول" && canReactivate ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={isReactivating}
+                      onClick={() => setReactivateDialog({ student, open: true })}
+                    >
+                      <RotateCcw className="size-4" />
+                      استرجاع الطالب
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
                     className="flex-1"
@@ -954,6 +1053,38 @@ export function DismissedManagementView() {
           </Button>
         </div>
       ) : null}
+
+      <AlertDialog
+        open={reactivateDialog.open}
+        onOpenChange={(open) => {
+          if (!open && !isReactivating) {
+            setReactivateDialog({ student: null, open: false });
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>استرجاع الطالب المفصول</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل تريد استرجاع «{reactivateDialog.student?.name || "الطالب المحدد"}»؟ سيزول الفصل الحالي ويصبح الطالب نشطاً برصيد فرصتين، مع بقاء سجل الفصل محفوظاً في إدارة المفصولين.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isReactivating}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!reactivateDialog.student || isReactivating}
+              onClick={(event) => {
+                event.preventDefault();
+                if (reactivateDialog.student) {
+                  void handleReactivate(reactivateDialog.student);
+                }
+              }}
+            >
+              {isReactivating ? "جاري الاسترجاع..." : "تأكيد الاسترجاع بفرصتين"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

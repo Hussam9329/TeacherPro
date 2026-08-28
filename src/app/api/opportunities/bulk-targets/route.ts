@@ -24,10 +24,6 @@ export async function GET(req: NextRequest) {
       searchParams.get("excludeFullOpportunities"),
       true,
     );
-    const reactivateDismissedOnAdd = normalizeBoolean(
-      searchParams.get("reactivateDismissedOnAdd"),
-      actionType === "add" && !excludeDismissed,
-    );
     const preview = await withSerializableTransaction((tx) =>
       buildBulkOpportunityPreview(tx, {
         courseId: String(searchParams.get("courseId") || "").trim(),
@@ -39,7 +35,6 @@ export async function GET(req: NextRequest) {
         actionType,
         excludeDismissed,
         excludeFullOpportunities,
-        reactivateDismissedOnAdd,
       }),
     );
 

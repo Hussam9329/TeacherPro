@@ -137,7 +137,8 @@ check(
     statusRoute.includes('if (action === "restore")') &&
     statusRoute.includes("إجراء الاستعادة مخصص للطلاب المؤرشفين فقط") &&
     studentsRoute.includes("استعده من إجراء «استعادة من الأرشيف» أولاً") &&
-    registry.includes('isArchived ? "restore" : "reactivate"'),
+    registry.includes('action: "restore"') &&
+    !registry.includes('action: "reactivate"'),
 );
 check(
   "الاستعادة تضبط رصيد الفصل الحالي وتعيد الاحتساب داخل العملية نفسها",

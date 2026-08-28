@@ -88,11 +88,12 @@ must(
 );
 
 must(
-  page.includes("studentApi.statusAction") &&
-    page.includes('action: "reactivate"') &&
-    !/reactivateStudent\s*[,\n}]/.test(page),
-  "إعادة التفعيل في صفحة المفصولين Server-first عبر status-action",
-  "لا يجوز أن تستخدم صفحة المفصولين reactivateStudent المحلي؛ يجب استخدام studentApi.statusAction.",
+  !page.includes('action: "reactivate"') &&
+    !page.includes("handleReactivate") &&
+    !/reactivateStudent\s*[,\n}]/.test(page) &&
+    page.includes("إعادة التفعيل تتم حصراً من صفحة إدارة المفصولين"),
+  "صفحة المفصولين القديمة للمتابعة فقط ولا تملك مسار استرجاع",
+  "يجب حذف إعادة التفعيل من صفحة المفصولين وإحالة الاسترجاع إلى إدارة المفصولين.",
 );
 
 must(
@@ -105,9 +106,9 @@ must(
 must(
   page.includes("canRunSensitiveActions") &&
     page.includes("disabled={!canRunSensitiveActions") &&
-    page.includes("تفاصيل الفصل غير محملة من بيانات النظام"),
-  "الإجراءات الحساسة تُمنع عند فشل تحميل بيانات الخادم أو تفاصيل الفصل",
-  "يجب منع إعادة التفعيل/الحفظ عند عرض بيانات غير مؤكدة من الخادم.",
+    page.includes("انتظر تحميل بيانات المفصولين من النظام قبل حفظ الملاحظة"),
+  "حفظ الملاحظات يُمنع عند فشل تحميل بيانات الخادم",
+  "يجب منع حفظ الملاحظات عند عرض بيانات غير مؤكدة من الخادم.",
 );
 
 must(
@@ -121,10 +122,10 @@ must(
 
 must(
   page.includes("emitTeacherProDataChanged") &&
-    page.includes("dismissed-students-reactivate") &&
+    !page.includes("dismissed-students-reactivate") &&
     page.includes("dismissed-students-note"),
-  "إجراءات صفحة المفصولين تطلق مزامنة لباقي النظام بعد نجاح الخادم",
-  "يجب بث مزامنة بعد إعادة التفعيل وحفظ الملاحظات حتى تعترف باقي الصفحات بالتغيير.",
+  "صفحة المفصولين تبث مزامنة للملاحظات فقط ولا تبث استرجاعاً",
+  "يجب أن تبقى مزامنة الملاحظات مع حذف مسار إعادة التفعيل من الصفحة.",
 );
 
 must(

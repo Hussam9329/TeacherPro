@@ -1239,7 +1239,6 @@ interface TeacherState {
     reason: string,
     notes?: string,
   ) => void;
-  reactivateStudent: (studentId: string) => void;
 
   addExam: (exam: Omit<Exam, "id">) => void;
   updateExam: (id: string, updates: Partial<Omit<Exam, "id">>) => void;
@@ -1266,7 +1265,6 @@ interface TeacherState {
     studentIds: string[],
     amount: number,
     reason: string,
-    options?: { reactivateDismissedOnAdd?: boolean },
   ) => { affected: number; skipped: number };
   resetOpportunities: (studentId: string) => void;
   undoOpportunityLog: (logId: string) => boolean;
@@ -1461,26 +1459,6 @@ function normalizeGradeRecord(g: Record<string, unknown>): Grade {
   } as Grade;
 }
 
-function firstAvailableSection(
-  user: User | undefined,
-  roles: Role[],
-): SectionId {
-  if (!user) return "dashboard";
-  const role = roles.find((r) => r.id === user.roleId);
-  const perms =
-    user.permissions.length > 0 ? user.permissions : role?.permissions || [];
-  // Map permissions back to section IDs
-  for (const perm of perms) {
-    for (const [sectionId, permId] of Object.entries(SECTION_PERMISSIONS)) {
-      if (permId === perm) return sectionId as SectionId;
-    }
-  }
-  // Fallback: if user has old-style section IDs in permissions
-  const first = perms?.[0] as SectionId | undefined;
-  if (first && first in SECTION_PERMISSIONS) return first;
-  return "dashboard";
-}
-
 // ─── Seed Data ───────────────────────────────────────────────────────────────
 
 // ─── Default Courses ─────────────────────────────────────────────────────────
@@ -1639,29 +1617,6 @@ function mergeDefaultRoles(roles: Role[]): Role[] {
   ];
 }
 
-function isRuleManagedDismissal(student: Student): boolean {
-  const reason = student.dismissalReason || "";
-  return [
-    "غياب امتحان",
-    "غياب ضمن درجة الفصل",
-    "أول حالة غش",
-    "غش متكرر",
-    "درجة فصل",
-    "درجة صفر",
-    "انتهاء الفرص",
-    "غياب امتحان",
-    "فصل امتحان",
-  ].some((part) => reason.includes(part));
-}
-
-function examPenaltyValue(exam: Exam): number {
-  if (exam.noDiscount) return 0;
-  const numeric = Number(exam.opportunitiesPenalty);
-  return Number.isFinite(numeric) && numeric > 0
-    ? Math.max(1, Math.trunc(numeric))
-    : 1;
-}
-
 function normalizeGraceDaysValue(value: unknown): number {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) return 0;
@@ -1674,12 +1629,6 @@ function sanitizeGradeStatus(value: unknown): Grade["status"] {
   if (value === "ضمن فترة السماح") return "ضمن فترة السماح";
   if (value === "قبل تسجيل الطالب") return "قبل تسجيل الطالب";
   return "درجة";
-}
-
-function parseDateOnly(value: string | undefined | null): Date | null {
-  if (!value) return null;
-  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function isExamWithinStudentGracePeriod(
@@ -1703,19 +1652,6 @@ function isAutomaticOpportunityLog(log: OpportunityLog): boolean {
   );
 }
 
-function automaticOpportunityLogId(
-  studentId: string,
-  examId: string,
-  sourceId: string,
-  action: string,
-  reason: string,
-): string {
-  const slug = `${action}-${reason}`
-    .replace(/[^A-Za-z0-9\u0600-\u06FF]+/g, "-")
-    .slice(0, 32);
-  return `auto_${studentId}_${examId}_${sourceId || "exam"}_${slug}`;
-}
-
 const ACADEMIC_REACTIVATION_LINK_PREFIX = "[academic-reactivation-link:";
 const ACADEMIC_REACTIVATION_LINK_SUFFIX = "]";
 
@@ -1724,18 +1660,6 @@ interface AcademicReactivationLink {
   sourceExamId: string;
   sourceAutomaticLogId: string;
   reactivationMode: string;
-}
-
-function encodeAcademicReactivationLink(
-  link: Partial<AcademicReactivationLink>,
-): string {
-  const params = new URLSearchParams();
-  if (link.sourceGradeId) params.set("sourceGradeId", link.sourceGradeId);
-  if (link.sourceExamId) params.set("sourceExamId", link.sourceExamId);
-  if (link.sourceAutomaticLogId)
-    params.set("sourceAutomaticLogId", link.sourceAutomaticLogId);
-  params.set("reactivationMode", link.reactivationMode || "بسبب إجراء تلقائي");
-  return `${ACADEMIC_REACTIVATION_LINK_PREFIX}${params.toString()}${ACADEMIC_REACTIVATION_LINK_SUFFIX}`;
 }
 
 function parseAcademicReactivationLink(
@@ -1789,185 +1713,6 @@ function opportunityLogBelongsToExam(
   );
 }
 
-function academicReactivationSourceKey(
-  link: AcademicReactivationLink | null,
-): string {
-  if (!link) return "";
-  if (link.sourceGradeId) return `grade:${link.sourceGradeId}`;
-  if (link.sourceExamId) return `exam:${link.sourceExamId}`;
-  if (link.sourceAutomaticLogId) return `log:${link.sourceAutomaticLogId}`;
-  return "";
-}
-
-function gradeMatchesAcademicReactivationLink(
-  grade: Grade,
-  link: AcademicReactivationLink | null,
-): boolean {
-  if (!link) return false;
-  if (link.sourceGradeId && grade.id === link.sourceGradeId) return true;
-  if (link.sourceExamId && grade.examId === link.sourceExamId) return true;
-  return false;
-}
-
-function automaticLogMatchesAcademicReactivationLink(
-  log: OpportunityLog,
-  link: AcademicReactivationLink | null,
-  grades: Grade[],
-): boolean {
-  if (!link) return false;
-  if (link.sourceAutomaticLogId && log.id === link.sourceAutomaticLogId)
-    return true;
-  if (link.sourceExamId && log.examId === link.sourceExamId) {
-    if (!link.sourceGradeId) return true;
-    return grades.some(
-      (grade) =>
-        grade.id === link.sourceGradeId &&
-        grade.studentId === log.studentId &&
-        grade.examId === log.examId,
-    );
-  }
-  return false;
-}
-
-function findAcademicReactivationSourceForStudent(
-  state: Pick<
-    TeacherState,
-    "grades" | "exams" | "opportunityLogs" | "studentLeaves"
-  >,
-  student: Student,
-): Partial<AcademicReactivationLink> | null {
-  if (!isRuleManagedDismissal(student)) return null;
-  return findLatestAcademicReactivationSourceForStudent(state, student);
-}
-
-function gradeHasAcademicEffect(grade: Grade, exam: Exam): boolean {
-  if (grade.academicEffectExcluded) return false;
-  if (!isExamAvailableForEntry(exam)) return false;
-  if (!isGradeEntered(grade, exam)) return false;
-  if (grade.status === "غش") return true;
-  if (exam.noDiscount) return false;
-
-  // الغياب ليس حالة معلوماتية فقط؛ هو دائماً حالة محاسبة أكاديمية
-  // ويعامل كأقل درجة ضمن الخصم في أي امتحان فعّال فيه خصم،
-  // مع استثناءات الحماية العامة فقط مثل الإجازة أو فترة السماح.
-  if (grade.status === "غائب") return true;
-
-  if (grade.status !== "درجة" || grade.score === null) return false;
-  const score = Number(grade.score);
-  if (exam.type === "فاينل") {
-    return (
-      score === 0 ||
-      (exam.dismissalGrade !== null && score <= exam.dismissalGrade)
-    );
-  }
-  return score <= exam.discountMark;
-}
-
-function gradeCausesDismissalGradeEffect(grade: Grade, exam: Exam): boolean {
-  if (!gradeHasAcademicEffect(grade, exam)) return false;
-  if (grade.status === "غش") return true;
-  if (grade.status === "غائب") return exam.type === "فاينل";
-  if (grade.status !== "درجة" || grade.score === null) return false;
-  const score = Number(grade.score);
-  if (exam.type === "فاينل") {
-    return (
-      score === 0 ||
-      (exam.dismissalGrade !== null && score <= exam.dismissalGrade)
-    );
-  }
-  return false;
-}
-
-function findLatestAcademicReactivationSourceForStudent(
-  state: Pick<
-    TeacherState,
-    "grades" | "exams" | "opportunityLogs" | "studentLeaves"
-  >,
-  student: Student,
-): Partial<AcademicReactivationLink> | null {
-  const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
-  const normalizedLeaves = (state.studentLeaves || []).map((leave) =>
-    normalizeStudentLeave(leave),
-  );
-
-  const studentAutomaticLogs = state.opportunityLogs
-    .filter(
-      (log) => log.studentId === student.id && isAutomaticOpportunityLog(log),
-    )
-    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-
-  const dismissalLog =
-    studentAutomaticLogs.find((log) => log.action === "فصل تلقائي") ||
-    studentAutomaticLogs[0];
-  if (dismissalLog) {
-    const sourceGrade = state.grades.find(
-      (grade) =>
-        grade.studentId === student.id && grade.examId === dismissalLog.examId,
-    );
-    return {
-      sourceGradeId: sourceGrade?.id || "",
-      sourceExamId: dismissalLog.examId || sourceGrade?.examId || "",
-      sourceAutomaticLogId: dismissalLog.id,
-      reactivationMode: "بسبب إجراء تلقائي",
-    };
-  }
-
-  const fallbackGrade = state.grades
-    .filter((grade) => grade.studentId === student.id)
-    .sort((a, b) =>
-      String(b.updatedAt || b.createdAt || "").localeCompare(
-        String(a.updatedAt || a.createdAt || ""),
-      ),
-    )
-    .find((grade) => {
-      const exam = examsById.get(grade.examId);
-      if (!exam) return false;
-      if (!isExamAvailableForEntry(exam)) return false;
-      if (!isGradeEntered(grade, exam)) return false;
-      if (!isExamOnOrAfterStudentRegistration(student, exam)) return false;
-      if (
-        normalizedLeaves.some((leave) =>
-          studentLeaveAppliesToExam(leave, student.id, exam),
-        )
-      )
-        return false;
-      if (isExamWithinStudentGracePeriod(student, exam)) return false;
-      return gradeCausesDismissalGradeEffect(grade, exam);
-    });
-
-  if (!fallbackGrade) return null;
-  return {
-    sourceGradeId: fallbackGrade.id,
-    sourceExamId: fallbackGrade.examId,
-    sourceAutomaticLogId: "",
-    reactivationMode: "بسبب إجراء تلقائي",
-  };
-}
-
-function resolveAcademicReactivationLinkForLog(
-  log: OpportunityLog,
-  state: Pick<
-    TeacherState,
-    "grades" | "exams" | "opportunityLogs" | "studentLeaves"
-  >,
-  student: Student,
-): AcademicReactivationLink | null {
-  const parsed = parseAcademicReactivationLink(log.reason);
-  if (parsed) return parsed;
-  if (!isSystemAcademicReactivationLog(log)) return null;
-  const inferred = findLatestAcademicReactivationSourceForStudent(
-    state,
-    student,
-  );
-  if (!inferred) return null;
-  return {
-    sourceGradeId: inferred.sourceGradeId || "",
-    sourceExamId: inferred.sourceExamId || "",
-    sourceAutomaticLogId: inferred.sourceAutomaticLogId || "",
-    reactivationMode: inferred.reactivationMode || "بسبب إجراء تلقائي",
-  };
-}
-
 function isAcademicallyManagedOpportunityLog(log: OpportunityLog): boolean {
   return (
     isAutomaticOpportunityLog(log) ||
@@ -1990,45 +1735,6 @@ function isReactivationBalanceOpportunityLog(log: OpportunityLog): boolean {
     log.action === "رصيد إعادة التفعيل" ||
     reason.includes("فرصتين بعد التعهد")
   );
-}
-
-function latestStudentLogDate(
-  logs: OpportunityLog[],
-  predicate: (log: OpportunityLog) => boolean,
-): string {
-  const dates = logs
-    .filter(predicate)
-    .map((log) => dayKey(log.date))
-    .filter(Boolean)
-    .sort();
-  return dates.length ? dates[dates.length - 1] : "";
-}
-
-
-function latestManualDismissalDateForStudent(
-  state: Pick<TeacherState, "opportunityLogs" | "studentNotes">,
-  studentId: string,
-): string {
-  const logDates = state.opportunityLogs
-    .filter(
-      (log) =>
-        log.studentId === studentId &&
-        log.action === "خصم" &&
-        String(log.reason || "").startsWith("فصل الطالب"),
-    )
-    .map((log) => dayKey(log.date))
-    .filter(Boolean);
-  const noteDates = (state.studentNotes || [])
-    .filter(
-      (note) =>
-        note.studentId === studentId &&
-        note.kind === "إجراء" &&
-        String(note.text || "").startsWith("فصل الطالب"),
-    )
-    .map((note) => dayKey(note.date))
-    .filter(Boolean);
-  const dates = [...logDates, ...noteDates].sort();
-  return dates.length ? dates[dates.length - 1] : "";
 }
 
 function dayKey(value: string | Date | null | undefined): string {
@@ -4114,74 +3820,7 @@ export const useTeacherStore = create<TeacherState>()(
             ),
           );
       },
-      reactivateStudent: (studentId) => {
-        const stateBefore = get();
-        const studentBefore = stateBefore.students.find((st) => st.id === studentId);
-        if (!studentBefore || studentBefore.status !== "مفصول") return;
-        const academicReactivationSource = findAcademicReactivationSourceForStudent(
-          stateBefore,
-          studentBefore,
-        );
-        const academicReactivationLink = academicReactivationSource
-          ? ` ${encodeAcademicReactivationLink(academicReactivationSource)}`
-          : "";
-        const chapterId =
-          stateBefore.activeChapterForCourse(studentBefore.courseId)?.id || "";
-        const reactivationLog: OpportunityLog = {
-          id: uid("ol"),
-          studentId,
-          examId: academicReactivationSource?.sourceExamId || "",
-          action: "إعادة تفعيل",
-          amount: 0,
-          reason: `تثبيت إعادة التفعيل: الطالب نشط برصيد فرصتين؛ الوصول إلى 0 لا يفصله، والمخالفة التالية وهو بدون فرص تؤدي إلى الفصل${academicReactivationLink}`,
-          date: todayISO(),
-          chapterId,
-        };
-        const balanceLog: OpportunityLog = {
-          id: uid("ol"),
-          studentId,
-          examId: academicReactivationSource?.sourceExamId || "",
-          action: "رصيد إعادة التفعيل",
-          amount: 2,
-          reason: `إرجاع الطالب إلى الحالة النشطة برصيد فرصتين${academicReactivationLink}`,
-          date: todayISO(),
-          chapterId,
-        };
-        const actionNote: StudentNote = {
-          id: uid("note"),
-          studentId,
-          kind: "إجراء",
-          text: `إعادة تفعيل الطالب ومنحه فرصتين بعد الفصل السابق: ${studentBefore.dismissalReason || "بدون سبب مسجل"}`,
-          date: todayISO(),
-        };
-        set((s) => ({
-          students: s.students.map((st) =>
-            st.id === studentId
-              ? {
-                  ...st,
-                  status: "نشط" as const,
-                  dismissalReason: "",
-                  dismissalNotes: "",
-                  opportunities: 2,
-                }
-              : st,
-          ),
-          opportunityLogs: [reactivationLog, balanceLog, ...s.opportunityLogs],
-          studentNotes: [actionNote, ...s.studentNotes],
-        }));
-        get().logAction("الطلاب", "إعادة تفعيل الطالب برصيد فرصتين", get().studentName(studentId));
-        syncToServer(get, () =>
-          studentApi.update(studentId, {
-            status: "نشط",
-            dismissalReason: "",
-            dismissalNotes: "",
-            opportunities: 2,
-          }),
-        );
-        syncToServer(get, () => opportunityLogApi.add(reactivationLog as unknown as Record<string, unknown>));
-        syncToServer(get, () => opportunityLogApi.add(balanceLog as unknown as Record<string, unknown>));
-        syncToServer(get, () => studentNoteApi.add(actionNote as unknown as Record<string, unknown>));
-      },
+
 
       addExam: (examData) => {
         const exam: Exam = { ...examData, id: uid("ex") };
@@ -4741,7 +4380,7 @@ export const useTeacherStore = create<TeacherState>()(
           );
         }
       },
-      bulkAdjustOpportunities: (studentIds, amount, reason, options = {}) => {
+      bulkAdjustOpportunities: (studentIds, amount, reason) => {
         const stateBefore = get();
         const normalizedAmount = Math.max(
           1,
@@ -4789,10 +4428,6 @@ export const useTeacherStore = create<TeacherState>()(
         const eligibleStudentIds = new Set(
           eligibleStudents.map((student) => student.id),
         );
-        const opportunityLogsAfterAdjustment = [
-          ...logs,
-          ...stateBefore.opportunityLogs,
-        ];
         const penaltyEffectsByStudentId = new Map(
           eligibleStudents.map((student) => [
             student.id,
@@ -4834,36 +4469,10 @@ export const useTeacherStore = create<TeacherState>()(
               note,
             };
           });
-        const reactivationEffects =
-          signedAmount > 0 && options.reactivateDismissedOnAdd
-            ? adjustedStudents
-                .filter(
-                  (student) =>
-                    eligibleStudentIds.has(student.id) &&
-                    student.status === "مفصول" &&
-                    student.opportunities > 0,
-                )
-                .map((student) => {
-                  const note: StudentNote = {
-                    id: uid("note"),
-                    studentId: student.id,
-                    kind: "إجراء",
-                    text: "إعادة تفعيل تلقائية بعد إضافة فرصة جماعية",
-                    date: todayISO(),
-                  };
-                  return { studentId: student.id, note };
-                })
-            : [];
         const dismissalByStudentId = new Map(
           dismissalEffects.map((effect) => [effect.studentId, effect]),
         );
-        const reactivationByStudentId = new Map(
-          reactivationEffects.map((effect) => [effect.studentId, effect]),
-        );
-        const effectNotes = [
-          ...dismissalEffects.map((effect) => effect.note),
-          ...reactivationEffects.map((effect) => effect.note),
-        ];
+        const effectNotes = dismissalEffects.map((effect) => effect.note);
         const nextStudents = adjustedStudents.map((student) => {
           const dismissal = dismissalByStudentId.get(student.id);
           if (dismissal) {
@@ -4873,15 +4482,6 @@ export const useTeacherStore = create<TeacherState>()(
               dismissalReason: dismissal.dismissalReason,
               dismissalNotes: "",
               opportunities: 0,
-            };
-          }
-          const reactivation = reactivationByStudentId.get(student.id);
-          if (reactivation) {
-            return {
-              ...student,
-              status: "نشط" as const,
-              dismissalReason: "",
-              dismissalNotes: "",
             };
           }
           return student;
@@ -4905,13 +4505,7 @@ export const useTeacherStore = create<TeacherState>()(
             `${get().studentName(effect.studentId)} - ${effect.dismissalReason}`,
           );
         });
-        reactivationEffects.forEach((effect) => {
-          get().logAction(
-            "الطلاب",
-            "إعادة تفعيل تلقائية",
-            `${get().studentName(effect.studentId)} - إضافة فرصة جماعية`,
-          );
-        });
+
 
         const nextState = get();
         const studentPayload = eligibleStudents
@@ -4928,10 +4522,6 @@ export const useTeacherStore = create<TeacherState>()(
             if (dismissal) {
               payload.status = "مفصول";
               payload.dismissalReason = dismissal.dismissalReason;
-              payload.dismissalNotes = "";
-            } else if (reactivationByStudentId.has(student.id)) {
-              payload.status = "نشط";
-              payload.dismissalReason = "";
               payload.dismissalNotes = "";
             }
             return payload;

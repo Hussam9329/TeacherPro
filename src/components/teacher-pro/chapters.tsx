@@ -97,9 +97,9 @@ type SecondChapterTransitionPreview = {
   impact: {
     courses: number;
     totalStudents: number;
-    studentsToReactivate: number;
-    dismissedToReactivate: number;
-    archivedToRestore: number;
+    activeStudentsToReset: number;
+    dismissedPreserved: number;
+    archivedPreserved: number;
     balancesToReset: number;
     activeLinksToDeactivate: number;
     externalChapterLinks: number;
@@ -1399,16 +1399,16 @@ export function ChaptersView() {
               <div className="grid gap-2 sm:grid-cols-2">
                 {statCard("كل الطلاب", transitionPreview.impact.totalStudents)}
                 {statCard(
-                  "سيعودون نشطين",
-                  transitionPreview.impact.studentsToReactivate,
+                  "نشطون سيُعاد ضبط رصيدهم",
+                  transitionPreview.impact.activeStudentsToReset,
                 )}
                 {statCard(
-                  "مفصولون",
-                  transitionPreview.impact.dismissedToReactivate,
+                  "مفصولون يبقون مفصولين",
+                  transitionPreview.impact.dismissedPreserved,
                 )}
                 {statCard(
-                  "مؤرشفون",
-                  transitionPreview.impact.archivedToRestore,
+                  "مؤرشفون يبقون مؤرشفين",
+                  transitionPreview.impact.archivedPreserved,
                 )}
               </div>
               {transitionPreview.perCourse.map((course) => (

@@ -14,7 +14,6 @@ export type BulkOpportunityPreviewInput = {
   actionType: "add" | "deduct";
   excludeDismissed: boolean;
   excludeFullOpportunities: boolean;
-  reactivateDismissedOnAdd: boolean;
 };
 
 export async function buildBulkOpportunityPreview(
@@ -40,13 +39,6 @@ export async function buildBulkOpportunityPreview(
   const targetRows = eligibleRows.filter((student) => {
     if (input.excludeDismissed && student.status === "مفصول") return false;
     if (
-      input.actionType === "add" &&
-      student.status === "مفصول" &&
-      !input.reactivateDismissedOnAdd
-    ) {
-      return false;
-    }
-    if (
       input.actionType === "deduct" &&
       input.excludeFullOpportunities &&
       student.isOpportunityFull
@@ -67,9 +59,7 @@ export async function buildBulkOpportunityPreview(
   ).length;
   const excludedDismissed = input.excludeDismissed
     ? eligibleRows.filter((student) => student.status === "مفصول").length
-    : input.actionType === "add" && !input.reactivateDismissedOnAdd
-      ? eligibleRows.filter((student) => student.status === "مفصول").length
-      : 0;
+    : 0;
   const excludedFullOpportunities =
     input.actionType === "deduct" && input.excludeFullOpportunities
       ? eligibleRows.filter((student) => student.isOpportunityFull).length

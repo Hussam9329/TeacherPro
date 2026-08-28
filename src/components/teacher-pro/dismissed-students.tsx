@@ -117,14 +117,6 @@ function formatDismissalGrade(detail: DismissalDetail | null): string {
   return grade.status || "درجة غير محددة";
 }
 
-function serverActionData(result: { data?: unknown }) {
-  return (result.data || {}) as {
-    student?: Student;
-    opportunityLogs?: OpportunityLog[];
-    studentNotes?: unknown[];
-  };
-}
-
 export function DismissedStudentsView() {
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "dismissed", "dashboard"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
@@ -156,7 +148,6 @@ export function DismissedStudentsView() {
   const [listError, setListError] = useState("");
   const [detailsError, setDetailsError] = useState("");
   const [savingNoteIds, setSavingNoteIds] = useState<Record<string, boolean>>({});
-  const [reactivatingIds, setReactivatingIds] = useState<Record<string, boolean>>({});
   const [dismissedStats, setDismissedStats] = useState<DismissedStats>({
     total: 0,
     current: 0,
@@ -422,52 +413,7 @@ export function DismissedStudentsView() {
     );
   };
 
-  const handleReactivate = async (student: Student) => {
-    if (!canRunSensitiveActions) {
-      toast.error("انتظر تحميل المفصولين وتفاصيل الفصل من بيانات النظام قبل تنفيذ إعادة التفعيل.");
-      return;
-    }
 
-    const serverDetail = dismissalDetails[student.id];
-    if (!serverDetail) {
-      toast.error("تفاصيل الفصل غير محملة من بيانات النظام لهذا الطالب. حدّث الصفحة ثم حاول مرة أخرى.");
-      return;
-    }
-
-    if (!serverDetail.hasPledge) {
-      const ok = window.confirm(
-        `لم يتم تسجيل تعهد لهذا الفصل.\n\nالطالب: ${student.name}\nالحالة: مفصول\nالسبب: ${serverDetail.reason || "لا يوجد سبب مسجل"}\n\nهل تريد إعادة التفعيل رغم عدم وجود تعهد؟`,
-      );
-      if (!ok) return;
-      toast.warning("سيتم تنفيذ إعادة التفعيل بدون تعهد مسجل لهذا الفصل بعد تأكيد الحفظ.");
-    }
-
-    setReactivatingIds((current) => ({ ...current, [student.id]: true }));
-    const result = await studentApi.statusAction({
-      action: "reactivate",
-      studentId: student.id,
-    });
-    setReactivatingIds((current) => ({ ...current, [student.id]: false }));
-
-    if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر إعادة تفعيل الطالب من النظام.");
-      return;
-    }
-
-    const payload = serverActionData(result);
-    if (payload.student) updateDismissedStudentLocally(payload.student);
-    else setDismissedServerStudents((current) => current.filter((item) => item.id !== student.id));
-
-    setDismissalDetails((current) => {
-      const next = { ...current };
-      delete next[student.id];
-      return next;
-    });
-    // إصلاح: استخدام dispatchLocal لضمان تحديث الواجهة فوراً
-    emitTeacherProDataChanged({ source: "local-mutation", reason: "dismissed-students-reactivate", scopes: ["students", "opportunities", "dismissed", "dashboard"], dispatchLocal: true });
-    setDismissedListRefreshKey((value) => value + 1);
-    toast.success("تمت إعادة تفعيل الطالب من بيانات النظام");
-  };
 
   const renderDismissalContext = (student: Student) => {
     const detail = dismissalDetailForStudent(student);
@@ -516,7 +462,7 @@ export function DismissedStudentsView() {
         >
           {detail.hasPledge
             ? `يوجد تعهد مسجل لهذا الفصل${detail.pledgeDate ? ` بتاريخ ${detail.pledgeDate}` : ""}.`
-            : "لم يتم تسجيل تعهد لهذا الفصل. راجع التعهد قبل إعادة التفعيل."}
+            : "لم يتم تسجيل تعهد لهذا الفصل. إعادة التفعيل تتم حصراً من صفحة إدارة المفصولين."}
         </div>
       </div>
     );
@@ -824,8 +770,7 @@ export function DismissedStudentsView() {
       {viewMode === "cards" ? (
         <div className="tp-dismissed-students__cards grid grid-cols-1 gap-3 xl:grid-cols-2">
           {dismissedStudents.map((student) => {
-            const reactivating = Boolean(reactivatingIds[student.id]);
-            return (
+                        return (
               <Card key={student.id}>
                 <CardContent className="space-y-3 p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -846,13 +791,7 @@ export function DismissedStudentsView() {
                         {student.subSite || student.locationScope || "بدون موقع"}
                       </p>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => void handleReactivate(student)}
-                      disabled={!canRunSensitiveActions || reactivating}
-                    >
-                      {reactivating ? "جاري التفعيل..." : "إعادة تفعيل"}
-                    </Button>
+
                   </div>
                   {renderDismissalContext(student)}
                   {renderNotesEditor(student)}
@@ -888,8 +827,7 @@ export function DismissedStudentsView() {
             <tbody>
               {dismissedStudents.map((student) => {
                 const detail = dismissalDetailForStudent(student);
-                const reactivating = Boolean(reactivatingIds[student.id]);
-                return (
+                                return (
                   <tr key={student.id} className="border-t align-top">
                     <td className="p-3 font-medium">{student.name}</td>
                     <td className="p-3">{student.code}</td>
@@ -920,13 +858,7 @@ export function DismissedStudentsView() {
                       {formatOpportunityBalance(student)}
                     </td>
                     <td className="p-3">
-                      <Button
-                        size="sm"
-                        onClick={() => void handleReactivate(student)}
-                        disabled={!canRunSensitiveActions || reactivating}
-                      >
-                        {reactivating ? "جاري التفعيل..." : "إعادة تفعيل"}
-                      </Button>
+<span className="text-xs text-muted-foreground">الاسترجاع من إدارة المفصولين</span>
                     </td>
                   </tr>
                 );

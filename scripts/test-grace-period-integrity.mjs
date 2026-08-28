@@ -140,11 +140,16 @@ check(
     repair.includes("withSerializableTransaction"),
 );
 check(
-  "الإصلاح الإداري الشامل ينشئ الحالات المحمية ويصحح السجلات ويعيد كل الأثر الأكاديمي",
+  "الإصلاح الإداري يبقي إصلاح الحماية والسماح ويغلق أي مسار صيانة قد يسترجع المفصول تلقائياً",
   academicRepair.includes("repairProtectedAbsencesForStudents") &&
-    academicRepair.includes("ensureProtectedGradeMarkers") &&
+  academicRepair.includes("ensureProtectedGradeMarkers") &&
     academicRepair.includes('scope === "dismissed"') &&
-    academicRepair.includes("restoredStudents") &&
+    academicRepair.includes('scope === "restore-excess-dismissed"') &&
+    academicRepair.match(/retiredDismissedReactivationPath:\s*true/g)?.length === 1 &&
+    academicRepair.includes("preservedDismissedStudents") &&
+    academicRepair.includes("حارس مركزية الاسترجاع") &&
+    !academicRepair.includes("restoredStudents") &&
+    !academicRepair.includes('status: "نشط"') &&
     academicRepair.includes('scope === "protected"') &&
     academicRepair.includes('where: { status: { not: "مؤرشف" } }') &&
     academicRepair.includes("deletedGrades") &&

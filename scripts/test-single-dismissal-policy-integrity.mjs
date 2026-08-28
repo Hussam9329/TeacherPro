@@ -62,11 +62,12 @@ check(
 );
 
 check(
-  pledgeRoute.includes('action: "رصيد بعد تعهد"') &&
-    pledgeRoute.includes("REACTIVATION_OPPORTUNITY_GRANT") &&
-    pledgeRoute.includes("activeChapter.opportunities") &&
+  pledgeRoute.includes('action: "تثبيت تعهد ولي الأمر"') &&
+    pledgeRoute.includes("reactivated: false") &&
+    !pledgeRoute.includes("REACTIVATION_OPPORTUNITY_GRANT") &&
+    !pledgeRoute.includes('status: "نشط"') &&
     !pledgeRoute.includes("dismissalType"),
-  "التعهد يعيد الطالب بفرصتين ضمن سقف الفصل ولا يغيّر نوع فصل",
+  "التعهد يسجل التعهد فقط ولا يعيد تفعيل الطالب أو يغير فرصه",
 );
 
 check(
@@ -74,6 +75,7 @@ check(
     engine.includes('log.action === "رصيد إعادة التفعيل"') &&
     engine.includes("opportunities = REACTIVATION_OPPORTUNITY_GRANT") &&
     engine.includes("hasZeroBalanceViolationMarker") &&
+    engine.includes('student.status === "مفصول" && !dismissed') &&
     !engine.includes("dismissalType"),
   "المحرك يعيد تشغيل كل إعادة تفعيل على فرصتين ويحفظ مخالفة الرصيد الصفري",
 );

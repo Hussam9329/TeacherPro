@@ -102,10 +102,10 @@ check(
   academicEngine.includes("historicalSettlementDate") &&
     academicEngine.includes("examEventDate <= historicalSettlementDate") &&
     academicRepair.includes('scope === "restore-excess-dismissed"') &&
-    academicRepair.includes('action: "إعادة تعيين"') &&
-    academicRepair.includes('startsWith: "تسوية تاريخية:"') &&
+    academicRepair.includes("retiredDismissedReactivationPath: true") &&
+    !academicRepair.includes('status: "نشط"') &&
     !academicRepair.includes('grade.deleteMany'),
-  "التسوية التاريخية تُبقي الدرجات محفوظة وتمنع أثرها الرجعي دون حذفها",
+  "المحرك يواصل احترام التسويات التاريخية القديمة بينما مسار الاسترجاع التاريخي نفسه متقاعد ولا يغيّر حالة مفصول",
 );
 check(
   [opportunitiesView, registry, dismissed, followUp, profile, bulkImport].every(

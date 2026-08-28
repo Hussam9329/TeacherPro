@@ -726,4 +726,53 @@ assert.equal(
 );
 console.log("✅ الخصم الافتراضي وتمييز المصدر التلقائي/اليدوي صحيحان");
 
+{
+  const oldExam = exam({
+    id: "old-dismissal-exam",
+    name: "امتحان فصل قديم",
+    date: "2026-02-01T00:00:00.000Z",
+    type: "فاينل",
+  });
+  const result = recalculatedStudent(
+    state({
+      students: [
+        student({
+          status: "مفصول",
+          opportunities: 0,
+          baseOpportunities: 3,
+          dismissalReason: "درجة صفر في امتحان فاينل قديم",
+        }),
+      ],
+      exams: [oldExam],
+      grades: [
+        grade({
+          id: "old-dismissal-grade",
+          examId: oldExam.id,
+          score: 0,
+          createdAt: oldExam.date,
+          updatedAt: oldExam.date,
+        }),
+      ],
+      opportunityLogs: [
+        {
+          id: "second-chapter-reset",
+          studentId: "student-1",
+          examId: "",
+          action: "إعادة تعيين",
+          amount: 3,
+          reason: "تسوية تاريخية: انتقال مؤكد إلى الفصل الثاني",
+          date: "2026-03-01T00:00:00.000Z",
+          chapterId: "chapter-1",
+          chapterNameSnapshot: "الفصل الثاني",
+        },
+      ],
+    }),
+  );
+  assert.equal(result.status, "مفصول");
+  assert.equal(result.dismissalReason, "درجة صفر في امتحان فاينل قديم");
+  console.log(
+    "✅ إعادة التعيين أو الصيانة لا تسترجع الطالب المفصول من خلف المسار المركزي",
+  );
+}
+
 console.log("\nكل اختبارات المحرك الأكاديمي السلوكية نجحت.");

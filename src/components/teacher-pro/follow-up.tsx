@@ -2327,7 +2327,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     setPledgeSavingKeys((current) => ({ ...current, [key]: true }));
 
     const result = await pledgeApi.action({
-      action: checked ? "pledge-and-reactivate" : "remove-pledge",
+      action: checked ? "pledge" : "remove-pledge",
       studentId: student.id,
       dismissalInfo,
       noteId: row.note?.id,
@@ -2347,7 +2347,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     emitTeacherProDataChanged({
       source: "local-mutation",
-      reason: checked ? "pledge-and-reactivate" : "pledge-remove",
+      reason: checked ? "pledge" : "pledge-remove",
       scopes: ["follow-up", "students", "opportunities", "dismissed", "dashboard"],
     });
 
@@ -2365,7 +2365,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     toast.success(
       checked
-        ? "تم تثبيت التعهد وإعادة تفعيل الطالب من بيانات النظام."
+        ? "تم تثبيت تعهد ولي الأمر. إعادة التفعيل تتم من إدارة المفصولين."
         : "تم إلغاء التعهد المرتبط بهذا الفصل من بيانات النظام.",
     );
   };
@@ -2432,7 +2432,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <b>{student.name}</b>
             <Badge variant="outline">{student.code}</Badge>
             {reactivated ? (
-              <Badge variant="default">تم التعهد وإعادة التفعيل</Badge>
+              <Badge variant="default">تم التعهد والطالب نشط حالياً</Badge>
             ) : null}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -3035,7 +3035,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">
-                  تم التعهد وإعادة التفعيل
+                  تم التعهد والطالب نشط
                 </p>
                 <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.reactivated)}</b>
               </CardContent>
@@ -3058,7 +3058,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             </div>
           ) : (
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
-              التعهدات محملة من بيانات النظام، وتثبيت التعهد مع إعادة التفعيل يتم كإجراء واحد آمن من النظام.
+              التعهدات محملة من بيانات النظام. تثبيت التعهد لا يغيّر حالة الطالب؛ استرجاع المفصول يتم حصراً من صفحة إدارة المفصولين.
             </div>
           )}
 
@@ -3079,7 +3079,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     <SelectItem value="all">كل الحالات</SelectItem>
                     <SelectItem value="pledged">تم التعهد</SelectItem>
                     <SelectItem value="reactivated">
-                      تم التعهد وإعادة التفعيل
+                      تم التعهد والطالب نشط
                     </SelectItem>
                     <SelectItem value="pending">لم يتم التعهد</SelectItem>
                   </SelectContent>

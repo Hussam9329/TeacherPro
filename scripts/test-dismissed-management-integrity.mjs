@@ -144,6 +144,18 @@ must(
   "اختبارات إدارة المفصولين مربوطة رسمياً باختبارات الآثار الجانبية",
 );
 
+must(
+  page.includes('action: "reactivate"') &&
+    page.includes("expectedMutationToken") &&
+    page.includes("students.edit") &&
+    page.includes("canReactivate") &&
+    page.includes("useActionLock") &&
+    page.includes("استرجاع الطالب") &&
+    page.includes("سيزول الفصل الحالي ويصبح الطالب نشطاً برصيد فرصتين"),
+  "إدارة المفصولين هي واجهة الاسترجاع وتستخدم status-action مع قفل وصلاحية وSnapshot",
+  "يجب أن يكون زر استرجاع المفصول داخل إدارة المفصولين فقط وبآلية خادمية محمية.",
+);
+
 if (failed) {
   console.error("\nفشل اختبار سلامة إدارة المفصولين.");
   process.exit(1);

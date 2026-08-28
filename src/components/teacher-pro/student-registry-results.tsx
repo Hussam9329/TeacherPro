@@ -291,7 +291,7 @@ type StudentActionsProps = {
   onFile: (student: Student) => void;
   onEdit: (student: Student) => void;
   onDismiss: (student: Student) => void;
-  onReactivate: (student: Student) => void;
+  onRestore: (student: Student) => void;
   onArchive: (student: Student) => void;
 };
 
@@ -305,7 +305,7 @@ function StudentActions({
   onFile,
   onEdit,
   onDismiss,
-  onReactivate,
+  onRestore,
   onArchive,
 }: StudentActionsProps) {
   return (
@@ -331,32 +331,30 @@ function StudentActions({
           تعديل
         </Button>
       )}
-      {canEdit &&
-        (student.status === "نشط" ? (
-          <Button
-            variant="destructive"
-            size="sm"
-            className="tp-student-registry__action-button"
-            disabled={serverUnavailable || statusActionSaving}
-            onClick={() => onDismiss(student)}
-          >
-            <UserX aria-hidden="true" className="size-4" />
-            فصل
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="tp-student-registry__action-button tp-student-registry__action-button--restore"
-            disabled={serverUnavailable || statusActionSaving}
-            onClick={() => onReactivate(student)}
-          >
-            <RotateCcw aria-hidden="true" className="size-4" />
-            {student.status === ARCHIVED_STUDENT_STATUS
-              ? "استعادة"
-              : "إعادة تفعيل"}
-          </Button>
-        ))}
+      {canEdit && student.status === "نشط" ? (
+        <Button
+          variant="destructive"
+          size="sm"
+          className="tp-student-registry__action-button"
+          disabled={serverUnavailable || statusActionSaving}
+          onClick={() => onDismiss(student)}
+        >
+          <UserX aria-hidden="true" className="size-4" />
+          فصل
+        </Button>
+      ) : null}
+      {canEdit && student.status === ARCHIVED_STUDENT_STATUS ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="tp-student-registry__action-button tp-student-registry__action-button--restore"
+          disabled={serverUnavailable || statusActionSaving}
+          onClick={() => onRestore(student)}
+        >
+          <RotateCcw aria-hidden="true" className="size-4" />
+          استعادة من الأرشيف
+        </Button>
+      ) : null}
       {canArchive && student.status !== ARCHIVED_STUDENT_STATUS && (
         <Button
           variant="outline"

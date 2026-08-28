@@ -276,8 +276,6 @@ export function OpportunitiesView() {
           actionType: bulkActionDialog.type,
           excludeDismissed: bulkExcludeDismissed,
           excludeFullOpportunities: bulkExcludeFullOpportunities,
-          reactivateDismissedOnAdd:
-            bulkActionDialog.type === "add" && !bulkExcludeDismissed,
         })
         .then((result) => {
           if (!cancelled) setBulkTargetStats(result);
@@ -748,8 +746,6 @@ export function OpportunitiesView() {
       reason: scopeReason,
       excludeDismissed: bulkExcludeDismissed,
       excludeFullOpportunities: bulkExcludeFullOpportunities,
-      reactivateDismissedOnAdd:
-        bulkActionDialog.type === "add" && !bulkExcludeDismissed,
       previewToken: bulkTargetStats?.previewToken || "",
       // الواجهة تعرض معاينة العدد والاستثناءات قبل تنفيذ العملية؛
       // نرسل التأكيد للخادم حتى لا تفشل العمليات الكبيرة بعد موافقة المستخدم.
@@ -1525,9 +1521,9 @@ export function OpportunitiesView() {
                       className="mt-0.5"
                     />
                     <span>
-                      عدا المفصولين: إذا بقيت محددة لا تُضاف لهم فرصة. إذا
-                      ألغيتها تُضاف لهم فرصة ويتم إعادة تفعيلهم تلقائياً إذا صار
-                      لديهم فرص.
+                      عدا المفصولين: إذا بقيت محددة لا تُضاف لهم فرص. إذا
+                      ألغيتها تُضاف لهم الفرص فقط دون تغيير حالتهم؛ استرجاع
+                      المفصول يتم حصراً من صفحة إدارة المفصولين.
                     </span>
                   </label>
                 </div>

@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthPrincipal, requirePermission } from "@/lib/server-auth";
+import { requirePermission } from "@/lib/server-auth";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
@@ -18,15 +18,12 @@ import {
 import { attachStudentOpportunitySnapshotsWithClient } from "@/lib/student-opportunity-snapshot-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { buildBulkOpportunityPreview } from "@/lib/bulk-opportunity-preview-server";
-import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 import { ZERO_BALANCE_VIOLATION_MARKER } from "@/lib/opportunity-balance";
 
 type StudentUpdatePayload = {
   id?: unknown;
   opportunities?: unknown;
   status?: unknown;
-  dismissalReason?: unknown;
-  dismissalNotes?: unknown;
 };
 
 type OpportunityLogPayload = {
@@ -98,14 +95,6 @@ function normalizeStudentUpdates(value: unknown) {
         id: String(item.id ?? "").trim(),
         opportunities: normalizeNonNegativeInt(item.opportunities),
         status: rawStatus,
-        dismissalReason:
-          item.dismissalReason !== undefined
-            ? String(item.dismissalReason ?? "")
-            : undefined,
-        dismissalNotes:
-          item.dismissalNotes !== undefined
-            ? String(item.dismissalNotes ?? "")
-            : undefined,
       };
     })
     .filter((item) => item.id);
@@ -162,10 +151,8 @@ async function handleFilterBasedBulkAdjust(
   req: NextRequest,
   body: Record<string, unknown>,
 ) {
-  const principal = await getAuthPrincipal(req);
   const actionType = body.actionType === "deduct" ? "deduct" : "add";
   const amount = normalizePositiveInt(body.amount, 1);
-  const signedAmount = actionType === "deduct" ? -amount : amount;
   const action = actionType === "deduct" ? "خصم" : "إضافة";
   const reason = normalizeText(body.reason, 2000);
   if (!reason) return validationError("يرجى إدخال سبب العملية الجماعية");
@@ -175,11 +162,6 @@ async function handleFilterBasedBulkAdjust(
     body.excludeFullOpportunities,
     true,
   );
-  const reactivateDismissedOnAdd = normalizeBoolean(
-    body.reactivateDismissedOnAdd,
-    false,
-  );
-
   const previewInput = {
     courseId: normalizeText(body.courseId, 120),
     status: normalizeText(body.status, 120),
@@ -188,7 +170,6 @@ async function handleFilterBasedBulkAdjust(
     actionType,
     excludeDismissed,
     excludeFullOpportunities,
-    reactivateDismissedOnAdd,
   } as const;
   const submittedPreviewToken = normalizeText(body.previewToken, 200);
 
@@ -266,27 +247,7 @@ async function handleFilterBasedBulkAdjust(
           chapterId: string | null;
           chapterNameSnapshot?: string | null;
         }> = [];
-        const studentNotes: Array<{
-          studentId: string;
-          kind: string;
-          text: string;
-          date: Date;
-          sourceType?: string;
-          sourceId?: string;
-          dismissalKey?: string;
-          dismissalReason?: string;
-          dismissalDate?: Date;
-        }> = [];
-
         const appliedStudentIds: string[] = [];
-        // Q76 FIX: Track which students need explicit status update to "نشط".
-        // Previously, reactivateDismissedOnAdd only created a StudentNote but
-        // left student.status === "مفصول". The subsequent recalculate then
-        // saw the student as still dismissed (manualDismissal) and kept them
-        // dismissed — making the UI label say "إعادة تفعيل" while the
-        // student's actual status remained "مفصل". This was visually
-        // misleading and blocked the student from further academic activity.
-        const reactivationStudentIds: string[] = [];
         for (const student of targetRows) {
           const activeChapter = student.activeChapter;
           if (!activeChapter) continue;
@@ -303,76 +264,11 @@ async function handleFilterBasedBulkAdjust(
             chapterId: activeChapter.id,
             chapterNameSnapshot: activeChapter.name || null,
           });
-          if (
-            signedAmount > 0 &&
-            reactivateDismissedOnAdd &&
-            student.status === "مفصول"
-          ) {
-            // Q76 FIX: mark this student for explicit status update below.
-            reactivationStudentIds.push(student.id);
-            studentNotes.push({
-              studentId: student.id,
-              kind: "إجراء",
-              text: "إعادة تفعيل بعد إضافة فرصة جماعية موثقة بسجل يدوي",
-              date: now,
-              sourceType: "bulk-opportunity-adjust",
-            });
-          }
         }
 
         for (const group of chunks(opportunityLogs)) {
           await tx.opportunityLog.createMany({ data: group });
         }
-        for (const group of chunks(studentNotes)) {
-          await tx.studentNote.createMany({ data: group });
-        }
-
-        // Q76 FIX: Explicitly flip status from "مفصول" → "نشط" for
-        // reactivated students, AND clear the dismissal fields so
-        // recalculateStudentsAcademicState doesn't treat them as
-        // manualDismissal. We also create an OpportunityLog entry of
-        // action="إعادة تفعيل" so the academic engine's
-        // hasIndependentManualReactivation guard recognizes this as a
-        // legitimate reactivation source (see academic-engine.ts).
-        if (reactivationStudentIds.length > 0) {
-          await tx.student.updateMany({
-            where: { id: { in: reactivationStudentIds } },
-            data: {
-              status: "نشط",
-              dismissalReason: null,
-              dismissalNotes: null,
-            },
-          });
-          const reactivationLogs = reactivationStudentIds.map((studentId) => ({
-            studentId,
-            action: "إعادة تفعيل",
-            amount: 0,
-            reason: "تثبيت إعادة التفعيل بعد إضافة فرصة جماعية",
-            date: now,
-            chapterId: null,
-            chapterNameSnapshot: null,
-          }));
-          for (const group of chunks(reactivationLogs)) {
-            await tx.opportunityLog.createMany({ data: group });
-          }
-        }
-
-        const pendingGradeMigrations: Array<
-          Awaited<
-            ReturnType<typeof migrateDismissedPendingGradesAfterActivation>
-          >
-        > = [];
-        for (const reactivatedStudentId of reactivationStudentIds) {
-          pendingGradeMigrations.push(
-            await migrateDismissedPendingGradesAfterActivation(
-              tx,
-              reactivatedStudentId,
-              { id: principal?.id, name: principal?.name },
-              now,
-            ),
-          );
-        }
-
         const academicRecalculation = appliedStudentIds.length
           ? await recalculateStudentsAcademicState(appliedStudentIds, { tx })
           : null;
@@ -381,16 +277,10 @@ async function handleFilterBasedBulkAdjust(
         return {
           updatedStudents,
           savedOpportunityLogs: opportunityLogs.length,
-          savedStudentNotes: studentNotes.length,
-          reactivatedStudents: reactivationStudentIds.length,
-          migratedPendingGrades: pendingGradeMigrations.reduce(
-            (total, migration) => total + migration.processed,
-            0,
-          ),
-          pendingGradeConflicts: pendingGradeMigrations.reduce(
-            (total, migration) => total + migration.conflicts,
-            0,
-          ),
+          savedStudentNotes: 0,
+          reactivatedStudents: 0,
+          migratedPendingGrades: 0,
+          pendingGradeConflicts: 0,
           totalMatching,
           eligibleWithActiveChapter,
           noActiveChapter,
@@ -464,7 +354,6 @@ async function handleFilterBasedBulkAdjust(
       skipped: result.skipped,
       excludeDismissed,
       excludeFullOpportunities,
-      reactivateDismissedOnAdd,
       confirmedImpact: isConfirmedImpact(body.confirmImpact),
     },
   );
@@ -491,8 +380,6 @@ export async function POST(req: NextRequest) {
     ) {
       return handleFilterBasedBulkAdjust(req, body as Record<string, unknown>);
     }
-    const principal = await getAuthPrincipal(req);
-
     const students = normalizeStudentUpdates(body.students);
     const opportunityLogs = normalizeOpportunityLogs(body.opportunityLogs);
     const studentNotes = normalizeStudentNotes(body.studentNotes);
@@ -531,23 +418,24 @@ export async function POST(req: NextRequest) {
           const existingStudentById = new Map(
             existingStudents.map((student) => [student.id, student]),
           );
+          const requestedStatusTransition = students.find((student) => {
+            if (student.status === undefined) return false;
+            const existing = existingStudentById.get(student.id);
+            return Boolean(existing && existing.status !== student.status);
+          });
+          if (requestedStatusTransition) {
+            throw Object.assign(
+              new Error(
+                "تغيير حالة الطالب من حمولة الفرص الجماعية القديمة موقوف. حدّث الصفحة؛ استرجاع المفصول يتم حصراً من إدارة المفصولين.",
+              ),
+              { code: "RETIRED_BULK_STATUS_TRANSITION" },
+            );
+          }
           const modifiableStudentIds = new Set(
             existingStudents
               .filter((student) => student.status !== "مؤرشف")
               .map((student) => student.id),
           );
-          const requestedActiveStudentIds = new Set(
-            students
-              .filter((student) => student.status === "نشط")
-              .map((student) => student.id),
-          );
-          const reactivationCandidates = existingStudents
-            .filter(
-              (student) =>
-                student.status === "مفصول" &&
-                requestedActiveStudentIds.has(student.id),
-            )
-            .map((student) => student.id);
           let updatedStudents = 0;
           const modifiableStudents = existingStudents.filter(
             (student) => student.status !== "مؤرشف",
@@ -598,18 +486,9 @@ export async function POST(req: NextRequest) {
               opportunityLimit,
             );
 
-            const data: {
-              opportunities: number;
-              status?: string;
-                  dismissalReason?: string;
-              dismissalNotes?: string;
-            } = { opportunities: finalOpportunities };
-
-            if (student.status !== undefined) data.status = student.status;
-            if (student.dismissalReason !== undefined)
-              data.dismissalReason = student.dismissalReason;
-            if (student.dismissalNotes !== undefined)
-              data.dismissalNotes = student.dismissalNotes;
+            // هذا المسار الجماعي يعدّل الرصيد فقط. تغيير حالة مفصول → نشط
+            // محصور في students/status-action من إدارة المفصولين.
+            const data = { opportunities: finalOpportunities };
 
             const update = await tx.student.updateMany({
               where: { id: student.id },
@@ -618,8 +497,12 @@ export async function POST(req: NextRequest) {
             updatedStudents += update.count;
           }
 
-          const safeOpportunityLogs = opportunityLogs.filter((log) =>
-            modifiableStudentIds.has(log.studentId),
+          const safeOpportunityLogs = opportunityLogs.filter(
+            (log) =>
+              modifiableStudentIds.has(log.studentId) &&
+              log.action !== "إعادة تفعيل" &&
+              log.action !== "رصيد إعادة التفعيل" &&
+              log.action !== "رصيد بعد تعهد",
           );
           const safeExamIds = Array.from(
             new Set(
@@ -705,37 +588,6 @@ export async function POST(req: NextRequest) {
             ? await recalculateStudentsAcademicState(recalculationIds, { tx })
             : null;
 
-          // The legacy payload can still carry an explicit dismissed→active
-          // transition. Resolve pending dismissed attempts only after the
-          // recalculation confirms that the transaction leaves the student
-          // active; a transient update that is immediately re-dismissed must
-          // not consume the pending note.
-          const reactivatedStudentIds = reactivationCandidates.length
-            ? (
-                await tx.student.findMany({
-                  where: {
-                    id: { in: reactivationCandidates },
-                    status: "نشط",
-                  },
-                  select: { id: true },
-                })
-              ).map((student) => student.id)
-            : [];
-          const pendingGradeMigrations: Array<
-            Awaited<
-              ReturnType<typeof migrateDismissedPendingGradesAfterActivation>
-            >
-          > = [];
-          for (const reactivatedStudentId of reactivatedStudentIds) {
-            pendingGradeMigrations.push(
-              await migrateDismissedPendingGradesAfterActivation(
-                tx,
-                reactivatedStudentId,
-                { id: principal?.id, name: principal?.name },
-              ),
-            );
-          }
-
           return {
             updatedStudents,
             savedOpportunityLogs: safeOpportunityLogs.length,
@@ -744,15 +596,9 @@ export async function POST(req: NextRequest) {
               allStudentIds.length - existingStudentIds.size,
             skippedArchivedStudents:
               existingStudentIds.size - modifiableStudentIds.size,
-            reactivatedStudents: reactivatedStudentIds.length,
-            migratedPendingGrades: pendingGradeMigrations.reduce(
-              (total, migration) => total + migration.processed,
-              0,
-            ),
-            pendingGradeConflicts: pendingGradeMigrations.reduce(
-              (total, migration) => total + migration.conflicts,
-              0,
-            ),
+            reactivatedStudents: 0,
+            migratedPendingGrades: 0,
+            pendingGradeConflicts: 0,
             academicRecalculation,
           };
         }),
@@ -778,6 +624,25 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json(result);
   } catch (error) {
+    if (
+      (error as { code?: string } | null)?.code ===
+      "RETIRED_BULK_STATUS_TRANSITION"
+    ) {
+      return NextResponse.json(
+        {
+          error: error instanceof Error ? error.message : "مسار تغيير الحالة موقوف.",
+          requiresRefresh: true,
+          retiredReactivationAction: true,
+        },
+        {
+          status: 409,
+          headers: {
+            "Cache-Control": "no-store",
+            "X-TeacherPro-Retryable": "0",
+          },
+        },
+      );
+    }
     // Validation errors (invalid status) should
     // return 400, not 500. routeErrorResponse treats unknown errors as 500.
     const message = error instanceof Error ? error.message : String(error);

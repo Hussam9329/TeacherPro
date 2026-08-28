@@ -59,7 +59,7 @@ must(
 );
 
 must(
-  followUp.includes('action: checked ? "pledge-and-reactivate" : "remove-pledge"') &&
+  followUp.includes('action: checked ? "pledge" : "remove-pledge"') &&
     followUp.includes("pledgeApi.action") &&
     followUp.includes("queued"),
   "تثبيت/إلغاء التعهد يتم Server-first عبر API واحد",
@@ -114,23 +114,26 @@ must(
 must(
   pledgeRoute.includes('export async function POST') &&
     pledgeRoute.includes('requirePermissionPrincipal(req, "follow-up.manage")') &&
-    pledgeRoute.includes('"pledge-and-reactivate"') &&
+    pledgeRoute.includes('action !== "pledge"') &&
+    pledgeRoute.includes('action === "pledge-and-reactivate"') &&
+    pledgeRoute.includes("retiredReactivationAction: true") &&
+    pledgeRoute.includes("requiresRefresh: true") &&
     pledgeRoute.includes('"remove-pledge"'),
-  "API إجراءات التعهدات محمي ويدعم التثبيت/الإلغاء",
-  "يجب وجود POST /api/student-notes/pledges لتنفيذ تثبيت وإلغاء التعهد.",
+  "API التعهدات محمي ويرفض الواجهة القديمة قبل أي نجاح مضلل",
+  "يجب تنفيذ التثبيت/الإلغاء فقط ورفض الطلب القديم الذي كان يسترجع الطالب.",
 );
 
 must(
-  pledgeRoute.includes("db.$transaction") &&
+  pledgeRoute.includes("withSerializableTransaction") &&
     pledgeRoute.includes("studentNote.create") &&
-    pledgeRoute.includes("student.update") &&
-    pledgeRoute.includes("opportunityLog.create") &&
-    pledgeRoute.includes('action: "رصيد بعد تعهد"') &&
-    pledgeRoute.includes("amount: REACTIVATION_OPPORTUNITY_GRANT") &&
-    !pledgeRoute.includes("dismissalType") &&
+    pledgeRoute.includes('action: "تثبيت تعهد ولي الأمر"') &&
+    pledgeRoute.includes("reactivated: false") &&
+    !pledgeRoute.includes('status: "نشط"') &&
+    !pledgeRoute.includes('action: "رصيد بعد تعهد"') &&
+    !pledgeRoute.includes("REACTIVATION_OPPORTUNITY_GRANT") &&
     pledgeRoute.includes("auditLog.create"),
-  "تثبيت التعهد مع إعادة التفعيل يتم داخل transaction مع سجل فرص وتدقيق",
-  "تثبيت التعهد وإعادة التفعيل يجب أن يكونا عملية خادمية واحدة داخل transaction.",
+  "تثبيت التعهد يسجل التعهد فقط ولا يغيّر حالة الطالب أو فرصه",
+  "التعهد يجب أن يبقى إجراء متابعة فقط، والاسترجاع يتم من إدارة المفصولين.",
 );
 
 must(

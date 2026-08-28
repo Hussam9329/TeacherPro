@@ -221,12 +221,18 @@ assert(
       "second-chapter-transition-snapshot",
     ) &&
     secondChapterTransitionRoute.includes('status: "نشط"') &&
+    secondChapterTransitionRoute.includes("activeStudentIds") &&
+    secondChapterTransitionRoute.includes("dismissedPreserved") &&
+    secondChapterTransitionRoute.includes("archivedPreserved") &&
+    !secondChapterTransitionRoute.includes('action: "إعادة تفعيل"') &&
+    !secondChapterTransitionRoute.includes("reactivatedStudents") &&
+    secondChapterTransitionRoute.includes("data: activeStudents.map") &&
     secondChapterTransitionRoute.includes("archived: false") &&
     secondChapterTransitionPolicy.includes("تسوية تاريخية:") &&
     !secondChapterTransitionRoute.includes(
       "recalculateAllStudentsAcademicState",
     ),
-  "انتقال الدورتين ذري ولمرة واحدة ويحفظ الحالة السابقة ثم يبدأ 3/3 بعد تسوية آثار الفصل السابق",
+  "انتقال الدورتين ذري ولمرة واحدة ويعيد ضبط النشطين فقط مع حفظ المفصولين والمؤرشفين",
 );
 assert(
   [

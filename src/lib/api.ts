@@ -1884,7 +1884,6 @@ export const opportunityStatsApi = {
       actionType?: "add" | "deduct";
       excludeDismissed?: boolean;
       excludeFullOpportunities?: boolean;
-      reactivateDismissedOnAdd?: boolean;
     } = {},
   ) => {
     const queryString = buildQueryString({
@@ -1901,10 +1900,6 @@ export const opportunityStatsApi = {
         query.excludeFullOpportunities === undefined
           ? undefined
           : String(query.excludeFullOpportunities),
-      reactivateDismissedOnAdd:
-        query.reactivateDismissedOnAdd === undefined
-          ? undefined
-          : String(query.reactivateDismissedOnAdd),
     });
     return apiGet<OpportunityBulkTargetsResponse>(
       `opportunities/bulk-targets${queryString ? `?${queryString}` : ""}`,
@@ -1920,7 +1915,6 @@ export const opportunityStatsApi = {
     reason: string;
     excludeDismissed?: boolean;
     excludeFullOpportunities?: boolean;
-    reactivateDismissedOnAdd?: boolean;
     confirmImpact?: boolean;
     previewToken?: string;
   }) =>

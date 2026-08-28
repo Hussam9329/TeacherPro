@@ -393,7 +393,7 @@ export function StudentRegistryView() {
   }>({ student: null, open: false });
   const [dismissReason, setDismissReason] = useState("");
   const [dismissNotes, setDismissNotes] = useState("");
-  const [reactivateDialog, setReactivateDialog] = useState<{
+  const [restoreDialog, setRestoreDialog] = useState<{
     student: Student | null;
     open: boolean;
   }>({ student: null, open: false });
@@ -1609,34 +1609,28 @@ export function StudentRegistryView() {
     });
   });
 
-  const handleReactivate = runStatusActionLocked(async (student: Student) => {
+  const handleRestoreArchived = runStatusActionLocked(async (student: Student) => {
     if (!canEditStudents) {
-      toast.error("لا تملك صلاحية استعادة أو إعادة تفعيل الطلاب");
+      toast.error("لا تملك صلاحية استعادة الطلاب من الأرشيف");
       return;
     }
     if (registryServerUnavailable) {
-      toast.error("لا يمكن إعادة تفعيل طالب أثناء عرض نسخة محلية مؤقتة.");
+      toast.error("لا يمكن استعادة طالب أثناء عرض نسخة محلية مؤقتة.");
       return;
     }
-    if (student.status === "نشط") {
-      setReactivateDialog({ student: null, open: false });
-      setServerRefreshKey((value) => value + 1);
-      toast.warning("الطالب نشط بالفعل؛ لم يتم إنشاء أي إجراء جديد.");
+    if (student.status !== ARCHIVED_STUDENT_STATUS) {
+      setRestoreDialog({ student: null, open: false });
+      toast.error("الاستعادة من سجل الطلاب مخصصة للطالب المؤرشف فقط. استرجاع المفصول يتم من إدارة المفصولين.");
       return;
     }
-    const studentId = student.id;
-    const isArchived = student.status === ARCHIVED_STUDENT_STATUS;
     const result = await studentApi.statusAction({
-      action: isArchived ? "restore" : "reactivate",
-      studentId,
+      action: "restore",
+      studentId: student.id,
       expectedStatus: student.status,
       expectedMutationToken: student.mutationToken || "",
     });
     if (!result.ok) {
-      toast.error(
-        result.error ||
-          (isArchived ? "تعذر استعادة الطالب من الأرشيف" : "تعذر إعادة تفعيل الطالب"),
-      );
+      toast.error(result.error || "تعذر استعادة الطالب من الأرشيف");
       return;
     }
     const statusResult = result.data as {
@@ -1644,18 +1638,13 @@ export function StudentRegistryView() {
       warning?: string | null;
     } | null;
     const updatedStudent = statusResult?.student;
-    if (updatedStudent) {
-      reconcileMutationStudent(updatedStudent);
-    }
-    setReactivateDialog({ student: null, open: false });
+    if (updatedStudent) reconcileMutationStudent(updatedStudent);
+    setRestoreDialog({ student: null, open: false });
     setServerRefreshKey((value) => value + 1);
-    const successTitle = isArchived
-      ? "تمت استعادة الطالب من الأرشيف"
-      : "تمت إعادة تفعيل الطالب";
     if (statusResult?.warning) {
-      toast.warning(successTitle, { description: statusResult.warning });
+      toast.warning("تمت استعادة الطالب من الأرشيف", { description: statusResult.warning });
     } else {
-      toast.success(successTitle);
+      toast.success("تمت استعادة الطالب من الأرشيف");
     }
   });
 
@@ -2436,8 +2425,8 @@ export function StudentRegistryView() {
           onFile={(student) => setFileDialog({ student, open: true })}
           onEdit={openEditDialog}
           onDismiss={openDismissDialog}
-          onReactivate={(student) =>
-            setReactivateDialog({ student, open: true })
+          onRestore={(student) =>
+            setRestoreDialog({ student, open: true })
           }
           onArchive={openDeleteDialog}
         />
@@ -3345,60 +3334,28 @@ export function StudentRegistryView() {
       </AlertDialog>
 
       <AlertDialog
-        open={reactivateDialog.open}
+        open={restoreDialog.open}
         onOpenChange={(open) => {
-          if (!open) {
-            setReactivateDialog({ student: null, open: false });
-          }
+          if (!open) setRestoreDialog({ student: null, open: false });
         }}
       >
-        <AlertDialogContent dir="rtl">
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {reactivateDialog.student?.status === ARCHIVED_STUDENT_STATUS
-                ? "تأكيد استعادة الطالب من الأرشيف"
-                : "تأكيد إعادة تفعيل الطالب"}
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-3 text-right leading-relaxed">
-                <p>
-                  هل تريد متابعة الإجراء للطالب «
-                  {reactivateDialog.student?.name || "الطالب المحدد"}»؟
-                </p>
-                {reactivateDialog.student?.status ===
-                ARCHIVED_STUDENT_STATUS ? (
-                  <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-500/50 dark:bg-amber-950/30 dark:text-amber-100">
-                    سيعود الطالب إلى السجل النشط، وسيحدد النظام رصيده حسب الفصل النشط للدورة بعد التحقق منه. لن تُحذف درجاته أو سجلاته المحفوظة.
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-500/50 dark:bg-amber-950/30 dark:text-amber-100">
-                    ستُزال حالة الفصل الحالية ويصبح الطالب نشطاً برصيد فرصتين. تاريخ الفصل السابق يبقى للتوثيق فقط ولا يغيّر أي فصل لاحق.
-                  </div>
-                )}
-              </div>
+            <AlertDialogTitle>تأكيد استعادة الطالب من الأرشيف</AlertDialogTitle>
+            <AlertDialogDescription>
+              هل تريد استعادة «{restoreDialog.student?.name || "الطالب المحدد"}» من الأرشيف؟ هذه العملية مختلفة عن استرجاع الطالب المفصول.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="tp-student-registry__confirm-actions">
-            <AlertDialogCancel className="tp-student-registry__dialog-button">
-              <X aria-hidden="true" className="size-4" />
-              إلغاء
-            </AlertDialogCancel>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              className="tp-student-registry__dialog-button"
-              disabled={isStatusActionSaving || !reactivateDialog.student}
+              disabled={isStatusActionSaving || !restoreDialog.student}
               onClick={(event) => {
                 event.preventDefault();
-                if (reactivateDialog.student) {
-                  void handleReactivate(reactivateDialog.student);
-                }
+                if (restoreDialog.student) void handleRestoreArchived(restoreDialog.student);
               }}
             >
-              <RotateCcw aria-hidden="true" className="size-4" />
-              {isStatusActionSaving
-                ? "جاري التنفيذ..."
-                : reactivateDialog.student?.status === ARCHIVED_STUDENT_STATUS
-                  ? "تأكيد الاستعادة"
-                  : "تأكيد إعادة التفعيل"}
+              {isStatusActionSaving ? "جاري الاستعادة..." : "استعادة من الأرشيف"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

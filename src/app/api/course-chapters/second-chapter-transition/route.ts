@@ -16,7 +16,6 @@ import {
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { requirePermission } from "@/lib/server-auth";
 import {
-  SECOND_CHAPTER_REACTIVATION_REASON,
   SECOND_CHAPTER_SETTLEMENT_REASON,
   SECOND_CHAPTER_TRANSITION_MARKER_ACTION,
   SECOND_CHAPTER_TRANSITION_MARKER_ID,
@@ -250,8 +249,9 @@ async function buildTransitionPreview(client: TransitionClient = db) {
         ).length,
         balancesToReset: courseStudents.filter(
           (student) =>
-            student.opportunities !== TARGET_OPPORTUNITIES ||
-            student.baseOpportunities !== TARGET_OPPORTUNITIES,
+            student.status === "نشط" &&
+            (student.opportunities !== TARGET_OPPORTUNITIES ||
+              student.baseOpportunities !== TARGET_OPPORTUNITIES),
         ).length,
       },
       activeLinksToDeactivate: courseLinks.filter(
@@ -304,14 +304,6 @@ async function buildTransitionPreview(client: TransitionClient = db) {
     (sum, course) => sum + course.students.total,
     0,
   );
-  const studentsToReactivate = perCourse.reduce(
-    (sum, course) =>
-      sum +
-      course.students.dismissed +
-      course.students.archived +
-      course.students.otherStatus,
-    0,
-  );
 
   return {
     canExecute:
@@ -330,12 +322,15 @@ async function buildTransitionPreview(client: TransitionClient = db) {
     impact: {
       courses: perCourse.length,
       totalStudents,
-      studentsToReactivate,
-      dismissedToReactivate: perCourse.reduce(
+      activeStudentsToReset: perCourse.reduce(
+        (sum, course) => sum + course.students.active,
+        0,
+      ),
+      dismissedPreserved: perCourse.reduce(
         (sum, course) => sum + course.students.dismissed,
         0,
       ),
-      archivedToRestore: perCourse.reduce(
+      archivedPreserved: perCourse.reduce(
         (sum, course) => sum + course.students.archived,
         0,
       ),
@@ -350,19 +345,10 @@ async function buildTransitionPreview(client: TransitionClient = db) {
       externalChapterLinks: externalTargetLinks.length,
     },
     perCourse,
-    sampleStudentsToReactivate: students
-      .filter((student) => student.status !== "نشط")
-      .slice(0, 12)
-      .map((student) => ({
-        id: student.id,
-        name: student.name,
-        code: student.code,
-        previousStatus: student.status,
-      })),
     message:
       blockers.length > 0
         ? "المعاينة وجدت مانعاً، لذلك لن يسمح النظام بالتنفيذ."
-        : `${willCreateChapter ? `سيُنشأ فصل «${TARGET_CHAPTER_NAME}» بثلاث فرص` : `سيُستخدم فصل «${targetChapter?.name || TARGET_CHAPTER_NAME}» وتُضبط فرصه على ثلاث`} لدورتي ${targetCourses.map((course) => `«${course.name}»`).join(" و")}، مع إعادة ${studentsToReactivate} طالب إلى نشط داخل عملية ذرية واحدة.`,
+        : `${willCreateChapter ? `سيُنشأ فصل «${TARGET_CHAPTER_NAME}» بثلاث فرص` : `سيُستخدم فصل «${targetChapter?.name || TARGET_CHAPTER_NAME}» وتُضبط فرصه على ثلاث`} لدورتي ${targetCourses.map((course) => `«${course.name}»`).join(" و")}، مع إعادة ضبط رصيد الطلاب النشطين فقط وبقاء المفصولين والمؤرشفين على حالتهم الحالية.`,
     previewToken: buildMutationPreviewToken(
       "second-chapter-transition-summer-exemption",
       snapshot,
@@ -459,7 +445,6 @@ export async function POST(req: NextRequest) {
       const chapterName = transitionChapter.name;
 
       let updatedStudents = 0;
-      let reactivatedStudents = 0;
       let disabledLinks = 0;
       for (const coursePreview of preview.perCourse) {
         const courseStudents = await tx.student.findMany({
@@ -534,39 +519,36 @@ export async function POST(req: NextRequest) {
           data: { active: true },
         });
 
-        const restoredStudents = courseStudents.filter(
-          (student) => student.status !== "نشط",
+        const activeStudents = courseStudents.filter(
+          (student) => student.status === "نشط",
         );
-        const restoredStudentIds = restoredStudents.map(
-          (student) => student.id,
-        );
-        const update = await tx.student.updateMany({
-          where: {
-            id: { in: courseStudents.map((student) => student.id) },
-            courseId: coursePreview.courseId,
-          },
-          data: {
-            status: "نشط",
-            opportunities: TARGET_OPPORTUNITIES,
-            baseOpportunities: TARGET_OPPORTUNITIES,
-            dismissalReason: null,
-            dismissalNotes: null,
-          },
-        });
-        if (update.count !== courseStudents.length) {
+        const activeStudentIds = activeStudents.map((student) => student.id);
+        const update = activeStudentIds.length
+          ? await tx.student.updateMany({
+              where: {
+                id: { in: activeStudentIds },
+                courseId: coursePreview.courseId,
+                status: "نشط",
+              },
+              data: {
+                opportunities: TARGET_OPPORTUNITIES,
+                baseOpportunities: TARGET_OPPORTUNITIES,
+              },
+            })
+          : { count: 0 };
+        if (update.count !== activeStudents.length) {
           throw new SecondChapterTransitionError(
-            `تعذر تحديث كل طلاب دورة «${coursePreview.courseName}». أُلغيت العملية بالكامل.`,
+            `تعذر تحديث كل الطلاب النشطين في دورة «${coursePreview.courseName}». أُلغيت العملية بالكامل.`,
           );
         }
         updatedStudents += update.count;
-        reactivatedStudents += restoredStudentIds.length;
 
         if (courseStudents.length > 0) {
           await tx.studentNote.createMany({
             data: courseStudents.map((student) => ({
               studentId: student.id,
               kind: "إجراء",
-              text: `${student.status === "نشط" ? "بدء رصيد فصل جديد" : "استعادة وإعادة تفعيل"} عند الانتقال إلى ${chapterName} بثلاث فرص. الحالة السابقة: ${student.status}، الرصيد السابق: ${student.opportunities}/${student.baseOpportunities}${student.dismissalReason ? `، السبب السابق: ${student.dismissalReason}` : ""}${student.dismissalNotes ? `، الملاحظات السابقة: ${student.dismissalNotes}` : ""}.`,
+              text: `${student.status === "نشط" ? `بدء رصيد فصل جديد بثلاث فرص عند الانتقال إلى ${chapterName}` : `تثبيت الانتقال إلى ${chapterName} مع بقاء الحالة «${student.status}» دون استرجاع`}. الحالة السابقة: ${student.status}، الرصيد السابق: ${student.opportunities}/${student.baseOpportunities}${student.dismissalReason ? `، السبب السابق: ${student.dismissalReason}` : ""}${student.dismissalNotes ? `، الملاحظات السابقة: ${student.dismissalNotes}` : ""}.`,
               date: now,
               sourceType: SECOND_CHAPTER_TRANSITION_NOTE_SOURCE,
               sourceId: SECOND_CHAPTER_TRANSITION_MARKER_ID,
@@ -574,9 +556,13 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        if (courseStudents.length > 0) {
+        if (activeStudents.length > 0) {
           await tx.opportunityLog.createMany({
-            data: courseStudents.map((student) => ({
+            // A historical settlement suppresses earlier exam effects during
+            // future recalculation. It therefore belongs only to students who
+            // are active in this transition; writing it for a dismissed
+            // student would create a hidden reactivation path later.
+            data: activeStudents.map((student) => ({
               studentId: student.id,
               action: "إعادة تعيين",
               amount: TARGET_OPPORTUNITIES,
@@ -587,24 +573,12 @@ export async function POST(req: NextRequest) {
             })),
           });
         }
-        if (restoredStudentIds.length > 0) {
-          await tx.opportunityLog.createMany({
-            data: restoredStudentIds.map((studentId) => ({
-              studentId,
-              action: "إعادة تفعيل",
-              amount: 0,
-              reason: SECOND_CHAPTER_REACTIVATION_REASON,
-              date: now,
-              chapterId,
-              chapterNameSnapshot: chapterName,
-            })),
-          });
-        }
       }
 
       return {
         updatedStudents,
-        reactivatedStudents,
+        preservedDismissedStudents: preview.impact.dismissedPreserved,
+        preservedArchivedStudents: preview.impact.archivedPreserved,
         disabledLinks,
         courses: preview.perCourse.map((course) => ({
           courseId: course.courseId,
@@ -621,13 +595,13 @@ export async function POST(req: NextRequest) {
     await writeRequestAuditLog(
       req,
       "الفصول والطلاب",
-      "انتقال الدورتين إلى الفصل الثاني وإعادة تفعيل جميع الطلاب",
+      "انتقال الدورتين إلى الفصل الثاني مع إبقاء المفصولين والمؤرشفين",
       result,
     );
 
     return NextResponse.json({
       ok: true,
-      message: `${result.createdChapter ? "تم إنشاء" : "تم ضبط"} ${result.chapterName} بثلاث فرص وتفعيله لدورتي ${result.courses.map((course) => `«${course.courseName}»`).join(" و")}، وإعادة تفعيل ${result.reactivatedStudents} طالب، وضبط ${result.updatedStudents} طالب على 3/3.`,
+      message: `${result.createdChapter ? "تم إنشاء" : "تم ضبط"} ${result.chapterName} بثلاث فرص وتفعيله لدورتي ${result.courses.map((course) => `«${course.courseName}»`).join(" و")}، وضبط ${result.updatedStudents} طالب نشط على 3/3 مع بقاء المفصولين والمؤرشفين على حالتهم.`,
       ...result,
       source: "database" as const,
       generatedAt: new Date().toISOString(),

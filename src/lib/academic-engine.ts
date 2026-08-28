@@ -613,7 +613,6 @@ export function recalculateAcademicState(
     const manualDismissalDate = manualDismissal
       ? latestManualDismissalDateForStudent(state, student.id)
       : "";
-    let hasAcademicEventAfterManualDismissal = false;
 
     const allStudentManualLogs = manualLogs
       .filter((log) => log.studentId === student.id)
@@ -917,9 +916,6 @@ export function recalculateAcademicState(
       if (isExamWithinStudentGraceWindow(student, exam)) continue;
       const gradeHasEffect = gradeHasAcademicEffect(grade, exam);
       if (isProtectedLinkedSourceGrade(grade) && gradeHasEffect) continue;
-      if (manualDismissal && gradeHasEffect)
-        hasAcademicEventAfterManualDismissal = true;
-
       if (grade.status === "غش") {
         cheatCount += 1;
         if (cheatCount === 1) {
@@ -1041,9 +1037,6 @@ export function recalculateAcademicState(
       }
     }
 
-    if (manualDismissal && !hasAcademicEventAfterManualDismissal)
-      return student;
-
     const opportunityCap = Number(
       activeChapter?.opportunities ?? student.baseOpportunities ?? 0,
     );
@@ -1051,6 +1044,21 @@ export function recalculateAcademicState(
     if (opportunityCap > 0) {
       opportunities = Math.min(opportunities, opportunityCap);
     }
+
+    // Recalculation may correct a dismissed student's balance, but it must
+    // never reactivate them implicitly. The only authorized dismissed→active
+    // transition updates Student.status first through students/status-action;
+    // all maintenance, chapter-settlement, grade, and opportunity replays see
+    // the stored dismissed status and preserve it here.
+    if (student.status === "مفصول" && !dismissed) {
+      return {
+        ...student,
+        opportunities,
+        status: "مفصول" as AcademicStudent["status"],
+        dismissalReason: student.dismissalReason,
+      };
+    }
+
     return {
       ...student,
       opportunities,

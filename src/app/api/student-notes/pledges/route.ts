@@ -9,8 +9,6 @@ import { Prisma } from "@prisma/client";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
-import { REACTIVATION_OPPORTUNITY_GRANT } from "@/lib/opportunity-balance";
-import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
@@ -85,20 +83,6 @@ function isLikelyDismissalLog(log: { action: string; reason: string | null }, di
     (log.action === "خصم" && rawReason.startsWith("فصل الطالب")) ||
     Boolean(normalizedReason && logReason.includes(normalizedReason))
   );
-}
-
-async function getActiveChapterForCourse(
-  tx: Prisma.TransactionClient,
-  courseId: string,
-) {
-  const links = await tx.courseChapter.findMany({
-    where: { courseId, active: true, archived: false },
-    select: {
-      chapter: { select: { id: true, name: true, opportunities: true } },
-    },
-  });
-  if (links.length !== 1) return null;
-  return links[0].chapter;
 }
 
 function buildInfoForDismissedStudent(
@@ -387,11 +371,29 @@ export async function POST(req: NextRequest) {
     const noteId = cleanText(body.noteId);
 
     if (!studentId) return validationError("تعذر تحديد الطالب المطلوب.");
-    if (action !== "pledge-and-reactivate" && action !== "remove-pledge") {
+    if (action === "pledge-and-reactivate") {
+      return NextResponse.json(
+        {
+          error:
+            "هذه الواجهة قديمة وكانت تجمع التعهد مع الاسترجاع. حدّث الصفحة ثم ثبّت التعهد؛ استرجاع المفصول يتم من إدارة المفصولين.",
+          requiresRefresh: true,
+          retiredReactivationAction: true,
+        },
+        {
+          status: 409,
+          headers: {
+            "Cache-Control": "no-store",
+            "X-TeacherPro-Retryable": "0",
+          },
+        },
+      );
+    }
+    if (action !== "pledge" && action !== "remove-pledge") {
       return validationError("إجراء التعهد غير معروف.");
     }
+    const normalizedAction = action;
 
-    if (action === "remove-pledge") {
+    if (normalizedAction === "remove-pledge") {
       const result = await withSerializableTransaction(async (tx) => {
         const student = await tx.student.findUnique({ where: { id: studentId } });
         if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
@@ -433,7 +435,7 @@ export async function POST(req: NextRequest) {
       ]);
       return NextResponse.json({
         ok: true,
-        action,
+        action: normalizedAction,
         ...result,
         student: studentWithOpportunity,
         source: "database",
@@ -487,91 +489,14 @@ export async function POST(req: NextRequest) {
           },
         });
 
-      const shouldReactivate = student.status === "مفصول";
-      const activeChapter = shouldReactivate ? await getActiveChapterForCourse(tx, student.courseId) : null;
-      if (
-        shouldReactivate &&
-        (!activeChapter ||
-          Number(activeChapter.opportunities || 0) <
-            REACTIVATION_OPPORTUNITY_GRANT)
-      ) {
-        throw Object.assign(
-          new Error("reactivation requires one active chapter with at least two opportunities"),
-          {
-            statusCode: 409,
-            userMessage:
-              "لا يمكن إعادة التفعيل بفرصتين قبل تثبيت فصل نشط واحد سقفه فرصتان على الأقل.",
-          },
-        );
-      }
-
-      const updatedStudent = shouldReactivate
-        ? await tx.student.update({
-            where: { id: studentId },
-            data: {
-              status: "نشط",
-              dismissalReason: "",
-              dismissalNotes: "",
-              opportunities: REACTIVATION_OPPORTUNITY_GRANT,
-            },
-          })
-        : student;
-
-      const pendingGradeMigration = shouldReactivate
-        ? await migrateDismissedPendingGradesAfterActivation(
-            tx,
-            studentId,
-            { id: principal.id, name: principal.name },
-          )
-        : null;
-
-      const reactivationLog = shouldReactivate
-        ? await tx.opportunityLog.create({
-            data: {
-              studentId,
-              examId: null,
-              action: "إعادة تفعيل",
-              amount: 0,
-              reason: "تثبيت إعادة التفعيل بعد تعهد ولي الأمر: الطالب نشط برصيد فرصتين؛ الوصول إلى 0 لا يفصله، والمخالفة التالية وهو بدون فرص تؤدي إلى الفصل",
-              chapterId: activeChapter?.id || null,
-              chapterNameSnapshot: activeChapter?.name || null,
-            },
-          })
-        : null;
-
-      const pledgeBalanceLog = shouldReactivate
-        ? await tx.opportunityLog.create({
-            data: {
-              studentId,
-              examId: null,
-              action: "رصيد بعد تعهد",
-              amount: REACTIVATION_OPPORTUNITY_GRANT,
-              reason: "إرجاع الطالب بعد تعهد ولي الأمر برصيد فرصتين",
-              chapterId: activeChapter?.id || null,
-              chapterNameSnapshot: activeChapter?.name || null,
-            },
-          })
-        : null;
-
-      const actionNote = shouldReactivate
-        ? await tx.studentNote.create({
-            data: {
-              studentId,
-              kind: "إجراء",
-              text: `إعادة تفعيل الطالب بعد تعهد ولي الأمر للفصل السابق: ${reason}`,
-              sourceType: "pledge-reactivation",
-              sourceId: pledgeNote.id,
-              dismissalKey,
-                dismissalReason: reason,
-              dismissalDate: dismissalDate ? new Date(dismissalDate) : null,
-            },
-          })
-        : null;
+      // التعهد يسجل التزام ولي الأمر فقط. تغيير حالة الطالب محصور
+      // بمسار students/status-action من صفحة إدارة المفصولين.
+      const updatedStudent = student;
 
       await tx.auditLog.create({
         data: {
           module: "التعهدات",
-          action: shouldReactivate ? "تثبيت تعهد وإعادة تفعيل" : "تثبيت تعهد ولي الأمر",
+          action: "تثبيت تعهد ولي الأمر",
           details: `${student.name} - ${student.code} - ${reason}`,
           userId: principal.id,
           userName: principal.name,
@@ -581,10 +506,10 @@ export async function POST(req: NextRequest) {
       return {
         student: updatedStudent,
         studentNote: pledgeNote,
-        actionNote,
-        opportunityLogs: [reactivationLog, pledgeBalanceLog].filter(Boolean),
-        reactivated: shouldReactivate,
-        pendingGradeMigration,
+        actionNote: null,
+        opportunityLogs: [],
+        reactivated: false,
+        pendingGradeMigration: null,
       };
     });
 
@@ -593,7 +518,7 @@ export async function POST(req: NextRequest) {
     ]);
     return NextResponse.json({
       ok: true,
-      action,
+      action: normalizedAction,
       ...result,
       student: studentWithOpportunity,
       source: "database",
