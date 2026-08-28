@@ -7,6 +7,7 @@ import {
   opportunityStatsApi,
   opportunityLogApi,
   studentApi,
+  studentProfileLogApi,
   type OpportunityStatsResponse,
   type OpportunityBulkTargetsResponse,
 } from "@/lib/api";
@@ -34,7 +35,7 @@ import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { ExportDialog, type ExportColumn } from "./export-dialog";
+import { ExportDialog, type ExportColumn, type FullReportData } from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { CountScopeSummary } from "./ui-kit";
 import {
@@ -799,6 +800,89 @@ export function OpportunitiesView() {
     );
   };
 
+  /**
+   * يجلب كل الطلاب المفلترين حسب فلاتر إدارة الفرص الحالية، ثم يستدعي
+   * profile-log لكل طالب على دفعات متوازية (6 طلبات في كل مرة) ويُرجع
+   * لقطة كاملة قابلة للحقن داخل قالب "التقرير الكلي HTML".
+   *
+   * الملف الناتج سيكون مستقلاً تماماً: لا يحتاج أي اتصال بـ API بعد التحميل.
+   */
+  const fetchOpportunityFullReportData = async ({
+    signal,
+    onProgress,
+  }: {
+    signal: AbortSignal;
+    onProgress: (loaded: number, total: number) => void;
+  }): Promise<FullReportData> => {
+    const listResult = await studentApi.listAll({
+      courseId: filterCourseId,
+      opportunityStatus: filterStatus,
+      opportunityCount: filterOpportunityCount,
+      q: debouncedSearch,
+      opportunityMode: true,
+    });
+    const students = ((listResult?.students || []) as unknown as Student[]).map(
+      mapOpportunityExportRow,
+    );
+    const total = students.length;
+    onProgress(0, total);
+
+    // تجنّب ضغط الخادم: 6 طلبات متوازية كحد أقصى.
+    const concurrency = 6;
+    const profiles: Record<string, Record<string, unknown>> = {};
+    let completed = 0;
+
+    const worker = async (queue: number[]) => {
+      while (queue.length > 0) {
+        const index = queue.shift();
+        if (typeof index !== "number") break;
+        const student = students[index];
+        const studentId = String(student?.id || "").trim();
+        if (!studentId) {
+          completed += 1;
+          onProgress(completed, total);
+          continue;
+        }
+        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+        try {
+          const profile = await studentProfileLogApi.get(studentId);
+          if (profile) {
+            profiles[studentId] = profile as unknown as Record<string, unknown>;
+          }
+        } catch (error) {
+          if (error instanceof Error && error.name === "AbortError") throw error;
+          // لا نوقف التصدير لطالب واحد؛ نكمل ونترك ملفه يُحمّل عند الطلب إن لزم.
+          console.error(
+            `[opportunities] profile-log failed for ${studentId}:`,
+            error,
+          );
+        }
+        completed += 1;
+        onProgress(completed, total);
+      }
+    };
+
+    const queue = students.map((_, index) => index);
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, Math.max(1, queue.length)) }, () =>
+        worker(queue),
+      ),
+    );
+
+    const reportCourses = courses.map((course) => ({
+      id: course.id,
+      name: course.name,
+      courseProgram: course.availablePrograms,
+      studyType: course.availableStudyTypes,
+    }));
+
+    return {
+      students: students as unknown as Array<Record<string, unknown>>,
+      courses: reportCourses,
+      profiles,
+    };
+  };
+
   return (
     <div className="tp-opportunities-page space-y-4">
       {/* Filters */}
@@ -918,6 +1002,14 @@ export function OpportunitiesView() {
                 columns={opportunityExportColumns}
                 triggerLabel="تصدير"
                 description="تقرير إدارة الفرص حسب الفلاتر الحالية"
+                fullReportHtml={{
+                  templateUrl: "/hfchances-teacherpro-full-report.html",
+                  fetchData: fetchOpportunityFullReportData,
+                  totalCount:
+                    typeof databaseStats?.filtered?.total === "number"
+                      ? databaseStats.filtered.total
+                      : null,
+                }}
               />
             </div>
           </div>

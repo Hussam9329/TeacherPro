@@ -191,9 +191,29 @@ const exportFormatIcons: Record<ExportFormat, React.ElementType> = {
   pdf: Printer,
 };
 
+export type FullReportProfile = Record<string, unknown>;
+
+export type FullReportData = {
+  students: Array<Record<string, unknown>>;
+  courses?: Array<Record<string, unknown>>;
+  profiles?: Record<string, FullReportProfile>;
+};
+
 export type ExportFetchContext = {
   signal: AbortSignal;
   onProgress: (loaded: number, total: number) => void;
+};
+
+export type FullReportHtmlConfig = {
+  /**
+   * عنوان القالب HTML داخل public/، مثل: "/hfchances-teacherpro-full-report.html"
+   * يُجلب في وقت التصدير ويُحقن بداخله TEACHERPRO_REPORT_DATA.
+   */
+  templateUrl: string;
+  /** يجلب كل الطلاب المفلترين + ملفاتهم الشخصية ويُرجع لقطة جاهزة للحقن. */
+  fetchData: (context: ExportFetchContext) => Promise<FullReportData>;
+  /** عدد طلابي يُتوقع تصديرهم (لإظهار العدّاد في الواجهة). */
+  totalCount?: number | null;
 };
 
 export function ExportDialog<T = Record<string, unknown>>({
@@ -211,6 +231,7 @@ export function ExportDialog<T = Record<string, unknown>>({
   fetchRows,
   totalRowCount,
   disabled = false,
+  fullReportHtml,
 }: {
   title: string;
   fileName: string;
@@ -227,6 +248,11 @@ export function ExportDialog<T = Record<string, unknown>>({
   /** Exact number of rows that fetchRows will export (not the current page). */
   totalRowCount?: number | null;
   disabled?: boolean;
+  /**
+   * عند تمريره يستبدل سلوك زر "تصدير HTML" لكي يُنتج ملف HTML
+   * قائم على قالب احترافي محقون بكل بيانات الطلاب المفلترين بدلاً من جدول HTML عام.
+   */
+  fullReportHtml?: FullReportHtmlConfig;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedColumnKeys, setSelectedColumnKeys] = useState<string[]>(() =>
@@ -365,6 +391,87 @@ export function ExportDialog<T = Record<string, unknown>>({
     setOpen(false);
   };
 
+  /**
+   * يبني ملف HTML "التقرير الكلي" اعتماداً على قالب احترافي داخل public/
+   * ويحقن بداخله window.TEACHERPRO_REPORT_DATA = { students, courses, profiles }
+   * بحيث يصبح الملف مستقلاً تماماً ولا يحتاج أي اتصال بـ API بعد التحميل.
+   *
+   * القالب لا يُعدَّل أبداً؛ نحقن فقط وسْم <script> إضافي قبل </body>.
+   */
+  const exportFullReportHtml = async () => {
+    if (!fullReportHtml) return false;
+    exportAbortController.current?.abort();
+    const controller = new AbortController();
+    exportAbortController.current = controller;
+    setExporting(true);
+    const expectedTotal =
+      typeof fullReportHtml.totalCount === "number"
+        ? fullReportHtml.totalCount
+        : typeof totalRowCount === "number"
+          ? totalRowCount
+          : 0;
+    setExportProgress({ loaded: 0, total: expectedTotal });
+    try {
+      const [templateText, reportData] = await Promise.all([
+        fetch(fullReportHtml.templateUrl, { cache: "no-store" }).then(
+          async (response) => {
+            if (!response.ok) {
+              throw new Error(
+                `تعذر تحميل قالب التقرير: ${response.status} ${response.statusText}`,
+              );
+            }
+            return response.text();
+          },
+        ),
+        fullReportHtml.fetchData({
+          signal: controller.signal,
+          onProgress: (loaded, total) =>
+            setExportProgress({ loaded, total: total || expectedTotal }),
+        }),
+      ]);
+
+      if (!Array.isArray(reportData?.students) || reportData.students.length === 0) {
+        toast.error("لا يوجد طلاب مطابقون للفلاتر الحالية للتصدير");
+        return false;
+      }
+
+      const injectionScript = `<script>window.TEACHERPRO_REPORT_DATA=${JSON.stringify(
+        reportData,
+      )};</script>`;
+      const injectedHtml = templateText.replace(
+        /<\/body>\s*<\/html>\s*$/i,
+        `${injectionScript}\n</body>\n</html>`,
+      );
+
+      downloadBlob(
+        injectedHtml,
+        `${safeFileName}.html`,
+        "text/html;charset=utf-8",
+      );
+      toast.success(
+        `تم تصدير التقرير الكلي بـ ${reportData.students.length} طالباً بصيغة HTML`,
+      );
+      setOpen(false);
+      return true;
+    } catch (error) {
+      console.error("[ExportDialog] full report HTML export failed:", error);
+      if (!(error instanceof Error && error.name === "AbortError")) {
+        toast.error(
+          error instanceof Error && error.message
+            ? error.message
+            : "تعذر إنشاء تقرير HTML الكلي",
+        );
+      }
+      return false;
+    } finally {
+      if (exportAbortController.current === controller) {
+        exportAbortController.current = null;
+      }
+      setExporting(false);
+      setExportProgress(null);
+    }
+  };
+
   const exportPdf = (exportRows: T[], pendingWindow?: Window | null) => {
     if (!ensureExportable(exportRows)) {
       pendingWindow?.close();
@@ -399,6 +506,15 @@ export function ExportDialog<T = Record<string, unknown>>({
     if (pendingPdfWindow) {
       pendingPdfWindow.document.write("<p dir='rtl' style='font-family:sans-serif;padding:16px'>جاري تجهيز التقرير...</p>");
       pendingPdfWindow.document.close();
+    }
+    // مسار "التقرير الكلي HTML" المستقل: يحقن كل البيانات المفلترة في القالب الاحترافي.
+    if (format === "html" && fullReportHtml) {
+      const ok = await exportFullReportHtml();
+      if (ok || exportAbortController.current === null) {
+        // إما نجح التصدير أو أُلغي؛ لا حاجة لفتح PDF في هذا المسار.
+      }
+      pendingPdfWindow?.close();
+      return;
     }
     const exportRows = await loadExportRows();
     if (!exportRows) {
@@ -460,7 +576,11 @@ export function ExportDialog<T = Record<string, unknown>>({
               aria-live="polite"
             >
               <div className="flex items-center justify-between gap-3 text-sm">
-                <strong>جاري تحميل جميع الطلاب…</strong>
+                <strong>
+                  {fullReportHtml
+                    ? "جاري تحميل الطلاب وملفاتهم الشخصية للتقرير الكلي…"
+                    : "جاري تحميل جميع الطلاب…"}
+                </strong>
                 <span>
                   {exportProgress.loaded} / {exportProgress.total || "…"}
                 </span>
@@ -518,16 +638,31 @@ export function ExportDialog<T = Record<string, unknown>>({
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:flex-wrap">
           {availableFormats.map((format) => {
             const Icon = exportFormatIcons[format];
+            const isFullReportHtml = format === "html" && Boolean(fullReportHtml);
+            const buttonDisabled =
+              exporting ||
+              (!fetchRows && rows.length === 0) ||
+              (!isFullReportHtml && selectedColumns.length === 0);
+            const buttonLabel = exporting
+              ? "جاري التحضير..."
+              : isFullReportHtml
+                ? "تصدير HTML شامل"
+                : exportFormatLabels[format];
             return (
               <Button
                 key={format}
                 variant="outline"
                 className="gap-2"
                 onClick={() => handleExport(format)}
-                disabled={exporting || (!fetchRows && rows.length === 0) || selectedColumns.length === 0}
+                disabled={buttonDisabled}
+                title={
+                  isFullReportHtml
+                    ? "يصدّر كل الطلاب المفلترين مع ملفاتهم الشخصية الكاملة داخل قالب HTML احترافي مستقل"
+                    : undefined
+                }
               >
                 <Icon className="h-4 w-4" />
-                {exporting ? "جاري التحضير..." : exportFormatLabels[format]}
+                {buttonLabel}
               </Button>
             );
           })}
