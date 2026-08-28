@@ -61,7 +61,6 @@ const student = (overrides = {}) => ({
   id: "student-1",
   courseId: "course-1",
   status: "نشط",
-  dismissalType: "",
   dismissalReason: "",
   dismissalNotes: "",
   opportunities: 3,
@@ -390,24 +389,24 @@ function recalculatedStudent(input) {
 
 {
   const firstExam = exam({
-    id: "exam-final-chance-1",
-    name: "امتحان الفرصة بعد إعادة التفعيل",
+    id: "exam-reactivation-1",
+    name: "امتحان بعد إعادة التفعيل - الفرصة الأولى",
     type: "يومي",
     date: "2026-02-01T00:00:00.000Z",
     opportunitiesPenalty: 1,
     dismissalGrade: null,
   });
   const secondExam = exam({
-    id: "exam-final-chance-2",
-    name: "امتحان المخالفة التالية",
+    id: "exam-reactivation-2",
+    name: "امتحان بعد إعادة التفعيل - الفرصة الثانية",
     type: "يومي",
     date: "2026-02-02T00:00:00.000Z",
     opportunitiesPenalty: 1,
     dismissalGrade: null,
   });
   const thirdExam = exam({
-    id: "exam-final-chance-3",
-    name: "امتحان المخالفة عند الصفر",
+    id: "exam-reactivation-3",
+    name: "امتحان المخالفة بعد نفاد الفرص",
     type: "يومي",
     date: "2026-02-03T00:00:00.000Z",
     opportunitiesPenalty: 1,
@@ -427,82 +426,183 @@ function recalculatedStudent(input) {
     createdAt: priorDismissalExam.date,
     updatedAt: priorDismissalExam.date,
   });
-  const reactivationGrantLog = {
-    id: "final-chance",
+  const reactivationBalanceLog = {
+    id: "reactivation-balance",
     studentId: "student-1",
     examId: "",
-    action: "إعادة تفعيل بفرصتين",
+    action: "رصيد بعد تعهد",
     amount: 2,
-    reason: "إرجاع الطالب بعد إعادة التفعيل بفرصتين [academic-reactivation-link:sourceGradeId=grade-prior-dismissal&sourceExamId=exam-prior-dismissal]",
+    reason: "إرجاع الطالب بعد تعهد ولي الأمر برصيد فرصتين [academic-reactivation-link:sourceGradeId=grade-prior-dismissal&sourceExamId=exam-prior-dismissal]",
     date: "2026-01-31",
     chapterId: "chapter-1",
     chapterNameSnapshot: "الفصل الأول",
   };
 
-  const afterUsingChance = recalculatedStudent(
+  const afterFirstViolation = recalculatedStudent(
     state({
       students: [student({ opportunities: 2, baseOpportunities: 3 })],
       exams: [priorDismissalExam, firstExam],
       grades: [
         priorDismissalGrade,
         grade({
-          id: "grade-final-chance-1",
+          id: "grade-reactivation-1",
           examId: firstExam.id,
           score: 10,
           createdAt: firstExam.date,
           updatedAt: firstExam.date,
         }),
       ],
-      opportunityLogs: [reactivationGrantLog],
+      opportunityLogs: [reactivationBalanceLog],
     }),
   );
-  assert.equal(afterUsingChance.status, "نشط");
-  assert.equal(afterUsingChance.opportunities, 1);
+  assert.equal(afterFirstViolation.status, "نشط");
+  assert.equal(afterFirstViolation.opportunities, 1);
 
-  const afterNextViolation = recalculatedStudent(
+  const afterSecondViolation = recalculatedStudent(
     state({
       students: [student({ opportunities: 2, baseOpportunities: 3 })],
       exams: [priorDismissalExam, firstExam, secondExam],
       grades: [
         priorDismissalGrade,
         grade({
-          id: "grade-final-chance-1",
+          id: "grade-reactivation-1",
           examId: firstExam.id,
           score: 10,
           createdAt: firstExam.date,
           updatedAt: firstExam.date,
         }),
         grade({
-          id: "grade-final-chance-2",
+          id: "grade-reactivation-2",
           examId: secondExam.id,
           score: 10,
           createdAt: secondExam.date,
           updatedAt: secondExam.date,
         }),
       ],
-      opportunityLogs: [reactivationGrantLog],
+      opportunityLogs: [reactivationBalanceLog],
     }),
   );
-  assert.equal(afterNextViolation.status, "نشط");
-  assert.equal(afterNextViolation.opportunities, 0);
+  assert.equal(afterSecondViolation.status, "نشط");
+  assert.equal(afterSecondViolation.opportunities, 0);
 
-  const afterZeroViolation = recalculatedStudent(
+  const afterThirdViolation = recalculatedStudent(
     state({
       students: [student({ opportunities: 2, baseOpportunities: 3 })],
       exams: [priorDismissalExam, firstExam, secondExam, thirdExam],
       grades: [
         priorDismissalGrade,
-        grade({ id: "grade-final-chance-1", examId: firstExam.id, score: 10, createdAt: firstExam.date, updatedAt: firstExam.date }),
-        grade({ id: "grade-final-chance-2", examId: secondExam.id, score: 10, createdAt: secondExam.date, updatedAt: secondExam.date }),
-        grade({ id: "grade-final-chance-3", examId: thirdExam.id, score: 10, createdAt: thirdExam.date, updatedAt: thirdExam.date }),
+        grade({
+          id: "grade-reactivation-1",
+          examId: firstExam.id,
+          score: 10,
+          createdAt: firstExam.date,
+          updatedAt: firstExam.date,
+        }),
+        grade({
+          id: "grade-reactivation-2",
+          examId: secondExam.id,
+          score: 10,
+          createdAt: secondExam.date,
+          updatedAt: secondExam.date,
+        }),
+        grade({
+          id: "grade-reactivation-3",
+          examId: thirdExam.id,
+          score: 10,
+          createdAt: thirdExam.date,
+          updatedAt: thirdExam.date,
+        }),
       ],
-      opportunityLogs: [reactivationGrantLog],
+      opportunityLogs: [reactivationBalanceLog],
     }),
   );
-  assert.equal(afterZeroViolation.status, "مفصول");
-  assert.equal(afterZeroViolation.opportunities, 0);
-  assert.equal(afterZeroViolation.dismissalType, "فصل");
-  console.log("✅ إعادة التفعيل تمنح فرصتين؛ الوصول إلى صفر يبقي الطالب نشطاً والمخالفة اللاحقة تفصله");
+  assert.equal(afterThirdViolation.status, "مفصول");
+  assert.equal(afterThirdViolation.opportunities, 0);
+  assert.match(afterThirdViolation.dismissalReason, /بعد انتهاء الفرص|بدون فرص/);
+  console.log("✅ التعهد يعيد الطالب بفرصتين: 2 ثم 1 ثم 0 وهو نشط، والمخالفة التالية فقط تفصله");
+}
+
+{
+  const oldDismissal = exam({
+    id: "exam-repeat-dismissal-old",
+    name: "فصل سابق",
+    type: "فاينل",
+    date: "2026-01-01T00:00:00.000Z",
+    dismissalGrade: 20,
+  });
+  const beforeSecondPledge = exam({
+    id: "exam-repeat-dismissal-before-pledge",
+    name: "مخالفة قبل التعهد الثاني",
+    type: "يومي",
+    date: "2026-02-01T00:00:00.000Z",
+    opportunitiesPenalty: 1,
+    dismissalGrade: null,
+  });
+  const afterSecondPledge = exam({
+    id: "exam-repeat-dismissal-after-pledge",
+    name: "مخالفة بعد التعهد الثاني",
+    type: "يومي",
+    date: "2026-03-01T00:00:00.000Z",
+    opportunitiesPenalty: 1,
+    dismissalGrade: null,
+  });
+  const result = recalculatedStudent(
+    state({
+      students: [student({ opportunities: 2, baseOpportunities: 3 })],
+      exams: [oldDismissal, beforeSecondPledge, afterSecondPledge],
+      grades: [
+        grade({
+          id: "grade-repeat-old",
+          examId: oldDismissal.id,
+          score: 10,
+          createdAt: oldDismissal.date,
+          updatedAt: oldDismissal.date,
+        }),
+        grade({
+          id: "grade-repeat-before",
+          examId: beforeSecondPledge.id,
+          score: 10,
+          createdAt: beforeSecondPledge.date,
+          updatedAt: beforeSecondPledge.date,
+        }),
+        grade({
+          id: "grade-repeat-after",
+          examId: afterSecondPledge.id,
+          score: 10,
+          createdAt: afterSecondPledge.date,
+          updatedAt: afterSecondPledge.date,
+        }),
+      ],
+      opportunityLogs: [
+        {
+          id: "pledge-repeat-1",
+          studentId: "student-1",
+          examId: "",
+          action: "رصيد بعد تعهد",
+          amount: 2,
+          reason: "تعهد أول",
+          date: "2026-01-15",
+          chapterId: "chapter-1",
+          chapterNameSnapshot: "الفصل الأول",
+        },
+        {
+          id: "pledge-repeat-2",
+          studentId: "student-1",
+          examId: "",
+          action: "رصيد بعد تعهد",
+          amount: 2,
+          reason: "تعهد ثانٍ",
+          date: "2026-02-15",
+          chapterId: "chapter-1",
+          chapterNameSnapshot: "الفصل الأول",
+        },
+      ],
+    }),
+  );
+  assert.equal(result.status, "نشط");
+  assert.equal(result.opportunities, 1);
+  assert.equal(result.dismissalReason, "");
+  console.log("✅ تكرار الفصل والتعهد لا يغيّر السياسة: آخر تعهد يعيد الطالب دائماً إلى فرصتين");
 }
 
 {

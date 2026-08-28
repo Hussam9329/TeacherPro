@@ -7,6 +7,34 @@ function cleanText(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+export function dismissedHistoryWhere(): Prisma.StudentWhereInput {
+  return {
+    OR: [
+      {
+        opportunityLogs: {
+          some: {
+            OR: [
+              { action: "فصل تلقائي" },
+              { action: "خصم", reason: { startsWith: "فصل الطالب" } },
+            ],
+          },
+        },
+      },
+      {
+        studentNotes: {
+          some: {
+            kind: "إجراء",
+            OR: [
+              { text: { startsWith: "فصل الطالب" } },
+              { text: { startsWith: "تم فصل الطالب" } },
+            ],
+          },
+        },
+      },
+    ],
+  };
+}
+
 function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
   const q = cleanText(rawQuery);
   if (!q) return null;
@@ -32,26 +60,49 @@ export function composeDismissedStudentWhere(
   return { AND: filtered };
 }
 
+export function buildDismissedHistoryScopeWhere(
+  rawScope: string | null | undefined,
+): Prisma.StudentWhereInput {
+  const scope = cleanText(rawScope);
+  if (scope === "former") {
+    return composeDismissedStudentWhere([
+      { status: "نشط" },
+      dismissedHistoryWhere(),
+    ]);
+  }
+  if (scope === "all") {
+    return {
+      OR: [
+        { status: DISMISSED_STUDENT_STATUS },
+        composeDismissedStudentWhere([
+          { status: "نشط" },
+          dismissedHistoryWhere(),
+        ]),
+      ],
+    };
+  }
+  return { status: DISMISSED_STUDENT_STATUS };
+}
+
 /**
- * Authoritative filter shared by the dismissed-student list and counters.
- * Keeping every predicate on the server makes pagination correct even for
- * pledge and notes filters; no page is filtered again in the browser.
+ * Authoritative filter shared by dismissed-student lists and counters.
+ * `historyScope=all` is used by إدارة المفصولين to include active students
+ * who have a real dismissal event in their history. The historical marker is
+ * informational only and never participates in academic calculations.
  */
 export function buildDismissedStudentWhere(
   searchParams: URLSearchParams,
 ): Prisma.StudentWhereInput {
   const parts: Prisma.StudentWhereInput[] = [
-    { status: DISMISSED_STUDENT_STATUS },
+    buildDismissedHistoryScopeWhere(searchParams.get("historyScope")),
   ];
   const searchWhere = buildSearchWhere(searchParams.get("q") || "");
   const courseId = cleanText(searchParams.get("courseId"));
-  const dismissalType = cleanText(searchParams.get("dismissalType"));
   const notesFilter = cleanText(searchParams.get("notesFilter"));
   const pledgeFilter = cleanText(searchParams.get("pledgeFilter"));
 
   if (searchWhere) parts.push(searchWhere);
   if (courseId) parts.push({ courseId });
-  if (dismissalType) parts.push({ dismissalType });
 
   if (notesFilter === "with-notes") {
     parts.push({ dismissalNotes: { not: "" } });

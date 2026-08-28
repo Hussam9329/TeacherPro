@@ -410,7 +410,7 @@ export function GradeRecordsView() {
     studentOpportunities: number,
   ) => {
     if (exam.noDiscount) return 0;
-    if (exam.type === "فاينل" && exam.opportunitiesPenalty === "فصل")
+    if (exam.type === "فاينل")
       return Math.max(1, studentOpportunities);
     return Math.max(0, Number(exam.opportunitiesPenalty || 0));
   };

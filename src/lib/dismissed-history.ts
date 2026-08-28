@@ -6,7 +6,6 @@ type DismissalLogLike = {
 type DismissalNoteLike = {
   kind?: unknown;
   text?: unknown;
-  dismissalType?: unknown;
 };
 
 type OpportunityMovementLike = {
@@ -109,10 +108,7 @@ export function isDismissalOpportunityLog(log: DismissalLogLike): boolean {
 export function isDismissalActionNote(note: DismissalNoteLike): boolean {
   if (cleanText(note.kind) !== "إجراء") return false;
   const noteText = cleanText(note.text);
-  return (
-    /^(?:فصل الطالب|تم فصل الطالب)(?:\s|$|\(|:)/u.test(noteText) ||
-    Boolean(cleanText(note.dismissalType) && noteText.startsWith("فصل"))
-  );
+  return /^(?:فصل الطالب|تم فصل الطالب)(?:\s|$|\(|:)/u.test(noteText);
 }
 
 export function classifyDismissedOpportunityMovement({

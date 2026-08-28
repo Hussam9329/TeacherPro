@@ -9,7 +9,7 @@ import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
 import { normalizeBoolean } from "@/lib/opportunity-filters-server";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
-import { isValidStudentStatus, isValidDismissalType } from "@/lib/student-status-enums";
+import { isValidStudentStatus } from "@/lib/student-status-enums";
 import {
   globalImpactConfirmationResponse,
   isConfirmedImpact,
@@ -25,7 +25,6 @@ type StudentUpdatePayload = {
   id?: unknown;
   opportunities?: unknown;
   status?: unknown;
-  dismissalType?: unknown;
   dismissalReason?: unknown;
   dismissalNotes?: unknown;
 };
@@ -51,7 +50,6 @@ type StudentNotePayload = {
   sourceType?: unknown;
   sourceId?: unknown;
   dismissalKey?: unknown;
-  dismissalType?: unknown;
   dismissalReason?: unknown;
   dismissalDate?: unknown;
 };
@@ -89,26 +87,17 @@ function chunks<T>(items: T[], size = 250): T[][] {
 function normalizeStudentUpdates(value: unknown) {
   return asArray<StudentUpdatePayload>(value)
     .map((item) => {
-      // Q78 FIX: Validate status and dismissalType against enum values.
-      // Reject unknown values like "موقوف" or "فصل تجريبي" at the entry point.
+      // Validate status against the single authoritative student-status enum.
       const rawStatus = item.status !== undefined ? String(item.status ?? "") : undefined;
       if (rawStatus !== undefined && !isValidStudentStatus(rawStatus)) {
         throw new Error(
           `قيمة الحالة "${rawStatus}" غير صالحة. القيم المسموح بها: نشط، مفصول، مؤرشف.`,
         );
       }
-      const rawDismissalType =
-        item.dismissalType !== undefined ? String(item.dismissalType ?? "") : undefined;
-      if (rawDismissalType !== undefined && !isValidDismissalType(rawDismissalType)) {
-        throw new Error(
-          `قيمة نوع الفصل "${rawDismissalType}" غير صالحة. القيم المسموح بها: فصل، أو فارغ.`,
-        );
-      }
       return {
         id: String(item.id ?? "").trim(),
         opportunities: normalizeNonNegativeInt(item.opportunities),
         status: rawStatus,
-        dismissalType: rawDismissalType,
         dismissalReason:
           item.dismissalReason !== undefined
             ? String(item.dismissalReason ?? "")
@@ -151,7 +140,6 @@ function normalizeStudentNotes(value: unknown) {
       sourceType: String(item.sourceType ?? ""),
       sourceId: String(item.sourceId ?? ""),
       dismissalKey: String(item.dismissalKey ?? ""),
-      dismissalType: String(item.dismissalType ?? ""),
       dismissalReason: String(item.dismissalReason ?? ""),
       dismissalDate: normalizeOptionalDate(item.dismissalDate),
     }))
@@ -286,7 +274,6 @@ async function handleFilterBasedBulkAdjust(
           sourceType?: string;
           sourceId?: string;
           dismissalKey?: string;
-          dismissalType?: string;
           dismissalReason?: string;
           dismissalDate?: Date;
         }> = [];
@@ -352,7 +339,6 @@ async function handleFilterBasedBulkAdjust(
             where: { id: { in: reactivationStudentIds } },
             data: {
               status: "نشط",
-              dismissalType: null,
               dismissalReason: null,
               dismissalNotes: null,
             },
@@ -615,14 +601,11 @@ export async function POST(req: NextRequest) {
             const data: {
               opportunities: number;
               status?: string;
-              dismissalType?: string;
-              dismissalReason?: string;
+                  dismissalReason?: string;
               dismissalNotes?: string;
             } = { opportunities: finalOpportunities };
 
             if (student.status !== undefined) data.status = student.status;
-            if (student.dismissalType !== undefined)
-              data.dismissalType = student.dismissalType;
             if (student.dismissalReason !== undefined)
               data.dismissalReason = student.dismissalReason;
             if (student.dismissalNotes !== undefined)
@@ -795,12 +778,11 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json(result);
   } catch (error) {
-    // Q78 FIX: Validation errors (invalid status/dismissalType) should
+    // Validation errors (invalid status) should
     // return 400, not 500. routeErrorResponse treats unknown errors as 500.
     const message = error instanceof Error ? error.message : String(error);
     if (
       message.includes("قيمة الحالة") ||
-      message.includes("قيمة نوع الفصل") ||
       message.includes("غير صالحة")
     ) {
       return validationError(message, 400);

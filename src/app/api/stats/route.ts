@@ -346,7 +346,6 @@ async function countDismissedStudentsNeedingCurrentPledge(
     select: {
       id: true,
       status: true,
-      dismissalType: true,
       dismissalReason: true,
       createdAt: true,
     },
@@ -367,8 +366,7 @@ async function countDismissedStudentsNeedingCurrentPledge(
         dismissalKey: true,
         sourceType: true,
         sourceId: true,
-        dismissalType: true,
-        dismissalReason: true,
+          dismissalReason: true,
         dismissalDate: true,
       },
     }),

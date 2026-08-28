@@ -12,7 +12,8 @@ export const TEACHERPRO_TERMS = Object.freeze({
   telegram: "تيليجرام",
   recordedGrades: "درجات مسجلة",
   programType: "نوع البرنامج",
-  dismissal: "فصل",
+  dismissed: "مفصول",
+  formerlyDismissed: "مفصول سابقاً",
   savedOpportunities: "فرص محفوظة",
 });
 

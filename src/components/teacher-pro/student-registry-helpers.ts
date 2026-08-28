@@ -77,7 +77,6 @@ export const studentExportColumns: ExportColumn<any>[] = [
   { key: "locationScope", label: "نطاق الموقع", value: (student) => student.locationScope || "" },
   { key: "location", label: "الموقع", value: (student) => student.locationText || "" },
   { key: "status", label: "الحالة", value: (student) => student.status || "" },
-  { key: "dismissalType", label: "نوع الفصل", value: (student) => student.dismissalType || "", defaultSelected: false },
   { key: "dismissalReason", label: "سبب الفصل", value: (student) => student.dismissalReason || "", defaultSelected: false },
   { key: "opportunities", label: "الفرص", value: (student) => student.opportunities ?? "" },
   { key: "grace", label: "السماح المتبقي", value: (student) => formatStudentGraceRemaining(student) },

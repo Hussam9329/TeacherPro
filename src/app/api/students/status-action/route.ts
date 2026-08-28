@@ -170,6 +170,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
+
       const result = await withSerializableTransaction(async (tx) => {
         const student = await tx.student.findUnique({ where: { id: studentId } });
         if (!student) throw Object.assign(new Error("student not found"), { code: "P2025" });
@@ -188,7 +189,8 @@ export async function POST(req: NextRequest) {
         // Q79 FIX: Prevent dismissing an already-dismissed student.
         // Previously, dismissing a dismissed student created duplicate
         // deduction logs (second with amount 0) and duplicate dismissal
-        // notes and repeated deductions.
+        // notes. Dismissal has one state only; previous dismissal history never
+        // changes the kind or severity of the next dismissal.
         if (student.status === STUDENT_STATUS_DISMISSED) {
           throw statusActionConflict(
             "الطالب مفصول مسبقاً. لا يمكن تكرار إجراء الفصل. استخدم إعادة التفعيل عند الحاجة.",
@@ -196,7 +198,6 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        const nextType = "فصل" as const;
         const nextReason = reason;
         const deductedOpportunities = Math.max(0, Math.trunc(Number(student.opportunities || 0)));
         const activeChapterResolution = await getActiveChapterForCourse(
@@ -209,7 +210,6 @@ export async function POST(req: NextRequest) {
           where: { id: studentId },
           data: {
             status: "مفصول",
-            dismissalType: nextType,
             dismissalReason: nextReason,
             dismissalNotes: notes,
             opportunities: 0,
@@ -234,10 +234,9 @@ export async function POST(req: NextRequest) {
           data: {
             studentId,
             kind: "إجراء",
-            text: `فصل الطالب (${nextType}): ${nextReason}${notes ? ` - ملاحظة: ${notes}` : ""}`,
+            text: `فصل الطالب: ${nextReason}${notes ? ` - ملاحظة: ${notes}` : ""}`,
             sourceType: "student-status-action",
             sourceId: studentId,
-            dismissalType: nextType,
             dismissalReason: nextReason,
             dismissalDate: new Date(),
           },
@@ -246,7 +245,7 @@ export async function POST(req: NextRequest) {
         await tx.auditLog.create({
           data: {
             module: "سجل الطلاب",
-            action: `فصل الطالب (${nextType})`,
+            action: "فصل الطالب",
             details: `${student.name} - ${student.code} - ${nextReason}`,
             userId: principal.id,
             userName: principal.name,
@@ -319,7 +318,6 @@ export async function POST(req: NextRequest) {
           where: { id: studentId },
           data: {
             status: "نشط",
-            dismissalType: "",
             dismissalReason: "",
             dismissalNotes: "",
             opportunities: baseline,
@@ -414,29 +412,23 @@ export async function POST(req: NextRequest) {
         tx,
         student.courseId,
       );
-      if (activeChapterResolution.kind !== "ready") {
-        throw statusActionConflict(
-          "لا يمكن إعادة تفعيل الطالب قبل تثبيت فصل نشط واحد بسقف فرص صالح.",
-          "invalid-active-chapter-for-reactivation",
-        );
-      }
       if (
+        activeChapterResolution.kind !== "ready" ||
         activeChapterResolution.opportunities <
-        REACTIVATION_OPPORTUNITY_GRANT
+          REACTIVATION_OPPORTUNITY_GRANT
       ) {
         throw statusActionConflict(
-          `لا يمكن إعادة التفعيل بفرصتين لأن سقف الفصل النشط «${activeChapterResolution.chapter.name}» أقل من فرصتين. عدّل سقف الفصل أولاً.`,
-          "reactivation-limit-below-two",
+          "لا يمكن إعادة تفعيل الطالب بفرصتين قبل تثبيت فصل نشط واحد سقفه فرصتان على الأقل.",
+          "insufficient-reactivation-opportunity-limit",
         );
       }
-      const activeChapter = activeChapterResolution.chapter;
-      const previousReason = student.dismissalReason || student.dismissalType || "بدون سبب مسجل";
+      const activeChapter = chapterFromResolution(activeChapterResolution);
+      const previousReason = student.dismissalReason || "بدون سبب مسجل";
 
       const updatedStudent = await tx.student.update({
         where: { id: studentId },
         data: {
           status: "نشط",
-          dismissalType: "",
           dismissalReason: "",
           dismissalNotes: "",
           opportunities: REACTIVATION_OPPORTUNITY_GRANT,
@@ -456,21 +448,21 @@ export async function POST(req: NextRequest) {
           examId: null,
           action: "إعادة تفعيل",
           amount: 0,
-          reason: "تثبيت إعادة التفعيل بفرصتين: لا يعاد فصل الطالب بسبب سجلات قديمة؛ يبقى نشطاً عند الوصول إلى 0، ويفصل فقط عند مخالفة خصم جديدة تبدأ وهو بدون فرص",
+          reason: "تثبيت إعادة التفعيل: الطالب نشط برصيد فرصتين؛ الوصول إلى 0 لا يفصله، والمخالفة التالية وهو بدون فرص تؤدي إلى الفصل",
           chapterId: activeChapter?.id || null,
           chapterNameSnapshot: activeChapter?.name || null,
         },
       });
 
-      const reactivationGrantLog = await tx.opportunityLog.create({
+      const reactivationBalanceLog = await tx.opportunityLog.create({
         data: {
           studentId,
           examId: null,
-          action: "إعادة تفعيل بفرصتين",
+          action: "رصيد إعادة التفعيل",
           amount: REACTIVATION_OPPORTUNITY_GRANT,
-          reason: "إرجاع الطالب بعد إعادة التفعيل بفرصتين",
-          chapterId: activeChapter.id,
-          chapterNameSnapshot: activeChapter.name,
+          reason: "إرجاع الطالب إلى الحالة النشطة برصيد فرصتين",
+          chapterId: activeChapter?.id || null,
+          chapterNameSnapshot: activeChapter?.name || null,
         },
       });
 
@@ -478,7 +470,7 @@ export async function POST(req: NextRequest) {
         data: {
           studentId,
           kind: "إجراء",
-          text: `إعادة تفعيل الطالب ومنحه فرصتين بعد الفصل السابق: ${previousReason}`,
+          text: `إعادة تفعيل الطالب ومنحه فرصتين بعد فصل سابق: ${previousReason}`,
           sourceType: "student-status-action",
           sourceId: studentId,
         },
@@ -487,7 +479,7 @@ export async function POST(req: NextRequest) {
       await tx.auditLog.create({
         data: {
           module: "سجل الطلاب",
-          action: "إعادة تفعيل بفرصتين",
+          action: "إعادة تفعيل الطالب برصيد فرصتين",
           details: `${student.name} - ${student.code}`,
           userId: principal.id,
           userName: principal.name,
@@ -496,7 +488,7 @@ export async function POST(req: NextRequest) {
 
       return {
         student: updatedStudent,
-        opportunityLogs: [reactivationLog, reactivationGrantLog],
+        opportunityLogs: [reactivationLog, reactivationBalanceLog],
         studentNotes: [studentNote],
         pendingGradeMigration,
       };

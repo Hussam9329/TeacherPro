@@ -52,7 +52,6 @@ export function buildOpportunitySearchWhere(
     { school: { contains: query, mode: "insensitive" } },
     { subSite: { contains: query, mode: "insensitive" } },
     { status: { contains: query, mode: "insensitive" } },
-    { dismissalType: { contains: query, mode: "insensitive" } },
     { dismissalReason: { contains: query, mode: "insensitive" } },
     { dismissalNotes: { contains: query, mode: "insensitive" } },
   ];

@@ -46,7 +46,6 @@ async function inspectCandidates(
       id: true,
       status: true,
       opportunities: true,
-      dismissalType: true,
       dismissalReason: true,
     },
   });
@@ -65,13 +64,11 @@ async function inspectCandidates(
     const current = {
       status: student.status,
       opportunities: student.opportunities,
-      dismissalType: student.dismissalType || "",
       dismissalReason: student.dismissalReason || "",
     };
     const next = {
       status: projected.status,
       opportunities: projected.opportunities,
-      dismissalType: projected.dismissalType || "",
       dismissalReason: projected.dismissalReason || "",
     };
     return JSON.stringify(current) === JSON.stringify(next)

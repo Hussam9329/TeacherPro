@@ -79,7 +79,6 @@ type CallContactStatusFilter =
 type CallNotesFilter = "all" | "with-notes";
 type CallBadgeTone = "deducted" | "warning" | "safe" | "success" | "neutral";
 type CallBadgeInfo = { label: string; tone: CallBadgeTone; detail?: string };
-type PledgeTypeFilter = "all" | "dismissal";
 type PledgeStatusFilter = "all" | "pledged" | "pending" | "reactivated";
 type ContactStatus = "" | "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
 
@@ -114,7 +113,6 @@ type DismissalLinkInfo = {
   key: string;
   sourceType: string;
   sourceId: string;
-  type: string;
   reason: string;
   date: string;
   examName: string;
@@ -124,7 +122,6 @@ type PledgeRow = {
   key: string;
   student: Student;
   dismissalInfo: DismissalLinkInfo;
-  group: "dismissal";
   pledged: boolean;
   note?: StudentNote;
   reactivated: boolean;
@@ -134,7 +131,7 @@ const viewTitles: Record<FollowView, { title: string; description: string }> = {
   calls: {
     title: "المكالمات",
     description:
-      "متابعة الغياب والرسوب والدرجات والفصل عبر الاتصال.",
+      "متابعة الغياب والرسوب والدرجات وحالات الفصل عبر الاتصال.",
   },
   leaves: {
     title: "الإجازات",
@@ -142,7 +139,7 @@ const viewTitles: Record<FollowView, { title: string; description: string }> = {
   },
   pledges: {
     title: "تعهدات",
-    description: "متابعة طلبة الفصل وتثبيت تعهد ولي الأمر.",
+    description: "متابعة الطلاب المفصولين وتثبيت تعهد ولي الأمر لإعادتهم برصيد فرصتين.",
   },
 };
 
@@ -368,9 +365,9 @@ function pledgeWhatsAppMessage(
   return `إدارة الأستاذ حسن فلاح
 تعهد ولي الأمر
 
-أتعهد أنا ولي أمر الطالب/ ……………………………. بمتابعة التزامه بالدوام والأنظمة، وأقر بأنه استنفد جميع الفرص الممنوحة ٣ فرص، وقد مُنح فرصة استثنائية أخيرة من إدارة الأستاذ حسن فلاح.
+أتعهد أنا ولي أمر الطالب/ ……………………………. بمتابعة التزامه بالدوام والأنظمة، وأقر بأنه تم إرجاع الطالب إلى الحالة النشطة ومنحه فرصتين وفق نظام المركز.
 
-وفي حال تكرار الغياب أو استنفاذ هذه الفرصة، يُفصل الطالب نهائيًا دون استثناء أو استرجاع لأي مبلغ مدفوع.
+وفي حال وصول رصيد الطالب إلى صفر يبقى نشطًا، ويُفصل عند وقوع مخالفة جديدة تستوجب خصم فرصة وهو بدون فرص، وفق نظام المركز.
 
 اسم ولي الأمر: ……………………….
 اسم الطالب: ……………………….
@@ -450,7 +447,6 @@ function buildDismissalKey(parts: {
   studentId: string;
   sourceType: string;
   sourceId: string;
-  type: string;
   reason: string;
   date: string;
 }) {
@@ -458,7 +454,6 @@ function buildDismissalKey(parts: {
     parts.studentId,
     parts.sourceType,
     parts.sourceId,
-    normalizeDismissalText(parts.type),
     normalizeDismissalText(parts.reason),
     dayKey(parts.date),
   ].join("::");
@@ -678,8 +673,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     : "";
   const [pledgeSearch, setPledgeSearch] = useState("");
   const debouncedPledgeSearch = useDebouncedValue(pledgeSearch, 250);
-  const [pledgeTypeFilter, setPledgeTypeFilter] =
-    useState<PledgeTypeFilter>("all");
   const [pledgeStatusFilter, setPledgeStatusFilter] =
     useState<PledgeStatusFilter>("all");
 
@@ -953,7 +946,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       .list(
         {
           q: debouncedPledgeSearch,
-          typeFilter: pledgeTypeFilter,
           statusFilter: pledgeStatusFilter,
         },
         { signal: controller.signal, quietAbort: true },
@@ -991,7 +983,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }, [
     view,
     debouncedPledgeSearch,
-    pledgeTypeFilter,
     pledgeStatusFilter,
     mergeStudentsCache,
     syncKey,
@@ -1075,6 +1066,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     return leave.examId === exam.id;
   };
 
+
   const effectiveStudentCalls = callPageStudentCalls;
 
   const callLogLookup = useMemo(() => {
@@ -1139,8 +1131,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     student: Student,
   ): DismissalLinkInfo | null => {
     if (student.status !== "مفصول") return null;
-    const type = student.dismissalType || "فصل";
-    const reason = student.dismissalReason || type || "طالب مفصول";
+    const reason = student.dismissalReason || "طالب مفصول";
     const normalizedReason = normalizeDismissalText(reason);
     const dismissalLogs = opportunityLogs
       .filter((log) => log.studentId === student.id)
@@ -1189,7 +1180,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       studentId: student.id,
       sourceType,
       sourceId,
-      type,
       reason,
       date,
     });
@@ -1197,7 +1187,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       key,
       sourceType,
       sourceId,
-      type,
       reason,
       date,
       examName: sourceExam?.name || "",
@@ -1215,8 +1204,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const sourceExam = sourceLog?.examId
       ? exams.find((exam) => exam.id === sourceLog.examId)
       : undefined;
-    const type = note.dismissalType || "فصل";
-    const reason = note.dismissalReason || note.text || type;
+    const reason = note.dismissalReason || note.text || "فصل الطالب";
     const sourceType = note.sourceType || "pledge-note";
     const sourceId = note.sourceId || note.id;
     const date = dayKey(note.dismissalDate || sourceLog?.date || note.date);
@@ -1226,7 +1214,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         studentId: student.id,
         sourceType,
         sourceId,
-        type,
         reason,
         date,
       });
@@ -1234,7 +1221,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       key,
       sourceType,
       sourceId,
-      type,
       reason,
       date,
       examName: sourceExam?.name || "",
@@ -1263,7 +1249,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         note.dismissalReason || note.text,
       );
       return (
-        note.text.includes(student.dismissalType || "فصل") &&
+        note.text.includes("فصل") &&
         (!noteReason ||
           noteReason.includes(normalizeDismissalText(dismissalInfo.reason)) ||
           normalizeDismissalText(dismissalInfo.reason).includes(noteReason))
@@ -2367,7 +2353,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     const refreshed = await pledgeApi.list({
       q: debouncedPledgeSearch,
-      typeFilter: pledgeTypeFilter,
       statusFilter: pledgeStatusFilter,
     });
 
@@ -2456,7 +2441,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         </div>
         <div className="space-y-1">
           <Badge variant="destructive">
-            {dismissalInfo.type || "فصل"}
+            مفصول
           </Badge>
           <p className="text-xs text-muted-foreground">
             حالة الطالب الآن: {student.status}
@@ -3034,17 +3019,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
       {view === "pledges" && (
         <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-6">
+          <div className="grid gap-3 md:grid-cols-4">
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">المفصولون الآن</p>
                 <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.dismissed)}</b>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">ملفات الفصل</p>
-                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.dismissal)}</b>
               </CardContent>
             </Card>
             <Card>
@@ -3084,24 +3063,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           )}
 
           <Card className="tp-filter-card">
-            <CardContent className="tp-filter-content tp-filter-grid grid-cols-1 md:grid-cols-3">
-              <div className="tp-filter-field tp-filter-primary">
-                <Label>فرز الفصل</Label>
-                <Select
-                  value={pledgeTypeFilter}
-                  onValueChange={(value) =>
-                    setPledgeTypeFilter(value as PledgeTypeFilter)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">كل ملفات الفصل</SelectItem>
-                    <SelectItem value="dismissal">طلبة الفصل</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <CardContent className="tp-filter-content tp-filter-grid grid-cols-1 md:grid-cols-2">
               <div className="tp-filter-field tp-filter-secondary">
                 <Label>حالة التعهد</Label>
                 <Select

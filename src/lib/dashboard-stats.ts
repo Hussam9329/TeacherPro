@@ -73,7 +73,6 @@ export type DashboardDismissalInfo = {
 export type DashboardDismissedStudent = {
   id: string;
   status: string;
-  dismissalType?: string | null;
   dismissalReason?: string | null;
   createdAt: Date | string;
 };
@@ -98,7 +97,6 @@ export type DashboardPledgeNote = {
   dismissalKey?: string | null;
   sourceType?: string | null;
   sourceId?: string | null;
-  dismissalType?: string | null;
   dismissalReason?: string | null;
   dismissalDate?: Date | string | null;
 };
@@ -155,8 +153,8 @@ export function buildCurrentDismissalInfo(
   actionNotes: DashboardDismissalActionNote[],
 ): DashboardDismissalInfo | null {
   if (student.status !== "مفصول") return null;
-  const type = student.dismissalType || "فصل";
-  const reason = student.dismissalReason || type || "طالب مفصول";
+  const type = "مفصول";
+  const reason = student.dismissalReason || "طالب مفصول";
   const normalizedReason = normalizeDismissalText(reason);
 
   const sourceLog = logs
@@ -223,14 +221,6 @@ export function pledgeMatchesCurrentDismissal(
   const dismissalDate = baghdadDateKey(note.dismissalDate || note.date);
   if (!dismissalDate || dismissalDate !== current.date) return false;
 
-  const noteType = normalizeDismissalText(note.dismissalType);
-  const currentType = normalizeDismissalText(current.type);
-  const typeMatches =
-    !noteType ||
-    noteType.includes(currentType) ||
-    currentType.includes(noteType);
-  if (!typeMatches) return false;
-
   const noteReason = normalizeDismissalText(
     note.dismissalReason || note.text,
   );
@@ -240,7 +230,7 @@ export function pledgeMatchesCurrentDismissal(
     noteReason.includes(currentReason) ||
     currentReason.includes(noteReason);
   if (!reasonMatches) return false;
-  return Boolean(noteType || noteReason);
+  return Boolean(noteReason);
 }
 
 const MODULE_LABELS: Record<string, string> = {

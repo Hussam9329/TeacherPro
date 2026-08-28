@@ -91,9 +91,8 @@ const SAMPLE_TEXT = `مراد سلمان سرحان سلمان\tالياسمين
 
 type BulkStudentDraft = Omit<
   Student,
-  "id" | "code" | "dismissalType" | "dismissalReason" | "dismissalNotes"
+  "id" | "code" | "dismissalReason" | "dismissalNotes"
 > & {
-  dismissalType?: string;
   dismissalReason?: string;
   dismissalNotes?: string;
 };
@@ -629,7 +628,6 @@ export function StudentBulkTextImportView() {
                   )
                 : subSite,
               status,
-              dismissalType: "",
               dismissalReason: "",
               dismissalNotes: "",
               createdAt: baghdadTodayKey(),

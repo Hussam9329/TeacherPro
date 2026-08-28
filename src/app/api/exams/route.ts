@@ -297,7 +297,7 @@ export async function POST(req: NextRequest) {
           opportunitiesPenalty: noDiscount
             ? '0'
             : isFinalExam
-              ? 'فصل'
+              ? '0'
               : String(gradeValues.opportunitiesPenalty),
           dismissalGrade:
             !noDiscount && isFinalExam ? gradeValues.dismissalGrade : null,
@@ -422,7 +422,7 @@ export async function PUT(req: NextRequest) {
         data.dismissalGrade = null;
       } else if (effectiveType === 'فاينل') {
         data.discountMark = 0;
-        data.opportunitiesPenalty = 'فصل';
+        data.opportunitiesPenalty = '0';
       } else {
         data.dismissalGrade = null;
       }

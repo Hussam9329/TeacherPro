@@ -40,7 +40,6 @@ function normalizeNotePayload(body: Record<string, unknown>) {
     sourceType: String(body.sourceType ?? ''),
     sourceId: String(body.sourceId ?? ''),
     dismissalKey: String(body.dismissalKey ?? ''),
-    dismissalType: String(body.dismissalType ?? ''),
     dismissalReason: String(body.dismissalReason ?? ''),
     dismissalDate: optionalDate(body.dismissalDate),
   };
@@ -103,7 +102,6 @@ export async function PUT(req: NextRequest) {
     if (updates.sourceType !== undefined) data.sourceType = String(updates.sourceType ?? '');
     if (updates.sourceId !== undefined) data.sourceId = String(updates.sourceId ?? '');
     if (updates.dismissalKey !== undefined) data.dismissalKey = String(updates.dismissalKey ?? '');
-    if (updates.dismissalType !== undefined) data.dismissalType = String(updates.dismissalType ?? '');
     if (updates.dismissalReason !== undefined) data.dismissalReason = String(updates.dismissalReason ?? '');
     if (updates.dismissalDate !== undefined) data.dismissalDate = optionalDate(updates.dismissalDate);
     const studentNote = await withDatabaseSchema(

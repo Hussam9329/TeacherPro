@@ -141,6 +141,32 @@ function latestDismissalDate(
   return candidates.sort((a, b) => Date.parse(b) - Date.parse(a))[0] || "";
 }
 
+function latestDismissalReason(
+  opportunityLogs: LooseRecord[],
+  notes: LooseRecord[],
+): string {
+  const rows = [
+    ...opportunityLogs
+      .filter(isDismissalOpportunityLog)
+      .map((item) => ({
+        date: iso(item.date),
+        reason: text(item.reason)
+          .replace(/^تلقائي:\s*/u, "")
+          .replace(/^فصل الطالب:\s*/u, ""),
+      })),
+    ...notes
+      .filter(isDismissalActionNote)
+      .map((item) => ({
+        date: iso(item.dismissalDate) || iso(item.date),
+        reason: text(item.dismissalReason) || text(item.text)
+          .replace(/^(?:تم )?فصل الطالب(?:\s*[:(][^)]*\))?[:\s-]*/u, ""),
+      })),
+  ]
+    .filter((item) => item.date && item.reason)
+    .sort((left, right) => Date.parse(right.date) - Date.parse(left.date));
+  return rows[0]?.reason || "";
+}
+
 function gradeLabel(
   statusValue: unknown,
   scoreValue: unknown,
@@ -516,7 +542,7 @@ export async function GET(req: NextRequest) {
     const historySnapshot = await db.$transaction(
       async (tx) => {
         const student = await tx.student.findFirst({
-          where: { id: studentId, status: "مفصول" },
+          where: { id: studentId, status: { in: ["مفصول", "نشط"] } },
           select: {
             id: true,
             name: true,
@@ -534,7 +560,6 @@ export async function GET(req: NextRequest) {
             mainSite: true,
             subSite: true,
             status: true,
-            dismissalType: true,
             dismissalReason: true,
             dismissalNotes: true,
             opportunities: true,
@@ -670,8 +695,7 @@ export async function GET(req: NextRequest) {
                   kind: true,
                   text: true,
                   date: true,
-                  dismissalType: true,
-                  dismissalReason: true,
+                        dismissalReason: true,
                   dismissalDate: true,
                 },
                 orderBy: [{ date: "asc" }, { id: "asc" }],
@@ -745,7 +769,7 @@ export async function GET(req: NextRequest) {
 
     if (!historySnapshot) {
       return NextResponse.json(
-        { error: "الطالب غير موجود ضمن المفصولين حالياً." },
+        { error: "الطالب غير موجود ضمن سجل الفصل." },
         { status: 404 },
       );
     }
@@ -776,6 +800,18 @@ export async function GET(req: NextRequest) {
       liveOpportunityLogs,
       liveNotes,
     );
+    const historicalDismissalReason = latestDismissalReason(
+      liveOpportunityLogs,
+      liveNotes,
+    );
+    if (student.status !== "مفصول" && !currentDismissalAt) {
+      return NextResponse.json(
+        { error: "الطالب لا يملك سجل فصل سابقاً." },
+        { status: 404 },
+      );
+    }
+    const displayedDismissalReason =
+      student.dismissalReason || historicalDismissalReason;
 
     const parsedArchives = archives.map((archive) => ({
       archive,
@@ -932,6 +968,7 @@ export async function GET(req: NextRequest) {
     );
 
     if (
+      student.status === "مفصول" &&
       !liveOpportunityLogs.some(isDismissalOpportunityLog) &&
       !liveNotes.some(isDismissalActionNote)
     ) {
@@ -942,8 +979,8 @@ export async function GET(req: NextRequest) {
         title: "حالة الفصل الحالية",
         details: [
           sourceCourseDetail(currentCourseName),
-          student.dismissalReason
-            ? `السبب: ${student.dismissalReason}`
+          displayedDismissalReason
+            ? `السبب: ${displayedDismissalReason}`
             : "لا يوجد سبب فصل مسجل",
           student.dismissalNotes
             ? `الملاحظات: ${student.dismissalNotes}`
@@ -980,7 +1017,7 @@ export async function GET(req: NextRequest) {
         mainSite: student.mainSite || "",
         subSite: student.subSite || "",
         status: student.status,
-        dismissalReason: student.dismissalReason || "",
+        dismissalReason: displayedDismissalReason || "",
         dismissalNotes: student.dismissalNotes || "",
         opportunities: student.opportunities,
         baseOpportunities: student.baseOpportunities,

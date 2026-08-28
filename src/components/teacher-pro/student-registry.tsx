@@ -1588,7 +1588,6 @@ export function StudentRegistryView() {
     const result = await studentApi.statusAction({
       action: "dismiss",
       studentId: dismissDialog.student.id,
-      dismissalType: "فصل",
       reason: dismissReason.trim(),
       notes: dismissNotes.trim(),
       expectedStatus: dismissDialog.student.status,
@@ -3373,7 +3372,7 @@ export function StudentRegistryView() {
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-500/50 dark:bg-amber-950/30 dark:text-amber-100">
-                    ستُزال حالة الفصل الحالية ويُمنح الطالب فرصة أخيرة واحدة. أي فصل لاحق بعد هذه الفرصة قد يصبح نهائياً وفق قواعد النظام.
+                    ستُزال حالة الفصل الحالية ويصبح الطالب نشطاً برصيد فرصتين. تاريخ الفصل السابق يبقى للتوثيق فقط ولا يغيّر أي فصل لاحق.
                   </div>
                 )}
               </div>
@@ -3419,7 +3418,7 @@ export function StudentRegistryView() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm leading-6 text-destructive">
-              عند تأكيد الفصل سيصبح رصيد فرص الطالب <strong>0</strong> فوراً، ويُحفظ الإجراء كفصل موحّد.
+              عند تأكيد الفصل سيصبح الطالب <strong>مفصولاً</strong> ورصيد فرصه <strong>0</strong>. لا توجد أنواع أو درجات للفصل، وسجل الفصل السابق لا يغيّر هذا القرار.
             </div>
             <div className="space-y-2">
               <Label htmlFor="dismiss-reason">سبب الفصل</Label>

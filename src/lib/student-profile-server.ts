@@ -98,7 +98,6 @@ export const STUDENT_PROFILE_STUDENT_SELECT = {
   subSite: true,
   code: true,
   status: true,
-  dismissalType: true,
   dismissalReason: true,
   dismissalNotes: true,
   opportunities: true,
@@ -221,7 +220,7 @@ export function buildStudentProfileDataVersion(input: {
   const studentKeys = [
     "id", "courseId", "name", "school", "gender", "phone", "parentPhone",
     "telegram", "courseProgram", "courseTerm", "studyType", "locationScope",
-    "baghdadMode", "mainSite", "subSite", "code", "status", "dismissalType",
+    "baghdadMode", "mainSite", "subSite", "code", "status",
     "dismissalReason", "dismissalNotes", "opportunities", "baseOpportunities",
     "accountingGraceDays", "gracePeriodStartDate", "gracePeriodEndedAt", "createdAt",
   ];
@@ -270,7 +269,7 @@ export function buildStudentProfileDataVersion(input: {
     ]),
     studentNotes: orderedFacts(input.studentNotes, [
       "id", "kind", "text", "date", "sourceType", "sourceId", "dismissalKey",
-      "dismissalType", "dismissalReason", "dismissalDate",
+      "dismissalReason", "dismissalDate",
     ]),
     enrollmentArchives: orderedFacts(input.enrollmentArchives, [
       "id", "fromCourseId", "toCourseId", "resetKind", "reason", "createdAt",
@@ -284,7 +283,7 @@ export function buildStudentProfileDataVersion(input: {
 export function summarizeStudentProfileActivity(input: {
   gradeCount: number;
   opportunityLogs: Array<{ action: string; amount: number }>;
-  studentNotes: Array<{ kind: string; text: string; dismissalType: string }>;
+  studentNotes: Array<{ kind: string; text: string }>;
   callsCount: number;
   leavesCount: number;
   auditCount: number;
@@ -294,8 +293,12 @@ export function summarizeStudentProfileActivity(input: {
   ).length;
   const addedMovements = input.opportunityLogs.filter((log) => {
     const action = String(log.action || "").trim();
-    if (action === "إضافة" || action === "إعادة تعيين") return true;
-    return action.includes("فرصة أخيرة") && Number(log.amount || 0) > 0;
+    return (
+      action === "إضافة" ||
+      action === "إعادة تعيين" ||
+      action === "رصيد بعد تعهد" ||
+      action === "رصيد إعادة التفعيل"
+    );
   }).length;
   const automaticDismissals = input.opportunityLogs.filter((log) =>
     String(log.action || "").includes("فصل"),
@@ -304,14 +307,11 @@ export function summarizeStudentProfileActivity(input: {
     (note) => note.kind === "إجراء",
   );
   const manualDismissals = actionNotes.filter((note) =>
-    Boolean(
-      String(note.dismissalType || "").trim() ||
-        /(^|\s)(فصل الطالب|تم فصل الطالب)(\s|$|\()/u.test(
-          String(note.text || ""),
-        ),
+    /(^|\s)(فصل الطالب|تم فصل الطالب)(?:\s|$|[:(])/u.test(
+      String(note.text || ""),
     ),
   ).length;
-  // A final-chance marker belongs to the same reactivation and must not turn
+  // The two-opportunity balance marker belongs to the same reactivation and must not turn
   // one reactivation into two events.
   const reactivations = input.opportunityLogs.filter(
     (log) => String(log.action || "").trim() === "إعادة تفعيل",

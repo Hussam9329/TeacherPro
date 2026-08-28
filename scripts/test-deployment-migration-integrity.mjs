@@ -23,7 +23,7 @@ function check(condition, message) {
 const reconciliationMigrationName =
   "20260820140000_schema_authority_reconciliation";
 const requiredRuntimeMigrationName =
-  "20260828010000_unify_dismissal_and_zero_balance";
+  "20260828034500_single_dismissal_policy";
 const graceTerminationMigrationName =
   "20260822210000_end_grace_on_numeric_grade";
 const initialBridgeMigrationName = "20260601000000_initial_schema_bridge";
@@ -117,8 +117,9 @@ check(
   "the exact historical interrupted migration is present and recoverable through its reviewed idempotent path",
 );
 check(
-  buildScript.includes('"20260828010000_unify_dismissal_and_zero_balance"'),
-  "the reviewed unified-dismissal migration can recover after an interrupted idempotent run",
+  buildScript.includes('"20260828010000_unify_dismissal_and_zero_balance"') &&
+    buildScript.includes(`"${requiredRuntimeMigrationName}"`),
+  "the reviewed unified-dismissal migrations can recover after interrupted idempotent runs",
 );
 check(
   buildScript.includes("DIRECT_URL") &&

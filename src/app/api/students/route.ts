@@ -90,7 +90,6 @@ const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
   // Status and dismissal transitions are owned by status-action. Keeping them
   // out of generic profile edits prevents accidental unarchive/reactivation.
   "status",
-  "dismissalType",
   "dismissalReason",
   "dismissalNotes",
   // gracePeriodStartDate is set by the backend only (when graceDays changes)
@@ -562,7 +561,6 @@ export async function POST(req: NextRequest) {
             // PostgreSQL sequence allocation is atomic across all app instances.
             code,
             status: "نشط",
-            dismissalType: "",
             dismissalReason: "",
             dismissalNotes: body.dismissalNotes
               ? String(body.dismissalNotes)
@@ -1168,7 +1166,6 @@ export async function PUT(req: NextRequest) {
         transactionData.opportunities = nextOpportunities.opportunities;
         transactionData.baseOpportunities = nextOpportunities.baseOpportunities;
         transactionData.status = "نشط";
-        transactionData.dismissalType = "";
         transactionData.dismissalReason = "";
         transactionData.dismissalNotes = "";
         transactionData.gracePeriodEndedAt = null;

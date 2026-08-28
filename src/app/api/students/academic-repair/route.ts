@@ -279,7 +279,6 @@ export async function PATCH(req: NextRequest) {
             where: { id: { in: transitioningIds }, status: "مفصول" },
             data: {
               status: "نشط",
-              dismissalType: "",
               dismissalReason: "",
               dismissalNotes: "",
             },
@@ -371,7 +370,6 @@ export async function PATCH(req: NextRequest) {
       const rows = fetchedRows.slice(0, limit);
       let restoredStudents = 0;
       let stillDismissed = 0;
-      let dismissals = 0;
       let convertedGrades = 0;
       let convertedBeforeRegistration = 0;
       let deletedCalls = 0;
@@ -390,7 +388,6 @@ export async function PATCH(req: NextRequest) {
             restoredStudents += 1;
           } else {
             stillDismissed += 1;
-            dismissals += 1;
           }
         }
       }
@@ -402,7 +399,6 @@ export async function PATCH(req: NextRequest) {
         hasMore,
         restoredStudents,
         stillDismissed,
-        dismissals,
         convertedGrades,
         convertedBeforeRegistration,
         deletedCalls,

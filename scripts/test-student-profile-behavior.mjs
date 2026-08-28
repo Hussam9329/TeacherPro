@@ -222,19 +222,19 @@ test("timeline count includes each visible source exactly once", () => {
   );
 });
 
-test("server activity counters do not double-count notes or final-chance logs", () => {
+test("server activity counters do not double-count notes or reactivation balance logs", () => {
   const summary = profileServer.summarizeStudentProfileActivity({
     gradeCount: 3,
     opportunityLogs: [
       { action: "خصم", amount: 1 },
       { action: "إضافة", amount: 2 },
       { action: "إعادة تفعيل", amount: 0 },
-      { action: "فرصة أخيرة بعد تعهد", amount: 1 },
+      { action: "رصيد بعد تعهد", amount: 2 },
     ],
     studentNotes: [
-      { kind: "إجراء", text: "فصل الطالب", dismissalType: "فصل" },
-      { kind: "إجراء", text: "تعديل إداري", dismissalType: "" },
-      { kind: "تعهد ولي الأمر", text: "تعهد", dismissalType: "" },
+      { kind: "إجراء", text: "فصل الطالب: انتهاء الفرص" },
+      { kind: "إجراء", text: "تعديل إداري" },
+      { kind: "تعهد ولي الأمر", text: "تعهد" },
     ],
     callsCount: 2,
     leavesCount: 1,

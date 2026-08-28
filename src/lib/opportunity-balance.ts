@@ -22,7 +22,6 @@ export type OpportunityPenaltyEffect = {
   dismissalTrigger: boolean;
 };
 
-/** Every dismissed student returns with exactly two usable opportunities. */
 export const REACTIVATION_OPPORTUNITY_GRANT = 2;
 export const ZERO_BALANCE_VIOLATION_MARKER = "[zero-balance-violation]";
 

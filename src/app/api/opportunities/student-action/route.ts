@@ -96,7 +96,6 @@ function selectStudentForResponse() {
     subSite: true,
     code: true,
     status: true,
-    dismissalType: true,
     dismissalReason: true,
     dismissalNotes: true,
     createdAt: true,

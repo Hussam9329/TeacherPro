@@ -249,11 +249,11 @@ function gradeImpactLabel(kind: GradeClassificationKind, grade: Grade, exam?: Ex
   if (kind === "grace-period") return "لم يتم الخصم: الامتحان ضمن فترة السماح المحاسبية للطالب.";
   if (kind === "no-discount-protected") return "لم يتم الخصم: هذا الامتحان مضبوط كـ بدون خصم.";
   if (kind === "missing") return "لا توجد محاسبة لأن الدرجة غير مكتملة.";
-  if (kind === "cheating") return "غش: يؤدي إلى فصل الطالب وتصفير الفرص.";
-  if (kind === "absent-dismissal") return "غائب: يؤدي إلى الفصل لأنه غياب في امتحان فاينل.";
+  if (kind === "cheating") return "غش: يؤدي إلى فصل الطالب وتصفير رصيد الفرص.";
+  if (kind === "absent-dismissal") return "غائب: يؤدي إلى فصل الطالب لأنه غياب في امتحان فاينل.";
   if (kind === "absent-deducted") return `غائب: تم احتسابه كغياب مخصوم، مقدار الخصم ${examPenaltyText(exam)} فرصة.`;
   if (kind === "discounted") return `درجة ضمن الخصم: تم خصم ${examPenaltyText(exam)} فرصة.`;
-  if (kind === "dismissal") return "درجة فصل/صفر: تؤدي إلى فصل الطالب وتصفير الفرص.";
+  if (kind === "dismissal") return "درجة فصل/صفر: تؤدي إلى فصل الطالب وتصفير رصيد الفرص.";
   if (kind === "academic-accounting") return "راسب غير مخصوم: محسوب أكاديمياً بدون خصم فرص مباشر.";
   if (kind === "failed") return "راسب بدون خصم فرص مباشر.";
   if (kind === "passed" || kind === "full-mark") return "ناجح: لا يوجد خصم.";
@@ -316,8 +316,11 @@ function buildOpportunityTraceRows(logs: OpportunityLog[]): OpportunityTraceRow[
         deltaText = `-${amount}`;
       } else if (action === "إعادة تعيين") {
         deltaText = "إعادة تعيين وفق إعداد الفصل وقت الإجراء";
-      } else if (action.includes("فرصة أخيرة")) {
-        deltaText = `تثبيت فرصة أخيرة: ${amount || 1}`;
+      } else if (
+        action === "رصيد بعد تعهد" ||
+        action === "رصيد إعادة التفعيل"
+      ) {
+        deltaText = `رصيد إعادة التفعيل: ${amount || 2}`;
       }
 
       return {
@@ -564,7 +567,7 @@ export function StudentProfileDialog({
           source: "الملاحظات",
           title: note.kind || "ملاحظة",
           details: linkedDismissal
-            ? `${note.text} | مرتبط بالفصل: ${note.dismissalType || "فصل"} - ${note.dismissalReason || "بدون سبب"}${note.dismissalDate ? ` - ${note.dismissalDate}` : ""}`
+            ? `${note.text} | مرتبط بالفصل: ${note.dismissalReason || "بدون سبب"}${note.dismissalDate ? ` - ${note.dismissalDate}` : ""}`
             : note.text,
           tone: note.kind === "تعهد ولي الأمر" ? "success" as const : note.kind === "إجراء" ? "secondary" as const : "info" as const,
         };
@@ -1028,7 +1031,7 @@ export function StudentProfileDialog({
                 {profileStudent.status === "مفصول" && (
                   <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:rounded-3xl">
                     <p className="font-black text-destructive">بيانات الفصل</p>
-                    <p className="mt-2 break-words">{profileStudent.dismissalType || "—"} - {profileStudent.dismissalReason || "—"}</p>
+                    <p className="mt-2 break-words">مفصول - {profileStudent.dismissalReason || "—"}</p>
                     {profileStudent.dismissalNotes && <p className="mt-1 break-words text-muted-foreground">{profileStudent.dismissalNotes}</p>}
                   </div>
                 )}
@@ -1154,8 +1157,8 @@ export function StudentProfileDialog({
                           <span className="text-xs text-muted-foreground">{formatAppDate(note.date)}</span>
                         </div>
                         <p className="mt-2 break-words">{note.text}</p>
-                        {(note.dismissalType || note.dismissalReason) && (
-                          <p className="mt-2 break-words text-xs text-muted-foreground">مرتبط بالفصل: {note.dismissalType || "فصل"} - {note.dismissalReason || "بدون سبب"}</p>
+                        {note.dismissalReason && (
+                          <p className="mt-2 break-words text-xs text-muted-foreground">مرتبط بالفصل: {note.dismissalReason}</p>
                         )}
                       </div>
                     ))}

@@ -9,8 +9,8 @@ import { Prisma } from "@prisma/client";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
-import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 import { REACTIVATION_OPPORTUNITY_GRANT } from "@/lib/opportunity-balance";
+import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 
 const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
@@ -19,7 +19,6 @@ type DismissalInfo = {
   key: string;
   sourceType: string;
   sourceId: string;
-  type: string;
   reason: string;
   date: string;
   examName: string;
@@ -45,7 +44,6 @@ function buildDismissalKey(parts: {
   studentId: string;
   sourceType: string;
   sourceId: string;
-  type: string;
   reason: string;
   date: string;
 }) {
@@ -53,11 +51,11 @@ function buildDismissalKey(parts: {
     parts.studentId,
     parts.sourceType,
     parts.sourceId,
-    normalizeDismissalText(parts.type),
     normalizeDismissalText(parts.reason),
     dayKey(parts.date),
   ].join("::");
 }
+
 
 function rowMatchesSearch(row: { student: Record<string, unknown>; dismissalInfo: DismissalInfo; note?: Record<string, unknown> | null }, query: string) {
   if (!query.trim()) return true;
@@ -69,7 +67,6 @@ function rowMatchesSearch(row: { student: Record<string, unknown>; dismissalInfo
     row.student.telegram,
     row.student.school,
     row.student.status,
-    row.dismissalInfo.type,
     row.dismissalInfo.reason,
     row.dismissalInfo.examName,
     row.note?.text,
@@ -108,7 +105,6 @@ function buildInfoForDismissedStudent(
   student: {
     id: string;
     status: string;
-    dismissalType: string | null;
     dismissalReason: string | null;
     createdAt: Date;
   },
@@ -128,8 +124,7 @@ function buildInfoForDismissedStudent(
   }>,
 ): DismissalInfo | null {
   if (student.status !== "مفصول") return null;
-  const type = "فصل";
-  const reason = student.dismissalReason || type || "طالب مفصول";
+  const reason = student.dismissalReason || "طالب مفصول";
   const normalizedReason = normalizeDismissalText(reason);
 
   const dismissalLogs = logs
@@ -163,13 +158,11 @@ function buildInfoForDismissedStudent(
       studentId: student.id,
       sourceType,
       sourceId,
-      type,
       reason,
       date,
     }),
     sourceType,
     sourceId,
-    type,
     reason,
     date,
     examName: sourceLog?.exam?.name || "",
@@ -185,14 +178,12 @@ function buildInfoFromPledgeNote(
     sourceType: string;
     sourceId: string;
     dismissalKey: string;
-    dismissalType: string;
     dismissalReason: string;
     dismissalDate: Date | null;
   },
   sourceLog?: { date: Date; exam?: { name: string } | null } | null,
 ): DismissalInfo {
-  const type = "فصل";
-  const reason = note.dismissalReason || note.text || type;
+  const reason = note.dismissalReason || note.text || "فصل الطالب";
   const sourceType = note.sourceType || "pledge-note";
   const sourceId = note.sourceId || note.id;
   const date = dayKey(note.dismissalDate || sourceLog?.date || note.date);
@@ -202,7 +193,6 @@ function buildInfoFromPledgeNote(
       studentId: student.id,
       sourceType,
       sourceId,
-      type,
       reason,
       date,
     });
@@ -211,7 +201,6 @@ function buildInfoFromPledgeNote(
     key,
     sourceType,
     sourceId,
-    type,
     reason,
     date,
     examName: sourceLog?.exam?.name || "",
@@ -220,7 +209,6 @@ function buildInfoFromPledgeNote(
 
 async function buildPledgeRows(searchParams: URLSearchParams) {
   const q = cleanText(searchParams.get("q"));
-  const typeFilter = cleanText(searchParams.get("typeFilter") || "all");
   const statusFilter = cleanText(searchParams.get("statusFilter") || "all");
 
   const [dismissedStudents, pledgeNotes] = await db.$transaction([
@@ -318,7 +306,6 @@ async function buildPledgeRows(searchParams: URLSearchParams) {
       key,
       student,
       dismissalInfo,
-      group: "dismissal",
       pledged: Boolean(linkedNote),
       note: linkedNote,
       reactivated: false,
@@ -339,7 +326,6 @@ async function buildPledgeRows(searchParams: URLSearchParams) {
       key,
       student: note.student,
       dismissalInfo,
-      group: "dismissal",
       pledged: true,
       note,
       reactivated: note.student.status !== "مفصول",
@@ -349,7 +335,6 @@ async function buildPledgeRows(searchParams: URLSearchParams) {
 
   const stats = {
     dismissed: dismissedStudents.length,
-    dismissal: rows.filter((row) => (row.student as { status?: string }).status === "مفصول").length,
     pledged: rows.filter((row) => Boolean(row.pledged)).length,
     reactivated: rows.filter((row) => Boolean(row.reactivated)).length,
     pending: rows.filter((row) => !row.pledged && (row.student as { status?: string }).status === "مفصول").length,
@@ -359,7 +344,6 @@ async function buildPledgeRows(searchParams: URLSearchParams) {
 
   const filtered = rows
     .filter((row) => {
-      if (typeFilter === "dismissal" && row.group !== "dismissal") return false;
       if (statusFilter === "pledged" && !row.pledged) return false;
       if (statusFilter === "pending" && row.pledged) return false;
       if (statusFilter === "reactivated" && !row.reactivated) return false;
@@ -456,7 +440,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const type = "فصل";
     const reason = cleanText(dismissalInfo.reason) || "تعهد ولي الأمر";
     const sourceType = cleanText(dismissalInfo.sourceType) || "student-dismissal";
     const sourceId = cleanText(dismissalInfo.sourceId) || studentId;
@@ -467,7 +450,6 @@ export async function POST(req: NextRequest) {
         studentId,
         sourceType,
         sourceId,
-        type,
         reason,
         date: dismissalDate || dayKey(new Date()),
       });
@@ -496,11 +478,10 @@ export async function POST(req: NextRequest) {
           data: {
             studentId,
             kind: PLEDGE_NOTE_KIND,
-            text: `تم تعهد ولي الأمر على ${type}: ${reason}`,
+            text: `تم تعهد ولي الأمر بخصوص فصل الطالب: ${reason}`,
             sourceType,
             sourceId,
             dismissalKey,
-            dismissalType: type,
             dismissalReason: reason,
             dismissalDate: dismissalDate ? new Date(dismissalDate) : null,
           },
@@ -529,7 +510,6 @@ export async function POST(req: NextRequest) {
             where: { id: studentId },
             data: {
               status: "نشط",
-              dismissalType: "",
               dismissalReason: "",
               dismissalNotes: "",
               opportunities: REACTIVATION_OPPORTUNITY_GRANT,
@@ -552,21 +532,21 @@ export async function POST(req: NextRequest) {
               examId: null,
               action: "إعادة تفعيل",
               amount: 0,
-              reason: "تثبيت إعادة التفعيل بفرصتين بعد تعهد ولي الأمر: لا يعاد فصل الطالب بسبب سجلات قديمة؛ يبقى نشطاً عند الوصول إلى 0، ويفصل فقط عند مخالفة خصم جديدة تبدأ وهو بدون فرص",
+              reason: "تثبيت إعادة التفعيل بعد تعهد ولي الأمر: الطالب نشط برصيد فرصتين؛ الوصول إلى 0 لا يفصله، والمخالفة التالية وهو بدون فرص تؤدي إلى الفصل",
               chapterId: activeChapter?.id || null,
               chapterNameSnapshot: activeChapter?.name || null,
             },
           })
         : null;
 
-      const reactivationGrantLog = shouldReactivate
+      const pledgeBalanceLog = shouldReactivate
         ? await tx.opportunityLog.create({
             data: {
               studentId,
               examId: null,
-              action: "إعادة تفعيل بفرصتين",
+              action: "رصيد بعد تعهد",
               amount: REACTIVATION_OPPORTUNITY_GRANT,
-              reason: "إرجاع الطالب بعد تعهد ولي الأمر بفرصتين",
+              reason: "إرجاع الطالب بعد تعهد ولي الأمر برصيد فرصتين",
               chapterId: activeChapter?.id || null,
               chapterNameSnapshot: activeChapter?.name || null,
             },
@@ -582,8 +562,7 @@ export async function POST(req: NextRequest) {
               sourceType: "pledge-reactivation",
               sourceId: pledgeNote.id,
               dismissalKey,
-              dismissalType: type,
-              dismissalReason: reason,
+                dismissalReason: reason,
               dismissalDate: dismissalDate ? new Date(dismissalDate) : null,
             },
           })
@@ -593,7 +572,7 @@ export async function POST(req: NextRequest) {
         data: {
           module: "التعهدات",
           action: shouldReactivate ? "تثبيت تعهد وإعادة تفعيل" : "تثبيت تعهد ولي الأمر",
-          details: `${student.name} - ${student.code} - ${type} - ${reason}`,
+          details: `${student.name} - ${student.code} - ${reason}`,
           userId: principal.id,
           userName: principal.name,
         },
@@ -603,7 +582,7 @@ export async function POST(req: NextRequest) {
         student: updatedStudent,
         studentNote: pledgeNote,
         actionNote,
-        opportunityLogs: [reactivationLog, reactivationGrantLog].filter(Boolean),
+        opportunityLogs: [reactivationLog, pledgeBalanceLog].filter(Boolean),
         reactivated: shouldReactivate,
         pendingGradeMigration,
       };
@@ -620,15 +599,12 @@ export async function POST(req: NextRequest) {
       source: "database",
     });
   } catch (error) {
-    const err = error as { code?: string; statusCode?: number; userMessage?: string };
+    const err = error as { code?: string; statusCode?: number };
     if (err.code === "P2025") {
       return NextResponse.json({ error: "تعذر العثور على الطالب المطلوب." }, { status: 404 });
     }
     if (err.statusCode === 409) {
-      return NextResponse.json(
-        { error: err.userMessage || "لا يمكن تثبيت تعهد لطالب مؤرشف. استعد الطالب أولاً." },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: "لا يمكن تثبيت تعهد لطالب مؤرشف. استعد الطالب أولاً." }, { status: 409 });
     }
     return routeErrorResponse(error, "تعذر تنفيذ إجراء التعهد حالياً.");
   }

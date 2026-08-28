@@ -118,24 +118,24 @@ function buildJudgmentPreview(state: ExamFormState): JudgmentPreviewItem[] {
       tone: "info",
     });
     items.push({ title: "الغياب", description: "لا يخصم فرص لأن الامتحان بدون خصم.", tone: "info" });
-    items.push({ title: "الغش", description: "يبقى إجراءً خطيراً ويؤدي إلى الفصل وتصفير الفرص.", tone: "danger" });
+    items.push({ title: "الغش", description: "يبقى إجراءً خطيراً: الغش يؤدي إلى فصل الطالب ويصفر رصيد الفرص.", tone: "danger" });
     return items;
   }
 
   if (isFinalExam) {
     if (dismissalGrade !== null) {
-      items.push({ title: `من 0 إلى ${formatRangeNumber(dismissalGrade)}`, description: "فصل حسب درجة الفصل في الفاينل.", tone: "danger" });
+      items.push({ title: `من 0 إلى ${formatRangeNumber(dismissalGrade)}`, description: "فصل الطالب حسب درجة الفصل في الفاينل.", tone: "danger" });
       if (dismissalGrade >= passMark) {
         items.push({ title: "تنبيه تداخل", description: "درجة الفصل تساوي أو تتجاوز درجة النجاح، وهذا يجعل حكم الفصل يتداخل مع النجاح. راجع القيم قبل الحفظ.", tone: "danger" });
       }
       items.push({ title: `أكبر من ${formatRangeNumber(dismissalGrade)} وأقل من ${formatRangeNumber(passMark)}`, description: "راسب في الفاينل بدون خصم فرص مباشر.", tone: "warn" });
     } else {
-      items.push({ title: "درجة 0", description: "فصل في الفاينل.", tone: "danger" });
+      items.push({ title: "درجة 0", description: "فصل الطالب في الفاينل.", tone: "danger" });
       items.push({ title: `أكبر من 0 وأقل من ${formatRangeNumber(passMark)}`, description: "راسب.", tone: "warn" });
     }
     items.push({ title: `من ${formatRangeNumber(passMark)} فما فوق`, description: "ناجح.", tone: "ok" });
-    items.push({ title: "الغياب", description: "فصل لأنه غياب ضمن فاينل.", tone: "danger" });
-    items.push({ title: "الغش", description: "الغش يؤدي إلى الفصل وتصفير الفرص.", tone: "danger" });
+    items.push({ title: "الغياب", description: "فصل الطالب لأنه غياب ضمن فاينل.", tone: "danger" });
+    items.push({ title: "الغش", description: "الغش يؤدي إلى فصل الطالب ويصفر رصيد الفرص.", tone: "danger" });
     return items;
   }
 
@@ -143,7 +143,7 @@ function buildJudgmentPreview(state: ExamFormState): JudgmentPreviewItem[] {
   items.push({ title: `أكبر من ${formatRangeNumber(discountMark)} وأقل من ${formatRangeNumber(passMark)}`, description: "راسب/محاسبة رسوب بدون خصم فرص مباشر.", tone: "warn" });
   items.push({ title: `من ${formatRangeNumber(passMark)} فما فوق`, description: "ناجح.", tone: "ok" });
   items.push({ title: "الغياب", description: `مخصوم: يخصم ${formatRangeNumber(penalty)} فرصة.`, tone: "danger" });
-  items.push({ title: "الغش", description: "الغش يؤدي إلى الفصل وتصفير الفرص.", tone: "danger" });
+  items.push({ title: "الغش", description: "الغش يؤدي إلى فصل الطالب ويصفر رصيد الفرص.", tone: "danger" });
   return items;
 }
 
@@ -213,7 +213,7 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
     opportunitiesPenalty: noDiscount
       ? 0
       : isFinalExam
-        ? "فصل"
+        ? 0
         : Number(toLatinDigits(form.opportunitiesPenaltyNum)),
     dismissalGrade:
       !noDiscount && isFinalExam && form.dismissalGrade.trim()
@@ -347,9 +347,9 @@ export function ExamNewView() {
     }
     setForm(emptyForm());
     // إصلاح: استخدام dispatchLocal لضمان تحديث الواجهة فوراً بعد الإضافة
-    emitTeacherProDataChanged({ 
-      source: "local-mutation", 
-      reason: "exam-created", 
+    emitTeacherProDataChanged({
+      source: "local-mutation",
+      reason: "exam-created",
       scopes: ["exams", "grades", "opportunities", "follow-up", "dashboard"],
       dispatchLocal: true  // ← إضافة هذا السطر لإصلاح المشكلة
     });
@@ -760,7 +760,7 @@ export function ExamNewView() {
               }))
             }
           />
-          {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ الغياب أو الغش أو درجة الفصل تؤدي إلى الفصل.</p>}
+          {isFinalExam && !noDiscount && <p className="text-xs text-amber-600">معطل في الفاينل؛ الغياب أو الغش أو درجة الفصل يعالج كفصل للطالب.</p>}
           {noDiscount && <p className="text-xs text-sky-600">معطل لأن الامتحان بدون خصم.</p>}
           <ExamFieldError
             id={`${prefix}-opportunities-penalty-error`}
