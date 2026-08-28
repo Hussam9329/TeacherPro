@@ -128,6 +128,7 @@ const RECOVERABLE_IDEMPOTENT_MIGRATIONS = [
   "20260712190000_atomic_student_codes_and_active_chapter_guard",
   "20260712220000_student_enrollment_archives",
   "20260712234500_operational_integrity_hardening",
+  "20260828010000_unify_dismissal_and_zero_balance",
 ];
 
 const INITIAL_SCHEMA_BRIDGE = "20260601000000_initial_schema_bridge";

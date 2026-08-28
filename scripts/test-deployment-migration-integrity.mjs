@@ -117,6 +117,10 @@ check(
   "the exact historical interrupted migration is present and recoverable through its reviewed idempotent path",
 );
 check(
+  buildScript.includes('"20260828010000_unify_dismissal_and_zero_balance"'),
+  "the reviewed unified-dismissal migration can recover after an interrupted idempotent run",
+);
+check(
   buildScript.includes("DIRECT_URL") &&
     buildScript.includes("redactDatabaseUrl") &&
     !buildScript.includes('replace(/:[^:@]+@/'),

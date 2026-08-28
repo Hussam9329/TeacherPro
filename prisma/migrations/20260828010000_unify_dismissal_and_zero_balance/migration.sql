@@ -1,6 +1,11 @@
 -- Unify every dismissal path under one durable value. The triggers keep the
 -- rolling deployment safe while older server instances are still draining.
 
+-- The previous constraint accepts only the legacy values, so it must be
+-- removed before the normalizing triggers or data update can emit `فصل`.
+ALTER TABLE "Student"
+DROP CONSTRAINT IF EXISTS "Student_dismissal_type_allowed";
+
 CREATE OR REPLACE FUNCTION "normalize_student_dismissal_type"()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -64,9 +69,6 @@ WHERE COALESCE(trim("dismissalType"), '') <> '';
 UPDATE "Exam"
 SET "opportunitiesPenalty" = 'فصل'
 WHERE "opportunitiesPenalty" IN ('فصل مؤقت', 'فصل نهائي');
-
-ALTER TABLE "Student"
-DROP CONSTRAINT IF EXISTS "Student_dismissal_type_allowed";
 
 ALTER TABLE "Student"
 ADD CONSTRAINT "Student_dismissal_type_allowed"
