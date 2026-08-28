@@ -42,8 +42,8 @@ type PledgeFilter = "all" | "with-pledge" | "without-pledge";
 
 type DismissedStats = {
   total: number;
-  temporary: number;
-  final: number;
+  current: number;
+  former: number;
   withNotes: number;
   withPledge: number;
   withoutPledge: number;
@@ -51,7 +51,6 @@ type DismissedStats = {
 
 type DismissalDetail = {
   studentId: string;
-  type: string;
   reason: string;
   notes?: string;
   dismissalDate?: string;
@@ -142,7 +141,6 @@ export function DismissedStudentsView() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 180);
   const [filterCourseId, setFilterCourseId] = useState("");
-  const [filterDismissalType, setFilterDismissalType] = useState("");
   const [filterNotes, setFilterNotes] = useState<NotesFilter>("all");
   const [filterPledge, setFilterPledge] = useState<PledgeFilter>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
@@ -161,16 +159,16 @@ export function DismissedStudentsView() {
   const [reactivatingIds, setReactivatingIds] = useState<Record<string, boolean>>({});
   const [dismissedStats, setDismissedStats] = useState<DismissedStats>({
     total: 0,
-    temporary: 0,
-    final: 0,
+    current: 0,
+    former: 0,
     withNotes: 0,
     withPledge: 0,
     withoutPledge: 0,
   });
   const [systemDismissedStats, setSystemDismissedStats] = useState<DismissedStats>({
     total: 0,
-    temporary: 0,
-    final: 0,
+    current: 0,
+    former: 0,
     withNotes: 0,
     withPledge: 0,
     withoutPledge: 0,
@@ -186,7 +184,6 @@ export function DismissedStudentsView() {
     });
     if (debouncedSearch) params.set("q", debouncedSearch);
     if (filterCourseId) params.set("courseId", filterCourseId);
-    if (filterDismissalType) params.set("dismissalType", filterDismissalType);
     if (filterNotes !== "all") params.set("notesFilter", filterNotes);
     if (filterPledge !== "all") params.set("pledgeFilter", filterPledge);
 
@@ -250,7 +247,6 @@ export function DismissedStudentsView() {
     dismissedListRefreshKey,
     dismissedPage,
     filterCourseId,
-    filterDismissalType,
     filterNotes,
     filterPledge,
     mergeStudentsCache,
@@ -306,7 +302,6 @@ export function DismissedStudentsView() {
     const params = new URLSearchParams();
     if (debouncedSearch) params.set("q", debouncedSearch);
     if (filterCourseId) params.set("courseId", filterCourseId);
-    if (filterDismissalType) params.set("dismissalType", filterDismissalType);
     if (filterNotes !== "all") params.set("notesFilter", filterNotes);
     if (filterPledge !== "all") params.set("pledgeFilter", filterPledge);
 
@@ -337,31 +332,9 @@ export function DismissedStudentsView() {
       });
 
     return () => controller.abort();
-  }, [debouncedSearch, filterCourseId, filterDismissalType, filterNotes, filterPledge, syncKey, isBackgroundSync]);
-
-  const dismissedTypes = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          [
-            "فصل مؤقت",
-            "فصل نهائي",
-            ...dismissedServerStudents
-              .filter((student) => student.status === "مفصول")
-              .map(
-                (student) =>
-                  dismissalDetails[student.id]?.type ||
-                  student.dismissalType ||
-                  "مفصول",
-              ),
-          ],
-        ),
-      ).filter(Boolean),
-    [dismissedServerStudents, dismissalDetails],
-  );
+  }, [debouncedSearch, filterCourseId, filterNotes, filterPledge, syncKey, isBackgroundSync]);
 
   const buildLocalDismissalDetail = (student: Student): DismissalDetail => {
-    const type = student.dismissalType || "مفصول";
     const reason = student.dismissalReason || "لا يوجد سبب مسجل";
     const studentLogs = opportunityLogs
       .filter((log) => log.studentId === student.id)
@@ -405,7 +378,6 @@ export function DismissedStudentsView() {
 
     return {
       studentId: student.id,
-      type,
       reason,
       notes: student.dismissalNotes || "",
       dismissalDate,
@@ -464,7 +436,7 @@ export function DismissedStudentsView() {
 
     if (!serverDetail.hasPledge) {
       const ok = window.confirm(
-        `لم يتم تسجيل تعهد لهذا الفصل.\n\nالطالب: ${student.name}\nنوع الفصل: ${serverDetail.type || "مفصول"}\nالسبب: ${serverDetail.reason || "لا يوجد سبب مسجل"}\n\nهل تريد إعادة التفعيل رغم عدم وجود تعهد؟`,
+        `لم يتم تسجيل تعهد لهذا الفصل.\n\nالطالب: ${student.name}\nالحالة: مفصول\nالسبب: ${serverDetail.reason || "لا يوجد سبب مسجل"}\n\nهل تريد إعادة التفعيل رغم عدم وجود تعهد؟`,
       );
       if (!ok) return;
       toast.warning("سيتم تنفيذ إعادة التفعيل بدون تعهد مسجل لهذا الفصل بعد تأكيد الحفظ.");
@@ -516,8 +488,8 @@ export function DismissedStudentsView() {
             </p>
           </div>
           <div>
-            <p className="text-xs font-semibold text-muted-foreground">نوع الفصل</p>
-            <p className="mt-1 font-medium">{detail.type || student.dismissalType || "مفصول"}</p>
+            <p className="text-xs font-semibold text-muted-foreground">الحالة</p>
+            <p className="mt-1 font-medium">مفصول</p>
           </div>
           <div>
             <p className="text-xs font-semibold text-muted-foreground">الامتحان المرتبط</p>
@@ -600,7 +572,6 @@ export function DismissedStudentsView() {
   const applyPreset = (values: FilterPresetValues) => {
     setSearch(String(values.search || ""));
     setFilterCourseId(String(values.courseId || ""));
-    setFilterDismissalType(String(values.dismissalType || ""));
     setFilterNotes((values.notesFilter as NotesFilter) || "all");
     setFilterPledge((values.pledgeFilter as PledgeFilter) || "all");
     setViewMode((values.viewMode as ViewMode) || "cards");
@@ -610,7 +581,6 @@ export function DismissedStudentsView() {
   const clearFilters = () => {
     setSearch("");
     setFilterCourseId("");
-    setFilterDismissalType("");
     setFilterNotes("all");
     setFilterPledge("all");
     setViewMode("cards");
@@ -681,19 +651,19 @@ export function DismissedStudentsView() {
           scope="system"
         />
         <StatCard
-          label="فصل مؤقت"
-          value={dismissedStatsLoading ? "..." : systemDismissedStats.temporary}
-          icon={Clock}
-          tone="warning"
-          hint="من إجمالي النظام"
+          label="مفصول حالياً"
+          value={dismissedStatsLoading ? "..." : systemDismissedStats.current}
+          icon={Ban}
+          tone="danger"
+          hint="الحالة الحالية"
           scope="system"
         />
         <StatCard
-          label="فصل نهائي"
-          value={dismissedStatsLoading ? "..." : systemDismissedStats.final}
-          icon={Ban}
-          tone="danger"
-          hint="من إجمالي النظام"
+          label="مفصول سابقاً"
+          value={dismissedStatsLoading ? "..." : systemDismissedStats.former}
+          icon={Clock}
+          tone="warning"
+          hint="نشط وله سجل فصل سابق"
           scope="system"
         />
         <StatCard
@@ -755,30 +725,6 @@ export function DismissedStudentsView() {
                   {courses.map((course) => (
                     <SelectItem key={course.id} value={course.id}>
                       {course.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label htmlFor="dismissed-type" className="text-xs">
-                نوع الفصل
-              </Label>
-              <Select
-                value={filterDismissalType || "all"}
-                onValueChange={(value) => {
-                  setFilterDismissalType(value === "all" ? "" : value);
-                  setDismissedPage(1);
-                }}
-              >
-                <SelectTrigger id="dismissed-type">
-                  <SelectValue placeholder="الكل" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {dismissedTypes.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -865,7 +811,6 @@ export function DismissedStudentsView() {
             currentFilters={{
               search,
               courseId: filterCourseId,
-              dismissalType: filterDismissalType,
               notesFilter: filterNotes,
               pledgeFilter: filterPledge,
               viewMode,
@@ -888,7 +833,7 @@ export function DismissedStudentsView() {
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="font-bold">{student.name}</h3>
                         <Badge variant="destructive">
-                          {dismissalDetails[student.id]?.type || student.dismissalType || "مفصول"}
+                          مفصول
                         </Badge>
                         {dismissalDetails[student.id]?.hasPledge ? (
                           <Badge variant="outline">تعهد مسجل</Badge>
@@ -932,7 +877,7 @@ export function DismissedStudentsView() {
                 <th className="p-3 text-right">الطالب</th>
                 <th className="p-3 text-right">الكود</th>
                 <th className="p-3 text-right">الدورة</th>
-                <th className="p-3 text-right">نوع الفصل</th>
+                <th className="p-3 text-right">الحالة</th>
                 <th className="p-3 text-right">تفاصيل الفصل</th>
                 <th className="p-3 text-right">التعهد</th>
                 <th className="p-3 text-right">الملاحظات</th>
@@ -951,7 +896,7 @@ export function DismissedStudentsView() {
                     <td className="p-3">{courseName(student.courseId)}</td>
                     <td className="p-3">
                       <Badge variant="destructive">
-                        {detail.type || student.dismissalType || "مفصول"}
+                        مفصول
                       </Badge>
                     </td>
                     <td className="p-3 min-w-80">

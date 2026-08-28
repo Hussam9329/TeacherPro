@@ -48,7 +48,6 @@ export async function GET(req: NextRequest) {
     },
     select: {
       id: true,
-      dismissalType: true,
       dismissalReason: true,
       dismissalNotes: true,
       createdAt: true,
@@ -110,7 +109,6 @@ export async function GET(req: NextRequest) {
   }
 
   const details = students.map((student) => {
-    const type = student.dismissalType || "مفصول";
     const reason = student.dismissalReason || "لا يوجد سبب مسجل";
     const studentLogs = logsByStudent.get(student.id) || [];
     const dismissalLog =
@@ -146,7 +144,6 @@ export async function GET(req: NextRequest) {
 
     return {
       studentId: student.id,
-      type,
       reason,
       notes: student.dismissalNotes || "",
       dismissalDate,

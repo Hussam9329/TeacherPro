@@ -96,9 +96,9 @@ must(
 
 must(
   followUp.includes("debouncedPledgeSearch") &&
-    followUp.includes("typeFilter: pledgeTypeFilter") &&
+    !followUp.includes("pledgeTypeFilter") &&
     followUp.includes("statusFilter: pledgeStatusFilter"),
-  "البحث وفلاتر نوع الفصل وحالة التعهد تُرسل للخادم",
+  "البحث وحالة التعهد تُرسل للخادم بدون فلتر نوع فصل",
   "يجب أن تمر فلاتر التعهدات إلى API قاعدة البيانات لا تبقى محلية فقط.",
 );
 
@@ -125,6 +125,9 @@ must(
     pledgeRoute.includes("studentNote.create") &&
     pledgeRoute.includes("student.update") &&
     pledgeRoute.includes("opportunityLog.create") &&
+    pledgeRoute.includes('action: "رصيد بعد تعهد"') &&
+    pledgeRoute.includes("amount: 2") &&
+    !pledgeRoute.includes("dismissalType") &&
     pledgeRoute.includes("auditLog.create"),
   "تثبيت التعهد مع إعادة التفعيل يتم داخل transaction مع سجل فرص وتدقيق",
   "تثبيت التعهد وإعادة التفعيل يجب أن يكونا عملية خادمية واحدة داخل transaction.",

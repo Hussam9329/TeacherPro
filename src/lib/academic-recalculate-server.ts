@@ -47,8 +47,7 @@ function nullableText(value: unknown): string {
   return value === null || value === undefined ? "" : String(value);
 }
 
-function normalizeOpportunityPenalty(value: unknown): number | "فصل مؤقت" {
-  if (value === "فصل مؤقت") return "فصل مؤقت";
+function normalizeOpportunityPenalty(value: unknown): number {
   const numeric = Number(value ?? 0);
   return Number.isFinite(numeric) ? numeric : 0;
 }
@@ -60,7 +59,6 @@ function mapStudent(student: {
   subSite?: string | null;
   locationScope?: string | null;
   status: string;
-  dismissalType: string | null;
   dismissalReason: string | null;
   dismissalNotes: string | null;
   opportunities: number;
@@ -77,7 +75,6 @@ function mapStudent(student: {
     subSite: student.subSite || null,
     locationScope: student.locationScope || null,
     status: student.status === "مفصول" || student.status === "مؤرشف" ? student.status : "نشط",
-    dismissalType: nullableText(student.dismissalType),
     dismissalReason: nullableText(student.dismissalReason),
     dismissalNotes: nullableText(student.dismissalNotes),
     opportunities: Number(student.opportunities || 0),
@@ -371,7 +368,6 @@ async function loadAcademicStateForStudents(
         subSite: true,
         locationScope: true,
         status: true,
-        dismissalType: true,
         dismissalReason: true,
         dismissalNotes: true,
         opportunities: true,
@@ -506,7 +502,6 @@ async function persistAcademicRecalculation(
           0,
           Math.trunc(Number(student.opportunities || 0)),
         ),
-        dismissalType: student.dismissalType || null,
         dismissalReason: student.dismissalReason || null,
       },
     });
@@ -583,7 +578,6 @@ export interface StudentAcademicUpdatePreview {
     gracePeriodStartDate: string | null;
     opportunities: number;
     status: string;
-    dismissalType: string;
     dismissalReason: string;
     automaticOpportunityLogs: number;
   };
@@ -593,7 +587,6 @@ export interface StudentAcademicUpdatePreview {
     gracePeriodStartDate: string | null;
     opportunities: number;
     status: string;
-    dismissalType: string;
     dismissalReason: string;
     automaticOpportunityLogs: number;
   };
@@ -669,7 +662,6 @@ export async function previewStudentAcademicUpdate(
       gracePeriodStartDate: storedStudent.gracePeriodStartDate || null,
       opportunities: calculatedCurrent.opportunities,
       status: calculatedCurrent.status,
-      dismissalType: calculatedCurrent.dismissalType || "",
       dismissalReason: calculatedCurrent.dismissalReason || "",
       automaticOpportunityLogs: currentResult.opportunityLogs.filter(
         (log) => log.studentId === trimmedId && isAutomaticOpportunityLog(log),
@@ -681,7 +673,6 @@ export async function previewStudentAcademicUpdate(
       gracePeriodStartDate: projectedStudent.gracePeriodStartDate || null,
       opportunities: calculatedProjected.opportunities,
       status: calculatedProjected.status,
-      dismissalType: calculatedProjected.dismissalType || "",
       dismissalReason: calculatedProjected.dismissalReason || "",
       automaticOpportunityLogs: projectedResult.opportunityLogs.filter(
         (log) => log.studentId === trimmedId && isAutomaticOpportunityLog(log),

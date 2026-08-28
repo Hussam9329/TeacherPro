@@ -45,13 +45,80 @@ export async function GET(req: NextRequest) {
     const studentsWithOpportunity = await attachStudentOpportunitySnapshots(
       students,
     );
+    const studentIds = students.map((student) => student.id);
+    const [dismissalNotes, dismissalLogs] = studentIds.length
+      ? await db.$transaction([
+          db.studentNote.findMany({
+            where: {
+              studentId: { in: studentIds },
+              kind: "إجراء",
+              OR: [
+                { text: { startsWith: "فصل الطالب" } },
+                { text: { startsWith: "تم فصل الطالب" } },
+              ],
+            },
+            select: {
+              studentId: true,
+              text: true,
+              dismissalReason: true,
+              dismissalDate: true,
+              date: true,
+            },
+            orderBy: [{ date: "desc" }, { id: "desc" }],
+          }),
+          db.opportunityLog.findMany({
+            where: {
+              studentId: { in: studentIds },
+              OR: [
+                { action: "فصل تلقائي" },
+                { action: "خصم", reason: { startsWith: "فصل الطالب" } },
+              ],
+            },
+            select: { studentId: true, reason: true, date: true },
+            orderBy: [{ date: "desc" }, { id: "desc" }],
+          }),
+        ])
+      : [[], []] as const;
+
+    const lastDismissalByStudentId = new Map<
+      string,
+      { reason: string; date: string; time: number }
+    >();
+    const rememberDismissal = (studentId: string, reason: string, date: Date | null) => {
+      const time = date?.getTime() || 0;
+      const previous = lastDismissalByStudentId.get(studentId);
+      if (previous && previous.time >= time) return;
+      lastDismissalByStudentId.set(studentId, {
+        reason: reason
+          .replace(/^تلقائي:\s*/u, "")
+          .replace(/^فصل الطالب:\s*/u, "")
+          .trim(),
+        date: date?.toISOString() || "",
+        time,
+      });
+    };
+    for (const note of dismissalNotes) {
+      rememberDismissal(
+        note.studentId,
+        String(note.dismissalReason || note.text || ""),
+        note.dismissalDate || note.date,
+      );
+    }
+    for (const log of dismissalLogs) {
+      rememberDismissal(log.studentId, String(log.reason || ""), log.date);
+    }
 
     return NextResponse.json({
-      students: studentsWithOpportunity.map((student) =>
-        withStudentMutationToken(
-          student as unknown as Record<string, unknown>,
-        ),
-      ),
+      students: studentsWithOpportunity.map((student) => {
+        const lastDismissal = lastDismissalByStudentId.get(student.id);
+        return withStudentMutationToken({
+          ...(student as unknown as Record<string, unknown>),
+          wasDismissed: true,
+          lastDismissalReason:
+            student.dismissalReason || lastDismissal?.reason || "",
+          lastDismissalAt: lastDismissal?.date || "",
+        });
+      }),
       totalCount,
       page,
       pageSize,

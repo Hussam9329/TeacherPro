@@ -15,6 +15,7 @@ import {
   parseCourseIds,
 } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
+import { applyOpportunityPenalty } from "@/lib/opportunity-balance";
 import {
   examSiteDatabaseValues,
   includesOutsideCountryExamSite,
@@ -476,11 +477,13 @@ function predictedMissingActionText(
   }
   if (kind === "absent-deducted") {
     const penalty = missingGradePenalty(exam);
-    const opportunities = Math.max(0, Number(student.opportunities || 0));
-    const remaining = Math.max(0, opportunities - penalty);
-    return remaining === 0
-      ? `فصل تلقائي لانتهاء الفرص عند تسجيل الغياب (خصم ${penalty})`
-      : `خصم ${penalty} فرصة؛ المتبقي المتوقع ${remaining}`;
+    const effect = applyOpportunityPenalty(student.opportunities, penalty);
+    if (effect.dismissalTrigger) {
+      return `فصل تلقائي لأن الطالب بدون فرص وحدثت مخالفة خصم جديدة عند تسجيل الغياب`;
+    }
+    return effect.after === 0
+      ? `خصم ${effect.deducted} فرصة؛ المتبقي المتوقع 0 (بدون فرص، غير مفصول)`
+      : `خصم ${effect.deducted} فرصة؛ المتبقي المتوقع ${effect.after}`;
   }
   return "يُحدد الإجراء عند تسجيل الغياب";
 }

@@ -632,7 +632,6 @@ export async function POST(req: NextRequest) {
               subSite: resolvedSubSite || subSite,
               code,
               status: asText(payload.status) || "نشط",
-              dismissalType: "",
               dismissalReason: "",
               dismissalNotes: null,
               createdAt: registrationDate,

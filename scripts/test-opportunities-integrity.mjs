@@ -15,6 +15,11 @@ const studentActionRoute = read('src/app/api/opportunities/student-action/route.
 const opportunityLogsRoute = read('src/app/api/opportunity-logs/route.ts');
 const opportunitySnapshotServer = read('src/lib/student-opportunity-snapshot-server.ts');
 const opportunityBalance = read('src/lib/opportunity-balance.ts');
+const academicEngine = read('src/lib/academic-engine.ts');
+const teacherStore = read('src/lib/teacher-store.ts');
+const gradeEntry = read('src/components/teacher-pro/grade-entry.tsx');
+const gradeRecords = read('src/components/teacher-pro/grade-records.tsx');
+const gradeExportRoute = read('src/app/api/grades/export/route.ts');
 const packageJson = read('package.json');
 
 check(
@@ -111,6 +116,24 @@ check(
   opportunityBalance.includes('formatOpportunityBalance') &&
     opportunityBalance.includes('Object.prototype.hasOwnProperty.call(source, "opportunityLimit")'),
   'منسق العرض الموحد يحترم السقف الخادمي الصريح ولا يخفي الرصيد عند غياب السقف',
+);
+
+check(
+  opportunityBalance.includes('dismissalTrigger: penalty > 0 && before === 0') &&
+    academicEngine.includes('applyOpportunityPenalty') &&
+    !academicEngine.includes('dismissalType') &&
+  'قانون الفرص موحد: الوصول إلى صفر لا يفصل، والفصل فقط عند عقوبة جديدة تبدأ والرصيد صفر',
+);
+check(
+  teacherStore.includes('manualPenaltyEffect?.dismissalTrigger') &&
+    teacherStore.includes('penaltyEffectsByStudentId.get(student.id)?.dismissalTrigger'),
+  'الخصم اليدوي الفردي والجماعي يستخدم رصيد ما قبل الحدث ولا يفصل عند مجرد الوصول إلى صفر',
+);
+check(
+  gradeEntry.includes('applyOpportunityPenalty') &&
+    gradeRecords.includes('applyOpportunityPenalty') &&
+    gradeExportRoute.includes('بدون فرص، غير مفصول'),
+  'تحذيرات تعديل الدرجات والتصدير تعرض نفس قانون الصفر بدون تنبؤ فصل خاطئ',
 );
 
 check(

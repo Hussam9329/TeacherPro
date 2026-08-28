@@ -739,8 +739,6 @@ export interface ExamStatsResponse {
 
 export interface PledgeStatsResponse {
   dismissed: number;
-  temporary: number;
-  final: number;
   pledged: number;
   pending: number;
   reactivated: number;
@@ -750,7 +748,6 @@ export interface PledgeStatsResponse {
 
 export interface PledgeRowsQuery {
   q?: string;
-  typeFilter?: "all" | "temporary" | "final";
   statusFilter?: "all" | "pledged" | "pending" | "reactivated";
 }
 
@@ -879,14 +876,12 @@ export interface StudentAcademicUpdateImpactResponse {
     current: {
       opportunities: number;
       status: string;
-      dismissalType: string;
       dismissalReason: string;
       automaticOpportunityLogs: number;
     };
     projected: {
       opportunities: number;
       status: string;
-      dismissalType: string;
       dismissalReason: string;
       automaticOpportunityLogs: number;
     };
@@ -1826,7 +1821,6 @@ export const pledgeApi = {
   list: (query: PledgeRowsQuery = {}, options: ApiGetOptions = {}) => {
     const queryString = buildQueryString({
       q: query.q,
-      typeFilter: query.typeFilter,
       statusFilter: query.statusFilter,
     });
     return apiGet<PledgeRowsResponse>(

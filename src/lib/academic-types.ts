@@ -35,7 +35,6 @@ export interface AcademicStudent {
   subSite?: string | null;
   locationScope?: string | null;
   status: StudentStatus;
-  dismissalType: string;
   dismissalReason: string;
   dismissalNotes?: string;
   opportunities: number;
@@ -54,7 +53,7 @@ export interface AcademicExam {
   fullMark: number;
   passMark: number;
   discountMark: number;
-  opportunitiesPenalty: number | "فصل مؤقت";
+  opportunitiesPenalty: number;
   dismissalGrade: number | null;
   noDiscount: boolean;
   active: boolean;
@@ -135,11 +134,7 @@ export interface AcademicRecalculationResult {
   opportunityLogs: AcademicOpportunityLog[];
 }
 
-export type GradeImpactType =
-  | "none"
-  | "discount"
-  | "temporary_dismissal"
-  | "final_dismissal";
+export type GradeImpactType = "none" | "discount" | "dismissal";
 
 export interface GradeImpact {
   type: GradeImpactType;

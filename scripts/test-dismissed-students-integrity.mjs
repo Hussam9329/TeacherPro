@@ -60,14 +60,14 @@ must(
 );
 
 must(
-  dismissedFilters.includes("dismissalType") &&
+  !dismissedFilters.includes("dismissalType") &&
     dismissedFilters.includes("notesFilter") &&
     dismissedFilters.includes("pledgeFilter") &&
     dismissedFilters.includes("studentNotes") &&
     dismissedFilters.includes("some:") &&
     dismissedFilters.includes("none:") &&
     dismissedStatsRoute.includes("buildDismissedStudentWhere(searchParams)"),
-  "القائمة والإحصائيات تشتركان في فلاتر النوع والملاحظات والتعهد الخادمية",
+  "القائمة والإحصائيات تشتركان في فلاتر الملاحظات والتعهد الخادمية بدون فلتر نوع فصل",
   "لا يجوز تطبيق فلاتر المفصولين على الصفحة محلياً؛ يجب مشاركتها بين list وstats على الخادم.",
 );
 
@@ -139,7 +139,8 @@ must(
 must(
   (statusActionRoute.includes("db.$transaction") || statusActionRoute.includes("withSerializableTransaction")) &&
     statusActionRoute.includes('action !== "dismiss" && action !== "reactivate"') &&
-    statusActionRoute.includes("فرصة أخيرة بعد تعهد") &&
+    statusActionRoute.includes('action: "رصيد إعادة التفعيل"') &&
+    statusActionRoute.includes("amount: 2") &&
     statusActionRoute.includes("auditLog.create"),
   "API حالة الطالب ينفذ الفصل/إعادة التفعيل داخل transaction مع سجلات وتدقيق",
   "إعادة التفعيل والفصل يجب أن تبقى داخل transaction واحدة مع audit log.",

@@ -50,6 +50,7 @@ import {
 import { baghdadDateKey, baghdadTodayKey, toBaghdadDateTimeLocal } from "./baghdad-time";
 import { formatAppDate, toLatinDigits } from "./format";
 import { recalculateAcademicState } from "./academic-engine";
+import { applyOpportunityPenalty } from "./opportunity-balance";
 import { isExamWithinStudentGraceWindow } from "./student-grace";
 import {
   announceTeacherProSyncError,
@@ -113,7 +114,6 @@ export interface Student {
   subSite: string;
   code: string;
   status: "نشط" | "مفصول" | "مؤرشف";
-  dismissalType: string;
   dismissalReason: string;
   dismissalNotes: string;
   createdAt: string;
@@ -297,7 +297,7 @@ export interface Exam {
   fullMark: number;
   passMark: number;
   discountMark: number;
-  opportunitiesPenalty: number | "فصل مؤقت";
+  opportunitiesPenalty: number;
   dismissalGrade: number | null;
   noDiscount: boolean;
   active: boolean;
@@ -373,7 +373,6 @@ export interface StudentNote {
   sourceType?: string;
   sourceId?: string;
   dismissalKey?: string;
-  dismissalType?: string;
   dismissalReason?: string;
   dismissalDate?: string;
 }
@@ -1237,7 +1236,6 @@ interface TeacherState {
   deleteStudent: (id: string) => boolean;
   dismissStudent: (
     studentId: string,
-    type: string,
     reason: string,
     notes?: string,
   ) => void;
@@ -1765,10 +1763,11 @@ function isLinkedAcademicReactivationLog(log: OpportunityLog): boolean {
 function isSystemAcademicReactivationLog(log: OpportunityLog): boolean {
   const reason = String(log.reason || "");
   return (
-    (isReactivationOpportunityLog(log) || isFinalChanceOpportunityLog(log)) &&
+    (isReactivationOpportunityLog(log) || isReactivationBalanceOpportunityLog(log)) &&
     (reason.includes("تثبيت إعادة التفعيل") ||
       reason.includes("إرجاع الطالب بعد إعادة التفعيل") ||
-      reason.includes("بفرصة واحدة"))
+      reason.includes("فرصتين") ||
+      reason.includes("بعد تعهد"))
   );
 }
 
@@ -1984,10 +1983,12 @@ function isReactivationOpportunityLog(log: OpportunityLog): boolean {
   );
 }
 
-function isFinalChanceOpportunityLog(log: OpportunityLog): boolean {
+function isReactivationBalanceOpportunityLog(log: OpportunityLog): boolean {
+  const reason = String(log.reason || "");
   return (
-    log.action === "فرصة أخيرة بعد تعهد" ||
-    String(log.reason || "").includes("فرصة أخيرة")
+    log.action === "رصيد بعد تعهد" ||
+    log.action === "رصيد إعادة التفعيل" ||
+    reason.includes("فرصتين بعد التعهد")
   );
 }
 
@@ -2003,14 +2004,6 @@ function latestStudentLogDate(
   return dates.length ? dates[dates.length - 1] : "";
 }
 
-function hasFinalChanceForStudent(
-  logs: OpportunityLog[],
-  studentId: string,
-): boolean {
-  return logs.some(
-    (log) => log.studentId === studentId && isFinalChanceOpportunityLog(log),
-  );
-}
 
 function latestManualDismissalDateForStudent(
   state: Pick<TeacherState, "opportunityLogs" | "studentNotes">,
@@ -2772,10 +2765,7 @@ export const useTeacherStore = create<TeacherState>()(
                 fullMark: Number(ex.fullMark || 100),
                 passMark: Number(ex.passMark || 50),
                 discountMark: Number(ex.discountMark || 0),
-                opportunitiesPenalty:
-                  ex.opportunitiesPenalty === "فصل مؤقت"
-                    ? ("فصل مؤقت" as const)
-                    : Number(ex.opportunitiesPenalty || 1),
+                opportunitiesPenalty: Number(ex.opportunitiesPenalty || 0),
                 dismissalGrade:
                   ex.dismissalGrade === null || ex.dismissalGrade === undefined
                     ? null
@@ -2857,7 +2847,6 @@ export const useTeacherStore = create<TeacherState>()(
                 sourceType: String(note.sourceType || ""),
                 sourceId: String(note.sourceId || ""),
                 dismissalKey: String(note.dismissalKey || ""),
-                dismissalType: String(note.dismissalType || ""),
                 dismissalReason: String(note.dismissalReason || ""),
                 dismissalDate: note.dismissalDate
                   ? baghdadDateKey(note.dismissalDate as string | Date)
@@ -3119,8 +3108,7 @@ export const useTeacherStore = create<TeacherState>()(
                   sourceType: String(note.sourceType || ""),
                   sourceId: String(note.sourceId || ""),
                   dismissalKey: String(note.dismissalKey || ""),
-                  dismissalType: String(note.dismissalType || ""),
-                  dismissalReason: String(note.dismissalReason || ""),
+                    dismissalReason: String(note.dismissalReason || ""),
                   dismissalDate: note.dismissalDate
                     ? baghdadDateKey(note.dismissalDate as string | Date)
                     : "",
@@ -3992,7 +3980,6 @@ export const useTeacherStore = create<TeacherState>()(
         includeIfProvided("subSite");
         includeIfProvided("courseId");
         includeIfProvided("status");
-        includeIfProvided("dismissalType");
         includeIfProvided("dismissalReason");
         includeIfProvided("dismissalNotes");
         includeIfProvided("createdAt");
@@ -4047,7 +4034,7 @@ export const useTeacherStore = create<TeacherState>()(
         });
         return true;
       },
-      dismissStudent: (studentId, type, reason, notes = "") => {
+      dismissStudent: (studentId, reason, notes = "") => {
         const stateBefore = get();
         const studentBefore = stateBefore.students.find(
           (student) => student.id === studentId,
@@ -4056,21 +4043,12 @@ export const useTeacherStore = create<TeacherState>()(
           0,
           Math.trunc(Number(studentBefore?.opportunities || 0)),
         );
-        const finalChanceViolation = Boolean(
-          studentBefore &&
-          hasFinalChanceForStudent(stateBefore.opportunityLogs, studentId) &&
-          type === "فصل مؤقت",
-        );
-        const nextDismissalType = finalChanceViolation ? "فصل نهائي" : type;
-        const nextDismissalReason = finalChanceViolation
-          ? `عدم الالتزام بالتعهد السابق - ${reason}`
-          : reason;
         const actionNote: StudentNote | null = studentBefore
           ? {
               id: uid("note"),
               studentId,
               kind: "إجراء",
-              text: `فصل الطالب (${nextDismissalType}): ${nextDismissalReason}${notes ? ` - ملاحظة: ${notes}` : ""}`,
+              text: `فصل الطالب: ${reason}${notes ? ` - ملاحظة: ${notes}` : ""}`,
               date: todayISO(),
             }
           : null;
@@ -4082,7 +4060,7 @@ export const useTeacherStore = create<TeacherState>()(
                 examId: "",
                 action: "خصم",
                 amount: deductedOpportunities,
-                reason: `فصل الطالب: ${nextDismissalReason}`,
+                reason: `فصل الطالب: ${reason}`,
                 date: todayISO(),
                 chapterId:
                   stateBefore.activeChapterForCourse(
@@ -4097,8 +4075,7 @@ export const useTeacherStore = create<TeacherState>()(
               ? {
                   ...st,
                   status: "مفصول" as const,
-                  dismissalType: nextDismissalType,
-                  dismissalReason: nextDismissalReason,
+                  dismissalReason: reason,
                   dismissalNotes: notes,
                   opportunities: 0,
                 }
@@ -4113,14 +4090,13 @@ export const useTeacherStore = create<TeacherState>()(
         }));
         get().logAction(
           "الطلاب",
-          `فصل الطالب (${nextDismissalType})`,
-          `${get().studentName(studentId)} - ${nextDismissalReason}`,
+          "فصل الطالب",
+          `${get().studentName(studentId)} - ${reason}`,
         );
         syncToServer(get, () =>
           studentApi.update(studentId, {
             status: "مفصول",
-            dismissalType: nextDismissalType,
-            dismissalReason: nextDismissalReason,
+            dismissalReason: reason,
             dismissalNotes: notes,
             opportunities: 0,
           }),
@@ -4140,118 +4116,71 @@ export const useTeacherStore = create<TeacherState>()(
       },
       reactivateStudent: (studentId) => {
         const stateBefore = get();
-        const studentBefore = stateBefore.students.find(
-          (st) => st.id === studentId,
+        const studentBefore = stateBefore.students.find((st) => st.id === studentId);
+        if (!studentBefore || studentBefore.status !== "مفصول") return;
+        const academicReactivationSource = findAcademicReactivationSourceForStudent(
+          stateBefore,
+          studentBefore,
         );
-        const shouldGrantFinalChance = Boolean(
-          studentBefore?.status === "مفصول",
-        );
-        const academicReactivationSource =
-          studentBefore && shouldGrantFinalChance
-            ? findAcademicReactivationSourceForStudent(
-                stateBefore,
-                studentBefore,
-              )
-            : null;
         const academicReactivationLink = academicReactivationSource
           ? ` ${encodeAcademicReactivationLink(academicReactivationSource)}`
           : "";
-        const reactivationLog: OpportunityLog | null = studentBefore
-          ? {
-              id: uid("ol"),
-              studentId,
-              examId: academicReactivationSource?.sourceExamId || "",
-              action: "إعادة تفعيل",
-              amount: 0,
-              reason: `تثبيت إعادة التفعيل: لا يعاد فصل الطالب بسبب سجلات قديمة، وأي إجراء جديد بعد الفرصة يصبح نهائياً${academicReactivationLink}`,
-              date: todayISO(),
-              chapterId:
-                stateBefore.activeChapterForCourse(studentBefore.courseId)
-                  ?.id || "",
-            }
-          : null;
-        const finalChanceLog: OpportunityLog | null =
-          shouldGrantFinalChance && studentBefore
-            ? {
-                id: uid("ol"),
-                studentId,
-                examId: academicReactivationSource?.sourceExamId || "",
-                action: "فرصة أخيرة بعد تعهد",
-                amount: 1,
-                reason: `إرجاع الطالب بعد إعادة التفعيل بفرصة واحدة فقط${academicReactivationLink}`,
-                date: todayISO(),
-                chapterId:
-                  stateBefore.activeChapterForCourse(studentBefore.courseId)
-                    ?.id || "",
-              }
-            : null;
-        const actionNote: StudentNote | null = studentBefore
-          ? {
-              id: uid("note"),
-              studentId,
-              kind: "إجراء",
-              text: shouldGrantFinalChance
-                ? `إعادة تفعيل الطالب ومنحه فرصة واحدة بعد الفصل السابق: ${studentBefore.dismissalReason || studentBefore.dismissalType || "بدون سبب مسجل"}`
-                : "إعادة تفعيل الطالب",
-              date: todayISO(),
-            }
-          : null;
+        const chapterId =
+          stateBefore.activeChapterForCourse(studentBefore.courseId)?.id || "";
+        const reactivationLog: OpportunityLog = {
+          id: uid("ol"),
+          studentId,
+          examId: academicReactivationSource?.sourceExamId || "",
+          action: "إعادة تفعيل",
+          amount: 0,
+          reason: `تثبيت إعادة التفعيل: الطالب نشط برصيد فرصتين؛ الوصول إلى 0 لا يفصله، والمخالفة التالية وهو بدون فرص تؤدي إلى الفصل${academicReactivationLink}`,
+          date: todayISO(),
+          chapterId,
+        };
+        const balanceLog: OpportunityLog = {
+          id: uid("ol"),
+          studentId,
+          examId: academicReactivationSource?.sourceExamId || "",
+          action: "رصيد إعادة التفعيل",
+          amount: 2,
+          reason: `إرجاع الطالب إلى الحالة النشطة برصيد فرصتين${academicReactivationLink}`,
+          date: todayISO(),
+          chapterId,
+        };
+        const actionNote: StudentNote = {
+          id: uid("note"),
+          studentId,
+          kind: "إجراء",
+          text: `إعادة تفعيل الطالب ومنحه فرصتين بعد الفصل السابق: ${studentBefore.dismissalReason || "بدون سبب مسجل"}`,
+          date: todayISO(),
+        };
         set((s) => ({
           students: s.students.map((st) =>
             st.id === studentId
               ? {
                   ...st,
                   status: "نشط" as const,
-                  dismissalType: "",
                   dismissalReason: "",
                   dismissalNotes: "",
-                  opportunities: shouldGrantFinalChance ? 1 : st.opportunities,
+                  opportunities: 2,
                 }
               : st,
           ),
-          opportunityLogs: (
-            [reactivationLog, finalChanceLog].filter(
-              Boolean,
-            ) as OpportunityLog[]
-          ).concat(s.opportunityLogs),
-          studentNotes: actionNote
-            ? [actionNote, ...s.studentNotes]
-            : s.studentNotes,
+          opportunityLogs: [reactivationLog, balanceLog, ...s.opportunityLogs],
+          studentNotes: [actionNote, ...s.studentNotes],
         }));
-        get().logAction(
-          "الطلاب",
-          shouldGrantFinalChance
-            ? "إعادة تفعيل بفرصة واحدة"
-            : "إعادة تفعيل طالب",
-          get().studentName(studentId),
-        );
+        get().logAction("الطلاب", "إعادة تفعيل الطالب برصيد فرصتين", get().studentName(studentId));
         syncToServer(get, () =>
           studentApi.update(studentId, {
             status: "نشط",
-            dismissalType: "",
             dismissalReason: "",
             dismissalNotes: "",
-            ...(shouldGrantFinalChance ? { opportunities: 1 } : {}),
+            opportunities: 2,
           }),
         );
-        if (reactivationLog)
-          syncToServer(get, () =>
-            opportunityLogApi.add(
-              reactivationLog as unknown as Record<string, unknown>,
-            ),
-          );
-        if (finalChanceLog)
-          syncToServer(get, () =>
-            opportunityLogApi.add(
-              finalChanceLog as unknown as Record<string, unknown>,
-            ),
-          );
-        if (actionNote)
-          syncToServer(get, () =>
-            studentNoteApi.add(
-              actionNote as unknown as Record<string, unknown>,
-            ),
-          );
+        syncToServer(get, () => opportunityLogApi.add(reactivationLog as unknown as Record<string, unknown>));
+        syncToServer(get, () => opportunityLogApi.add(balanceLog as unknown as Record<string, unknown>));
+        syncToServer(get, () => studentNoteApi.add(actionNote as unknown as Record<string, unknown>));
       },
 
       addExam: (examData) => {
@@ -4672,14 +4601,12 @@ export const useTeacherStore = create<TeacherState>()(
           if (
             oldStudent.opportunities !== student.opportunities ||
             oldStudent.status !== student.status ||
-            oldStudent.dismissalType !== student.dismissalType ||
             oldStudent.dismissalReason !== student.dismissalReason
           ) {
             syncToServer(get, () =>
               studentApi.update(student.id, {
                 opportunities: student.opportunities,
                 status: student.status,
-                dismissalType: student.dismissalType,
                 dismissalReason: student.dismissalReason,
               }),
             );
@@ -4768,12 +4695,21 @@ export const useTeacherStore = create<TeacherState>()(
             stateBefore.activeChapterForCourse(studentBefore?.courseId || "")
               ?.id || "",
         };
+        const manualPenaltyEffect =
+          signedAmount < 0
+            ? applyOpportunityPenalty(
+                studentBefore.opportunities,
+                normalizedAmount,
+              )
+            : null;
         set((s) => {
           const students = s.students.map((st) =>
             st.id === studentId
               ? {
                   ...st,
-                  opportunities: Math.max(0, st.opportunities + signedAmount),
+                  opportunities:
+                    manualPenaltyEffect?.after ??
+                    Math.max(0, st.opportunities + signedAmount),
                 }
               : st,
           );
@@ -4796,19 +4732,12 @@ export const useTeacherStore = create<TeacherState>()(
         );
         if (
           student &&
-          student.opportunities === 0 &&
+          manualPenaltyEffect?.dismissalTrigger &&
           student.status === "نشط"
         ) {
-          const hasFinalChance = hasFinalChanceForStudent(
-            get().opportunityLogs,
-            studentId,
-          );
           get().dismissStudent(
             studentId,
-            hasFinalChance ? "فصل نهائي" : "فصل مؤقت",
-            hasFinalChance
-              ? "عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة"
-              : "انتهاء الفرص",
+            "مخالفة جديدة بعد انتهاء الفرص",
           );
         }
       },
@@ -4864,11 +4793,22 @@ export const useTeacherStore = create<TeacherState>()(
           ...logs,
           ...stateBefore.opportunityLogs,
         ];
+        const penaltyEffectsByStudentId = new Map(
+          eligibleStudents.map((student) => [
+            student.id,
+            signedAmount < 0
+              ? applyOpportunityPenalty(student.opportunities, normalizedAmount)
+              : null,
+          ]),
+        );
         const adjustedStudents = stateBefore.students.map((student) => {
           if (!eligibleStudentIds.has(student.id)) return student;
+          const penaltyEffect = penaltyEffectsByStudentId.get(student.id);
           return {
             ...student,
-            opportunities: Math.max(0, student.opportunities + signedAmount),
+            opportunities:
+              penaltyEffect?.after ??
+              Math.max(0, student.opportunities + signedAmount),
           };
         });
 
@@ -4876,28 +4816,20 @@ export const useTeacherStore = create<TeacherState>()(
           .filter(
             (student) =>
               eligibleStudentIds.has(student.id) &&
-              student.opportunities === 0 &&
+              penaltyEffectsByStudentId.get(student.id)?.dismissalTrigger &&
               student.status === "نشط",
           )
           .map((student) => {
-            const hasFinalChance = hasFinalChanceForStudent(
-              opportunityLogsAfterAdjustment,
-              student.id,
-            );
-            const dismissalType = hasFinalChance ? "فصل نهائي" : "فصل مؤقت";
-            const dismissalReason = hasFinalChance
-              ? "عدم الالتزام بالتعهد السابق - انتهاء الفرصة الأخيرة"
-              : "انتهاء الفرص";
+            const dismissalReason = "مخالفة جديدة بعد انتهاء الفرص";
             const note: StudentNote = {
               id: uid("note"),
               studentId: student.id,
               kind: "إجراء",
-              text: `فصل الطالب (${dismissalType}): ${dismissalReason}`,
+              text: `فصل الطالب: ${dismissalReason}`,
               date: todayISO(),
             };
             return {
               studentId: student.id,
-              dismissalType,
               dismissalReason,
               note,
             };
@@ -4938,7 +4870,6 @@ export const useTeacherStore = create<TeacherState>()(
             return {
               ...student,
               status: "مفصول" as const,
-              dismissalType: dismissal.dismissalType,
               dismissalReason: dismissal.dismissalReason,
               dismissalNotes: "",
               opportunities: 0,
@@ -4949,7 +4880,6 @@ export const useTeacherStore = create<TeacherState>()(
             return {
               ...student,
               status: "نشط" as const,
-              dismissalType: "",
               dismissalReason: "",
               dismissalNotes: "",
             };
@@ -4971,7 +4901,7 @@ export const useTeacherStore = create<TeacherState>()(
         dismissalEffects.forEach((effect) => {
           get().logAction(
             "الطلاب",
-            `فصل الطالب (${effect.dismissalType})`,
+            "فصل الطالب",
             `${get().studentName(effect.studentId)} - ${effect.dismissalReason}`,
           );
         });
@@ -4997,12 +4927,10 @@ export const useTeacherStore = create<TeacherState>()(
             const dismissal = dismissalByStudentId.get(student.id);
             if (dismissal) {
               payload.status = "مفصول";
-              payload.dismissalType = dismissal.dismissalType;
               payload.dismissalReason = dismissal.dismissalReason;
               payload.dismissalNotes = "";
             } else if (reactivationByStudentId.has(student.id)) {
               payload.status = "نشط";
-              payload.dismissalType = "";
               payload.dismissalReason = "";
               payload.dismissalNotes = "";
             }

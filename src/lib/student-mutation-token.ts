@@ -20,7 +20,6 @@ const STUDENT_MUTATION_TOKEN_FIELDS = [
   "subSite",
   "code",
   "status",
-  "dismissalType",
   "dismissalReason",
   "dismissalNotes",
   "createdAt",

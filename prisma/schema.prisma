@@ -68,7 +68,6 @@ model Student {
   subSite         String?
   code            String   @unique
   status          String   @default("نشط")
-  dismissalType   String?
   dismissalReason String?
   dismissalNotes  String?
   opportunities   Int      @default(0)
@@ -271,7 +270,6 @@ model StudentNote {
   sourceType      String   @default("")
   sourceId        String   @default("")
   dismissalKey    String   @default("")
-  dismissalType   String   @default("")
   dismissalReason String   @default("")
   dismissalDate   DateTime?
   student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)

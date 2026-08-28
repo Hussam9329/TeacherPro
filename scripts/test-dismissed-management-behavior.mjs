@@ -57,7 +57,6 @@ test("only authoritative action notes are dismissal events", () => {
     isDismissalActionNote({
       kind: "تعهد ولي الأمر",
       text: "تعهد",
-      dismissalType: "مفصول",
     }),
     false,
   );

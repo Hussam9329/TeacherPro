@@ -46,10 +46,11 @@ must(
     route.includes("async (tx) =>") &&
     route.includes('{ isolationLevel: "RepeatableRead" }') &&
     route.includes("tx.student.findFirst") &&
-    route.includes('status: "مفصول"') &&
+    route.includes('status: { in: ["مفصول", "نشط"] }') &&
+    route.includes('student.status !== "مفصول" && !currentDismissalAt') &&
     route.includes("{ status: 400 }") &&
     route.includes("{ status: 404 }"),
-  "API السجل محمي ويقرأ لقطة RepeatableRead ويتحقق من الطالب المفصول",
+  "API السجل محمي ويقرأ لقطة RepeatableRead ويتحقق من المفصول الحالي أو المفصول سابقاً",
 );
 
 must(

@@ -98,7 +98,6 @@ const NOTE_SELECT = {
   sourceType: true,
   sourceId: true,
   dismissalKey: true,
-  dismissalType: true,
   dismissalReason: true,
   dismissalDate: true,
 } as const;

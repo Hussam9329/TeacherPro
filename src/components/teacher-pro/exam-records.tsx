@@ -781,7 +781,7 @@ export function ExamRecordsView() {
       opportunitiesPenalty: noDiscount
         ? 0
         : isFinalExam
-          ? "فصل مؤقت"
+          ? 0
           : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum)),
       dismissalGrade:
         !noDiscount && isFinalExam && editDialog.dismissalGrade

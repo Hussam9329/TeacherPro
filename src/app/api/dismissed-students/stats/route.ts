@@ -6,34 +6,34 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import {
+  buildDismissedHistoryScopeWhere,
   buildDismissedStudentWhere,
   composeDismissedStudentWhere,
   DISMISSED_STUDENT_PLEDGE_NOTE_KIND,
-  DISMISSED_STUDENT_STATUS,
 } from "@/lib/dismissed-student-filters-server";
 
 async function collectDismissedStats(
   where: Prisma.StudentWhereInput,
 ): Promise<{
   total: number;
-  temporary: number;
-  final: number;
+  current: number;
+  former: number;
   withNotes: number;
   withPledge: number;
   withoutPledge: number;
 }> {
-  const [total, temporary, final, withNotes, pledgeRows] = await db.$transaction([
+  const [total, current, former, withNotes, pledgeRows] = await db.$transaction([
     db.student.count({ where }),
     db.student.count({
       where: composeDismissedStudentWhere([
         where,
-        { dismissalType: "فصل مؤقت" },
+        buildDismissedHistoryScopeWhere("current"),
       ]),
     }),
     db.student.count({
       where: composeDismissedStudentWhere([
         where,
-        { dismissalType: "فصل نهائي" },
+        buildDismissedHistoryScopeWhere("former"),
       ]),
     }),
     db.student.count({
@@ -54,8 +54,8 @@ async function collectDismissedStats(
   const withPledge = pledgeRows.length;
   return {
     total,
-    temporary,
-    final,
+    current,
+    former,
     withNotes,
     withPledge,
     withoutPledge: Math.max(0, total - withPledge),
@@ -67,9 +67,7 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   const searchParams = new URL(req.url).searchParams;
-  const systemWhere: Prisma.StudentWhereInput = {
-    status: DISMISSED_STUDENT_STATUS,
-  };
+  const systemWhere = buildDismissedHistoryScopeWhere(searchParams.get("historyScope"));
   const filteredWhere = buildDismissedStudentWhere(searchParams);
 
   const [system, filtered] = await Promise.all([

@@ -53,6 +53,7 @@ import {
 } from "@/lib/exam-utils";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { applyOpportunityPenalty } from "@/lib/opportunity-balance";
 import { CheckCircle2, UserX } from "lucide-react";
 import { CountScopeSummary, StatCard } from "./ui-kit";
 import {
@@ -409,7 +410,7 @@ export function GradeRecordsView() {
     studentOpportunities: number,
   ) => {
     if (exam.noDiscount) return 0;
-    if (exam.type === "فاينل" && exam.opportunitiesPenalty === "فصل مؤقت")
+    if (exam.type === "فاينل")
       return Math.max(1, studentOpportunities);
     return Math.max(0, Number(exam.opportunitiesPenalty || 0));
   };
@@ -442,10 +443,10 @@ export function GradeRecordsView() {
         0,
         Number(student.opportunities || 0),
       );
-      return (
-        examPenaltyAmount(exam, remainingOpportunities) >=
-        remainingOpportunities
-      );
+      return applyOpportunityPenalty(
+        remainingOpportunities,
+        examPenaltyAmount(exam, remainingOpportunities),
+      ).dismissalTrigger;
     }
     return false;
   };
@@ -1629,8 +1630,8 @@ export function GradeRecordsView() {
               تأكيد تعديل درجة طالب مُعاد تنشيطه
             </AlertDialogTitle>
             <AlertDialogDescription>
-              الدرجة الجديدة قد تستهلك الفرصة الأخيرة وتعيد الطالب إلى
-              المفصولين. هل تريد المتابعة؟
+              الطالب بدون فرص حالياً، وهذه الدرجة تستوجب خصم فرصة جديدة
+              ولذلك ستعيده إلى المفصولين. هل تريد المتابعة؟
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

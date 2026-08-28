@@ -9,7 +9,7 @@ import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-sna
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
-import { validateDismissalType, STUDENT_STATUS_DISMISSED } from "@/lib/student-status-enums";
+import { STUDENT_STATUS_DISMISSED } from "@/lib/student-status-enums";
 import {
   buildStudentMutationToken,
   withStudentMutationToken,
@@ -160,7 +160,6 @@ export async function POST(req: NextRequest) {
 
   try {
     if (action === "dismiss") {
-      const requestedType = cleanText(body.dismissalType || body.type) || "فصل مؤقت";
       const reason = cleanText(body.reason);
       const notes = cleanText(body.notes);
       if (!reason) {
@@ -170,18 +169,6 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Q78 FIX: Validate dismissalType against the allowed enum values.
-      // Reject unknown values like "موقوف" or "فصل تجريبي".
-      let validatedType: "فصل مؤقت" | "فصل نهائي";
-      try {
-        const vt = validateDismissalType(requestedType);
-        validatedType = vt || "فصل مؤقت";
-      } catch (validationErr) {
-        return NextResponse.json(
-          { error: validationErr instanceof Error ? validationErr.message : "قيمة نوع الفصل غير صالحة." },
-          { status: 400 },
-        );
-      }
 
       const result = await withSerializableTransaction(async (tx) => {
         const student = await tx.student.findUnique({ where: { id: studentId } });
@@ -201,8 +188,8 @@ export async function POST(req: NextRequest) {
         // Q79 FIX: Prevent dismissing an already-dismissed student.
         // Previously, dismissing a dismissed student created duplicate
         // deduction logs (second with amount 0) and duplicate dismissal
-        // notes, and could auto-promote "فصل مؤقت" to "فصل نهائي"
-        // unintentionally if a "فرصة أخيرة بعد تعهد" log existed.
+        // notes. Dismissal has one state only; previous dismissal history never
+        // changes the kind or severity of the next dismissal.
         if (student.status === STUDENT_STATUS_DISMISSED) {
           throw statusActionConflict(
             "الطالب مفصول مسبقاً. لا يمكن تكرار إجراء الفصل. استخدم إعادة التفعيل عند الحاجة.",
@@ -210,17 +197,7 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        const hasFinalChance = Boolean(
-          await tx.opportunityLog.findFirst({
-            where: { studentId, action: "فرصة أخيرة بعد تعهد" },
-            select: { id: true },
-          }),
-        );
-        const nextType = hasFinalChance && validatedType === "فصل مؤقت" ? "فصل نهائي" : validatedType;
-        const nextReason =
-          hasFinalChance && validatedType === "فصل مؤقت"
-            ? `عدم الالتزام بالتعهد السابق - ${reason}`
-            : reason;
+        const nextReason = reason;
         const deductedOpportunities = Math.max(0, Math.trunc(Number(student.opportunities || 0)));
         const activeChapterResolution = await getActiveChapterForCourse(
           tx,
@@ -232,7 +209,6 @@ export async function POST(req: NextRequest) {
           where: { id: studentId },
           data: {
             status: "مفصول",
-            dismissalType: nextType,
             dismissalReason: nextReason,
             dismissalNotes: notes,
             opportunities: 0,
@@ -257,10 +233,9 @@ export async function POST(req: NextRequest) {
           data: {
             studentId,
             kind: "إجراء",
-            text: `فصل الطالب (${nextType}): ${nextReason}${notes ? ` - ملاحظة: ${notes}` : ""}`,
+            text: `فصل الطالب: ${nextReason}${notes ? ` - ملاحظة: ${notes}` : ""}`,
             sourceType: "student-status-action",
             sourceId: studentId,
-            dismissalType: nextType,
             dismissalReason: nextReason,
             dismissalDate: new Date(),
           },
@@ -269,7 +244,7 @@ export async function POST(req: NextRequest) {
         await tx.auditLog.create({
           data: {
             module: "سجل الطلاب",
-            action: `فصل الطالب (${nextType})`,
+            action: "فصل الطالب",
             details: `${student.name} - ${student.code} - ${nextReason}`,
             userId: principal.id,
             userName: principal.name,
@@ -342,7 +317,6 @@ export async function POST(req: NextRequest) {
           where: { id: studentId },
           data: {
             status: "نشط",
-            dismissalType: "",
             dismissalReason: "",
             dismissalNotes: "",
             opportunities: baseline,
@@ -433,22 +407,20 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const shouldGrantFinalChance = true;
       const activeChapterResolution = await getActiveChapterForCourse(
         tx,
         student.courseId,
       );
       const activeChapter = chapterFromResolution(activeChapterResolution);
-      const previousReason = student.dismissalReason || student.dismissalType || "بدون سبب مسجل";
+      const previousReason = student.dismissalReason || "بدون سبب مسجل";
 
       const updatedStudent = await tx.student.update({
         where: { id: studentId },
         data: {
           status: "نشط",
-          dismissalType: "",
           dismissalReason: "",
           dismissalNotes: "",
-          ...(shouldGrantFinalChance ? { opportunities: 1 } : {}),
+          opportunities: 2,
         },
       });
 
@@ -465,35 +437,29 @@ export async function POST(req: NextRequest) {
           examId: null,
           action: "إعادة تفعيل",
           amount: 0,
-          reason: "تثبيت إعادة التفعيل: لا يعاد فصل الطالب بسبب سجلات قديمة، وأي إجراء جديد بعد الفرصة يصبح نهائياً",
+          reason: "تثبيت إعادة التفعيل: الطالب نشط برصيد فرصتين؛ الوصول إلى 0 لا يفصله، والمخالفة التالية وهو بدون فرص تؤدي إلى الفصل",
           chapterId: activeChapter?.id || null,
           chapterNameSnapshot: activeChapter?.name || null,
         },
       });
 
-      const finalChanceLog = shouldGrantFinalChance
-        ? await tx.opportunityLog.create({
-            data: {
-              studentId,
-              examId: null,
-              action: "فرصة أخيرة بعد تعهد",
-              amount: 1,
-              reason: "إرجاع الطالب بعد إعادة التفعيل بفرصة واحدة فقط",
-              chapterId: activeChapter?.id || null,
-              chapterNameSnapshot: activeChapter?.name || null,
-            },
-          })
-        : null;
+      const reactivationBalanceLog = await tx.opportunityLog.create({
+        data: {
+          studentId,
+          examId: null,
+          action: "رصيد إعادة التفعيل",
+          amount: 2,
+          reason: "إرجاع الطالب إلى الحالة النشطة برصيد فرصتين",
+          chapterId: activeChapter?.id || null,
+          chapterNameSnapshot: activeChapter?.name || null,
+        },
+      });
 
       const studentNote = await tx.studentNote.create({
         data: {
           studentId,
           kind: "إجراء",
-          text: shouldGrantFinalChance
-            ? `إعادة تفعيل الطالب ومنحه فرصة واحدة بعد الفصل السابق: ${previousReason}`
-            : student.status === ARCHIVED_STUDENT_STATUS
-              ? "استعادة الطالب من الأرشيف"
-              : "إعادة تفعيل الطالب",
+          text: `إعادة تفعيل الطالب ومنحه فرصتين بعد فصل سابق: ${previousReason}`,
           sourceType: "student-status-action",
           sourceId: studentId,
         },
@@ -502,7 +468,7 @@ export async function POST(req: NextRequest) {
       await tx.auditLog.create({
         data: {
           module: "سجل الطلاب",
-          action: shouldGrantFinalChance ? "إعادة تفعيل بفرصة واحدة" : "إعادة تفعيل طالب",
+          action: "إعادة تفعيل الطالب برصيد فرصتين",
           details: `${student.name} - ${student.code}`,
           userId: principal.id,
           userName: principal.name,
@@ -511,7 +477,7 @@ export async function POST(req: NextRequest) {
 
       return {
         student: updatedStudent,
-        opportunityLogs: [reactivationLog, finalChanceLog].filter(Boolean),
+        opportunityLogs: [reactivationLog, reactivationBalanceLog],
         studentNotes: [studentNote],
         pendingGradeMigration,
       };

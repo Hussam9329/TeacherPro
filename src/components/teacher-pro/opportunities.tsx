@@ -146,8 +146,6 @@ export function OpportunitiesView() {
         "dismissed",
         "has-opportunities",
         "no-opportunities",
-        "temporary-dismissal",
-        "final-dismissal",
       ].includes(status)
     ) {
       setFilterStatus(status);
@@ -378,8 +376,6 @@ export function OpportunitiesView() {
           dismissed: "طلاب مفصولون",
           "has-opportunities": "نشط ولديه فرص",
           "no-opportunities": "نشط بدون فرص",
-          "temporary-dismissal": "فصل مؤقت",
-          "final-dismissal": "فصل نهائي",
         } as Record<string, string>
       )[filterStatus] || "حالة مخصصة"
     : "كل الحالات";
@@ -434,7 +430,11 @@ export function OpportunitiesView() {
     return selectedDetailsLogs.reduce(
       (acc, log) => {
         if (log.action === "خصم") acc.deducted += Number(log.amount) || 0;
-        if (log.action === "إضافة" || log.action === "فرصة أخيرة بعد تعهد")
+        if (
+          log.action === "إضافة" ||
+          log.action === "رصيد بعد تعهد" ||
+          log.action === "رصيد إعادة التفعيل"
+        )
           acc.added += Number(log.amount) || 0;
         if (log.examId) acc.examLinked += 1;
         return acc;
@@ -860,8 +860,6 @@ export function OpportunitiesView() {
                     نشط ولديه فرص
                   </SelectItem>
                   <SelectItem value="no-opportunities">نشط بدون فرص</SelectItem>
-                  <SelectItem value="temporary-dismissal">فصل مؤقت</SelectItem>
-                  <SelectItem value="final-dismissal">فصل نهائي</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1115,7 +1113,7 @@ export function OpportunitiesView() {
                         </Badge>
                         {student.status === "مفصول" && (
                           <Badge variant="destructive" className="text-[10px]">
-                            {student.dismissalType || "مفصول"}
+                            مفصول
                           </Badge>
                         )}
                       </div>

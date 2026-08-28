@@ -74,7 +74,6 @@ type DbStudentLite = {
   subSite: string | null;
   code: string;
   status: string;
-  dismissalType: string | null;
   dismissalReason: string | null;
   dismissalNotes: string | null;
   opportunities: number;
@@ -549,7 +548,6 @@ export async function GET(req: NextRequest) {
         subSite: true,
         code: true,
         status: true,
-        dismissalType: true,
         dismissalReason: true,
         dismissalNotes: true,
         opportunities: true,
@@ -599,8 +597,7 @@ export async function GET(req: NextRequest) {
             subSite: true,
             code: true,
             status: true,
-            dismissalType: true,
-            dismissalReason: true,
+                dismissalReason: true,
             dismissalNotes: true,
             opportunities: true,
             baseOpportunities: true,

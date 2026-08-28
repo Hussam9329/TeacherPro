@@ -112,8 +112,14 @@ type StudentHistory = {
   generatedAt: string;
 };
 
+type ManagedDismissalStudent = Student & {
+  wasDismissed?: boolean;
+  lastDismissalReason?: string;
+  lastDismissalAt?: string;
+};
+
 type ListResponse = {
-  students: Student[];
+  students: ManagedDismissalStudent[];
   totalCount: number;
   page: number;
   pageSize: number;
@@ -246,6 +252,7 @@ function historyMetrics(history: StudentHistory) {
 function buildHtmlReport(history: StudentHistory) {
   const s = history.student;
   const metrics = historyMetrics(history);
+  const statusLabel = s.status === "مفصول" ? "مفصول" : "مفصول سابقاً";
   const eventRows = history.events
     .map(
       (event, index) => `
@@ -317,7 +324,7 @@ body{margin:0;padding:24px}
 <body>
 <main class="page">
 <div class="no-print" style="display:flex;justify-content:flex-start;margin-bottom:12px"><button onclick="window.print()" style="border:1px solid #d1d5db;background:#fff;border-radius:10px;padding:8px 14px;cursor:pointer;font-weight:700">طباعة التقرير</button></div>
-<header class="header"><div class="brand"><h1>سجل الطالب المفصول</h1><p>إدارة حسن فلاح مدرس مادة الاحياء</p></div><div class="status">مفصول</div></header>
+<header class="header"><div class="brand"><h1>سجل الفصل للطالب</h1><p>إدارة حسن فلاح مدرس مادة الاحياء</p></div><div class="status">${escapeDismissedHistoryHtml(statusLabel)}</div></header>
 <div class="grid">${info.map(([k, v]) => `<div class="info-box"><b>${escapeDismissedHistoryHtml(k)}</b><span>${escapeDismissedHistoryHtml(v)}</span></div>`).join("")}</div>
 <div class="summary">${metrics.map((metric) => `<div class="metric"><strong>${metric.value}</strong><span>${escapeDismissedHistoryHtml(metric.label)}</span></div>`).join("")}</div>
 <h2 class="section-title">السجل الزمني الكامل</h2>
@@ -348,8 +355,9 @@ export function DismissedManagementView() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 180);
   const [courseId, setCourseId] = useState("");
+  const [historyScope, setHistoryScope] = useState<"all" | "current" | "former">("all");
   const [page, setPage] = useState(1);
-  const [students, setStudents] = useState<Student[]>([]);
+  const [students, setStudents] = useState<ManagedDismissalStudent[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -369,6 +377,7 @@ export function DismissedManagementView() {
       pageSize: String(PAGE_SIZE),
     });
     if (courseId) params.set("courseId", courseId);
+    params.set("historyScope", historyScope);
     if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
 
     setLoading(true);
@@ -421,7 +430,7 @@ export function DismissedManagementView() {
       });
 
     return () => controller.abort();
-  }, [courseId, debouncedSearch, page, mergeStudentsCache, syncKey]);
+  }, [courseId, debouncedSearch, historyScope, page, mergeStudentsCache, syncKey]);
 
   useEffect(() => {
     const controllers = historyControllersRef.current;
@@ -432,7 +441,7 @@ export function DismissedManagementView() {
       controllers.forEach((controller) => controller.abort());
       controllers.clear();
     };
-  }, [courseId, debouncedSearch, page, syncKey]);
+  }, [courseId, debouncedSearch, historyScope, page, syncKey]);
 
   const loadHistory = useCallback(
     async (studentId: string) => {
@@ -553,7 +562,7 @@ export function DismissedManagementView() {
           <CardContent className="flex items-center justify-between p-4">
             <div>
               <p className="text-xs text-muted-foreground">
-                إجمالي المفصولين حسب الفلترة
+                سجل الفصل حسب الفلترة
               </p>
               <p className="text-2xl font-black">
                 {loading ? "..." : totalCount}
@@ -591,7 +600,7 @@ export function DismissedManagementView() {
             إدارة المفصولين
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(220px,0.8fr)_minmax(280px,1.6fr)]">
+        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label>الدورة</Label>
             <Select
@@ -611,6 +620,25 @@ export function DismissedManagementView() {
                     {course.name}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>الحالة</Label>
+            <Select
+              value={historyScope}
+              onValueChange={(value) => {
+                setHistoryScope(value as "all" | "current" | "former");
+                setPage(1);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">الكل</SelectItem>
+                <SelectItem value="current">مفصول حالياً</SelectItem>
+                <SelectItem value="former">مفصول سابقاً</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -672,7 +700,9 @@ export function DismissedManagementView() {
                       <h3 className="text-lg font-black leading-tight">
                         {student.name}
                       </h3>
-                      <Badge variant="destructive">مفصول</Badge>
+                      <Badge variant={student.status === "مفصول" ? "destructive" : "secondary"}>
+                        {student.status === "مفصول" ? "مفصول" : "مفصول سابقاً"}
+                      </Badge>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span>الكود: {student.code}</span>
@@ -680,14 +710,17 @@ export function DismissedManagementView() {
                       <span>المدرسة: {student.school || "—"}</span>
                       <span>الجنس: {student.gender || "—"}</span>
                       <span>تاريخ التسجيل: {formatBaghdadDateTime(student.createdAt)}</span>
+                      {student.status !== "مفصول" && student.lastDismissalAt ? (
+                        <span>آخر فصل: {formatBaghdadDateTime(student.lastDismissalAt)}</span>
+                      ) : null}
                     </div>
                   </div>
                   <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs sm:basis-64 sm:shrink-0">
                     <b className="block text-red-700 dark:text-red-300">
-                      سبب الفصل
+                      {student.status === "مفصول" ? "سبب الفصل" : "سبب آخر فصل"}
                     </b>
                     <span>
-                      {student.dismissalReason || "لا يوجد سبب مسجل"}
+                      {student.dismissalReason || student.lastDismissalReason || "لا يوجد سبب مسجل"}
                     </span>
                     {student.dismissalNotes ? (
                       <span className="mt-1 block border-t border-red-500/10 pt-1 text-[11px] text-muted-foreground">
@@ -892,7 +925,7 @@ export function DismissedManagementView() {
       {!loading && students.length === 0 && !error ? (
         <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">
           <Ban className="mx-auto mb-2 size-7" />
-          لا يوجد طلاب مفصولون حسب البحث والفلترة الحالية.
+          لا يوجد طلاب ضمن سجل الفصل حسب البحث والفلترة الحالية.
         </div>
       ) : null}
 

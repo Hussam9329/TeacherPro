@@ -270,9 +270,7 @@ function StudentDismissalDetails({ student }: { student: Student }) {
   return (
     <div className="rounded-lg bg-destructive/10 p-2 text-xs text-destructive">
       <div>
-        {[student.dismissalType, student.dismissalReason]
-          .filter(Boolean)
-          .join(" — ") || "سبب الفصل غير مدخل"}
+        {student.dismissalReason || "سبب الفصل غير مدخل"}
       </div>
       {student.dismissalNotes && (
         <div className="mt-1 text-destructive/80">

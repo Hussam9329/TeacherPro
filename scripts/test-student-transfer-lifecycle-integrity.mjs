@@ -90,7 +90,8 @@ check(
   studentsRoute.includes('"opportunities"') &&
     studentsRoute.includes('"baseOpportunities"') &&
     studentsRoute.includes('"status"') &&
-    studentsRoute.includes('"dismissalType"') &&
+    studentsRoute.includes('"dismissalReason"') &&
+    !studentsRoute.includes('"dismissalType"') &&
     studentsRoute.includes("stripNonWritableStudentUpdateFields(data)"),
 );
 check(
