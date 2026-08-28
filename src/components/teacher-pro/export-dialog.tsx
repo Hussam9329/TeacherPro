@@ -55,6 +55,18 @@ export type StudentDetails = {
 
 export type StudentDetailsMap = Record<string, StudentDetails>;
 
+/**
+ * بيانات الطالب الأساسية المعروضة في الجدول/البطاقة عند اختياره من البحث.
+ * تُحقن في ملف HTML كـ window.STUDENT_LIST لاستخدامها في البحث والفلترة.
+ */
+export type StudentRowBasic = {
+  id: string;
+  name: string;
+  courseName: string;
+  opportunities: number | string;
+  [key: string]: unknown;
+};
+
 export type ExportFetchContext = {
   signal: AbortSignal;
   onProgress: (loaded: number, total: number) => void;
@@ -158,10 +170,94 @@ function buildTableRows<T>(
 }
 
 const DETAILS_MODAL_CSS = `
+  .tp-search-wrap {
+    position: relative;
+    margin-bottom: 20px;
+  }
+  .tp-search-input {
+    width: 100%;
+    padding: 14px 18px;
+    font-size: 16px;
+    font-family: inherit;
+    border: 2px solid #111827;
+    border-radius: 10px;
+    background: #fff;
+    color: #111827;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .tp-search-input:focus { border-color: #2563eb; }
+  .tp-search-input::placeholder { color: #9ca3af; }
+  .tp-search-hint {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #6b7280;
+  }
+  .tp-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-top: 0;
+    border-radius: 0 0 10px 10px;
+    max-height: 320px;
+    overflow-y: auto;
+    box-shadow: 0 12px 24px rgba(15,23,42,.12);
+    display: none;
+  }
+  .tp-suggestions.open { display: block; }
+  .tp-suggestion {
+    padding: 11px 16px;
+    cursor: pointer;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 14px;
+    color: #111827;
+    transition: background .1s;
+  }
+  .tp-suggestion:last-child { border-bottom: 0; }
+  .tp-suggestion:hover, .tp-suggestion.active {
+    background: #f9fafb;
+  }
+  .tp-suggestion-name { font-weight: 700; }
+  .tp-suggestion-meta {
+    font-size: 11.5px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+  .tp-empty-search {
+    padding: 14px 16px;
+    text-align: center;
+    color: #6b7280;
+    font-size: 13px;
+  }
+
+  .tp-student-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 0;
+    overflow: hidden;
+    display: none;
+  }
+  .tp-student-card.visible { display: block; }
+  .tp-student-card table {
+    margin: 0;
+    border: 0;
+  }
+  .tp-student-card th, .tp-student-card td {
+    border: 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .tp-student-card tr:last-child th,
+  .tp-student-card tr:last-child td { border-bottom: 0; }
+
   .tp-details-cell { text-align: center; white-space: nowrap; }
   .tp-details-btn {
     background: #111827; color: #fff; border: 0; border-radius: 6px;
-    padding: 5px 12px; cursor: pointer; font-size: 11px; font-weight: 700;
+    padding: 8px 16px; cursor: pointer; font-size: 12px; font-weight: 700;
     font-family: inherit;
   }
   .tp-details-btn:hover { background: #1f2937; }
@@ -205,6 +301,14 @@ const DETAILS_MODAL_CSS = `
 `;
 
 const DETAILS_MODAL_HTML = `
+<div class="tp-search-wrap">
+  <input type="text" id="tpStudentSearch" class="tp-search-input" autocomplete="off" placeholder="اكتب اسم الطالب الثنائي فما فوق (مثال: محمد علي)">
+  <div id="tpSuggestions" class="tp-suggestions"></div>
+  <p class="tp-search-hint" id="tpSearchHint">اكتب كلمتين على الأقل (الاسم واسم الأب) لعرض قائمة الطلاب المطابقين.</p>
+</div>
+
+<div id="tpStudentCard" class="tp-student-card"></div>
+
 <div id="tpDetailsModal" class="tp-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="tpModalTitle">
   <div class="tp-modal">
     <div class="tp-modal-header">
@@ -251,11 +355,20 @@ const DETAILS_MODAL_JS = `
 <script>
 (function(){
   var DATA = window.STUDENT_DETAILS || {};
+  var STUDENTS = window.STUDENT_LIST || [];
+
+  var searchInput = document.getElementById('tpStudentSearch');
+  var suggestionsEl = document.getElementById('tpSuggestions');
+  var hintEl = document.getElementById('tpSearchHint');
+  var cardEl = document.getElementById('tpStudentCard');
   var overlay = document.getElementById('tpDetailsModal');
   var titleEl = document.getElementById('tpModalTitle');
   var gradesBody = document.getElementById('tpGradesBody');
   var logsBody = document.getElementById('tpLogsBody');
   var closeBtn = document.getElementById('tpModalClose');
+
+  var activeIndex = -1;
+  var currentMatches = [];
 
   function esc(s){
     if (s === null || s === undefined) return '';
@@ -273,6 +386,116 @@ const DETAILS_MODAL_JS = `
     try {
       return d.toLocaleDateString('ar-IQ-u-nu-latn', {day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Baghdad'});
     } catch(e){ return esc(s); }
+  }
+
+  // عدد الكلمات في استعلام البحث — نُهمل المسافات الزائدة.
+  function countWords(q){
+    return String(q || '').trim().split(/\\s+/).filter(Boolean).length;
+  }
+
+  // مطابقة بسيطة: يجب أن يبدأ اسم الطالب بالنص المكتوب (أو يحتوي عليه ككلمات متتالية).
+  function matchesQuery(student, q){
+    var name = String(student.name || '').trim();
+    if (!name) return false;
+    var nq = String(q || '').trim().toLowerCase();
+    if (!nq) return false;
+    var nname = name.toLowerCase();
+    if (nname.startsWith(nq)) return true;
+    // مطابقة "كلمات متتالية" داخل الاسم: مثلاً "علي حسين" داخل "محمد علي حسين جاسم"
+    var nameParts = nname.split(/\\s+/);
+    var qParts = nq.split(/\\s+/);
+    for (var i = 0; i <= nameParts.length - qParts.length; i++) {
+      var ok = true;
+      for (var j = 0; j < qParts.length; j++) {
+        if (!nameParts[i + j].startsWith(qParts[j])) { ok = false; break; }
+      }
+      if (ok) return true;
+    }
+    return false;
+  }
+
+  function renderSuggestions(matches){
+    currentMatches = matches;
+    activeIndex = -1;
+    if (matches.length === 0) {
+      suggestionsEl.innerHTML = '<div class="tp-empty-search">لا يوجد طلاب مطابقون لهذا البحث</div>';
+      suggestionsEl.classList.add('open');
+      return;
+    }
+    var limit = Math.min(matches.length, 50);
+    var html = '';
+    for (var i = 0; i < limit; i++) {
+      var s = matches[i];
+      html += '<div class="tp-suggestion" data-idx="' + i + '">'
+        + '<div class="tp-suggestion-name">' + esc(s.name) + '</div>'
+        + '<div class="tp-suggestion-meta">الدورة: ' + esc(s.courseName || '—') + ' · الفرص: ' + fmtNum(s.opportunities) + '</div>'
+        + '</div>';
+    }
+    if (matches.length > limit) {
+      html += '<div class="tp-empty-search">و' + (matches.length - limit) + ' طالب آخر — ضيّق البحث أكثر</div>';
+    }
+    suggestionsEl.innerHTML = html;
+    suggestionsEl.classList.add('open');
+  }
+
+  function hideSuggestions(){
+    suggestionsEl.classList.remove('open');
+    currentMatches = [];
+    activeIndex = -1;
+  }
+
+  function renderStudentCard(student){
+    var id = esc(student.id);
+    var html = '<table>'
+      + '<thead><tr>'
+      + '<th>الطالب</th>'
+      + '<th>الدورة</th>'
+      + '<th>عدد الفرص</th>'
+      + '<th>تفاصيل الطالب</th>'
+      + '</tr></thead>'
+      + '<tbody><tr>'
+      + '<td>' + esc(student.name) + '</td>'
+      + '<td>' + esc(student.courseName || '—') + '</td>'
+      + '<td>' + fmtNum(student.opportunities) + '</td>'
+      + '<td class="tp-details-cell"><button type="button" class="tp-details-btn" data-sid="' + id + '">إظهار التفاصيل</button></td>'
+      + '</tr></tbody>'
+      + '</table>';
+    cardEl.innerHTML = html;
+    cardEl.classList.add('visible');
+  }
+
+  function selectStudent(student){
+    searchInput.value = student.name;
+    hideSuggestions();
+    hintEl.textContent = 'تم اختيار: ' + student.name + ' — اضغط زر «إظهار التفاصيل» لعرض درجاته وسجل فرصه.';
+    renderStudentCard(student);
+  }
+
+  function handleSearchInput(){
+    var q = searchInput.value;
+    var wordCount = countWords(q);
+
+    if (!q.trim()) {
+      hideSuggestions();
+      cardEl.classList.remove('visible');
+      cardEl.innerHTML = '';
+      hintEl.textContent = 'اكتب كلمتين على الأقل (الاسم واسم الأب) لعرض قائمة الطلاب المطابقين.';
+      return;
+    }
+
+    if (wordCount < 2) {
+      hideSuggestions();
+      hintEl.textContent = 'اكتب كلمة أخرى على الأقل (مثال: «محمد علي» بدل «محمد» فقط) لعرض قائمة الطلاب.';
+      return;
+    }
+
+    hintEl.textContent = 'ابحث عن الاسم الثنائي أو أكثر. مثال: «محمد علي» يعرض كل الطلاب الذين تبدأ أسماؤهم بـ«محمد علي».';
+
+    var matches = STUDENTS.filter(function(s){
+      return matchesQuery(s, q);
+    });
+
+    renderSuggestions(matches);
   }
 
   function showDetails(studentId, studentLabel){
@@ -318,12 +541,70 @@ const DETAILS_MODAL_JS = `
     document.body.style.overflow = '';
   }
 
+  // البحث أثناء الكتابة (debounce خفيف).
+  var debounceTimer = null;
+  searchInput.addEventListener('input', function(){
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(handleSearchInput, 150);
+  });
+
+  // التنقل بلوحة المفاتيح داخل قائمة الاقتراحات.
+  searchInput.addEventListener('keydown', function(e){
+    if (!suggestionsEl.classList.contains('open')) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      activeIndex = Math.min(activeIndex + 1, currentMatches.length - 1);
+      updateActiveSuggestion();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      activeIndex = Math.max(activeIndex - 1, 0);
+      updateActiveSuggestion();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeIndex >= 0 && activeIndex < currentMatches.length) {
+        selectStudent(currentMatches[activeIndex]);
+      } else if (currentMatches.length > 0) {
+        selectStudent(currentMatches[0]);
+      }
+    } else if (e.key === 'Escape') {
+      hideSuggestions();
+    }
+  });
+
+  function updateActiveSuggestion(){
+    var items = suggestionsEl.querySelectorAll('.tp-suggestion');
+    items.forEach(function(item, i){
+      item.classList.toggle('active', i === activeIndex);
+    });
+    if (activeIndex >= 0 && items[activeIndex]) {
+      items[activeIndex].scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  // اختيار طالب عند الضغط على اقتراح.
+  suggestionsEl.addEventListener('click', function(e){
+    var item = e.target.closest && e.target.closest('.tp-suggestion');
+    if (!item) return;
+    var idx = parseInt(item.getAttribute('data-idx') || '0', 10);
+    if (idx >= 0 && idx < currentMatches.length) {
+      selectStudent(currentMatches[idx]);
+    }
+  });
+
+  // إغلاق القائمة عند الضغط خارجها.
+  document.addEventListener('click', function(e){
+    if (!searchInput.contains(e.target) && !suggestionsEl.contains(e.target)) {
+      hideSuggestions();
+    }
+  });
+
+  // فتح نافذة التفاصيل عند الضغط على زر «إظهار التفاصيل».
   document.addEventListener('click', function(e){
     var btn = e.target.closest && e.target.closest('.tp-details-btn');
     if (btn) {
       var sid = btn.getAttribute('data-sid') || '';
-      var row = btn.closest('tr');
       var label = '';
+      var row = btn.closest('tr');
       if (row) {
         var firstCell = row.querySelector('td:not(.tp-details-cell)');
         if (firstCell) label = firstCell.textContent.trim();
@@ -339,6 +620,9 @@ const DETAILS_MODAL_JS = `
   document.addEventListener('keydown', function(e){
     if (e.key === 'Escape' && overlay.classList.contains('open')) closeDetails();
   });
+
+  // ركّز على خانة البحث عند فتح الملف.
+  setTimeout(function(){ try { searchInput.focus(); } catch(e){} }, 100);
 })();
 </script>
 `;
@@ -353,25 +637,16 @@ function buildHtml<T>(
     documentTitle?: string;
     safeUrlName?: string;
     studentDetails?: StudentDetailsMap;
+    studentList?: StudentRowBasic[];
     getRowId?: (row: T) => string;
   } = {},
 ): string {
   const documentTitle = options.documentTitle || title;
   const safeUrlName = options.safeUrlName || sanitizeExportFileName(documentTitle);
   const hasDetails = Boolean(options.studentDetails);
-
-  // أضف عمود "التفاصيل" فقط عند وجود بيانات الطلاب، ولا يخضع لاختيار الـ checkbox.
-  const effectiveColumns: ExportColumn<T>[] = hasDetails
-    ? [
-        ...columns,
-        {
-          key: DETAILS_COLUMN_KEY,
-          label: "تفاصيل الطالب",
-          value: () => "",
-          locked: true,
-        },
-      ]
-    : columns;
+  // عند تمرير studentList يصبح الملف في وضع "بحث + اختيار طالب واحد" بدل
+  // عرض كل الطلاب دفعة واحدة. لا نعرض الجدول الكامل ولا العدد الكلي.
+  const searchMode = Boolean(options.studentList && options.studentList.length > 0);
 
   const printableToolbar = options.printable
     ? `<div class="toolbar"><button onclick="window.print()">طباعة / حفظ PDF</button><button onclick="window.close()">إغلاق</button></div>`
@@ -383,9 +658,26 @@ function buildHtml<T>(
   const detailsDataScript = hasDetails
     ? `<script>window.STUDENT_DETAILS=${JSON.stringify(options.studentDetails || {})};</script>`
     : "";
+  const studentListScript = searchMode
+    ? `<script>window.STUDENT_LIST=${JSON.stringify(options.studentList || [])};</script>`
+    : "";
   const detailsModalHtml = hasDetails ? DETAILS_MODAL_HTML : "";
   const detailsModalJs = hasDetails ? DETAILS_MODAL_JS : "";
   const detailsCss = hasDetails ? DETAILS_MODAL_CSS : "";
+
+  // في وضع البحث لا نعرض الجدول الكامل ولا «عدد الصفوف» — فقط خانة البحث (داخل detailsModalHtml)
+  // والجدول يُعرض ديناميكياً عند اختيار طالب.
+  const mainTableHtml = searchMode
+    ? ""
+    : `<div class="table-wrap"><table><thead><tr>${columns
+        .map((col) => `<th>${escapeHtml(humanizeTeacherProText(col.label))}</th>`)
+        .join("")}</tr></thead><tbody>${buildTableRows(rows, columns, {
+          hasDetails: false,
+          getRowId: options.getRowId,
+        })}</tbody></table></div>`;
+  const metaLine = searchMode
+    ? ""
+    : `<div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}</div>`;
 
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${escapeHtml(humanizeTeacherProText(documentTitle))}</title><style>
   @page { size: A4 ${options.orientation || "portrait"}; margin: 10mm; }
@@ -416,14 +708,9 @@ function buildHtml<T>(
     tr { page-break-inside: avoid; page-break-after: auto; }
     thead { display: table-header-group; }
     th, td { padding: 4px 5px; }
-    .tp-modal-overlay { display: none !important; }
+    .tp-modal-overlay, .tp-suggestions { display: none !important; }
   }
-  </style>${printableScript}</head><body>${printableToolbar}<main class="report"><header class="report-header"><h1>${escapeHtml(humanizeTeacherProText(title))}</h1><div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}${hasDetails ? " + تفاصيل" : ""}</div></header><div class="table-wrap"><table><thead><tr>${effectiveColumns
-    .map((col) => `<th>${escapeHtml(humanizeTeacherProText(col.label))}</th>`)
-    .join("")}</tr></thead><tbody>${buildTableRows(rows, effectiveColumns, {
-      hasDetails,
-      getRowId: options.getRowId,
-    })}</tbody></table></div></main>${detailsModalHtml}${detailsDataScript}${detailsModalJs}</body></html>`;
+  </style>${printableScript}</head><body>${printableToolbar}<main class="report"><header class="report-header"><h1>${escapeHtml(humanizeTeacherProText(title))}</h1>${metaLine}</header>${mainTableHtml}${detailsModalHtml}${studentListScript}${detailsDataScript}${detailsModalJs}</main></body></html>`;
 }
 
 function downloadBlob(content: BlobPart | Blob, fileName: string, mime: string) {
@@ -699,8 +986,29 @@ export function ExportDialog<T = Record<string, unknown>>({
       }
     }
 
+    // في وضع البحث نمرّر قائمة الطلاب (id + name + courseName + opportunities)
+    // لاستخدامها في خانة البحث بدل عرض كل الطلاب دفعة واحدة.
+    const idGetter = getRowId || ((row: T) => String((row as Record<string, unknown>)?.id ?? ""));
+    const nameGetter = (row: T) => String((row as Record<string, unknown>)?.name ?? "");
+    const courseGetter = (row: T) =>
+      String((row as Record<string, unknown>)?.courseName ?? "");
+    const oppGetter = (row: T) => {
+      const v = (row as Record<string, unknown>)?.opportunities;
+      return v === null || v === undefined ? "" : (v as number | string);
+    };
+
+    const studentList: StudentRowBasic[] | undefined = fetchStudentDetails
+      ? exportRows.map((row) => ({
+          id: idGetter(row),
+          name: nameGetter(row),
+          courseName: courseGetter(row),
+          opportunities: oppGetter(row),
+        }))
+      : undefined;
+
     const html = buildHtml(exportRows, selectedColumns, title, {
       studentDetails: detailsMap || undefined,
+      studentList,
       getRowId,
     });
     downloadBlob(html, `${safeFileName}.html`, "text/html;charset=utf-8");
@@ -708,7 +1016,7 @@ export function ExportDialog<T = Record<string, unknown>>({
       ? ` مع تفاصيل ${Object.keys(detailsMap).length} طالب`
       : "";
     toast.success(
-      `تم تصدير ${exportRows.length} صف و ${selectedColumns.length} عمود بصيغة HTML${detailsNote}`,
+      `تم تصدير ${exportRows.length} طالب بصيغة HTML${detailsNote}`,
     );
     setOpen(false);
   };
@@ -863,9 +1171,9 @@ export function ExportDialog<T = Record<string, unknown>>({
               })}
             </div>
             <p className="text-xs text-muted-foreground">
-              سيتم تصدير الأعمدة المختارة فقط وبنفس ترتيبها الظاهر في هذه القائمة.
+              سيتم تصدير الأعمدة المختارة فقط وبنفس ترتيبها الظاهر في هذه القائمة (للملفات CSV / Excel / PDF).
               {fetchStudentDetails
-                ? " عند تصدير HTML يُضاف عمود «تفاصيل الطالب» تلقائياً لفتح درجات الطالب وسجل فرصه."
+                ? " زر «تصدير HTML» يُنتج ملف بحث: تكتب الاسم الثنائي فما فوق فيظهر قائمة بالطلاب المطابقين، وعند اختيار طالب تظهر بياناته (الاسم + الدورة + عدد الفرص) مع زر «إظهار التفاصيل» يفتح درجاته وسجل فرصه."
                 : ""}
             </p>
           </div>
