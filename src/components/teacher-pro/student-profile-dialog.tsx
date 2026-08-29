@@ -354,25 +354,6 @@ function buildDeductionLogByExamId(
   return map;
 }
 
-/**
- * يرجع آخر سجل خصم (مهما كان الامتحان) لعرضه في بطاقة «سبب الخصم الأخير»
- * بتبويب التفاصيل الرئيسي. آخر = الأحدث زمنياً.
- */
-function pickLatestDeductionLog(
-  logs: OpportunityLog[],
-): OpportunityLog | null {
-  const deductions = logs.filter((log) => {
-    const action = String(log.action || "");
-    return action === "خصم" || action === "خصم تلقائي" || action === "خصم يدوي";
-  });
-  if (deductions.length === 0) return null;
-  return [...deductions].sort(
-    (a, b) =>
-      String(b.date || "").localeCompare(String(a.date || "")) ||
-      String(b.id || "").localeCompare(String(a.id || "")),
-  )[0];
-}
-
 export function StudentProfileDialog({
   student,
   open,
@@ -533,13 +514,6 @@ export function StudentProfileDialog({
   // «خصم N فرصة» على كل درجة سببت خصماً فعلياً بتبويب الدرجات.
   const deductionLogByExamId = useMemo(
     () => buildDeductionLogByExamId(studentOpportunities),
-    [studentOpportunities],
-  );
-
-  // آخر سجل خصم بشكل عام (مهما كان الامتحان) لعرضه في بطاقة «سبب الخصم الأخير»
-  // بتبويب التفاصيل الرئيسي.
-  const latestDeductionLog = useMemo(
-    () => pickLatestDeductionLog(studentOpportunities),
     [studentOpportunities],
   );
 
@@ -857,6 +831,9 @@ export function StudentProfileDialog({
     profileStudent.activeChapter,
     activeChapterForCourse(profileStudent.courseId),
   );
+  // مصدر الفصل النشط الوحيد من الآن فصاعداً هو قاعدة البيانات (statsForStudent).
+  // عند عدم تحميل الإحصائيات بعد نعرض "جاري التحقق…"، وعند الفشل نعرض خطأ صريح.
+  // لا نعد نستخدم الكاش المحلي (student.activeChapter أو activeChapterForCourse) كقيمة عرض.
   const activeChapterText = statsPending
     ? "جاري التحقق…"
     : statsForStudent?.opportunityHealth === "active-chapter-conflict"
@@ -865,14 +842,21 @@ export function StudentProfileDialog({
         ? "لا يوجد فصل نشط"
         : statsForStudent?.opportunityHealth === "zero-limit"
           ? `${activeChapter?.name || "الفصل النشط"} — سقف الفرص 0`
-          : activeChapter?.name || (databaseStatsError ? "تعذر التحقق من الفصل النشط" : "لا يوجد فصل نشط");
+          : activeChapter?.name
+            || (databaseStatsError
+              ? "تعذر التحقق من الفصل النشط من قاعدة البيانات"
+              : "لا يوجد فصل نشط");
   const profileStatValue = (value: number | undefined) => {
     if (statsPending) return "…";
     return value ?? "—";
   };
+  // رصيد الفرص مصدره الوحيد هو قاعدة البيانات (statsForStudent). عند عدم التحميل
+  // نعرض "…"، وعند الفشل نعرض "—" بدلاً من قراءة الكاش المحلي للطالب.
   const opportunityText = statsPending
     ? "…"
-    : formatOpportunityBalance(statsForStudent || profileStudent);
+    : statsForStudent
+      ? formatOpportunityBalance(statsForStudent)
+      : "—";
   const successCount = profileStatValue(statsForStudent?.success);
   const failedCount = profileStatValue(statsForStudent?.failed);
   const absentCount = profileStatValue(statsForStudent?.absent);
@@ -1085,7 +1069,10 @@ export function StudentProfileDialog({
                   </div>
                 </div>
 
-                {profileStudent.status === "مفصول" && (
+                {/* بيانات الفصل: مصدرها الوحيد قاعدة البيانات. لا نعرض هذه البطاقة
+                    إلا بعد تحميل ملف الطالب من قاعدة البيانات، حتى لا نعرض حالة فصل
+                    مخفية من الكاش المحلي. */}
+                {hasAuthoritativeProfile && profileStudent.status === "مفصول" && (
                   <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:rounded-3xl">
                     <p className="font-black text-destructive">بيانات الفصل</p>
                     <p className="mt-2 break-words">مفصول - {profileStudent.dismissalReason || "—"}</p>
@@ -1093,37 +1080,56 @@ export function StudentProfileDialog({
                   </div>
                 )}
 
-                {latestDeductionLog && (() => {
-                  const deductionExam = latestDeductionLog.examId
-                    ? profileExamById.get(latestDeductionLog.examId)
-                    : undefined;
-                  const deductionGrade = deductionExam
-                    ? studentGrades.find((g) => g.examId === deductionExam.id)
-                    : undefined;
-                  const deductionReason = humanizeProfileText(latestDeductionLog.reason) || "خصم تلقائي";
+                {/* سجل الخصومات الكامل — مصدره الوحيد قاعدة البيانات عبر
+                    studentOpportunities (التي تعتمد على hasAuthoritativeProfile).
+                    نعرض كل حركة خصم (تلقائي/يدوي/خصم) مرتبة من الأحدث للأقدم،
+                    مع اسم الامتحان المرتبط وتاريخه ودرجة الطالب وحد الخصم والسبب. */}
+                {(() => {
+                  const deductionLogs = studentOpportunities.filter((log) => {
+                    const action = String(log.action || "");
+                    return action === "خصم" || action === "خصم تلقائي" || action === "خصم يدوي";
+                  });
+                  if (deductionLogs.length === 0) return null;
                   return (
                     <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:rounded-3xl">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="destructive">آخر خصم: {latestDeductionLog.amount} فرصة</Badge>
-                        <span className="text-xs text-muted-foreground">{formatAppDate(latestDeductionLog.date)}</span>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-black text-destructive">سجل الخصومات ({deductionLogs.length})</p>
+                        <span className="text-xs text-muted-foreground">مصدر البيانات: قاعدة البيانات</span>
                       </div>
-                      <p className="mt-3 break-words font-bold">
-                        {deductionExam?.name || "امتحان محذوف"}
-                      </p>
-                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        {deductionExam && (
-                          <span>تاريخ الامتحان: {formatAppDate(deductionExam.date)}</span>
-                        )}
-                        {deductionGrade && deductionExam && (
-                          <span>درجة الطالب: {formatGradeScore(deductionGrade, deductionExam, "—")} من {deductionExam.fullMark}</span>
-                        )}
-                        {deductionExam && (
-                          <span>حد الخصم: {deductionExam.discountMark}</span>
-                        )}
+                      <div className="mt-3 space-y-2">
+                        {deductionLogs.map((log) => {
+                          const exam = log.examId ? profileExamById.get(log.examId) : undefined;
+                          const grade = exam ? studentGrades.find((g) => g.examId === exam.id) : undefined;
+                          const reason = humanizeProfileText(log.reason) || "خصم";
+                          const isAuto = String(log.action || "").includes("تلقائي");
+                          return (
+                            <div key={log.id} className="rounded-xl border border-destructive/20 bg-background/60 p-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="destructive">خصم {log.amount} فرصة</Badge>
+                                <Badge variant={isAuto ? "outline" : "secondary"} className="text-[10px]">{isAuto ? "تلقائي" : "يدوي"}</Badge>
+                                <span className="text-xs text-muted-foreground">{formatAppDate(log.date)}</span>
+                              </div>
+                              <p className="mt-2 break-words font-bold">
+                                {exam?.name || (log.examId ? "امتحان محذوف" : "بدون امتحان مرتبط")}
+                              </p>
+                              <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                {exam && (
+                                  <span>تاريخ الامتحان: {formatAppDate(exam.date)}</span>
+                                )}
+                                {grade && exam && (
+                                  <span>درجة الطالب: {formatGradeScore(grade, exam, "—")} من {exam.fullMark}</span>
+                                )}
+                                {exam && (
+                                  <span>حد الخصم: {exam.discountMark}</span>
+                                )}
+                              </div>
+                              <p className="mt-2 break-words text-xs leading-6 text-muted-foreground">
+                                {reason}
+                              </p>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <p className="mt-2 break-words text-xs leading-6 text-muted-foreground">
-                        {deductionReason}
-                      </p>
                     </div>
                   );
                 })()}
