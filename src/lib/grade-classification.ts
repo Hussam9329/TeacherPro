@@ -166,14 +166,18 @@ export function classifyGradeAcademicImpact(
     date: exam.date,
     scheduledActivateAt: exam.scheduledActivateAt,
   }).available) return "unavailable-exam";
-  if (student && isExamWithinStudentGracePeriodUnified(student, exam)) return "grace-period";
   if (grade?.status === "غش") return "cheating";
+  // أمثلة "بدون خصم" يجب أن تصنّف كـ no-discount-protected / passed / full-mark حتى
+  // لو وقعت ضمن نافذة السماح الزمنية. هذه الامتحانات مصمّمة بعدم الخصم أصلاً،
+  // ولا حاجة لحمايتها عبر فترة السماح. إذا قدّمنا فحص السماح على فحص noDiscount
+  // سيُحتسب الامتحان ضمن "ضمن السماح" بدلاً من "بدون خصم" وهذا يُخفي العداد.
   if (exam.noDiscount) {
     if (grade?.status === "درجة" && Number(grade.score || 0) >= Number(exam.passMark || 0)) {
       return Number(grade.score || 0) === Number(exam.fullMark || 0) ? "full-mark" : "passed";
     }
     return "no-discount-protected";
   }
+  if (student && isExamWithinStudentGracePeriodUnified(student, exam)) return "grace-period";
   if (grade?.status === "غائب") return exam.type === "فاينل" ? "absent-dismissal" : "absent-deducted";
 
   const score = grade?.status === "درجة" ? Number(grade.score) : NaN;
