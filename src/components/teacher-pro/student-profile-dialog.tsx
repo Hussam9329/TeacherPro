@@ -331,6 +331,48 @@ function buildOpportunityTraceRows(logs: OpportunityLog[]): OpportunityTraceRow[
     });
 }
 
+/**
+ * يبني خريطة بين examId وسجل الخصم المرتبط به (إن وُجد). تُستخدم لعرض بادج
+ * «خصم N فرصة» على كل درجة تسببت بخصم فعلي بتبويب الدرجات.
+ * نأخذ آخر سجل خصم لكل امتحان ترتيباً زمنياً حتى لو تكرر.
+ */
+function buildDeductionLogByExamId(
+  logs: OpportunityLog[],
+): Map<string, OpportunityLog> {
+  const map = new Map<string, OpportunityLog>();
+  const sorted = [...logs].sort(
+    (a, b) =>
+      String(a.date || "").localeCompare(String(b.date || "")) ||
+      String(a.id || "").localeCompare(String(b.id || "")),
+  );
+  for (const log of sorted) {
+    if (!log.examId) continue;
+    const action = String(log.action || "");
+    if (action !== "خصم" && action !== "خصم تلقائي" && action !== "خصم يدوي") continue;
+    map.set(log.examId, log);
+  }
+  return map;
+}
+
+/**
+ * يرجع آخر سجل خصم (مهما كان الامتحان) لعرضه في بطاقة «سبب الخصم الأخير»
+ * بتبويب التفاصيل الرئيسي. آخر = الأحدث زمنياً.
+ */
+function pickLatestDeductionLog(
+  logs: OpportunityLog[],
+): OpportunityLog | null {
+  const deductions = logs.filter((log) => {
+    const action = String(log.action || "");
+    return action === "خصم" || action === "خصم تلقائي" || action === "خصم يدوي";
+  });
+  if (deductions.length === 0) return null;
+  return [...deductions].sort(
+    (a, b) =>
+      String(b.date || "").localeCompare(String(a.date || "")) ||
+      String(b.id || "").localeCompare(String(a.id || "")),
+  )[0];
+}
+
 export function StudentProfileDialog({
   student,
   open,
@@ -486,6 +528,20 @@ export function StudentProfileDialog({
     opportunityTraceRows.forEach((row) => map.set(row.log.id, row));
     return map;
   }, [opportunityTraceRows]);
+
+  // خريطة بين examId وسجل الخصم الأخير المرتبط به. تُستخدم لعرض بادج أحمر
+  // «خصم N فرصة» على كل درجة سببت خصماً فعلياً بتبويب الدرجات.
+  const deductionLogByExamId = useMemo(
+    () => buildDeductionLogByExamId(studentOpportunities),
+    [studentOpportunities],
+  );
+
+  // آخر سجل خصم بشكل عام (مهما كان الامتحان) لعرضه في بطاقة «سبب الخصم الأخير»
+  // بتبويب التفاصيل الرئيسي.
+  const latestDeductionLog = useMemo(
+    () => pickLatestDeductionLog(studentOpportunities),
+    [studentOpportunities],
+  );
 
   const studentActions = useMemo<StudentActionRow[]>(() => {
     if (!effectiveStudent) return [];
@@ -859,6 +915,7 @@ export function StudentProfileDialog({
             ["no-discount-protected", "passed", "full-mark"].includes(impactKind),
         ),
         impactKind,
+        deductionLog: exam ? deductionLogByExamId.get(exam.id) : undefined,
       };
     }),
     gradeViewFilter,
@@ -1035,6 +1092,41 @@ export function StudentProfileDialog({
                     {profileStudent.dismissalNotes && <p className="mt-1 break-words text-muted-foreground">{profileStudent.dismissalNotes}</p>}
                   </div>
                 )}
+
+                {latestDeductionLog && (() => {
+                  const deductionExam = latestDeductionLog.examId
+                    ? profileExamById.get(latestDeductionLog.examId)
+                    : undefined;
+                  const deductionGrade = deductionExam
+                    ? studentGrades.find((g) => g.examId === deductionExam.id)
+                    : undefined;
+                  const deductionReason = humanizeProfileText(latestDeductionLog.reason) || "خصم تلقائي";
+                  return (
+                    <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:rounded-3xl">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="destructive">آخر خصم: {latestDeductionLog.amount} فرصة</Badge>
+                        <span className="text-xs text-muted-foreground">{formatAppDate(latestDeductionLog.date)}</span>
+                      </div>
+                      <p className="mt-3 break-words font-bold">
+                        {deductionExam?.name || "امتحان محذوف"}
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        {deductionExam && (
+                          <span>تاريخ الامتحان: {formatAppDate(deductionExam.date)}</span>
+                        )}
+                        {deductionGrade && deductionExam && (
+                          <span>درجة الطالب: {formatGradeScore(deductionGrade, deductionExam, "—")} من {deductionExam.fullMark}</span>
+                        )}
+                        {deductionExam && (
+                          <span>حد الخصم: {deductionExam.discountMark}</span>
+                        )}
+                      </div>
+                      <p className="mt-2 break-words text-xs leading-6 text-muted-foreground">
+                        {deductionReason}
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -1042,7 +1134,7 @@ export function StudentProfileDialog({
               <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
                 <h4 className="mb-4 text-base font-black sm:text-lg">{gradeViewFilter === "absent" ? "غيابات الطالب المؤثرة" : gradeViewFilter === "grace" ? "درجات ضمن السماح" : gradeViewFilter === "no-discount" ? "درجات بدون خصم" : "درجات الطالب"}</h4>
                 <div className="space-y-2">
-                  {filteredGradeRows.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText={gradeViewFilter === "all" ? gradesEmptyMessage : "لا توجد درجات مطابقة لهذا التصنيف"} /> : filteredGradeRows.map(({ grade, withinGrace, withoutDiscount }) => {
+                  {filteredGradeRows.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText={gradeViewFilter === "all" ? gradesEmptyMessage : "لا توجد درجات مطابقة لهذا التصنيف"} /> : filteredGradeRows.map(({ grade, withinGrace, withoutDiscount, deductionLog }) => {
                     const exam = profileExamById.get(grade.examId);
                     return (
                       <div key={grade.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
@@ -1055,6 +1147,11 @@ export function StudentProfileDialog({
                           {grade.academicEffectExcluded && <Badge className="w-fit" variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>}
                           {withinGrace && <Badge className="w-fit" variant="outline">ضمن السماح</Badge>}
                           {!withinGrace && withoutDiscount && <Badge className="w-fit" variant="secondary">بدون خصم</Badge>}
+                          {deductionLog && (
+                            <Badge className="w-fit" variant="destructive" title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>
+                              خصم {deductionLog.amount} فرصة
+                            </Badge>
+                          )}
                           <Badge className="w-fit" variant={withinGrace || withoutDiscount ? "outline" : grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : "secondary"}>{grade.status}</Badge>
                           {opportunityText !== "0/0" && <Badge variant="outline" className="text-[10px]">فرص: {opportunityText}</Badge>}
                         </div>
@@ -1082,9 +1179,10 @@ export function StudentProfileDialog({
                       exam.noDiscount &&
                         ["no-discount-protected", "passed", "full-mark"].includes(impactKind),
                     );
+                    const deductionLog = deductionLogByExamId.get(exam.id);
                     return (
                       <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
-                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{grade.academicEffectExcluded && <Badge variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>}{withinGrace && <Badge variant="outline">ضمن السماح</Badge>}{!withinGrace && withoutDiscount && <Badge variant="secondary">بدون خصم</Badge>}<Badge>{grade.status}</Badge></div></div>
+                        <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{grade.academicEffectExcluded && <Badge variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>}{withinGrace && <Badge variant="outline">ضمن السماح</Badge>}{!withinGrace && withoutDiscount && <Badge variant="secondary">بدون خصم</Badge>}{deductionLog && <Badge variant="destructive" title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>خصم {deductionLog.amount} فرصة</Badge>}<Badge>{grade.status}</Badge></div></div>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{formatGradeScore(grade, exam, "—")}</b><p>درجة الطالب</p></div></div>
                         {grade.notes ? <p className="mt-3 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
                         {grade.academicEffectExcluded && grade.academicEffectExclusionReason ? <p className="mt-2 text-xs font-medium text-sky-700 dark:text-sky-300">سبب عدم الاحتساب: {grade.academicEffectExclusionReason}</p> : null}
