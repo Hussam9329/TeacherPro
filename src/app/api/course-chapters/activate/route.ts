@@ -11,6 +11,7 @@ import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-ser
 import type { Prisma } from "@prisma/client";
 import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
+import { CHAPTER_TRANSITION_SETTLEMENT_REASON } from "@/lib/second-chapter-transition";
 
 type ArchiveEntry = { studentId: string; opportunities: number; date: string };
 
@@ -317,6 +318,17 @@ export async function POST(req: NextRequest) {
         const activeLinkIds = activeLinks
           .map((link) => link.id)
           .filter((id) => id !== target.id);
+        // Detect a real chapter transition: another chapter was active for
+        // this course and is now being deactivated as we activate `target`.
+        // Without a historical settlement boundary here, the upcoming academic
+        // recalculation would re-evaluate every grade from the previous
+        // chapter and could deplete the freshly-reset opportunities, which is
+        // exactly the bug that converted active students into "مفصولين" the
+        // last time an admin switched a course from الفصل الأول to الفصل الثاني.
+        // We therefore mint a single settlement opportunity log per active
+        // student (action "إعادة تعيين") so the engine skips any exam whose
+        // date is on or before this transition moment.
+        const isChapterTransition = activeLinkIds.length > 0;
         if (activeLinkIds.length) {
           await tx.courseChapter.updateMany({
             where: { id: { in: activeLinkIds } },
@@ -359,6 +371,41 @@ export async function POST(req: NextRequest) {
             data: { baseOpportunities },
           });
         }
+
+        // Mint the historical settlement log BEFORE recalculation so the
+        // engine sees the boundary when it re-evaluates grades. We only write
+        // it for currently-active students because the academic engine
+        // preserves a dismissed student's status regardless of recalculation
+        // output; reactivating a dismissed student is still gated behind
+        // students/status-action, which is the only authorized dismissed→active
+        // transition. Writing the settlement for active students is enough to
+        // prevent the regression where active students get auto-dismissed by
+        // stale chapter-one grades.
+        const transitionSettlementAt = new Date();
+        const transitionChapterId = target.chapterId;
+        const transitionChapterName = target.chapter.name;
+        if (isChapterTransition && activeStudentIds.length > 0) {
+          await tx.opportunityLog.createMany({
+            data: activeStudents.map((student) => ({
+              studentId: student.id,
+              action: "إعادة تعيين",
+              amount: baseOpportunities,
+              reason: CHAPTER_TRANSITION_SETTLEMENT_REASON,
+              date: transitionSettlementAt,
+              chapterId: transitionChapterId,
+              chapterNameSnapshot: transitionChapterName,
+            })),
+          });
+          await tx.studentNote.createMany({
+            data: activeStudents.map((student) => ({
+              studentId: student.id,
+              kind: "إجراء",
+              text: `تحويل فصل يدوي إلى «${transitionChapterName}»: تم تجاهل آثار امتحانات الفصل السابق وبدء رصيد جديد بـ ${baseOpportunities} فرص. الرصيد السابق قبل التحويل: ${student.opportunities}/${student.baseOpportunities}.`,
+              date: transitionSettlementAt,
+            })),
+          });
+        }
+
         if (activeStudentIds.length) {
           academicRecalculation = await recalculateStudentsAcademicState(
             activeStudentIds,
@@ -382,6 +429,10 @@ export async function POST(req: NextRequest) {
             skippedArchived: courseStudents.length - nonArchivedStudents.length,
             disabledOtherActiveLinks: activeLinkIds.length,
             restoredArchiveEntries: restoredArchive.size,
+            chapterTransitionSettlementLogsCreated:
+              isChapterTransition && activeStudentIds.length > 0
+                ? activeStudentIds.length
+                : 0,
           },
           academicRecalculation,
         };
