@@ -65,6 +65,8 @@ export type StudentRowBasic = {
   name: string;
   courseName: string;
   opportunities: number | string;
+  /** حالة الطالب في النظام (نشط / مفصول / مؤرشف) — تُستخدم لعرض شارة «مفصول» بجانب الاسم. */
+  status?: string;
   [key: string]: unknown;
 };
 
@@ -352,6 +354,20 @@ const DETAILS_MODAL_CSS = `
     color: #64748b;
     margin-top: 3px;
   }
+  .tp-dismissed-badge {
+    display: inline-block;
+    margin-right: 8px;
+    padding: 2px 12px;
+    border-radius: 999px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 1.7;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
   .tp-empty-search {
     padding: 15px 16px;
     text-align: center;
@@ -455,7 +471,7 @@ const DETAILS_MODAL_HTML = `
 <div id="tpDetailsModal" class="tp-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="tpModalTitle">
   <div class="tp-modal">
     <div class="tp-modal-header">
-      <h2 id="tpModalTitle">تفاصيل الطالب</h2>
+      <h2 id="tpModalTitle"><span id="tpModalTitleText">تفاصيل الطالب</span> <span class="tp-dismissed-badge" id="tpModalDismissedBadge" style="display:none">مفصول</span></h2>
       <button type="button" class="tp-modal-close" id="tpModalClose">إغلاق</button>
     </div>
     <div class="tp-details-section">
@@ -503,7 +519,7 @@ const DETAILS_MODAL_JS = `
   var hintEl = document.getElementById('tpSearchHint');
   var cardEl = document.getElementById('tpStudentCard');
   var overlay = document.getElementById('tpDetailsModal');
-  var titleEl = document.getElementById('tpModalTitle');
+  var titleTextEl = document.getElementById('tpModalTitleText');
   var gradesBody = document.getElementById('tpGradesBody');
   var logsBody = document.getElementById('tpLogsBody');
   var logsSection = document.getElementById('tpLogsSection');
@@ -528,6 +544,14 @@ const DETAILS_MODAL_JS = `
     try {
       return d.toLocaleDateString('ar-IQ-u-nu-latn', {day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Baghdad'});
     } catch(e){ return esc(s); }
+  }
+
+  // شارة «مفصول» بجانب اسم الطالب المفصول — نفس معنى الشارة الحمراء داخل النظام.
+  function isDismissed(student){
+    return Boolean(student) && String(student.status || '').trim() === 'مفصول';
+  }
+  function dismissedBadgeHtml(student){
+    return isDismissed(student) ? '<span class="tp-dismissed-badge">مفصول</span>' : '';
   }
 
   // نفس تطبيع البحث في البرنامج، مع إضافة مساواة ض/ظ المطلوبة للتقرير.
@@ -586,8 +610,8 @@ const DETAILS_MODAL_JS = `
     for (var i = 0; i < limit; i++) {
       var s = matches[i];
       html += '<div class="tp-suggestion" data-idx="' + i + '">'
-        + '<div class="tp-suggestion-name">' + esc(s.name) + '</div>'
-        + '<div class="tp-suggestion-meta">الدورة: ' + esc(s.courseName || '—') + ' · الفرص: ' + fmtNum(s.opportunities) + '</div>'
+        + '<div class="tp-suggestion-name">' + esc(s.name) + ' ' + dismissedBadgeHtml(s) + '</div>'
+        + '<div class="tp-suggestion-meta">الدورة: ' + esc(s.courseName || '—') + ' · الفرص: ' + fmtNum(s.opportunities) + (isDismissed(s) ? ' · الطالب مفصول' : '') + '</div>'
         + '</div>';
     }
     if (matches.length > limit) {
@@ -613,7 +637,7 @@ const DETAILS_MODAL_JS = `
       + '<th>تفاصيل الطالب</th>'
       + '</tr></thead>'
       + '<tbody><tr>'
-      + '<td>' + esc(student.name) + '</td>'
+      + '<td class="tp-student-name-cell">' + esc(student.name) + ' ' + dismissedBadgeHtml(student) + '</td>'
       + '<td>' + esc(student.courseName || '—') + '</td>'
       + '<td>' + fmtNum(student.opportunities) + '</td>'
       + '<td class="tp-details-cell"><button type="button" class="tp-details-btn" data-sid="' + id + '">إظهار التفاصيل</button></td>'
@@ -626,7 +650,7 @@ const DETAILS_MODAL_JS = `
   function selectStudent(student){
     searchInput.value = student.name;
     hideSuggestions();
-    hintEl.textContent = 'تم اختيار: ' + student.name + ' — اضغط زر «إظهار التفاصيل» لعرض درجاته وسجل فرصه.';
+    hintEl.textContent = 'تم اختيار: ' + student.name + (isDismissed(student) ? ' — الطالب مفصول' : '') + ' — اضغط زر «إظهار التفاصيل» لعرض درجاته وسجل فرصه.';
     renderStudentCard(student);
   }
 
@@ -661,7 +685,20 @@ const DETAILS_MODAL_JS = `
 
   function showDetails(studentId, studentLabel){
     var data = DATA[studentId];
-    titleEl.textContent = 'تفاصيل الطالب' + (studentLabel ? ' · ' + studentLabel : '');
+    var badgeEl = document.getElementById('tpModalDismissedBadge');
+    var titleTextEl = document.getElementById('tpModalTitleText');
+    var dismissed = false;
+    for (var i = 0; i < STUDENTS.length; i++) {
+      if (STUDENTS[i] && String(STUDENTS[i].id) === String(studentId)) {
+        dismissed = isDismissed(STUDENTS[i]);
+        break;
+      }
+    }
+    if (badgeEl) badgeEl.style.display = dismissed ? '' : 'none';
+    // نص العنوان داخل span مستقل حتى لا يمسح textContent شارة «مفصول» المجاورة.
+    if (titleTextEl) {
+      titleTextEl.textContent = 'تفاصيل الطالب' + (studentLabel ? ' · ' + studentLabel : '');
+    }
 
     if (data && data.grades && data.grades.length > 0) {
       gradesBody.innerHTML = data.grades.map(function(g){
@@ -770,7 +807,13 @@ const DETAILS_MODAL_JS = `
       var row = btn.closest('tr');
       if (row) {
         var firstCell = row.querySelector('td:not(.tp-details-cell)');
-        if (firstCell) label = firstCell.textContent.trim();
+        if (firstCell) {
+          // اسم الطالب فقط بدون نص شارة «مفصول» — الشارة تُعرض في رأس النافذة.
+          var labelClone = firstCell.cloneNode(true);
+          var badgeInLabel = labelClone.querySelector('.tp-dismissed-badge');
+          if (badgeInLabel && badgeInLabel.parentNode) badgeInLabel.parentNode.removeChild(badgeInLabel);
+          label = labelClone.textContent.trim();
+        }
       }
       showDetails(sid, label);
     }
@@ -1178,8 +1221,9 @@ export function ExportDialog<T = Record<string, unknown>>({
       ? sanitizeStudentDetailsForHtml(detailsMap)
       : null;
 
-    // في وضع البحث نمرّر قائمة الطلاب (id + name + courseName + opportunities)
-    // لاستخدامها في خانة البحث بدل عرض كل الطلاب دفعة واحدة.
+    // في وضع البحث نمرّر قائمة الطلاب (id + name + courseName + opportunities + status)
+    // لاستخدامها في خانة البحث بدل عرض كل الطلاب دفعة واحدة؛ الحالة تُستخدم
+    // لعرض شارة «مفصول» بجانب اسم الطالب المفصول داخل التقرير.
     const idGetter = getRowId || ((row: T) => String((row as Record<string, unknown>)?.id ?? ""));
     const nameGetter = (row: T) => String((row as Record<string, unknown>)?.name ?? "");
     const courseGetter = (row: T) =>
@@ -1188,6 +1232,8 @@ export function ExportDialog<T = Record<string, unknown>>({
       const v = (row as Record<string, unknown>)?.opportunities;
       return v === null || v === undefined ? "" : (v as number | string);
     };
+    const statusGetter = (row: T) =>
+      String((row as Record<string, unknown>)?.status ?? "");
 
     const studentList: StudentRowBasic[] | undefined = fetchStudentDetails
       ? exportRows.map((row) => ({
@@ -1195,6 +1241,7 @@ export function ExportDialog<T = Record<string, unknown>>({
           name: nameGetter(row),
           courseName: courseGetter(row),
           opportunities: oppGetter(row),
+          status: statusGetter(row),
         }))
       : undefined;
 
@@ -1365,7 +1412,7 @@ export function ExportDialog<T = Record<string, unknown>>({
             <p className="text-xs text-muted-foreground">
               سيتم تصدير الأعمدة المختارة فقط وبنفس ترتيبها الظاهر في هذه القائمة (للملفات CSV / Excel / PDF).
               {fetchStudentDetails
-                ? " زر «تصدير HTML» يُنتج ملف بحث: تكتب الاسم الثنائي فما فوق فيظهر قائمة بالطلاب المطابقين، وعند اختيار طالب تظهر بياناته (الاسم + الدورة + عدد الفرص) مع زر «إظهار التفاصيل» يفتح درجاته وسجل فرصه."
+                ? " زر «تصدير HTML» يُنتج ملف بحث: تكتب الاسم الثنائي فما فوق فيظهر قائمة بالطلاب المطابقين، وعند اختيار طالب تظهر بياناته (الاسم + الدورة + عدد الفرص) مع زر «إظهار التفاصيل» يفتح درجاته وسجل فرصه، والطالب المفصول تظهر بجانب اسمه شارة «مفصول»."
                 : ""}
             </p>
           </div>
