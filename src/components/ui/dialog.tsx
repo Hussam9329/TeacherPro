@@ -65,6 +65,10 @@ const DialogContent = React.forwardRef<
         ref={ref}
         data-slot="dialog-content"
         dir={dir ?? "rtl"}
+        // Suppress the Radix "Missing Description" console warning for dialogs
+        // that intentionally have no DialogDescription. Callers can still pass
+        // their own `aria-describedby` to link to a description element.
+        aria-describedby={undefined}
         className={cn(
           "bg-popover/95 text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-1rem)] w-[calc(100dvw-1rem)] max-w-lg min-w-0 -translate-x-1/2 -translate-y-1/2 gap-5 overflow-y-auto overscroll-contain rounded-2xl border border-border/80 p-4 shadow-2xl backdrop-blur-xl duration-200 sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100dvw-2rem)] sm:p-6 [&>*]:min-w-0 [&>[data-slot=dialog-footer]]:sticky [&>[data-slot=dialog-footer]]:bottom-0 [&>[data-slot=dialog-footer]]:z-10 [&>[data-slot=dialog-footer]]:border-t [&>[data-slot=dialog-footer]]:bg-popover/95 [&>[data-slot=dialog-footer]]:py-3 [&>[data-slot=dialog-footer]]:backdrop-blur-xl [&>[data-slot=dialog-header]]:sticky [&>[data-slot=dialog-header]]:top-0 [&>[data-slot=dialog-header]]:z-10 [&>[data-slot=dialog-header]]:border-b [&>[data-slot=dialog-header]]:bg-popover/95 [&>[data-slot=dialog-header]]:py-3 [&>[data-slot=dialog-header]]:backdrop-blur-xl",
           className
