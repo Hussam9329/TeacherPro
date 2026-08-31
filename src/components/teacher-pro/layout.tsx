@@ -212,27 +212,26 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   "admin-log-reset": ["logs", "opportunity-logs"],
 };
 
-// These sections own server-side page queries through useTeacherProSyncKey.
-// The layout must not refetch the same section as well, otherwise one external
-// event creates two overlapping requests and a visible UI refresh.
+// Sections whose data is fully owned by the page itself (they call their own
+// dedicated overview/context API on mount and never rely on the shared
+// `courseChapters` slice from the store). For these sections the generic
+// `loadSectionDataFromServer` lazy-load and smart-sync refresh would be
+// redundant, so we skip them.
+//
+// IMPORTANT: any section that reads `courseChapters` or `activeChapterForCourse`
+// from the store MUST NOT be listed here, otherwise the store stays empty and
+// the UI renders every course as "بدون فصل نشط". See exam-records, grade-entry,
+// opportunities, student-registry and the follow-up family.
 const PAGE_OWNED_SYNC_SECTIONS = new Set<SectionId>([
   "dashboard",
   "missing-students-notes",
   "courses",
   "chapters",
-  "student-registry",
   "student-bulk-import",
   "dismissed-management",
   "exam-new",
-  "grade-entry",
-  "exam-records",
   "grade-records",
-  "opportunities",
   "e-correction",
-  "follow-up",
-  "follow-up-calls",
-  "follow-up-leaves",
-  "follow-up-pledges",
   "accounts",
   "logs",
 ]);
