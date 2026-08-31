@@ -859,7 +859,7 @@ export function OpportunitiesView() {
             });
 
             // إضافة امتحانات الدورة التي ليس للطالب سجل درجات فيها.
-            const allCourseExams = Array.isArray((profile as Record<string, unknown>).allCourseExams) ? (profile as Record<string, unknown>).allCourseExams as unknown[] : [];
+            const allCourseExams = Array.isArray((profile as unknown as Record<string, unknown>).allCourseExams) ? (profile as unknown as Record<string, unknown>).allCourseExams as unknown[] : [];
             for (const rawExam of allCourseExams) {
               const examRecord = rawExam as Record<string, unknown>;
               const examId = String(examRecord.id || "");
