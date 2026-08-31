@@ -896,7 +896,7 @@ export function OpportunitiesView() {
   return (
     <div className="tp-opportunities-page space-y-4">
       {/* Filters */}
-      <Card className="tp-filter-card">
+      <Card className="tp-filter-card tp-opportunities-filters">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">فلاتر إدارة الفرص</CardTitle>
         </CardHeader>
@@ -1025,7 +1025,12 @@ export function OpportunitiesView() {
         </CardContent>
       </Card>
 
-      <Card className="border-primary/20 bg-primary/5">
+      <div className="tp-opportunities-workspace">
+        <section
+          className="tp-opportunities-main-flow"
+          aria-label="سير عمل إدارة الفرص"
+        >
+      <Card className="tp-opportunities-bulk-card border-primary/20 bg-primary/5">
         <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-1">
             <p className="text-sm font-black">
@@ -1076,97 +1081,8 @@ export function OpportunitiesView() {
         </CardContent>
       </Card>
 
-      {/* Opportunity Overview */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-black">إجمالي الطلاب في النظام</h3>
-          <Badge variant="outline">نطاق كلي</Badge>
-        </div>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-8">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-              {statsHasOpportunities}
-              {statsSuffix}
-            </p>
-            <p className="text-xs text-muted-foreground">طلاب لديهم فرص محفوظة</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-              {statsNoOpportunities}
-              {statsSuffix}
-            </p>
-            <p className="text-xs text-muted-foreground">طلاب نشطون بلا فرص محفوظة</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">
-              {statsDismissed}
-              {statsSuffix}
-            </p>
-            <p className="text-xs text-muted-foreground">مفصولون</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold">
-              {statsTotal}
-              {statsSuffix}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              إجمالي الطلاب في النظام
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-              {statsNoActiveChapter}
-            </p>
-            <p className="text-xs text-muted-foreground">طلاب بلا فصل نشط</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-destructive">
-              {statsConflicts}
-            </p>
-            <p className="text-xs text-muted-foreground">طلاب ضمن تعارض فصول</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-primary">
-              {statsFullOpportunities}
-            </p>
-            <p className="text-xs text-muted-foreground">فرص محفوظة كاملة</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-              {statsBelowFullOpportunities}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              طلاب فرصهم المحفوظة ناقصة
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-destructive">
-              {statsOverLimit}
-            </p>
-            <p className="text-xs text-muted-foreground">فوق السقف</p>
-          </CardContent>
-        </Card>
-        </div>
-      </div>
-
       <CountScopeSummary
+        className="tp-opportunities-count-summary"
         subject="الطلاب"
         systemTotal={databaseStatValue(systemStats?.total)}
         filteredTotal={databaseStatValue(filteredStats?.total)}
@@ -1174,7 +1090,7 @@ export function OpportunitiesView() {
       />
 
       {/* Student Opportunities */}
-      <Card>
+      <Card className="tp-opportunities-results-card">
         <CardHeader>
           <CardTitle>فرص الطلاب</CardTitle>
         </CardHeader>
@@ -1378,6 +1294,102 @@ export function OpportunitiesView() {
           </Button>
         </div>
       )}
+
+        </section>
+
+        <aside className="tp-opportunities-stats-rail" aria-label="إحصائيات إدارة الفرص">
+          {/* Opportunity Overview */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-black">إجمالي الطلاب في النظام</h3>
+              <Badge variant="outline">نطاق كلي</Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-8">
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                  {statsHasOpportunities}
+                  {statsSuffix}
+                </p>
+                <p className="text-xs text-muted-foreground">طلاب لديهم فرص محفوظة</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                  {statsNoOpportunities}
+                  {statsSuffix}
+                </p>
+                <p className="text-xs text-muted-foreground">طلاب نشطون بلا فرص محفوظة</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+                  {statsDismissed}
+                  {statsSuffix}
+                </p>
+                <p className="text-xs text-muted-foreground">مفصولون</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold">
+                  {statsTotal}
+                  {statsSuffix}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  إجمالي الطلاب في النظام
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                  {statsNoActiveChapter}
+                </p>
+                <p className="text-xs text-muted-foreground">طلاب بلا فصل نشط</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-destructive">
+                  {statsConflicts}
+                </p>
+                <p className="text-xs text-muted-foreground">طلاب ضمن تعارض فصول</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-primary">
+                  {statsFullOpportunities}
+                </p>
+                <p className="text-xs text-muted-foreground">فرص محفوظة كاملة</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                  {statsBelowFullOpportunities}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  طلاب فرصهم المحفوظة ناقصة
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-2xl font-bold text-destructive">
+                  {statsOverLimit}
+                </p>
+                <p className="text-xs text-muted-foreground">فوق السقف</p>
+              </CardContent>
+            </Card>
+            </div>
+          </div>
+
+        </aside>
+      </div>
 
       {/* Recent Opportunity Logs */}
       <Card>
