@@ -35,7 +35,7 @@ import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { ExportDialog, type ExportColumn, type StudentDetailsMap, type StudentGradeDetail, type StudentOpportunityLogDetail } from "./export-dialog";
+import { ExportDialog, buildStudentDetailsFromProfileLog, type ExportColumn, type StudentDetailsMap } from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { CountScopeSummary } from "./ui-kit";
 import {
@@ -807,6 +807,10 @@ export function OpportunitiesView() {
    * عبر profile-log، ويُرجع لقطة مُختصرة فقط — بدون ملاحظات أو مكالمات
    * أو سجل تدقيق — لتبقى أحجام ملفات HTML صغيرة وقابلة للفتح أوفلاين.
    *
+   * التحويل نفسه (buildStudentDetailsFromProfileLog) يُستخدم أيضاً من زر
+   * تيليجرام في إدارة المفصولين حتى يبقى مصدر الرسالة ومصدر ملف HTML
+   * واحداً حرفياً؛ أي تعديل مستقبلي على التحويل يطبّق على المسارين معاً.
+   *
    * يُستدعى فقط عند تصدير HTML لربط زر "عرض التفاصيل" في كل صف.
    */
   const fetchOpportunityStudentDetails = async (
@@ -830,67 +834,7 @@ export function OpportunitiesView() {
         try {
           const profile = await studentProfileLogApi.get(studentId);
           if (profile) {
-            const examMap = new Map<string, Record<string, unknown>>();
-            const exams = Array.isArray(profile.exams) ? profile.exams : [];
-            for (const exam of exams) {
-              const examRecord = exam as Record<string, unknown>;
-              const examId = String(examRecord.id || "");
-              if (examId) examMap.set(examId, examRecord);
-            }
-
-            const rawGrades = Array.isArray(profile.grades) ? profile.grades : [];
-            const gradeExamIds = new Set<string>();
-            const grades: StudentGradeDetail[] = rawGrades.map((rawGrade) => {
-              const grade = rawGrade as Record<string, unknown>;
-              const examId = String(grade.examId || "");
-              gradeExamIds.add(examId);
-              const exam = examMap.get(examId);
-              const score = grade.score;
-              const fullMark = exam?.fullMark;
-              return {
-                examName: String(exam?.name || "امتحان غير محدد"),
-                examType: String(exam?.type || ""),
-                examDate: String(exam?.date || ""),
-                score: score === null || score === undefined ? null : Number(score),
-                fullMark: fullMark === null || fullMark === undefined ? null : Number(fullMark),
-                status: String(grade.status || ""),
-                notes: grade.notes ? String(grade.notes) : null,
-              };
-            });
-
-            // إضافة امتحانات الدورة التي ليس للطالب سجل درجات فيها.
-            const allCourseExams = Array.isArray((profile as unknown as Record<string, unknown>).allCourseExams) ? (profile as unknown as Record<string, unknown>).allCourseExams as unknown[] : [];
-            for (const rawExam of allCourseExams) {
-              const examRecord = rawExam as Record<string, unknown>;
-              const examId = String(examRecord.id || "");
-              if (examId && !gradeExamIds.has(examId) && !examMap.has(examId)) {
-                examMap.set(examId, examRecord);
-                grades.push({
-                  examName: String(examRecord.name || "امتحان غير محدد"),
-                  examType: String(examRecord.type || ""),
-                  examDate: String(examRecord.date || ""),
-                  score: null,
-                  fullMark: examRecord.fullMark === null || examRecord.fullMark === undefined ? null : Number(examRecord.fullMark),
-                  status: "غائب",
-                  notes: null,
-                });
-              }
-            }
-
-            const rawLogs = Array.isArray(profile.opportunityLogs) ? profile.opportunityLogs : [];
-            const opportunityLogs: StudentOpportunityLogDetail[] = rawLogs.map((rawLog) => {
-              const log = rawLog as Record<string, unknown>;
-              const exam = examMap.get(String(log.examId || ""));
-              return {
-                action: String(log.action || ""),
-                amount: Number(log.amount || 0),
-                reason: log.reason ? String(log.reason) : null,
-                date: String(log.date || ""),
-                examName: exam?.name ? String(exam.name) : null,
-              };
-            });
-
-            result[studentId] = { grades, opportunityLogs };
+            result[studentId] = buildStudentDetailsFromProfileLog(profile);
           }
         } catch (error) {
           if (error instanceof Error && error.name === "AbortError") throw error;

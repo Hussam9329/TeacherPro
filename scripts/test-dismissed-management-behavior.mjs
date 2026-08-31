@@ -6,6 +6,9 @@ import {
   buildBoundedTelegramDraft,
   buildDismissedTelegramReport,
   buildDismissedHistoryAccess,
+  buildOpportunityTelegramAttachment,
+  buildOpportunityTelegramHtml,
+  buildOpportunityTelegramReport,
   canUseDirectDismissedTelegramDraft,
   canUseSingleDismissedTelegramMessage,
   classifyDismissedOpportunityMovement,
@@ -268,4 +271,141 @@ test("HTML and exported filenames neutralize unsafe user content", () => {
   const fileName = safeDismissedHistoryFileName(`${"طالب".repeat(80)}/:*?`);
   assert.ok(fileName.length <= 120);
   assert.doesNotMatch(fileName, /[\\/:*?"<>|]/);
+});
+
+test("opportunity-source Telegram report mirrors the HTML export tables", () => {
+  const message = buildOpportunityTelegramReport(
+    {
+      name: "شهد علي سامي ناجي",
+      code: "BIO-1061",
+      courseName: "الدورة الصيفية الثانية",
+      opportunities: 0,
+      status: "مفصول",
+      dismissalDate: "2026/8/20",
+      dismissalReason: "نفاد الفرص",
+      dismissalNotes: "تم إبلاغ ولي الأمر",
+    },
+    {
+      grades: [
+        {
+          examName: "الامتحان اليومي 12",
+          examType: "يومي",
+          examDate: "2026-08-18T00:00:00.000Z",
+          score: 18,
+          fullMark: 25,
+          status: "درجة",
+        },
+        {
+          examName: "الامتحان التراكمي 4",
+          examType: "تراكمي",
+          examDate: "2026-08-20T00:00:00.000Z",
+          score: null,
+          fullMark: 30,
+          status: "غائب",
+        },
+      ],
+      opportunityLogs: [
+        {
+          action: "خصم",
+          amount: -1,
+          reason: "فقدان فرصة بسبب الغياب",
+          date: "2026-08-20T00:00:00.000Z",
+          examName: "الامتحان التراكمي 4",
+        },
+      ],
+    },
+  );
+
+  assert.match(message, /هذا هو السجل الدراسي للطالب "شهد علي سامي ناجي"/);
+  assert.match(message, /الكود: BIO-1061/);
+  assert.match(message, /الدورة: الدورة الصيفية الثانية/);
+  assert.match(message, /عدد الفرص: 0/);
+  assert.match(message, /الحالة: مفصول/);
+  assert.match(message, /سبب الفصل: نفاد الفرص/);
+  assert.match(message, /تاريخ الفصل: 2026\/8\/20/);
+  assert.match(message, /ملاحظات الفصل: تم إبلاغ ولي الأمر/);
+
+  assert.match(message, /كل الامتحانات/);
+  assert.match(message, /1\. الامتحان اليومي 12 — يومي/);
+  assert.match(message, /الدرجة: 18 من 25/);
+  assert.match(message, /الحالة: درجة/);
+  assert.match(message, /2\. الامتحان التراكمي 4 — تراكمي/);
+  assert.match(message, /الدرجة: — من 30/);
+  assert.match(message, /الحالة: غائب/);
+
+  assert.match(message, /سجل تغيّر الفرص/);
+  assert.match(message, /السبب: فقدان فرصة بسبب الغياب/);
+  assert.match(message, /مقدار التغيير: -1/);
+  assert.match(message, /الامتحان: الامتحان التراكمي 4/);
+  assert.match(message, /إدارة حسن فلاح\nمدرس مادة الأحياء$/);
+});
+
+test("opportunity-source Telegram report handles empty records like the HTML report", () => {
+  const message = buildOpportunityTelegramReport(
+    { name: "طالب", code: "BIO-2", courseName: "الدورة الحالية" },
+    { grades: [], opportunityLogs: [] },
+  );
+  assert.match(message, /لا توجد امتحانات مسجلة لهذا الطالب\./);
+  assert.doesNotMatch(message, /سجل تغيّر الفرص/);
+  assert.match(message, /سبب الفصل: غير مسجل/);
+  assert.doesNotMatch(message, /الحالة:/);
+});
+
+test("opportunity-source attachment summary counts come from the same details", () => {
+  const attachment = buildOpportunityTelegramAttachment(
+    { name: "طالب", code: "BIO-3", courseName: "الدورة", status: "مفصول" },
+    {
+      grades: [
+        {
+          examName: "أ",
+          examType: "يومي",
+          examDate: "2026-08-01",
+          score: 1,
+          fullMark: 2,
+          status: "درجة",
+        },
+      ],
+      opportunityLogs: [
+        { action: "خصم", amount: -1, reason: "سبب", date: "2026-08-01", examName: null },
+      ],
+    },
+  );
+  assert.ok(attachment.length <= DISMISSED_TELEGRAM_DRAFT_MAX_LENGTH);
+  assert.match(attachment, /عدد الامتحانات: 1/);
+  assert.match(attachment, /حركات الفرص في السجل: 1/);
+  assert.match(attachment, /يرجى إرفاق الملف بهذه المحادثة\./);
+  assert.match(attachment, /إدارة حسن فلاح مدرس مادة الأحياء$/);
+});
+
+test("opportunity-source HTML fallback keeps the export tables and escapes text", () => {
+  const html = buildOpportunityTelegramHtml(
+    { name: "<طالب>", code: "BIO-4", courseName: "الدورة", status: "مفصول" },
+    {
+      grades: [
+        {
+          examName: "امتحان <1>",
+          examType: "يومي",
+          examDate: "",
+          score: null,
+          fullMark: null,
+          status: "",
+        },
+      ],
+      opportunityLogs: [
+        { action: "خصم", amount: -2, reason: "<سبب>", date: "", examName: null },
+      ],
+    },
+  );
+  assert.match(
+    html,
+    /<th>الامتحان<\/th><th>النوع<\/th><th>التاريخ<\/th><th>الدرجة<\/th><th>الامتحان من<\/th><th>الحالة<\/th>/,
+  );
+  assert.match(
+    html,
+    /<th>السبب<\/th><th>مقدار التغيير<\/th><th>التاريخ<\/th><th>الامتحان<\/th>/,
+  );
+  assert.match(html, /&lt;طالب&gt;/);
+  assert.match(html, /&lt;سبب&gt;/);
+  assert.match(html, /مقدار التغيير/);
+  assert.match(html, /تم إنشاء هذا التقرير من نفس مصدر بيانات تصدير HTML/);
 });

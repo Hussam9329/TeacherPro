@@ -12,18 +12,25 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { formatBaghdadDateTime } from "@/lib/baghdad-time";
-import { studentApi } from "@/lib/api";
+import { studentApi, studentProfileLogApi } from "@/lib/api";
 import { toast } from "@/lib/user-toast";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import {
-  buildBoundedTelegramDraft,
-  buildDismissedTelegramReport,
+  buildOpportunityTelegramAttachment,
+  buildOpportunityTelegramHtml,
+  buildOpportunityTelegramReport,
   canUseDirectDismissedTelegramDraft,
   canUseSingleDismissedTelegramMessage,
   escapeDismissedHistoryHtml,
   safeDismissedHistoryFileName,
+  type OpportunityTelegramDetails,
+  type OpportunityTelegramStudent,
 } from "@/lib/dismissed-history";
+import {
+  buildStudentDetailsFromProfileLog,
+  sanitizeStudentDetailsForHtml,
+} from "./export-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -192,45 +199,6 @@ function toneClasses(tone: TimelineEvent["tone"]) {
   return "border-border bg-muted/20";
 }
 
-function fullTelegramMessage(history: StudentHistory) {
-  const s = history.student;
-  const dismissalDateTime = formatBaghdadDateTime(s.dismissalAt);
-  return buildDismissedTelegramReport(
-    {
-      name: s.name,
-      code: s.code,
-      courseName: s.courseName,
-      dismissalDate:
-        dismissalDateTime === "—" ? "" : dismissalDateTime.split(" ")[0],
-      dismissalReason: s.dismissalReason,
-      dismissalNotes: s.dismissalNotes,
-    },
-    history.events,
-  );
-}
-
-function telegramAttachmentMessage(history: StudentHistory) {
-  const s = history.student;
-  const metrics = historyMetrics(history)
-    .map((metric) => `${metric.label}: ${metric.value}`)
-    .join("\n");
-  const header = `السلام عليكم
-هذا هو سجل الطالب الكامل "${s.name}"
-
-الكود: ${s.code}
-الدورة: ${s.courseName}
-سبب الفصل: ${s.dismissalReason || "غير مسجل"}
-
-تم تنزيل السجل الزمني الكامل بصيغة HTML على جهاز الإدارة لأن حجمه يتجاوز الحد الآمن لرابط تيليجرام. يرجى إرفاق الملف بهذه المحادثة.
-
-ملخص الملف`;
-  return buildBoundedTelegramDraft({
-    header,
-    timeline: metrics || "لا توجد أحداث متاحة",
-    footer: "إدارة حسن فلاح مدرس مادة الأحياء",
-  });
-}
-
 function historyMetrics(history: StudentHistory) {
   return [
     history.sections.opportunities
@@ -384,6 +352,23 @@ function downloadHistoryHtml(history: StudentHistory) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function downloadOpportunityHtml(
+  student: OpportunityTelegramStudent,
+  details: OpportunityTelegramDetails,
+) {
+  const blob = new Blob([buildOpportunityTelegramHtml(student, details)], {
+    type: "text/html;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${safeDismissedHistoryFileName(`سجل-${student.name}-${student.code}`)}.html`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function DismissedManagementView() {
   const { courses, courseName, mergeStudentsCache, currentUser } = useTeacherStore();
   const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "dismissed", "follow-up"]);
@@ -407,6 +392,7 @@ export function DismissedManagementView() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [histories, setHistories] = useState<Record<string, StudentHistory>>({});
   const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
+  const [telegramLoading, setTelegramLoading] = useState<Record<string, boolean>>({});
   const [historyErrors, setHistoryErrors] = useState<Record<string, string>>({});
   const [reactivateDialog, setReactivateDialog] = useState<{
     student: ManagedDismissalStudent | null;
@@ -603,43 +589,102 @@ export function DismissedManagementView() {
     const username = telegramUsername(student.telegram);
     if (!username) return;
 
-    const history = await loadHistory(student.id);
-    if (!history) return;
-    const completeMessage = fullTelegramMessage(history);
-    if (canUseDirectDismissedTelegramDraft(completeMessage)) {
-      window.location.assign(
-        `tg://resolve?domain=${encodeURIComponent(username)}&text=${encodeURIComponent(completeMessage)}`,
-      );
-      return;
-    }
-
-    if (canUseSingleDismissedTelegramMessage(completeMessage)) {
-      try {
-        await navigator.clipboard.writeText(completeMessage);
-        window.alert(
-          "تم نسخ التقرير الدراسي الكامل. ستفتح محادثة الطالب الآن؛ الصق الرسالة ثم أرسلها.",
-        );
-        window.location.assign(
-          `tg://resolve?domain=${encodeURIComponent(username)}`,
+    setTelegramLoading((current) => ({ ...current, [student.id]: true }));
+    try {
+      // نفس مصدر تصدير HTML: لوغ ملف الطالب (profile-log) من قاعدة
+      // البيانات داخل transaction واحد، وليس أي مصدر واجهة آخر.
+      const profile = await studentProfileLogApi.get(student.id);
+      if (!profile) {
+        toast.error(
+          "تعذر جلب بيانات تقرير HTML لهذا الطالب من النظام؛ لم تُرسل أي رسالة.",
         );
         return;
-      } catch {
-        downloadHistoryHtml(history);
+      }
+      const sections = profile.sections;
+      if (sections && !sections.grades && !sections.opportunities) {
+        toast.error(
+          "حسابك لا يملك صلاحية عرض درجات أو فرص هذا الطالب؛ لم تُرسل أي رسالة.",
+        );
+        return;
+      }
+
+      const rawDetails = buildStudentDetailsFromProfileLog(profile);
+      // نفس تنظيف تقرير HTML: إخفاء سجلات التسوية التاريخية وصياغة
+      // الأسباب نفسها حتى تتطابق الرسالة مع الملف المنشور حرفياً.
+      const details = sanitizeStudentDetailsForHtml({
+        [student.id]: rawDetails,
+      })[student.id];
+      if (!details) return;
+
+      const managed = student as ManagedDismissalStudent;
+      const profileStudent = (profile.student || {}) as Record<string, unknown>;
+      const dismissalDateTime = managed.lastDismissalAt
+        ? formatBaghdadDateTime(managed.lastDismissalAt)
+        : "—";
+      const opportunitiesRaw =
+        profileStudent.opportunities ?? student.opportunities ?? null;
+      const telegramStudent: OpportunityTelegramStudent = {
+        name: String(profileStudent.name ?? student.name ?? ""),
+        code: String(profileStudent.code ?? student.code ?? ""),
+        courseName: courseName(student.courseId),
+        opportunities:
+          opportunitiesRaw === null ? null : Number(opportunitiesRaw),
+        status: String(profileStudent.status ?? student.status ?? ""),
+        dismissalDate:
+          dismissalDateTime === "—" ? "" : dismissalDateTime.split(" ")[0],
+        dismissalReason: String(
+          profileStudent.dismissalReason ??
+            managed.lastDismissalReason ??
+            student.dismissalReason ??
+            "",
+        ),
+        dismissalNotes: String(profileStudent.dismissalNotes ?? ""),
+      };
+
+      const completeMessage = buildOpportunityTelegramReport(
+        telegramStudent,
+        details,
+      );
+      if (canUseDirectDismissedTelegramDraft(completeMessage)) {
+        window.location.assign(
+          `tg://resolve?domain=${encodeURIComponent(username)}&text=${encodeURIComponent(completeMessage)}`,
+        );
+        return;
+      }
+
+      if (canUseSingleDismissedTelegramMessage(completeMessage)) {
+        try {
+          await navigator.clipboard.writeText(completeMessage);
+          window.alert(
+            "تم نسخ التقرير الدراسي الكامل من نفس مصدر بيانات تصدير HTML. ستفتح محادثة الطالب الآن؛ الصق الرسالة ثم أرسلها.",
+          );
+          window.location.assign(
+            `tg://resolve?domain=${encodeURIComponent(username)}`,
+          );
+          return;
+        } catch {
+          downloadOpportunityHtml(telegramStudent, details);
+          window.alert(
+            "تعذر النسخ التلقائي، لذلك تم تنزيل التقرير الكامل كملف HTML من نفس المصدر. ستفتح المحادثة الآن لإرفاقه.",
+          );
+        }
+      } else {
+        downloadOpportunityHtml(telegramStudent, details);
         window.alert(
-          "تعذر النسخ التلقائي، لذلك تم تنزيل التقرير الكامل كملف HTML. ستفتح المحادثة الآن لإرفاقه.",
+          "التقرير أطول من حد رسالة تيليجرام، لذلك تم تنزيله كاملاً كملف HTML من نفس المصدر. ستفتح المحادثة الآن لإرفاقه.",
         );
       }
-    } else {
-      downloadHistoryHtml(history);
-      window.alert(
-        "التقرير أطول من حد رسالة تيليجرام، لذلك تم تنزيله كاملاً كملف HTML. ستفتح المحادثة الآن لإرفاقه.",
-      );
-    }
 
-    const attachmentMessage = telegramAttachmentMessage(history);
-    window.location.assign(
-      `tg://resolve?domain=${encodeURIComponent(username)}&text=${encodeURIComponent(attachmentMessage)}`,
-    );
+      const attachmentMessage = buildOpportunityTelegramAttachment(
+        telegramStudent,
+        details,
+      );
+      window.location.assign(
+        `tg://resolve?domain=${encodeURIComponent(username)}&text=${encodeURIComponent(attachmentMessage)}`,
+      );
+    } finally {
+      setTelegramLoading((current) => ({ ...current, [student.id]: false }));
+    }
   };
 
   const exportHtml = async (student: Student) => {
@@ -1139,20 +1184,27 @@ export function DismissedManagementView() {
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={!telegramUsername(student.telegram) || historyLoading[student.id]}
+                    disabled={
+                      !telegramUsername(student.telegram) ||
+                      historyLoading[student.id] ||
+                      telegramLoading[student.id]
+                    }
                     onClick={() => void openTelegram(student)}
                   >
                     <Send className="size-4" />
-                    {student.telegram || "تيليجرام غير متوفر"}
+                    {telegramLoading[student.id]
+                      ? "جاري تجهيز التقرير..."
+                      : student.telegram || "تيليجرام غير متوفر"}
                   </Button>
                 </div>
 
                 {student.telegram ? (
                   <p className="text-[11px] text-muted-foreground">
-                    زر تيليجرام يجهز تقريراً مرتباً لكل امتحان ونتيجته أو
-                    غيابه والإجراء المرتبط به. عند تجاوز حد الرابط يُنسخ
-                    التقرير، وعند تجاوز حد الرسالة أو تعذر النسخ يُنزّل ملف
-                    HTML الكامل دون فقدان البيانات.
+                    زر تيليجرام يجهز الرسالة من نفس مصدر بيانات ملف تصدير
+                    HTML (لوغ ملف الطالب من بيانات النظام): كل امتحان
+                    ودرجته وحالته مع سجل تغيّر الفرص. عند تجاوز حد الرابط
+                    يُنسخ التقرير، وعند تجاوز حد الرسالة أو تعذر النسخ
+                    يُنزّل ملف HTML كامل من نفس المصدر دون فقدان البيانات.
                   </p>
                 ) : null}
 

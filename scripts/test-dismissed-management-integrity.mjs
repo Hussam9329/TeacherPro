@@ -19,6 +19,8 @@ const route = read("src/app/api/dismissed-management/history/route.ts");
 const listRoute = read("src/app/api/dismissed-management/list/route.ts");
 const statsRoute = read("src/app/api/dismissed-management/stats/route.ts");
 const helper = read("src/lib/dismissed-history.ts");
+const exportDialog = read("src/components/teacher-pro/export-dialog.tsx");
+const opportunitiesView = read("src/components/teacher-pro/opportunities.tsx");
 const profileServer = read("src/lib/student-profile-server.ts");
 const layout = read("src/components/teacher-pro/layout.tsx");
 const store = read("src/lib/teacher-store.ts");
@@ -125,22 +127,35 @@ must(
 );
 
 must(
-  page.includes("fullTelegramMessage") &&
-    page.includes("buildDismissedTelegramReport") &&
+  page.includes("studentProfileLogApi.get(student.id)") &&
+    page.includes("buildOpportunityTelegramReport") &&
     page.includes("canUseDirectDismissedTelegramDraft") &&
     page.includes("canUseSingleDismissedTelegramMessage") &&
     page.includes("navigator.clipboard.writeText(completeMessage)") &&
-    page.includes("downloadHistoryHtml(history)") &&
+    page.includes("downloadOpportunityHtml(telegramStudent, details)") &&
     page.includes("أطول من حد رسالة تيليجرام") &&
-    page.includes("if (!history) return") &&
     page.includes("window.location.assign") &&
     !page.includes("window.location.href =") &&
     !page.includes("function historyText") &&
     !page.includes("s.dismissalType") &&
-    helper.includes("buildDismissedTelegramReport") &&
+    helper.includes("buildOpportunityTelegramReport") &&
+    helper.includes("buildOpportunityTelegramAttachment") &&
+    helper.includes("buildOpportunityTelegramHtml") &&
     helper.includes("DISMISSED_TELEGRAM_SINGLE_MESSAGE_MAX_LENGTH") &&
     route.includes("تاريخ الامتحان"),
-  "تيليجرام يبني تقرير امتحانات احترافياً ويستخدم إرسالاً ونسخاً وملفاً احتياطياً دون فقدان",
+  "تيليجرام يبني رسالته من لوغ ملف الطالب (نفس مصدر تصدير HTML) مع إرسال ونسخ وملف احتياطي من نفس المصدر",
+);
+
+must(
+  exportDialog.includes("export function buildStudentDetailsFromProfileLog") &&
+    exportDialog.includes("export function sanitizeStudentDetailsForHtml") &&
+    opportunitiesView.includes(
+      "result[studentId] = buildStudentDetailsFromProfileLog(profile)",
+    ) &&
+    page.includes("const rawDetails = buildStudentDetailsFromProfileLog(profile)") &&
+    page.includes("sanitizeStudentDetailsForHtml({") &&
+    page.includes("if (sections && !sections.grades && !sections.opportunities)"),
+  "زر تيليجرام وتصدير HTML يمران بنفس دالة التحويل والتنظيف من profile-log فلا يتفرع المصدر، وترسل الرسالة فقط عند توفر الصلاحية",
 );
 
 must(

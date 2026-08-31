@@ -491,3 +491,336 @@ export function safeDismissedHistoryFileName(value: string): string {
     .trim()
     .slice(0, 120);
 }
+
+/* ========== تقرير تيليجرام من مصدر تصدير HTML (profile-log) ========== */
+
+export type OpportunityTelegramStudent = {
+  name: string;
+  code: string;
+  courseName: string;
+  opportunities?: number | string | null;
+  status?: string;
+  dismissalDate?: string;
+  dismissalReason?: string;
+  dismissalNotes?: string;
+};
+
+export type OpportunityTelegramGrade = {
+  examName: string;
+  examType: string;
+  examDate: string;
+  score: number | null;
+  fullMark: number | null;
+  status: string;
+};
+
+export type OpportunityTelegramLog = {
+  action: string;
+  amount: number;
+  reason: string | null;
+  date: string;
+  examName: string | null;
+};
+
+export type OpportunityTelegramDetails = {
+  grades: OpportunityTelegramGrade[];
+  opportunityLogs: OpportunityTelegramLog[];
+};
+
+/** نفس منطق fmtNum في ملف تصدير HTML: القيمة غير الرقمية تُعرض شرطة. */
+function opportunityReportNumber(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? String(numeric) : "—";
+}
+
+/** نفس تنسيق تاريخ تقرير HTML (ar-IQ-u-nu-latn بتوقيت بغداد) مع احتياط النص الخام. */
+function opportunityReportDate(value: unknown): string {
+  const raw = cleanText(value);
+  if (!raw) return "—";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  try {
+    return parsed.toLocaleDateString("ar-IQ-u-nu-latn", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "Asia/Baghdad",
+    });
+  } catch {
+    return raw;
+  }
+}
+
+function opportunityStatusLine(status: string): string {
+  const normalized = cleanText(status);
+  return normalized === "مفصول" ? "مفصول" : "مفصول سابقاً";
+}
+
+function opportunityIdentityLines(student: OpportunityTelegramStudent): string[] {
+  const lines = [
+    `الكود: ${cleanText(student.code) || "—"}`,
+    `الدورة: ${cleanText(student.courseName) || "—"}`,
+  ];
+  const opportunities = student.opportunities;
+  if (opportunities !== null && opportunities !== undefined && opportunities !== "") {
+    lines.push(`عدد الفرص: ${opportunityReportNumber(opportunities)}`);
+  }
+  if (cleanText(student.status)) {
+    lines.push(`الحالة: ${opportunityStatusLine(cleanText(student.status))}`);
+  }
+  lines.push(`سبب الفصل: ${cleanText(student.dismissalReason) || "غير مسجل"}`);
+  if (cleanText(student.dismissalDate)) {
+    lines.push(`تاريخ الفصل: ${cleanText(student.dismissalDate)}`);
+  }
+  if (cleanText(student.dismissalNotes)) {
+    lines.push(`ملاحظات الفصل: ${cleanText(student.dismissalNotes)}`);
+  }
+  return lines;
+}
+
+function opportunityExamLines(grades: OpportunityTelegramGrade[]): string {
+  if (!grades.length) return "لا توجد امتحانات مسجلة لهذا الطالب.";
+  return grades
+    .flatMap((grade, index) => {
+      const headParts = [
+        cleanText(grade.examName),
+        cleanText(grade.examType),
+        cleanText(grade.examDate) ? opportunityReportDate(grade.examDate) : "",
+      ].filter(Boolean);
+      const score = opportunityReportNumber(grade.score);
+      const fullMark = grade.fullMark;
+      const scoreLine =
+        fullMark === null || fullMark === undefined
+          ? `الدرجة: ${score}`
+          : `الدرجة: ${score} من ${opportunityReportNumber(fullMark)}`;
+      const rows = [
+        `${index + 1}. ${headParts.join(" — ")}`,
+        scoreLine,
+      ];
+      if (cleanText(grade.status)) {
+        rows.push(`الحالة: ${cleanText(grade.status)}`);
+      }
+      return [...rows, ""];
+    })
+    .join("\n")
+    .trim();
+}
+
+function opportunityLogLines(logs: OpportunityTelegramLog[]): string | null {
+  const rows = logs
+    .map((log) => {
+      const reason = cleanText(log.reason) || "غير مسجل";
+      const parts = [
+        `السبب: ${reason}`,
+        `مقدار التغيير: ${opportunityReportNumber(log.amount)}`,
+        `التاريخ: ${opportunityReportDate(log.date)}`,
+        `الامتحان: ${cleanText(log.examName) || "—"}`,
+      ];
+      return `• ${parts.join(" · ")}`;
+    });
+  return rows.length ? rows.join("\n") : null;
+}
+
+/**
+ * يبني رسالة تيليجرام من نفس لقطة تفاصيل الطالب التي تُحقن في ملف تصدير
+ * HTML (profile-log بعد المرور بـ sanitizeStudentDetailsForHtml): نفس
+ * الدرجات، نفس سجل الفرص، ونفس الترتيب (الأحدث أولاً).
+ *
+ * عمود «مقدار التغيير» يعرض المقدار كما هو مخزّن في قاعدة البيانات
+ * (سالب للخصم، موجب للإضافة) — نفس القيمة التي يعرضها جدول الفرص في
+ * ملف HTML تماماً.
+ */
+export function buildOpportunityTelegramReport(
+  student: OpportunityTelegramStudent,
+  details: OpportunityTelegramDetails,
+): string {
+  const header = [
+    "السلام عليكم",
+    `هذا هو السجل الدراسي للطالب "${cleanText(student.name)}"`,
+    "",
+    ...opportunityIdentityLines(student),
+    "",
+    "كل الامتحانات",
+  ].join("\n");
+
+  const examSection = opportunityExamLines(details.grades || []);
+  const logSection = opportunityLogLines(details.opportunityLogs || []);
+
+  const sections = [header, examSection];
+  if (logSection) {
+    sections.push(["سجل تغيّر الفرص", logSection].join("\n"));
+  }
+  sections.push("إدارة حسن فلاح\nمدرس مادة الأحياء");
+
+  return sections.filter(Boolean).join("\n\n");
+}
+
+/**
+ * رسالة الإرفاق القصيرة عندما يتجاوز التقرير حد رسالة تيليجرام فيُنزّل
+ * كملف HTML كامل من نفس المصدر — الملخص يُحصي من نفس بيانات الملف.
+ */
+export function buildOpportunityTelegramAttachment(
+  student: OpportunityTelegramStudent,
+  details: OpportunityTelegramDetails,
+): string {
+  const summary = [
+    `- عدد الامتحانات: ${(details.grades || []).length}`,
+    `- حركات الفرص في السجل: ${(details.opportunityLogs || []).length}`,
+  ].join("\n");
+
+  const header = `السلام عليكم
+هذا هو سجل الطالب الكامل "${cleanText(student.name)}"
+
+${opportunityIdentityLines(student).join("\n")}
+
+تم تنزيل سجل الطالب الكامل بصيغة HTML على جهاز الإدارة لأن حجمه يتجاوز الحد الآمن لرابط تيليجرام. يرجى إرفاق الملف بهذه المحادثة.
+
+ملخص الملف`;
+
+  return buildBoundedTelegramDraft({
+    header,
+    timeline: summary,
+    footer: "إدارة حسن فلاح مدرس مادة الأحياء",
+  });
+}
+
+/**
+ * ملف HTML الاحتياطي الذي يُنزّل عند تجاوز حد الرسالة: جداول «كل
+ * الامتحانات» و«سجل تغيّر الفرص» من نفس لقطة تفاصيل تصدير HTML،
+ * بنفس الأعمدة، حتى لا يختلف الملف المرفق عن التقرير المنشور.
+ */
+export function buildOpportunityTelegramHtml(
+  student: OpportunityTelegramStudent,
+  details: OpportunityTelegramDetails,
+): string {
+  const escape = escapeDismissedHistoryHtml;
+  const fmtDate = (value: unknown) => {
+    const raw = cleanText(value);
+    if (!raw) return "—";
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return escape(raw);
+    try {
+      return escape(
+        parsed.toLocaleDateString("ar-IQ-u-nu-latn", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+          timeZone: "Asia/Baghdad",
+        }),
+      );
+    } catch {
+      return escape(raw);
+    }
+  };
+  const fmtNum = (value: unknown) => escape(opportunityReportNumber(value));
+
+  const grades = details.grades || [];
+  const logs = details.opportunityLogs || [];
+
+  const infoRows: Array<[string, string]> = [
+    ["الاسم", cleanText(student.name)],
+    ["الكود", cleanText(student.code) || "—"],
+    ["الدورة", cleanText(student.courseName) || "—"],
+  ];
+  if (
+    student.opportunities !== null &&
+    student.opportunities !== undefined &&
+    student.opportunities !== ""
+  ) {
+    infoRows.push(["عدد الفرص", opportunityReportNumber(student.opportunities)]);
+  }
+  if (cleanText(student.status)) {
+    infoRows.push(["الحالة", opportunityStatusLine(cleanText(student.status))]);
+  }
+  infoRows.push(["سبب الفصل", cleanText(student.dismissalReason) || "غير مسجل"]);
+  infoRows.push([
+    "تاريخ الفصل",
+    cleanText(student.dismissalDate) || "—",
+  ]);
+  if (cleanText(student.dismissalNotes)) {
+    infoRows.push(["ملاحظات الفصل", cleanText(student.dismissalNotes)]);
+  }
+
+  const gradeRows = grades.length
+    ? grades
+        .map(
+          (grade) => `<tr>
+            <td>${escape(grade.examName)}</td>
+            <td>${escape(grade.examType)}</td>
+            <td>${fmtDate(grade.examDate)}</td>
+            <td>${fmtNum(grade.score)}</td>
+            <td>${fmtNum(grade.fullMark)}</td>
+            <td>${escape(grade.status)}</td>
+          </tr>`,
+        )
+        .join("")
+    : '<tr class="empty-row"><td colspan="6">لا توجد امتحانات مسجلة لهذا الطالب</td></tr>';
+
+  const logsSection = logs.length
+    ? `<h2 class="section-title">سجل تغيّر الفرص</h2>
+<table>
+  <thead>
+    <tr><th>السبب</th><th>مقدار التغيير</th><th>التاريخ</th><th>الامتحان</th></tr>
+  </thead>
+  <tbody>
+    ${logs
+      .map(
+        (log) => `<tr>
+          <td>${escape(cleanText(log.reason) || "غير مسجل")}</td>
+          <td>${fmtNum(log.amount)}</td>
+          <td>${fmtDate(log.date)}</td>
+          <td>${escape(cleanText(log.examName) || "—")}</td>
+        </tr>`,
+      )
+      .join("")}
+  </tbody>
+</table>`
+    : "";
+
+  return `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>سجل الطالب - ${escape(cleanText(student.name))}</title>
+<style>
+:root{font-family:Arial,Tahoma,sans-serif;color:#111827;background:#f8fafc}
+*{box-sizing:border-box}
+body{margin:0;padding:24px}
+.page{max-width:1000px;margin:auto;background:#fff;border:1px solid #e5e7eb;border-radius:18px;padding:28px;overflow-wrap:anywhere}
+.header{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;border-bottom:3px solid #111827;padding-bottom:18px;margin-bottom:20px}
+.brand h1{font-size:24px;margin:0 0 6px}.brand p{margin:0;color:#6b7280}
+.status{padding:8px 12px;border-radius:999px;background:#fee2e2;color:#991b1b;font-weight:700}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:18px 0}
+.info-box{border:1px solid #e5e7eb;border-radius:12px;padding:10px;break-inside:avoid}
+.info-box b{display:block;font-size:11px;color:#6b7280;margin-bottom:4px}
+.section-title{font-size:18px;margin:26px 0 12px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{border:1px solid #d1d5db;padding:8px 10px;text-align:center;vertical-align:middle}
+th{background:#f3f4f6;font-weight:900}
+tbody tr:nth-child(even){background:#fafafa}
+.empty-row td{color:#64748b;padding:16px}
+.footer{margin-top:28px;border-top:1px solid #e5e7eb;padding-top:12px;font-size:12px;color:#6b7280;text-align:center}
+@media(max-width:760px){body{padding:8px}.page{padding:14px;border-radius:10px}.header{display:block}.status{display:inline-block;margin-top:10px}.grid{grid-template-columns:1fr 1fr}}
+@page{size:A4;margin:12mm}
+@media print{body{padding:0;background:#fff}.page{max-width:none;border:0;border-radius:0;padding:0}tr,.info-box{page-break-inside:avoid;break-inside:avoid}}
+</style>
+</head>
+<body>
+<main class="page">
+<header class="header"><div class="brand"><h1>سجل الطالب</h1><p>إدارة حسن فلاح مدرس مادة الأحياء</p></div><div class="status">${escape(opportunityStatusLine(cleanText(student.status)))}</div></header>
+<div class="grid">${infoRows.map(([k, v]) => `<div class="info-box"><b>${escape(k)}</b><span>${escape(v)}</span></div>`).join("")}</div>
+<h2 class="section-title">كل الامتحانات</h2>
+<table>
+  <thead>
+    <tr><th>الامتحان</th><th>النوع</th><th>التاريخ</th><th>الدرجة</th><th>الامتحان من</th><th>الحالة</th></tr>
+  </thead>
+  <tbody>${gradeRows}</tbody>
+</table>
+${logsSection}
+<footer class="footer">تم إنشاء هذا التقرير من نفس مصدر بيانات تصدير HTML في TeacherPro.</footer>
+</main>
+</body>
+</html>`;
+}

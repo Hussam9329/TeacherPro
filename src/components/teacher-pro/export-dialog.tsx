@@ -168,7 +168,7 @@ function isOpportunityResetLog(reason: string | null | undefined): boolean {
   );
 }
 
-function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetailsMap {
+export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetailsMap {
   return Object.fromEntries(
     Object.entries(details).map(([studentId, studentDetails]) => [
       studentId,
@@ -198,6 +198,97 @@ function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetai
       },
     ]),
   );
+}
+
+export type StudentProfileLogSnapshot = {
+  exams?: Array<Record<string, unknown>> | null;
+  grades?: Array<Record<string, unknown>> | null;
+  allCourseExams?: Array<Record<string, unknown>> | null;
+  opportunityLogs?: Array<Record<string, unknown>> | null;
+};
+
+/**
+ * يحوّل استجابة /api/students/profile-log إلى لقطة تفاصيل الطالب
+ * (درجات كل الامتحانات + سجل الفرص مع الأسباب) — نفس التحويل الحرفي
+ * الذي يستخدمه تصدير HTML من صفحة إدارة الفرص.
+ *
+ * الدالة مشتركة عمداً بين تصدير HTML وزر تيليجرام في إدارة المفصولين
+ * حتى يبقى مصدر الرسالة ومصدر الملف المتولد واحداً لا يتفرع.
+ */
+export function buildStudentDetailsFromProfileLog(
+  profile: StudentProfileLogSnapshot,
+): StudentDetails {
+  const examMap = new Map<string, Record<string, unknown>>();
+  const exams = Array.isArray(profile.exams) ? profile.exams : [];
+  for (const exam of exams) {
+    const examRecord = exam as Record<string, unknown>;
+    const examId = String(examRecord.id || "");
+    if (examId) examMap.set(examId, examRecord);
+  }
+
+  const rawGrades = Array.isArray(profile.grades) ? profile.grades : [];
+  const gradeExamIds = new Set<string>();
+  const grades: StudentGradeDetail[] = rawGrades.map((rawGrade) => {
+    const grade = rawGrade as Record<string, unknown>;
+    const examId = String(grade.examId || "");
+    gradeExamIds.add(examId);
+    const exam = examMap.get(examId);
+    const score = grade.score;
+    const fullMark = exam?.fullMark;
+    return {
+      examName: String(exam?.name || "امتحان غير محدد"),
+      examType: String(exam?.type || ""),
+      examDate: String(exam?.date || ""),
+      score: score === null || score === undefined ? null : Number(score),
+      fullMark:
+        fullMark === null || fullMark === undefined ? null : Number(fullMark),
+      status: String(grade.status || ""),
+      notes: grade.notes ? String(grade.notes) : null,
+    };
+  });
+
+  // إضافة امتحانات الدورة التي ليس للطالب سجل درجات فيها.
+  const allCourseExams = Array.isArray(profile.allCourseExams)
+    ? profile.allCourseExams
+    : [];
+  for (const rawExam of allCourseExams) {
+    const examRecord = rawExam as Record<string, unknown>;
+    const examId = String(examRecord.id || "");
+    if (examId && !gradeExamIds.has(examId) && !examMap.has(examId)) {
+      examMap.set(examId, examRecord);
+      grades.push({
+        examName: String(examRecord.name || "امتحان غير محدد"),
+        examType: String(examRecord.type || ""),
+        examDate: String(examRecord.date || ""),
+        score: null,
+        fullMark:
+          examRecord.fullMark === null || examRecord.fullMark === undefined
+            ? null
+            : Number(examRecord.fullMark),
+        status: "غائب",
+        notes: null,
+      });
+    }
+  }
+
+  const rawLogs = Array.isArray(profile.opportunityLogs)
+    ? profile.opportunityLogs
+    : [];
+  const opportunityLogs: StudentOpportunityLogDetail[] = rawLogs.map(
+    (rawLog) => {
+      const log = rawLog as Record<string, unknown>;
+      const exam = examMap.get(String(log.examId || ""));
+      return {
+        action: String(log.action || ""),
+        amount: Number(log.amount || 0),
+        reason: log.reason ? String(log.reason) : null,
+        date: String(log.date || ""),
+        examName: exam?.name ? String(exam.name) : null,
+      };
+    },
+  );
+
+  return { grades, opportunityLogs };
 }
 
 function normalizeExportValue(value: string | number | null | undefined): string | number {
