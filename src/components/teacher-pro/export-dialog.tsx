@@ -172,9 +172,6 @@ function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetai
       studentId,
       {
         grades: (studentDetails.grades || [])
-          .filter((grade) =>
-            HTML_VISIBLE_GRADE_STATUSES.has(String(grade.status || "").trim()),
-          )
           .map((grade) => {
             const { notes: _notes, ...reportGrade } = grade;
             return {
@@ -462,7 +459,7 @@ const DETAILS_MODAL_HTML = `
       <button type="button" class="tp-modal-close" id="tpModalClose">إغلاق</button>
     </div>
     <div class="tp-details-section">
-      <h3>الامتحانات ذات الدرجة أو الغياب</h3>
+      <h3>كل الامتحانات</h3>
       <table class="tp-details-table tp-grades-table">
         <thead>
           <tr>
@@ -678,7 +675,7 @@ const DETAILS_MODAL_JS = `
           + '</tr>';
       }).join('');
     } else {
-      gradesBody.innerHTML = '<tr class="tp-empty-row"><td colspan="6">لا توجد امتحانات بحالة «درجة» أو «غائب» لهذا الطالب</td></tr>';
+      gradesBody.innerHTML = '<tr class="tp-empty-row"><td colspan="6">لا توجد امتحانات مسجلة لهذا الطالب</td></tr>';
     }
 
     var lossLogs = (data && data.opportunityLogs || []).filter(function(l){
