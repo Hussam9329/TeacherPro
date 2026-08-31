@@ -89,6 +89,12 @@ const GRACE_DEFERRED_GRADE_NOTE_PREFIXES = [
 ] as const;
 const HISTORICAL_OPPORTUNITY_RESET_REASON =
   "تسوية تاريخية: تجاهل آثار الامتحانات السابقة للتسوية حتى عند تعديل درجاتها لاحقاً";
+// عبارات تدل على إعادة تعيين الرصيد (وليس فقدان حقيقي) — تُستخدم لفلترة سجل الفرص في التقرير.
+const RESET_REASON_PATTERNS = [
+  "تسوية تاريخية",
+  "بدء رصيد جديد",
+  "انتقال مؤكد",
+] as const;
 
 function normalizeArabicComparisonText(value: unknown): string {
   return String(value ?? "")
@@ -152,6 +158,14 @@ function sanitizeOpportunityReasonForHtml(
   return text || null;
 }
 
+function isOpportunityResetLog(reason: string | null | undefined): boolean {
+  if (!reason) return false;
+  const normalized = normalizeArabicComparisonText(reason);
+  return RESET_REASON_PATTERNS.some((pattern) =>
+    normalized.includes(normalizeArabicComparisonText(pattern)),
+  );
+}
+
 function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetailsMap {
   return Object.fromEntries(
     Object.entries(details).map(([studentId, studentDetails]) => [
@@ -176,14 +190,12 @@ function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetai
             return db - da;
           }),
         opportunityLogs: (studentDetails.opportunityLogs || [])
-          .filter((log) => {
-            const reason = sanitizeOpportunityReasonForHtml(log.reason);
-            return reason !== null && reason !== 'اعادة تعيين جميع الفرص';
-          })
+          .filter((log) => !isOpportunityResetLog(log.reason))
           .map((log) => ({
             ...log,
             reason: sanitizeOpportunityReasonForHtml(log.reason),
-          })),
+          }))
+          .filter((log) => log.reason !== null),
       },
     ]),
   );
