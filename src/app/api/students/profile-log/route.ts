@@ -190,6 +190,14 @@ export async function GET(req: NextRequest) {
               orderBy: [{ date: "desc" }, { id: "desc" }],
             })
           : [];
+        // جلب كل امتحانات الدورة لإظهارها في التقارير حتى لو لم يكن للطالب سجل درجات.
+        const allCourseExams = student.courseId
+          ? await tx.exam.findMany({
+              where: { courseIds: { has: student.courseId }, active: true },
+              select: EXAM_SELECT,
+              orderBy: [{ date: "desc" }, { id: "desc" }],
+            })
+          : [];
         const [studentWithOpportunity] =
           await attachStudentOpportunitySnapshotsWithClient(tx, [student]);
         const auditResult = access.logs
@@ -211,6 +219,7 @@ export async function GET(req: NextRequest) {
           studentWithOpportunity,
           grades,
           exams,
+          allCourseExams,
           opportunityLogs,
           studentLeaves,
           studentCalls,
@@ -229,6 +238,7 @@ export async function GET(req: NextRequest) {
       studentWithOpportunity,
       grades,
       exams,
+      allCourseExams,
       opportunityLogs,
       studentLeaves,
       studentCalls,
@@ -285,6 +295,7 @@ export async function GET(req: NextRequest) {
       ),
       grades: access.grades ? grades : [],
       exams: exams.filter((exam) => visibleExamIds.has(exam.id)),
+      allCourseExams: access.grades ? allCourseExams : [],
       opportunityLogs: access.opportunities ? opportunityLogs : [],
       studentLeaves: access.followUp ? studentLeaves : [],
       studentCalls: access.followUp ? studentCalls : [],

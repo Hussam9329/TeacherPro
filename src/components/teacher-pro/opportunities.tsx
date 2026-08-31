@@ -839,9 +839,12 @@ export function OpportunitiesView() {
             }
 
             const rawGrades = Array.isArray(profile.grades) ? profile.grades : [];
+            const gradeExamIds = new Set<string>();
             const grades: StudentGradeDetail[] = rawGrades.map((rawGrade) => {
               const grade = rawGrade as Record<string, unknown>;
-              const exam = examMap.get(String(grade.examId || ""));
+              const examId = String(grade.examId || "");
+              gradeExamIds.add(examId);
+              const exam = examMap.get(examId);
               const score = grade.score;
               const fullMark = exam?.fullMark;
               return {
@@ -854,6 +857,25 @@ export function OpportunitiesView() {
                 notes: grade.notes ? String(grade.notes) : null,
               };
             });
+
+            // إضافة امتحانات الدورة التي ليس للطالب سجل درجات فيها.
+            const allCourseExams = Array.isArray((profile as Record<string, unknown>).allCourseExams) ? (profile as Record<string, unknown>).allCourseExams as unknown[] : [];
+            for (const rawExam of allCourseExams) {
+              const examRecord = rawExam as Record<string, unknown>;
+              const examId = String(examRecord.id || "");
+              if (examId && !gradeExamIds.has(examId) && !examMap.has(examId)) {
+                examMap.set(examId, examRecord);
+                grades.push({
+                  examName: String(examRecord.name || "امتحان غير محدد"),
+                  examType: String(examRecord.type || ""),
+                  examDate: String(examRecord.date || ""),
+                  score: null,
+                  fullMark: examRecord.fullMark === null || examRecord.fullMark === undefined ? null : Number(examRecord.fullMark),
+                  status: "غائب",
+                  notes: null,
+                });
+              }
+            }
 
             const rawLogs = Array.isArray(profile.opportunityLogs) ? profile.opportunityLogs : [];
             const opportunityLogs: StudentOpportunityLogDetail[] = rawLogs.map((rawLog) => {
