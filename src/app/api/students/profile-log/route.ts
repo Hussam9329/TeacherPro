@@ -193,7 +193,7 @@ export async function GET(req: NextRequest) {
         // جلب كل امتحانات الدورة لإظهارها في التقارير حتى لو لم يكن للطالب سجل درجات.
         const allCourseExams = student.courseId
           ? await tx.exam.findMany({
-              where: { courseIds: { has: student.courseId }, active: true },
+              where: { courseIds: { contains: `"${student.courseId}"` }, active: true },
               select: EXAM_SELECT,
               orderBy: [{ date: "desc" }, { id: "desc" }],
             })
