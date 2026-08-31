@@ -465,7 +465,7 @@ const DETAILS_MODAL_HTML = `
         <tbody id="tpGradesBody"></tbody>
       </table>
     </div>
-    <div class="tp-details-section">
+    <div class="tp-details-section" id="tpLogsSection">
       <h3>سجل فقدان الفرص</h3>
       <table class="tp-details-table tp-logs-table">
         <thead>
@@ -497,6 +497,7 @@ const DETAILS_MODAL_JS = `
   var titleEl = document.getElementById('tpModalTitle');
   var gradesBody = document.getElementById('tpGradesBody');
   var logsBody = document.getElementById('tpLogsBody');
+  var logsSection = document.getElementById('tpLogsSection');
   var closeBtn = document.getElementById('tpModalClose');
 
   var activeIndex = -1;
@@ -672,6 +673,7 @@ const DETAILS_MODAL_JS = `
       return l.reason !== null && l.reason !== '';
     });
     if (lossLogs.length > 0) {
+      logsSection.style.display = '';
       logsBody.innerHTML = lossLogs.map(function(l){
         return '<tr>'
           + '<td>' + esc(l.reason) + '</td>'
@@ -681,7 +683,7 @@ const DETAILS_MODAL_JS = `
           + '</tr>';
       }).join('');
     } else {
-      logsBody.innerHTML = '<tr class="tp-empty-row"><td colspan="4">لا يوجد سجل فقدان فرص لهذا الطالب</td></tr>';
+      logsSection.style.display = 'none';
     }
 
     overlay.classList.add('open');
