@@ -27,7 +27,6 @@ assert.match(examsRoute, /includeAbsent:\s*protectedScopeChanged/);
 assert.match(examsRoute, /studentLeave\.findMany[\s\S]*leaveType:\s*'exam'/);
 assert.match(examsRoute, /baghdadDateKey\(leave\.date\) === oldExamDay/);
 assert.match(examsRoute, /StudentLeaveUpdateInput/);
-assert.match(examsRoute, /gradeEntryMissingNote\.updateMany/);
 assert.match(examsRoute, /opportunityLog\.findMany[\s\S]*reason:\s*\{ contains: oldName \}/);
 assert.match(examsRoute, /split\(oldName\)\.join\(newName\)/);
 assert.match(examsRoute, /gradeSmartNote\.aggregate/);

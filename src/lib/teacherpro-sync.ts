@@ -52,7 +52,6 @@ export type TeacherProSyncScope =
   | "correction"
   | "accounts"
   | "logs"
-  | "grade-entry-notes"
   | "bulk-import";
 
 const LOG_SYNC_DEBOUNCE_MS = 1200;
@@ -370,12 +369,11 @@ export function inferTeacherProScopesFromEndpoint(endpoint: string): TeacherProS
   const scopes = new Set<TeacherProSyncScope>();
   const add = (items: TeacherProSyncScope[]) => items.forEach((item) => scopes.add(item));
 
-  if (path.includes("grade-smart-notes")) add(["grade-entry-notes", "grades", "students", "exams", "dashboard"]);
-  else if (path.includes("grade-entry-missing-notes")) add(["grade-entry-notes", "grades", "exams"]);
+  if (path.includes("grade-smart-notes")) add(["grades", "students", "exams", "dashboard"]);
   else if (path.includes("grades")) add(["grades", "students", "opportunities", "dashboard"]);
   else if (path.includes("students")) add(["students", "grades", "opportunities", "dismissed", "dashboard"]);
   else if (path.includes("opportunity-logs")) add(["opportunities", "opportunity-logs", "students", "dashboard"]);
-  else if (path.includes("exams")) add(["exams", "grades", "students", "dashboard", "grade-entry-notes"]);
+  else if (path.includes("exams")) add(["exams", "grades", "students", "dashboard"]);
   else if (path.includes("courses")) add(["courses", "students", "exams", "dashboard"]);
   else if (path.includes("chapters")) add(["chapters", "courses", "students", "opportunities", "dashboard"]);
   else if (path.includes("student-leaves") || path.includes("student-calls") || path.includes("student-notes")) add(["follow-up", "students", "grades", "opportunities", "dashboard"]);

@@ -615,7 +615,7 @@ export async function flushGradeEntryOfflineSaves(): Promise<number> {
     emitTeacherProDataChanged({
       source: "local-mutation",
       reason: `تمت مزامنة ${synced} درجة محفوظة محلياً`,
-      scopes: ["grades", "students", "opportunities", "dashboard", "grade-entry-notes"],
+      scopes: ["grades", "students", "opportunities", "dashboard"],
     });
     announceTeacherProSyncSettled(["grades", "students", "opportunities"]);
   }

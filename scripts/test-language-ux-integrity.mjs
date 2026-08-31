@@ -35,7 +35,6 @@ const followUpView = read("src/components/teacher-pro/follow-up.tsx");
 const pkg = JSON.parse(read("package.json"));
 
 const canonicalTerms = [
-  "الطلاب غير الموجودين",
   "البطاقات",
   "تيليجرام",
   "درجات مسجلة",

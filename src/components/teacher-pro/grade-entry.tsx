@@ -229,7 +229,7 @@ function formatGradeEntryTimestamp(value?: string | Date | null): string {
 }
 
 export function GradeEntryView() {
-  const syncKey = useTeacherProSyncKey(["grades", "students", "exams", "opportunities", "grade-entry-notes", "dashboard"]);
+  const syncKey = useTeacherProSyncKey(["grades", "students", "exams", "opportunities", "dashboard"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const {
     exams,
@@ -1172,7 +1172,7 @@ export function GradeEntryView() {
     emitTeacherProDataChanged({
       source: "local-mutation",
       reason,
-      scopes: ["grades", "students", "opportunities", "dashboard", "grade-entry-notes"],
+      scopes: ["grades", "students", "opportunities", "dashboard"],
     });
   };
 

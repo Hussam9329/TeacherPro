@@ -556,15 +556,6 @@ export async function PUT(req: NextRequest) {
 
       const exam = await tx.exam.update({ where: { id }, data });
       await syncExamCourseLinks(tx, exam.id, exam.courseIds);
-      if (normalizedPatch.name !== undefined || normalizedPatch.date !== undefined) {
-        await tx.gradeEntryMissingNote.updateMany({
-          where: { examId: exam.id },
-          data: {
-            examName: exam.name,
-            examDate: exam.date.toISOString(),
-          },
-        });
-      }
       if (
         normalizedPatch.name !== undefined &&
         String(existingExam.name || '') !== String(exam.name || '')
@@ -752,7 +743,6 @@ export async function DELETE(req: NextRequest) {
         correctionSheetCount,
         telegramSubmissionCount,
         opportunityLogCount,
-        missingNoteCount,
         smartNoteCount,
         leaveBackupCount,
       ] = await Promise.all([
@@ -763,7 +753,6 @@ export async function DELETE(req: NextRequest) {
         tx.correctionSheet.count({ where: { examId: id } }),
         tx.telegramExamSubmission.count({ where: { examId: id } }),
         tx.opportunityLog.count({ where: { examId: id } }),
-        tx.gradeEntryMissingNote.count({ where: { examId: id } }),
         tx.gradeSmartNote.count({ where: { examId: id } }),
         tx.studentLeaveGradeBackup.count({ where: { examId: id } }),
       ]);
@@ -775,7 +764,6 @@ export async function DELETE(req: NextRequest) {
         ['أوراق تصحيح', correctionSheetCount],
         ['مستلمات تيليجرام', telegramSubmissionCount],
         ['حركات فرص', opportunityLogCount],
-        ['ملاحظات إدخال', missingNoteCount],
         ['ملاحظات درجات ذكية', smartNoteCount],
         ['نسخ درجات الإجازات', leaveBackupCount],
       ] as const;

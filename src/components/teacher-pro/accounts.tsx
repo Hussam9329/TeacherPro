@@ -32,7 +32,6 @@ const PREFERRED_PERMISSION_CATEGORIES = [
   'الطلاب',
   'الامتحانات',
   'الدرجات',
-  'الدرجات / الطلاب غير الموجودين',
   'الفرص',
   'المتابعة',
   'المتابعة / المكالمات',
@@ -277,7 +276,6 @@ const PAGE_PERMISSION_BLUEPRINT = [
   { page: 'مكالمات', view: 'follow-up.calls.view', manage: 'follow-up.calls.manage' },
   { page: 'الإجازات', view: 'follow-up.leaves.view', manage: 'follow-up.leaves.manage' },
   { page: 'التعهدات', view: 'follow-up.pledges.view', manage: 'follow-up.pledges.manage' },
-  { page: 'الطلاب غير الموجودين', view: 'grades.missing.view', manage: 'grades.missing.manage' },
   { page: 'إدارة الحسابات / المستخدمين', view: 'accounts.users.view', manage: 'accounts.users.add / edit / delete' },
   { page: 'إدارة الحسابات / الأدوار', view: 'accounts.roles.view', manage: 'accounts.roles.add / edit / delete' },
   { page: 'إدارة الحسابات / الصلاحيات', view: 'accounts.permissions.view', manage: 'accounts.permissions.assign' },
@@ -1188,7 +1186,7 @@ type BackupRecordCounts = {
   studentLeaves?: number; studentCalls?: number; studentNotes?: number;
   correctionSheets?: number; users?: number; roles?: number; logs?: number;
   telegramExamSubmissions?: number; studentLeaveGradeBackups?: number;
-  studentEnrollmentArchives?: number; gradeEntryMissingNotes?: number;
+  studentEnrollmentArchives?: number;
   permissionCatalog?: number;
 };
 

@@ -234,7 +234,7 @@ const SERVER_PERMISSION_EQUIVALENTS: Record<string, string[]> = {
   "exams.delete": [],
 
   // Grades: view-only alias; add/edit/delete must be granted explicitly
-  "grades.view": ["page.grade-records.view", "page.missing-students-notes.view"],
+  "grades.view": ["page.grade-records.view"],
   "grades.add": ["page.grade-entry.view"],
   "grades.edit": [],
   "grades.delete": [],

@@ -11,7 +11,6 @@ export interface ExamDeleteImpact {
   studentLeaveCount: number;
   studentCallCount: number;
   telegramSubmissionCount: number;
-  gradeEntryMissingNoteCount: number;
   gradeSmartNoteCount: number;
   leaveGradeBackupCount: number;
 }
@@ -53,7 +52,6 @@ export function sumExamDeleteImpact(impact: ExamDeleteImpact): number {
     impact.studentLeaveCount +
     impact.studentCallCount +
     impact.telegramSubmissionCount +
-    impact.gradeEntryMissingNoteCount +
     impact.gradeSmartNoteCount +
     impact.leaveGradeBackupCount
   );
@@ -74,7 +72,6 @@ export async function getExamDeleteImpact(
     studentLeaveCount,
     studentCallCount,
     telegramSubmissionCount,
-    gradeEntryMissingNoteCount,
     gradeSmartNoteCount,
     leaveGradeBackupCount,
   ] = await Promise.all([
@@ -84,7 +81,6 @@ export async function getExamDeleteImpact(
     client.studentLeave.count({ where: { examId } }),
     client.studentCall.count({ where: { examId } }),
     client.telegramExamSubmission.count({ where: { examId } }),
-    client.gradeEntryMissingNote.count({ where: { examId } }),
     client.gradeSmartNote.count({ where: { examId } }),
     client.studentLeaveGradeBackup.count({ where: { examId } }),
   ]);
@@ -96,7 +92,6 @@ export async function getExamDeleteImpact(
     studentLeaveCount,
     studentCallCount,
     telegramSubmissionCount,
-    gradeEntryMissingNoteCount,
     gradeSmartNoteCount,
     leaveGradeBackupCount,
   };

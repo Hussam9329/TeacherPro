@@ -558,7 +558,6 @@ export async function GET(req: NextRequest) {
           dismissedCount,
           totalCount,
           pendingSheetsCount,
-          missingNotesCount,
           zeroOpportunityActiveCount,
           todaysLeavesCount,
           dismissedNeedsPledgeCount,
@@ -568,7 +567,6 @@ export async function GET(req: NextRequest) {
           tx.student.count({ where: { status: "مفصول" } }),
           tx.student.count(),
           countPendingCorrectionItems(tx),
-          tx.gradeEntryMissingNote.count(),
           positiveOpportunityCourseIds.size
             ? tx.student.count({
                 where: {
@@ -680,7 +678,6 @@ export async function GET(req: NextRequest) {
           dismissedStudents: dismissedCount,
           totalStudents: totalCount,
           pendingCorrectionSheets: pendingSheetsCount,
-          missingStudentsNotes: missingNotesCount,
           alerts: allAlerts.filter((alert) => alert.count > 0),
           recentLogs,
           canViewLogs,

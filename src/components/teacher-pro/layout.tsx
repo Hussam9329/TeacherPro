@@ -28,7 +28,6 @@ import {
   ClipboardList,
   
   UsersRound,
-  UserX,
   FileText,
   PenTool,
   FileCheck,
@@ -73,12 +72,6 @@ const menuItems: {
     title: "لوحة النظام",
     sub: "نظرة عامة",
     icon: LayoutDashboard,
-  },
-  {
-    id: "missing-students-notes",
-    title: "الطلاب غير الموجودين",
-    sub: "ملاحظات الإدخال",
-    icon: UserX,
   },
   {
     id: "courses",
@@ -130,7 +123,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
   { title: "الطلاب", itemIds: ["student-register", "student-bulk-import", "student-registry"] },
   {
     title: "الامتحانات والدرجات",
-    itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records", "missing-students-notes"],
+    itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
   },
   { title: "المتابعة", itemIds: ["follow-up-calls", "follow-up-leaves", "follow-up-pledges"] },
   { title: "الإدارة", itemIds: ["accounts", "logs"] },
@@ -142,7 +135,6 @@ const familyItemIds = new Set<SectionId>(
 
 const sectionDescriptions: Partial<Record<SectionId, string>> = {
   dashboard: "ملخص سريع لحالة الطلاب والامتحانات والتنبيهات الإدارية.",
-  "missing-students-notes": "مراجعة ملاحظات الطلاب غير الموجودين أثناء إدخال الدرجات.",
   courses: "إنشاء الدورات ومراجعة إعداداتها وحالتها التشغيلية.",
   chapters: "تنظيم الفصول وربطها بالدورات ومتابعة حالة الفرص.",
   "student-register": "إضافة طالب جديد وربطه بالدورة والبرنامج والموقع المناسب.",
@@ -162,7 +154,6 @@ const sectionDescriptions: Partial<Record<SectionId, string>> = {
   logs: "مراجعة سجل العمليات والتغييرات المنفذة داخل النظام.",
 };
 const sectionsWithPageSearch = new Set<SectionId>([
-  "missing-students-notes",
   "student-registry",
   "dismissed-management",
   "grade-entry",
@@ -189,7 +180,6 @@ const dashboardActionQueryKeys = [
 
 const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   dashboard: ["dashboard", "students", "grades", "opportunities", "exams", "correction"],
-  "missing-students-notes": ["grade-entry-notes", "grades", "exams"],
   courses: ["courses", "students", "exams", "dashboard"],
   chapters: ["chapters", "courses", "students", "opportunities", "dashboard"],
   "student-register": ["students", "courses", "opportunities", "dashboard"],
@@ -197,8 +187,8 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   "student-bulk-import": ["students", "courses", "opportunities", "bulk-import", "dashboard"],
   "dismissed-management": ["students", "grades", "opportunities", "dismissed", "follow-up", "dashboard"],
   "exam-new": ["exams", "courses", "grades", "dashboard"],
-  "grade-entry": ["grades", "students", "exams", "opportunities", "grade-entry-notes", "dashboard"],
-  "exam-records": ["exams", "courses", "grades", "students", "correction", "grade-entry-notes", "dashboard"],
+  "grade-entry": ["grades", "students", "exams", "opportunities", "dashboard"],
+  "exam-records": ["exams", "courses", "grades", "students", "correction", "dashboard"],
   "grade-records": ["grades", "students", "exams", "opportunities", "dashboard"],
   opportunities: ["opportunities", "opportunity-logs", "students", "grades", "dashboard"],
   "e-correction": ["correction", "students", "exams", "grades", "dashboard"],
@@ -224,7 +214,6 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
 // opportunities, student-registry and the follow-up family.
 const PAGE_OWNED_SYNC_SECTIONS = new Set<SectionId>([
   "dashboard",
-  "missing-students-notes",
   "courses",
   "chapters",
   "student-bulk-import",
@@ -275,7 +264,6 @@ const SYNC_VERSION_SCOPE_MAP: Record<string, string[]> = {
     "grades",
     "students",
     "correction",
-    "grade-entry-notes",
     "dashboard",
   ],
   grades: ["grades", "students", "opportunities", "dashboard"],
@@ -288,7 +276,6 @@ const SYNC_VERSION_SCOPE_MAP: Record<string, string[]> = {
   users: ["accounts"],
   roles: ["accounts"],
   auditLogs: ["logs"],
-  missingNotes: ["grade-entry-notes", "grades", "exams"],
 };
 
 function normalizeSyncVersionSnapshot(result: unknown): SyncVersionSnapshot | null {
@@ -395,7 +382,6 @@ import { StudentRegistryView } from "./student-registry";
 import { DismissedManagementView } from "./dismissed-management";
 import { ExamNewView } from "./exam-new";
 import { GradeEntryView } from "./grade-entry";
-import { MissingStudentsNotesView } from "./missing-students-notes";
 import { ExamRecordsView } from "./exam-records";
 import { GradeRecordsView } from "./grade-records";
 import { OpportunitiesView } from "./opportunities";
@@ -415,7 +401,6 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "dismissed-management": DismissedManagementView,
   "exam-new": ExamNewView,
   "grade-entry": GradeEntryView,
-  "missing-students-notes": MissingStudentsNotesView,
   "exam-records": ExamRecordsView,
   "grade-records": GradeRecordsView,
   opportunities: OpportunitiesView,

@@ -365,7 +365,7 @@ export function StudentProfileDialog({
   isStudentCurrentlyInGrace,
   graceEndDate,
 }: StudentProfileDialogProps) {
-  const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "opportunity-logs", "follow-up", "correction", "logs", "grade-entry-notes"]);
+  const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "opportunity-logs", "follow-up", "correction", "logs"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const [tab, setTab] = useState<StudentFileTab>("details");
   const [gradeViewFilter, setGradeViewFilter] = useState<StudentProfileGradeFilter>("all");

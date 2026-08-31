@@ -117,7 +117,6 @@ model Exam {
   studentLeaves      StudentLeave[]
   studentCalls       StudentCall[]
   telegramExamSubmissions TelegramExamSubmission[]
-  gradeEntryMissingNote GradeEntryMissingNote?
   examCourses ExamCourse[]
   studentLeaveGradeBackups StudentLeaveGradeBackup[]
   gradeSmartNotes       GradeSmartNote[]
@@ -279,21 +278,6 @@ model StudentNote {
   @@index([sourceType])
   @@index([sourceId])
   @@index([dismissalKey])
-}
-
-model GradeEntryMissingNote {
-  id        String   @id @default(cuid())
-  examId    String   @unique
-  examName  String   @default("")
-  examDate  String   @default("")
-  text      String
-  userId    String?
-  userName  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  exam      Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
-
-  @@index([updatedAt])
 }
 
 model CorrectionSheet {

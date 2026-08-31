@@ -20,7 +20,7 @@ type AnyDelegate = { upsert: (args: any) => Promise<any>; createMany: (args: any
 // ----------------------------------------------------------------------------
 // Version history:
 //  - v4 (legacy): missing TelegramExamSubmission, StudentLeaveGradeBackup,
-//    StudentEnrollmentArchive, GradeEntryMissingNote, PermissionCatalog;
+//    StudentEnrollmentArchive, PermissionCatalog;
 //    audit logs capped to last 500.
 //  - v5: all legacy operational tables exported; audit logs unbounded.
 //  - v6 (current): adds structured GradeSmartNote records and Grade provenance.
@@ -49,7 +49,6 @@ const RESTORE_ORDER = [
   'studentLeaveGradeBackups',
   'studentCalls',
   'studentNotes',
-  'gradeEntryMissingNotes',
   'correctionSheets',
   'telegramExamSubmissions',
   'studentEnrollmentArchives',
@@ -89,7 +88,6 @@ export async function GET(req: NextRequest) {
       telegramExamSubmissions,
       studentLeaveGradeBackups,
       studentEnrollmentArchives,
-      gradeEntryMissingNotes,
       permissionCatalog,
       gradeSmartNotes,
     ] = await Promise.all([
@@ -126,7 +124,6 @@ export async function GET(req: NextRequest) {
       db.telegramExamSubmission.findMany(),
       db.studentLeaveGradeBackup.findMany(),
       db.studentEnrollmentArchive.findMany(),
-      db.gradeEntryMissingNote.findMany(),
       db.permissionCatalog.findMany(),
       db.gradeSmartNote.findMany(),
     ]);
@@ -134,7 +131,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       version: BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
-      tableCount: 21,
+      tableCount: 20,
       recordCounts: {
         courses: courses.length,
         chapters: chapters.length,
@@ -154,7 +151,6 @@ export async function GET(req: NextRequest) {
         telegramExamSubmissions: telegramExamSubmissions.length,
         studentLeaveGradeBackups: studentLeaveGradeBackups.length,
         studentEnrollmentArchives: studentEnrollmentArchives.length,
-        gradeEntryMissingNotes: gradeEntryMissingNotes.length,
         permissionCatalog: permissionCatalog.length,
         gradeSmartNotes: gradeSmartNotes.length,
       },
@@ -177,7 +173,6 @@ export async function GET(req: NextRequest) {
       telegramExamSubmissions,
       studentLeaveGradeBackups,
       studentEnrollmentArchives,
-      gradeEntryMissingNotes,
       permissionCatalog,
       gradeSmartNotes,
     });
@@ -392,7 +387,6 @@ async function collectTableCounts(): Promise<Record<string, number>> {
     ['studentLeaveGradeBackups', db.studentLeaveGradeBackup.count()],
     ['studentCalls', db.studentCall.count()],
     ['studentNotes', db.studentNote.count()],
-    ['gradeEntryMissingNotes', db.gradeEntryMissingNote.count()],
     ['correctionSheets', db.correctionSheet.count()],
     ['telegramExamSubmissions', db.telegramExamSubmission.count()],
     ['studentEnrollmentArchives', db.studentEnrollmentArchive.count()],
@@ -677,17 +671,6 @@ async function restoreTable(
           ),
         );
         break;
-      case 'gradeEntryMissingNotes':
-        await Promise.all(
-          batch.map((row) =>
-            upsertRecord(tx.gradeEntryMissingNote, row as never, mode).then((r) => {
-              if (r === 'inserted') inserted++;
-              else if (r === 'updated') updated++;
-              else skipped++;
-            }),
-          ),
-        );
-        break;
       case 'gradeSmartNotes':
         await Promise.all(
           batch.map((row) =>
@@ -769,7 +752,6 @@ const PRISMA_TABLE_NAMES: Record<string, string> = {
   studentLeaveGradeBackups: 'StudentLeaveGradeBackup',
   studentCalls: 'StudentCall',
   studentNotes: 'StudentNote',
-  gradeEntryMissingNotes: 'GradeEntryMissingNote',
   correctionSheets: 'CorrectionSheet',
   telegramExamSubmissions: 'TelegramExamSubmission',
   studentEnrollmentArchives: 'StudentEnrollmentArchive',

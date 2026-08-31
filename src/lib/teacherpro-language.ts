@@ -6,7 +6,6 @@
  */
 
 export const TEACHERPRO_TERMS = Object.freeze({
-  missingStudents: "الطلاب غير الموجودين",
   cards: "البطاقات",
   card: "بطاقة",
   telegram: "تيليجرام",
@@ -48,8 +47,6 @@ export interface TeacherProActionStatusDetail {
 }
 
 const UI_REPLACEMENTS: Array<[RegExp, string]> = [
-  [/الطلاب\s+الغير\s+موجودين/g, TEACHERPRO_TERMS.missingStudents],
-  [/الطلاب\s+غير\s+المتواجدين/g, TEACHERPRO_TERMS.missingStudents],
   [/تليكرام|تلغرام|تلكرام|تيليگرام/gi, TEACHERPRO_TERMS.telegram],
   [/كروت/g, TEACHERPRO_TERMS.cards],
   [/كارت/g, TEACHERPRO_TERMS.card],

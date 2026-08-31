@@ -39,8 +39,6 @@ const requiredPermissionIds = [
   "follow-up.leaves.manage",
   "follow-up.pledges.view",
   "follow-up.pledges.manage",
-  "grades.missing.view",
-  "grades.missing.manage",
 ];
 
 for (const permission of requiredPermissionIds) {
@@ -55,10 +53,9 @@ must(
   store.includes('"follow-up-calls": "follow-up.calls.view"') &&
     store.includes('"follow-up-leaves": "follow-up.leaves.view"') &&
     store.includes('"follow-up-pledges": "follow-up.pledges.view"') &&
-    store.includes('"missing-students-notes": "grades.missing.view"') &&
     store.includes('"admin-log-reset": "logs.clear"'),
   "ربط الصفحات الحساسة بصلاحياتها الدقيقة داخل SECTION_PERMISSIONS",
-  "SECTION_PERMISSIONS يجب أن يربط المكالمات/الإجازات/التعهدات/الطلاب غير الموجودين/تصفير اللوغ بصلاحيات دقيقة.",
+  "SECTION_PERMISSIONS يجب أن يربط المكالمات/الإجازات/التعهدات/تصفير اللوغ بصلاحيات دقيقة.",
 );
 
 must(

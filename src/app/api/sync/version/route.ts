@@ -41,7 +41,6 @@ type SyncVersionRow = {
   gradesmartnotes: bigint;
   gradesmax: Date | null;
   telegramsubmissionsmax: Date | null;
-  missingnotesmax: Date | null;
   auditlogsmax: Date | null;
   gradesmartnotesmax: Date | null;
 };
@@ -85,7 +84,6 @@ const SYNC_VERSION_SQL = `
     (SELECT COUNT(*) FROM "GradeSmartNote") AS gradesmartnotes,
     (SELECT MAX("updatedAt") FROM "Grade") AS gradesmax,
     COALESCE((SELECT MAX("updatedAt") FROM "TelegramExamSubmission"), NULL) AS telegramsubmissionsmax,
-    COALESCE((SELECT MAX("updatedAt") FROM "GradeEntryMissingNote"), NULL) AS missingnotesmax,
     (SELECT MAX("time") FROM "AuditLog") AS auditlogsmax,
     (SELECT MAX("updatedAt") FROM "GradeSmartNote") AS gradesmartnotesmax
 `;
@@ -128,7 +126,6 @@ export async function GET(req: NextRequest) {
     const maxDates: Record<string, string> = {
       grades: toIso(row.gradesmax),
       telegramSubmissions: toIso(row.telegramsubmissionsmax),
-      missingNotes: toIso(row.missingnotesmax),
       auditLogs: toIso(row.auditlogsmax),
       gradeSmartNotes: toIso(row.gradesmartnotesmax),
     };

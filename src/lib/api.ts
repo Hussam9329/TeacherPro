@@ -716,14 +716,6 @@ export interface GradeCoverageStatsResponse {
   source: "database";
 }
 
-export interface MissingStudentsNotesStatsResponse {
-  total: number;
-  examsWithNotes: number;
-  totalLines: number;
-  source: "database";
-  generatedAt?: string;
-}
-
 export interface ExamRecordStat {
   total: number;
   passCount: number;
@@ -1791,14 +1783,6 @@ export const gradeCoverageStatsApi = {
       options,
     );
   },
-};
-
-export const missingStudentsNotesStatsApi = {
-  get: (options: ApiGetOptions = {}) =>
-    apiGet<MissingStudentsNotesStatsResponse>(
-      "grade-entry-missing-notes/stats",
-      options,
-    ),
 };
 
 export const examStatsApi = {

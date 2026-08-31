@@ -7,7 +7,6 @@ const syncLib = read("src/lib/teacherpro-sync.ts");
 const syncHook = read("src/hooks/use-teacherpro-sync.ts");
 const layout = read("src/components/teacher-pro/layout.tsx");
 const store = read("src/lib/teacher-store.ts");
-const missingNotes = read("src/components/teacher-pro/missing-students-notes.tsx");
 const calls = read("src/components/teacher-pro/follow-up.tsx");
 const silentRepairEndpoints = [
   "/api/students/academic-repair",
@@ -76,10 +75,6 @@ const checks = [
       !store.includes("repairAbsentDiscountAccountingIfNeeded") &&
       !store.includes("ACADEMIC_REPAIR_FLAG") &&
       silentRepairEndpoints.every((endpoint) => !store.includes(endpoint)),
-  ],
-  [
-    "صفحة ملاحظات الطلاب لا تستمع لكل تغييرات localStorage بلا فلترة",
-    !missingNotes.includes('addEventListener("storage"'),
   ],
   [
     "طلبات المكالمات القديمة لا تستبدل حالة تم الاتصال المحفوظة",

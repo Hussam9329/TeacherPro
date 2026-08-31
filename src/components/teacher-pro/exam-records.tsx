@@ -473,7 +473,6 @@ export function ExamRecordsView() {
     "grades",
     "students",
     "correction",
-    "grade-entry-notes",
     "dashboard",
   ]);
   const {

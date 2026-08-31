@@ -12,7 +12,6 @@ import {
   Clock,
   Shield,
   Users,
-  UserX,
 } from "lucide-react";
 import { EmptyState, StatCard } from "./ui-kit";
 import {
@@ -40,7 +39,6 @@ type DashboardStats = {
   dismissedStudents: number;
   totalStudents: number;
   pendingCorrectionSheets: number;
-  missingStudentsNotes: number;
   alerts: DashboardAlert[];
   recentLogs: Array<{
     id: string;
@@ -471,36 +469,6 @@ export function DashboardView() {
           )}
         </CardContent>
       </Card>
-
-      {canAccess("missing-students-notes") && (
-      <Card className="tp-dashboard__missing overflow-hidden">
-        <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300">
-              <UserX className="size-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-black">الطلاب غير الموجودين</h3>
-              <p className="mt-1 text-sm leading-7 text-muted-foreground">
-                افتح كل الملاحظات التي يكتبها مدخل الدرجات عن الطلاب غير الموجودين في قوائم الامتحانات. العدد هنا من بيانات النظام.
-              </p>
-            </div>
-          </div>
-          <Button
-            type="button"
-            className="shrink-0"
-            onClick={() => navigateFromDashboard("missing-students-notes")}
-          >
-            الطلاب غير الموجودين
-            {(stats?.missingStudentsNotes ?? 0) > 0 && (
-              <span className="mr-2 rounded-full bg-white/20 px-2 py-0.5 text-xs">
-                {stats?.missingStudentsNotes}
-              </span>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-      )}
 
       {canAccess("logs") && (
       <Card className="tp-dashboard__activity">

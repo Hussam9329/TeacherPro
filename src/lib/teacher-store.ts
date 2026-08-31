@@ -506,7 +506,6 @@ export interface LeaderboardSettings {
 
 export type SectionId =
   | "dashboard"
-  | "missing-students-notes"
   | "courses"
   | "chapters"
   | "student-register"
@@ -718,20 +717,6 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
     category: "الدرجات",
     level: "delete",
     description: "حذف درجة من السجل",
-  },
-  {
-    id: "grades.missing.view",
-    label: "عرض الطلاب غير الموجودين",
-    category: "الدرجات / الطلاب غير الموجودين",
-    level: "read",
-    description: "عرض ملاحظات الطلاب غير الموجودين في أوراق أو إدخالات الدرجات.",
-  },
-  {
-    id: "grades.missing.manage",
-    label: "إدارة الطلاب غير الموجودين",
-    category: "الدرجات / الطلاب غير الموجودين",
-    level: "manage",
-    description: "حذف أو معالجة ملاحظات الطلاب غير الموجودين.",
   },
   // الفرص
   {
@@ -946,7 +931,6 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
 
 export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   dashboard: "system.dashboard",
-  "missing-students-notes": "grades.missing.view",
   courses: "courses.add",
   chapters: "chapters.view",
   "student-register": "students.add",
@@ -1112,7 +1096,6 @@ const DEFAULT_ROLES: Role[] = [
       "chapters.view",
       "exams.view",
       "grades.view",
-      "grades.missing.view",
     ],
   },
   {

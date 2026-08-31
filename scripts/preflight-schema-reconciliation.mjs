@@ -112,11 +112,6 @@ const checks = [
     sql: `SELECT COUNT(*)::int AS count FROM "ExamCourse" child WHERE NOT EXISTS (SELECT 1 FROM "Course" parent WHERE parent."id" = child."courseId")`,
   },
   {
-    label: "GradeEntryMissingNote.examId -> Exam.id",
-    tables: ["GradeEntryMissingNote", "Exam"],
-    sql: `SELECT COUNT(*)::int AS count FROM "GradeEntryMissingNote" child WHERE NOT EXISTS (SELECT 1 FROM "Exam" parent WHERE parent."id" = child."examId")`,
-  },
-  {
     label: "OpportunityLog.chapterId -> Chapter.id",
     tables: ["OpportunityLog", "Chapter"],
     sql: `SELECT COUNT(*)::int AS count FROM "OpportunityLog" child WHERE child."chapterId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Chapter" parent WHERE parent."id" = child."chapterId")`,
