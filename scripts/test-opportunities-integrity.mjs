@@ -5,6 +5,7 @@ const checks = [];
 const check = (condition, message) => checks.push({ condition, message });
 
 const opportunitiesView = read('src/components/teacher-pro/opportunities.tsx');
+const exportDialog = read('src/components/teacher-pro/export-dialog.tsx');
 const apiLayer = read('src/lib/api.ts');
 const studentRoute = read('src/app/api/students/route.ts');
 const statsRoute = read('src/app/api/opportunities/stats/route.ts');
@@ -136,6 +137,21 @@ check(
     gradeRecords.includes('applyOpportunityPenalty') &&
     gradeExportRoute.includes('بدون فرص، غير مفصول'),
   'تحذيرات تعديل الدرجات والتصدير تعرض نفس قانون الصفر بدون تنبؤ فصل خاطئ',
+);
+
+check(
+  exportDialog.includes('GRACE_DEFERRED_REPORT_STATUS = "لا يحاسب الطالب ( ضمن فترة السماح )"') &&
+    exportDialog.includes('"درجة مؤجلة خلال فترة السماح"') &&
+    exportDialog.includes('"درجة مؤجلة خلال فترة سماح الطالب"') &&
+    exportDialog.includes('String(grade.status || "").trim() !== "درجة"') &&
+    exportDialog.includes('const { notes: _notes, ...reportGrade } = grade'),
+  'تقرير HTML يحول فقط حالة «درجة» المؤجلة خلال السماح، ويتعرف على صيغتي النظام ولا يحقن الملاحظات في الملف',
+);
+check(
+  !exportDialog.includes('<th>ملاحظات</th>') &&
+    !exportDialog.includes("+ '<td>' + esc(g.notes) + '</td>'") &&
+    exportDialog.includes('colspan="6"'),
+  'تفاصيل تقرير HTML لا تحتوي عمود الملاحظات وتستخدم عدد الأعمدة الصحيح بعد حذفه',
 );
 
 check(

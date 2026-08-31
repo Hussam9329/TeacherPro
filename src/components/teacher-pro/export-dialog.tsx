@@ -37,7 +37,8 @@ export type StudentGradeDetail = {
   score: number | null;
   fullMark: number | null;
   status: string;
-  notes: string | null;
+  /** داخلي فقط لتحديد حالة تقرير HTML؛ لا يُحقن في الملف المتولد. */
+  notes?: string | null;
 };
 
 export type StudentOpportunityLogDetail = {
@@ -78,13 +79,14 @@ export type StudentDetailsFetcher = (
 ) => Promise<StudentDetailsMap>;
 
 const HTML_VISIBLE_GRADE_STATUSES = new Set(["درجة", "غائب"]);
-const BULK_ABSENCE_GRADE_NOTE =
-  "أثر أكاديمي فعّال بعد التسوية: تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم";
-const HISTORICAL_NO_EFFECT_GRADE_NOTE =
-  "تسوية تاريخية بلا أثر: إكمال حالة امتحان سابق";
-const AUTO_BEFORE_REGISTRATION_GRADE_NOTE =
-  "تصحيح تلقائي: الامتحان يسبق تاريخ تسجيل الطالب";
-const BEFORE_REGISTRATION_GRADE_NOTE = "الامتحان يسبق تاريخ تسجيل الطالب";
+const GRACE_DEFERRED_REPORT_STATUS = "لا يحاسب الطالب ( ضمن فترة السماح )";
+// تُهمل أنواع الملاحظات الأخرى عمداً لأن عمود الملاحظات أزيل من التقرير،
+// وتلك الحالات لا تؤثر على عرض الحالة في التقرير.
+const GRACE_DEFERRED_GRADE_NOTE_PREFIXES = [
+  "درجة مؤجلة خلال فترة السماح",
+  "درجة مؤجلة خلال فترة سماح الطالب",
+  "درجة حقيقية داخل فترة السماح؛ محفوظة للمتابعة دون أثر أكاديمي",
+] as const;
 const HISTORICAL_OPPORTUNITY_RESET_REASON =
   "تسوية تاريخية: تجاهل آثار الامتحانات السابقة للتسوية حتى عند تعديل درجاتها لاحقاً";
 
@@ -112,38 +114,16 @@ function tidyReportText(value: string): string {
     .trim();
 }
 
-function removeReportPhrase(value: string, phrase: string): string {
-  if (!value) return "";
-  const exactRemoved = value.replaceAll(phrase, "");
-  if (exactRemoved !== value) return tidyReportText(exactRemoved);
+function isGraceDeferredGradeForHtml(grade: StudentGradeDetail): boolean {
+  // لا نحول أي حالة أخرى (مثل «غائب») حتى لو احتوت ملاحظة مشابهة.
+  if (String(grade.status || "").trim() !== "درجة") return false;
 
-  // يدعم اختلاف التشكيل/الهمزات في البيانات التاريخية من دون حذف نصوص أخرى.
-  return normalizeArabicComparisonText(value) === normalizeArabicComparisonText(phrase)
-    ? ""
-    : value;
-}
+  const normalizedNotes = normalizeArabicComparisonText(grade.notes);
+  if (!normalizedNotes) return false;
 
-function sanitizeGradeNoteForHtml(notes: string | null | undefined): string | null {
-  let text = String(notes || "").trim();
-  if (!text) return null;
-
-  text = removeReportPhrase(text, BULK_ABSENCE_GRADE_NOTE);
-  text = removeReportPhrase(text, HISTORICAL_NO_EFFECT_GRADE_NOTE);
-  if (!text) return null;
-
-  if (
-    normalizeArabicComparisonText(text) ===
-    normalizeArabicComparisonText(AUTO_BEFORE_REGISTRATION_GRADE_NOTE)
-  ) {
-    return BEFORE_REGISTRATION_GRADE_NOTE;
-  }
-
-  text = text.replaceAll(
-    AUTO_BEFORE_REGISTRATION_GRADE_NOTE,
-    BEFORE_REGISTRATION_GRADE_NOTE,
+  return GRACE_DEFERRED_GRADE_NOTE_PREFIXES.some((phrase) =>
+    normalizedNotes.includes(normalizeArabicComparisonText(phrase)),
   );
-  text = tidyReportText(text);
-  return text || null;
 }
 
 function sanitizeOpportunityReasonForHtml(
@@ -178,11 +158,18 @@ function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetai
       studentId,
       {
         grades: (studentDetails.grades || [])
-          .filter((grade) => HTML_VISIBLE_GRADE_STATUSES.has(String(grade.status || "").trim()))
-          .map((grade) => ({
-            ...grade,
-            notes: sanitizeGradeNoteForHtml(grade.notes),
-          })),
+          .filter((grade) =>
+            HTML_VISIBLE_GRADE_STATUSES.has(String(grade.status || "").trim()),
+          )
+          .map((grade) => {
+            const { notes: _notes, ...reportGrade } = grade;
+            return {
+              ...reportGrade,
+              status: isGraceDeferredGradeForHtml(grade)
+                ? GRACE_DEFERRED_REPORT_STATUS
+                : grade.status,
+            };
+          }),
         opportunityLogs: (studentDetails.opportunityLogs || []).map((log) => ({
           ...log,
           reason: sanitizeOpportunityReasonForHtml(log.reason),
@@ -433,7 +420,6 @@ const DETAILS_MODAL_CSS = `
   .tp-details-table th { background: #f3f4f6; font-weight: 900; color: #111827; }
   .tp-details-table tr:nth-child(even) { background: #fafafa; }
   .tp-grades-table th:nth-child(1), .tp-grades-table td:nth-child(1) { min-width: 170px; }
-  .tp-grades-table th:nth-child(7), .tp-grades-table td:nth-child(7) { min-width: 260px; }
   .tp-logs-table th:nth-child(3), .tp-logs-table td:nth-child(3) { min-width: 300px; }
   .tp-empty-row td { text-align: center !important; color: #64748b; padding: 16px !important; }
 `;
@@ -464,7 +450,6 @@ const DETAILS_MODAL_HTML = `
             <th>الدرجة</th>
             <th>الامتحان من</th>
             <th>الحالة</th>
-            <th>ملاحظات</th>
           </tr>
         </thead>
         <tbody id="tpGradesBody"></tbody>
@@ -668,11 +653,10 @@ const DETAILS_MODAL_JS = `
           + '<td>' + fmtNum(g.score) + '</td>'
           + '<td>' + fmtNum(g.fullMark) + '</td>'
           + '<td>' + esc(g.status) + '</td>'
-          + '<td>' + esc(g.notes) + '</td>'
           + '</tr>';
       }).join('');
     } else {
-      gradesBody.innerHTML = '<tr class="tp-empty-row"><td colspan="7">لا توجد امتحانات بحالة «درجة» أو «غائب» لهذا الطالب</td></tr>';
+      gradesBody.innerHTML = '<tr class="tp-empty-row"><td colspan="6">لا توجد امتحانات بحالة «درجة» أو «غائب» لهذا الطالب</td></tr>';
     }
 
     if (data && data.opportunityLogs && data.opportunityLogs.length > 0) {
