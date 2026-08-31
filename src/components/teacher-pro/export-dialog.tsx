@@ -77,6 +77,121 @@ export type StudentDetailsFetcher = (
   context: ExportFetchContext,
 ) => Promise<StudentDetailsMap>;
 
+const HTML_VISIBLE_GRADE_STATUSES = new Set(["درجة", "غائب"]);
+const BULK_ABSENCE_GRADE_NOTE =
+  "أثر أكاديمي فعّال بعد التسوية: تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم";
+const HISTORICAL_NO_EFFECT_GRADE_NOTE =
+  "تسوية تاريخية بلا أثر: إكمال حالة امتحان سابق";
+const AUTO_BEFORE_REGISTRATION_GRADE_NOTE =
+  "تصحيح تلقائي: الامتحان يسبق تاريخ تسجيل الطالب";
+const BEFORE_REGISTRATION_GRADE_NOTE = "الامتحان يسبق تاريخ تسجيل الطالب";
+const HISTORICAL_OPPORTUNITY_RESET_REASON =
+  "تسوية تاريخية: تجاهل آثار الامتحانات السابقة للتسوية حتى عند تعديل درجاتها لاحقاً";
+
+function normalizeArabicComparisonText(value: unknown): string {
+  return String(value ?? "")
+    .toLocaleLowerCase("ar-IQ")
+    .normalize("NFKD")
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/[\s\-_]+/g, " ")
+    .trim();
+}
+
+function tidyReportText(value: string): string {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([:،؛])/g, "$1")
+    .replace(/([:،؛]){2,}/g, "$1")
+    .replace(/^[\s:،؛.\-–—|]+|[\s:،؛.\-–—|]+$/g, "")
+    .trim();
+}
+
+function removeReportPhrase(value: string, phrase: string): string {
+  if (!value) return "";
+  const exactRemoved = value.replaceAll(phrase, "");
+  if (exactRemoved !== value) return tidyReportText(exactRemoved);
+
+  // يدعم اختلاف التشكيل/الهمزات في البيانات التاريخية من دون حذف نصوص أخرى.
+  return normalizeArabicComparisonText(value) === normalizeArabicComparisonText(phrase)
+    ? ""
+    : value;
+}
+
+function sanitizeGradeNoteForHtml(notes: string | null | undefined): string | null {
+  let text = String(notes || "").trim();
+  if (!text) return null;
+
+  text = removeReportPhrase(text, BULK_ABSENCE_GRADE_NOTE);
+  text = removeReportPhrase(text, HISTORICAL_NO_EFFECT_GRADE_NOTE);
+  if (!text) return null;
+
+  if (
+    normalizeArabicComparisonText(text) ===
+    normalizeArabicComparisonText(AUTO_BEFORE_REGISTRATION_GRADE_NOTE)
+  ) {
+    return BEFORE_REGISTRATION_GRADE_NOTE;
+  }
+
+  text = text.replaceAll(
+    AUTO_BEFORE_REGISTRATION_GRADE_NOTE,
+    BEFORE_REGISTRATION_GRADE_NOTE,
+  );
+  text = tidyReportText(text);
+  return text || null;
+}
+
+function sanitizeOpportunityReasonForHtml(
+  reason: string | null | undefined,
+): string | null {
+  let text = String(reason || "")
+    .replace(/\s*\[academic-reactivation-link:[^\]]+\]/g, "")
+    .trim();
+  if (!text) return null;
+
+  const normalized = normalizeArabicComparisonText(text);
+  if (
+    normalized.includes(
+      normalizeArabicComparisonText(HISTORICAL_OPPORTUNITY_RESET_REASON),
+    )
+  ) {
+    return "اعادة تعيين جميع الفرص";
+  }
+
+  // كلمة "تلقائي" ليست معلومة مفيدة للمستخدم داخل سبب سجل الفرص.
+  text = text.replace(
+    /(^|[\s:،؛\-–—])تلقائي(?=\s|[:،؛\-–—]|$)/g,
+    "$1",
+  );
+  text = tidyReportText(text);
+  return text || null;
+}
+
+function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetailsMap {
+  return Object.fromEntries(
+    Object.entries(details).map(([studentId, studentDetails]) => [
+      studentId,
+      {
+        grades: (studentDetails.grades || [])
+          .filter((grade) => HTML_VISIBLE_GRADE_STATUSES.has(String(grade.status || "").trim()))
+          .map((grade) => ({
+            ...grade,
+            notes: sanitizeGradeNoteForHtml(grade.notes),
+          })),
+        opportunityLogs: (studentDetails.opportunityLogs || []).map((log) => ({
+          ...log,
+          reason: sanitizeOpportunityReasonForHtml(log.reason),
+        })),
+      },
+    ]),
+  );
+}
+
 function normalizeExportValue(value: string | number | null | undefined): string | number {
   return typeof value === "string" ? humanizeTeacherProText(value) : value ?? "";
 }
@@ -172,12 +287,13 @@ function buildTableRows<T>(
 const DETAILS_MODAL_CSS = `
   .tp-search-wrap {
     position: relative;
-    margin-bottom: 20px;
+    margin-bottom: 22px;
   }
   .tp-search-input {
     width: 100%;
-    padding: 14px 18px;
-    font-size: 16px;
+    padding: 15px 18px;
+    font-size: 18px;
+    font-weight: 800;
     font-family: inherit;
     border: 2px solid #111827;
     border-radius: 10px;
@@ -187,11 +303,12 @@ const DETAILS_MODAL_CSS = `
     transition: border-color .15s;
   }
   .tp-search-input:focus { border-color: #2563eb; }
-  .tp-search-input::placeholder { color: #9ca3af; }
+  .tp-search-input::placeholder { color: #9ca3af; font-weight: 700; }
   .tp-search-hint {
-    margin-top: 6px;
-    font-size: 12px;
-    color: #6b7280;
+    margin-top: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #475569;
   }
   .tp-suggestions {
     position: absolute;
@@ -203,17 +320,18 @@ const DETAILS_MODAL_CSS = `
     border: 1px solid #d1d5db;
     border-top: 0;
     border-radius: 0 0 10px 10px;
-    max-height: 320px;
+    max-height: 360px;
     overflow-y: auto;
     box-shadow: 0 12px 24px rgba(15,23,42,.12);
     display: none;
   }
   .tp-suggestions.open { display: block; }
   .tp-suggestion {
-    padding: 11px 16px;
+    padding: 12px 16px;
     cursor: pointer;
     border-bottom: 1px solid #f3f4f6;
-    font-size: 14px;
+    font-size: 16px;
+    font-weight: 700;
     color: #111827;
     transition: background .1s;
   }
@@ -221,17 +339,19 @@ const DETAILS_MODAL_CSS = `
   .tp-suggestion:hover, .tp-suggestion.active {
     background: #f9fafb;
   }
-  .tp-suggestion-name { font-weight: 700; }
+  .tp-suggestion-name { font-weight: 900; }
   .tp-suggestion-meta {
-    font-size: 11.5px;
-    color: #6b7280;
-    margin-top: 2px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #64748b;
+    margin-top: 3px;
   }
   .tp-empty-search {
-    padding: 14px 16px;
+    padding: 15px 16px;
     text-align: center;
-    color: #6b7280;
-    font-size: 13px;
+    color: #475569;
+    font-size: 14px;
+    font-weight: 700;
   }
 
   .tp-student-card {
@@ -239,7 +359,8 @@ const DETAILS_MODAL_CSS = `
     border: 1px solid #e5e7eb;
     border-radius: 12px;
     padding: 0;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     display: none;
   }
   .tp-student-card.visible { display: block; }
@@ -256,48 +377,65 @@ const DETAILS_MODAL_CSS = `
 
   .tp-details-cell { text-align: center; white-space: nowrap; }
   .tp-details-btn {
-    background: #111827; color: #fff; border: 0; border-radius: 6px;
-    padding: 8px 16px; cursor: pointer; font-size: 12px; font-weight: 700;
+    background: #111827; color: #fff; border: 0; border-radius: 7px;
+    padding: 9px 17px; cursor: pointer; font-size: 14px; font-weight: 800;
     font-family: inherit;
   }
   .tp-details-btn:hover { background: #1f2937; }
   .tp-modal-overlay {
     position: fixed; inset: 0; background: rgba(15,23,42,.55);
     display: none; align-items: flex-start; justify-content: center;
-    z-index: 100; padding: 24px 16px; overflow-y: auto;
+    z-index: 100; padding: 20px 16px; overflow: auto;
   }
   .tp-modal-overlay.open { display: flex; }
   .tp-modal {
-    background: #fff; border-radius: 14px; padding: 20px;
-    max-width: 920px; width: 100%; margin: auto;
+    background: #fff; border-radius: 14px; padding: 22px;
+    max-width: 1180px; width: 100%; margin: auto;
     box-shadow: 0 24px 60px rgba(15,23,42,.25);
   }
   .tp-modal-header {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 12px; margin-bottom: 16px; padding-bottom: 10px;
+    gap: 12px; margin-bottom: 18px; padding-bottom: 12px;
     border-bottom: 2px solid #111827;
   }
-  .tp-modal-header h2 { font-size: 17px; margin: 0; color: #111827; }
+  .tp-modal-header h2 { font-size: 21px; font-weight: 900; margin: 0; color: #111827; }
   .tp-modal-close {
     background: #111827; color: #fff; border: 0; border-radius: 8px;
-    padding: 7px 14px; cursor: pointer; font-weight: 700; font-size: 12px;
+    padding: 8px 15px; cursor: pointer; font-weight: 800; font-size: 14px;
     font-family: inherit;
   }
   .tp-modal-close:hover { background: #1f2937; }
-  .tp-details-section { margin-bottom: 18px; }
+  .tp-details-section { margin-bottom: 20px; overflow-x: auto; }
   .tp-details-section:last-child { margin-bottom: 0; }
   .tp-details-section h3 {
-    font-size: 14px; margin: 0 0 8px; color: #111827;
-    border-right: 4px solid #111827; padding-right: 8px;
+    font-size: 17px; font-weight: 900; margin: 0 0 10px; color: #111827;
+    border-right: 4px solid #111827; padding-right: 9px;
   }
-  .tp-details-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .tp-details-table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+    font-size: 14px;
+    font-weight: 700;
+  }
   .tp-details-table th, .tp-details-table td {
-    border: 1px solid #d1d5db; padding: 6px 8px; text-align: right;
-    vertical-align: top; line-height: 1.4; word-break: break-word;
+    border: 1px solid #d1d5db;
+    padding: 8px 10px;
+    text-align: center;
+    vertical-align: middle;
+    line-height: 1.6;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: normal;
+    hyphens: none;
   }
-  .tp-details-table th { background: #f3f4f6; font-weight: 700; color: #111827; }
+  .tp-details-table th { background: #f3f4f6; font-weight: 900; color: #111827; }
   .tp-details-table tr:nth-child(even) { background: #fafafa; }
-  .tp-empty-row td { text-align: center !important; color: #6b7280; padding: 14px !important; }
+  .tp-grades-table th:nth-child(1), .tp-grades-table td:nth-child(1) { min-width: 170px; }
+  .tp-grades-table th:nth-child(7), .tp-grades-table td:nth-child(7) { min-width: 260px; }
+  .tp-logs-table th:nth-child(3), .tp-logs-table td:nth-child(3) { min-width: 300px; }
+  .tp-empty-row td { text-align: center !important; color: #64748b; padding: 16px !important; }
 `;
 
 const DETAILS_MODAL_HTML = `
@@ -316,15 +454,15 @@ const DETAILS_MODAL_HTML = `
       <button type="button" class="tp-modal-close" id="tpModalClose">إغلاق</button>
     </div>
     <div class="tp-details-section">
-      <h3>الدرجات في كل الامتحانات</h3>
-      <table class="tp-details-table">
+      <h3>الامتحانات ذات الدرجة أو الغياب</h3>
+      <table class="tp-details-table tp-grades-table">
         <thead>
           <tr>
             <th>الامتحان</th>
             <th>النوع</th>
             <th>التاريخ</th>
             <th>الدرجة</th>
-            <th>الدرجة العظمى</th>
+            <th>الامتحان من</th>
             <th>الحالة</th>
             <th>ملاحظات</th>
           </tr>
@@ -334,7 +472,7 @@ const DETAILS_MODAL_HTML = `
     </div>
     <div class="tp-details-section">
       <h3>سجل الفرص (أسباب الفقدان والإضافة)</h3>
-      <table class="tp-details-table">
+      <table class="tp-details-table tp-logs-table">
         <thead>
           <tr>
             <th>الإجراء</th>
@@ -388,20 +526,37 @@ const DETAILS_MODAL_JS = `
     } catch(e){ return esc(s); }
   }
 
-  // عدد الكلمات في استعلام البحث — نُهمل المسافات الزائدة.
-  function countWords(q){
-    return String(q || '').trim().split(/\\s+/).filter(Boolean).length;
+  // نفس تطبيع البحث في البرنامج، مع إضافة مساواة ض/ظ المطلوبة للتقرير.
+  function normalizeArabicSearch(value){
+    return String(value || '')
+      .toLocaleLowerCase('ar-IQ')
+      .normalize('NFKD')
+      .replace(/[\\u064B-\\u065F\\u0670]/g, '')
+      .replace(/[أإآٱ]/g, 'ا')
+      .replace(/ؤ/g, 'و')
+      .replace(/ئ/g, 'ي')
+      .replace(/ى/g, 'ي')
+      .replace(/ة/g, 'ه')
+      .replace(/[ضظ]/g, 'ض')
+      .replace(/ـ/g, '')
+      .replace(/[\\u200B-\\u200D\\uFEFF]/g, '')
+      .replace(/[\\s\\-_]+/g, ' ')
+      .trim();
   }
 
-  // مطابقة بسيطة: يجب أن يبدأ اسم الطالب بالنص المكتوب (أو يحتوي عليه ككلمات متتالية).
+  // لا تظهر أي نتائج قبل كتابة اسمين على الأقل.
+  function countWords(q){
+    var normalized = normalizeArabicSearch(q);
+    return normalized ? normalized.split(/\\s+/).filter(Boolean).length : 0;
+  }
+
+  // مطابقة كلمات متتالية مع السماح بإكمال كل جزء من الاسم (prefix matching).
   function matchesQuery(student, q){
-    var name = String(student.name || '').trim();
-    if (!name) return false;
-    var nq = String(q || '').trim().toLowerCase();
-    if (!nq) return false;
-    var nname = name.toLowerCase();
+    var nq = normalizeArabicSearch(q);
+    var nname = normalizeArabicSearch(student && student.name);
+    if (!nq || !nname) return false;
     if (nname.startsWith(nq)) return true;
-    // مطابقة "كلمات متتالية" داخل الاسم: مثلاً "علي حسين" داخل "محمد علي حسين جاسم"
+
     var nameParts = nname.split(/\\s+/);
     var qParts = nq.split(/\\s+/);
     for (var i = 0; i <= nameParts.length - qParts.length; i++) {
@@ -485,11 +640,13 @@ const DETAILS_MODAL_JS = `
 
     if (wordCount < 2) {
       hideSuggestions();
+      cardEl.classList.remove('visible');
+      cardEl.innerHTML = '';
       hintEl.textContent = 'اكتب كلمة أخرى على الأقل (مثال: «محمد علي» بدل «محمد» فقط) لعرض قائمة الطلاب.';
       return;
     }
 
-    hintEl.textContent = 'ابحث عن الاسم الثنائي أو أكثر. مثال: «محمد علي» يعرض كل الطلاب الذين تبدأ أسماؤهم بـ«محمد علي».';
+    hintEl.textContent = 'البحث يتجاهل اختلافات الكتابة العربية الشائعة، مع بقاء شرط الاسم الثنائي أو أكثر.';
 
     var matches = STUDENTS.filter(function(s){
       return matchesQuery(s, q);
@@ -515,7 +672,7 @@ const DETAILS_MODAL_JS = `
           + '</tr>';
       }).join('');
     } else {
-      gradesBody.innerHTML = '<tr class="tp-empty-row"><td colspan="7">لا توجد درجات مسجلة لهذا الطالب</td></tr>';
+      gradesBody.innerHTML = '<tr class="tp-empty-row"><td colspan="7">لا توجد امتحانات بحالة «درجة» أو «غائب» لهذا الطالب</td></tr>';
     }
 
     if (data && data.opportunityLogs && data.opportunityLogs.length > 0) {
@@ -683,31 +840,55 @@ function buildHtml<T>(
   @page { size: A4 ${options.orientation || "portrait"}; margin: 10mm; }
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; }
-  body { font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif; padding: 16px; color: #111827; background: #eef2f7; }
+  body {
+    font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+    padding: 16px;
+    color: #111827;
+    background: #eef2f7;
+    font-size: 16px;
+    font-weight: 700;
+  }
   .toolbar { position: sticky; top: 0; display: flex; gap: 8px; margin: -16px -16px 14px; padding: 10px 12px; background: #111827; color: white; z-index: 3; }
-  .toolbar button { border: 0; border-radius: 10px; padding: 9px 14px; cursor: pointer; font-weight: 700; }
-  .report { background: white; border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; box-shadow: 0 10px 30px rgba(15,23,42,.08); }
-  .report-header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px; margin-bottom: 12px; border-bottom: 2px solid #111827; padding-bottom: 10px; }
-  h1 { font-size: 20px; line-height: 1.5; margin: 0; }
-  .meta { color: #475569; font-size: 12px; white-space: nowrap; }
-  .table-wrap { width: 100%; overflow: visible; }
-  table { border-collapse: collapse; width: 100%; table-layout: auto; font-size: 11px; }
-  th, td { border: 1px solid #d1d5db; padding: 6px 7px; text-align: right; vertical-align: top; line-height: 1.45; word-break: break-word; }
-  th { background: #f3f4f6; font-weight: 800; color: #111827; }
+  .toolbar button { border: 0; border-radius: 10px; padding: 9px 14px; cursor: pointer; font-weight: 800; font-size: 14px; }
+  .report { background: white; border: 1px solid #e5e7eb; border-radius: 14px; padding: 18px; box-shadow: 0 10px 30px rgba(15,23,42,.08); }
+  .report-header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px; margin-bottom: 14px; border-bottom: 2px solid #111827; padding-bottom: 11px; }
+  h1 { font-size: 24px; font-weight: 900; line-height: 1.5; margin: 0; }
+  .meta { color: #475569; font-size: 14px; font-weight: 800; white-space: nowrap; }
+  .table-wrap { width: 100%; overflow-x: auto; overflow-y: visible; }
+  table {
+    border-collapse: collapse;
+    width: max-content;
+    min-width: 100%;
+    table-layout: auto;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  th, td {
+    border: 1px solid #d1d5db;
+    padding: 8px 10px;
+    text-align: center;
+    vertical-align: middle;
+    line-height: 1.6;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: normal;
+    hyphens: none;
+  }
+  th { background: #f3f4f6; font-weight: 900; color: #111827; }
   tr:nth-child(even) { background: #fafafa; }
   a[href]::after { content: "" !important; }
   ${detailsCss}
   @media print {
-    html, body { width: 100%; margin: 0 !important; padding: 0 !important; background: white !important; }
+    html, body { width: 100%; margin: 0 !important; padding: 0 !important; background: white !important; font-weight: 700; }
     .toolbar { display: none !important; }
     .report { box-shadow: none !important; border: 0 !important; border-radius: 0 !important; padding: 0 !important; }
     .report-header { margin-bottom: 8px; padding-bottom: 8px; }
-    h1 { font-size: 18px; }
+    h1 { font-size: 20px; font-weight: 900; }
     .meta { font-size: 11px; }
-    table { font-size: 10px; page-break-inside: auto; }
+    table { font-size: 11px; page-break-inside: auto; }
     tr { page-break-inside: avoid; page-break-after: auto; }
     thead { display: table-header-group; }
-    th, td { padding: 4px 5px; }
+    th, td { padding: 5px 6px; }
     .tp-modal-overlay, .tp-suggestions { display: none !important; }
   }
   </style>${printableScript}</head><body>${printableToolbar}<main class="report"><header class="report-header"><h1>${escapeHtml(humanizeTeacherProText(title))}</h1>${metaLine}</header>${mainTableHtml}${detailsModalHtml}${studentListScript}${detailsDataScript}${detailsModalJs}</main></body></html>`;
@@ -986,6 +1167,11 @@ export function ExportDialog<T = Record<string, unknown>>({
       }
     }
 
+    // ننظّف نسخة التقرير فقط: لا تتغير الدرجات أو السجلات الأصلية في النظام.
+    const reportDetailsMap = detailsMap
+      ? sanitizeStudentDetailsForHtml(detailsMap)
+      : null;
+
     // في وضع البحث نمرّر قائمة الطلاب (id + name + courseName + opportunities)
     // لاستخدامها في خانة البحث بدل عرض كل الطلاب دفعة واحدة.
     const idGetter = getRowId || ((row: T) => String((row as Record<string, unknown>)?.id ?? ""));
@@ -1007,13 +1193,13 @@ export function ExportDialog<T = Record<string, unknown>>({
       : undefined;
 
     const html = buildHtml(exportRows, selectedColumns, title, {
-      studentDetails: detailsMap || undefined,
+      studentDetails: reportDetailsMap || undefined,
       studentList,
       getRowId,
     });
     downloadBlob(html, `${safeFileName}.html`, "text/html;charset=utf-8");
-    const detailsNote = detailsMap
-      ? ` مع تفاصيل ${Object.keys(detailsMap).length} طالب`
+    const detailsNote = reportDetailsMap
+      ? ` مع تفاصيل ${Object.keys(reportDetailsMap).length} طالب`
       : "";
     toast.success(
       `تم تصدير ${exportRows.length} طالب بصيغة HTML${detailsNote}`,
