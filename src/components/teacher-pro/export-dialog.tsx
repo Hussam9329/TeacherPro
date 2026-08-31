@@ -169,11 +169,21 @@ function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetai
                 ? GRACE_DEFERRED_REPORT_STATUS
                 : grade.status,
             };
+          })
+          .sort((a, b) => {
+            const da = new Date(a.examDate).getTime() || 0;
+            const db = new Date(b.examDate).getTime() || 0;
+            return db - da;
           }),
-        opportunityLogs: (studentDetails.opportunityLogs || []).map((log) => ({
-          ...log,
-          reason: sanitizeOpportunityReasonForHtml(log.reason),
-        })),
+        opportunityLogs: (studentDetails.opportunityLogs || [])
+          .filter((log) => {
+            const reason = sanitizeOpportunityReasonForHtml(log.reason);
+            return reason !== null && reason !== 'اعادة تعيين جميع الفرص';
+          })
+          .map((log) => ({
+            ...log,
+            reason: sanitizeOpportunityReasonForHtml(log.reason),
+          })),
       },
     ]),
   );
@@ -420,7 +430,7 @@ const DETAILS_MODAL_CSS = `
   .tp-details-table th { background: #f3f4f6; font-weight: 900; color: #111827; }
   .tp-details-table tr:nth-child(even) { background: #fafafa; }
   .tp-grades-table th:nth-child(1), .tp-grades-table td:nth-child(1) { min-width: 170px; }
-  .tp-logs-table th:nth-child(3), .tp-logs-table td:nth-child(3) { min-width: 300px; }
+  .tp-logs-table th:nth-child(1), .tp-logs-table td:nth-child(1) { min-width: 300px; }
   .tp-empty-row td { text-align: center !important; color: #64748b; padding: 16px !important; }
 `;
 
@@ -456,14 +466,13 @@ const DETAILS_MODAL_HTML = `
       </table>
     </div>
     <div class="tp-details-section">
-      <h3>سجل الفرص (أسباب الفقدان والإضافة)</h3>
+      <h3>سجل فقدان الفرص</h3>
       <table class="tp-details-table tp-logs-table">
         <thead>
           <tr>
-            <th>الإجراء</th>
-            <th>العدد</th>
             <th>السبب</th>
-            <th>التاريخ</th>
+            <th>عدد الفرص المفقودة</th>
+            <th>تاريخ الفقدان</th>
             <th>الامتحان</th>
           </tr>
         </thead>
@@ -659,18 +668,20 @@ const DETAILS_MODAL_JS = `
       gradesBody.innerHTML = '<tr class="tp-empty-row"><td colspan="6">لا توجد امتحانات بحالة «درجة» أو «غائب» لهذا الطالب</td></tr>';
     }
 
-    if (data && data.opportunityLogs && data.opportunityLogs.length > 0) {
-      logsBody.innerHTML = data.opportunityLogs.map(function(l){
+    var lossLogs = (data && data.opportunityLogs || []).filter(function(l){
+      return l.reason !== null && l.reason !== '';
+    });
+    if (lossLogs.length > 0) {
+      logsBody.innerHTML = lossLogs.map(function(l){
         return '<tr>'
-          + '<td>' + esc(l.action) + '</td>'
-          + '<td>' + fmtNum(l.amount) + '</td>'
           + '<td>' + esc(l.reason) + '</td>'
+          + '<td>' + fmtNum(l.amount) + '</td>'
           + '<td>' + fmtDate(l.date) + '</td>'
           + '<td>' + esc(l.examName) + '</td>'
           + '</tr>';
       }).join('');
     } else {
-      logsBody.innerHTML = '<tr class="tp-empty-row"><td colspan="5">لا يوجد سجل فرص لهذا الطالب</td></tr>';
+      logsBody.innerHTML = '<tr class="tp-empty-row"><td colspan="4">لا يوجد سجل فقدان فرص لهذا الطالب</td></tr>';
     }
 
     overlay.classList.add('open');
