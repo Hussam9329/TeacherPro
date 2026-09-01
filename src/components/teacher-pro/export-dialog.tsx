@@ -517,6 +517,13 @@ const DETAILS_MODAL_CSS = `
   .tp-suggestion:hover, .tp-suggestion.active, .tp-suggestion[aria-selected="true"] {
     background: #eff6ff; box-shadow: inset -3px 0 #2563eb;
   }
+  @media (forced-colors: active) {
+    .tp-search-input:focus,
+    .tp-suggestion.active,
+    .tp-suggestion[aria-selected="true"] {
+      outline: 2px solid CanvasText; outline-offset: 2px;
+    }
+  }
   .tp-suggestion-name { font-weight: 900; }
   .tp-suggestion-meta {
     margin-top: 3px; color: #64748b; font-size: 13px; font-weight: 700;
@@ -913,9 +920,9 @@ const DETAILS_MODAL_JS = `
     activeIndex = -1;
     searchInput.removeAttribute('aria-activedescendant');
     if (totalMatches === 0) {
-      suggestionsEl.innerHTML = '<div class="tp-empty-search" role="presentation" aria-hidden="true">لا يوجد طلاب مطابقون لهذا البحث</div>';
-      suggestionsEl.classList.add('open');
-      searchInput.setAttribute('aria-expanded', 'true');
+      suggestionsEl.innerHTML = '';
+      suggestionsEl.classList.remove('open');
+      searchInput.setAttribute('aria-expanded', 'false');
       hintEl.textContent = 'لا يوجد طلاب مطابقون لهذا البحث.';
       return;
     }
@@ -1029,7 +1036,7 @@ const DETAILS_MODAL_JS = `
     }
 
     if (!data) {
-      gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row"><td colspan="6">تعذر العثور على تفاصيل هذا الطالب داخل الملف. أعد إنشاء التقرير من النظام.</td></tr>';
+      gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row" role="row"><td colspan="6" role="cell">تعذر العثور على تفاصيل هذا الطالب داخل الملف. أعد إنشاء التقرير من النظام.</td></tr>';
       logsSection.style.display = 'none';
     } else if (data.grades && data.grades.length > 0) {
       gradesBody.innerHTML = data.grades.map(function(g){
@@ -1043,7 +1050,7 @@ const DETAILS_MODAL_JS = `
           + '</tr>';
       }).join('');
     } else {
-      gradesBody.innerHTML = '<tr class="tp-empty-row"><td colspan="6">'
+      gradesBody.innerHTML = '<tr class="tp-empty-row" role="row"><td colspan="6" role="cell">'
         + ((data && data.activeChapterName)
           ? 'لا توجد امتحانات للفصل النشط الحالي لهذا الطالب'
           : 'لا توجد امتحانات مسجلة لهذا الطالب')
@@ -1243,7 +1250,7 @@ export function buildHtml<T>(
   const reportClassName = interactiveMode ? "report report-search-mode" : "report";
   const viewportMeta = interactiveMode
     ? '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
-    : "";
+    : '<meta name="viewport" content="width=device-width, initial-scale=1">';
 
   const printableToolbar = options.printable
     ? `<div class="toolbar"><button onclick="window.print()">طباعة / حفظ PDF</button><button onclick="window.close()">إغلاق</button></div>`

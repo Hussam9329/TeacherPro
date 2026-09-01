@@ -299,6 +299,10 @@ function labelsFromRenderedCells(html) {
 }
 
 function assertNormalTableFallback(html, label) {
+  assert.match(
+    html,
+    /<meta name="viewport" content="width=device-width, initial-scale=1">/,
+  );
   assert.match(html, /<body class="">/);
   assert.match(html, /<main class="report">/);
   assert.match(html, /<div class="table-wrap"><table>/);
@@ -564,6 +568,37 @@ check("التنقل بالأسهم يبقى ضمن أول 50 نتيجة ظاهر
   });
 
   assert.equal(dom.elements.tpStudentSearch.value, manyStudents[49].name);
+});
+
+check("البحث بلا نتائج يغلق listbox ويعلن النتيجة عبر النص الحي", () => {
+  const { dom } = executeInlineScripts(validHtml, "opportunities-zero-results");
+  dom.elements.tpStudentSearch.value = "اسم غيرموجود";
+  dom.elements.tpStudentSearch.dispatch("input", {});
+
+  assert.equal(dom.elements.tpStudentSearch.getAttribute("aria-expanded"), "false");
+  assert.ok(!dom.elements.tpSuggestions.classList.contains("open"));
+  assert.equal(dom.elements.tpSuggestions.innerHTML, "");
+  assert.equal(
+    dom.elements.tpSearchHint.textContent,
+    "لا يوجد طلاب مطابقون لهذا البحث.",
+  );
+});
+
+check("صف الخطأ الدفاعي يحتفظ بدلالات row وcell على الهاتف", () => {
+  const missingDetailsHtml = buildHtml(rows, columns, "تقرير إدارة الفرص", {
+    studentList,
+    studentDetails: { placeholder: studentDetails.s1 },
+  });
+  const { dom } = executeInlineScripts(
+    missingDetailsHtml,
+    "opportunities-missing-details",
+  );
+  openStudentDetails(dom, "s1", "محمد علي حسن");
+
+  assert.match(
+    dom.elements.tpGradesBody.innerHTML,
+    /<tr class="tp-empty-row tp-error-row" role="row"><td colspan="6" role="cell">/,
+  );
 });
 
 check("تركيبات خيارات التفاصيل غير الصالحة تعود إلى جدول التقرير الطبيعي", () => {

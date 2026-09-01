@@ -183,8 +183,9 @@ check(
     exportDialog.includes('@media screen and (max-width: 420px)') &&
     exportDialog.includes('grid-template-columns: minmax(96px, 38%) minmax(0, 1fr)') &&
     exportDialog.includes('env(safe-area-inset-top, 0px)') &&
+    exportDialog.includes('@media (forced-colors: active)') &&
     exportDialog.includes('min-height: 44px'),
-  'بطاقات HTML متجاوبة داخل وضع الشاشة وتستخدم حقولاً ضمن التدفق وsafe-area وأهداف لمس 44px',
+  'بطاقات HTML متجاوبة داخل وضع الشاشة وتستخدم حقولاً ضمن التدفق وsafe-area وتبايناً قسرياً وأهداف لمس 44px',
 );
 check(
   exportDialog.includes('const interactiveMode = Boolean(') &&
