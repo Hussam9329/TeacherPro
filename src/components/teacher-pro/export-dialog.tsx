@@ -52,6 +52,11 @@ export type StudentOpportunityLogDetail = {
 export type StudentDetails = {
   grades: StudentGradeDetail[];
   opportunityLogs: StudentOpportunityLogDetail[];
+  /**
+   * اسم الفصل النشط الحالي (اختياري): يُعرض في عنوان قسم الامتحانات داخل
+   * ملف HTML ويُستخدم لصياغة حالة «لا توجد امتحانات للفصل النشط».
+   */
+  activeChapterName?: string | null;
 };
 
 export type StudentDetailsMap = Record<string, StudentDetails>;
@@ -173,6 +178,7 @@ export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): Stude
     Object.entries(details).map(([studentId, studentDetails]) => [
       studentId,
       {
+        activeChapterName: studentDetails.activeChapterName ?? null,
         grades: (studentDetails.grades || [])
           .map((grade) => {
             const { notes: _notes, ...reportGrade } = grade;
@@ -205,11 +211,48 @@ export type StudentProfileLogSnapshot = {
   grades?: Array<Record<string, unknown>> | null;
   allCourseExams?: Array<Record<string, unknown>> | null;
   opportunityLogs?: Array<Record<string, unknown>> | null;
+  /**
+   * سياق الفصل النشط الحالي (من /api/students/profile-log): عند توفره
+   * تُعرض درجات امتحانات الفصل النشط وحدها (الامتحانات المنشأة بعد بداية
+   * الفصل النشط) بدل كل امتحانات الدورة. غيابه = بلا فلترة (سلوك قديم).
+   */
+  currentChapter?: {
+    id?: unknown;
+    name?: unknown;
+    since?: unknown;
+    examIds?: unknown;
+  } | null;
 };
 
 /**
+ * يستخرج فلتر امتحانات الفصل النشط الحالي من استجابة profile-log:
+ * مجموعة معرفات امتحانات الفصل النشط (اسم الفصل أيضاً لعناوين التقرير).
+ * يعيد set فارغاً فقط عندما تكون قائمة examIds فارغة فعلاً (فصل
+ * نشط بلا امتحانات بعد)، ويعيد null عند غياب السياق كلياً (بلا فلترة).
+ */
+function resolveActiveChapterExamFilter(
+  profile: StudentProfileLogSnapshot,
+): { chapterExamIds: Set<string> | null; activeChapterName: string | null } {
+  const currentChapter = profile.currentChapter;
+  if (!currentChapter || typeof currentChapter !== "object") {
+    return { chapterExamIds: null, activeChapterName: null };
+  }
+  const examIdsRaw = currentChapter.examIds;
+  if (!Array.isArray(examIdsRaw)) {
+    return { chapterExamIds: null, activeChapterName: null };
+  }
+  const chapterExamIds = new Set(
+    examIdsRaw.map((id) => String(id || "").trim()).filter(Boolean),
+  );
+  const nameRaw = currentChapter.name;
+  const activeChapterName =
+    typeof nameRaw === "string" && nameRaw.trim() ? nameRaw.trim() : null;
+  return { chapterExamIds, activeChapterName };
+}
+
+/**
  * يحوّل استجابة /api/students/profile-log إلى لقطة تفاصيل الطالب
- * (درجات كل الامتحانات + سجل الفرص مع الأسباب) — نفس التحويل الحرفي
+ * (درجات الامتحانات + سجل الفرص مع الأسباب) — نفس التحويل الحرفي
  * الذي يستخدمه تصدير HTML من صفحة إدارة الفرص.
  *
  * الدالة مشتركة عمداً بين تصدير HTML وزر تيليجرام في إدارة المفصولين
@@ -218,6 +261,8 @@ export type StudentProfileLogSnapshot = {
 export function buildStudentDetailsFromProfileLog(
   profile: StudentProfileLogSnapshot,
 ): StudentDetails {
+  const { chapterExamIds, activeChapterName } =
+    resolveActiveChapterExamFilter(profile);
   const examMap = new Map<string, Record<string, unknown>>();
   const exams = Array.isArray(profile.exams) ? profile.exams : [];
   for (const exam of exams) {
@@ -228,33 +273,48 @@ export function buildStudentDetailsFromProfileLog(
 
   const rawGrades = Array.isArray(profile.grades) ? profile.grades : [];
   const gradeExamIds = new Set<string>();
-  const grades: StudentGradeDetail[] = rawGrades.map((rawGrade) => {
-    const grade = rawGrade as Record<string, unknown>;
-    const examId = String(grade.examId || "");
-    gradeExamIds.add(examId);
-    const exam = examMap.get(examId);
-    const score = grade.score;
-    const fullMark = exam?.fullMark;
-    return {
-      examName: String(exam?.name || "امتحان غير محدد"),
-      examType: String(exam?.type || ""),
-      examDate: String(exam?.date || ""),
-      score: score === null || score === undefined ? null : Number(score),
-      fullMark:
-        fullMark === null || fullMark === undefined ? null : Number(fullMark),
-      status: String(grade.status || ""),
-      notes: grade.notes ? String(grade.notes) : null,
-    };
-  });
+  const grades: StudentGradeDetail[] = rawGrades
+    // درجات امتحانات الفصل النشط الحالي فقط: عند توفر سياق الفصل النشط
+    // (currentChapter) نخفي درجات الامتحانات المنشأة قبل بداية الفصل النشط
+    // حتى يعرض التقرير فصل الطالب الحالي وحده — غياب السياق = بلا فلترة.
+    .filter((rawGrade) =>
+      chapterExamIds
+        ? chapterExamIds.has(String((rawGrade as Record<string, unknown>).examId || ""))
+        : true,
+    )
+    .map((rawGrade) => {
+      const grade = rawGrade as Record<string, unknown>;
+      const examId = String(grade.examId || "");
+      gradeExamIds.add(examId);
+      const exam = examMap.get(examId);
+      const score = grade.score;
+      const fullMark = exam?.fullMark;
+      return {
+        examName: String(exam?.name || "امتحان غير محدد"),
+        examType: String(exam?.type || ""),
+        examDate: String(exam?.date || ""),
+        score: score === null || score === undefined ? null : Number(score),
+        fullMark:
+          fullMark === null || fullMark === undefined ? null : Number(fullMark),
+        status: String(grade.status || ""),
+        notes: grade.notes ? String(grade.notes) : null,
+      };
+    });
 
-  // إضافة امتحانات الدورة التي ليس للطالب سجل درجات فيها.
+  // إضافة امتحانات الدورة التي ليس للطالب سجل درجات فيها — ضمن امتحانات
+  // الفصل النشط الحالي فقط عند توفر سياق الفصل النشط.
   const allCourseExams = Array.isArray(profile.allCourseExams)
     ? profile.allCourseExams
     : [];
   for (const rawExam of allCourseExams) {
     const examRecord = rawExam as Record<string, unknown>;
     const examId = String(examRecord.id || "");
-    if (examId && !gradeExamIds.has(examId) && !examMap.has(examId)) {
+    if (
+      examId &&
+      (!chapterExamIds || chapterExamIds.has(examId)) &&
+      !gradeExamIds.has(examId) &&
+      !examMap.has(examId)
+    ) {
       examMap.set(examId, examRecord);
       grades.push({
         examName: String(examRecord.name || "امتحان غير محدد"),
@@ -288,7 +348,7 @@ export function buildStudentDetailsFromProfileLog(
     },
   );
 
-  return { grades, opportunityLogs };
+  return { grades, opportunityLogs, activeChapterName };
 }
 
 function normalizeExportValue(value: string | number | null | undefined): string | number {
@@ -387,11 +447,23 @@ const DETAILS_MODAL_CSS = `
   .tp-search-wrap {
     position: relative;
     margin-bottom: 22px;
+    /* البحث في وسط الصفحة ومرن لكل الشاشات (هاتف/تاب/حاسوب):
+       عرض مرن مع سقف عرض معقول وتوسيط أفقي عبر الهوامش التلقائية
+       حتى لا يبدأ الحقل من جهة اليمين على الشاشات الواسعة. */
+    width: 100%;
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 6px;
   }
   .tp-search-input {
     width: 100%;
-    padding: 15px 18px;
-    font-size: 18px;
+    /* سطرا fallback قبل clamp يضمنان مظهراً سليماً على المتصفحات القديمة
+       التي لا تفهم الوحدات الديناميكية (dvw). */
+    padding: 14px 16px;
+    padding: clamp(13px, 3dvw, 15px) clamp(14px, 3.5dvw, 18px);
+    font-size: 16px;
+    font-size: clamp(16px, 2.2dvw, 18px);
     font-weight: 800;
     font-family: inherit;
     border: 2px solid #111827;
@@ -400,14 +472,18 @@ const DETAILS_MODAL_CSS = `
     color: #111827;
     outline: none;
     transition: border-color .15s;
+    /* نص الحقل ووسيطه في المنتصف فيبدو البحث وسطياً على كل الاتجاهات. */
+    text-align: center;
   }
   .tp-search-input:focus { border-color: #2563eb; }
   .tp-search-input::placeholder { color: #9ca3af; font-weight: 700; }
   .tp-search-hint {
     margin-top: 8px;
-    font-size: 14px;
+    font-size: 12.5px;
+    font-size: clamp(12.5px, 1.8dvw, 14px);
     font-weight: 700;
     color: #475569;
+    text-align: center;
   }
   .tp-suggestions {
     position: absolute;
@@ -475,6 +551,11 @@ const DETAILS_MODAL_CSS = `
     overflow-x: auto;
     overflow-y: hidden;
     display: none;
+    /* بطاقة الطالب بنفس محاذاة خانة البحث: وسطية ومرنة لكل الشاشات. */
+    width: 100%;
+    max-width: 760px;
+    margin-left: auto;
+    margin-right: auto;
   }
   .tp-student-card.visible { display: block; }
   .tp-student-card table {
@@ -548,6 +629,14 @@ const DETAILS_MODAL_CSS = `
   .tp-grades-table th:nth-child(1), .tp-grades-table td:nth-child(1) { min-width: 170px; }
   .tp-logs-table th:nth-child(1), .tp-logs-table td:nth-child(1) { min-width: 300px; }
   .tp-empty-row td { text-align: center !important; color: #64748b; padding: 16px !important; }
+
+  /* هواتف صغيرة: تقليص الحشوات ليأخذ البحث مساحة أوسع ويبقى مريحاً للمس. */
+  @media (max-width: 640px) {
+    .tp-search-input { padding: 13px 14px; }
+    .tp-suggestion { padding: 11px 14px; font-size: 15px; }
+    .tp-modal { padding: 16px; }
+    .tp-details-table th, .tp-details-table td { padding: 7px 8px; font-size: 13px; }
+  }
 `;
 
 const DETAILS_MODAL_HTML = `
@@ -566,7 +655,7 @@ const DETAILS_MODAL_HTML = `
       <button type="button" class="tp-modal-close" id="tpModalClose">إغلاق</button>
     </div>
     <div class="tp-details-section">
-      <h3>كل الامتحانات</h3>
+      <h3 id="tpGradesSectionTitle">كل الامتحانات</h3>
       <table class="tp-details-table tp-grades-table">
         <thead>
           <tr>
@@ -778,6 +867,7 @@ const DETAILS_MODAL_JS = `
     var data = DATA[studentId];
     var badgeEl = document.getElementById('tpModalDismissedBadge');
     var titleTextEl = document.getElementById('tpModalTitleText');
+    var gradesTitleEl = document.getElementById('tpGradesSectionTitle');
     var dismissed = false;
     for (var i = 0; i < STUDENTS.length; i++) {
       if (STUDENTS[i] && String(STUDENTS[i].id) === String(studentId)) {
@@ -789,6 +879,13 @@ const DETAILS_MODAL_JS = `
     // نص العنوان داخل span مستقل حتى لا يمسح textContent شارة «مفصول» المجاورة.
     if (titleTextEl) {
       titleTextEl.textContent = 'تفاصيل الطالب' + (studentLabel ? ' · ' + studentLabel : '');
+    }
+    // عنوان قسم الامتحانات: يبين اسم الفصل النشط الحالي عندما تتوفر بياناته،
+    // لأن التقرير يعرض درجات امتحانات الفصل النشط وحدها.
+    if (gradesTitleEl) {
+      gradesTitleEl.textContent = (data && data.activeChapterName)
+        ? 'امتحانات الفصل النشط الحالي (' + data.activeChapterName + ')'
+        : 'كل الامتحانات';
     }
 
     if (data && data.grades && data.grades.length > 0) {
@@ -803,7 +900,11 @@ const DETAILS_MODAL_JS = `
           + '</tr>';
       }).join('');
     } else {
-      gradesBody.innerHTML = '<tr class="tp-empty-row"><td colspan="6">لا توجد امتحانات مسجلة لهذا الطالب</td></tr>';
+      gradesBody.innerHTML = '<tr class="tp-empty-row"><td colspan="6">'
+        + ((data && data.activeChapterName)
+          ? 'لا توجد امتحانات للفصل النشط الحالي لهذا الطالب'
+          : 'لا توجد امتحانات مسجلة لهذا الطالب')
+        + '</td></tr>';
     }
 
     var lossLogs = (data && data.opportunityLogs || []).filter(function(l){
@@ -924,7 +1025,12 @@ const DETAILS_MODAL_JS = `
 </script>
 `;
 
-function buildHtml<T>(
+/**
+ * يبني ملف تقرير HTML مستقلاً (يعمل أوفلاين) من الصفوف والأعمدة المختارة.
+ * مُصدَّر عمداً ليستخدمه تصدير HTML واختبارات السلامة/أدوات التقارير بنفس
+ * القالب الواحد دون نسخ ثانية تتباعد عن مصدر التوليد.
+ */
+export function buildHtml<T>(
   rows: T[],
   columns: ExportColumn<T>[],
   title: string,
@@ -1503,7 +1609,7 @@ export function ExportDialog<T = Record<string, unknown>>({
             <p className="text-xs text-muted-foreground">
               سيتم تصدير الأعمدة المختارة فقط وبنفس ترتيبها الظاهر في هذه القائمة (للملفات CSV / Excel / PDF).
               {fetchStudentDetails
-                ? " زر «تصدير HTML» يُنتج ملف بحث: تكتب الاسم الثنائي فما فوق فيظهر قائمة بالطلاب المطابقين، وعند اختيار طالب تظهر بياناته (الاسم + الدورة + عدد الفرص) مع زر «إظهار التفاصيل» يفتح درجاته وسجل فرصه، والطالب المفصول تظهر بجانب اسمه شارة «مفصول»."
+                ? " زر «تصدير HTML» يُنتج ملف بحث: خانة البحث وسطية ومرنة لكل الشاشات، تكتب الاسم الثنائي فما فوق فيظهر قائمة بالطلاب المطابقين، وعند اختيار طالب تظهر بياناته (الاسم + الدورة + عدد الفرص) مع زر «إظهار التفاصيل» يفتح درجات امتحانات الفصل النشط الحالي وسجل فرصه، والطالب المفصول تظهر بجانب اسمه شارة «مفصول»."
                 : ""}
             </p>
           </div>

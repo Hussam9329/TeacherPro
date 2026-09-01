@@ -897,9 +897,22 @@ export interface StudentEnrollmentArchiveRecord {
   snapshot: Record<string, unknown>;
 }
 
+/**
+ * سياق الفصل النشط الحالي كما يعيده /api/students/profile-log: يحدد امتحانات
+ * الدورة التي انصنعت بعد بداية الفصل النشط (آخر انتقال للدورة) ليعرض تقرير
+ * HTML ورسالة تيليجرام درجات الفصل النشط وحدها.
+ */
+export interface StudentActiveChapterContext {
+  id: string;
+  name: string;
+  since: string | null;
+  examIds: string[];
+}
+
 export interface StudentProfileLogResponse {
   studentId: string;
   student?: Record<string, unknown>;
+  currentChapter?: StudentActiveChapterContext | null;
   grades: Array<Record<string, unknown>>;
   exams?: Array<Record<string, unknown>>;
   opportunityLogs: Array<Record<string, unknown>>;

@@ -7,6 +7,7 @@ import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { requireAnyPermissionPrincipal } from "@/lib/server-auth";
 import { attachStudentOpportunitySnapshotsWithClient } from "@/lib/student-opportunity-snapshot-server";
 import { parseStudentEnrollmentArchiveSnapshot } from "@/lib/student-enrollment-archive-server";
+import { loadActiveChapterReportContext } from "@/lib/active-chapter-report";
 import {
   buildStudentProfileDataVersion,
   loadStudentProfileAuditLogs,
@@ -198,6 +199,12 @@ export async function GET(req: NextRequest) {
               orderBy: [{ date: "desc" }, { id: "desc" }],
             })
           : [];
+        // سياق الفصل النشط الحالي: يحدد امتحانات الدورة التي انصنعت بعد بداية
+        // الفصل النشط (آخر انتقال للدورة)، ليعرض تقرير HTML درجات الفصل النشط
+        // وحدها — نفس المصدر الذي تبنى عليه رسالة تيليجرام في إدارة المفصولين.
+        const currentChapter = student.courseId
+          ? await loadActiveChapterReportContext(tx, student.courseId)
+          : null;
         const [studentWithOpportunity] =
           await attachStudentOpportunitySnapshotsWithClient(tx, [student]);
         const auditResult = access.logs
@@ -220,6 +227,7 @@ export async function GET(req: NextRequest) {
           grades,
           exams,
           allCourseExams,
+          currentChapter,
           opportunityLogs,
           studentLeaves,
           studentCalls,
@@ -239,6 +247,7 @@ export async function GET(req: NextRequest) {
       grades,
       exams,
       allCourseExams,
+      currentChapter,
       opportunityLogs,
       studentLeaves,
       studentCalls,
@@ -293,6 +302,7 @@ export async function GET(req: NextRequest) {
         } as unknown as Record<string, unknown>,
         access,
       ),
+      currentChapter,
       grades: access.grades ? grades : [],
       exams: exams.filter((exam) => visibleExamIds.has(exam.id)),
       allCourseExams: access.grades ? allCourseExams : [],
