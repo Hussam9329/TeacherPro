@@ -153,10 +153,51 @@ check(
     exportDialog.includes('colspan="6"'),
   'تفاصيل تقرير HTML لا تحتوي عمود الملاحظات وتستخدم عدد الأعمدة الصحيح بعد حذفه',
 );
+check(
+  exportDialog.includes('serializeForInlineScript') &&
+    exportDialog.includes('.replaceAll("<", "\\\\u003C")') &&
+    !exportDialog.includes('window.STUDENT_DETAILS=${JSON.stringify') &&
+    !exportDialog.includes('window.STUDENT_LIST=${JSON.stringify'),
+  'بيانات تقرير HTML تُحقن عبر serializer آمن ولا يمكنها إغلاق عنصر script',
+);
+check(
+  exportDialog.includes('سجل حركات الفرص') &&
+    exportDialog.includes('نوع الحركة') &&
+    exportDialog.includes('العدد المسجل') &&
+    exportDialog.includes("mobileCell('نوع الحركة', esc(l.action || '—'))") &&
+    !exportDialog.includes('سجل فقدان الفرص') &&
+    !exportDialog.includes('عدد الفرص المفقودة'),
+  'تقرير HTML يعرض كل حركة فرص بنوعها ولا يصف الإضافات وإعادة التفعيل كفقدان',
+);
+check(
+  exportDialog.includes('role="combobox"') &&
+    exportDialog.includes('role="listbox"') &&
+    exportDialog.includes("currentMatches = matches.slice(0, limit)") &&
+    exportDialog.includes("searchInput.setAttribute('aria-activedescendant'") &&
+    exportDialog.includes("window.matchMedia('(pointer: fine)')"),
+  'البحث التفاعلي يملك دلالات وصول ولا يتنقل إلى نتائج مخفية ولا يفتح لوحة مفاتيح الهاتف تلقائياً',
+);
+check(
+  exportDialog.includes('@media screen and (max-width: 960px)') &&
+    exportDialog.includes('@media screen and (max-width: 720px)') &&
+    exportDialog.includes('@media screen and (max-width: 420px)') &&
+    exportDialog.includes('grid-template-columns: minmax(96px, 38%) minmax(0, 1fr)') &&
+    exportDialog.includes('env(safe-area-inset-top, 0px)') &&
+    exportDialog.includes('min-height: 44px'),
+  'بطاقات HTML متجاوبة داخل وضع الشاشة وتستخدم حقولاً ضمن التدفق وsafe-area وأهداف لمس 44px',
+);
+check(
+  exportDialog.includes('const interactiveMode = Boolean(') &&
+    exportDialog.includes('options.studentDetails && options.studentList') &&
+    opportunitiesView.includes('const failedStudentIds = new Set<string>()') &&
+    opportunitiesView.includes('لم يتم إنشاء ملف ناقص؛ يرجى إعادة المحاولة'),
+  'التقرير لا يدخل وضع البحث بمدخلات ناقصة ولا ينشئ ملفاً جزئياً عند فشل تفاصيل طالب',
+);
 
 check(
-  packageJson.includes('test:opportunities-integrity'),
-  'يوجد أمر اختبار خاص بسلامة تبويبة إدارة الفرص داخل package.json',
+  packageJson.includes('test:opportunities-integrity') &&
+    packageJson.includes('test:opportunities-html-behavior'),
+  'توجد أوامر اختبارات السلامة والسلوك الخاصة بتقرير إدارة الفرص داخل package.json',
 );
 
 const failed = checks.filter((item) => !item.condition);

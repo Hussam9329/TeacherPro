@@ -234,8 +234,7 @@ must(
 must(
   exportDialog.includes(".tp-search-wrap") &&
     exportDialog.includes("max-width: 760px") &&
-    exportDialog.includes("margin-left: auto") &&
-    exportDialog.includes("margin-right: auto") &&
+    exportDialog.includes("margin: 6px auto 22px") &&
     exportDialog.includes("text-align: center") &&
     exportDialog.includes("clamp(16px, 2.2dvw, 18px)") &&
     !/(?:^|[^a-z])\d+(?:\.\d+)?vw\b/i.test(
@@ -244,8 +243,10 @@ must(
         exportDialog.indexOf("const DETAILS_MODAL_HTML"),
       ),
     ) &&
-    exportDialog.includes("@media (max-width: 640px)"),
-  "خانة البحث في ملف HTML وسطية ومرنة لشاشات الهاتف والتاب والحاسوب (بوحدات dvw الديناميكية)",
+    exportDialog.includes("@media screen and (max-width: 720px)") &&
+    exportDialog.includes("@media screen and (max-width: 420px)") &&
+    exportDialog.includes("env(safe-area-inset-top, 0px)"),
+  "خانة البحث في ملف HTML وسطية ومرنة ومعزولة للشاشة وتراعي safe-area",
 );
 
 must(

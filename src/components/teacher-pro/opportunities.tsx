@@ -820,6 +820,7 @@ export function OpportunitiesView() {
     const total = studentIds.length;
     onProgress(0, total);
     const result: StudentDetailsMap = {};
+    const failedStudentIds = new Set<string>();
     let completed = 0;
 
     const concurrency = 6;
@@ -835,9 +836,15 @@ export function OpportunitiesView() {
           const profile = await studentProfileLogApi.get(studentId);
           if (profile) {
             result[studentId] = buildStudentDetailsFromProfileLog(profile);
+          } else {
+            failedStudentIds.add(studentId);
+            console.error(
+              `[opportunities] profile-log returned no data for ${studentId}`,
+            );
           }
         } catch (error) {
           if (error instanceof Error && error.name === "AbortError") throw error;
+          failedStudentIds.add(studentId);
           console.error(
             `[opportunities] profile-log failed for ${studentId}:`,
             error,
@@ -855,6 +862,12 @@ export function OpportunitiesView() {
         () => worker(),
       ),
     );
+
+    if (failedStudentIds.size > 0) {
+      throw new Error(
+        `تعذر إكمال تقرير HTML لأن تفاصيل ${failedStudentIds.size} من أصل ${total} طالب لم تُحمّل من النظام. لم يتم إنشاء ملف ناقص؛ يرجى إعادة المحاولة.`,
+      );
+    }
 
     return result;
   };

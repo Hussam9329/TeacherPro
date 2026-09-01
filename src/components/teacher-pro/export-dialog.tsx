@@ -382,8 +382,22 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;");
 }
 
+/**
+ * Serializes values for an inline classic script without allowing user data to
+ * terminate the surrounding <script> element. The escaped code points are
+ * decoded by JavaScript back to their original characters at runtime.
+ */
+function serializeForInlineScript(value: unknown): string {
+  return (JSON.stringify(value) ?? "null")
+    .replaceAll("&", "\\u0026")
+    .replaceAll("<", "\\u003C")
+    .replaceAll(">", "\\u003E")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
+}
+
 function escapeJsString(value: string): string {
-  return JSON.stringify(String(value ?? ""));
+  return serializeForInlineScript(String(value ?? ""));
 }
 
 function sanitizeExportFileName(value: string): string {
@@ -444,241 +458,345 @@ function buildTableRows<T>(
 }
 
 const DETAILS_MODAL_CSS = `
+  .tp-search-report-body {
+    width: 100%; max-width: 100%;
+    padding-top: max(16px, env(safe-area-inset-top, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
+  }
+  .report-search-mode h1 {
+    font-size: 24px; font-size: clamp(20px, 3dvw, 26px);
+    overflow-wrap: anywhere;
+  }
   .tp-search-wrap {
     position: relative;
-    margin-bottom: 22px;
-    /* البحث في وسط الصفحة ومرن لكل الشاشات (هاتف/تاب/حاسوب):
-       عرض مرن مع سقف عرض معقول وتوسيط أفقي عبر الهوامش التلقائية
-       حتى لا يبدأ الحقل من جهة اليمين على الشاشات الواسعة. */
-    width: 100%;
-    max-width: 760px;
-    margin-left: auto;
-    margin-right: auto;
-    margin-top: 6px;
+    width: 100%; max-width: 760px;
+    margin: 6px auto 22px;
+  }
+  .tp-search-label {
+    display: block; margin: 0 0 7px;
+    color: #334155; font-size: 14px; font-weight: 900; text-align: center;
   }
   .tp-search-input {
     width: 100%;
-    /* سطرا fallback قبل clamp يضمنان مظهراً سليماً على المتصفحات القديمة
-       التي لا تفهم الوحدات الديناميكية (dvw). */
     padding: 14px 16px;
     padding: clamp(13px, 3dvw, 15px) clamp(14px, 3.5dvw, 18px);
-    font-size: 16px;
-    font-size: clamp(16px, 2.2dvw, 18px);
-    font-weight: 800;
-    font-family: inherit;
-    border: 2px solid #111827;
-    border-radius: 10px;
-    background: #fff;
-    color: #111827;
-    outline: none;
-    transition: border-color .15s;
-    /* نص الحقل ووسيطه في المنتصف فيبدو البحث وسطياً على كل الاتجاهات. */
+    font-size: 16px; font-size: clamp(16px, 2.2dvw, 18px);
+    font-weight: 800; font-family: inherit;
+    border: 2px solid #111827; border-radius: 10px;
+    background: #fff; color: #111827; outline: none;
+    transition: border-color .15s, box-shadow .15s;
     text-align: center;
   }
-  .tp-search-input:focus { border-color: #2563eb; }
-  .tp-search-input::placeholder { color: #9ca3af; font-weight: 700; }
+  .tp-search-input:focus {
+    border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.18);
+  }
+  .tp-search-input::placeholder { color: #64748b; font-weight: 700; opacity: 1; }
   .tp-search-hint {
-    margin-top: 8px;
-    font-size: 12.5px;
-    font-size: clamp(12.5px, 1.8dvw, 14px);
-    font-weight: 700;
-    color: #475569;
-    text-align: center;
+    margin: 8px 4px 0;
+    font-size: 12.5px; font-size: clamp(12.5px, 1.8dvw, 14px);
+    font-weight: 700; color: #475569; line-height: 1.65; text-align: center;
   }
   .tp-suggestions {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    z-index: 50;
-    background: #fff;
-    border: 1px solid #d1d5db;
-    border-top: 0;
-    border-radius: 0 0 10px 10px;
-    max-height: 360px;
-    overflow-y: auto;
-    box-shadow: 0 12px 24px rgba(15,23,42,.12);
-    display: none;
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+    display: none; max-height: 360px; max-height: min(360px, 52dvh);
+    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    background: #fff; border: 1px solid #d1d5db; border-top: 0;
+    border-radius: 0 0 10px 10px; box-shadow: 0 12px 24px rgba(15,23,42,.12);
   }
   .tp-suggestions.open { display: block; }
   .tp-suggestion {
-    padding: 12px 16px;
-    cursor: pointer;
+    min-height: 44px; padding: 12px 16px; cursor: pointer;
     border-bottom: 1px solid #f3f4f6;
-    font-size: 16px;
-    font-weight: 700;
-    color: #111827;
-    transition: background .1s;
+    font-size: 16px; font-weight: 700; color: #111827;
+    outline: none; transition: background .1s, box-shadow .1s;
   }
   .tp-suggestion:last-child { border-bottom: 0; }
-  .tp-suggestion:hover, .tp-suggestion.active {
-    background: #f9fafb;
+  .tp-suggestion:hover, .tp-suggestion.active, .tp-suggestion[aria-selected="true"] {
+    background: #eff6ff; box-shadow: inset -3px 0 #2563eb;
   }
   .tp-suggestion-name { font-weight: 900; }
   .tp-suggestion-meta {
-    font-size: 13px;
-    font-weight: 700;
-    color: #64748b;
-    margin-top: 3px;
+    margin-top: 3px; color: #64748b; font-size: 13px; font-weight: 700;
   }
   .tp-dismissed-badge {
-    display: inline-block;
-    margin-right: 8px;
-    padding: 2px 12px;
-    border-radius: 999px;
-    background: #fef2f2;
-    border: 1px solid #fecaca;
-    color: #b91c1c;
-    font-size: 12px;
-    font-weight: 900;
-    line-height: 1.7;
-    vertical-align: middle;
-    white-space: nowrap;
+    display: inline-block; margin-right: 8px; padding: 2px 12px;
+    border-radius: 999px; background: #fef2f2; border: 1px solid #fecaca;
+    color: #b91c1c; font-size: 12px; font-weight: 900; line-height: 1.7;
+    vertical-align: middle; white-space: nowrap;
   }
   .tp-empty-search {
-    padding: 15px 16px;
-    text-align: center;
-    color: #475569;
-    font-size: 14px;
-    font-weight: 700;
+    padding: 15px 16px; color: #475569;
+    font-size: 14px; font-weight: 700; text-align: center;
   }
+  .tp-mobile-field-label { display: none; }
+  .tp-mobile-field-value { min-width: 0; }
 
   .tp-student-card {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    display: none;
-    /* بطاقة الطالب بنفس محاذاة خانة البحث: وسطية ومرنة لكل الشاشات. */
-    width: 100%;
-    max-width: 760px;
-    margin-left: auto;
-    margin-right: auto;
+    display: none; width: 100%; max-width: 760px;
+    margin: 0 auto; padding: 0;
+    overflow-x: auto; overflow-y: hidden;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+    overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch;
   }
   .tp-student-card.visible { display: block; }
-  .tp-student-card table {
-    margin: 0;
-    border: 0;
-  }
+  .tp-student-card table { margin: 0; border: 0; }
   .tp-student-card th, .tp-student-card td {
-    border: 0;
-    border-bottom: 1px solid #f3f4f6;
+    border: 0; border-bottom: 1px solid #f3f4f6;
   }
   .tp-student-card tr:last-child th,
   .tp-student-card tr:last-child td { border-bottom: 0; }
 
   .tp-details-cell { text-align: center; white-space: nowrap; }
-  .tp-details-btn {
-    background: #111827; color: #fff; border: 0; border-radius: 7px;
-    padding: 9px 17px; cursor: pointer; font-size: 14px; font-weight: 800;
-    font-family: inherit;
+  .tp-details-btn, .tp-modal-close {
+    min-height: 44px; touch-action: manipulation;
+    background: #111827; color: #fff; border: 0; cursor: pointer;
+    font-family: inherit; font-weight: 800;
   }
-  .tp-details-btn:hover { background: #1f2937; }
+  .tp-details-btn { padding: 9px 17px; border-radius: 7px; font-size: 14px; }
+  .tp-modal-close { padding: 8px 15px; border-radius: 8px; font-size: 14px; }
+  .tp-details-btn:hover, .tp-modal-close:hover { background: #1f2937; }
+  .tp-details-btn:focus-visible, .tp-modal-close:focus-visible {
+    outline: 3px solid #60a5fa; outline-offset: 2px;
+  }
   .tp-modal-overlay {
-    position: fixed; inset: 0; background: rgba(15,23,42,.55);
+    position: fixed; inset: 0; z-index: 100;
     display: none; align-items: flex-start; justify-content: center;
-    z-index: 100; padding: 20px 16px; overflow: auto;
+    padding: 20px 16px; padding: clamp(8px, 2.5dvw, 20px);
+    overflow: hidden; overscroll-behavior: contain;
+    background: rgba(15,23,42,.55);
   }
   .tp-modal-overlay.open { display: flex; }
   .tp-modal {
-    background: #fff; border-radius: 14px; padding: 22px;
-    max-width: 1180px; width: 100%; margin: auto;
+    width: 100%; width: min(100%, 1180px); max-width: 1180px;
+    max-height: calc(100% - 40px);
+    max-height: calc(100dvh - clamp(16px, 5dvw, 40px));
+    margin: auto; padding: 22px; padding: clamp(14px, 2.4dvw, 22px);
+    padding-top: max(clamp(14px, 2.4dvw, 22px), env(safe-area-inset-top, 0px));
+    padding-right: max(clamp(14px, 2.4dvw, 22px), env(safe-area-inset-right, 0px));
+    padding-bottom: max(clamp(14px, 2.4dvw, 22px), env(safe-area-inset-bottom, 0px));
+    padding-left: max(clamp(14px, 2.4dvw, 22px), env(safe-area-inset-left, 0px));
+    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    background: #fff; border-radius: 14px;
     box-shadow: 0 24px 60px rgba(15,23,42,.25);
   }
+  .tp-modal:focus { outline: none; }
   .tp-modal-header {
+    position: sticky; top: 0; z-index: 2;
     display: flex; align-items: center; justify-content: space-between;
-    gap: 12px; margin-bottom: 18px; padding-bottom: 12px;
-    border-bottom: 2px solid #111827;
+    gap: 12px; margin: 0 0 18px; padding: 2px 0 12px;
+    border-bottom: 2px solid #111827; background: #fff;
   }
-  .tp-modal-header h2 { font-size: 21px; font-weight: 900; margin: 0; color: #111827; }
-  .tp-modal-close {
-    background: #111827; color: #fff; border: 0; border-radius: 8px;
-    padding: 8px 15px; cursor: pointer; font-weight: 800; font-size: 14px;
-    font-family: inherit;
+  .tp-modal-header h2 {
+    min-width: 0; margin: 0; color: #111827;
+    font-size: 21px; font-weight: 900; overflow-wrap: anywhere;
   }
-  .tp-modal-close:hover { background: #1f2937; }
-  .tp-details-section { margin-bottom: 20px; overflow-x: auto; }
+  .tp-details-section {
+    max-width: 100%; margin-bottom: 20px; overflow-x: auto;
+    overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch;
+  }
   .tp-details-section:last-child { margin-bottom: 0; }
   .tp-details-section h3 {
-    font-size: 17px; font-weight: 900; margin: 0 0 10px; color: #111827;
-    border-right: 4px solid #111827; padding-right: 9px;
+    margin: 0 0 10px; padding-right: 9px;
+    border-right: 4px solid #111827;
+    color: #111827; font-size: 17px; font-weight: 900;
   }
   .tp-details-table {
-    width: max-content;
-    min-width: 100%;
-    border-collapse: collapse;
-    table-layout: auto;
-    font-size: 14px;
-    font-weight: 700;
+    width: max-content; min-width: 100%;
+    border-collapse: collapse; table-layout: auto;
+    font-size: 14px; font-weight: 700;
   }
   .tp-details-table th, .tp-details-table td {
-    border: 1px solid #d1d5db;
-    padding: 8px 10px;
-    text-align: center;
-    vertical-align: middle;
-    line-height: 1.6;
-    white-space: normal;
-    word-break: normal;
-    overflow-wrap: normal;
-    hyphens: none;
+    padding: 8px 10px; border: 1px solid #d1d5db;
+    text-align: center; vertical-align: middle;
+    line-height: 1.6; white-space: normal;
+    word-break: normal; overflow-wrap: normal; hyphens: none;
   }
-  .tp-details-table th { background: #f3f4f6; font-weight: 900; color: #111827; }
+  .tp-details-table th { background: #f3f4f6; color: #111827; font-weight: 900; }
   .tp-details-table tr:nth-child(even) { background: #fafafa; }
   .tp-grades-table th:nth-child(1), .tp-grades-table td:nth-child(1) { min-width: 170px; }
-  .tp-logs-table th:nth-child(1), .tp-logs-table td:nth-child(1) { min-width: 300px; }
-  .tp-empty-row td { text-align: center !important; color: #64748b; padding: 16px !important; }
+  .tp-logs-table th:nth-child(2), .tp-logs-table td:nth-child(2) { min-width: 300px; }
+  .tp-empty-row td {
+    padding: 16px !important; color: #64748b; text-align: center !important;
+  }
+  .tp-error-row td { color: #b91c1c; background: #fef2f2; }
 
-  /* هواتف صغيرة: تقليص الحشوات ليأخذ البحث مساحة أوسع ويبقى مريحاً للمس. */
-  @media (max-width: 640px) {
-    .tp-search-input { padding: 13px 14px; }
-    .tp-suggestion { padding: 11px 14px; font-size: 15px; }
-    .tp-modal { padding: 16px; }
-    .tp-details-table th, .tp-details-table td { padding: 7px 8px; font-size: 13px; }
+  @media screen and (max-width: 960px) {
+    .tp-modal-header h2 { font-size: 17px; font-size: clamp(17px, 3dvw, 20px); }
+    .tp-details-table { font-size: 13px; }
+    .tp-details-table th, .tp-details-table td { padding: 7px 8px; }
+  }
+
+  @media screen and (max-width: 720px) {
+    .tp-search-report-body { padding: 0; background: #fff; }
+    .report-search-mode {
+      min-height: 100%; min-height: 100dvh;
+      padding: 12px; border: 0; border-radius: 0; box-shadow: none;
+      padding-top: max(12px, env(safe-area-inset-top, 0px));
+      padding-right: max(12px, env(safe-area-inset-right, 0px));
+      padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+      padding-left: max(12px, env(safe-area-inset-left, 0px));
+    }
+    .report-search-mode .report-header {
+      align-items: flex-start; margin-bottom: 12px; padding-bottom: 9px;
+    }
+    .tp-search-wrap { margin-bottom: 16px; }
+    .tp-search-label { font-size: 13px; }
+    .tp-search-input { padding: 13px 12px; font-size: 16px; border-radius: 9px; }
+    .tp-suggestions { max-height: 320px; max-height: min(320px, 48dvh); }
+    .tp-suggestion { padding: 11px 12px; font-size: 15px; }
+    .tp-suggestion-meta { font-size: 12px; line-height: 1.6; }
+
+    .tp-student-card { overflow: visible; border: 0; background: transparent; }
+    .tp-student-card table,
+    .tp-student-card tbody,
+    .tp-student-card tr { display: block; width: 100%; min-width: 0; }
+    .tp-student-card thead,
+    .tp-details-table thead {
+      position: absolute; width: 1px; height: 1px;
+      margin: -1px; padding: 0; overflow: hidden;
+      clip: rect(0, 0, 0, 0); clip-path: inset(50%);
+      white-space: nowrap; border: 0;
+    }
+    .tp-student-card tr {
+      padding: 4px 12px; overflow: hidden;
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+      box-shadow: 0 5px 16px rgba(15,23,42,.05);
+    }
+    .tp-student-card td,
+    .tp-details-table tr:not(.tp-empty-row) td {
+      display: grid; grid-template-columns: minmax(96px, 38%) minmax(0, 1fr);
+      align-items: start; gap: 10px; width: 100%; min-width: 0 !important;
+      min-height: 44px; padding: 10px 4px;
+      border: 0; border-bottom: 1px solid #eef2f7;
+      text-align: right; white-space: normal; overflow-wrap: anywhere;
+    }
+    .tp-student-card td:last-child,
+    .tp-details-table tr:not(.tp-empty-row) td:last-child { border-bottom: 0; }
+    .tp-mobile-field-label {
+      display: block; min-width: 0;
+      color: #475569; font-size: 12px; font-weight: 900;
+      line-height: 1.6; text-align: right; overflow-wrap: anywhere;
+    }
+    .tp-mobile-field-value {
+      display: block; min-width: 0;
+      line-height: 1.65; text-align: right; overflow-wrap: anywhere;
+    }
+    .tp-details-cell { white-space: normal; }
+    .tp-details-cell .tp-mobile-field-value { width: 100%; }
+    .tp-details-btn { width: 100%; min-height: 44px; padding: 10px 12px; }
+
+    .tp-modal-overlay { padding: 0; align-items: stretch; }
+    .tp-modal {
+      width: 100%; max-width: none;
+      min-height: 100%; max-height: 100%;
+      min-height: 100dvh; max-height: 100dvh;
+      margin: 0; padding: 12px; border-radius: 0; box-shadow: none;
+      padding-top: max(12px, env(safe-area-inset-top, 0px));
+      padding-right: max(12px, env(safe-area-inset-right, 0px));
+      padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+      padding-left: max(12px, env(safe-area-inset-left, 0px));
+    }
+    .tp-modal-header { gap: 8px; margin-bottom: 14px; padding: 4px 0 10px; }
+    .tp-modal-header h2 { line-height: 1.55; }
+    .tp-modal-close { flex: 0 0 auto; min-height: 44px; padding: 8px 12px; }
+    .tp-dismissed-badge { margin-right: 5px; padding-inline: 8px; }
+    .tp-details-section { margin-bottom: 18px; overflow: visible; }
+    .tp-details-section h3 { font-size: 15px; line-height: 1.6; }
+
+    .tp-details-table { display: block; width: 100%; min-width: 0; background: transparent; }
+    .tp-details-table tbody { display: grid; gap: 10px; width: 100%; }
+    .tp-details-table tr:not(.tp-empty-row) {
+      display: block; width: 100%; min-width: 0;
+      padding: 4px 10px; overflow: hidden;
+      background: #fff !important; border: 1px solid #e5e7eb; border-radius: 12px;
+      box-shadow: 0 3px 12px rgba(15,23,42,.04);
+    }
+    .tp-details-table tr:not(.tp-empty-row) td {
+      font-size: 13px; line-height: 1.65;
+    }
+    .tp-details-table .tp-empty-row { display: block; width: 100%; }
+    .tp-details-table .tp-empty-row td {
+      display: block; width: 100%;
+      padding: 14px !important; border: 1px dashed #d1d5db; border-radius: 10px;
+      background: #f8fafc; text-align: center !important;
+    }
+    .tp-details-table .tp-error-row td { background: #fef2f2; border-color: #fecaca; }
+  }
+
+  @media screen and (max-width: 420px) {
+    .report-search-mode {
+      padding: 10px;
+      padding-top: max(10px, env(safe-area-inset-top, 0px));
+      padding-right: max(10px, env(safe-area-inset-right, 0px));
+      padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+      padding-left: max(10px, env(safe-area-inset-left, 0px));
+    }
+    .tp-search-input { padding-inline: 10px; }
+    .tp-student-card td,
+    .tp-details-table tr:not(.tp-empty-row) td {
+      grid-template-columns: minmax(88px, 40%) minmax(0, 1fr); gap: 8px;
+    }
+    .tp-modal {
+      padding: 10px;
+      padding-top: max(10px, env(safe-area-inset-top, 0px));
+      padding-right: max(10px, env(safe-area-inset-right, 0px));
+      padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+      padding-left: max(10px, env(safe-area-inset-left, 0px));
+    }
+    .tp-modal-close { font-size: 13px; padding-inline: 10px; }
+  }
+
+  @media screen and (max-height: 520px) and (orientation: landscape) {
+    .tp-suggestions { max-height: 180px; max-height: min(180px, 42dvh); }
+    .tp-modal-header { margin-bottom: 10px; }
   }
 `;
 
 const DETAILS_MODAL_HTML = `
 <div class="tp-search-wrap">
-  <input type="text" id="tpStudentSearch" class="tp-search-input" autocomplete="off" placeholder="اكتب اسم الطالب الثنائي فما فوق (مثال: محمد علي)">
-  <div id="tpSuggestions" class="tp-suggestions"></div>
-  <p class="tp-search-hint" id="tpSearchHint">اكتب كلمتين على الأقل (الاسم واسم الأب) لعرض قائمة الطلاب المطابقين.</p>
+  <label class="tp-search-label" for="tpStudentSearch">البحث عن طالب داخل التقرير</label>
+  <input type="text" id="tpStudentSearch" class="tp-search-input" autocomplete="off" placeholder="اكتب اسم الطالب الثنائي فما فوق (مثال: محمد علي)" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tpSuggestions" aria-describedby="tpSearchHint">
+  <div id="tpSuggestions" class="tp-suggestions" role="listbox" aria-label="الطلاب المطابقون"></div>
+  <p class="tp-search-hint" id="tpSearchHint" role="status" aria-live="polite">اكتب كلمتين على الأقل (الاسم واسم الأب) لعرض قائمة الطلاب المطابقين.</p>
 </div>
 
-<div id="tpStudentCard" class="tp-student-card"></div>
+<div id="tpStudentCard" class="tp-student-card" aria-live="polite"></div>
 
-<div id="tpDetailsModal" class="tp-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="tpModalTitle">
-  <div class="tp-modal">
+<div id="tpDetailsModal" class="tp-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="tpModalTitle" aria-hidden="true">
+  <div class="tp-modal" role="document" tabindex="-1">
     <div class="tp-modal-header">
       <h2 id="tpModalTitle"><span id="tpModalTitleText">تفاصيل الطالب</span> <span class="tp-dismissed-badge" id="tpModalDismissedBadge" style="display:none">مفصول</span></h2>
       <button type="button" class="tp-modal-close" id="tpModalClose">إغلاق</button>
     </div>
     <div class="tp-details-section">
       <h3 id="tpGradesSectionTitle">كل الامتحانات</h3>
-      <table class="tp-details-table tp-grades-table">
+      <table class="tp-details-table tp-grades-table" role="table" aria-label="درجات الطالب">
         <thead>
-          <tr>
-            <th>الامتحان</th>
-            <th>النوع</th>
-            <th>التاريخ</th>
-            <th>الدرجة</th>
-            <th>الامتحان من</th>
-            <th>الحالة</th>
+          <tr role="row">
+            <th scope="col" role="columnheader">الامتحان</th>
+            <th scope="col" role="columnheader">النوع</th>
+            <th scope="col" role="columnheader">التاريخ</th>
+            <th scope="col" role="columnheader">الدرجة</th>
+            <th scope="col" role="columnheader">الامتحان من</th>
+            <th scope="col" role="columnheader">الحالة</th>
           </tr>
         </thead>
         <tbody id="tpGradesBody"></tbody>
       </table>
     </div>
     <div class="tp-details-section" id="tpLogsSection">
-      <h3>سجل فقدان الفرص</h3>
-      <table class="tp-details-table tp-logs-table">
+      <h3>سجل حركات الفرص</h3>
+      <table class="tp-details-table tp-logs-table" role="table" aria-label="سجل حركات الفرص">
         <thead>
-          <tr>
-            <th>السبب</th>
-            <th>عدد الفرص المفقودة</th>
-            <th>تاريخ الفقدان</th>
-            <th>الامتحان</th>
+          <tr role="row">
+            <th scope="col" role="columnheader">نوع الحركة</th>
+            <th scope="col" role="columnheader">السبب</th>
+            <th scope="col" role="columnheader">العدد المسجل</th>
+            <th scope="col" role="columnheader">تاريخ الحركة</th>
+            <th scope="col" role="columnheader">الامتحان</th>
           </tr>
         </thead>
         <tbody id="tpLogsBody"></tbody>
@@ -707,6 +825,9 @@ const DETAILS_MODAL_JS = `
 
   var activeIndex = -1;
   var currentMatches = [];
+  var debounceTimer = null;
+  var previouslyFocusedElement = null;
+  var previousBodyOverflow = '';
 
   function esc(s){
     if (s === null || s === undefined) return '';
@@ -724,6 +845,14 @@ const DETAILS_MODAL_JS = `
     try {
       return d.toLocaleDateString('ar-IQ-u-nu-latn', {day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Baghdad'});
     } catch(e){ return esc(s); }
+  }
+
+  function mobileCell(label, valueHtml, extraClass){
+    var className = extraClass ? ' class="' + extraClass + '"' : '';
+    return '<td role="cell" data-label="' + esc(label) + '"' + className + '>'
+      + '<span class="tp-mobile-field-label" aria-hidden="true">' + esc(label) + '</span>'
+      + '<span class="tp-mobile-field-value">' + valueHtml + '</span>'
+      + '</td>';
   }
 
   // شارة «مفصول» بجانب اسم الطالب المفصول — نفس معنى الشارة الحمراء داخل النظام.
@@ -778,49 +907,59 @@ const DETAILS_MODAL_JS = `
   }
 
   function renderSuggestions(matches){
-    currentMatches = matches;
+    var totalMatches = matches.length;
+    var limit = Math.min(totalMatches, 50);
+    currentMatches = matches.slice(0, limit);
     activeIndex = -1;
-    if (matches.length === 0) {
-      suggestionsEl.innerHTML = '<div class="tp-empty-search">لا يوجد طلاب مطابقون لهذا البحث</div>';
+    searchInput.removeAttribute('aria-activedescendant');
+    if (totalMatches === 0) {
+      suggestionsEl.innerHTML = '<div class="tp-empty-search" role="presentation" aria-hidden="true">لا يوجد طلاب مطابقون لهذا البحث</div>';
       suggestionsEl.classList.add('open');
+      searchInput.setAttribute('aria-expanded', 'true');
+      hintEl.textContent = 'لا يوجد طلاب مطابقون لهذا البحث.';
       return;
     }
-    var limit = Math.min(matches.length, 50);
     var html = '';
     for (var i = 0; i < limit; i++) {
-      var s = matches[i];
-      html += '<div class="tp-suggestion" data-idx="' + i + '">'
+      var s = currentMatches[i];
+      html += '<div class="tp-suggestion" id="tpSuggestion-' + i + '" role="option" aria-selected="false" data-idx="' + i + '">'
         + '<div class="tp-suggestion-name">' + esc(s.name) + ' ' + dismissedBadgeHtml(s) + '</div>'
         + '<div class="tp-suggestion-meta">الدورة: ' + esc(s.courseName || '—') + ' · الفرص: ' + fmtNum(s.opportunities) + (isDismissed(s) ? ' · الطالب مفصول' : '') + '</div>'
         + '</div>';
     }
-    if (matches.length > limit) {
-      html += '<div class="tp-empty-search">و' + (matches.length - limit) + ' طالب آخر — ضيّق البحث أكثر</div>';
+    if (totalMatches > limit) {
+      html += '<div class="tp-empty-search" role="presentation" aria-hidden="true">و' + (totalMatches - limit) + ' طالب آخر — ضيّق البحث أكثر</div>';
+      hintEl.textContent = 'تم عرض أول ' + limit + ' طالب من أصل ' + totalMatches + ' نتيجة؛ ضيّق البحث لنتائج أدق.';
+    } else {
+      hintEl.textContent = 'تم العثور على ' + totalMatches + ' طالب مطابق.';
     }
     suggestionsEl.innerHTML = html;
     suggestionsEl.classList.add('open');
+    searchInput.setAttribute('aria-expanded', 'true');
   }
 
   function hideSuggestions(){
     suggestionsEl.classList.remove('open');
     currentMatches = [];
     activeIndex = -1;
+    searchInput.setAttribute('aria-expanded', 'false');
+    searchInput.removeAttribute('aria-activedescendant');
   }
 
   function renderStudentCard(student){
     var id = esc(student.id);
-    var html = '<table>'
-      + '<thead><tr>'
-      + '<th>الطالب</th>'
-      + '<th>الدورة</th>'
-      + '<th>عدد الفرص</th>'
-      + '<th>تفاصيل الطالب</th>'
+    var html = '<table class="tp-student-summary-table" role="table" aria-label="ملخص الطالب المختار">'
+      + '<thead><tr role="row">'
+      + '<th scope="col" role="columnheader">الطالب</th>'
+      + '<th scope="col" role="columnheader">الدورة</th>'
+      + '<th scope="col" role="columnheader">عدد الفرص</th>'
+      + '<th scope="col" role="columnheader">تفاصيل الطالب</th>'
       + '</tr></thead>'
-      + '<tbody><tr>'
-      + '<td class="tp-student-name-cell">' + esc(student.name) + ' ' + dismissedBadgeHtml(student) + '</td>'
-      + '<td>' + esc(student.courseName || '—') + '</td>'
-      + '<td>' + fmtNum(student.opportunities) + '</td>'
-      + '<td class="tp-details-cell"><button type="button" class="tp-details-btn" data-sid="' + id + '">إظهار التفاصيل</button></td>'
+      + '<tbody><tr role="row">'
+      + mobileCell('الطالب', esc(student.name) + ' ' + dismissedBadgeHtml(student), 'tp-student-name-cell')
+      + mobileCell('الدورة', esc(student.courseName || '—'))
+      + mobileCell('عدد الفرص', fmtNum(student.opportunities))
+      + mobileCell('تفاصيل الطالب', '<button type="button" class="tp-details-btn" data-sid="' + id + '">إظهار التفاصيل</button>', 'tp-details-cell')
       + '</tr></tbody>'
       + '</table>';
     cardEl.innerHTML = html;
@@ -828,6 +967,7 @@ const DETAILS_MODAL_JS = `
   }
 
   function selectStudent(student){
+    clearTimeout(debounceTimer);
     searchInput.value = student.name;
     hideSuggestions();
     hintEl.textContent = 'تم اختيار: ' + student.name + (isDismissed(student) ? ' — الطالب مفصول' : '') + ' — اضغط زر «إظهار التفاصيل» لعرض درجاته وسجل فرصه.';
@@ -888,15 +1028,18 @@ const DETAILS_MODAL_JS = `
         : 'كل الامتحانات';
     }
 
-    if (data && data.grades && data.grades.length > 0) {
+    if (!data) {
+      gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row"><td colspan="6">تعذر العثور على تفاصيل هذا الطالب داخل الملف. أعد إنشاء التقرير من النظام.</td></tr>';
+      logsSection.style.display = 'none';
+    } else if (data.grades && data.grades.length > 0) {
       gradesBody.innerHTML = data.grades.map(function(g){
-        return '<tr>'
-          + '<td>' + esc(g.examName) + '</td>'
-          + '<td>' + esc(g.examType) + '</td>'
-          + '<td>' + fmtDate(g.examDate) + '</td>'
-          + '<td>' + fmtNum(g.score) + '</td>'
-          + '<td>' + fmtNum(g.fullMark) + '</td>'
-          + '<td>' + esc(g.status) + '</td>'
+        return '<tr role="row">'
+          + mobileCell('الامتحان', esc(g.examName))
+          + mobileCell('النوع', esc(g.examType))
+          + mobileCell('التاريخ', fmtDate(g.examDate))
+          + mobileCell('الدرجة', fmtNum(g.score))
+          + mobileCell('الامتحان من', fmtNum(g.fullMark))
+          + mobileCell('الحالة', esc(g.status))
           + '</tr>';
       }).join('');
     } else {
@@ -907,36 +1050,49 @@ const DETAILS_MODAL_JS = `
         + '</td></tr>';
     }
 
-    var lossLogs = (data && data.opportunityLogs || []).filter(function(l){
+    var movementLogs = (data && data.opportunityLogs || []).filter(function(l){
       return l.reason !== null && l.reason !== '';
     });
-    if (lossLogs.length > 0) {
+    if (data && movementLogs.length > 0) {
       logsSection.style.display = '';
-      logsBody.innerHTML = lossLogs.map(function(l){
-        return '<tr>'
-          + '<td>' + esc(l.reason) + '</td>'
-          + '<td>' + fmtNum(l.amount) + '</td>'
-          + '<td>' + fmtDate(l.date) + '</td>'
-          + '<td>' + esc(l.examName) + '</td>'
+      logsBody.innerHTML = movementLogs.map(function(l){
+        return '<tr role="row">'
+          + mobileCell('نوع الحركة', esc(l.action || '—'))
+          + mobileCell('السبب', esc(l.reason))
+          + mobileCell('العدد المسجل', fmtNum(l.amount))
+          + mobileCell('تاريخ الحركة', fmtDate(l.date))
+          + mobileCell('الامتحان', esc(l.examName || '—'))
           + '</tr>';
       }).join('');
     } else {
       logsSection.style.display = 'none';
     }
 
+    previouslyFocusedElement = document.activeElement;
+    previousBodyOverflow = document.body.style.overflow;
+    overlay.setAttribute('aria-hidden', 'false');
     overlay.classList.add('open');
     document.body.style.overflow = 'hidden';
+    setTimeout(function(){ try { closeBtn.focus({ preventScroll: true }); } catch(e){ closeBtn.focus(); } }, 0);
   }
 
   function closeDetails(){
+    if (!overlay.classList.contains('open')) return;
     overlay.classList.remove('open');
-    document.body.style.overflow = '';
+    document.body.style.overflow = previousBodyOverflow;
+    if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+      try { previouslyFocusedElement.focus({ preventScroll: true }); } catch(e){ previouslyFocusedElement.focus(); }
+    }
+    overlay.setAttribute('aria-hidden', 'true');
+    previouslyFocusedElement = null;
   }
 
   // البحث أثناء الكتابة (debounce خفيف).
-  var debounceTimer = null;
   searchInput.addEventListener('input', function(){
     clearTimeout(debounceTimer);
+    cardEl.classList.remove('visible');
+    cardEl.innerHTML = '';
+    hideSuggestions();
     debounceTimer = setTimeout(handleSearchInput, 150);
   });
 
@@ -960,6 +1116,8 @@ const DETAILS_MODAL_JS = `
       }
     } else if (e.key === 'Escape') {
       hideSuggestions();
+    } else if (e.key === 'Tab') {
+      hideSuggestions();
     }
   });
 
@@ -967,9 +1125,13 @@ const DETAILS_MODAL_JS = `
     var items = suggestionsEl.querySelectorAll('.tp-suggestion');
     items.forEach(function(item, i){
       item.classList.toggle('active', i === activeIndex);
+      item.setAttribute('aria-selected', i === activeIndex ? 'true' : 'false');
     });
     if (activeIndex >= 0 && items[activeIndex]) {
+      searchInput.setAttribute('aria-activedescendant', items[activeIndex].id);
       items[activeIndex].scrollIntoView({ block: 'nearest' });
+    } else {
+      searchInput.removeAttribute('aria-activedescendant');
     }
   }
 
@@ -1001,7 +1163,8 @@ const DETAILS_MODAL_JS = `
         var firstCell = row.querySelector('td:not(.tp-details-cell)');
         if (firstCell) {
           // اسم الطالب فقط بدون نص شارة «مفصول» — الشارة تُعرض في رأس النافذة.
-          var labelClone = firstCell.cloneNode(true);
+          var valueCell = firstCell.querySelector('.tp-mobile-field-value') || firstCell;
+          var labelClone = valueCell.cloneNode(true);
           var badgeInLabel = labelClone.querySelector('.tp-dismissed-badge');
           if (badgeInLabel && badgeInLabel.parentNode) badgeInLabel.parentNode.removeChild(badgeInLabel);
           label = labelClone.textContent.trim();
@@ -1015,12 +1178,36 @@ const DETAILS_MODAL_JS = `
   overlay.addEventListener('click', function(e){
     if (e.target === overlay) closeDetails();
   });
+  overlay.addEventListener('keydown', function(e){
+    if (e.key !== 'Tab' || !overlay.classList.contains('open')) return;
+    var focusable = Array.prototype.slice.call(
+      overlay.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])')
+    ).filter(function(el){ return el.offsetParent !== null; });
+    if (focusable.length === 0) {
+      e.preventDefault();
+      closeBtn.focus();
+      return;
+    }
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  });
   document.addEventListener('keydown', function(e){
     if (e.key === 'Escape' && overlay.classList.contains('open')) closeDetails();
   });
 
-  // ركّز على خانة البحث عند فتح الملف.
-  setTimeout(function(){ try { searchInput.focus(); } catch(e){} }, 100);
+  // على أجهزة المؤشر الدقيق فقط؛ لا نفتح لوحة مفاتيح الهاتف فور فتح الملف.
+  setTimeout(function(){
+    try {
+      if (window.matchMedia && window.matchMedia('(pointer: fine)').matches) {
+        searchInput.focus({ preventScroll: true });
+      }
+    } catch(e){}
+  }, 100);
 })();
 </script>
 `;
@@ -1046,31 +1233,38 @@ export function buildHtml<T>(
 ): string {
   const documentTitle = options.documentTitle || title;
   const safeUrlName = options.safeUrlName || sanitizeExportFileName(documentTitle);
-  const hasDetails = Boolean(options.studentDetails);
-  // عند تمرير studentList يصبح الملف في وضع "بحث + اختيار طالب واحد" بدل
-  // عرض كل الطلاب دفعة واحدة. لا نعرض الجدول الكامل ولا العدد الكلي.
-  const searchMode = Boolean(options.studentList && options.studentList.length > 0);
+  const printableHistoryPath = `/${encodeURIComponent(safeUrlName)}.pdf`;
+  // لا ندخل وضع البحث التفاعلي إلا عندما تتوفر القائمة والتفاصيل معاً.
+  // أي تركيبة ناقصة ترجع تلقائياً إلى التقرير الجدولي العادي بدلاً من ملف فارغ.
+  const interactiveMode = Boolean(
+    options.studentDetails && options.studentList && options.studentList.length > 0,
+  );
+  const bodyClassName = interactiveMode ? "tp-search-report-body" : "";
+  const reportClassName = interactiveMode ? "report report-search-mode" : "report";
+  const viewportMeta = interactiveMode
+    ? '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">'
+    : "";
 
   const printableToolbar = options.printable
     ? `<div class="toolbar"><button onclick="window.print()">طباعة / حفظ PDF</button><button onclick="window.close()">إغلاق</button></div>`
     : "";
   const printableScript = options.printable
-    ? `<script>document.title=${escapeJsString(documentTitle)};try{window.history.replaceState(null,document.title,'/${encodeURIComponent(safeUrlName)}.pdf');}catch(e){}</script>`
+    ? `<script>document.title=${escapeJsString(documentTitle)};try{window.history.replaceState(null,document.title,${escapeJsString(printableHistoryPath)});}catch(e){}</script>`
     : "";
 
-  const detailsDataScript = hasDetails
-    ? `<script>window.STUDENT_DETAILS=${JSON.stringify(options.studentDetails || {})};</script>`
+  const detailsDataScript = interactiveMode
+    ? `<script>window.STUDENT_DETAILS=${serializeForInlineScript(options.studentDetails || {})};</script>`
     : "";
-  const studentListScript = searchMode
-    ? `<script>window.STUDENT_LIST=${JSON.stringify(options.studentList || [])};</script>`
+  const studentListScript = interactiveMode
+    ? `<script>window.STUDENT_LIST=${serializeForInlineScript(options.studentList || [])};</script>`
     : "";
-  const detailsModalHtml = hasDetails ? DETAILS_MODAL_HTML : "";
-  const detailsModalJs = hasDetails ? DETAILS_MODAL_JS : "";
-  const detailsCss = hasDetails ? DETAILS_MODAL_CSS : "";
+  const detailsModalHtml = interactiveMode ? DETAILS_MODAL_HTML : "";
+  const detailsModalJs = interactiveMode ? DETAILS_MODAL_JS : "";
+  const detailsCss = interactiveMode ? DETAILS_MODAL_CSS : "";
 
   // في وضع البحث لا نعرض الجدول الكامل ولا «عدد الصفوف» — فقط خانة البحث (داخل detailsModalHtml)
   // والجدول يُعرض ديناميكياً عند اختيار طالب.
-  const mainTableHtml = searchMode
+  const mainTableHtml = interactiveMode
     ? ""
     : `<div class="table-wrap"><table><thead><tr>${columns
         .map((col) => `<th>${escapeHtml(humanizeTeacherProText(col.label))}</th>`)
@@ -1078,11 +1272,11 @@ export function buildHtml<T>(
           hasDetails: false,
           getRowId: options.getRowId,
         })}</tbody></table></div>`;
-  const metaLine = searchMode
+  const metaLine = interactiveMode
     ? ""
     : `<div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}</div>`;
 
-  return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${escapeHtml(humanizeTeacherProText(documentTitle))}</title><style>
+  return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">${viewportMeta}<title>${escapeHtml(humanizeTeacherProText(documentTitle))}</title><style>
   @page { size: A4 ${options.orientation || "portrait"}; margin: 10mm; }
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; }
@@ -1137,7 +1331,7 @@ export function buildHtml<T>(
     th, td { padding: 5px 6px; }
     .tp-modal-overlay, .tp-suggestions { display: none !important; }
   }
-  </style>${printableScript}</head><body>${printableToolbar}<main class="report"><header class="report-header"><h1>${escapeHtml(humanizeTeacherProText(title))}</h1>${metaLine}</header>${mainTableHtml}${detailsModalHtml}${studentListScript}${detailsDataScript}${detailsModalJs}</main></body></html>`;
+  </style>${printableScript}</head><body class="${bodyClassName}">${printableToolbar}<main class="${reportClassName}"><header class="report-header"><h1>${escapeHtml(humanizeTeacherProText(title))}</h1>${metaLine}</header>${mainTableHtml}${detailsModalHtml}${studentListScript}${detailsDataScript}${detailsModalJs}</main></body></html>`;
 }
 
 function downloadBlob(content: BlobPart | Blob, fileName: string, mime: string) {
