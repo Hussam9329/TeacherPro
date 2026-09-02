@@ -35,9 +35,14 @@ import {
   type StudentProfileCardKey,
   type StudentProfileGradeFilter,
 } from "@/lib/student-profile-state";
+import {
+  displayOpportunityAction,
+  displayOpportunityReason,
+  isRetiredFollowupNote,
+} from "@/lib/retired-followup-compat";
 
 type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "archives" | "timeline";
-type StudentProfileAnchor = "calls" | "leaves" | "pledges" | "notes" | null;
+type StudentProfileAnchor = "calls" | "leaves" | "notes" | null;
 
 type StudentProfileDialogProps = {
   student: Student | null;
@@ -290,7 +295,7 @@ function gradeLogDetailsWithAccounting(
   const relatedLogs = relatedOpportunityLogsForGrade(grade, exam, opportunityLogs);
   const logSummary = relatedLogs.length
     ? ` | سجل الفرص المرتبط: ${relatedLogs
-        .map((log) => `${log.action}${log.amount ? ` ${log.amount}` : ""}`)
+        .map((log) => `${displayOpportunityAction(log.action)}${log.amount ? ` ${log.amount}` : ""}`)
         .join("، ")}`
     : " | لا يوجد سجل خصم مرتبط بهذا الامتحان";
   return `${base} | الأثر الأكاديمي: ${gradeImpactLabel(kind, grade, exam)}${logSummary}`;
@@ -326,7 +331,7 @@ function buildOpportunityTraceRows(logs: OpportunityLog[]): OpportunityTraceRow[
       return {
         log,
         deltaText,
-        details: `${humanizeProfileText(log.reason) || "—"} | أثر الحركة المسجل: ${deltaText}`,
+        details: `${humanizeProfileText(displayOpportunityReason(log.reason)) || "—"} | أثر الحركة المسجل: ${deltaText}`,
       };
     });
 }
@@ -491,12 +496,8 @@ export function StudentProfileDialog({
     () => allStudentNotes.filter((note) => note.kind === "إجراء"),
     [allStudentNotes],
   );
-  const studentPledges = useMemo(
-    () => allStudentNotes.filter((note) => note.kind === "تعهد ولي الأمر"),
-    [allStudentNotes],
-  );
   const studentGeneralNotes = useMemo(
-    () => allStudentNotes.filter((note) => note.kind !== "تعهد ولي الأمر" && note.kind !== "إجراء"),
+    () => allStudentNotes.filter((note) => !isRetiredFollowupNote(note) && note.kind !== "إجراء"),
     [allStudentNotes],
   );
 
@@ -531,8 +532,8 @@ export function StudentProfileDialog({
       return {
         id: `opp-${log.id}`,
         date: log.date,
-        title: `${log.action}${log.amount ? ` ${log.amount}` : ""}`,
-        details: trace?.details || log.reason || "—",
+        title: `${displayOpportunityAction(log.action)}${log.amount ? ` ${log.amount}` : ""}`,
+        details: trace?.details || displayOpportunityReason(log.reason) || "—",
         tone: opportunityActionTone(log.action),
       };
     });
@@ -568,8 +569,8 @@ export function StudentProfileDialog({
           id: `opp-${log.id}`,
           date: log.date,
           source: "الفرص",
-          title: `${log.action}${log.amount ? ` ${log.amount}` : ""}`,
-          details: trace?.details || log.reason || "—",
+          title: `${displayOpportunityAction(log.action)}${log.amount ? ` ${log.amount}` : ""}`,
+          details: trace?.details || displayOpportunityReason(log.reason) || "—",
           tone: opportunityActionTone(log.action),
         };
       }),
@@ -589,19 +590,16 @@ export function StudentProfileDialog({
         details: callLogDetails(call, profileExamById.get(call.examId)),
         tone: call.completed ? "success" as const : "secondary" as const,
       })),
-      ...allStudentNotes.map((note) => {
-        const linkedDismissal = note.kind === "تعهد ولي الأمر" && (note.dismissalKey || note.sourceId);
-        return {
+      ...allStudentNotes
+        .filter((note) => !isRetiredFollowupNote(note))
+        .map((note) => ({
           id: `note-${note.id}`,
           date: note.date,
           source: "الملاحظات",
           title: note.kind || "ملاحظة",
-          details: linkedDismissal
-            ? `${note.text} | مرتبط بالفصل: ${note.dismissalReason || "بدون سبب"}${note.dismissalDate ? ` - ${note.dismissalDate}` : ""}`
-            : note.text,
-          tone: note.kind === "تعهد ولي الأمر" ? "success" as const : note.kind === "إجراء" ? "secondary" as const : "info" as const,
-        };
-      }),
+          details: note.text,
+          tone: note.kind === "إجراء" ? "secondary" as const : "info" as const,
+        })),
       ...profileSystemLogs.map((log) => {
         const display = formatAuditLogDisplay(log, auditLabels);
         return {
@@ -831,7 +829,7 @@ export function StudentProfileDialog({
     profileStudent.activeChapter,
     activeChapterForCourse(profileStudent.courseId),
   );
-  // مصدر الفصل النشط الوحيد من الآن فصاعداً هو قاعدة البيانات (statsForStudent).
+  // مصدر الفصل النشط الوحيد من الآن فصاعداً هو بيانات النظام (statsForStudent).
   // عند عدم تحميل الإحصائيات بعد نعرض "جاري التحقق…"، وعند الفشل نعرض خطأ صريح.
   // لا نعد نستخدم الكاش المحلي (student.activeChapter أو activeChapterForCourse) كقيمة عرض.
   const activeChapterText = statsPending
@@ -844,13 +842,13 @@ export function StudentProfileDialog({
           ? `${activeChapter?.name || "الفصل النشط"} — سقف الفرص 0`
           : activeChapter?.name
             || (databaseStatsError
-              ? "تعذر التحقق من الفصل النشط من قاعدة البيانات"
+              ? "تعذر التحقق من الفصل النشط من النظام"
               : "لا يوجد فصل نشط");
   const profileStatValue = (value: number | undefined) => {
     if (statsPending) return "…";
     return value ?? "—";
   };
-  // رصيد الفرص مصدره الوحيد هو قاعدة البيانات (statsForStudent). عند عدم التحميل
+  // رصيد الفرص مصدره الوحيد هو بيانات النظام (statsForStudent). عند عدم التحميل
   // نعرض "…"، وعند الفشل نعرض "—" بدلاً من قراءة الكاش المحلي للطالب.
   const opportunityText = statsPending
     ? "…"
@@ -867,7 +865,6 @@ export function StudentProfileDialog({
   const addedCount = profileStatValue(statsForStudent?.addedMovements);
   const callsCount = profileStatValue(statsForStudent?.calls);
   const leavesCount = profileStatValue(statsForStudent?.leaves);
-  const pledgesCount = profileStatValue(statsForStudent?.pledges);
   const notesCount = profileStatValue(statsForStudent?.notes);
   const dismissalsCount = profileStatValue(statsForStudent?.dismissals);
   const reactivationsCount = profileStatValue(statsForStudent?.reactivations);
@@ -911,7 +908,6 @@ export function StudentProfileDialog({
     { key: "opportunities", label: "الخصومات/الفرص", value: opportunityText, hint: "الفرص والخصومات" },
     { key: "calls", label: "المكالمات", value: callsCount, hint: "متابعة واتصالات" },
     { key: "leaves", label: "الإجازات", value: leavesCount, hint: "إجازات امتحان/فترة" },
-    { key: "pledges", label: "التعهدات", value: pledgesCount, hint: "تعهدات ولي الأمر" },
     { key: "status-actions", label: "فصل/إعادة تفعيل", value: `${dismissalsCount}/${reactivationsCount}`, hint: "مسار حالة الطالب" },
     { key: "notes", label: "الملاحظات", value: notesCount, hint: "عرض ملاحظات الطالب" },
     { key: "archives", label: "الملفات السابقة", value: profileLogPending ? "…" : databaseEnrollmentArchives.length, hint: "أرشيف قراءة فقط قبل النقل أو إعادة البداية" },
@@ -925,7 +921,7 @@ export function StudentProfileDialog({
     "grades", "absences", "exams", "grace-grades", "no-discount-grades",
   ]);
   const followUpCardKeys = new Set<StudentProfileCardKey>([
-    "calls", "leaves", "pledges", "notes",
+    "calls", "leaves", "notes",
   ]);
   const cards = !sectionAccess
     ? allCards
@@ -1069,8 +1065,8 @@ export function StudentProfileDialog({
                   </div>
                 </div>
 
-                {/* بيانات الفصل: مصدرها الوحيد قاعدة البيانات. لا نعرض هذه البطاقة
-                    إلا بعد تحميل ملف الطالب من قاعدة البيانات، حتى لا نعرض حالة فصل
+                {/* بيانات الفصل: مصدرها الوحيد بيانات النظام. لا نعرض هذه البطاقة
+                    إلا بعد تحميل ملف الطالب من بيانات النظام، حتى لا نعرض حالة فصل
                     مخفية من الكاش المحلي. */}
                 {hasAuthoritativeProfile && profileStudent.status === "مفصول" && (
                   <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:rounded-3xl">
@@ -1080,7 +1076,7 @@ export function StudentProfileDialog({
                   </div>
                 )}
 
-                {/* سجل الخصومات الكامل — مصدره الوحيد قاعدة البيانات عبر
+                {/* سجل الخصومات الكامل — مصدره الوحيد بيانات النظام عبر
                     studentOpportunities (التي تعتمد على hasAuthoritativeProfile).
                     نعرض كل حركة خصم (تلقائي/يدوي/خصم) مرتبة من الأحدث للأقدم،
                     مع اسم الامتحان المرتبط وتاريخه ودرجة الطالب وحد الخصم والسبب. */}
@@ -1094,7 +1090,7 @@ export function StudentProfileDialog({
                     <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:rounded-3xl">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="font-black text-destructive">سجل الخصومات ({deductionLogs.length})</p>
-                        <span className="text-xs text-muted-foreground">مصدر البيانات: قاعدة البيانات</span>
+                        <span className="text-xs text-muted-foreground">مصدر البيانات: النظام</span>
                       </div>
                       <div className="mt-3 space-y-2">
                         {deductionLogs.map((log) => {
@@ -1205,7 +1201,7 @@ export function StudentProfileDialog({
                 <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3"><div className="rounded-2xl bg-primary/10 p-3 text-center"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-xs text-muted-foreground">فرص محفوظة</p></div><div className="rounded-2xl bg-red-500/10 p-3 text-center"><p className="text-xl font-black text-red-600 sm:text-2xl">{deductedCount}</p><p className="text-xs text-muted-foreground">حركات خصم</p></div><div className="rounded-2xl bg-emerald-500/10 p-3 text-center"><p className="text-xl font-black text-emerald-600 sm:text-2xl">{addedCount}</p><p className="text-xs text-muted-foreground">حركات إضافة/تعديل</p></div></div>
                 <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                   {opportunityTraceRows.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="لا توجد حركات فرص" /> : [...opportunityTraceRows].reverse().map((row) => (
-                    <div key={row.log.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center"><span>{formatAppDate(row.log.date)}</span><Badge className="w-fit" variant={row.log.action === "خصم" || row.log.action === "خصم تلقائي" ? "destructive" : "default"}>{row.log.action} {row.log.amount}</Badge><span className="break-words text-muted-foreground">{row.details}</span></div>
+                    <div key={row.log.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center"><span>{formatAppDate(row.log.date)}</span><Badge className="w-fit" variant={row.log.action === "خصم" || row.log.action === "خصم تلقائي" ? "destructive" : "default"}>{displayOpportunityAction(row.log.action)} {row.log.amount}</Badge><span className="break-words text-muted-foreground">{row.details}</span></div>
                   ))}
                 </div>
               </div>
@@ -1248,24 +1244,6 @@ export function StudentProfileDialog({
                         </div>
                       );
                     })}
-                  </div>
-                </div>
-
-                <div ref={(node) => { sectionRefs.current.pledges = node; }} className="scroll-mt-4 rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
-                  <h4 className="mb-4 text-base font-black sm:text-lg">تعهدات ولي الأمر</h4>
-                  <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
-                    {studentPledges.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="لا توجد تعهدات لهذا الطالب" /> : studentPledges.map((note) => (
-                      <div key={note.id} className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <Badge variant="outline">تعهد</Badge>
-                          <span className="text-xs text-muted-foreground">{formatAppDate(note.date)}</span>
-                        </div>
-                        <p className="mt-2 break-words">{note.text}</p>
-                        {note.dismissalReason && (
-                          <p className="mt-2 break-words text-xs text-muted-foreground">مرتبط بالفصل: {note.dismissalReason}</p>
-                        )}
-                      </div>
-                    ))}
                   </div>
                 </div>
 
@@ -1318,7 +1296,9 @@ export function StudentProfileDialog({
                     const oldOpportunities = archiveSnapshotList(archive, "opportunityLogs");
                     const oldLeaves = archiveSnapshotList(archive, "studentLeaves");
                     const oldCalls = archiveSnapshotList(archive, "studentCalls");
-                    const oldNotes = archiveSnapshotList(archive, "studentNotes");
+                    const oldNotes = archiveSnapshotList(archive, "studentNotes").filter(
+                      (note) => !isRetiredFollowupNote(note),
+                    );
                     const oldCorrectionSheets = archiveSnapshotList(archive, "correctionSheets");
                     const oldTelegramSubmissions = archiveSnapshotList(archive, "telegramExamSubmissions");
                     const oldLeaveGradeBackups = archiveSnapshotList(archive, "studentLeaveGradeBackups");
@@ -1370,7 +1350,7 @@ export function StudentProfileDialog({
                           <InfoBox label="حركات الفرص" value={counts.opportunityLogs || 0} />
                           <InfoBox label="الإجازات" value={counts.studentLeaves || 0} />
                           <InfoBox label="المكالمات" value={counts.studentCalls || 0} />
-                          <InfoBox label="الملاحظات" value={counts.studentNotes || 0} />
+                          <InfoBox label="الملاحظات" value={oldNotes.length} />
                           <InfoBox label="أوراق التصحيح" value={counts.correctionSheets || 0} />
                           <InfoBox label="مستلمات تيليجرام" value={counts.telegramExamSubmissions || 0} />
                           <InfoBox label="نسخ درجات الإجازات" value={counts.studentLeaveGradeBackups || 0} />
@@ -1394,8 +1374,8 @@ export function StudentProfileDialog({
                             <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
                               {oldOpportunities.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد حركات</p> : oldOpportunities.map((log) => (
                                 <div key={String(log.id)} className="rounded-xl bg-background p-3 text-xs">
-                                  <p className="font-bold">{log.action || "حركة"} {log.amount ? `— ${log.amount}` : ""}</p>
-                                  <p className="mt-1 break-words text-muted-foreground">{humanizeProfileText(log.reason) || "—"} — {formatAppDate(log.date)}</p>
+                                  <p className="font-bold">{displayOpportunityAction(log.action) || "حركة"} {log.amount ? `— ${log.amount}` : ""}</p>
+                                  <p className="mt-1 break-words text-muted-foreground">{humanizeProfileText(displayOpportunityReason(log.reason)) || "—"} — {formatAppDate(log.date)}</p>
                                 </div>
                               ))}
                             </div>

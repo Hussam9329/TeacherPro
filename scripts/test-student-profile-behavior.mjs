@@ -234,7 +234,7 @@ test("server activity counters do not double-count notes or reactivation balance
     studentNotes: [
       { kind: "إجراء", text: "فصل الطالب: انتهاء الفرص" },
       { kind: "إجراء", text: "تعديل إداري" },
-      { kind: "تعهد ولي الأمر", text: "تعهد" },
+      { kind: "ملاحظة إدارية", text: "متابعة" },
     ],
     callsCount: 2,
     leavesCount: 1,

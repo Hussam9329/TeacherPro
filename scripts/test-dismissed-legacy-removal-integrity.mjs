@@ -59,8 +59,8 @@ must(
     canonicalHistory.includes("requirePermissionPrincipal") &&
     canonicalStats.includes('requirePermission(req, "students.view")') &&
     canonicalStats.includes("buildDismissedStudentWhere") &&
-    canonicalStats.includes("withPledge") &&
-    canonicalStats.includes("withoutPledge"),
+    !canonicalStats.includes("withPledge") &&
+    !canonicalStats.includes("withoutPledge"),
   "مسارات القائمة والسجل والإحصائيات الرسمية محمية وتشارك الفلاتر الخادمية",
 );
 
@@ -77,7 +77,7 @@ must(
 
 must(
   management.includes('params.set("notesFilter", notesFilter)') &&
-    management.includes('params.set("pledgeFilter", pledgeFilter)') &&
+    !management.includes("pledgeFilter") &&
     management.includes("handleSaveDismissalNote") &&
     management.includes('student.status !== "مفصول"') &&
     management.includes("expectedMutationToken: student.mutationToken") &&

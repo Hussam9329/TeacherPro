@@ -3335,8 +3335,7 @@
 
 /* Follow-up pages contract. */
 .tp-follow-up-page--calls > .tp-follow-up-page__intro,
-.tp-follow-up-page--leaves > .tp-follow-up-page__intro,
-.tp-follow-up-page--pledges > .tp-follow-up-page__intro {
+.tp-follow-up-page--leaves > .tp-follow-up-page__intro {
   border-color: color-mix(in srgb, var(--primary) 22%, transparent);
 }
 
@@ -3345,8 +3344,7 @@
   gap: 1rem;
 }
 
-.tp-follow-up-page--calls .tp-filter-card,
-.tp-follow-up-page--pledges .tp-filter-card {
+.tp-follow-up-page--calls .tp-filter-card {
   scroll-margin-top: 6rem;
 }
 
@@ -3372,18 +3370,6 @@
 
 .tp-follow-up-page--leaves .tp-filter-card {
   margin-block: 0.25rem;
-}
-
-.tp-follow-up-page--pledges > .grid {
-  align-items: stretch;
-}
-
-.tp-follow-up-page--pledges > .grid > [data-slot="card"] {
-  box-shadow: none;
-}
-
-.tp-follow-up-page--pledges > .grid > [data-slot="card"]:first-child {
-  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
 @media (max-width: 1279px) {
@@ -3448,7 +3434,6 @@
   .tp-e-correction-page,
   .tp-follow-up-page--calls,
   .tp-follow-up-page--leaves,
-  .tp-follow-up-page--pledges,
   .tp-accounts-page,
   .tp-logs-page {
     gap: 1rem;
@@ -3462,8 +3447,7 @@
     width: 100%;
   }
 
-  .tp-follow-up-page--leaves .grid,
-  .tp-follow-up-page--pledges .grid {
+  .tp-follow-up-page--leaves .grid {
     gap: 0.75rem;
   }
 

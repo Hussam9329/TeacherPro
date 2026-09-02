@@ -28,14 +28,11 @@ import {
   type AuditLogEntityLabels,
 } from "@/lib/audit-log-display";
 import {
-  buildCurrentDismissalInfo,
   getActiveChapterHealth,
-  pledgeMatchesCurrentDismissal,
   sanitizeDashboardAuditLog,
 } from "@/lib/dashboard-stats";
 
 const BAGHDAD_OFFSET_MS = 3 * 60 * 60 * 1000;
-const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 
 type DashboardAlertTone = "danger" | "warning" | "info" | "success";
 
@@ -49,8 +46,7 @@ type DashboardAlert = {
     | "grade-entry"
     | "student-registry"
     | "follow-up-leaves"
-    | "opportunities"
-    | "follow-up-pledges";
+    | "opportunities";
   actionLabel: string;
   actionQuery?: Record<string, string>;
   sample?: string[];
@@ -338,107 +334,6 @@ async function countActiveExamsWithMissingGrades(
   };
 }
 
-async function countDismissedStudentsNeedingCurrentPledge(
-  tx: StatsClient,
-): Promise<number> {
-  const dismissedStudents = await tx.student.findMany({
-    where: { status: "مفصول" },
-    select: {
-      id: true,
-      status: true,
-      dismissalReason: true,
-      createdAt: true,
-    },
-  });
-  if (dismissedStudents.length === 0) return 0;
-
-  const studentIds = dismissedStudents.map((student) => student.id);
-  const [pledgeNotes, dismissalLogs, dismissalActionNotes] = await Promise.all([
-    tx.studentNote.findMany({
-      where: {
-        studentId: { in: studentIds },
-        kind: PLEDGE_NOTE_KIND,
-      },
-      select: {
-        studentId: true,
-        text: true,
-        date: true,
-        dismissalKey: true,
-        sourceType: true,
-        sourceId: true,
-          dismissalReason: true,
-        dismissalDate: true,
-      },
-    }),
-    tx.opportunityLog.findMany({
-      where: {
-        studentId: { in: studentIds },
-        OR: [
-          { action: "فصل تلقائي" },
-          { action: "خصم", reason: { startsWith: "فصل الطالب" } },
-        ],
-      },
-      select: {
-        id: true,
-        studentId: true,
-        action: true,
-        reason: true,
-        date: true,
-      },
-      orderBy: [{ date: "desc" }, { id: "desc" }],
-    }),
-    tx.studentNote.findMany({
-      where: {
-        studentId: { in: studentIds },
-        kind: "إجراء",
-        text: { startsWith: "فصل الطالب" },
-      },
-      select: {
-        id: true,
-        studentId: true,
-        kind: true,
-        text: true,
-        date: true,
-      },
-      orderBy: [{ date: "desc" }, { id: "desc" }],
-    }),
-  ]);
-
-  const notesByStudent = new Map<string, typeof pledgeNotes>();
-  for (const note of pledgeNotes) {
-    const notes = notesByStudent.get(note.studentId) || [];
-    notes.push(note);
-    notesByStudent.set(note.studentId, notes);
-  }
-  const logsByStudent = new Map<string, typeof dismissalLogs>();
-  for (const log of dismissalLogs) {
-    const logs = logsByStudent.get(log.studentId) || [];
-    logs.push(log);
-    logsByStudent.set(log.studentId, logs);
-  }
-  const actionsByStudent = new Map<string, typeof dismissalActionNotes>();
-  for (const note of dismissalActionNotes) {
-    const notes = actionsByStudent.get(note.studentId) || [];
-    notes.push(note);
-    actionsByStudent.set(note.studentId, notes);
-  }
-
-  let pending = 0;
-  for (const student of dismissedStudents) {
-    const current = buildCurrentDismissalInfo(
-      student,
-      logsByStudent.get(student.id) || [],
-      actionsByStudent.get(student.id) || [],
-    );
-    if (!current) continue;
-    const hasCurrentPledge = (notesByStudent.get(student.id) || []).some(
-      (note) => pledgeMatchesCurrentDismissal(note, current),
-    );
-    if (!hasCurrentPledge) pending += 1;
-  }
-  return pending;
-}
-
 async function readRecentDashboardLogs(
   tx: StatsClient,
   canViewLogs: boolean,
@@ -560,7 +455,6 @@ export async function GET(req: NextRequest) {
           pendingSheetsCount,
           zeroOpportunityActiveCount,
           todaysLeavesCount,
-          dismissedNeedsPledgeCount,
           recentLogs,
           missingGradesSummary,
         ] = await Promise.all([
@@ -591,7 +485,6 @@ export async function GET(req: NextRequest) {
               ],
             },
           }),
-          countDismissedStudentsNeedingCurrentPledge(tx),
           readRecentDashboardLogs(tx, canViewLogs),
           countActiveExamsWithMissingGrades(
             tx,
@@ -659,17 +552,6 @@ export async function GET(req: NextRequest) {
             actionSection: "opportunities",
             actionLabel: "فتح إدارة الفرص",
             actionQuery: { status: "no-opportunities" },
-          },
-          {
-            id: "dismissed-needs-pledge",
-            title: "طلاب مفصولون يحتاجون تعهد",
-            description:
-              "طلاب مفصولون لا يوجد لهم تعهد مرتبط بحالة الفصل الحالية. التعهدات التاريخية لفصل سابق لا تدخل في العدد.",
-            count: dismissedNeedsPledgeCount,
-            tone: "warning",
-            actionSection: "follow-up-pledges",
-            actionLabel: "فتح التعهدات",
-            actionQuery: { statusFilter: "pending" },
           },
         ];
 

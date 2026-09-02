@@ -88,7 +88,6 @@ const ALLOWED_CLIENT_LOG_ENTRIES: Record<string, Set<string>> = {
     'تسجيل مكالمة',
     'تحديث حالة مكالمة',
     'تسجيل إجازة',
-    'تثبيت تعهد',
     // 'حذف إجازة' → server-only (delete is sensitive)
   ]),
   'التصحيح الإلكتروني': new Set([

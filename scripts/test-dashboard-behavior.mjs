@@ -285,7 +285,7 @@ test("dashboard grade policy excludes protected and unavailable cases", () => {
   );
 });
 
-test("dashboard chapter and pledge policies keep conflicts and historical pledges distinct", () => {
+test("dashboard chapter policy distinguishes healthy links from conflicts", () => {
   const loader = createTypeScriptLoader();
   const policy = loader("src/lib/dashboard-stats.ts");
 
@@ -311,29 +311,6 @@ test("dashboard chapter and pledge policies keep conflicts and historical pledge
     "one active link is healthy",
   );
 
-  const currentDismissal = {
-    key: "dismissal-current",
-    sourceType: "opportunity-log",
-    sourceId: "log-current",
-    type: "مفصول",
-    reason: "نفاد الفرص",
-    date: "2026-07-01",
-  };
-  assert.equal(
-    policy.pledgeMatchesCurrentDismissal(
-      { dismissalKey: "dismissal-current" },
-      currentDismissal,
-    ),
-    true,
-  );
-  assert.equal(
-    policy.pledgeMatchesCurrentDismissal(
-      { dismissalKey: "dismissal-old" },
-      currentDismissal,
-    ),
-    false,
-    "a pledge for an older dismissal cannot hide the current one",
-  );
 });
 
 test("dashboard audit payload is human-readable and does not expose raw identifiers", () => {
@@ -496,7 +473,7 @@ test("dashboard component integrates permissions, deep links, stale errors, huma
   const missingGradesBlock = statsRoute.slice(
     statsRoute.indexOf("async function countActiveExamsWithMissingGrades"),
     statsRoute.indexOf(
-      "async function countDismissedStudentsNeedingCurrentPledge",
+      "async function readRecentDashboardLogs",
     ),
   );
 
@@ -542,7 +519,6 @@ test("dashboard component integrates permissions, deep links, stale errors, huma
   assert.match(gradeEntry, /params\.get\(["']filterStatus["']\)/);
   assert.match(studentRegistry, /params\.get\(["']registryIssue["']\)/);
   assert.match(followUp, /params\.get\(["']dashboardDate["']\)/);
-  assert.match(followUp, /params\.get\(["']statusFilter["']\)/);
   assert.match(opportunities, /params\.get\(["']status["']\)/);
   for (const queryKey of [
     "examId",

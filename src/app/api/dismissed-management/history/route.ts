@@ -23,7 +23,12 @@ import {
   sanitizeEnrollmentArchiveSnapshot,
   studentProfileSectionAccess,
 } from "@/lib/student-profile-server";
-import { DISMISSED_STUDENT_PLEDGE_NOTE_KIND } from "@/lib/dismissed-student-filters-server";
+import {
+  displayOpportunityAction,
+  displayOpportunityReason,
+  isRetiredFollowupNote,
+  RETIRED_FOLLOWUP_NOTE_KIND,
+} from "@/lib/retired-followup-compat";
 
 type TimelineEvent = {
   id: string;
@@ -77,12 +82,9 @@ function sanitizeHistoryArchiveSnapshot(
     sanitized.studentLeaves = records(snapshot.studentLeaves);
   }
   if (historyAccess.studentNotes) {
-    const studentNotes = records(snapshot.studentNotes);
-    sanitized.studentNotes = historyAccess.allStudentNotes
-      ? studentNotes
-      : studentNotes.filter(
-          (note) => text(note.kind) === DISMISSED_STUDENT_PLEDGE_NOTE_KIND,
-        );
+    sanitized.studentNotes = records(snapshot.studentNotes).filter(
+      (note) => !isRetiredFollowupNote(note),
+    );
   }
   return sanitized;
 }
@@ -194,9 +196,10 @@ function pushOpportunityEvents(
   for (const log of rows) {
     const dismissal = isDismissalOpportunityLog(log);
     const amount = integer(log.amount);
-    const action = text(log.action);
-    const reason = text(log.reason);
-    const movement = classifyDismissedOpportunityMovement({ action, amount });
+    const rawAction = text(log.action);
+    const action = displayOpportunityAction(rawAction);
+    const reason = displayOpportunityReason(log.reason).trim();
+    const movement = classifyDismissedOpportunityMovement({ action: rawAction, amount });
     const movementAmount = Math.abs(amount);
     const exam = record(log.exam);
     const chapter = record(log.chapter);
@@ -424,7 +427,7 @@ function pushStudentNoteEvents(
           ? `سبب الفصل المرتبط: ${text(note.dismissalReason)}`
           : "",
       ].filter(Boolean),
-      tone: kind === "تعهد ولي الأمر" ? "warning" : "neutral",
+      tone: "neutral",
     });
   }
 }
@@ -686,9 +689,7 @@ export async function GET(req: NextRequest) {
             ? tx.studentNote.findMany({
                 where: {
                   studentId,
-                  ...(historyAccess.allStudentNotes
-                    ? {}
-                    : { kind: DISMISSED_STUDENT_PLEDGE_NOTE_KIND }),
+                  kind: { not: RETIRED_FOLLOWUP_NOTE_KIND },
                 },
                 select: {
                   id: true,

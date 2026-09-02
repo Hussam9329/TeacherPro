@@ -47,6 +47,10 @@ import {
   getStudentGraceWindow,
   isStudentCurrentlyInGrace as isStudentCurrentlyInGraceUnified,
 } from "@/lib/student-grace";
+import {
+  displayOpportunityAction,
+  displayOpportunityReason,
+} from "@/lib/retired-followup-compat";
 
 const opportunityExportColumns: ExportColumn<any>[] = [
   { key: "student", label: "الطالب", value: (s) => s.name || "", defaultSelected: true },
@@ -522,7 +526,7 @@ export function OpportunitiesView() {
   };
 
   const cleanOpportunityReason = (reason: string | null | undefined) => {
-    const text = String(reason || "")
+    const text = displayOpportunityReason(reason)
       .replace(/\s*\[academic-reactivation-link:[^\]]+\]/g, "")
       .trim();
     return text || "بدون سبب مكتوب";
@@ -1413,10 +1417,10 @@ export function OpportunitiesView() {
                               : "secondary"
                         }
                       >
-                        {log.action} {log.amount}
+                        {displayOpportunityAction(log.action)} {log.amount}
                       </Badge>
                       <span className="text-muted-foreground text-xs">
-                        {log.reason}
+                        {displayOpportunityReason(log.reason)}
                       </span>
                       <Button
                         variant="ghost"
@@ -1521,7 +1525,7 @@ export function OpportunitiesView() {
                                   : "secondary"
                             }
                           >
-                            {log.action} {log.amount}
+                            {displayOpportunityAction(log.action)} {log.amount}
                           </Badge>
                           <span className="text-sm font-bold text-foreground">
                             {formatAppDate(log.date)}

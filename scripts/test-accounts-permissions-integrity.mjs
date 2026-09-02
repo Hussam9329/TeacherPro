@@ -37,8 +37,6 @@ const requiredPermissionIds = [
   "follow-up.calls.manage",
   "follow-up.leaves.view",
   "follow-up.leaves.manage",
-  "follow-up.pledges.view",
-  "follow-up.pledges.manage",
 ];
 
 for (const permission of requiredPermissionIds) {
@@ -52,10 +50,16 @@ for (const permission of requiredPermissionIds) {
 must(
   store.includes('"follow-up-calls": "follow-up.calls.view"') &&
     store.includes('"follow-up-leaves": "follow-up.leaves.view"') &&
-    store.includes('"follow-up-pledges": "follow-up.pledges.view"') &&
     store.includes('"admin-log-reset": "logs.clear"'),
   "ربط الصفحات الحساسة بصلاحياتها الدقيقة داخل SECTION_PERMISSIONS",
-  "SECTION_PERMISSIONS يجب أن يربط المكالمات/الإجازات/التعهدات/تصفير اللوغ بصلاحيات دقيقة.",
+  "SECTION_PERMISSIONS يجب أن يربط المكالمات/الإجازات/تصفير اللوغ بصلاحيات دقيقة.",
+);
+
+must(
+  !store.includes("follow-up.pledges") &&
+    !store.includes('"follow-up-pledges":') &&
+    !accounts.includes("المتابعة / التعهدات"),
+  "صلاحيات وصفحة التعهدات القديمة محذوفة من إدارة الحسابات",
 );
 
 must(

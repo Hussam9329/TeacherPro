@@ -9,20 +9,15 @@ import {
   type Student,
   type StudentCall,
   type StudentLeave,
-  type StudentNote,
 } from "@/lib/teacher-store";
 import {
   callCandidatesApi,
   callCourseExamsApi,
   callStatsApi,
-  gradeApi,
-  pledgeApi,
   studentApi,
   studentCallApi,
   studentLeaveApi,
   type CallStatsResponse,
-  type PledgeActionResponse,
-  type PledgeStatsResponse,
 } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,7 +25,6 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -61,7 +55,7 @@ import {
   studentExamCallIdentityMatches,
 } from "@/lib/call-identity";
 
-type FollowView = "leaves" | "calls" | "pledges";
+type FollowView = "leaves" | "calls";
 type CallCategory =
   | "absent"
   | "discounted"
@@ -85,7 +79,6 @@ type CallContactStatusFilter =
 type CallNotesFilter = "all" | "with-notes";
 type CallBadgeTone = "deducted" | "warning" | "safe" | "success" | "neutral";
 type CallBadgeInfo = { label: string; tone: CallBadgeTone; detail?: string };
-type PledgeStatusFilter = "all" | "pledged" | "pending" | "reactivated";
 type ContactStatus = "" | "تم الاتصال" | "لم يرد" | "الرقم خاطئ";
 
 type CallGradeItem = {
@@ -115,24 +108,6 @@ type CallExportRow = {
   courseName: (id: string) => string;
 };
 
-type DismissalLinkInfo = {
-  key: string;
-  sourceType: string;
-  sourceId: string;
-  reason: string;
-  date: string;
-  examName: string;
-};
-
-type PledgeRow = {
-  key: string;
-  student: Student;
-  dismissalInfo: DismissalLinkInfo;
-  pledged: boolean;
-  note?: StudentNote;
-  reactivated: boolean;
-};
-
 const viewTitles: Record<FollowView, { title: string; description: string }> = {
   calls: {
     title: "المكالمات",
@@ -142,10 +117,6 @@ const viewTitles: Record<FollowView, { title: string; description: string }> = {
   leaves: {
     title: "الإجازات",
     description: "تسجيل إجازات الطلاب حسب الامتحان أو حسب فترة زمنية.",
-  },
-  pledges: {
-    title: "تعهدات",
-    description: "متابعة الطلاب المفصولين وتثبيت تعهد ولي الأمر لإعادتهم برصيد فرصتين.",
   },
 };
 
@@ -158,19 +129,6 @@ const leaveReasonOptions = [
 ] as const;
 type LeaveReasonOption = (typeof leaveReasonOptions)[number];
 type LeaveMode = "exam" | "period";
-
-const callCategoryLabels: Record<CallCategory, string> = {
-  absent: "غائب",
-  discounted: "مخصوم",
-  failed: "راسب غير مخصوم",
-  "academic-accounting": "راسب غير مخصوم",
-  "low-pass": "ناجح بدرجة منخفضة",
-  full: "درجة كاملة",
-  passed: "ناجح",
-  cheating: "غش",
-  protected: "محمي",
-  missing: "غير مدخل",
-};
 
 const callStatusFilterLabels: Record<CallStatusFilter, string> = {
   all: "كل الحالات",
@@ -235,11 +193,6 @@ const contactStatusOptions: Array<{
 // hold React's scheduler for hundreds of milliseconds. Counts and exports are
 // server-driven, so a smaller UI page keeps the complete result set intact.
 const CALL_PAGE_SIZE = 30;
-const nonCallableGradeKinds = new Set([
-  "grace",
-  "before-registration",
-  "excused",
-]);
 
 const callExportColumns: ExportColumn<CallExportRow>[] = [
   {
@@ -307,8 +260,6 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
   },
   { key: "note", label: "ملاحظات المكالمات", value: ({ note }) => note },
 ];
-const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
-
 function todayISO() {
   return baghdadTodayKey();
 }
@@ -324,66 +275,6 @@ function phoneForWhatsApp(phone?: string) {
 function whatsappLink(phone: string): string {
   const digits = phoneForWhatsApp(sanitizePhoneInput(phone));
   return digits ? `https://wa.me/${digits}` : "#";
-}
-
-function whatsappMessageLink(phone: string, message: string): string {
-  const digits = phoneForWhatsApp(sanitizePhoneInput(phone));
-  return digits
-    ? `https://wa.me/${digits}?text=${encodeURIComponent(message)}`
-    : "#";
-}
-
-function pledgeGradeReport(grades: Array<Record<string, unknown>>): string {
-  if (grades.length === 0) {
-    return "لا توجد درجات مسجلة للطالب في النظام.";
-  }
-
-  return grades
-    .map((rawGrade) => {
-      const exam = (rawGrade.exam || {}) as Record<string, unknown>;
-      const examName = String(exam.name || "امتحان غير مسمى").trim();
-      const examDate = formatAppDate(String(exam.date || ""));
-      const gradeText = formatGradeScore(
-        {
-          status: String(rawGrade.status || ""),
-          score:
-            typeof rawGrade.score === "number" ||
-            typeof rawGrade.score === "string"
-              ? rawGrade.score
-              : null,
-        },
-        { fullMark: Number(exam.fullMark || 0) },
-        String(rawGrade.status || "غير مدخلة"),
-      );
-      return [
-        `اسم الامتحان: ${examName}`,
-        `تاريخ الامتحان: ${examDate}`,
-        `درجة الامتحان: ${gradeText}`,
-      ].join("\n");
-    })
-    .join("\n\n");
-}
-
-function pledgeWhatsAppMessage(
-  grades: Array<Record<string, unknown>>,
-): string {
-  return `إدارة الأستاذ حسن فلاح
-تعهد ولي الأمر
-
-أتعهد أنا ولي أمر الطالب/ ……………………………. بمتابعة التزامه بالدوام والأنظمة، وأقر بأنه تم إرجاع الطالب إلى الحالة النشطة ومنحه فرصتين وفق نظام المركز.
-
-وفي حال وصول رصيد الطالب إلى صفر يبقى نشطًا، ويُفصل عند وقوع مخالفة جديدة تستوجب خصم فرصة وهو بدون فرص، وفق نظام المركز.
-
-اسم ولي الأمر: ……………………….
-اسم الطالب: ……………………….
-التوقيع: ……………………….
-التاريخ: …… / …… / …….
-
-ملاحظة مهمة:
-يرجى كتابة هذا التعهد بخط اليد في ورقة، وتوقيعه، ثم إرساله مع صورة من وجه هوية ولي الأمر إلى الإدارة.
-
-تقرير درجات الطالب:
-${pledgeGradeReport(grades)}`;
 }
 
 function telegramLink(telegram: string): string {
@@ -440,30 +331,6 @@ function dayKey(value: string | null | undefined): string {
   return String(value || "").slice(0, 10);
 }
 
-function normalizeDismissalText(value: string | null | undefined): string {
-  return String(value || "")
-    .replace(/^تلقائي:\s*/, "")
-    .replace(/^فصل الطالب:\s*/, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function buildDismissalKey(parts: {
-  studentId: string;
-  sourceType: string;
-  sourceId: string;
-  reason: string;
-  date: string;
-}) {
-  return [
-    parts.studentId,
-    parts.sourceType,
-    parts.sourceId,
-    normalizeDismissalText(parts.reason),
-    dayKey(parts.date),
-  ].join("::");
-}
-
 function FollowUpViewBase({ view }: { view: FollowView }) {
   const syncKey = useTeacherProSyncKey(["follow-up", "students", "grades", "opportunities", "dashboard"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
@@ -515,29 +382,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       cancelled = true;
     };
   }, [view, debouncedGlobalSearch, mergeStudentsCache]);
-
-  useEffect(() => {
-    if (view !== "leaves") return;
-    let cancelled = false;
-
-    // حمّل المفصولين بشكل صريح حتى تظهرهم قائمة التعهدات لاحقاً.
-    // لا نعتمد على هذا المصدر لمنتقي الإجازات — استخدام البحث من النظام
-    // يضمن ظهور أي طالب بغض النظر عن ترتيبه الزمني.
-    studentApi
-      .list({ status: "مفصول", opportunityMode: true, pageSize: 200 })
-      .then((dismissedResult) => {
-        if (cancelled) return;
-        const all = dismissedResult?.students || [];
-        mergeStudentsCache(all as unknown as Student[]);
-      })
-      .catch(() => {
-        // الصفحة تستخدم آخر بيانات مؤقتة متاح إذا فشل الاتصال المؤقت.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [view, mergeStudentsCache]);
 
   const [leaveStudentId, setLeaveStudentId] = useState("");
   const [leaveMode, setLeaveMode] = useState<LeaveMode>("exam");
@@ -652,17 +496,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     useState<CallStatsResponse | null>(null);
   const [callDatabaseStatsLoading, setCallDatabaseStatsLoading] =
     useState(false);
-  const [pledgeDatabaseStats, setPledgeDatabaseStats] =
-    useState<PledgeStatsResponse | null>(null);
-  const [pledgeDatabaseStatsLoading, setPledgeDatabaseStatsLoading] =
-    useState(false);
-  const [pledgeRowsFromDb, setPledgeRowsFromDb] = useState<PledgeRow[]>([]);
-  const [pledgeLoading, setPledgeLoading] = useState(false);
-  const [pledgeError, setPledgeError] = useState("");
-  const [pledgeSavingKeys, setPledgeSavingKeys] = useState<Record<string, boolean>>({});
-  const [pledgeWhatsAppLoadingKeys, setPledgeWhatsAppLoadingKeys] = useState<
-    Record<string, boolean>
-  >({});
   const [callGradeDisplayModes, setCallGradeDisplayModes] = useState<
     Record<string, CallGradeDisplayMode>
   >({});
@@ -677,10 +510,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const effectiveCallGradeTo = callGradeRangeEnabled
     ? debouncedCallGradeTo
     : "";
-  const [pledgeSearch, setPledgeSearch] = useState("");
-  const debouncedPledgeSearch = useDebouncedValue(pledgeSearch, 250);
-  const [pledgeStatusFilter, setPledgeStatusFilter] =
-    useState<PledgeStatusFilter>("all");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -693,12 +522,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           ? requestedDate
           : "",
       );
-    }
-    if (view === "pledges" && section === "follow-up-pledges") {
-      const status = String(params.get("statusFilter") || "");
-      if (["all", "pledged", "pending", "reactivated"].includes(status)) {
-        setPledgeStatusFilter(status as PledgeStatusFilter);
-      }
     }
   }, [view]);
 
@@ -932,69 +755,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     isBackgroundSync,
   ]);
 
-  useEffect(() => {
-    if (view !== "pledges") {
-      setPledgeRowsFromDb([]);
-      setPledgeDatabaseStats(null);
-      setPledgeDatabaseStatsLoading(false);
-      setPledgeLoading(false);
-      setPledgeError("");
-      return;
-    }
-
-    const controller = new AbortController();
-    const silent = isBackgroundSync();
-    if (!silent) setPledgeLoading(true);
-    if (!silent) setPledgeDatabaseStatsLoading(true);
-    if (!silent) setPledgeError("");
-
-    pledgeApi
-      .list(
-        {
-          q: debouncedPledgeSearch,
-          statusFilter: pledgeStatusFilter,
-        },
-        { signal: controller.signal, quietAbort: true },
-      )
-      .then((result) => {
-        if (controller.signal.aborted) return;
-        if (!result) {
-          if (!silent) {
-            setPledgeRowsFromDb([]);
-            setPledgeDatabaseStats(null);
-            setPledgeError("تعذر تحميل التعهدات من بيانات النظام. لا يمكن تنفيذ إجراء حساس حتى يرجع الاتصال.");
-          }
-          return;
-        }
-        const nextRows = (result.rows || []) as unknown as PledgeRow[];
-        setPledgeRowsFromDb(nextRows);
-        setPledgeDatabaseStats(result.stats || null);
-        mergeStudentsCache(nextRows.map((row) => row.student).filter(Boolean) as Student[]);
-      })
-      .catch(() => {
-        if (!controller.signal.aborted && !silent) {
-          setPledgeRowsFromDb([]);
-          setPledgeDatabaseStats(null);
-          setPledgeError("تعذر تحميل التعهدات من بيانات النظام. لا يمكن تنفيذ إجراء حساس حتى يرجع الاتصال.");
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setPledgeLoading(false);
-          setPledgeDatabaseStatsLoading(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, [
-    view,
-    debouncedPledgeSearch,
-    pledgeStatusFilter,
-    mergeStudentsCache,
-    syncKey,
-    isBackgroundSync,
-  ]);
-
   const filteredStudents = useMemo(() => {
     // نتائج منتقي الإجازات تأتي مباشرة من النظام (leavePickerStudents).
     // هذا يضمن ظهور أي طالب بغض النظر عن ترتيبه في البيانات المؤقتة المحلية.
@@ -1068,31 +828,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const leaveReason =
     leaveReasonChoice === "أخرى" ? customLeaveReason.trim() : leaveReasonChoice;
 
-  const leaveAppliesToExam = (
-    leave: {
-      studentId: string;
-      examId?: string;
-      leaveType?: string;
-      date?: string;
-      dateFrom?: string;
-      dateTo?: string;
-    },
-    studentId: string,
-    exam: Exam,
-  ) => {
-    if (leave.studentId !== studentId) return false;
-    if ((leave.leaveType || "exam") === "period") {
-      const examDate = dayKey(exam.date);
-      const from = dayKey(leave.dateFrom || leave.date);
-      const to = dayKey(leave.dateTo || leave.dateFrom || leave.date);
-      return Boolean(
-        examDate && from && to && examDate >= from && examDate <= to,
-      );
-    }
-    return leave.examId === exam.id;
-  };
-
-
   const effectiveStudentCalls = callPageStudentCalls;
 
   const callLogLookup = useMemo(() => {
@@ -1147,146 +882,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     if (callDatabaseStatsLoading && !callDatabaseStats) return "…";
     return value ?? "—";
   };
-
-  const pledgeStatValue = (value: number | undefined) => {
-    if (pledgeDatabaseStatsLoading && !pledgeDatabaseStats) return "…";
-    return value ?? "—";
-  };
-
-  const dismissalInfoForStudent = (
-    student: Student,
-  ): DismissalLinkInfo | null => {
-    if (student.status !== "مفصول") return null;
-    const reason = student.dismissalReason || "طالب مفصول";
-    const normalizedReason = normalizeDismissalText(reason);
-    const dismissalLogs = opportunityLogs
-      .filter((log) => log.studentId === student.id)
-      .filter((log) => {
-        const rawReason = String(log.reason || "");
-        const logReason = normalizeDismissalText(rawReason);
-        return (
-          log.action === "فصل تلقائي" ||
-          (log.action === "خصم" && rawReason.startsWith("فصل الطالب")) ||
-          (normalizedReason && logReason.includes(normalizedReason))
-        );
-      })
-      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-    const sourceLog =
-      dismissalLogs.find((log) => log.action === "فصل تلقائي") ||
-      dismissalLogs[0];
-    const sourceNote = sourceLog
-      ? undefined
-      : studentNotes
-          .filter(
-            (note) => note.studentId === student.id && note.kind === "إجراء",
-          )
-          .filter((note) => {
-            const noteText = normalizeDismissalText(note.text);
-            return (
-              note.text.includes("فصل الطالب") ||
-              (normalizedReason && noteText.includes(normalizedReason))
-            );
-          })
-          .sort((a, b) =>
-            String(b.date || "").localeCompare(String(a.date || "")),
-          )[0];
-    const sourceExam = sourceLog?.examId
-      ? exams.find((exam) => exam.id === sourceLog.examId)
-      : undefined;
-    const sourceType = sourceLog
-      ? "opportunity-log"
-      : sourceNote
-        ? "student-note"
-        : "student-dismissal";
-    const sourceId = sourceLog?.id || sourceNote?.id || student.id;
-    const date = dayKey(
-      sourceLog?.date || sourceNote?.date || student.createdAt,
-    );
-    const key = buildDismissalKey({
-      studentId: student.id,
-      sourceType,
-      sourceId,
-      reason,
-      date,
-    });
-    return {
-      key,
-      sourceType,
-      sourceId,
-      reason,
-      date,
-      examName: sourceExam?.name || "",
-    };
-  };
-
-  const dismissalInfoFromPledgeNote = (
-    student: Student,
-    note: StudentNote,
-  ): DismissalLinkInfo => {
-    const sourceLog =
-      note.sourceType === "opportunity-log" && note.sourceId
-        ? opportunityLogs.find((log) => log.id === note.sourceId)
-        : undefined;
-    const sourceExam = sourceLog?.examId
-      ? exams.find((exam) => exam.id === sourceLog.examId)
-      : undefined;
-    const reason = note.dismissalReason || note.text || "فصل الطالب";
-    const sourceType = note.sourceType || "pledge-note";
-    const sourceId = note.sourceId || note.id;
-    const date = dayKey(note.dismissalDate || sourceLog?.date || note.date);
-    const key =
-      note.dismissalKey ||
-      buildDismissalKey({
-        studentId: student.id,
-        sourceType,
-        sourceId,
-        reason,
-        date,
-      });
-    return {
-      key,
-      sourceType,
-      sourceId,
-      reason,
-      date,
-      examName: sourceExam?.name || "",
-    };
-  };
-
-  const pledgeNotes = useMemo(
-    () => studentNotes.filter((note) => note.kind === PLEDGE_NOTE_KIND),
-    [studentNotes],
-  );
-
-  const pledgeNoteForDismissal = (
-    student: Student,
-    dismissalInfo = dismissalInfoForStudent(student),
-  ) => {
-    if (!dismissalInfo) return undefined;
-    return pledgeNotes.find((note) => {
-      if (note.studentId !== student.id) return false;
-      if (note.dismissalKey) return note.dismissalKey === dismissalInfo.key;
-      if (note.sourceType && note.sourceId)
-        return (
-          note.sourceType === dismissalInfo.sourceType &&
-          note.sourceId === dismissalInfo.sourceId
-        );
-      const noteReason = normalizeDismissalText(
-        note.dismissalReason || note.text,
-      );
-      return (
-        note.text.includes("فصل") &&
-        (!noteReason ||
-          noteReason.includes(normalizeDismissalText(dismissalInfo.reason)) ||
-          normalizeDismissalText(dismissalInfo.reason).includes(noteReason))
-      );
-    });
-  };
-
-  const pledgeRows = useMemo<PledgeRow[]>(
-    () => pledgeRowsFromDb,
-    [pledgeRowsFromDb],
-  );
 
   const refreshLeavesFromPayload = (leave: StudentLeave | null | undefined) => {
     if (!leave) return;
@@ -2403,194 +1998,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     );
   };
 
-  const togglePledge = async (row: PledgeRow, checked: boolean) => {
-    if (pledgeLoading || pledgeError) {
-      toast.error("انتظر تحميل التعهدات من بيانات النظام قبل تنفيذ الإجراء.");
-      return;
-    }
-
-    const { student, dismissalInfo } = row;
-    const key = row.note?.id || row.key;
-    setPledgeSavingKeys((current) => ({ ...current, [key]: true }));
-
-    const result = await pledgeApi.action({
-      action: checked ? "pledge" : "remove-pledge",
-      studentId: student.id,
-      dismissalInfo,
-      noteId: row.note?.id,
-    });
-
-    setPledgeSavingKeys((current) => ({ ...current, [key]: false }));
-
-    if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر تنفيذ إجراء التعهد من النظام.");
-      return;
-    }
-
-    const payload = (result.data || {}) as PledgeActionResponse;
-    if (payload.student) {
-      mergeStudentsCache([payload.student as unknown as Student]);
-    }
-
-    emitTeacherProDataChanged({
-      source: "local-mutation",
-      reason: checked ? "pledge" : "pledge-remove",
-      scopes: ["follow-up", "students", "opportunities", "dismissed", "dashboard"],
-    });
-
-    const refreshed = await pledgeApi.list({
-      q: debouncedPledgeSearch,
-      statusFilter: pledgeStatusFilter,
-    });
-
-    if (refreshed) {
-      const nextRows = (refreshed.rows || []) as unknown as PledgeRow[];
-      setPledgeRowsFromDb(nextRows);
-      setPledgeDatabaseStats(refreshed.stats || null);
-      mergeStudentsCache(nextRows.map((nextRow) => nextRow.student).filter(Boolean) as Student[]);
-    }
-
-    toast.success(
-      checked
-        ? "تم تثبيت تعهد ولي الأمر. إعادة التفعيل تتم من إدارة المفصولين."
-        : "تم إلغاء التعهد المرتبط بهذا الفصل من بيانات النظام.",
-    );
-  };
-
-  const openPledgeWhatsApp = async (row: PledgeRow) => {
-    const phone = row.student.parentPhone || "";
-    const digits = phoneForWhatsApp(sanitizePhoneInput(phone));
-    if (!digits) {
-      toast.error("رقم ولي الأمر غير متوفر أو غير صالح لهذا الطالب.");
-      return;
-    }
-
-    const key = row.note?.id || row.key;
-    if (pledgeWhatsAppLoadingKeys[key]) return;
-
-    const whatsappWindow = window.open("about:blank", "_blank");
-    if (whatsappWindow) {
-      whatsappWindow.opener = null;
-      whatsappWindow.document.title = "جاري تجهيز تقرير الدرجات";
-      whatsappWindow.document.body.textContent =
-        "جاري تحميل تقرير درجات الطالب من النظام…";
-    }
-
-    setPledgeWhatsAppLoadingKeys((current) => ({ ...current, [key]: true }));
-    try {
-      const result = await gradeApi.listAll({ studentId: row.student.id });
-      if (!result) {
-        whatsappWindow?.close();
-        toast.error("تعذر تحميل تقرير درجات الطالب من النظام.");
-        return;
-      }
-
-      const grades = [...(result.grades || [])].sort((left, right) => {
-        const leftExam = (left.exam || {}) as Record<string, unknown>;
-        const rightExam = (right.exam || {}) as Record<string, unknown>;
-        return (
-          new Date(String(rightExam.date || 0)).getTime() -
-          new Date(String(leftExam.date || 0)).getTime()
-        );
-      });
-      const url = whatsappMessageLink(phone, pledgeWhatsAppMessage(grades));
-      if (whatsappWindow) whatsappWindow.location.href = url;
-      else window.location.assign(url);
-    } catch {
-      whatsappWindow?.close();
-      toast.error("تعذر تجهيز رسالة التعهد وتقرير الدرجات.");
-    } finally {
-      setPledgeWhatsAppLoadingKeys((current) => ({ ...current, [key]: false }));
-    }
-  };
-
-  const renderPledgeRow = (row: PledgeRow) => {
-    const { student, dismissalInfo, pledged, reactivated } = row;
-    const rowKey = row.note?.id || row.key;
-    const saving = Boolean(pledgeSavingKeys[rowKey]);
-    const openingWhatsApp = Boolean(pledgeWhatsAppLoadingKeys[rowKey]);
-    return (
-      <div
-        key={row.key}
-        className="grid gap-3 rounded-2xl border bg-card/80 p-3 text-sm xl:grid-cols-[1.2fr_1fr_1.7fr_1.2fr_190px_auto] xl:items-center"
-      >
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <b>{student.name}</b>
-            <Badge variant="outline">{student.code}</Badge>
-            {reactivated ? (
-              <Badge variant="default">تم التعهد والطالب نشط حالياً</Badge>
-            ) : null}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {courseName(student.courseId)} - {student.studyType || "—"}
-          </p>
-        </div>
-        <div className="space-y-1">
-          <Badge variant="destructive">
-            مفصول
-          </Badge>
-          <p className="text-xs text-muted-foreground">
-            حالة الطالب الآن: {student.status}
-          </p>
-          {dismissalInfo.date ? (
-            <p className="text-xs text-muted-foreground">
-              تاريخ الفصل: {formatAppDate(dismissalInfo.date)}
-            </p>
-          ) : null}
-        </div>
-        <div className="space-y-1">
-          <p className="text-xs leading-6 text-muted-foreground">
-            {dismissalInfo.reason || "لا يوجد سبب فصل مسجل"}
-          </p>
-          <p className="rounded-xl bg-muted/50 px-2 py-1 text-[11px] text-muted-foreground">
-            الربط:{" "}
-            {dismissalInfo.sourceType === "opportunity-log"
-              ? "سجل فرص/فصل"
-              : dismissalInfo.sourceType === "student-note"
-                ? "ملاحظة إجراء الفصل"
-                : dismissalInfo.sourceType === "pledge-note"
-                  ? "تعهد محفوظ"
-                  : "ملف الفصل الحالي"}
-            {dismissalInfo.examName ? ` - ${dismissalInfo.examName}` : ""}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {renderPhoneLink("رقم الطالب", student.phone)}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-auto rounded-xl border-emerald-500/40 px-3 py-2 text-xs font-bold text-emerald-700 underline hover:bg-emerald-500/10 dark:text-emerald-300"
-            disabled={openingWhatsApp || !student.parentPhone}
-            onClick={() => void openPledgeWhatsApp(row)}
-          >
-            {openingWhatsApp
-              ? "جاري تجهيز التقرير…"
-              : `رقم ولي الأمر: ${student.parentPhone || "غير متوفر"}`}
-          </Button>
-        </div>
-        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-2xl border bg-muted/30 px-3 py-2">
-          <span className="text-sm font-bold">{saving ? "جاري الحفظ..." : "التعهد"}</span>
-          <Checkbox
-            checked={pledged}
-            disabled={saving || pledgeLoading || Boolean(pledgeError)}
-            onCheckedChange={(value) => void togglePledge(row, Boolean(value))}
-          />
-        </label>
-        <div className="flex items-center justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => openProfile(student.id)}
-          >
-            ملف الطالب
-          </Button>
-        </div>
-      </div>
-    );
-  };
-
   if (profileDialogOpen && selectedProfileStudent) {
     return (
       <StudentProfileDialog
@@ -3117,111 +2524,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         </div>
       )}
 
-      {view === "pledges" && (
-        <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-4">
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">المفصولون الآن</p>
-                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.dismissed)}</b>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">تم التعهد</p>
-                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.pledged)}</b>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">
-                  تم التعهد والطالب نشط
-                </p>
-                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.reactivated)}</b>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">بانتظار التعهد</p>
-                <b className="text-2xl">{pledgeStatValue(pledgeDatabaseStats?.pending)}</b>
-              </CardContent>
-            </Card>
-          </div>
-
-          {pledgeLoading ? (
-            <div className="rounded-2xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-              جاري تحميل التعهدات من بيانات النظام...
-            </div>
-          ) : pledgeError ? (
-            <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {pledgeError}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
-              التعهدات محملة من بيانات النظام. تثبيت التعهد لا يغيّر حالة الطالب؛ استرجاع المفصول يتم حصراً من صفحة إدارة المفصولين.
-            </div>
-          )}
-
-          <Card className="tp-filter-card">
-            <CardContent className="tp-filter-content tp-filter-grid grid-cols-1 md:grid-cols-2">
-              <div className="tp-filter-field tp-filter-secondary">
-                <Label>حالة التعهد</Label>
-                <Select
-                  value={pledgeStatusFilter}
-                  onValueChange={(value) =>
-                    setPledgeStatusFilter(value as PledgeStatusFilter)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">كل الحالات</SelectItem>
-                    <SelectItem value="pledged">تم التعهد</SelectItem>
-                    <SelectItem value="reactivated">
-                      تم التعهد والطالب نشط
-                    </SelectItem>
-                    <SelectItem value="pending">لم يتم التعهد</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="tp-filter-field tp-filter-search">
-                <Label>بحث</Label>
-                <Input
-                  id="follow-up-pledges-search"
-                  name="search"
-                  data-teacherpro-search="true"
-                  value={pledgeSearch}
-                  onChange={(event) => setPledgeSearch(event.target.value)}
-                  placeholder="طالب / كود / سبب الفصل"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>قائمة التعهدات</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {pledgeLoading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 4 }).map((_, index) => (
-                    <div
-                      key={index}
-                      className="h-24 animate-pulse rounded-2xl border bg-muted/40"
-                    />
-                  ))}
-                </div>
-              ) : pledgeRows.length === 0 ? (
-                <p className="empty-state py-8">لا توجد نتائج للتعهدات</p>
-              ) : (
-                pledgeRows.map(renderPledgeRow)
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }
@@ -3232,10 +2534,6 @@ export function FollowUpCallsView() {
 
 export function FollowUpLeavesView() {
   return <FollowUpViewBase view="leaves" />;
-}
-
-export function FollowUpPledgesView() {
-  return <FollowUpViewBase view="pledges" />;
 }
 
 export function FollowUpView() {

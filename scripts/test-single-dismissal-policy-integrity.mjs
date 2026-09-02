@@ -28,7 +28,6 @@ const runtimeFiles = walk(path.join(root, "src"));
 const runtimeSource = runtimeFiles.map((file) => fs.readFileSync(file, "utf8")).join("\n");
 const schema = read("prisma/schema.prisma");
 const statusAction = read("src/app/api/students/status-action/route.ts");
-const pledgeRoute = read("src/app/api/student-notes/pledges/route.ts");
 const engine = read("src/lib/academic-engine.ts");
 const management = read("src/components/teacher-pro/dismissed-management.tsx");
 const filters = read("src/lib/dismissed-student-filters-server.ts");
@@ -59,15 +58,6 @@ check(
     statusAction.includes("insufficient-reactivation-opportunity-limit") &&
     !statusAction.includes("dismissalType"),
   "إعادة التفعيل العامة تمنح فرصتين فقط ضمن سقف فصل صالح وبلا نوع فصل",
-);
-
-check(
-  pledgeRoute.includes('action: "تثبيت تعهد ولي الأمر"') &&
-    pledgeRoute.includes("reactivated: false") &&
-    !pledgeRoute.includes("REACTIVATION_OPPORTUNITY_GRANT") &&
-    !pledgeRoute.includes('status: "نشط"') &&
-    !pledgeRoute.includes("dismissalType"),
-  "التعهد يسجل التعهد فقط ولا يعيد تفعيل الطالب أو يغير فرصه",
 );
 
 check(

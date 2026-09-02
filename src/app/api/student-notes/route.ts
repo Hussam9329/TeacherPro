@@ -6,6 +6,10 @@ import { requirePermission } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { requireText, routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { withDatabaseSchema } from '@/lib/schema-readiness';
+import {
+  isRetiredFollowupNote,
+  RETIRED_FOLLOWUP_NOTE_KIND,
+} from '@/lib/retired-followup-compat';
 
 function readListPagination(req: NextRequest, fallbackPageSize = 100, maxPageSize = 500) {
   const searchParams = new URL(req.url).searchParams;
@@ -34,7 +38,7 @@ function optionalDate(value: unknown): Date | null {
 function normalizeNotePayload(body: Record<string, unknown>) {
   return {
     studentId: String(body.studentId ?? ''),
-    kind: String(body.kind ?? ''),
+    kind: String(body.kind ?? '').trim(),
     text: String(body.text ?? '').trim(),
     date: dateOrNow(body.date),
     sourceType: String(body.sourceType ?? ''),
@@ -51,10 +55,11 @@ export async function GET(req: NextRequest) {
 
   try {
     const { page, pageSize, skip } = readListPagination(req);
+    const where = { kind: { not: RETIRED_FOLLOWUP_NOTE_KIND } };
     const [totalCount, studentNotes] = await withDatabaseSchema(
       () => Promise.all([
-        db.studentNote.count(),
-        db.studentNote.findMany({ orderBy: { date: 'desc' }, skip, take: pageSize }),
+        db.studentNote.count({ where }),
+        db.studentNote.findMany({ where, orderBy: { date: 'desc' }, skip, take: pageSize }),
       ]),
       'StudentNote',
     );
@@ -72,6 +77,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const data = normalizeNotePayload(body);
+    if (data.kind === RETIRED_FOLLOWUP_NOTE_KIND) {
+      return validationError('نوع الملاحظة المطلوب متقاعد ولا يقبل سجلات جديدة.');
+    }
     const studentError = requireText(data.studentId, 'الطالب');
     if (studentError) return validationError(studentError);
     const textError = requireText(data.text, 'نص الملاحظة');
@@ -95,8 +103,18 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
     const { id, ...updates } = body;
     if (!id) return validationError('تعذر تحديد الملاحظة المطلوبة');
+    if (String(updates.kind ?? '').trim() === RETIRED_FOLLOWUP_NOTE_KIND) {
+      return validationError('نوع الملاحظة المطلوب متقاعد ولا يقبل التحديث.');
+    }
+    const existing = await withDatabaseSchema(
+      () => db.studentNote.findUnique({ where: { id: String(id) }, select: { kind: true } }),
+      'StudentNote',
+    );
+    if (existing && isRetiredFollowupNote(existing)) {
+      return validationError('سجل المتابعة التاريخي محفوظ للقراءة الاحتياطية ولا يقبل التعديل.');
+    }
     const data: Record<string, unknown> = {};
-    if (updates.kind !== undefined) data.kind = String(updates.kind ?? '');
+    if (updates.kind !== undefined) data.kind = String(updates.kind ?? '').trim();
     if (updates.text !== undefined) data.text = String(updates.text ?? '').trim();
     if (updates.date !== undefined) data.date = dateOrNow(updates.date);
     if (updates.sourceType !== undefined) data.sourceType = String(updates.sourceType ?? '');
@@ -122,6 +140,13 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     if (!id) return validationError('تعذر تحديد الملاحظة المطلوبة');
+    const existing = await withDatabaseSchema(
+      () => db.studentNote.findUnique({ where: { id }, select: { kind: true } }),
+      'StudentNote',
+    );
+    if (existing && isRetiredFollowupNote(existing)) {
+      return validationError('سجل المتابعة التاريخي محفوظ للقراءة الاحتياطية ولا يقبل الحذف.');
+    }
     await withDatabaseSchema(() => db.studentNote.delete({ where: { id } }), 'StudentNote');
     return NextResponse.json({ ok: true });
   } catch (error) {

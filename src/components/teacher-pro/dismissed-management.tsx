@@ -63,7 +63,6 @@ import {
   Download,
   FileClock,
   GraduationCap,
-  Handshake,
   MessageCircle,
   Phone,
   RotateCcw,
@@ -150,15 +149,12 @@ type ListResponse = {
 };
 
 type NotesFilter = "all" | "with-notes" | "without-notes";
-type PledgeFilter = "all" | "with-pledge" | "without-pledge";
 
 type DismissedStats = {
   total: number;
   current: number;
   former: number;
   withNotes: number;
-  withPledge: number;
-  withoutPledge: number;
 };
 
 const EMPTY_DISMISSED_STATS: DismissedStats = {
@@ -166,8 +162,6 @@ const EMPTY_DISMISSED_STATS: DismissedStats = {
   current: 0,
   former: 0,
   withNotes: 0,
-  withPledge: 0,
-  withoutPledge: 0,
 };
 
 function phoneForWhatsApp(phone?: string) {
@@ -378,7 +372,6 @@ export function DismissedManagementView() {
   const [courseId, setCourseId] = useState("");
   const [historyScope, setHistoryScope] = useState<"all" | "current" | "former">("all");
   const [notesFilter, setNotesFilter] = useState<NotesFilter>("all");
-  const [pledgeFilter, setPledgeFilter] = useState<PledgeFilter>("all");
   const [page, setPage] = useState(1);
   const [students, setStudents] = useState<ManagedDismissalStudent[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -421,7 +414,6 @@ export function DismissedManagementView() {
     if (courseId) params.set("courseId", courseId);
     params.set("historyScope", historyScope);
     if (notesFilter !== "all") params.set("notesFilter", notesFilter);
-    if (pledgeFilter !== "all") params.set("pledgeFilter", pledgeFilter);
     if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
 
     setLoading(true);
@@ -474,14 +466,13 @@ export function DismissedManagementView() {
       });
 
     return () => controller.abort();
-  }, [courseId, debouncedSearch, historyScope, notesFilter, page, pledgeFilter, mergeStudentsCache, syncKey]);
+  }, [courseId, debouncedSearch, historyScope, notesFilter, page, mergeStudentsCache, syncKey]);
 
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({ historyScope });
     if (courseId) params.set("courseId", courseId);
     if (notesFilter !== "all") params.set("notesFilter", notesFilter);
-    if (pledgeFilter !== "all") params.set("pledgeFilter", pledgeFilter);
     if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
 
     setStatsLoading(true);
@@ -515,7 +506,7 @@ export function DismissedManagementView() {
       });
 
     return () => controller.abort();
-  }, [courseId, debouncedSearch, historyScope, notesFilter, pledgeFilter, syncKey]);
+  }, [courseId, debouncedSearch, historyScope, notesFilter, syncKey]);
 
   useEffect(() => {
     const controllers = historyControllersRef.current;
@@ -764,7 +755,7 @@ export function DismissedManagementView() {
 
   const handleReactivate = runReactivateLocked(async (student: ManagedDismissalStudent) => {
     if (!canReactivate) {
-      toast.error("لا تملك صلاحية تنفيذ تعهد الطلاب المفصولين.");
+      toast.error("لا تملك صلاحية استرجاع الطلاب المفصولين.");
       return;
     }
     if (student.status !== "مفصول") {
@@ -780,7 +771,7 @@ export function DismissedManagementView() {
       expectedMutationToken: student.mutationToken || "",
     });
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر تثبيت تعهد الطالب من بيانات النظام.");
+      toast.error(result.error || "تعذر استرجاع الطالب من بيانات النظام.");
       return;
     }
 
@@ -818,8 +809,8 @@ export function DismissedManagementView() {
       scopes: ["students", "opportunities", "dismissed", "dashboard", "follow-up"],
       dispatchLocal: true,
     });
-    toast.success("تم تعهد الطالب", {
-      description: "أصبح الطالب نشطاً برصيد فرصتين بسبب تعهده. بقي سجل الفصل محفوظاً كـ«مفصول سابقاً».",
+    toast.success("تم استرجاع الطالب", {
+      description: "أصبح الطالب نشطاً برصيد فرصتين. بقي سجل الفصل محفوظاً كـ«مفصول سابقاً».",
     });
   });
 
@@ -830,7 +821,7 @@ export function DismissedManagementView() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card className="border-red-500/20">
           <CardContent className="flex items-center justify-between p-4">
             <div>
@@ -875,28 +866,6 @@ export function DismissedManagementView() {
             <FileClock className="size-7 text-muted-foreground" />
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">مع تعهد</p>
-              <p className="text-2xl font-black">
-                {statsLoading ? "..." : stats.withPledge}
-              </p>
-            </div>
-            <MessageCircle className="size-7 text-emerald-600" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">بدون تعهد</p>
-              <p className="text-2xl font-black">
-                {statsLoading ? "..." : stats.withoutPledge}
-              </p>
-            </div>
-            <Ban className="size-7 text-amber-600" />
-          </CardContent>
-        </Card>
       </div>
 
       {statsError ? (
@@ -912,7 +881,7 @@ export function DismissedManagementView() {
             إدارة المفصولين
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="space-y-1.5">
             <Label>الدورة</Label>
             <Select
@@ -970,25 +939,6 @@ export function DismissedManagementView() {
                 <SelectItem value="all">الكل</SelectItem>
                 <SelectItem value="with-notes">مع ملاحظات</SelectItem>
                 <SelectItem value="without-notes">بدون ملاحظات</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>التعهد</Label>
-            <Select
-              value={pledgeFilter}
-              onValueChange={(value) => {
-                setPledgeFilter(value as PledgeFilter);
-                setPage(1);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">الكل</SelectItem>
-                <SelectItem value="with-pledge">مع تعهد</SelectItem>
-                <SelectItem value="without-pledge">بدون تعهد</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1217,8 +1167,8 @@ export function DismissedManagementView() {
                       disabled={isReactivating}
                       onClick={() => setReactivateDialog({ student, open: true })}
                     >
-                      <Handshake className="size-4" />
-                      تم تعهد الطالب
+                      <RotateCcw className="size-4" />
+                      استرجاع الطالب
                     </Button>
                   ) : null}
                   <Button
@@ -1369,9 +1319,9 @@ export function DismissedManagementView() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>تم تعهد الطالب المفصول</AlertDialogTitle>
+            <AlertDialogTitle>استرجاع الطالب المفصول</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تم تعهد «{reactivateDialog.student?.name || "الطالب المحدد"}»؟ سيزول الفصل الحالي ويصبح الطالب نشطاً برصيد فرصتين بسبب تعهده، مع بقاء سجل الفصل محفوظاً في إدارة المفصولين.
+              هل تريد استرجاع «{reactivateDialog.student?.name || "الطالب المحدد"}»؟ سيزول الفصل الحالي ويصبح الطالب نشطاً برصيد فرصتين، مع بقاء سجل الفصل محفوظاً في إدارة المفصولين.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1385,7 +1335,7 @@ export function DismissedManagementView() {
                 }
               }}
             >
-              {isReactivating ? "جاري تثبيت التعهد..." : "تأكيد التعهد بفرصتين"}
+              {isReactivating ? "جاري الاسترجاع..." : "تأكيد الاسترجاع بفرصتين"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

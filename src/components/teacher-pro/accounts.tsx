@@ -36,7 +36,6 @@ const PREFERRED_PERMISSION_CATEGORIES = [
   'المتابعة',
   'المتابعة / المكالمات',
   'المتابعة / الإجازات',
-  'المتابعة / التعهدات',
   'التصحيح',
   'التصحيح الإلكتروني',
   'إدارة الحسابات / المستخدمين',
@@ -275,7 +274,6 @@ function PermissionChecklist({
 const PAGE_PERMISSION_BLUEPRINT = [
   { page: 'مكالمات', view: 'follow-up.calls.view', manage: 'follow-up.calls.manage' },
   { page: 'الإجازات', view: 'follow-up.leaves.view', manage: 'follow-up.leaves.manage' },
-  { page: 'التعهدات', view: 'follow-up.pledges.view', manage: 'follow-up.pledges.manage' },
   { page: 'إدارة الحسابات / المستخدمين', view: 'accounts.users.view', manage: 'accounts.users.add / edit / delete' },
   { page: 'إدارة الحسابات / الأدوار', view: 'accounts.roles.view', manage: 'accounts.roles.add / edit / delete' },
   { page: 'إدارة الحسابات / الصلاحيات', view: 'accounts.permissions.view', manage: 'accounts.permissions.assign' },

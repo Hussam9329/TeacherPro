@@ -129,7 +129,6 @@ export type StudentProfileFollowupFilter =
   | "all"
   | "calls"
   | "leaves"
-  | "pledges"
   | "notes";
 
 export type StudentProfileCardKey =
@@ -138,7 +137,6 @@ export type StudentProfileCardKey =
   | "opportunities"
   | "calls"
   | "leaves"
-  | "pledges"
   | "status-actions"
   | "notes"
   | "archives"
@@ -171,7 +169,6 @@ const CARD_TARGETS: Record<StudentProfileCardKey, StudentProfileCardTarget> = {
   },
   calls: { tab: "followup", gradeFilter: "all", followupFilter: "calls" },
   leaves: { tab: "followup", gradeFilter: "all", followupFilter: "leaves" },
-  pledges: { tab: "followup", gradeFilter: "all", followupFilter: "pledges" },
   "status-actions": {
     tab: "actions",
     gradeFilter: "all",

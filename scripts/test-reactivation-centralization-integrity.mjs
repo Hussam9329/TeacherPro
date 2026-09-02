@@ -4,6 +4,7 @@ import path from "node:path";
 
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+const exists = (file) => fs.existsSync(path.join(root, file));
 let failed = false;
 const check = (condition, message) => {
   if (condition) console.log(`✅ ${message}`);
@@ -15,7 +16,6 @@ const registry = read("src/components/teacher-pro/student-registry.tsx");
 const registryResults = read("src/components/teacher-pro/student-registry-results.tsx");
 const opportunities = read("src/components/teacher-pro/opportunities.tsx");
 const followUp = read("src/components/teacher-pro/follow-up.tsx");
-const pledges = read("src/app/api/student-notes/pledges/route.ts");
 const bulkAdjust = read("src/app/api/opportunities/bulk-adjust/route.ts");
 const bulkTargets = read("src/app/api/opportunities/bulk-targets/route.ts");
 const bulkPreview = read("src/lib/bulk-opportunity-preview-server.ts");
@@ -32,9 +32,9 @@ check(
   management.includes("expectedMutationToken") &&
   management.includes("students.edit") &&
   management.includes("canReactivate") &&
-  management.includes("تم تعهد الطالب") &&
+  management.includes("استرجاع الطالب") &&
   statusAction.includes("REACTIVATION_OPPORTUNITY_GRANT"),
-  "إدارة المفصولين تستخدم المسار الخادمي الوحيد لتعهد المفصول بفرصتين",
+  "إدارة المفصولين تستخدم المسار الخادمي الوحيد لاسترجاع المفصول بفرصتين",
 );
 
 check(
@@ -67,14 +67,11 @@ check(
 );
 
 check(
-  followUp.includes('action: checked ? "pledge" : "remove-pledge"') &&
-  pledges.includes('action === "pledge-and-reactivate"') &&
-  pledges.includes("retiredReactivationAction: true") &&
-  pledges.includes("requiresRefresh: true") &&
-  pledges.includes("reactivated: false") &&
-  !pledges.includes('status: "نشط"') &&
-  !pledges.includes("REACTIVATION_OPPORTUNITY_GRANT"),
-  "التعهد يسجل فقط والواجهة القديمة تُرفض بوضوح بلا نجاح مضلل",
+  !exists("src/app/api/student-notes/pledges/route.ts") &&
+  !exists("src/app/api/student-notes/pledge-stats/route.ts") &&
+  !followUp.includes("FollowUpPledgesView") &&
+  !followUp.includes("pledgeApi"),
+  "ميزة التعهد القديمة محذوفة ولا توفر مساراً موازياً للاسترجاع",
 );
 
 check(

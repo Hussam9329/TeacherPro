@@ -89,7 +89,8 @@ check(
 check(
   academicEngine.includes("activeCourseChapterGroups") &&
     academicEngine.includes(".filter(([, links]) => links.length === 1)") &&
-    academicEngine.match(/activeChapter\?\.opportunities \?\? student\.baseOpportunities \?\? 0/g)?.length === 3,
+    academicEngine.match(/activeChapter\?\.opportunities \?\? student\.baseOpportunities \?\? 0/g)?.length === 2 &&
+    academicEngine.includes("opportunities = amount"),
   "محرك الاحتساب يفضل الفصل النشط ويمنع اختيار فصل عشوائي عند التعارض",
 );
 check(
@@ -113,10 +114,11 @@ check(
   "كل صفحات العرض الرئيسية تستخدم نفس منسق الرصيد والسقف",
 );
 check(
-  opportunitiesView.includes("opportunityMode: true") &&
+    opportunitiesView.includes("opportunityMode: true") &&
     registry.includes("opportunityMode: true") &&
     dismissedListRoute.includes("attachStudentOpportunitySnapshots") &&
-    followUp.match(/opportunityMode: true/g)?.length >= 2,
+    followUp.includes("opportunityMode: true") &&
+    candidates.includes("attachStudentOpportunitySnapshots"),
   "كل القوائم التي تعرض الفرص تطلب Snapshot الخادمي صراحة",
 );
 

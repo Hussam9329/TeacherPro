@@ -49,7 +49,7 @@ const LOG_RESET_SCOPES = [
   {
     id: "audit-followup",
     title: "تصفير إجراءات المتابعة",
-    description: "المكالمات، الإجازات، التعهدات والملاحظات التابعة للمتابعة.",
+    description: "المكالمات، الإجازات والملاحظات التابعة للمتابعة.",
     danger: false,
   },
   {

@@ -13,7 +13,6 @@ export const STUDENT_PROFILE_ACCESS_PERMISSIONS = [
   "follow-up.view",
   "follow-up.calls.view",
   "follow-up.leaves.view",
-  "follow-up.pledges.view",
   "logs.view",
   "correction.view",
 ] as const;
@@ -40,7 +39,6 @@ export function studentProfileSectionAccess(
     "follow-up.view",
     "follow-up.calls.view",
     "follow-up.leaves.view",
-    "follow-up.pledges.view",
   ].some((permission) => hasPermission(principal, permission));
   const logs = hasPermission(principal, "logs.view");
   const correction = hasPermission(principal, "correction.view");

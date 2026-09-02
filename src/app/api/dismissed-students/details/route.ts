@@ -8,8 +8,6 @@ import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 
-const PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
-
 function dayKey(value: Date | string | null | undefined): string {
   return baghdadDateKey(value);
 }
@@ -61,7 +59,7 @@ export async function GET(req: NextRequest) {
 
   const studentIds = students.map((student) => student.id);
 
-  const [logs, grades, pledgeNotes, actionNotes] = await db.$transaction([
+  const [logs, grades, actionNotes] = await db.$transaction([
     db.opportunityLog.findMany({
       where: { studentId: { in: studentIds } },
       include: { exam: { select: { id: true, name: true, date: true, fullMark: true, type: true } } },
@@ -71,10 +69,6 @@ export async function GET(req: NextRequest) {
       where: { studentId: { in: studentIds } },
       include: { exam: { select: { id: true, name: true, date: true, fullMark: true, type: true } } },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    }),
-    db.studentNote.findMany({
-      where: { studentId: { in: studentIds }, kind: PLEDGE_NOTE_KIND },
-      orderBy: { date: "desc" },
     }),
     db.studentNote.findMany({
       where: { studentId: { in: studentIds }, kind: "إجراء" },
@@ -94,13 +88,6 @@ export async function GET(req: NextRequest) {
     const list = gradesByStudent.get(grade.studentId) || [];
     list.push(grade);
     gradesByStudent.set(grade.studentId, list);
-  }
-
-  const pledgeNotesByStudent = new Map<string, typeof pledgeNotes>();
-  for (const note of pledgeNotes) {
-    const list = pledgeNotesByStudent.get(note.studentId) || [];
-    list.push(note);
-    pledgeNotesByStudent.set(note.studentId, list);
   }
 
   const actionNotesByStudent = new Map<string, typeof actionNotes>();
@@ -135,13 +122,6 @@ export async function GET(req: NextRequest) {
     const sourceType = dismissalLog ? "opportunity-log" : sourceNote ? "student-note" : "student-dismissal";
     const sourceId = dismissalLog?.id || sourceNote?.id || student.id;
     const dismissalDate = dayKey(dismissalLog?.date || sourceNote?.date || student.createdAt);
-    const normalizedReason = normalizeDismissalText(reason);
-    const pledgeNote = (pledgeNotesByStudent.get(student.id) || []).find((note) => {
-      if (note.sourceType && note.sourceId) return note.sourceType === sourceType && note.sourceId === sourceId;
-      const noteReason = normalizeDismissalText(note.dismissalReason || note.text);
-      return !noteReason || noteReason.includes(normalizedReason) || normalizedReason.includes(noteReason);
-    }) || (pledgeNotesByStudent.get(student.id) || [])[0] || null;
-
     const exam = dismissalLog?.exam || reasonGrade?.exam || null;
 
     return {
@@ -163,9 +143,6 @@ export async function GET(req: NextRequest) {
             updatedAt: reasonGrade.updatedAt ? reasonGrade.updatedAt.toISOString() : "",
           }
         : null,
-      hasPledge: Boolean(pledgeNote),
-      pledgeText: pledgeNote?.text || "",
-      pledgeDate: dayKey(pledgeNote?.date),
     };
   });
 

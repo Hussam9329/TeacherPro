@@ -36,7 +36,6 @@ import {
   CheckSquare,
   PhoneCall,
   CalendarCheck,
-  Handshake,
   Shield,
   ShieldAlert,
   ScrollText,
@@ -112,7 +111,6 @@ const menuItems: {
   },
   { id: "follow-up-calls", title: "المكالمات", sub: "اتصالات المتابعة", icon: PhoneCall },
   { id: "follow-up-leaves", title: "الإجازات", sub: "إجازات الطلاب", icon: CalendarCheck },
-  { id: "follow-up-pledges", title: "تعهدات", sub: "تعهدات الفصل", icon: Handshake },
   { id: "accounts", title: "إدارة الحسابات", sub: "صلاحيات", icon: Shield },
   { id: "logs", title: "السجلات", sub: "تدقيق", icon: ScrollText },
 ];
@@ -125,7 +123,7 @@ const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
     title: "الامتحانات والدرجات",
     itemIds: ["exam-new", "grade-entry", "exam-records", "grade-records"],
   },
-  { title: "المتابعة", itemIds: ["follow-up-calls", "follow-up-leaves", "follow-up-pledges"] },
+  { title: "المتابعة", itemIds: ["follow-up-calls", "follow-up-leaves"] },
   { title: "الإدارة", itemIds: ["accounts", "logs"] },
 ];
 
@@ -149,7 +147,6 @@ const sectionDescriptions: Partial<Record<SectionId, string>> = {
   "e-correction": "مراجعة أوراق التصحيح والمستلمات ونتائج التدقيق.",
   "follow-up-calls": "تنظيم اتصالات المتابعة وتسجيل نتائج المكالمات.",
   "follow-up-leaves": "إدارة إجازات الطلاب ومراجعة الفترات المسجلة.",
-  "follow-up-pledges": "متابعة التعهدات المرتبطة بحالات الفصل وتثبيتها.",
   accounts: "إدارة المستخدمين والأدوار والصلاحيات وإعدادات الأمان.",
   logs: "مراجعة سجل العمليات والتغييرات المنفذة داخل النظام.",
 };
@@ -163,7 +160,6 @@ const sectionsWithPageSearch = new Set<SectionId>([
   "e-correction",
   "follow-up-calls",
   "follow-up-leaves",
-  "follow-up-pledges",
   "logs",
 ]);
 const sectionIds = new Set<SectionId>(menuItems.map((item) => item.id));
@@ -195,7 +191,6 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   "follow-up": ["follow-up", "students", "grades", "opportunities", "dashboard"],
   "follow-up-calls": ["follow-up", "students", "dashboard"],
   "follow-up-leaves": ["follow-up", "students", "grades", "opportunities", "dashboard"],
-  "follow-up-pledges": ["follow-up", "students", "opportunities", "dashboard"],
   accounts: ["accounts", "logs"],
   logs: ["logs", "opportunity-logs"],
   // Legacy hidden section: old persisted links are redirected to logs.
@@ -363,6 +358,7 @@ function readSectionFromLocation(): SectionId | null {
   // Backward compatibility: redirect old section IDs
   if (value === 'whatsapp') return 'follow-up-calls' as SectionId;
   if (value === 'follow-up') return 'follow-up-leaves' as SectionId;
+  if (value === 'follow-up-pledges') return 'dismissed-management' as SectionId;
   // التبويب القديم أزيل، لكن الروابط المحفوظة يجب أن تصل إلى بديله الرسمي.
   if (value === 'dismissed-students') return 'dismissed-management' as SectionId;
   // التبويبة أزيلت من الواجهة؛ الروابط القديمة تنتقل للسجلات بأمان.
@@ -386,7 +382,7 @@ import { ExamRecordsView } from "./exam-records";
 import { GradeRecordsView } from "./grade-records";
 import { OpportunitiesView } from "./opportunities";
 import { ECorrectionView } from "./e-correction";
-import { FollowUpCallsView, FollowUpLeavesView, FollowUpPledgesView, FollowUpView } from "./follow-up";
+import { FollowUpCallsView, FollowUpLeavesView, FollowUpView } from "./follow-up";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
 import { LoadingState } from "./ui-kit";
@@ -407,7 +403,6 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "follow-up": FollowUpView,
   "follow-up-calls": FollowUpCallsView,
   "follow-up-leaves": FollowUpLeavesView,
-  "follow-up-pledges": FollowUpPledgesView,
   "e-correction": ECorrectionView,
   accounts: AccountsView,
   logs: LogsView,

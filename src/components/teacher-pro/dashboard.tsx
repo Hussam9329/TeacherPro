@@ -100,7 +100,6 @@ const alertFallbackQuery: Record<string, Record<string, string>> = {
     status: "no-opportunities",
     opportunityCount: "0",
   },
-  "dismissed-needs-pledge": { statusFilter: "pending" },
 };
 
 function baghdadDayKey(now = Date.now()) {
@@ -424,7 +423,7 @@ export function DashboardView() {
             <EmptyState
               icon={CheckCircle2}
               title="لا توجد تنبيهات حرجة حالياً"
-              description="لم ترجع بيانات النظام أي امتحانات ناقصة الدرجات، طلاب بلا فصل نشط، إجازات اليوم، فرص صفر، أو تعهدات معلقة."
+              description="لم ترجع بيانات النظام أي امتحانات ناقصة الدرجات، طلاب بلا فصل نشط، إجازات اليوم، أو فرص صفر."
             />
           ) : (
             <ul className="tp-dashboard__alert-grid grid list-none grid-cols-1 gap-4 p-0 lg:grid-cols-3">

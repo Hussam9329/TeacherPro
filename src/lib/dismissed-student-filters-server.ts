@@ -1,7 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
 export const DISMISSED_STUDENT_STATUS = "مفصول";
-export const DISMISSED_STUDENT_PLEDGE_NOTE_KIND = "تعهد ولي الأمر";
 
 function cleanText(value: unknown): string {
   return String(value ?? "").trim();
@@ -99,7 +98,6 @@ export function buildDismissedStudentWhere(
   const searchWhere = buildSearchWhere(searchParams.get("q") || "");
   const courseId = cleanText(searchParams.get("courseId"));
   const notesFilter = cleanText(searchParams.get("notesFilter"));
-  const pledgeFilter = cleanText(searchParams.get("pledgeFilter"));
 
   if (searchWhere) parts.push(searchWhere);
   if (courseId) parts.push({ courseId });
@@ -108,20 +106,6 @@ export function buildDismissedStudentWhere(
     parts.push({ dismissalNotes: { not: "" } });
   } else if (notesFilter === "without-notes") {
     parts.push({ OR: [{ dismissalNotes: null }, { dismissalNotes: "" }] });
-  }
-
-  if (pledgeFilter === "with-pledge") {
-    parts.push({
-      studentNotes: {
-        some: { kind: DISMISSED_STUDENT_PLEDGE_NOTE_KIND },
-      },
-    });
-  } else if (pledgeFilter === "without-pledge") {
-    parts.push({
-      studentNotes: {
-        none: { kind: DISMISSED_STUDENT_PLEDGE_NOTE_KIND },
-      },
-    });
   }
 
   return composeDismissedStudentWhere(parts);

@@ -293,20 +293,20 @@ must(
   profileDialog.includes('type StudentFileTab = "details" | "grades" | "exams" | "opportunities" | "followup" | "actions" | "archives" | "timeline"') &&
     profileDialog.includes('label: "المكالمات"') &&
     profileDialog.includes('label: "الإجازات"') &&
-    profileDialog.includes('label: "التعهدات"') &&
+    !profileDialog.includes('label: "التعهدات"') &&
     profileDialog.includes('label: "السجل الزمني"'),
-  "ملف الطالب يملك مسارات واضحة للدرجات والغيابات والفرص والمكالمات والإجازات والتعهدات والسجل الزمني",
+  "ملف الطالب يملك مسارات واضحة للدرجات والغيابات والفرص والمكالمات والإجازات والسجل الزمني",
   "ملف الطالب يجب أن يحتوي تبويبات/كروت صريحة لكل مسار منطقي للطالب.",
 );
 
 must(
-  profileDialog.includes('tab === "followup"') &&
+    profileDialog.includes('tab === "followup"') &&
     profileDialog.includes("مكالمات الطالب") &&
     profileDialog.includes("إجازات الطالب") &&
-    profileDialog.includes("تعهدات ولي الأمر") &&
+    !profileDialog.includes("تعهدات ولي الأمر") &&
     profileDialog.includes("ملاحظات الطالب"),
-  "ملف الطالب يعرض المتابعة والتعهدات والملاحظات داخل تبويب واضح",
-  "يجب أن تكون المكالمات والإجازات والتعهدات والملاحظات ظاهرة داخل ملف الطالب.",
+  "ملف الطالب يعرض المكالمات والإجازات والملاحظات دون الميزة القديمة",
+  "يجب أن تكون المكالمات والإجازات والملاحظات ظاهرة داخل ملف الطالب دون قسم متقاعد.",
 );
 
 must(
@@ -328,10 +328,10 @@ must(
 must(
     profileStatsRoute.includes("callsCount") &&
     profileStatsRoute.includes("leavesCount") &&
-    profileStatsRoute.includes("pledgesCount") &&
+    !profileStatsRoute.includes("pledgesCount") &&
     profileStatsRoute.includes("timeline: activityStats.timeline") &&
     profileStatsRoute.includes("deductions"),
-  "إحصائيات ملف الطالب تشمل المكالمات والإجازات والتعهدات والخصومات والسجل الزمني",
+  "إحصائيات ملف الطالب تشمل المكالمات والإجازات والخصومات والسجل الزمني دون الإحصاء المتقاعد",
   "كروت ملف الطالب يجب أن تأتي من إحصائيات DB لكل مسار مهم.",
 );
 

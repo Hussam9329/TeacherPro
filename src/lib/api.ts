@@ -729,38 +729,6 @@ export interface ExamStatsResponse {
   generatedAt?: string;
 }
 
-export interface PledgeStatsResponse {
-  dismissed: number;
-  pledged: number;
-  pending: number;
-  reactivated: number;
-  source: "database";
-  generatedAt?: string;
-}
-
-export interface PledgeRowsQuery {
-  q?: string;
-  statusFilter?: "all" | "pledged" | "pending" | "reactivated";
-}
-
-export interface PledgeRowsResponse {
-  rows: Array<Record<string, unknown>>;
-  stats: PledgeStatsResponse;
-  totalCount: number;
-  source: "database";
-  generatedAt?: string;
-}
-
-export interface PledgeActionResponse {
-  student?: Record<string, unknown> | null;
-  studentNote?: Record<string, unknown> | null;
-  actionNote?: Record<string, unknown> | null;
-  opportunityLogs?: Array<Record<string, unknown>>;
-  reactivated?: boolean;
-  deletedCount?: number;
-  source: "database";
-}
-
 export interface StudentProfileStatsResponse {
   studentId: string;
   student?: Record<string, unknown>;
@@ -796,7 +764,6 @@ export interface StudentProfileStatsResponse {
   addedMovements: number;
   calls?: number;
   leaves?: number;
-  pledges?: number;
   notes?: number;
   dismissals?: number;
   reactivations?: number;
@@ -1808,27 +1775,6 @@ export const examStatsApi = {
       options,
     );
   },
-};
-
-export const pledgeStatsApi = {
-  get: () => apiGet<PledgeStatsResponse>("student-notes/pledge-stats"),
-};
-
-export const pledgeApi = {
-  list: (query: PledgeRowsQuery = {}, options: ApiGetOptions = {}) => {
-    const queryString = buildQueryString({
-      q: query.q,
-      statusFilter: query.statusFilter,
-    });
-    return apiGet<PledgeRowsResponse>(
-      `student-notes/pledges${queryString ? `?${queryString}` : ""}`,
-      options,
-    );
-  },
-  action: (payload: Record<string, unknown>) =>
-    apiPost("student-notes/pledges", payload) as Promise<
-      ApiResult & { data?: PledgeActionResponse }
-    >,
 };
 
 export const studentProfileStatsApi = {

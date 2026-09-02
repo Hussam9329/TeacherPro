@@ -33,7 +33,6 @@ export type DismissedHistoryAccess = {
   calls: boolean;
   leaves: boolean;
   studentNotes: boolean;
-  allStudentNotes: boolean;
 };
 
 type DismissedHistoryAccessInput = {
@@ -72,18 +71,11 @@ export function buildDismissedHistoryAccess({
       "follow-up.leaves.manage",
       "page.follow-up-leaves.view",
     );
-  const pledgeNotes = hasAny(
-    "follow-up.pledges.view",
-    "follow-up.pledges.manage",
-    "page.follow-up-pledges.view",
-  );
-
   return {
     ...baseAccess,
     calls,
     leaves,
-    studentNotes: broadFollowUp || pledgeNotes,
-    allStudentNotes: broadFollowUp,
+    studentNotes: broadFollowUp,
   };
 }
 
@@ -102,8 +94,8 @@ export function isDismissalOpportunityLog(log: DismissalLogLike): boolean {
 }
 
 /**
- * Pledge notes also carry dismissal metadata, but they are not dismissal
- * events. Only an action note whose text records the dismissal is accepted.
+ * Only an action note whose text records the dismissal is accepted as a
+ * dismissal event; other administrative notes are ignored.
  */
 export function isDismissalActionNote(note: DismissalNoteLike): boolean {
   if (cleanText(note.kind) !== "إجراء") return false;

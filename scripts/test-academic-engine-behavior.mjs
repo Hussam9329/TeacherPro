@@ -519,7 +519,7 @@ function recalculatedStudent(input) {
   assert.equal(afterThirdViolation.status, "مفصول");
   assert.equal(afterThirdViolation.opportunities, 0);
   assert.match(afterThirdViolation.dismissalReason, /بعد انتهاء الفرص|بدون فرص/);
-  console.log("✅ التعهد يعيد الطالب بفرصتين: 2 ثم 1 ثم 0 وهو نشط، والمخالفة التالية فقط تفصله");
+  console.log("✅ سجل إعادة التفعيل التاريخي يبدأ بفرصتين: 2 ثم 1 ثم 0 وهو نشط، والمخالفة التالية فقط تفصله");
 }
 
 {
@@ -530,17 +530,17 @@ function recalculatedStudent(input) {
     date: "2026-01-01T00:00:00.000Z",
     dismissalGrade: 20,
   });
-  const beforeSecondPledge = exam({
-    id: "exam-repeat-dismissal-before-pledge",
-    name: "مخالفة قبل التعهد الثاني",
+  const beforeSecondReactivation = exam({
+    id: "exam-repeat-dismissal-before-reactivation",
+    name: "مخالفة قبل إعادة التفعيل الثانية",
     type: "يومي",
     date: "2026-02-01T00:00:00.000Z",
     opportunitiesPenalty: 1,
     dismissalGrade: null,
   });
-  const afterSecondPledge = exam({
-    id: "exam-repeat-dismissal-after-pledge",
-    name: "مخالفة بعد التعهد الثاني",
+  const afterSecondReactivation = exam({
+    id: "exam-repeat-dismissal-after-reactivation",
+    name: "مخالفة بعد إعادة التفعيل الثانية",
     type: "يومي",
     date: "2026-03-01T00:00:00.000Z",
     opportunitiesPenalty: 1,
@@ -549,7 +549,7 @@ function recalculatedStudent(input) {
   const result = recalculatedStudent(
     state({
       students: [student({ opportunities: 2, baseOpportunities: 3 })],
-      exams: [oldDismissal, beforeSecondPledge, afterSecondPledge],
+      exams: [oldDismissal, beforeSecondReactivation, afterSecondReactivation],
       grades: [
         grade({
           id: "grade-repeat-old",
@@ -560,22 +560,22 @@ function recalculatedStudent(input) {
         }),
         grade({
           id: "grade-repeat-before",
-          examId: beforeSecondPledge.id,
+          examId: beforeSecondReactivation.id,
           score: 10,
-          createdAt: beforeSecondPledge.date,
-          updatedAt: beforeSecondPledge.date,
+          createdAt: beforeSecondReactivation.date,
+          updatedAt: beforeSecondReactivation.date,
         }),
         grade({
           id: "grade-repeat-after",
-          examId: afterSecondPledge.id,
+          examId: afterSecondReactivation.id,
           score: 10,
-          createdAt: afterSecondPledge.date,
-          updatedAt: afterSecondPledge.date,
+          createdAt: afterSecondReactivation.date,
+          updatedAt: afterSecondReactivation.date,
         }),
       ],
       opportunityLogs: [
         {
-          id: "pledge-repeat-1",
+          id: "legacy-reactivation-1",
           studentId: "student-1",
           examId: "",
           action: "رصيد بعد تعهد",
@@ -586,7 +586,7 @@ function recalculatedStudent(input) {
           chapterNameSnapshot: "الفصل الأول",
         },
         {
-          id: "pledge-repeat-2",
+          id: "legacy-reactivation-2",
           studentId: "student-1",
           examId: "",
           action: "رصيد بعد تعهد",
@@ -602,7 +602,7 @@ function recalculatedStudent(input) {
   assert.equal(result.status, "نشط");
   assert.equal(result.opportunities, 1);
   assert.equal(result.dismissalReason, "");
-  console.log("✅ تكرار الفصل والتعهد لا يغيّر السياسة: آخر تعهد يعيد الطالب دائماً إلى فرصتين");
+  console.log("✅ سجلات إعادة التفعيل التاريخية لا تغيّر السياسة: آخر استرجاع يعيد الطالب إلى فرصتين");
 }
 
 {
@@ -776,21 +776,20 @@ console.log("✅ الخصم الافتراضي وتمييز المصدر الت�
 }
 
 {
-  // جذر خلل عودة الفرص إلى 3 بعد تعهد 30/8/2026: حركة «إعادة تعيين» كانت
-  // تعيد الرصيد إلى سقف الفصل متجاهلة مبلغها المخزون (فرصتان). الآن المبلغ
-  // محترم حتى لو لم يبدأ السب بحد التسوية التاريخية.
+  // حركة «إعادة تعيين» يجب أن تحترم الرصيد المستهدف المخزون، لا أن تعيده
+  // إلى سقف الفصل. هذا يحفظ التصحيحات التاريخية العامة بعد إعادة الاحتساب.
   const result = recalculatedStudent(
     state({
       grades: [],
       opportunityLogs: [
         {
-          id: "pledge-reset-raw",
+          id: "historical-reset-raw",
           studentId: "student-1",
           examId: "",
           action: "إعادة تعيين",
           amount: 2,
           reason:
-            "تعديل الفرص إلى فرصتين (2/3) بسبب تعهد الطالب للامتحان الفاينل الفصل الأول [قبل: 3 → بعد: 2، فرق: -1]",
+            "تصحيح تاريخي للرصيد إلى فرصتين (2/3) [قبل: 3 → بعد: 2، فرق: -1]",
           date: "2026-08-30T12:00:00.000Z",
           chapterId: "chapter-1",
           chapterNameSnapshot: "الفصل الأول",
@@ -801,39 +800,39 @@ console.log("✅ الخصم الافتراضي وتمييز المصدر الت�
   assert.equal(result.status, "نشط");
   assert.equal(result.opportunities, 2);
   console.log(
-    "✅ إعادة تعيين بفرصتين (تعهد) تحترم مبلغها حتى بلا حد تسوية تاريخية",
+    "✅ إعادة تعيين بفرصتين تحترم مبلغها حتى بلا حد تسوية تاريخية",
   );
 }
 
 {
-  // التعهد بصيغة التسوية التاريخية يتجاهل امتحانات ما قبل تاريخه، فيبقى
-  // الرصيد فرصتين رغم غياب سابق في امتحان قبل التعهد.
-  const prePledgeExam = exam({
-    id: "exam-pre-pledge",
+  // التسوية التاريخية العامة تتجاهل الامتحانات السابقة لتاريخها، فيبقى
+  // الرصيد المصحح رغم غياب سابق.
+  const preSettlementExam = exam({
+    id: "exam-pre-settlement",
     type: "تراكمي",
     date: "2026-08-20T00:00:00.000Z",
     opportunitiesPenalty: 1,
   });
   const result = recalculatedStudent(
     state({
-      exams: [prePledgeExam],
+      exams: [preSettlementExam],
       grades: [
         grade({
-          id: "pre-pledge-absence",
-          examId: "exam-pre-pledge",
+          id: "pre-settlement-absence",
+          examId: "exam-pre-settlement",
           status: "غائب",
           score: null,
         }),
       ],
       opportunityLogs: [
         {
-          id: "pledge-settlement",
+          id: "historical-settlement",
           studentId: "student-1",
           examId: "",
           action: "إعادة تعيين",
           amount: 2,
           reason:
-            "تسوية تاريخية: تعهد الطالب للامتحان الفاينل الفصل الأول — تجاهل آثار الامتحانات السابقة للتعهد وبدء الرصيد بفرصتين",
+            "تسوية تاريخية: تصحيح الرصيد وبدء المحاسبة من فرصتين",
           date: "2026-08-30T12:00:00.000Z",
           chapterId: "chapter-1",
           chapterNameSnapshot: "الفصل الأول",
@@ -845,38 +844,38 @@ console.log("✅ الخصم الافتراضي وتمييز المصدر الت�
   assert.equal(result.opportunities, 2);
   assert.equal(result.dismissalReason, "");
   console.log(
-    "✅ تسوية التعهد تتجاهل امتحانات ما قبل التعهد وتبقي الرصيد فرصتين",
+    "✅ التسوية التاريخية تتجاهل الامتحانات السابقة وتبقي الرصيد المصحح",
   );
 }
 
 {
-  // الامتحانات اللاحقة للتعهد تخصم من فرصتي التعهد كالمعتاد.
-  const postPledgeExam = exam({
-    id: "exam-post-pledge",
+  // الامتحانات اللاحقة للتسوية تخصم من الرصيد المصحح كالمعتاد.
+  const postSettlementExam = exam({
+    id: "exam-post-settlement",
     type: "تراكمي",
     date: "2026-09-01T00:00:00.000Z",
     opportunitiesPenalty: 1,
   });
   const result = recalculatedStudent(
     state({
-      exams: [postPledgeExam],
+      exams: [postSettlementExam],
       grades: [
         grade({
-          id: "post-pledge-absence",
-          examId: "exam-post-pledge",
+          id: "post-settlement-absence",
+          examId: "exam-post-settlement",
           status: "غائب",
           score: null,
         }),
       ],
       opportunityLogs: [
         {
-          id: "pledge-settlement-2",
+          id: "historical-settlement-2",
           studentId: "student-1",
           examId: "",
           action: "إعادة تعيين",
           amount: 2,
           reason:
-            "تسوية تاريخية: تعهد الطالب للامتحان الفاينل الفصل الأول — تجاهل آثار الامتحانات السابقة للتعهد وبدء الرصيد بفرصتين",
+            "تسوية تاريخية: تصحيح الرصيد وبدء المحاسبة من فرصتين",
           date: "2026-08-30T12:00:00.000Z",
           chapterId: "chapter-1",
           chapterNameSnapshot: "الفصل الأول",
@@ -886,7 +885,7 @@ console.log("✅ الخصم الافتراضي وتمييز المصدر الت�
   );
   assert.equal(result.status, "نشط");
   assert.equal(result.opportunities, 1);
-  console.log("✅ مخالفة بعد التعهد تخصم من فرصتي التعهد لا من سقف الفصل");
+  console.log("✅ مخالفة بعد التسوية تخصم من الرصيد المصحح لا من سقف الفصل");
 }
 
 console.log("\nكل اختبارات المحرك الأكاديمي السلوكية نجحت.");

@@ -41,7 +41,6 @@ const requiredPagePermissions = [
   'page.opportunities.view',
   'page.follow-up-calls.view',
   'page.follow-up-leaves.view',
-  'page.follow-up-pledges.view',
   'page.e-correction.view',
   'page.accounts.view',
   'page.logs.view',

@@ -8,6 +8,7 @@ import { requireAnyPermissionPrincipal } from "@/lib/server-auth";
 import { attachStudentOpportunitySnapshotsWithClient } from "@/lib/student-opportunity-snapshot-server";
 import { parseStudentEnrollmentArchiveSnapshot } from "@/lib/student-enrollment-archive-server";
 import { loadActiveChapterReportContext } from "@/lib/active-chapter-report";
+import { RETIRED_FOLLOWUP_NOTE_KIND } from "@/lib/retired-followup-compat";
 import {
   buildStudentProfileDataVersion,
   loadStudentProfileAuditLogs,
@@ -166,7 +167,10 @@ export async function GET(req: NextRequest) {
               orderBy: [{ createdAt: "desc" }, { id: "desc" }],
             }),
             tx.studentNote.findMany({
-              where: { studentId },
+              where: {
+                studentId,
+                kind: { not: RETIRED_FOLLOWUP_NOTE_KIND },
+              },
               select: NOTE_SELECT,
               orderBy: [{ date: "desc" }, { id: "desc" }],
             }),

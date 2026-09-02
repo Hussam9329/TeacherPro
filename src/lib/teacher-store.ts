@@ -520,7 +520,6 @@ export type SectionId =
   | "follow-up"
   | "follow-up-calls"
   | "follow-up-leaves"
-  | "follow-up-pledges"
   | "e-correction"
   | "accounts"
   | "logs"
@@ -775,20 +774,6 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
     level: "manage",
     description: "إضافة وحذف إجازات الطلاب مع الأثر الأكاديمي.",
   },
-  {
-    id: "follow-up.pledges.view",
-    label: "عرض التعهدات",
-    category: "المتابعة / التعهدات",
-    level: "read",
-    description: "عرض تعهدات ولي الأمر المرتبطة بالفصل.",
-  },
-  {
-    id: "follow-up.pledges.manage",
-    label: "إدارة التعهدات",
-    category: "المتابعة / التعهدات",
-    level: "manage",
-    description: "تثبيت/إلغاء التعهدات وربطها بإعادة التفعيل.",
-  },
   // التصحيح
   {
     id: "correction.view",
@@ -945,7 +930,6 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   "follow-up": "follow-up.view",
   "follow-up-calls": "follow-up.calls.view",
   "follow-up-leaves": "follow-up.leaves.view",
-  "follow-up-pledges": "follow-up.pledges.view",
   "e-correction": "correction.view",
   accounts: "accounts.users.view",
   logs: "logs.view",
@@ -2328,7 +2312,8 @@ function toPersistedUiSnapshot(
       ? state.currentUserId
       : "u_admin";
   const persistedSection =
-    state.currentSection === "dismissed-students"
+    state.currentSection === "dismissed-students" ||
+    state.currentSection === "follow-up-pledges"
       ? "dismissed-management"
       : state.currentSection;
   const currentSection =
@@ -2712,7 +2697,6 @@ export const useTeacherStore = create<TeacherState>()(
               "follow-up",
               "follow-up-calls",
               "follow-up-leaves",
-              "follow-up-pledges",
             ].includes(section)
           ) {
             const data = await courseChapterApi.list();
@@ -2748,7 +2732,6 @@ export const useTeacherStore = create<TeacherState>()(
               "follow-up",
               "follow-up-calls",
               "follow-up-leaves",
-              "follow-up-pledges",
             ].includes(section)
           ) {
             const [leavesData, callsData, notesData] = await Promise.all([

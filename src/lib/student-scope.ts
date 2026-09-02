@@ -32,7 +32,7 @@ export function archivedStudentWhere(): Prisma.StudentWhereInput {
 
 export function followupStudentWhere(): Prisma.StudentWhereInput {
   // المتابعة تشمل النشطين والمفصولين — المفصولين يحتاجون متابعة أيضاً
-  // (مكالمات لولي الأمر، تعهدات، إعادة تفعيل). فقط المؤرشفون مستثنون.
+  // (مكالمات لولي الأمر وإدارة إعادة التفعيل). فقط المؤرشفون مستثنون.
   return { status: { notIn: [STUDENT_STATUS_ARCHIVED] } };
 }
 

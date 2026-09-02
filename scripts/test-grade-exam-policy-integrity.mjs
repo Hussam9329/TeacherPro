@@ -202,7 +202,7 @@ must(
     examRoute.includes("correctionSheetCount") &&
     examRoute.includes("telegramSubmissionCount") &&
     examRoute.includes("opportunityLogCount") &&
-    examRoute.includes("missingNoteCount") &&
+    examRoute.includes("smartNoteCount") &&
     examRoute.includes("leaveBackupCount") &&
     examRoute.includes("عطّل الامتحان بدلاً من حذفه"),
   "حذف الامتحان ممنوع عند وجود أي بيانات تابعة وليس الدرجات فقط",

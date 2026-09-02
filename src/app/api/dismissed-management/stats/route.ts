@@ -10,11 +10,10 @@ import {
   buildDismissedHistoryScopeWhere,
   buildDismissedStudentWhere,
   composeDismissedStudentWhere,
-  DISMISSED_STUDENT_PLEDGE_NOTE_KIND,
 } from "@/lib/dismissed-student-filters-server";
 
 async function collectDismissedStats(where: Prisma.StudentWhereInput) {
-  const [total, current, former, withNotes, pledgeRows] =
+  const [total, current, former, withNotes] =
     await db.$transaction([
       db.student.count({ where }),
       db.student.count({
@@ -35,23 +34,12 @@ async function collectDismissedStats(where: Prisma.StudentWhereInput) {
           { dismissalNotes: { not: "" } },
         ]),
       }),
-      db.studentNote.findMany({
-        where: {
-          kind: DISMISSED_STUDENT_PLEDGE_NOTE_KIND,
-          student: where,
-        },
-        select: { studentId: true },
-        distinct: ["studentId"],
-      }),
     ]);
-  const withPledge = pledgeRows.length;
   return {
     total,
     current,
     former,
     withNotes,
-    withPledge,
-    withoutPledge: Math.max(0, total - withPledge),
   };
 }
 

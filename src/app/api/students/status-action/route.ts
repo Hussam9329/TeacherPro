@@ -448,7 +448,7 @@ export async function POST(req: NextRequest) {
           examId: null,
           action: "إعادة تفعيل",
           amount: 0,
-          reason: "تثبيت إعادة التفعيل بعد تعهد الطالب: الطالب نشط برصيد فرصتين؛ الوصول إلى 0 لا يفصله، والمخالفة التالية وهو بدون فرص تؤدي إلى الفصل",
+          reason: "تثبيت إعادة التفعيل: الطالب نشط برصيد فرصتين؛ الوصول إلى 0 لا يفصله، والمخالفة التالية وهو بدون فرص تؤدي إلى الفصل",
           chapterId: activeChapter?.id || null,
           chapterNameSnapshot: activeChapter?.name || null,
         },
@@ -460,7 +460,7 @@ export async function POST(req: NextRequest) {
           examId: null,
           action: "رصيد إعادة التفعيل",
           amount: REACTIVATION_OPPORTUNITY_GRANT,
-          reason: "تم تعهد الطالب: إرجاعه إلى الحالة النشطة برصيد فرصتين بسبب التعهد",
+          reason: "إرجاع الطالب إلى الحالة النشطة برصيد فرصتين",
           chapterId: activeChapter?.id || null,
           chapterNameSnapshot: activeChapter?.name || null,
         },
@@ -470,7 +470,7 @@ export async function POST(req: NextRequest) {
         data: {
           studentId,
           kind: "إجراء",
-          text: `تم تعهد الطالب: إعادة تفعيله بفرصتين بعد فصل سابق: ${previousReason}`,
+          text: `إعادة تفعيل الطالب ومنحه فرصتين بعد فصل سابق: ${previousReason}`,
           sourceType: "student-status-action",
           sourceId: studentId,
         },
@@ -479,7 +479,7 @@ export async function POST(req: NextRequest) {
       await tx.auditLog.create({
         data: {
           module: "سجل الطلاب",
-          action: "تم تعهد الطالب - إعادة تفعيل بفرصتين",
+          action: "إعادة تفعيل الطالب برصيد فرصتين",
           details: `${student.name} - ${student.code}`,
           userId: principal.id,
           userName: principal.name,

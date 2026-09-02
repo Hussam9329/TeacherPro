@@ -58,8 +58,8 @@ test("only authoritative action notes are dismissal events", () => {
   );
   assert.equal(
     isDismissalActionNote({
-      kind: "تعهد ولي الأمر",
-      text: "تعهد",
+      kind: "ملاحظة إدارية",
+      text: "متابعة ولي الأمر",
     }),
     false,
   );
@@ -86,7 +86,6 @@ test("follow-up permissions remain isolated by domain", () => {
       calls: true,
       leaves: false,
       studentNotes: false,
-      allStudentNotes: false,
     },
   );
   assert.deepEqual(
@@ -96,17 +95,6 @@ test("follow-up permissions remain isolated by domain", () => {
       calls: false,
       leaves: true,
       studentNotes: false,
-      allStudentNotes: false,
-    },
-  );
-  assert.deepEqual(
-    accessFor(["follow-up.pledges.view"]),
-    {
-      ...baseAccess,
-      calls: false,
-      leaves: false,
-      studentNotes: true,
-      allStudentNotes: false,
     },
   );
   assert.deepEqual(
@@ -116,7 +104,6 @@ test("follow-up permissions remain isolated by domain", () => {
       calls: true,
       leaves: true,
       studentNotes: true,
-      allStudentNotes: true,
     },
   );
   assert.equal(accessFor(["page.follow-up-calls.view"]).calls, true);

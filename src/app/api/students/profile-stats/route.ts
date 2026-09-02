@@ -7,6 +7,7 @@ import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { requireAnyPermissionPrincipal } from "@/lib/server-auth";
 import { attachStudentOpportunitySnapshotsWithClient } from "@/lib/student-opportunity-snapshot-server";
 import { classifyGradeAcademicImpact } from "@/lib/grade-classification";
+import { RETIRED_FOLLOWUP_NOTE_KIND } from "@/lib/retired-followup-compat";
 import {
   buildStudentProfileDataVersion,
   loadStudentProfileAuditLogs,
@@ -151,7 +152,13 @@ export async function GET(req: NextRequest) {
             }),
             tx.studentLeave.findMany({ where: { studentId }, select: LEAVE_SELECT }),
             tx.studentCall.findMany({ where: { studentId }, select: CALL_SELECT }),
-            tx.studentNote.findMany({ where: { studentId }, select: NOTE_SELECT }),
+            tx.studentNote.findMany({
+              where: {
+                studentId,
+                kind: { not: RETIRED_FOLLOWUP_NOTE_KIND },
+              },
+              select: NOTE_SELECT,
+            }),
           ]);
 
         const [studentWithOpportunity] =
@@ -250,11 +257,8 @@ export async function GET(req: NextRequest) {
     const visibleNotes = access.followUp ? studentNotes : [];
     const callsCount = access.followUp ? studentCalls.length : 0;
     const leavesCount = access.followUp ? studentLeaves.length : 0;
-    const pledgesCount = visibleNotes.filter(
-      (note) => note.kind === "تعهد ولي الأمر",
-    ).length;
     const notesCount = visibleNotes.filter(
-      (note) => note.kind !== "تعهد ولي الأمر" && note.kind !== "إجراء",
+      (note) => note.kind !== "إجراء",
     ).length;
     const activityStats = summarizeStudentProfileActivity({
       gradeCount: gradeStats.grades,
@@ -310,7 +314,6 @@ export async function GET(req: NextRequest) {
       addedMovements: activityStats.addedMovements,
       calls: callsCount,
       leaves: leavesCount,
-      pledges: pledgesCount,
       notes: notesCount,
       dismissals: activityStats.dismissals,
       reactivations: activityStats.reactivations,

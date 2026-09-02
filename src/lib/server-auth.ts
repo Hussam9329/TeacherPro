@@ -244,8 +244,8 @@ const SERVER_PERMISSION_EQUIVALENTS: Record<string, string[]> = {
   "opportunities.manage": [],
 
   // Follow-up: view-only alias; manage must be granted explicitly
-  "follow-up.view": ["page.follow-up-calls.view", "page.follow-up-leaves.view", "page.follow-up-pledges.view"],
-  "follow-up.manage": ["follow-up.calls.manage", "follow-up.leaves.manage", "follow-up.pledges.manage"],
+  "follow-up.view": ["page.follow-up-calls.view", "page.follow-up-leaves.view"],
+  "follow-up.manage": ["follow-up.calls.manage", "follow-up.leaves.manage"],
 
   // Correction: manage does NOT alias to view anymore (Q89 fix)
   "correction.view": ["page.e-correction.view"],

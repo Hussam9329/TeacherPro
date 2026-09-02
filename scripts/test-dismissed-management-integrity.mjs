@@ -47,13 +47,13 @@ must(
 must(
   page.includes("/api/dismissed-management/stats?") &&
     page.includes('params.set("notesFilter", notesFilter)') &&
-    page.includes('params.set("pledgeFilter", pledgeFilter)') &&
+    !page.includes("pledgeFilter") &&
     listRoute.includes("buildDismissedStudentWhere(searchParams)") &&
     statsRoute.includes("buildDismissedStudentWhere(searchParams)") &&
     statsRoute.includes("db.$transaction") &&
-    statsRoute.includes("withPledge") &&
-    statsRoute.includes("withoutPledge"),
-  "الإدارة تحتفظ بإحصائيات وفلاتر الملاحظات والتعهد من نفس المصدر الخادمي",
+    !statsRoute.includes("withPledge") &&
+    !statsRoute.includes("withoutPledge"),
+  "الإدارة تحتفظ بإحصائيات وفلاتر الفصل من المصدر الخادمي دون أثر لميزة التعهد القديمة",
 );
 
 must(
@@ -79,13 +79,12 @@ must(
 );
 
 must(
-  route.includes("historyAccess.calls") &&
+    route.includes("historyAccess.calls") &&
     route.includes("historyAccess.leaves") &&
     route.includes("historyAccess.studentNotes") &&
-    route.includes("historyAccess.allStudentNotes") &&
     helper.includes('"follow-up.calls.view"') &&
     helper.includes('"follow-up.leaves.view"') &&
-    helper.includes('"follow-up.pledges.view"') &&
+    !helper.includes('"follow-up.pledges.view"') &&
     page.includes("history.sections.calls") &&
     page.includes("history.sections.leaves") &&
     page.includes("history.sections.notes"),
@@ -188,10 +187,10 @@ must(
     page.includes("students.edit") &&
     page.includes("canReactivate") &&
     page.includes("useActionLock") &&
-    page.includes("تم تعهد الطالب") &&
+    page.includes("استرجاع الطالب") &&
     page.includes("سيزول الفصل الحالي ويصبح الطالب نشطاً برصيد فرصتين"),
-  "إدارة المفصولين هي واجهة تعهد المفصول وتستخدم status-action مع قفل وصلاحية وSnapshot",
-  "يجب أن يكون زر تعهد المفصول داخل إدارة المفصولين فقط وبآلية خادمية محمية.",
+  "إدارة المفصولين هي واجهة استرجاع المفصول وتستخدم status-action مع قفل وصلاحية وSnapshot",
+  "يجب أن يكون زر استرجاع المفصول داخل إدارة المفصولين فقط وبآلية خادمية محمية.",
 );
 
 if (failed) {
