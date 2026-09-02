@@ -163,6 +163,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     if (error instanceof AcademicGradeWritebackError) {
+      if (error.code) {
+        return NextResponse.json(
+          { error: error.message, code: error.code },
+          { status: error.status },
+        );
+      }
       return validationError(error.message, error.status);
     }
     const err = error as { code?: string };
@@ -234,6 +240,12 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof AcademicGradeWritebackError) {
+      if (error.code) {
+        return NextResponse.json(
+          { error: error.message, code: error.code },
+          { status: error.status },
+        );
+      }
       return validationError(error.message, error.status);
     }
     return routeErrorResponse(error, "تعذر تحديث ورقة التصحيح حالياً.");

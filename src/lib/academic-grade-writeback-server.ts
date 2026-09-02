@@ -19,6 +19,11 @@ import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-vali
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { shouldEndGraceForNumericGrade } from "@/lib/grace-grade-activation";
 import { endLeavesCoveringExamForGrade } from "@/lib/student-leave-grade-override-server";
+import {
+  LEAVE_END_CONFIRMATION_MESSAGE,
+  LEAVE_END_CONFIRMATION_REQUIRED_CODE,
+  requiresLeaveEndConfirmation,
+} from "@/lib/grade-leave-safety";
 
 // ----------------------------------------------------------------------------
 // Stale Absence Notes — ROOT-CAUSE FIX
@@ -181,11 +186,13 @@ type PrismaClientLike = typeof db | Prisma.TransactionClient;
 
 export class AcademicGradeWritebackError extends Error {
   status: number;
+  code?: string;
 
-  constructor(message: string, status = 400) {
+  constructor(message: string, status = 400, code?: string) {
     super(message);
     this.name = "AcademicGradeWritebackError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -229,6 +236,8 @@ export interface AcademicGradeWritebackInput {
   enforceExamAvailability?: boolean;
   allowDismissedExistingGradeCorrection?: boolean;
   deferAcademicRecalculation?: boolean;
+  /** Set only after the user explicitly approved ending the covering leave. */
+  confirmLeaveEnd?: boolean;
 }
 
 export function normalizeAcademicGradeStatus(
@@ -597,11 +606,12 @@ export async function syncAcademicGradeWriteback(
     });
   }
 
-  if (
-    input.blockOnLeave !== false &&
-    (score !== undefined || status !== "درجة") &&
-    !preRegistrationNumericGrade
-  ) {
+  const realNumericGrade =
+    status === "درجة" && typeof score === "number" && Number.isFinite(score);
+  // Numeric grades always inspect covering leaves, even if a future internal
+  // caller disables non-numeric leave coercion. This prevents a bypass from
+  // storing a counted grade beside an active leave or ending it silently.
+  if (realNumericGrade || input.blockOnLeave !== false) {
     const blockedByLeave = await hasBlockingLeave(client, studentId, exam);
     if (blockedByLeave) {
       // UNIFIED RULE: a real numeric grade (zero included) consciously
@@ -610,7 +620,19 @@ export async function syncAcademicGradeWriteback(
       // typed grade is then stored counted below. Absence/cheating attempts
       // keep their coercion to "مجاز" so a leave can never be erased by a
       // non-numeric marker.
-      if (status === "درجة" && typeof score === "number" && Number.isFinite(score)) {
+      if (realNumericGrade) {
+        if (requiresLeaveEndConfirmation({
+          hasBlockingLeave: blockedByLeave,
+          status,
+          score,
+          confirmLeaveEnd: input.confirmLeaveEnd,
+        })) {
+          throw new AcademicGradeWritebackError(
+            LEAVE_END_CONFIRMATION_MESSAGE,
+            409,
+            LEAVE_END_CONFIRMATION_REQUIRED_CODE,
+          );
+        }
         const leaveOverride = await endLeavesCoveringExamForGrade(
           client,
           studentId,

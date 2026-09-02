@@ -45,7 +45,7 @@
     "test:grade-entry-integrity": "node scripts/test-grade-entry-integrity.mjs && node --experimental-strip-types --test scripts/test-grade-entry-stats-behavior.mjs",
     "test:exam-records-integrity": "node scripts/test-exam-records-integrity.mjs",
     "test:grade-records-integrity": "node scripts/test-grade-records-integrity.mjs",
-    "test:student-leaves-integrity": "node scripts/test-student-leaves-integrity.mjs",
+    "test:student-leaves-integrity": "node scripts/test-student-leaves-integrity.mjs && node scripts/test-leave-grade-safety-integrity.mjs && node --experimental-strip-types --test scripts/test-grade-leave-safety-behavior.mjs",
     "test:pledges-integrity": "node scripts/test-pledges-integrity.mjs",
     "test:accounts-permissions-integrity": "node scripts/test-accounts-permissions-integrity.mjs",
     "test:logs-integrity": "node scripts/test-logs-integrity.mjs",

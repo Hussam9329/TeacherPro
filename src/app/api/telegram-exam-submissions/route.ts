@@ -756,6 +756,12 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     if (error instanceof AcademicGradeWritebackError) {
+      if (error.code) {
+        return NextResponse.json(
+          { error: error.message, code: error.code },
+          { status: error.status },
+        );
+      }
       return validationError(error.message, error.status);
     }
     return routeErrorResponse(error, "تعذر استقبال تسليم البوت حالياً.");
@@ -813,6 +819,12 @@ export async function PUT(req: NextRequest) {
         );
       } catch (error) {
         if (error instanceof AcademicGradeWritebackError) {
+          if (error.code) {
+            return NextResponse.json(
+              { error: error.message, code: error.code },
+              { status: error.status },
+            );
+          }
           return validationError(error.message, error.status);
         }
         throw error;
@@ -897,6 +909,12 @@ export async function PUT(req: NextRequest) {
     });
   } catch (error) {
     if (error instanceof AcademicGradeWritebackError) {
+      if (error.code) {
+        return NextResponse.json(
+          { error: error.message, code: error.code },
+          { status: error.status },
+        );
+      }
       return validationError(error.message, error.status);
     }
     return routeErrorResponse(error, "تعذر تحديث مستلم البوت حالياً.");

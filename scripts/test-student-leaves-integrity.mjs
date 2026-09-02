@@ -64,7 +64,9 @@ must(
 
 must(
   followUp.includes("leaveError") &&
-    followUp.includes("disabled={leaveSaving || leaveLoading || Boolean(leaveError)}") &&
+    followUp.includes("leaveSaving ||") &&
+    followUp.includes("Boolean(leaveError) ||") &&
+    followUp.includes("Boolean(selectedLeaveStudentBlockedReason)") &&
     followUp.includes("disabled={deleting || leaveLoading || Boolean(leaveError)}"),
   "الإجراءات الحساسة تتوقف إذا فشل تحميل الإجازات من الخادم",
   "يجب منع الحفظ والحذف عند فشل تحميل بيانات الخادم.",
@@ -157,8 +159,9 @@ must(
 );
 
 must(
-  pkg.scripts?.["test:student-leaves-integrity"] ===
+  String(pkg.scripts?.["test:student-leaves-integrity"] || "").startsWith(
     "node scripts/test-student-leaves-integrity.mjs",
+  ),
   "سكريبت اختبار الإجازات مضاف إلى package.json",
   "يجب إضافة test:student-leaves-integrity إلى package.json.",
 );

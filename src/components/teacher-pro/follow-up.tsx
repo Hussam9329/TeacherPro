@@ -1020,6 +1020,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const selectedLeaveStudent =
     students.find((student) => student.id === leaveStudentId) ||
     leavePickerStudents.find((student) => student.id === leaveStudentId);
+  const selectedLeaveStudentBlockedReason =
+    selectedLeaveStudent?.status === "مؤرشف"
+      ? "لا يمكن تسجيل إجازة لهذا الطالب لأنه مؤرشف."
+      : selectedLeaveStudent?.status === "مفصول"
+        ? "لا يمكن تسجيل إجازة لهذا الطالب لأنه مفصول. أعد تفعيله أولاً ثم سجل الإجازة."
+        : "";
   const leaveExamOptions = useMemo(
     () =>
       selectedLeaveStudent
@@ -1297,6 +1303,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     }
     if (!leaveStudentId || !leaveReason.trim()) {
       toast.error("اختر الطالب وسبب الإجازة");
+      return;
+    }
+    if (selectedLeaveStudentBlockedReason) {
+      toast.error(selectedLeaveStudentBlockedReason);
       return;
     }
     if (leaveMode === "exam" && !leaveExamId) {
@@ -1627,6 +1637,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             >
               <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{student.name}</span>
               <span className="shrink-0 break-all text-xs opacity-80">{student.code}</span>
+              {(student.status === "مؤرشف" || student.status === "مفصول") && (
+                <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold opacity-90">
+                  {student.status}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -1736,13 +1751,36 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       scopes: ["follow-up", "grades", "students", "opportunities", "dashboard"],
     });
 
-    const response = (result.data || {}) as { restoredGradeCount?: number };
+    const response = (result.data || {}) as {
+      restoredGradeCount?: number;
+      skippedGradeRestores?: {
+        absentBeforeRegistration?: number;
+        absentWithinGrace?: number;
+      };
+    };
     const restored = Number(response.restoredGradeCount || 0);
-    toast.success(
-      restored > 0
-        ? `تم حذف الإجازة واسترجاع ${restored} درجة/درجات ثم إعادة الاحتساب`
-        : "تم حذف الإجازة وإعادة احتساب الطالب من بيانات النظام",
+    const skippedBeforeRegistration = Number(
+      response.skippedGradeRestores?.absentBeforeRegistration || 0,
     );
+    const skippedWithinGrace = Number(
+      response.skippedGradeRestores?.absentWithinGrace || 0,
+    );
+    const resultDetails = [
+      restored > 0
+        ? `استُرجعت ${restored} درجة/درجات.`
+        : "لم تكن هناك درجات صالحة للاسترجاع.",
+      skippedBeforeRegistration > 0
+        ? `تم تجاهل ${skippedBeforeRegistration} غياب/غيابات لأنها تقع قبل تسجيل الطالب.`
+        : "",
+      skippedWithinGrace > 0
+        ? `تم تجاهل ${skippedWithinGrace} غياب/غيابات لأنها تقع ضمن فترة السماح.`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    toast.success("تم حذف الإجازة وإعادة احتساب الطالب.", {
+      description: resultDetails,
+    });
   };
 
   const renderLeaveList = () => (
@@ -2695,10 +2733,23 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   نوع البرنامج: <b>{selectedLeaveStudent.studyType || "—"}</b>
                 </p>
               )}
+              {selectedLeaveStudentBlockedReason && (
+                <p
+                  className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive"
+                  role="alert"
+                >
+                  {selectedLeaveStudentBlockedReason}
+                </p>
+              )}
               <Button
                 className="w-full"
                 onClick={() => void saveLeave()}
-                disabled={leaveSaving || leaveLoading || Boolean(leaveError)}
+                disabled={
+                  leaveSaving ||
+                  leaveLoading ||
+                  Boolean(leaveError) ||
+                  Boolean(selectedLeaveStudentBlockedReason)
+                }
               >
                 {leaveSaving ? "جاري الحفظ..." : "حفظ الإجازة"}
               </Button>

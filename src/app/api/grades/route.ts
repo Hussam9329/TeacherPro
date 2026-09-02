@@ -762,6 +762,7 @@ export async function POST(req: NextRequest) {
           // فقط إذا كان لهذا الطالب سجل موجود فعلاً في الامتحان؛ إنشاء
           // درجة جديدة لطالب مفصول يبقى ممنوعاً.
           allowDismissedExistingGradeCorrection: Boolean(existingGrade),
+          confirmLeaveEnd: body.confirmEndLeave === true,
         });
         if (!writeback) {
           throw new AcademicGradeWritebackError(
@@ -823,6 +824,12 @@ export async function POST(req: NextRequest) {
       );
     }
     if (error instanceof AcademicGradeWritebackError) {
+      if (error.code) {
+        return NextResponse.json(
+          { error: error.message, code: error.code },
+          { status: error.status },
+        );
+      }
       return validationError(error.message, error.status);
     }
     // أرجع تفاصيل الخطأ لسهولة التشخيص
@@ -1008,6 +1015,7 @@ export async function PUT(req: NextRequest) {
         blockOnLeave: true,
         enforceExamAvailability: true,
         allowDismissedExistingGradeCorrection: true,
+        confirmLeaveEnd: body.confirmEndLeave === true,
       });
       if (!writeback) {
         throw new AcademicGradeWritebackError(
@@ -1037,6 +1045,12 @@ export async function PUT(req: NextRequest) {
       );
     }
     if (error instanceof AcademicGradeWritebackError) {
+      if (error.code) {
+        return NextResponse.json(
+          { error: error.message, code: error.code },
+          { status: error.status },
+        );
+      }
       return validationError(error.message, error.status);
     }
     return routeErrorResponse(error, "تعذر تحديث الدرجة حالياً.");

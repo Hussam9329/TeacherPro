@@ -262,6 +262,15 @@ type RestoredGrade = {
   examId: string;
 };
 
+type SkippedGradeRestoreSummary = {
+  absentBeforeRegistration: number;
+  absentWithinGrace: number;
+};
+
+function emptySkippedGradeRestoreSummary(): SkippedGradeRestoreSummary {
+  return { absentBeforeRegistration: 0, absentWithinGrace: 0 };
+}
+
 async function backupGradesForLeave(
   tx: Prisma.TransactionClient,
   leaveId: string,
@@ -390,6 +399,7 @@ async function clearExcusedGradeMarkersForLeave(
 async function restoreGradesForLeave(
   tx: Prisma.TransactionClient,
   leaveId: string,
+  skippedSummary?: SkippedGradeRestoreSummary,
 ): Promise<RestoredGrade[]> {
   await clearExcusedGradeMarkersForLeave(tx, leaveId);
   const backups = await tx.$queryRaw<LeaveGradeBackupRow[]>`
@@ -442,14 +452,16 @@ async function restoreGradesForLeave(
     // حذف الإجازة لا يجوز أن يعيد غياباً كان غير صالح أصلاً: قبل تسجيل
     // الطالب أو ضمن السماح التلقائي/اليدوي. بقية الحالات (درجة/غش) تبقى
     // قابلة للاستعادة لأن السماح يمنع العقوبة لا إدخال النتيجة.
-    if (
-      backup.status === "غائب" &&
-      student &&
-      exam &&
-      (!isExamOnOrAfterStudentRegistration(student, exam) ||
-        isExamWithinStudentGraceWindow(student, exam))
-    ) {
-      continue;
+    if (backup.status === "غائب" && student && exam) {
+      const beforeRegistration = !isExamOnOrAfterStudentRegistration(student, exam);
+      const withinGrace = isExamWithinStudentGraceWindow(student, exam);
+      if (beforeRegistration || withinGrace) {
+        if (skippedSummary) {
+          if (beforeRegistration) skippedSummary.absentBeforeRegistration += 1;
+          else if (withinGrace) skippedSummary.absentWithinGrace += 1;
+        }
+        continue;
+      }
     }
     const restored = await tx.grade.upsert({
       where: {
@@ -515,6 +527,7 @@ type LeaveUpdateResult = {
 
 type LeaveDeleteResult = {
   restoredGrades: RestoredGrade[];
+  skippedGradeRestores: SkippedGradeRestoreSummary;
   retiredPendingNotes: number;
   academicRecalculation: AcademicServerRecalculationResult;
 };
@@ -989,7 +1002,12 @@ export async function DELETE(req: NextRequest) {
             where: { id },
           });
           if (!existingLeave) throw new Error("الإجازة المطلوبة غير موجودة");
-          const restoredGrades = await restoreGradesForLeave(tx, id);
+          const skippedGradeRestores = emptySkippedGradeRestoreSummary();
+          const restoredGrades = await restoreGradesForLeave(
+            tx,
+            id,
+            skippedGradeRestores,
+          );
           // Retire legacy pending leave notes for the exams this leave
           // covered so no stale "pending grade" alert survives the deletion.
           const affectedExamIds = await getAffectedExamIds(
@@ -1010,13 +1028,21 @@ export async function DELETE(req: NextRequest) {
             ]),
             { tx },
           );
-          return { restoredGrades, retiredPendingNotes, academicRecalculation };
+          return {
+            restoredGrades,
+            skippedGradeRestores,
+            retiredPendingNotes,
+            academicRecalculation,
+          };
         }),
       "StudentLeave",
     );
     await writeRequestAuditLog(req, "المتابعة", "حذف إجازة واسترجاع الدرجات وإعادة الاحتساب", {
       leaveId: id,
       restoredGradeCount: result.restoredGrades.length,
+      skippedAbsentBeforeRegistration:
+        result.skippedGradeRestores.absentBeforeRegistration,
+      skippedAbsentWithinGrace: result.skippedGradeRestores.absentWithinGrace,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
       studentIds: result.academicRecalculation?.studentIds || [],
     });
@@ -1024,6 +1050,7 @@ export async function DELETE(req: NextRequest) {
       ok: true,
       restoredGrades: result.restoredGrades,
       restoredGradeCount: result.restoredGrades.length,
+      skippedGradeRestores: result.skippedGradeRestores,
       academicRecalculation: result.academicRecalculation,
     });
   } catch (error) {

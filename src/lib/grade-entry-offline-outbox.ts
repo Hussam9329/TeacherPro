@@ -26,6 +26,7 @@ export type GradeEntryOfflineSave = {
   desired: OfflineGradeDesired;
   expectedUpdatedAt: string;
   expectMissing: boolean;
+  confirmEndLeave: boolean;
   attempted: OfflineGradeDesired[];
   queuedAt: number;
   updatedAt: number;
@@ -120,6 +121,7 @@ function normalizeItem(value: unknown): GradeEntryOfflineSave | null {
     desired,
     expectedUpdatedAt: String(record.expectedUpdatedAt || ""),
     expectMissing: Boolean(record.expectMissing),
+    confirmEndLeave: Boolean(record.confirmEndLeave),
     attempted,
     queuedAt: Number(record.queuedAt || Date.now()),
     updatedAt: Number(record.updatedAt || Date.now()),
@@ -276,6 +278,7 @@ export function stageGradeEntryOfflineSave(input: {
   notes?: string;
   expectedUpdatedAt?: string;
   expectMissing?: boolean;
+  confirmEndLeave?: boolean;
 }): GradeEntryOfflineAttempt | null {
   installBrowserEvents();
   const studentId = String(input.studentId || "").trim();
@@ -307,6 +310,7 @@ export function stageGradeEntryOfflineSave(input: {
           existing.state === "pending"
             ? existing.expectMissing
             : Boolean(input.expectMissing),
+        confirmEndLeave: Boolean(input.confirmEndLeave),
         attempted:
           existing.state === "pending"
             ? recordAttempted(existing.attempted, existing.desired)
@@ -324,6 +328,7 @@ export function stageGradeEntryOfflineSave(input: {
         desired,
         expectedUpdatedAt: String(input.expectedUpdatedAt || ""),
         expectMissing: Boolean(input.expectMissing),
+        confirmEndLeave: Boolean(input.confirmEndLeave),
         attempted: [],
         queuedAt: now,
         updatedAt: now,
@@ -439,6 +444,7 @@ function buildPayload(item: GradeEntryOfflineSave): Record<string, unknown> {
     notes: item.desired.notes,
     expectedUpdatedAt: item.expectedUpdatedAt,
     expectMissing: item.expectMissing,
+    confirmEndLeave: item.confirmEndLeave,
   };
 }
 

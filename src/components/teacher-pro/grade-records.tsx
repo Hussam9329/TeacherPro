@@ -72,6 +72,10 @@ import {
   matchesArabicLetterFilter,
   type GradeStatusFilter,
 } from "@/lib/grade-status-filters";
+import {
+  LEAVE_END_CONFIRMATION_MESSAGE,
+  LEAVE_END_CONFIRMATION_REQUIRED_CODE,
+} from "@/lib/grade-leave-safety";
 
 type GradeStatus = "درجة" | "غائب" | "غش" | "مجاز";
 type ViewMode = "cards" | "table";
@@ -203,6 +207,7 @@ export function GradeRecordsView() {
   });
   const [reactivationEditConfirmOpen, setReactivationEditConfirmOpen] =
     useState(false);
+  const [leaveEndEditConfirmOpen, setLeaveEndEditConfirmOpen] = useState(false);
   const { locked: isDeletingGrade, runLocked: runDeleteGradeLocked } =
     useActionLock();
 
@@ -783,7 +788,9 @@ export function GradeRecordsView() {
     return { grade, score: rawScore };
   };
 
-  const saveEditGradeUnchecked = async () => {
+  const saveEditGradeUnchecked = async (
+    options: { confirmLeaveEnd?: boolean } = {},
+  ) => {
     if (!canRunGradeRecordActions) {
       toast.error("تعذر تعديل الدرجة قبل تحميل سجل الدرجات من النظام.");
       return;
@@ -798,9 +805,19 @@ export function GradeRecordsView() {
       notes: editDialog.notes,
       academicAccountingChecked: false,
       expectedUpdatedAt: grade.updatedAt || "",
+      confirmEndLeave: options.confirmLeaveEnd === true,
     });
 
     if (!result.ok || result.queued) {
+      const errorPayload = (result.data || {}) as { code?: string };
+      if (
+        !result.queued &&
+        errorPayload.code === LEAVE_END_CONFIRMATION_REQUIRED_CODE &&
+        !options.confirmLeaveEnd
+      ) {
+        setLeaveEndEditConfirmOpen(true);
+        return;
+      }
       if (result.status === 409) setServerRefreshKey((key) => key + 1);
       toast.error(result.error || "تعذر تعديل الدرجة من النظام.");
       return;
@@ -827,7 +844,12 @@ export function GradeRecordsView() {
       notes: "",
     });
     refreshGradeRecordsAfterMutation("grade-records-edit");
-    toast.success("تم تعديل الدرجة من بيانات النظام وإعادة الاحتساب");
+    const payload = (result.data || {}) as { leaveEndedByGrade?: boolean };
+    toast.success(
+      payload.leaveEndedByGrade
+        ? "تم اعتماد الدرجة وإنهاء الإجازة وإعادة احتساب الطالب."
+        : "تم تعديل الدرجة من بيانات النظام وإعادة الاحتساب",
+    );
   };
 
   const handleSaveEditGrade = () => {
@@ -1644,6 +1666,32 @@ export function GradeRecordsView() {
               }}
             >
               متابعة
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={leaveEndEditConfirmOpen}
+        onOpenChange={setLeaveEndEditConfirmOpen}
+      >
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأكيد إنهاء إجازة الطالب</AlertDialogTitle>
+            <AlertDialogDescription>
+              {LEAVE_END_CONFIRMATION_MESSAGE} هل تريد المتابعة؟
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                setLeaveEndEditConfirmOpen(false);
+                void saveEditGradeUnchecked({ confirmLeaveEnd: true });
+              }}
+            >
+              اعتماد الدرجة وإنهاء الإجازة
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
