@@ -120,6 +120,52 @@ export function computeActiveChapterReportContext(
   };
 }
 
+export type ActiveChapterOpportunityLogLike = {
+  examId?: unknown;
+  date?: unknown;
+};
+
+/**
+ * يقرر هل تنتمي حركة فرص لعرض «الفصل النشط الحالي» في تقرير HTML ورسالة
+ * تيليجرام (نفس قاعدة الدرجات — حسب طلب المالك):
+ *
+ * - حركة مرتبطة بامتحان: تُعرض فقط إذا كان الامتحان من امتحانات الفصل
+ *   النشط، مهما كان تاريخ تسجيل الحركة (حتى لو أعاد المحرك توليدها لاحقاً
+ *   بسبب تعديل درجة).
+ * - حركة بلا امتحان (تسوية انتقال الفصول، تعديل يدوي): تُعرض فقط إذا
+ *   وقعت بيوم لحظة الانتقال أو بعدها؛ خصومات الفصل السابق أثرها انمحى
+ *   بالتسوية فلا معنى لعرضها داخل تقرير الفصل النشط. بلا انتقال (الفصل
+ *   الأول منذ بداية الدورة) تُعرض كلها لأنها كلها ضمن الفصل النشط.
+ * - غياب سياق الفصل النشط كلياً: يُعرض كل شيء (السلوك القديم) حتى لا
+ *   يخفي التقرير بيانات بسبب غياب الفصل النشط أو تعارضه.
+ *
+ * مقارنة اليوم بغداد (baghdadDateKey) حتى تعمل الحدود المخزنة كمفتاح يوم
+ * أو كطابع زمني كامل بنفس الدقة. التسوية تُسك بلحظة الانتقال نفسها،
+ * فيومها يساوي يوم الحد ويدخل بالشرط «>=» المتعمد.
+ */
+export function opportunityLogWithinActiveChapter(
+  log: ActiveChapterOpportunityLogLike | null | undefined,
+  context:
+    | Pick<ActiveChapterReportContext, "examIds" | "since">
+    | null
+    | undefined,
+): boolean {
+  if (!context || !Array.isArray(context.examIds)) return true;
+  const examId = String(log?.examId ?? "")
+    .trim();
+  if (examId) return context.examIds.includes(examId);
+  if (!context.since) return true;
+  const boundaryDay = baghdadDateKey(context.since);
+  const logDay = baghdadDateKey(
+    log?.date instanceof Date
+      ? log.date
+      : typeof log?.date === "string" && log.date.trim()
+        ? log.date
+        : null,
+  );
+  return Boolean(boundaryDay && logDay && logDay >= boundaryDay);
+}
+
 type ActiveChapterReportDbClient = Pick<
   Prisma.TransactionClient,
   "courseChapter" | "exam" | "grade"

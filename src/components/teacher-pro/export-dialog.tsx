@@ -17,6 +17,7 @@ import { Download, FileCode, FileSpreadsheet, FileText, Printer, RotateCcw } fro
 import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
+import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
 
 export type ExportColumn<T = Record<string, unknown>> = {
   key: string;
@@ -96,12 +97,6 @@ const GRACE_DEFERRED_GRADE_NOTE_PREFIXES = [
 ] as const;
 const HISTORICAL_OPPORTUNITY_RESET_REASON =
   "تسوية تاريخية: تجاهل آثار الامتحانات السابقة للتسوية حتى عند تعديل درجاتها لاحقاً";
-// عبارات تدل على إعادة تعيين الرصيد (وليس فقدان حقيقي) — تُستخدم لفلترة سجل الفرص في التقرير.
-const RESET_REASON_PATTERNS = [
-  "تسوية تاريخية",
-  "بدء رصيد جديد",
-  "انتقال مؤكد",
-] as const;
 
 function normalizeArabicComparisonText(value: unknown): string {
   return String(value ?? "")
@@ -165,14 +160,6 @@ function sanitizeOpportunityReasonForHtml(
   return text || null;
 }
 
-function isOpportunityResetLog(reason: string | null | undefined): boolean {
-  if (!reason) return false;
-  const normalized = normalizeArabicComparisonText(reason);
-  return RESET_REASON_PATTERNS.some((pattern) =>
-    normalized.includes(normalizeArabicComparisonText(pattern)),
-  );
-}
-
 export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetailsMap {
   return Object.fromEntries(
     Object.entries(details).map(([studentId, studentDetails]) => [
@@ -194,8 +181,10 @@ export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): Stude
             const db = new Date(b.examDate).getTime() || 0;
             return db - da;
           }),
+        // سجل الفرص يصل هنا مقيداً بالفصل النشط من buildStudentDetailsFromProfileLog،
+        // لذا تبقى صفوف التسوية (بداية رصيد الفصل) ظاهرة: هي الخط الفاصل الذي
+        // يفسر أن خصومات الفصل السابق لا تُحسب على الرصيد الحالي.
         opportunityLogs: (studentDetails.opportunityLogs || [])
-          .filter((log) => !isOpportunityResetLog(log.reason))
           .map((log) => ({
             ...log,
             reason: sanitizeOpportunityReasonForHtml(log.reason),
@@ -248,6 +237,33 @@ function resolveActiveChapterExamFilter(
   const activeChapterName =
     typeof nameRaw === "string" && nameRaw.trim() ? nameRaw.trim() : null;
   return { chapterExamIds, activeChapterName };
+}
+
+/**
+ * يستخرج نطاق «الفصل النشط» لسجل حركات الفرص من استجابة profile-log:
+ * نفس امتحانات الفصل النشط المستخدمة لفلترة الدرجات، مع لحظة الانتقال
+ * (since) لفلترة الحركات غير المرتبطة بامتحان (التسوية، التعديلات اليدوية).
+ * يعيد null عند غياب السياق كلياً = بلا فلترة (السلوك القديم).
+ */
+function resolveActiveChapterLogScope(
+  profile: StudentProfileLogSnapshot,
+): { examIds: string[]; since: string | null } | null {
+  const currentChapter = profile.currentChapter;
+  if (!currentChapter || typeof currentChapter !== "object") {
+    return null;
+  }
+  const examIdsRaw = currentChapter.examIds;
+  if (!Array.isArray(examIdsRaw)) {
+    return null;
+  }
+  const sinceRaw = currentChapter.since;
+  return {
+    examIds: examIdsRaw
+      .map((id) => String(id || "").trim())
+      .filter(Boolean),
+    since:
+      typeof sinceRaw === "string" && sinceRaw.trim() ? sinceRaw.trim() : null,
+  };
 }
 
 /**
@@ -334,8 +350,19 @@ export function buildStudentDetailsFromProfileLog(
   const rawLogs = Array.isArray(profile.opportunityLogs)
     ? profile.opportunityLogs
     : [];
-  const opportunityLogs: StudentOpportunityLogDetail[] = rawLogs.map(
-    (rawLog) => {
+  const logScope = resolveActiveChapterLogScope(profile);
+  const opportunityLogs: StudentOpportunityLogDetail[] = rawLogs
+    // سجل الفرص مقيد بنفس حدود الفصل النشط المطبقة على الدرجات (حسب طلب
+    // المالك): تُعرض حركات امتحانات الفصل النشط فقط، ومعها التسوية/الحركات
+    // اليدوية الواقعة يوم انتقال الفصل أو بعده. خصومات امتحانات الفصل
+    // السابق تُخفى لأن التسوية عند التحويل محت أثرها من الرصيد الحالي.
+    .filter((rawLog) =>
+      opportunityLogWithinActiveChapter(
+        rawLog as Record<string, unknown>,
+        logScope,
+      ),
+    )
+    .map((rawLog) => {
       const log = rawLog as Record<string, unknown>;
       const exam = examMap.get(String(log.examId || ""));
       return {
@@ -345,8 +372,7 @@ export function buildStudentDetailsFromProfileLog(
         date: String(log.date || ""),
         examName: exam?.name ? String(exam.name) : null,
       };
-    },
-  );
+    });
 
   return { grades, opportunityLogs, activeChapterName };
 }
@@ -795,7 +821,7 @@ const DETAILS_MODAL_HTML = `
       </table>
     </div>
     <div class="tp-details-section" id="tpLogsSection">
-      <h3>سجل حركات الفرص</h3>
+      <h3 id="tpLogsSectionTitle">سجل حركات الفرص</h3>
       <table class="tp-details-table tp-logs-table" role="table" aria-label="سجل حركات الفرص">
         <thead>
           <tr role="row">
@@ -1033,6 +1059,14 @@ const DETAILS_MODAL_JS = `
       gradesTitleEl.textContent = (data && data.activeChapterName)
         ? 'امتحانات الفصل النشط الحالي (' + data.activeChapterName + ')'
         : 'كل الامتحانات';
+    }
+    // عنوان قسم السجل: نفس توضيح الفصل النشط لأن حركات الفرص مقيدة به
+    // (خصومات الفصل السابق مخفية وأثرها انمحى بالتسوية عند التحويل).
+    var logsTitleEl = document.getElementById('tpLogsSectionTitle');
+    if (logsTitleEl) {
+      logsTitleEl.textContent = (data && data.activeChapterName)
+        ? 'سجل حركات الفرص — الفصل النشط (' + data.activeChapterName + ')'
+        : 'سجل حركات الفرص';
     }
 
     if (!data) {

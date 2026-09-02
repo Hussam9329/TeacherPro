@@ -46,7 +46,7 @@ require.extensions[".ts"] = (module, filename) => {
   module._compile(output.outputText, filename);
 };
 
-const { computeActiveChapterReportContext, parseArchiveEntryDates } = require(
+const { computeActiveChapterReportContext, parseArchiveEntryDates, opportunityLogWithinActiveChapter } = require(
   path.join(root, "src/lib/active-chapter-report.ts"),
 );
 
@@ -199,6 +199,126 @@ must(
   "أرشيف تالف أو بلا تواريخ: يُتجاهل بأمان",
 );
 
+/* ================= سلوك تقييد سجل الفرص على الفصل النشط ================= */
+
+const chapterLogScope = {
+  examIds: ["e-new", "e-future"],
+  since: "2026-08-14T17:39:56.561Z",
+};
+
+// حركة مرتبطة بامتحان: تُعرض فقط إذا كان الامتحان من امتحانات الفصل النشط،
+// مهما كان تاريخ تسجيل الحركة (حتى لو أعاد المحرك توليدها لاحقاً).
+assert.equal(
+  opportunityLogWithinActiveChapter(
+    { examId: "e-new", date: "2026-08-15T10:00:00.000Z" },
+    chapterLogScope,
+  ),
+  true,
+);
+assert.equal(
+  opportunityLogWithinActiveChapter(
+    { examId: "e-old", date: "2026-07-19T10:00:00.000Z" },
+    chapterLogScope,
+  ),
+  false,
+);
+assert.equal(
+  opportunityLogWithinActiveChapter(
+    { examId: "e-old", date: "2026-08-25T10:00:00.000Z" },
+    chapterLogScope,
+  ),
+  false,
+);
+must(
+  opportunityLogWithinActiveChapter({ examId: "e-new" }, chapterLogScope) &&
+    !opportunityLogWithinActiveChapter({ examId: "e-old" }, chapterLogScope) &&
+    !opportunityLogWithinActiveChapter(
+      { examId: "e-old", date: "2026-08-25T10:00:00.000Z" },
+      chapterLogScope,
+    ),
+  "حركة مرتبطة بامتحان: تدخل فقط إذا كان الامتحان من الفصل النشط مهما تأخر تاريخها",
+);
+
+// التسوية تُسك بيوم الانتقال نفسها فتظهر (>= متعمد)، وما قبل اليوم يُخفى.
+assert.equal(
+  opportunityLogWithinActiveChapter(
+    { examId: null, date: "2026-08-14T17:39:56.561Z" },
+    chapterLogScope,
+  ),
+  true,
+);
+assert.equal(
+  opportunityLogWithinActiveChapter(
+    { examId: null, date: "2026-08-20T09:00:00.000Z" },
+    chapterLogScope,
+  ),
+  true,
+);
+assert.equal(
+  opportunityLogWithinActiveChapter(
+    { examId: null, date: "2026-08-13T10:00:00.000Z" },
+    chapterLogScope,
+  ),
+  false,
+);
+assert.equal(
+  opportunityLogWithinActiveChapter(
+    { examId: null, date: "2026-07-01T09:00:00.000Z" },
+    chapterLogScope,
+  ),
+  false,
+);
+must(
+  opportunityLogWithinActiveChapter(
+    { examId: null, date: "2026-08-14T17:39:56.561Z" },
+    chapterLogScope,
+  ) &&
+    opportunityLogWithinActiveChapter(
+      { examId: null, date: "2026-08-20T09:00:00.000Z" },
+      chapterLogScope,
+    ) &&
+    !opportunityLogWithinActiveChapter(
+      { examId: null, date: "2026-08-13T10:00:00.000Z" },
+      chapterLogScope,
+    ),
+  "حركة بلا امتحان: تظهر من يوم الانتقال فصاعداً (التسوية بيومها تظهر) وما قبله يُخفى",
+);
+
+// بلا انتقال بعد (الفصل الأول منذ البداية): الحركات غير المرتبطة بامتحان كلها ظاهرة.
+assert.equal(
+  opportunityLogWithinActiveChapter(
+    { examId: null, date: "2026-06-01T00:00:00.000Z" },
+    { examIds: ["e1"], since: null },
+  ),
+  true,
+);
+must(
+  opportunityLogWithinActiveChapter(
+    { examId: null, date: "2026-06-01T00:00:00.000Z" },
+    { examIds: ["e1"], since: null },
+  ),
+  "فصل نشط بلا انتقال: الحركات غير المرتبطة بامتحان كلها من الفصل النشط",
+);
+
+// غياب السياق كلياً أو تاريخ غير صالح: بلا فلترة (السلوك القديم) وتجاهل آمن.
+assert.equal(opportunityLogWithinActiveChapter({ examId: "x" }, null), true);
+assert.equal(opportunityLogWithinActiveChapter({ examId: "x" }, undefined), true);
+assert.equal(
+  opportunityLogWithinActiveChapter(
+    { examId: null, date: "تاريخ غير صالح" },
+    chapterLogScope,
+  ),
+  false,
+);
+must(
+  opportunityLogWithinActiveChapter({ examId: "x" }, null) &&
+    !opportunityLogWithinActiveChapter(
+      { examId: null, date: "تاريخ غير صالح" },
+      chapterLogScope,
+    ),
+  "غياب السياق = بلا فلترة، وتاريخ حركة غير صالح لا يظهر داخل نطاق الفصل",
+);
+
 /* ===================== الربط بالمصدر الموحد للتقرير ===================== */
 
 must(
@@ -215,6 +335,25 @@ must(
     exportDialog.includes("chapterExamIds.has(") &&
     exportDialog.includes("activeChapterName }"),
   "دالة التحويل المشتركة تفلتر درجات امتحانات الفصل النشط وتربط اسم الفصل بالتفاصيل",
+);
+
+must(
+  exportDialog.includes('import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report"') &&
+    exportDialog.includes("resolveActiveChapterLogScope(profile)") &&
+    exportDialog.includes("opportunityLogWithinActiveChapter("),
+  "دالة التحويل المشتركة تقيد سجل حركات الفرص بنفس حدود الفصل النشط (خصومات الفصل السابق مخفية والتسوية ظاهرة)",
+);
+
+must(
+  !exportDialog.includes("isOpportunityResetLog") &&
+    !exportDialog.includes("RESET_REASON_PATTERNS"),
+  "صفوف تسوية انتقال الفصول تبقى ظاهرة بالتقرير (لم تعد تُخفى) لأن السجل مقيد بالفصل النشط",
+);
+
+must(
+  exportDialog.includes('id="tpLogsSectionTitle"') &&
+    exportDialog.includes("سجل حركات الفرص — الفصل النشط ("),
+  "عنوان قسم السجل بملف HTML يوضح أن الحركات مقيدة بالفصل النشط",
 );
 
 must(

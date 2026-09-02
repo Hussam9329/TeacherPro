@@ -990,7 +990,7 @@ export function OpportunitiesView() {
                 fetchRows={fetchOpportunityExportRows}
                 columns={opportunityExportColumns}
                 triggerLabel="تصدير"
-                description="تقرير إدارة الفرص حسب الفلاتر الحالية — زر HTML يفتح ملف بحث بخانة وسطية مرنة، يعرض درجات امتحانات الفصل النشط الحالي فقط مع سجل الفرص، والطالب المفصول تظهر شارة «مفصول» بجانب اسمه"
+                description="تقرير إدارة الفرص حسب الفلاتر الحالية — زر HTML يفتح ملف بحث بخانة وسطية مرنة، يعرض درجات امتحانات الفصل النشط الحالي فقط مع سجل فرص مقيد بنفس الفصل (مع صف تسوية الانتقال)، والطالب المفصول تظهر شارة «مفصول» بجانب اسمه"
                 fetchStudentDetails={fetchOpportunityStudentDetails}
                 getRowId={(s) => String((s as Record<string, unknown>)?.id ?? "")}
                 totalRowCount={

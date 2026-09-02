@@ -30,6 +30,22 @@ const inertNamespace = new Proxy(inertComponent, {
   },
 });
 
+// تحميل مصدر TypeScript الفعلي للمكتبات المشتركة (نفس آلية
+// test-active-chapter-report-integrity.mjs) بدل تنصيبها ككعب صامت.
+require.extensions[".ts"] = (module, filename) => {
+  const source = fs.readFileSync(filename, "utf8");
+  const output = ts.transpileModule(source, {
+    fileName: filename,
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      moduleResolution: ts.ModuleResolutionKind.NodeJs,
+      target: ts.ScriptTarget.ES2022,
+    },
+  });
+  module._compile(output.outputText, filename);
+};
+
 function loadExportDialogModule() {
   const source = fs.readFileSync(exportDialogPath, "utf8");
   const transpiled = ts.transpileModule(source, {
@@ -63,6 +79,13 @@ function loadExportDialogModule() {
           return String(value ?? "");
         },
       };
+    }
+    // المكتبة المشتركة تُحمَّل حقيقية: فلترة سجل الفرص على الفصل النشط
+    // سلوك منطق عمل يجب فحصه، لا كعب صامت يرجع true دائماً.
+    if (request === "@/lib/active-chapter-report") {
+      return require(
+        path.join(projectRoot, "src/lib/active-chapter-report.ts"),
+      );
     }
     if (request === "react/jsx-runtime") {
       return {
@@ -164,6 +187,7 @@ function createDomHarness() {
     "tpModalDismissedBadge",
     "tpGradesSectionTitle",
     "tpGradesBody",
+    "tpLogsSectionTitle",
     "tpLogsBody",
     "tpLogsSection",
     "tpModalClose",
@@ -317,7 +341,7 @@ function assertNormalTableFallback(html, label) {
   );
 }
 
-const { buildHtml } = loadExportDialogModule();
+const { buildHtml, buildStudentDetailsFromProfileLog, sanitizeStudentDetailsForHtml } = loadExportDialogModule();
 
 const rows = [{ id: "s1", name: "طالب اعتيادي" }];
 const columns = [
@@ -448,11 +472,16 @@ check("سجل الفرص يعرض الحركة والعدد المسجل بدو�
     "تاريخ الحركة",
     "الامتحان",
   ]);
-  assert.match(validHtml, /<h3>سجل حركات الفرص<\/h3>/);
+  assert.match(validHtml, /<h3 id="tpLogsSectionTitle">سجل حركات الفرص<\/h3>/);
   assert.doesNotMatch(validHtml, /سجل فقدان الفرص|عدد الفرص المفقودة|تاريخ الفقدان/);
 
   const { dom } = executeInlineScripts(validHtml, "opportunities-movements");
   openStudentDetails(dom, "s1", "محمد علي حسن");
+  // عنوان قسم السجل يوضح أن الحركات مقيدة بالفصل النشط عند توفر اسمه.
+  assert.equal(
+    dom.elements.tpLogsSectionTitle.textContent,
+    "سجل حركات الفرص — الفصل النشط (الفصل الأول)",
+  );
   const movementHtml = dom.elements.tpLogsBody.innerHTML;
   assert.deepEqual(labelsFromRenderedCells(movementHtml), [
     "نوع الحركة",
@@ -482,6 +511,97 @@ check("سجل الفرص يعرض الحركة والعدد المسجل بدو�
     movementHtml,
     /data-label="العدد المسجل"[\s\S]*?class="tp-mobile-field-value">7<\/span>/,
   );
+});
+
+check("سجل الفرص مقيد بالفصل النشط: خصومات الفصل السابق مخفية والتسوية ظاهرة", () => {
+  const profile = {
+    currentChapter: {
+      id: "ch2",
+      name: "الفصل الثاني - الانسجة",
+      since: "2026-08-14T17:39:56.561Z",
+      examIds: ["exam-ch2-1", "exam-ch2-2"],
+    },
+    exams: [
+      { id: "exam-ch1-old", name: "الامتحان 13 - دورة صيفية", type: "تراكمي", date: "2026-07-18T00:00:00.000Z", fullMark: 40 },
+      { id: "exam-ch2-1", name: "الفصل الثاني - الامتحان الاول (ص1)", type: "يومي", date: "2026-08-13T00:00:00.000Z", fullMark: 40 },
+      { id: "exam-ch2-2", name: "الفصل الثاني - الامتحان الثاني (ص1)", type: "تراكمي", date: "2026-08-15T00:00:00.000Z", fullMark: 40 },
+    ],
+    grades: [
+      { examId: "exam-ch2-1", status: "درجة", score: 10 },
+      { examId: "exam-ch1-old", status: "درجة", score: 12 },
+    ],
+    opportunityLogs: [
+      // خصم على امتحان الفصل السابق (تموز) — يجب إخفاؤه.
+      { action: "خصم تلقائي", amount: 1, examId: "exam-ch1-old", date: "2026-07-19T00:00:00.000Z", reason: "تلقائي: درجة 12 ضمن الخصم في امتحان: الامتحان 13 - دورة صيفية" },
+      // خصم على امتحان الفصل النشط — يظهر.
+      { action: "خصم تلقائي", amount: 1, examId: "exam-ch2-1", date: "2026-08-14T18:00:00.000Z", reason: "تلقائي: درجة 10 ضمن الخصم في امتحان: الفصل الثاني - الامتحان الاول (ص1)" },
+      // تسوية الانتقال (بلا امتحان، بيوم الانتقال نفسه) — تظهر.
+      { action: "إعادة تعيين", amount: 3, examId: null, date: "2026-08-14T17:39:56.561Z", reason: "تسوية تاريخية: تحويل فصل يدوي؛ تجاهل آثار امتحانات الفصل السابق وبدء رصيد جديد من الفصل النشط الجديد" },
+      // حركة يدوية قبل الانتقال (بلا امتحان) — تُخفى.
+      { action: "إضافة", amount: 1, examId: null, date: "2026-07-01T09:00:00.000Z", reason: "تعديل يدوي قديم" },
+      // حركة يدوية بعد الانتقال (بلا امتحان) — تظهر.
+      { action: "إضافة", amount: 1, examId: null, date: "2026-08-20T09:00:00.000Z", reason: "تعديل يدوي حديث" },
+      // حركة أعادها المحرك لاحقاً على امتحان قديم — تُخفى مهما كان تاريخها.
+      { action: "خصم تلقائي", amount: 1, examId: "exam-ch1-old", date: "2026-08-25T00:00:00.000Z", reason: "تلقائي: درجة 12 ضمن الخصم في امتحان: الامتحان 13 - دورة صيفية" },
+    ],
+  };
+
+  const details = buildStudentDetailsFromProfileLog(profile);
+  const reasons = details.opportunityLogs.map((log) => log.reason);
+  assert.equal(details.opportunityLogs.length, 3);
+  assert.ok(reasons.some((reason) => reason.includes("تسوية تاريخية")), "التسوية ظاهرة");
+  assert.ok(reasons.some((reason) => reason.includes("الامتحان الاول (ص1)")), "خصم امتحان الفصل النشط ظاهر");
+  assert.ok(reasons.some((reason) => reason === "تعديل يدوي حديث"), "الحركة اليدوية بعد الانتقال ظاهرة");
+  assert.ok(!reasons.some((reason) => reason.includes("دورة صيفية")), "خصومات امتحانات الفصل السابق (تموز) مخفية");
+  assert.ok(!reasons.some((reason) => reason === "تعديل يدوي قديم"), "الحركات اليدوية قبل الانتقال مخفية");
+  assert.equal(details.activeChapterName, "الفصل الثاني - الانسجة");
+
+  // الدرجات تبقى مفلترة على امتحانات الفصل النشط فقط.
+  assert.deepEqual(
+    details.grades.map((grade) => grade.examName),
+    ["الفصل الثاني - الامتحان الاول (ص1)"],
+  );
+
+  // التنظيف لم يعد يحذف صفوف التسوية — هي الخط الفاصل الذي يفسر الرصيد.
+  const sanitized = sanitizeStudentDetailsForHtml({ s1: details });
+  const sanitizedReasons = sanitized.s1.opportunityLogs.map((log) => log.reason);
+  assert.equal(sanitized.s1.opportunityLogs.length, 3);
+  assert.ok(sanitizedReasons.some((reason) => reason.includes("تسوية تاريخية")), "التسوية تبقى بعد التنظيف");
+});
+
+check("غياب سياق الفصل النشط يبقي سجل الفرص كاملاً (السلوك القديم)", () => {
+  const profile = {
+    currentChapter: null,
+    exams: [{ id: "exam-any", name: "امتحان قديم", type: "يومي", date: "2026-07-01T00:00:00.000Z", fullMark: 40 }],
+    grades: [],
+    opportunityLogs: [
+      { action: "خصم تلقائي", amount: 1, examId: "exam-any", date: "2026-07-02T00:00:00.000Z", reason: "خصم قديم" },
+      { action: "إعادة تعيين", amount: 3, examId: null, date: "2026-06-01T00:00:00.000Z", reason: "تسوية تاريخية قديمة" },
+    ],
+  };
+  const details = buildStudentDetailsFromProfileLog(profile);
+  assert.equal(details.opportunityLogs.length, 2);
+});
+
+check("فصل نشط بلا انتقال بعد (since=null): حركات الدورة كلها من الفصل النشط", () => {
+  const profile = {
+    currentChapter: { id: "ch1", name: "الفصل الأول", since: null, examIds: ["exam-a"] },
+    exams: [
+      { id: "exam-a", name: "امتحان آ", type: "يومي", date: "2026-06-16T00:00:00.000Z", fullMark: 40 },
+      { id: "exam-old-other", name: "امتحان دورة أخرى", type: "يومي", date: "2026-06-10T00:00:00.000Z", fullMark: 40 },
+    ],
+    grades: [],
+    opportunityLogs: [
+      { action: "خصم تلقائي", amount: 1, examId: "exam-a", date: "2026-06-17T00:00:00.000Z", reason: "خصم آ" },
+      { action: "إضافة", amount: 2, examId: null, date: "2026-06-01T00:00:00.000Z", reason: "رصيد بداية الدورة" },
+      { action: "خصم تلقائي", amount: 1, examId: "exam-old-other", date: "2026-06-11T00:00:00.000Z", reason: "خصم خارج الدورة" },
+    ],
+  };
+  const details = buildStudentDetailsFromProfileLog(profile);
+  const reasons = details.opportunityLogs.map((log) => log.reason);
+  assert.ok(reasons.includes("خصم آ"));
+  assert.ok(reasons.includes("رصيد بداية الدورة"), "بلا انتقال: الحركات غير المرتبطة بامتحان كلها ظاهرة");
+  assert.ok(!reasons.includes("خصم خارج الدورة"), "امتحان خارج قائمة امتحانات الفصل النشط يبقى مخفياً");
 });
 
 check("بيانات الطلاب لا تستطيع كسر عنصر script وتبقى قيمتها الأصلية بعد التنفيذ", () => {
