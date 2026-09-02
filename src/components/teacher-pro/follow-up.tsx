@@ -54,6 +54,12 @@ import {
   isStudentCurrentlyInGrace as isStudentCurrentlyInGraceUnified,
 } from "@/lib/student-grace";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
+import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
+import {
+  isStudentExamCall,
+  studentExamCallIdentityKey,
+  studentExamCallIdentityMatches,
+} from "@/lib/call-identity";
 
 type FollowView = "leaves" | "calls" | "pledges";
 type CallCategory =
@@ -215,7 +221,6 @@ const callGradeDisplayModeLabels: Record<CallGradeDisplayMode, string> = {
 };
 
 const CONTACT_STATUS_EMPTY_VALUE = "__empty__";
-const CALL_STUDENT_NOTE_CATEGORY = "call-student-note";
 const contactStatusOptions: Array<{
   value: typeof CONTACT_STATUS_EMPTY_VALUE | Exclude<ContactStatus, "">;
   label: string;
@@ -1087,17 +1092,17 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const callLogLookup = useMemo(() => {
     const map = new Map<string, (typeof effectiveStudentCalls)[number]>();
     effectiveStudentCalls.forEach((call) => {
-      const key = `${call.studentId}::${String(call.examId || "")}::${call.category}`;
+      if (!isStudentExamCall(call)) return;
+      const key = studentExamCallIdentityKey(call.studentId, call.examId);
+      // API results are newest-first, so the first row wins if historical
+      // category-based duplicates still exist before opportunistic cleanup.
       if (!map.has(key)) map.set(key, call);
     });
     return map;
   }, [effectiveStudentCalls]);
 
-  const callLogForGrade = (student: Student, item: CallGradeItem) => {
-    const exactKey = `${student.id}::${item.exam.id}::${item.callKey}`;
-    const legacyKey = `${student.id}::${item.exam.id}::${item.category}`;
-    return callLogLookup.get(exactKey) || callLogLookup.get(legacyKey);
-  };
+  const callLogForGrade = (student: Student, item: CallGradeItem) =>
+    callLogLookup.get(studentExamCallIdentityKey(student.id, item.exam.id));
 
   const callLogForRow = (row: CallStudentRow) =>
     row.focusItem ? callLogForGrade(row.student, row.focusItem) : undefined;
@@ -1422,8 +1427,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const serverCallLookup = new Map<string, StudentCall>();
     const serverNoteLookup = new Map<string, StudentCall>();
     serverCalls.forEach((call) => {
-      const key = `${call.studentId}::${String(call.examId || "")}::${call.category}`;
-      if (!serverCallLookup.has(key)) serverCallLookup.set(key, call);
+      if (isStudentExamCall(call)) {
+        const key = studentExamCallIdentityKey(call.studentId, call.examId);
+        if (!serverCallLookup.has(key)) serverCallLookup.set(key, call);
+      }
       if (call.category === CALL_STUDENT_NOTE_CATEGORY && !serverNoteLookup.has(call.studentId)) {
         serverNoteLookup.set(call.studentId, call);
       }
@@ -1431,13 +1438,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     return serverRows.map((row) => {
       const item = row.focusItem;
-      const exactKey = item
-        ? `${row.student.id}::${item.exam.id}::${item.callKey}`
-        : "";
-      const legacyKey = item
-        ? `${row.student.id}::${item.exam.id}::${item.category}`
-        : "";
-      const call = serverCallLookup.get(exactKey) || serverCallLookup.get(legacyKey);
+      const call = item
+        ? serverCallLookup.get(studentExamCallIdentityKey(row.student.id, item.exam.id))
+        : undefined;
       const note = serverNoteLookup.get(row.student.id)?.notes || "";
       return { row, status: callStatusForLog(call), note, courseName };
     });
@@ -1447,9 +1450,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     call: StudentCall,
     payload: { studentId: string; examId: string; category: string },
   ) =>
-    call.studentId === payload.studentId &&
-    String(call.examId || "") === String(payload.examId || "") &&
-    call.category === payload.category;
+    payload.category === CALL_STUDENT_NOTE_CATEGORY
+      ? call.studentId === payload.studentId &&
+        String(call.examId || "") === String(payload.examId || "") &&
+        call.category === CALL_STUDENT_NOTE_CATEGORY
+      : studentExamCallIdentityMatches(call, payload.studentId, payload.examId);
 
   const mergeSavedCall = (
     payload: { studentId: string; examId: string; category: string },
@@ -1493,7 +1498,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         existing?.notes ||
         `${item?.reason || ""} | ${item.exam.name} | ${formatGradeScore(item.grade, item.exam, "—")}`,
     };
-    const savingKey = `status:${payload.studentId}:${payload.examId}:${payload.category}`;
+    const savingKey = `status:${studentExamCallIdentityKey(payload.studentId, payload.examId)}`;
     const previousCall = existing || null;
     const optimisticCall: StudentCall = {
       id: existing?.id || `optimistic-call-${Date.now()}`,
@@ -2079,7 +2084,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const callStudentNote = callNoteForStudent(row.student.id);
     const displayMode = callGradeDisplayModes[row.student.id] || "latest";
     const statusSavingKey = item
-      ? `status:${row.student.id}:${item.exam.id}:${item.callKey}`
+      ? `status:${studentExamCallIdentityKey(row.student.id, item.exam.id)}`
       : "";
     const noteSavingKey = `note:${row.student.id}`;
     const noteValue = Object.prototype.hasOwnProperty.call(callNoteDrafts, row.student.id)

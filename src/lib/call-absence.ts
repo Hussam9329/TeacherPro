@@ -85,35 +85,6 @@ export function implicitCallAbsenceGradeId(
   return `implicit-absence:${examId}:${studentId}`;
 }
 
-export function callCategoryAliasesForCurrentGrade(args: {
-  requestedCategory: string;
-  currentGrade?: { id: string; status: string } | null;
-}): string[] {
-  const requestedCategory = String(args.requestedCategory || "");
-  const grade = args.currentGrade;
-  if (!grade || grade.status !== "غائب") return [requestedCategory];
-
-  const gradeCategory = `grade:${grade.id}`;
-  if (requestedCategory === "absent") return ["absent", gradeCategory];
-  if (requestedCategory === gradeCategory) return [gradeCategory, "absent"];
-  return [requestedCategory];
-}
-
-export function retainedCallCategory(
-  requestedCategory: string,
-  existingCategory?: string | null,
-  categoryAliases: string[] = [],
-): string {
-  if (existingCategory) return String(existingCategory);
-  // New recorded-absence calls use the same canonical key as an implicit
-  // absence. This closes the small race where one request still sees no Grade
-  // while another already sees the newly-created absent Grade.
-  if (categoryAliases.length > 1 && categoryAliases.includes("absent")) {
-    return "absent";
-  }
-  return String(requestedCategory || "");
-}
-
 /**
  * Virtual display data only. It gives the existing calls UI a stable item for
  * contact logging without inserting a Grade or triggering recalculation.

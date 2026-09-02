@@ -34,6 +34,7 @@ import {
   resolveCallAbsenceSource,
   type CallAbsenceSource,
 } from "@/lib/call-absence";
+import { isStudentExamCall } from "@/lib/call-identity";
 
 type CallStatusFilter =
   | "all"
@@ -440,9 +441,6 @@ export async function GET(req: NextRequest) {
       ...correctionAttempts.map((sheet) => sheet.studentId),
       ...submissionAttempts.map((submission) => submission.studentId),
     ]);
-    const studentById = new Map<string, DbStudentLite>();
-    students.forEach((student) => studentById.set(student.id, student));
-
     const leavesByStudentId = new Map<string, DbLeaveLite[]>();
     leaves.forEach((leave) => {
       const current = leavesByStudentId.get(leave.studentId) || [];
@@ -455,37 +453,9 @@ export async function GET(req: NextRequest) {
       { status: string; completed: boolean }
     >();
     calls.forEach((call) => {
-      const student = studentById.get(call.studentId);
-      if (!student) return;
-      const storedGrade = gradeByStudentId.get(call.studentId);
-      const studentLeaves = leavesByStudentId.get(call.studentId) || [];
-      const absenceSource = resolveCallAbsenceSource({
-        grade: storedGrade,
-        exam,
-        student,
-        leaves: studentLeaves,
-        hasAttemptEvidence: attemptEvidenceStudentIds.has(student.id),
-      });
-      const grade =
-        storedGrade ||
-        (absenceSource === "missing"
-          ? buildImplicitCallAbsenceGrade({
-              studentId: student.id,
-              examId: exam.id,
-              examDate: exam.date,
-            })
-          : undefined);
-      if (!grade) return;
-      const category = gradeCategory(
-        grade,
-        exam,
-        student,
-        studentLeaves,
-        absenceSource,
-      );
-      const exactCategory =
-        absenceSource === "missing" ? "absent" : `grade:${grade.id}`;
-      if (call.category !== exactCategory && call.category !== category) return;
+      // Contact state survives Grade deletion/recreation because category is
+      // legacy metadata, not part of the logical student + exam identity.
+      if (!isStudentExamCall({ ...call, examId })) return;
       if (!bestCallByStudentId.has(call.studentId)) {
         bestCallByStudentId.set(call.studentId, call);
       }

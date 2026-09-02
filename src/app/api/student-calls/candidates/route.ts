@@ -35,6 +35,7 @@ import {
   resolveCallAbsenceSource,
   type CallAbsenceSource,
 } from "@/lib/call-absence";
+import { isStudentExamCall } from "@/lib/call-identity";
 
 export type CallStatusFilter =
   | "all"
@@ -734,36 +735,10 @@ export async function GET(req: NextRequest) {
           completed: true,
         },
       });
-      const studentById = new Map(
-        selectedStudents.map((student) => [student.id, student]),
-      );
       selectedExamCalls.forEach((call) => {
-        const student = studentById.get(call.studentId);
-        if (!student) return;
-        const storedGrade = selectedGradeByStudentId.get(student.id);
-        const leaves = leavesForExam(selectedLeavesByStudentId, student.id, exam);
-        const absenceSource = resolveCallAbsenceSource({
-          grade: storedGrade,
-          exam,
-          student,
-          leaves,
-          hasAttemptEvidence: attemptEvidenceStudentIds.has(student.id),
-        });
-        const grade =
-          storedGrade ||
-          (absenceSource === "missing"
-            ? buildImplicitCallAbsenceGrade({
-                studentId: student.id,
-                examId: exam.id,
-                examDate: exam.date,
-              })
-            : undefined);
-        if (!grade) return;
-        const impactKind = classifyCallImpact(grade, exam, student, leaves);
-        const kind = absenceSource ? "absent" : gradeKindForCalls(impactKind);
-        const exactCategory =
-          absenceSource === "missing" ? "absent" : `grade:${grade.id}`;
-        if (call.category !== exactCategory && call.category !== kind) return;
+        // Student + exam is the call identity. Category may point to an old
+        // Grade row and is intentionally ignored when selecting contact state.
+        if (!isStudentExamCall({ ...call, examId })) return;
         if (!bestCallByStudentId.has(call.studentId)) {
           bestCallByStudentId.set(call.studentId, call);
         }

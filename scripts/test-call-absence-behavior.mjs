@@ -57,6 +57,7 @@ function createTypeScriptModuleLoader() {
 
 const loadTypeScriptModule = createTypeScriptModuleLoader();
 const absence = loadTypeScriptModule("src/lib/call-absence.ts");
+const identity = loadTypeScriptModule("src/lib/call-identity.ts");
 const range = loadTypeScriptModule("src/lib/call-grade-range.ts");
 const contact = loadTypeScriptModule("src/lib/call-contact-status.ts");
 const notes = loadTypeScriptModule("src/lib/call-notes-filter.ts");
@@ -348,41 +349,73 @@ test("absence filter ignores stale numeric range while numeric filters keep it",
   );
 });
 
-test("a derived absence call survives a later stored absent Grade without duplicates", () => {
-  const calls = [{ id: "call-1", category: "absent", status: "لم يرد" }];
-  const currentGrade = { id: "grade-1", status: "غائب" };
-  const aliases = absence.callCategoryAliasesForCurrentGrade({
-    requestedCategory: `grade:${currentGrade.id}`,
-    currentGrade,
-  });
-  const existing = calls.find((call) => aliases.includes(call.category));
-  assert.equal(existing?.id, "call-1");
-
-  existing.status = "تم الاتصال";
-  existing.category = absence.retainedCallCategory(
-    `grade:${currentGrade.id}`,
-    existing.category,
-    aliases,
+test("stable call identity survives derived absence becoming a numeric Grade", () => {
+  const call = {
+    studentId: student.id,
+    examId: exam.id,
+    category: "absent",
+    status: "تم الاتصال",
+  };
+  assert.equal(
+    identity.studentExamCallIdentityMatches(call, student.id, exam.id),
+    true,
   );
-  assert.equal(calls.length, 1);
-  assert.equal(existing.category, "absent");
-  assert.equal(existing.status, "تم الاتصال");
-
-  existing.status = "";
-  assert.equal(calls.length, 1);
-  assert.equal(existing.category, "absent");
-  assert.equal(existing.status, "");
+  assert.equal(call.status, "تم الاتصال");
 });
 
-test("new stored-absence calls use the implicit absence key as their canonical category", () => {
-  const currentGrade = { id: "grade-2", status: "غائب" };
-  const aliases = absence.callCategoryAliasesForCurrentGrade({
-    requestedCategory: `grade:${currentGrade.id}`,
-    currentGrade,
-  });
+test("stable call identity survives leave restore with a new Grade id", () => {
+  const call = {
+    studentId: student.id,
+    examId: exam.id,
+    category: "grade:old-before-leave",
+    status: "تم الاتصال",
+  };
+  const restoredGrade = { id: "new-after-leave", status: "غائب" };
+  assert.notEqual(call.category, `grade:${restoredGrade.id}`);
   assert.equal(
-    absence.retainedCallCategory(`grade:${currentGrade.id}`, null, aliases),
-    "absent",
+    identity.studentExamCallIdentityMatches(call, student.id, exam.id),
+    true,
+  );
+});
+
+test("stable call identity survives Grade deletion and recreation", () => {
+  const call = {
+    studentId: student.id,
+    examId: exam.id,
+    category: "grade:deleted-grade",
+    status: "لم يرد",
+  };
+  const recreatedGrade = { id: "recreated-grade", status: "درجة", score: 18 };
+  assert.notEqual(call.category, `grade:${recreatedGrade.id}`);
+  assert.equal(
+    identity.studentExamCallIdentityMatches(call, student.id, exam.id),
+    true,
+  );
+});
+
+test("reload and second-tab category variants resolve to the same logical call key", () => {
+  const oldTabCall = {
+    studentId: student.id,
+    examId: exam.id,
+    category: "grade:old-tab",
+  };
+  const reloadedCall = {
+    studentId: student.id,
+    examId: exam.id,
+    category: "absent",
+  };
+  assert.equal(
+    identity.studentExamCallIdentityKey(oldTabCall.studentId, oldTabCall.examId),
+    identity.studentExamCallIdentityKey(reloadedCall.studentId, reloadedCall.examId),
+  );
+  assert.equal(identity.isStudentExamCall(oldTabCall), true);
+  assert.equal(
+    identity.isStudentExamCall({
+      studentId: student.id,
+      examId: null,
+      category: notes.CALL_STUDENT_NOTE_CATEGORY,
+    }),
+    false,
   );
 });
 
@@ -405,23 +438,6 @@ test("site changes do not hide a stored absence, but site mismatch protects deri
       today,
     }),
     null,
-  );
-});
-
-test("absence aliases never merge numeric or cheating grades", () => {
-  assert.deepEqual(
-    absence.callCategoryAliasesForCurrentGrade({
-      requestedCategory: "grade:numeric",
-      currentGrade: { id: "numeric", status: "درجة" },
-    }),
-    ["grade:numeric"],
-  );
-  assert.deepEqual(
-    absence.callCategoryAliasesForCurrentGrade({
-      requestedCategory: "grade:cheating",
-      currentGrade: { id: "cheating", status: "غش" },
-    }),
-    ["grade:cheating"],
   );
 });
 

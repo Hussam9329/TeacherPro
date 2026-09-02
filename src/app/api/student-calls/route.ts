@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import {
@@ -10,10 +11,8 @@ import {
   validationError,
 } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
-import {
-  callCategoryAliasesForCurrentGrade,
-  retainedCallCategory,
-} from "@/lib/call-absence";
+import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
+import { isStudentExamCall } from "@/lib/call-identity";
 
 function dateOrNull(value: unknown): Date | null {
   if (!value) return null;
@@ -108,31 +107,32 @@ export async function POST(req: NextRequest) {
     const result = await withDatabaseSchema(
       () =>
         db.$transaction(async (tx) => {
-          const currentGrade = data.examId
-            ? await tx.grade.findUnique({
-                where: {
-                  studentId_examId: {
-                    studentId: data.studentId,
-                    examId: data.examId,
-                  },
-                },
-                select: { id: true, status: true },
-              })
-            : null;
-          const categoryAliases = callCategoryAliasesForCurrentGrade({
-            requestedCategory: data.category,
-            currentGrade,
-          });
+          const examCall = isStudentExamCall(data);
+
+          // The DB unique key still includes category for backward compatibility.
+          // Serialize exam-call writes on the stable parent row so two tabs cannot
+          // create different category rows for the same student + exam concurrently.
+          if (examCall) {
+            await tx.$queryRaw`SELECT "id" FROM "Student" WHERE "id" = ${data.studentId} FOR UPDATE`;
+          }
+
+          const logicalWhere: Prisma.StudentCallWhereInput = examCall
+            ? {
+                studentId: data.studentId,
+                examId: data.examId,
+                category: { not: CALL_STUDENT_NOTE_CATEGORY },
+              }
+            : {
+                studentId: data.studentId,
+                examId: data.examId,
+                category: data.category,
+              };
           const existing = await tx.studentCall.findFirst({
-            where: {
-              studentId: data.studentId,
-              examId: data.examId,
-              category: { in: categoryAliases },
-            },
+            where: logicalWhere,
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           });
 
-          if (data.category === "call-student-note" && !data.notes.trim()) {
+          if (data.category === CALL_STUDENT_NOTE_CATEGORY && !data.notes.trim()) {
             if (existing) {
               await tx.studentCall.delete({ where: { id: existing.id } });
               await tx.studentCall.deleteMany({
@@ -147,16 +147,14 @@ export async function POST(req: NextRequest) {
             return { studentCall: null, deleted: true };
           }
 
-          if (!data.status && data.category !== "call-student-note" && !existing) {
+          if (!data.status && data.category !== CALL_STUDENT_NOTE_CATEGORY && !existing) {
             return { studentCall: null, deleted: false };
           }
 
           const { createdAt: _createdAt, ...updateData } = data;
-          updateData.category = retainedCallCategory(
-            data.category,
-            existing?.category,
-            categoryAliases,
-          );
+          // Preserve a legacy category when reusing an old row. The category is
+          // metadata now; studentId + examId is the authoritative call identity.
+          updateData.category = existing?.category || data.category;
           const createData = {
             ...data,
             category: String(updateData.category || data.category),
@@ -175,11 +173,7 @@ export async function POST(req: NextRequest) {
               // A second tab/request created the same logical call between findFirst and create.
               // Re-read and update the winning row instead of returning an error to the user.
               const racedExisting = await tx.studentCall.findFirst({
-                where: {
-                  studentId: data.studentId,
-                  examId: data.examId,
-                  category: { in: categoryAliases },
-                },
+                where: logicalWhere,
                 orderBy: [{ createdAt: "desc" }, { id: "desc" }],
               });
               if (!racedExisting) throw createError;
@@ -190,12 +184,11 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // Best-effort cleanup of older duplicates for the same logical call.
+          // Opportunistically collapse historical category-based duplicates when
+          // this logical call is touched. No bulk data migration is needed here.
           await tx.studentCall.deleteMany({
             where: {
-              studentId: data.studentId,
-              examId: data.examId,
-              category: { in: categoryAliases },
+              ...logicalWhere,
               id: { not: studentCall.id },
             },
           });

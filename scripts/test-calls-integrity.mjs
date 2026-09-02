@@ -14,6 +14,7 @@ const files = {
   gradeRange: 'src/lib/call-grade-range.ts',
   contactStatus: 'src/lib/call-contact-status.ts',
   notesFilter: 'src/lib/call-notes-filter.ts',
+  callIdentity: 'src/lib/call-identity.ts',
 };
 
 const read = (file) => fs.readFileSync(file, 'utf8');
@@ -39,6 +40,7 @@ const profileDialog = read(files.profileDialog);
 const gradeRange = read(files.gradeRange);
 const contactStatus = read(files.contactStatus);
 const notesFilter = read(files.notesFilter);
+const callIdentity = read(files.callIdentity);
 
 const callPageSizeMatch = followUp.match(/const CALL_PAGE_SIZE = (\d+);/);
 const callPageSize = Number(callPageSizeMatch?.[1] || 0);
@@ -76,7 +78,32 @@ assert(
 );
 assert(
   callsRoute.includes('findFirst') && callsRoute.includes('deleteMany'),
-  'منع تكرار سجل المكالمة لنفس الطالب/الامتحان/السبب',
+  'حفظ المكالمة يعيد استخدام سجل منطقي واحد وينظف التكرارات التاريخية عند لمسه',
+);
+assert(
+  callIdentity.includes('per student + exam') &&
+    callIdentity.includes('studentExamCallIdentityKey') &&
+    callIdentity.includes('studentExamCallIdentityMatches'),
+  'هوية مكالمة الامتحان معرفة مركزياً بالطالب + الامتحان بدون Grade ID',
+);
+assert(
+  callsRoute.includes('FOR UPDATE') &&
+    callsRoute.includes('category: { not: CALL_STUDENT_NOTE_CATEGORY }') &&
+    callsRoute.includes('existing?.category || data.category'),
+  'الحفظ يقفل الطالب أثناء المعاملة ويعيد استخدام أي category تاريخية لنفس الطالب/الامتحان بدون إنشاء Duplicate متزامن',
+);
+assert(
+  candidates.includes('isStudentExamCall({ ...call, examId })') &&
+    stats.includes('isStudentExamCall({ ...call, examId })') &&
+    !candidates.includes('call.category !== exactCategory') &&
+    !stats.includes('call.category !== exactCategory'),
+  'القائمة والإحصائيات تقرآن حالة التواصل حسب الطالب + الامتحان ولا تربطانها بمعرف Grade الحالي',
+);
+assert(
+  followUp.includes('studentExamCallIdentityKey(call.studentId, call.examId)') &&
+    followUp.includes('studentExamCallIdentityMatches(call, payload.studentId, payload.examId)') &&
+    !followUp.includes('::${item.callKey}`;'),
+  'الواجهة والتصدير والدمج المتفائل تستخدم مفتاح الطالب + الامتحان المستقر بعد Reload أو تغير الدرجة',
 );
 assert(
   candidates.includes('rows,') && candidates.includes('source: "database"'),
