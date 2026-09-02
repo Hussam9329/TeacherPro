@@ -779,10 +779,15 @@ export function recalculateAcademicState(
         }
         opportunities = effect.after;
       }
-      if (log.action === "إعادة تعيين")
-        opportunities = Number(
-          activeChapter?.opportunities ?? student.baseOpportunities ?? 0,
-        );
+      if (log.action === "إعادة تعيين") {
+        // المبلغ المخزون في حركة «إعادة تعيين» هو الرصيد المستهدف نفسه:
+        // تسويات انتقال الفصول تخزن سقف الفصل، وتعهد الفاينل يخزن فرصتين.
+        // احترام المبلغ يمنع إعادة الاحتساب من إرجاع رصيد خُفِّض بتعهد
+        // صريح إلى سقف الفصل مرة أخرى. المبلغ مضمون > 0 هنا لأن حركات
+        // المبلغ 0 تُتخطى قبل هذه النقطة، والسقف النهائي للمحرك يبقى
+        // صمام الأمان ضد أي مبلغ شاذ.
+        opportunities = amount;
+      }
     }
 
     const addAutomaticLog = (

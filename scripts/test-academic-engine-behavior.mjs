@@ -775,4 +775,118 @@ console.log("✅ الخصم الافتراضي وتمييز المصدر الت�
   );
 }
 
+{
+  // جذر خلل عودة الفرص إلى 3 بعد تعهد 30/8/2026: حركة «إعادة تعيين» كانت
+  // تعيد الرصيد إلى سقف الفصل متجاهلة مبلغها المخزون (فرصتان). الآن المبلغ
+  // محترم حتى لو لم يبدأ السب بحد التسوية التاريخية.
+  const result = recalculatedStudent(
+    state({
+      grades: [],
+      opportunityLogs: [
+        {
+          id: "pledge-reset-raw",
+          studentId: "student-1",
+          examId: "",
+          action: "إعادة تعيين",
+          amount: 2,
+          reason:
+            "تعديل الفرص إلى فرصتين (2/3) بسبب تعهد الطالب للامتحان الفاينل الفصل الأول [قبل: 3 → بعد: 2، فرق: -1]",
+          date: "2026-08-30T12:00:00.000Z",
+          chapterId: "chapter-1",
+          chapterNameSnapshot: "الفصل الأول",
+        },
+      ],
+    }),
+  );
+  assert.equal(result.status, "نشط");
+  assert.equal(result.opportunities, 2);
+  console.log(
+    "✅ إعادة تعيين بفرصتين (تعهد) تحترم مبلغها حتى بلا حد تسوية تاريخية",
+  );
+}
+
+{
+  // التعهد بصيغة التسوية التاريخية يتجاهل امتحانات ما قبل تاريخه، فيبقى
+  // الرصيد فرصتين رغم غياب سابق في امتحان قبل التعهد.
+  const prePledgeExam = exam({
+    id: "exam-pre-pledge",
+    type: "تراكمي",
+    date: "2026-08-20T00:00:00.000Z",
+    opportunitiesPenalty: 1,
+  });
+  const result = recalculatedStudent(
+    state({
+      exams: [prePledgeExam],
+      grades: [
+        grade({
+          id: "pre-pledge-absence",
+          examId: "exam-pre-pledge",
+          status: "غائب",
+          score: null,
+        }),
+      ],
+      opportunityLogs: [
+        {
+          id: "pledge-settlement",
+          studentId: "student-1",
+          examId: "",
+          action: "إعادة تعيين",
+          amount: 2,
+          reason:
+            "تسوية تاريخية: تعهد الطالب للامتحان الفاينل الفصل الأول — تجاهل آثار الامتحانات السابقة للتعهد وبدء الرصيد بفرصتين",
+          date: "2026-08-30T12:00:00.000Z",
+          chapterId: "chapter-1",
+          chapterNameSnapshot: "الفصل الأول",
+        },
+      ],
+    }),
+  );
+  assert.equal(result.status, "نشط");
+  assert.equal(result.opportunities, 2);
+  assert.equal(result.dismissalReason, "");
+  console.log(
+    "✅ تسوية التعهد تتجاهل امتحانات ما قبل التعهد وتبقي الرصيد فرصتين",
+  );
+}
+
+{
+  // الامتحانات اللاحقة للتعهد تخصم من فرصتي التعهد كالمعتاد.
+  const postPledgeExam = exam({
+    id: "exam-post-pledge",
+    type: "تراكمي",
+    date: "2026-09-01T00:00:00.000Z",
+    opportunitiesPenalty: 1,
+  });
+  const result = recalculatedStudent(
+    state({
+      exams: [postPledgeExam],
+      grades: [
+        grade({
+          id: "post-pledge-absence",
+          examId: "exam-post-pledge",
+          status: "غائب",
+          score: null,
+        }),
+      ],
+      opportunityLogs: [
+        {
+          id: "pledge-settlement-2",
+          studentId: "student-1",
+          examId: "",
+          action: "إعادة تعيين",
+          amount: 2,
+          reason:
+            "تسوية تاريخية: تعهد الطالب للامتحان الفاينل الفصل الأول — تجاهل آثار الامتحانات السابقة للتعهد وبدء الرصيد بفرصتين",
+          date: "2026-08-30T12:00:00.000Z",
+          chapterId: "chapter-1",
+          chapterNameSnapshot: "الفصل الأول",
+        },
+      ],
+    }),
+  );
+  assert.equal(result.status, "نشط");
+  assert.equal(result.opportunities, 1);
+  console.log("✅ مخالفة بعد التعهد تخصم من فرصتي التعهد لا من سقف الفصل");
+}
+
 console.log("\nكل اختبارات المحرك الأكاديمي السلوكية نجحت.");
