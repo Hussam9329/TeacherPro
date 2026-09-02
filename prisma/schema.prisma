@@ -260,6 +260,43 @@ model StudentCall {
   @@index([createdAt])
 }
 
+model StudentCallHistoryMigrationRun {
+  id           String    @id
+  status       String    @default("running")
+  backupCount  Int       @default(0)
+  mergedGroups Int       @default(0)
+  deletedRows  Int       @default(0)
+  summary      Json?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+  backups      StudentCallHistoryBackup[]
+
+  @@index([startedAt])
+}
+
+model StudentCallHistoryBackup {
+  id               String   @id
+  migrationRunId   String
+  sourceCallId     String
+  studentId        String
+  examId           String?
+  category         String   @default("")
+  target           String   @default("")
+  phone            String   @default("")
+  status           String   @default("")
+  completed        Boolean  @default(false)
+  completedAt      DateTime?
+  notes            String   @default("")
+  sourceCreatedAt  DateTime
+  backedUpAt       DateTime @default(now())
+  migrationRun     StudentCallHistoryMigrationRun @relation(fields: [migrationRunId], references: [id], onDelete: Restrict)
+
+  @@unique([migrationRunId, sourceCallId])
+  @@index([migrationRunId])
+  @@index([studentId, examId])
+  @@index([sourceCallId])
+}
+
 model StudentNote {
   id              String   @id @default(cuid())
   studentId       String
