@@ -498,6 +498,7 @@ type StudentLeaveWithRelations = StudentLeaveRecord & { student?: unknown; exam?
 type LeaveCreateResult = {
   leave: StudentLeaveWithRelations;
   backedUpGrades: number;
+  coveredExamCount: number;
   restoredGrades: RestoredGrade[];
   academicRecalculation: AcademicServerRecalculationResult;
 };
@@ -709,6 +710,7 @@ export async function POST(req: NextRequest) {
           return {
             leave: savedLeave,
             backedUpGrades,
+            coveredExamCount: affectedExamIds.length,
             restoredGrades,
             academicRecalculation,
           };
@@ -722,6 +724,7 @@ export async function POST(req: NextRequest) {
       examId: result.leave.examId,
       leaveType: result.leave.leaveType,
       backedUpGrades: result.backedUpGrades,
+      coveredExamCount: result.coveredExamCount,
       restoredGradeCount: result.restoredGrades.length,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
     });
@@ -729,6 +732,7 @@ export async function POST(req: NextRequest) {
       {
         studentLeave: result.leave,
         backedUpGrades: result.backedUpGrades,
+        coveredExamCount: result.coveredExamCount,
         restoredGrades: result.restoredGrades,
         restoredGradeCount: result.restoredGrades.length,
         academicRecalculation: result.academicRecalculation,

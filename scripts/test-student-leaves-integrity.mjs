@@ -57,9 +57,9 @@ must(
 
 must(
   followUp.includes("leaveRowsFromDb.some") &&
-    followUp.includes("هذا الطالب لديه إجازة مسجلة بنفس النطاق حسب بيانات النظام"),
-  "فحص التكرار يعتمد على الإجازات القادمة من قاعدة البيانات",
-  "فحص تكرار الإجازة يجب ألا يعتمد على كاش محلي قديم.",
+    followUp.includes("هذا الطالب لديه إجازة فترة تتداخل مع النطاق المحدد حسب بيانات النظام"),
+  "فحص التداخل يعتمد على الإجازات القادمة من قاعدة البيانات",
+  "فحص تداخل الإجازة يجب ألا يعتمد على كاش محلي قديم.",
 );
 
 must(
@@ -68,6 +68,43 @@ must(
     followUp.includes("disabled={deleting || leaveLoading || Boolean(leaveError)}"),
   "الإجراءات الحساسة تتوقف إذا فشل تحميل الإجازات من الخادم",
   "يجب منع الحفظ والحذف عند فشل تحميل بيانات الخادم.",
+);
+
+must(
+  followUp.includes("leaveRefreshKey") &&
+    followUp.includes("setLeaveRefreshKey((current) => current + 1)") &&
+    followUp.includes("إعادة المحاولة"),
+  "فشل تحميل الإجازات يعرض إعادة محاولة مباشرة بدون تحديث الصفحة كاملة",
+  "يجب توفير زر إعادة محاولة يعيد طلب الإجازات بعد فشل الشبكة.",
+);
+
+must(
+  followUp.includes("const leaveExamOptions = useMemo(") &&
+    followUp.includes("exam.courseIds.includes(selectedLeaveStudent.courseId)") &&
+    followUp.includes("{leaveExamOptions.map((exam) => (") &&
+    followUp.includes('setLeaveExamId("")') &&
+    followUp.includes("اختر امتحاناً تابعاً لدورة الطالب الحالية"),
+  "منتقى إجازة الامتحان يعرض امتحانات دورة الطالب المختار فقط ويمسح الاختيار غير الصالح",
+  "قائمة الامتحانات يجب أن تُفلتر حسب دورة الطالب قبل الحفظ.",
+);
+
+must(
+  followUp.includes("const existingFrom = dayKey(leave.dateFrom || leave.date)") &&
+    followUp.includes("const existingTo = dayKey(leave.dateTo || leave.dateFrom || leave.date)") &&
+    followUp.includes("return existingFrom <= to && existingTo >= from") &&
+    followUp.includes("تتداخل مع النطاق المحدد"),
+  "الواجهة تكشف أي تداخل فعلي بين فترات الإجازة بنفس قاعدة السيرفر",
+  "فحص الواجهة يجب أن يمنع التداخل الجزئي لا التطابق الكامل فقط.",
+);
+
+must(
+  route.includes("coveredExamCount: affectedExamIds.length") &&
+    route.includes("coveredExamCount: result.coveredExamCount") &&
+    followUp.includes("coveredExamCount?: number") &&
+    followUp.includes('leaveMode === "period" && coveredExamCount === 0') &&
+    followUp.includes("لم تغطِّ أي امتحان تابع لدورة/موقع الطالب"),
+  "إجازة الفترة ترجع عدد الامتحانات المغطاة وتحذر المستخدم عند صفر تغطية",
+  "يجب إبلاغ المستخدم إذا حُفظت إجازة فترة ولم تؤثر على أي امتحان.",
 );
 
 must(

@@ -253,9 +253,15 @@ assert(
   'اختيار أحدث حالة تواصل حتمي ومتطابق بين القائمة والإحصائيات',
 );
 assert(
-  followUp.includes('setCallFilterRefreshKey((current) => current + 1)') &&
-    followUp.includes('callContactStatusFilter !== "all"'),
-  'تحديث حالة طالب يعيد جلب النتائج عندما لا تعود مطابقة لفلتر التواصل النشط',
+  /setCallFilterRefreshKey\(\(current\) => current \+ 1\);\s*if \(callContactStatusFilter !== "all"\) setCallGradePage\(1\);/.test(followUp),
+  'حفظ حالة الاتصال يحدّث القائمة والإحصائيات دائماً، ويعيد الصفحة الأولى فقط عند فلتر تواصل نشط',
+);
+assert(
+  followUp.includes('if (!result.ok && !result.queued)') &&
+    followUp.includes('if (result.queued)') &&
+    followUp.includes('حُفظ إجراء التواصل مؤقتاً وسيُرسل تلقائياً عند رجوعه') &&
+    followUp.includes('mergeSavedCall(payload, previousCall, !previousCall)'),
+  'الواجهة تفرّق بين الفشل الحقيقي والحفظ المؤجل في outbox ولا تتراجع عن الحالة المتفائلة عند انقطاع الشبكة',
 );
 assert(
   followUp.includes('الملاحظات') &&

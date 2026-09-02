@@ -547,6 +547,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [leaveRowsFromDb, setLeaveRowsFromDb] = useState<StudentLeave[]>([]);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [leaveError, setLeaveError] = useState("");
+  const [leaveRefreshKey, setLeaveRefreshKey] = useState(0);
   const [leaveSaving, setLeaveSaving] = useState(false);
   const [leaveDeletingIds, setLeaveDeletingIds] = useState<Record<string, boolean>>({});
   const [leaveSearch, setLeaveSearch] = useState("");
@@ -609,7 +610,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     void loadLeavesFromDatabase();
 
     return () => controller.abort();
-  }, [view, mergeStudentsCache, syncKey, isBackgroundSync]);
+  }, [view, mergeStudentsCache, syncKey, leaveRefreshKey, isBackgroundSync]);
 
   const [callCourseId, setCallCourseId] = useState("");
   const [callExamId, setCallExamId] = useState("");
@@ -1014,6 +1015,20 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const selectedLeaveStudent =
     students.find((student) => student.id === leaveStudentId) ||
     leavePickerStudents.find((student) => student.id === leaveStudentId);
+  const leaveExamOptions = useMemo(
+    () =>
+      selectedLeaveStudent
+        ? exams.filter((exam) => exam.courseIds.includes(selectedLeaveStudent.courseId))
+        : exams,
+    [exams, selectedLeaveStudent],
+  );
+
+  useEffect(() => {
+    if (!leaveExamId || !selectedLeaveStudent) return;
+    if (!leaveExamOptions.some((exam) => exam.id === leaveExamId)) {
+      setLeaveExamId("");
+    }
+  }, [leaveExamId, leaveExamOptions, selectedLeaveStudent]);
   const selectedProfileStudent =
     callRowsFromDb.find((row) => row.student.id === profileStudentId)?.student ||
     students.find((student) => student.id === profileStudentId) ||
@@ -1283,6 +1298,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       toast.error("اختر الامتحان المطلوب للإجازة");
       return;
     }
+    if (
+      leaveMode === "exam" &&
+      selectedLeaveStudent &&
+      !leaveExamOptions.some((exam) => exam.id === leaveExamId)
+    ) {
+      toast.error("اختر امتحاناً تابعاً لدورة الطالب الحالية");
+      return;
+    }
     if (leaveMode === "period" && (!leaveDateFrom || !leaveDateTo)) {
       toast.error("حدد بداية ونهاية فترة الإجازة");
       return;
@@ -1296,14 +1319,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         return (
           (leave.leaveType || "exam") === "exam" && leave.examId === leaveExamId
         );
-      return (
-        (leave.leaveType || "exam") === "period" &&
-        dayKey(leave.dateFrom || leave.date) === from &&
-        dayKey(leave.dateTo || leave.dateFrom || leave.date) === to
-      );
+      if ((leave.leaveType || "exam") !== "period") return false;
+      const existingFrom = dayKey(leave.dateFrom || leave.date);
+      const existingTo = dayKey(leave.dateTo || leave.dateFrom || leave.date);
+      return existingFrom <= to && existingTo >= from;
     });
     if (duplicate) {
-      toast.error("هذا الطالب لديه إجازة مسجلة بنفس النطاق حسب بيانات النظام");
+      toast.error("هذا الطالب لديه إجازة فترة تتداخل مع النطاق المحدد حسب بيانات النظام");
       return;
     }
 
@@ -1335,6 +1357,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       studentLeave?: StudentLeave;
       backedUpGrades?: number;
       restoredGradeCount?: number;
+      coveredExamCount?: number;
     };
     refreshLeavesFromPayload(response.studentLeave);
     setCustomLeaveReason("");
@@ -1345,6 +1368,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       reason: "student-leave-created",
       scopes: ["follow-up", "grades", "students", "opportunities", "dashboard"],
     });
+
+    const coveredExamCount = Number(response.coveredExamCount || 0);
+    if (leaveMode === "period" && coveredExamCount === 0) {
+      toast.warning(
+        "تم حفظ الإجازة لكنها لم تغطِّ أي امتحان تابع لدورة/موقع الطالب. راجع موقع الطالب أو تواريخ الفترة.",
+      );
+      return;
+    }
 
     const backedUpGrades = Number(response.backedUpGrades || 0);
     if (backedUpGrades > 0) {
@@ -1476,9 +1507,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     callMutationVersionRef.current += 1;
     try {
       const result = await studentCallApi.upsert(payload);
-      if (!result.ok) {
+      if (!result.ok && !result.queued) {
         mergeSavedCall(payload, previousCall, !previousCall);
         toast.error(result.error || "تعذر حفظ حالة التواصل.");
+        return;
+      }
+      if (result.queued) {
+        toast.info(
+          "انقطع الاتصال؛ حُفظ إجراء التواصل مؤقتاً وسيُرسل تلقائياً عند رجوعه.",
+        );
         return;
       }
       const data = result.data as { studentCall?: StudentCall | null; deleted?: boolean } | null;
@@ -1491,10 +1528,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         // يعيد هذا التبويب تحميل نفسه ويستبدل النتيجة بطلب Sync أقدم.
         dispatchLocal: false,
       });
-      if (callContactStatusFilter !== "all") {
-        setCallGradePage(1);
-        setCallFilterRefreshKey((current) => current + 1);
-      }
+      setCallFilterRefreshKey((current) => current + 1);
+      if (callContactStatusFilter !== "all") setCallGradePage(1);
       toast.success("تم حفظ إجراء التواصل");
     } finally {
       setCallSaving(savingKey, false);
@@ -1793,8 +1828,17 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             ))}
           </div>
         ) : leaveError ? (
-          <div className="rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-            {leaveError}
+          <div className="flex flex-col gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between">
+            <span>{leaveError}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setLeaveRefreshKey((current) => current + 1)}
+              disabled={leaveLoading}
+            >
+              إعادة المحاولة
+            </Button>
           </div>
         ) : leavesForDisplay.length === 0 ? (
           <p className="empty-state py-6">لا توجد إجازات مطابقة للفلاتر الحالية</p>
@@ -2573,7 +2617,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                         <SelectValue placeholder="اختر الامتحان" />
                       </SelectTrigger>
                       <SelectContent>
-                        {exams.map((exam) => (
+                        {leaveExamOptions.map((exam) => (
                           <SelectItem key={exam.id} value={exam.id}>
                             {exam.name} - {formatAppDate(exam.date)} {exam.active ? "" : "(معطل)"}
                           </SelectItem>
