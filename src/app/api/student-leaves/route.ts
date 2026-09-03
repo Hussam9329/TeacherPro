@@ -24,7 +24,7 @@ import {
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
-import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
+import { baghdadDateKey } from "@/lib/baghdad-time";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { rejectPendingLeaveNotesForExams } from "@/lib/student-leave-grade-override-server";
 
@@ -47,8 +47,8 @@ function readListPagination(
   return { page, pageSize, skip: (page - 1) * pageSize };
 }
 
-// Q64 FIX: Previously dateOrNow silently replaced invalid dates with
-// today's date. Now we throw so the caller can return a 400 error.
+// Q64 FIX: Previously invalid dates were silently replaced with today's
+// date. Now we throw so the caller can return a 400 error.
 function parseDateStrict(value: unknown): Date {
   if (!value || value === null) throw new Error("التاريخ مطلوب.");
   const date = new Date(String(value));
@@ -56,18 +56,6 @@ function parseDateStrict(value: unknown): Date {
     throw new Error(`تاريخ غير صالح: "${String(value)}". أرسل تاريخاً صالحاً بصيغة ISO 8601 (YYYY-MM-DD).`);
   }
   return date;
-}
-
-// dateOrNow is kept for backward compat with existing code that legitimately
-// falls back to today (e.g. internal default). For user-supplied dates, use
-// parseDateStrict.
-function dateOrNow(value: unknown): Date {
-  const date = value ? new Date(String(value)) : new Date();
-  return Number.isNaN(date.getTime()) ? new Date() : date;
-}
-
-function dateOnly(value: unknown): string {
-  return baghdadDateKey(dateOrNow(value)) || baghdadTodayKey();
 }
 
 function dayAfter(value: Date): Date {
@@ -640,7 +628,12 @@ export async function POST(req: NextRequest) {
                 where: { id: data.examId },
                 select: { courseIds: true },
               });
-              const courseIds = parseCourseIds(exam?.courseIds);
+              if (!exam) {
+                throw new Error(
+                  "الامتحان المحدد غير موجود أو تم حذفه من النظام. اختر امتحاناً صالحاً.",
+                );
+              }
+              const courseIds = parseCourseIds(exam.courseIds);
               if (!courseIds.includes(student.courseId)) {
                 throw new Error(
                   "الامتحان غير تابع لدورة الطالب الحالية. لا يمكن إنشاء إجازة لامتحان من دورة أخرى.",
@@ -760,6 +753,7 @@ export async function POST(req: NextRequest) {
     const message = error instanceof Error ? error.message : String(error);
     if (
       message.includes("غير تابع لدورة الطالب") ||
+      message.includes("الامتحان المحدد غير موجود") ||
       message.includes("تتداخل") ||
       message.includes("لا يمكن إضافة إجازة لطالب مؤرشف") ||
       message.includes("لا يمكن إضافة إجازة لطالب مفصول") ||
@@ -825,7 +819,12 @@ export async function PUT(req: NextRequest) {
                 where: { id: nextData.examId },
                 select: { courseIds: true },
               });
-              const courseIds = parseCourseIds(exam?.courseIds);
+              if (!exam) {
+                throw new Error(
+                  "الامتحان المحدد غير موجود أو تم حذفه من النظام. اختر امتحاناً صالحاً.",
+                );
+              }
+              const courseIds = parseCourseIds(exam.courseIds);
               if (!courseIds.includes(student.courseId)) {
                 throw new Error(
                   "الامتحان غير تابع لدورة الطالب الحالية. لا يمكن إنشاء إجازة لامتحان من دورة أخرى.",
@@ -973,6 +972,8 @@ export async function PUT(req: NextRequest) {
     const message = error instanceof Error ? error.message : String(error);
     if (
       message.includes("غير تابع لدورة الطالب") ||
+      message.includes("الامتحان المحدد غير موجود") ||
+      message.includes("الإجازة المطلوبة غير موجودة") ||
       message.includes("تتداخل") ||
       message.includes("لا يمكن إضافة إجازة لطالب مؤرشف") ||
       message.includes("لا يمكن إضافة إجازة لطالب مفصول") ||
@@ -1054,6 +1055,11 @@ export async function DELETE(req: NextRequest) {
       academicRecalculation: result.academicRecalculation,
     });
   } catch (error) {
+    // حذف إجازة غير موجودة يجب أن يظهر للمستخدم كرسالة واضحة 400/404، لا كخطأ 500.
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("الإجازة المطلوبة غير موجودة")) {
+      return validationError(message, 404);
+    }
     return routeErrorResponse(error, "تعذر حذف الإجازة حالياً.");
   }
 }

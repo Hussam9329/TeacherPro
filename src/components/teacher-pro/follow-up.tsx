@@ -39,7 +39,11 @@ import { searchAny } from "@/lib/validation";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { CountScopeSummary } from "./ui-kit";
-import { formatGradeScore } from "@/lib/exam-utils";
+import {
+  formatGradeScore,
+  splitSelection,
+  studentMatchesExamMainSites,
+} from "@/lib/exam-utils";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { formatOpportunityBalance, getOpportunityLimit } from "@/lib/opportunity-balance";
@@ -355,24 +359,33 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   // نتائج البحث من النظام للطالب المعروض في منتقي الإجازات.
   // نستخدم بحث النظام بدلاً من البيانات المؤقتة المحلية لأن البيانات المؤقتة قد لا يحوي
   // إلا أول 200 طالب، مما يخفي الطلاب القدامى أو الإضافيين عن المستخدم.
+  // المؤرشفون يدخلون النتائج أيضاً كي يظهر سبب المنع بوضوح بدل اختفاء الطالب كلياً.
   const [leavePickerStudents, setLeavePickerStudents] = useState<Student[]>([]);
   const [leavePickerLoading, setLeavePickerLoading] = useState(false);
+  const [leavePickerTotal, setLeavePickerTotal] = useState(0);
 
   useEffect(() => {
     if (view !== "leaves") return;
     let cancelled = false;
     setLeavePickerLoading(true);
     studentApi
-      .list({ q: debouncedGlobalSearch, opportunityMode: true, pageSize: 30 })
+      .list({
+        q: debouncedGlobalSearch,
+        opportunityMode: true,
+        includeArchived: true,
+        pageSize: 30,
+      })
       .then((result) => {
         if (cancelled) return;
         const next = (result?.students || []) as unknown as Student[];
         setLeavePickerStudents(next);
+        setLeavePickerTotal(Number(result?.totalCount || 0));
         mergeStudentsCache(next);
       })
       .catch(() => {
         if (!cancelled) {
           setLeavePickerStudents([]);
+          setLeavePickerTotal(0);
         }
       })
       .finally(() => {
@@ -393,6 +406,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [leaveDateFrom, setLeaveDateFrom] = useState(todayISO());
   const [leaveDateTo, setLeaveDateTo] = useState(todayISO());
   const [leaveNotes, setLeaveNotes] = useState("");
+  // وضع التعديل: يُحمَّل صف إجازة قائم في النموذج ثم يُحدَّث عبر PUT
+  // بدل إجبار المستخدم على الحذف وإعادة الإنشاء من الصفر.
+  const [editingLeaveId, setEditingLeaveId] = useState("");
+  const leaveFormCardRef = useRef<HTMLDivElement | null>(null);
   const [leaveRowsFromDb, setLeaveRowsFromDb] = useState<StudentLeave[]>([]);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [leaveError, setLeaveError] = useState("");
@@ -800,6 +817,63 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       setLeaveExamId("");
     }
   }, [leaveExamId, leaveExamOptions, selectedLeaveStudent]);
+
+  // إجازات الطالب المحدد كما هي في بيانات النظام. عرضها داخل النموذج يجعل
+  // المستخدم يرى فوراً ما لديه قبل الحفظ، بدل أن يفاجأ برسالة تعارض غامضة.
+  const selectedStudentLeaves = useMemo(
+    () =>
+      leaveStudentId
+        ? leaveRowsFromDb
+            .filter((leave) => leave.studentId === leaveStudentId)
+            .sort((a, b) =>
+              String(b.dateFrom || b.date || "").localeCompare(
+                String(a.dateFrom || a.date || ""),
+              ),
+            )
+        : [],
+    [leaveRowsFromDb, leaveStudentId],
+  );
+
+  const studentHasExistingExamLeave = useMemo(
+    () =>
+      selectedStudentLeaves.some(
+        (leave) => (leave.leaveType || "exam") === "exam",
+      ),
+    [selectedStudentLeaves],
+  );
+
+  const studentHasExistingPeriodLeave = useMemo(
+    () =>
+      selectedStudentLeaves.some(
+        (leave) => (leave.leaveType || "exam") === "period",
+      ),
+    [selectedStudentLeaves],
+  );
+
+  // معاينة عدد الامتحانات التي ستغطيها إجازة الفترة قبل الحفظ، بنفس منطق
+  // الخادم (دورة الطالب + موقعه) حتى لا يكتشف المستخدم التغطية بعد الحفظ.
+  const periodPreviewExamCount = useMemo(() => {
+    if (leaveMode !== "period" || !selectedLeaveStudent) return null;
+    const from = leaveDateFrom <= leaveDateTo ? leaveDateFrom : leaveDateTo;
+    const to = leaveDateFrom <= leaveDateTo ? leaveDateTo : leaveDateFrom;
+    if (!from || !to) return null;
+    return exams.filter(
+      (exam) =>
+        exam.courseIds.includes(selectedLeaveStudent.courseId) &&
+        dayKey(exam.date) >= from &&
+        dayKey(exam.date) <= to &&
+        studentMatchesExamMainSites(
+          selectedLeaveStudent,
+          splitSelection(exam.mainSite),
+        ),
+    ).length;
+  }, [
+    leaveMode,
+    leaveDateFrom,
+    leaveDateTo,
+    exams,
+    selectedLeaveStudent,
+  ]);
   const selectedProfileStudent =
     callRowsFromDb.find((row) => row.student.id === profileStudentId)?.student ||
     students.find((student) => student.id === profileStudentId) ||
@@ -891,6 +965,50 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     ]);
   };
 
+  const cancelLeaveEdit = () => {
+    setEditingLeaveId("");
+    setCustomLeaveReason("");
+    setLeaveReasonChoice("حالة مرضية");
+    setLeaveNotes("");
+  };
+
+  const startEditLeave = (leave: StudentLeave) => {
+    if (leaveError || leaveLoading) {
+      toast.error("انتظر تحميل الإجازات من بيانات النظام قبل التعديل.");
+      return;
+    }
+    const isPeriod = (leave.leaveType || "exam") === "period";
+    const relatedStudent =
+      leave.student && typeof leave.student === "object" ? leave.student : null;
+    const studentName =
+      relatedStudent?.name ||
+      students.find((item) => item.id === leave.studentId)?.name ||
+      "";
+    setEditingLeaveId(leave.id);
+    setGlobalSearch(studentName);
+    setLeaveStudentId(leave.studentId);
+    setLeaveMode(isPeriod ? "period" : "exam");
+    setLeaveExamId(isPeriod ? "" : String(leave.examId || ""));
+    const leaveDay = dayKey(leave.date);
+    if (leaveDay) setLeaveDate(leaveDay);
+    setLeaveDateFrom(dayKey(leave.dateFrom || leave.date) || todayISO());
+    setLeaveDateTo(
+      dayKey(leave.dateTo || leave.dateFrom || leave.date) || todayISO(),
+    );
+    if ((leaveReasonOptions as readonly string[]).includes(leave.reason)) {
+      setLeaveReasonChoice(leave.reason as LeaveReasonOption);
+      setCustomLeaveReason("");
+    } else {
+      setLeaveReasonChoice("أخرى");
+      setCustomLeaveReason(leave.reason || "");
+    }
+    setLeaveNotes(String(leave.notes || ""));
+    leaveFormCardRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
   const saveLeave = async () => {
     if (leaveError || leaveLoading) {
       toast.error("انتظر تحميل الإجازات من بيانات النظام قبل الحفظ.");
@@ -923,8 +1041,10 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     const from = leaveDateFrom <= leaveDateTo ? leaveDateFrom : leaveDateTo;
     const to = leaveDateFrom <= leaveDateTo ? leaveDateTo : leaveDateFrom;
-    const duplicate = leaveRowsFromDb.some((leave) => {
+    // عند التعديل نستثني الإجازة قيد التعديل نفسها من فحص التعارض.
+    const duplicateLeave = leaveRowsFromDb.find((leave) => {
       if (leave.studentId !== leaveStudentId) return false;
+      if (leave.id === editingLeaveId) return false;
       if (leaveMode === "exam")
         return (
           (leave.leaveType || "exam") === "exam" && leave.examId === leaveExamId
@@ -934,8 +1054,20 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       const existingTo = dayKey(leave.dateTo || leave.dateFrom || leave.date);
       return existingFrom <= to && existingTo >= from;
     });
-    if (duplicate) {
-      toast.error("هذا الطالب لديه إجازة فترة تتداخل مع النطاق المحدد حسب بيانات النظام");
+    if (duplicateLeave) {
+      if (leaveMode === "exam") {
+        toast.error(
+          "هذا الطالب لديه إجازة سابقة على هذا الامتحان بالفعل. راجعها في «إجازات الطالب المحدد» أو في قائمة الإجازات أدناه، واحذفها أو عدّلها بدل تكرارها.",
+        );
+      } else {
+        const existingFrom = dayKey(duplicateLeave.dateFrom || duplicateLeave.date);
+        const existingTo = dayKey(
+          duplicateLeave.dateTo || duplicateLeave.dateFrom || duplicateLeave.date,
+        );
+        toast.error(
+          `توجد إجازة فترة سابقة لهذا الطالب (${existingFrom} إلى ${existingTo}) تتداخل مع النطاق المحدد. راجعها في «إجازات الطالب المحدد» أو في قائمة الإجازات أدناه.`,
+        );
+      }
       return;
     }
 
@@ -955,7 +1087,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     };
 
     setLeaveSaving(true);
-    const result = await studentLeaveApi.add(payload);
+    const result = editingLeaveId
+      ? await studentLeaveApi.update(editingLeaveId, payload)
+      : await studentLeaveApi.add(payload);
     setLeaveSaving(false);
 
     if (!result.ok || result.queued) {
@@ -968,16 +1102,30 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       backedUpGrades?: number;
       restoredGradeCount?: number;
       coveredExamCount?: number;
+      affectedBefore?: string[];
+      affectedAfter?: string[];
     };
     refreshLeavesFromPayload(response.studentLeave);
+    const wasEditing = Boolean(editingLeaveId);
+    setEditingLeaveId("");
     setCustomLeaveReason("");
     setLeaveReasonChoice("حالة مرضية");
     setLeaveNotes("");
     emitTeacherProDataChanged({
       source: "local-mutation",
-      reason: "student-leave-created",
+      reason: wasEditing ? "student-leave-updated" : "student-leave-created",
       scopes: ["follow-up", "grades", "students", "opportunities", "dashboard"],
     });
+
+    if (wasEditing) {
+      const restoredGradeCount = Number(response.restoredGradeCount || 0);
+      toast.success(
+        restoredGradeCount > 0
+          ? `تم تحديث الإجازة واسترجاع ${restoredGradeCount} درجة/درجات أصلية ثم إعادة الاحتساب.`
+          : "تم تحديث الإجازة وإعادة احتساب الطالب من بيانات النظام.",
+      );
+      return;
+    }
 
     const coveredExamCount = Number(response.coveredExamCount || 0);
     if (leaveMode === "period" && coveredExamCount === 0) {
@@ -991,15 +1139,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     if (backedUpGrades > 0) {
       toast.success(
         backedUpGrades === 1
-          ? "تم حفظ الإجازة وحذف درجة مرتبطة بعد أخذ نسخة احتياطية لها"
-          : `تم حفظ الإجازة وحذف ${backedUpGrades} درجات مرتبطة بعد أخذ نسخة احتياطية لها`,
+          ? "تم حفظ الإجازة وتعليق درجة مرتبطة واحدة بعد أخذ نسخة احتياطية لها (تُسترجع تلقائياً عند حذف الإجازة)"
+          : `تم حفظ الإجازة وتعليق ${backedUpGrades} درجات مرتبطة بعد أخذ نسخة احتياطية لها (تُسترجع تلقائياً عند حذف الإجازة)`,
       );
       return;
     }
 
     toast.success(
       leaveMode === "period"
-        ? "تمت إضافة الإجازة للفترة وإعادة احتساب الطالب من بيانات النظام"
+        ? `تمت إضافة إجازة الفترة وهي تغطي ${coveredExamCount} امتحاناً تابعاً لدورة/موقع الطالب، مع إعادة احتساب الطالب`
         : "تمت إضافة الإجازة وإعادة احتساب الطالب بدون محاسبة هذا الامتحان",
     );
   };
@@ -1240,6 +1388,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             </button>
           ))}
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          {leavePickerLoading
+            ? "جاري جلب النتائج من بيانات النظام…"
+            : `معروض ${filteredStudents.length} من ${leavePickerTotal || filteredStudents.length} طالب/طالبة في النظام حسب البحث. الطلاب المؤرشفون والمفصولون يظهرون مع شارة توضح حالتهم ولا يمكن منحهم إجازة قبل إعادة تفعيلهم.`}
+        </p>
         {selectedLeaveStudent && (
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card/80 p-2">
             <Button
@@ -1325,8 +1478,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       toast.error("انتظر تحميل الإجازات من بيانات النظام قبل الحذف.");
       return;
     }
+    const isPeriod = (leave.leaveType || "exam") === "period";
+    const scopeText = isPeriod
+      ? `فترة من ${formatAppDate(leave.dateFrom || leave.date)} إلى ${formatAppDate(leave.dateTo || leave.dateFrom || leave.date)}`
+      : "امتحان واحد";
     const ok = window.confirm(
-      "سيتم حذف الإجازة من بيانات النظام واسترجاع أي درجات محفوظة احتياطياً ثم إعادة احتساب الطالب. هل تريد المتابعة؟",
+      `سيتم حذف إجازة (${scopeText}) من بيانات النظام نهائياً، واسترجاع أي درجات عُلّقت بسببها (يُستثنى الغياب غير الصالح قبل التسجيل أو ضمن السماح)، ثم إعادة احتساب الطالب. هل تريد المتابعة؟`,
     );
     if (!ok) return;
 
@@ -1339,6 +1496,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       return;
     }
 
+    if (editingLeaveId === leave.id) cancelLeaveEdit();
     setLeaveRowsFromDb((current) => current.filter((item) => item.id !== leave.id));
     emitTeacherProDataChanged({
       source: "local-mutation",
@@ -1499,10 +1657,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               ? ` (${student.code})`
               : "";
             const deleting = Boolean(leaveDeletingIds[leave.id]);
+            const editingThis = editingLeaveId === leave.id;
             return (
               <div
                 key={leave.id}
-                className="grid gap-2 rounded-2xl border bg-card/80 p-3 text-sm lg:grid-cols-[1.1fr_1fr_1.4fr_1fr_auto] lg:items-center"
+                className={`grid gap-2 rounded-2xl border p-3 text-sm lg:grid-cols-[1.1fr_1fr_1.4fr_1fr_auto] lg:items-center ${editingThis ? "border-sky-300 bg-sky-50/50 dark:border-sky-900/60 dark:bg-sky-950/20" : "bg-card/80"}`}
               >
                 <b>
                   {studentDisplayName}
@@ -1512,7 +1671,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 <span>
                   {isPeriod
                     ? `فترة: ${formatAppDate(leave.dateFrom || leave.date)} إلى ${formatAppDate(leave.dateTo || leave.dateFrom || leave.date)}`
-                    : exam?.name || "امتحان محذوف"}
+                    : `${exam?.name || "امتحان محذوف"} — امتحان بتاريخ ${exam ? formatAppDate(exam.date) : formatAppDate(leave.date)}`}
                 </span>
                 <span>{leave.studyType || student?.studyType || "—"}</span>
                 <div className="flex items-center justify-end gap-2">
@@ -1522,6 +1681,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   <Button
                     variant="ghost"
                     size="sm"
+                    disabled={deleting || leaveSaving || leaveLoading || Boolean(leaveError)}
+                    onClick={() => startEditLeave(leave)}
+                  >
+                    {editingThis ? "قيد التعديل" : "تعديل"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive"
                     disabled={deleting || leaveLoading || Boolean(leaveError)}
                     onClick={() => void deleteLeaveServerFirst(leave)}
                   >
@@ -2037,131 +2205,244 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
       {view === "leaves" && (
         <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle>إضافة إجازة</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {renderStudentPicker()}
-              <div className="space-y-2">
-                <Label>نوع الإجازة</Label>
-                <Select
-                  value={leaveMode}
-                  onValueChange={(value) => setLeaveMode(value as LeaveMode)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="exam">حسب الامتحان</SelectItem>
-                    <SelectItem value="period">فترة زمنية</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {leaveMode === "exam" ? (
-                <>
-                  <div className="space-y-2">
-                    <Label>الامتحان</Label>
-                    <Select value={leaveExamId} onValueChange={setLeaveExamId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="اختر الامتحان" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {leaveExamOptions.map((exam) => (
-                          <SelectItem key={exam.id} value={exam.id}>
-                            {exam.name} - {formatAppDate(exam.date)} {exam.active ? "" : "(معطل)"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+          <div ref={leaveFormCardRef} className="scroll-mt-24">
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {editingLeaveId ? "تعديل إجازة قائمة" : "إضافة إجازة"}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  الإجازة تستثني الطالب من محاسبة الامتحانات المشمولة بها:
+                  تُحفظ درجاته الحالية نسخةً احتياطية وتظهر مؤقتاً كـ«مجاز»،
+                  وعند حذف الإجازة تُسترجع درجاته الأصلية تلقائياً ويُعاد احتسابه.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {editingLeaveId && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-sky-50/70 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
+                    <span>
+                      أنت تعدّل إجازة قائمة. أي تغيير في النطاق يعيد ترتيب
+                      الدرجات المعلّقة تلقائياً.
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={cancelLeaveEdit}
+                      disabled={leaveSaving}
+                    >
+                      إلغاء التعديل
+                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label>تاريخ الإجازة</Label>
-                    <DateInput value={leaveDate} onChange={setLeaveDate} />
+                )}
+                {renderStudentPicker()}
+                {selectedLeaveStudent && selectedStudentLeaves.length > 0 && (
+                  <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/25">
+                    <p className="text-xs font-bold text-amber-900 dark:text-amber-100">
+                      إجازات الطالب المحدد حالياً في النظام (
+                      {selectedStudentLeaves.length}):
+                    </p>
+                    <ul className="space-y-1.5">
+                      {selectedStudentLeaves.map((leave) => {
+                        const isExistingPeriod =
+                          (leave.leaveType || "exam") === "period";
+                        const existingExam =
+                          exams.find((item) => item.id === leave.examId) ||
+                          (leave.exam && typeof leave.exam === "object"
+                            ? (leave.exam as Exam)
+                            : null);
+                        return (
+                          <li
+                            key={leave.id}
+                            className="flex flex-wrap items-center gap-1.5 rounded-xl bg-card/80 px-2.5 py-1.5 text-[11px]"
+                          >
+                            <Badge
+                              variant={isExistingPeriod ? "secondary" : "outline"}
+                            >
+                              {isExistingPeriod ? "فترة" : "امتحان"}
+                            </Badge>
+                            <span className="min-w-0 flex-1 break-words">
+                              {isExistingPeriod
+                                ? `${formatAppDate(leave.dateFrom || leave.date)} → ${formatAppDate(leave.dateTo || leave.dateFrom || leave.date)} — ${leave.reason}`
+                                : `${existingExam?.name || "امتحان محذوف"} (${formatAppDate(leave.date)}) — ${leave.reason}`}
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-[11px]"
+                              disabled={Boolean(leaveDeletingIds[leave.id]) || leaveLoading}
+                              onClick={() => startEditLeave(leave)}
+                            >
+                              تعديل
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-[11px] text-destructive"
+                              disabled={Boolean(leaveDeletingIds[leave.id]) || leaveLoading}
+                              onClick={() => void deleteLeaveServerFirst(leave)}
+                            >
+                              {leaveDeletingIds[leave.id] ? "..." : "حذف"}
+                            </Button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-200">
+                      لا يمكن تسجيل إجازة جديدة تتقاطع مع أي إجازة أعلاه؛
+                      عدّلها أو احذفها أولاً.
+                    </p>
                   </div>
-                </>
-              ) : (
-                <div className="grid gap-3 md:grid-cols-2">
+                )}
+                <div className="space-y-2">
+                  <Label>نوع الإجازة</Label>
+                  <Select
+                    value={leaveMode}
+                    onValueChange={(value) => setLeaveMode(value as LeaveMode)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="exam">حسب الامتحان</SelectItem>
+                      <SelectItem value="period">فترة زمنية</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {leaveMode === "exam" ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label>الامتحان</Label>
+                      <Select value={leaveExamId} onValueChange={setLeaveExamId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="اختر الامتحان" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {leaveExamOptions.map((exam) => (
+                            <SelectItem key={exam.id} value={exam.id}>
+                              {exam.name} - {formatAppDate(exam.date)} {exam.active ? "" : "(معطّل)"}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedLeaveStudent && leaveExamOptions.length === 0 && (
+                        <p className="text-xs text-destructive">
+                          لا توجد امتحانات تابعة لدورة هذا الطالب حالياً، لذلك
+                          لا يمكن تسجيل إجازة امتحان له.
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>تاريخ الإجازة</Label>
+                      <DateInput value={leaveDate} onChange={setLeaveDate} />
+                      <p className="text-[11px] text-muted-foreground">
+                        تاريخ تسجيل الإجازة (للعرض والسجل) — الاستثناء يطبَّق على
+                        الامتحان المختار أياً كان هذا التاريخ.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>من</Label>
+                        <DateInput
+                          value={leaveDateFrom}
+                          onChange={setLeaveDateFrom}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>إلى</Label>
+                        <DateInput value={leaveDateTo} onChange={setLeaveDateTo} />
+                      </div>
+                    </div>
+                    {selectedLeaveStudent && periodPreviewExamCount !== null && (
+                      <p
+                        className={`rounded-xl px-3 py-2 text-xs ${periodPreviewExamCount > 0 ? "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-100" : "bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-100"}`}
+                      >
+                        {periodPreviewExamCount > 0
+                          ? `هذه الفترة ستغطي ${periodPreviewExamCount} امتحاناً تابعاً لدورة/موقع هذا الطالب وسيُستثنى منها جميعاً من المحاسبة.`
+                          : "تنبيه: لا يوجد أي امتحان تابع لدورة/موقع هذا الطالب داخل هذه الفترة، لذلك لن تتأثر أي درجة بهذه الإجازة."}
+                      </p>
+                    )}
+                  </>
+                )}
+                <div className="space-y-2">
+                  <Label>سبب الإجازة</Label>
+                  <Select
+                    value={leaveReasonChoice}
+                    onValueChange={(value) =>
+                      setLeaveReasonChoice(value as LeaveReasonOption)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {leaveReasonOptions.map((reason) => (
+                        <SelectItem key={reason} value={reason}>
+                          {reason}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {leaveReasonChoice === "أخرى" && (
                   <div className="space-y-2">
-                    <Label>من</Label>
-                    <DateInput
-                      value={leaveDateFrom}
-                      onChange={setLeaveDateFrom}
+                    <Label>السبب اليدوي</Label>
+                    <Input
+                      value={customLeaveReason}
+                      onChange={(event) =>
+                        setCustomLeaveReason(event.target.value)
+                      }
+                      placeholder="اكتب سبب الإجازة"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>إلى</Label>
-                    <DateInput value={leaveDateTo} onChange={setLeaveDateTo} />
-                  </div>
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label>سبب الإجازة</Label>
-                <Select
-                  value={leaveReasonChoice}
-                  onValueChange={(value) =>
-                    setLeaveReasonChoice(value as LeaveReasonOption)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {leaveReasonOptions.map((reason) => (
-                      <SelectItem key={reason} value={reason}>
-                        {reason}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {leaveReasonChoice === "أخرى" && (
+                )}
                 <div className="space-y-2">
-                  <Label>السبب اليدوي</Label>
+                  <Label>ملاحظات</Label>
                   <Input
-                    value={customLeaveReason}
-                    onChange={(event) =>
-                      setCustomLeaveReason(event.target.value)
-                    }
-                    placeholder="اكتب سبب الإجازة"
+                    value={leaveNotes}
+                    onChange={(event) => setLeaveNotes(event.target.value)}
+                    placeholder="اختياري"
                   />
                 </div>
-              )}
-              <div className="space-y-2">
-                <Label>ملاحظات</Label>
-                <Input
-                  value={leaveNotes}
-                  onChange={(event) => setLeaveNotes(event.target.value)}
-                  placeholder="اختياري"
-                />
-              </div>
-              {selectedLeaveStudent && (
-                <p className="rounded-xl bg-muted/50 p-2 text-xs text-muted-foreground">
-                  نوع البرنامج: <b>{selectedLeaveStudent.studyType || "—"}</b>
-                </p>
-              )}
-              {selectedLeaveStudentBlockedReason && (
-                <p
-                  className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive"
-                  role="alert"
+                {selectedLeaveStudent && (
+                  <p className="rounded-xl bg-muted/50 p-2 text-xs text-muted-foreground">
+                    نوع البرنامج: <b>{selectedLeaveStudent.studyType || "—"}</b>
+                    {studentHasExistingExamLeave && " — لديه إجازة امتحان سابقة"}
+                    {studentHasExistingPeriodLeave && " — لديه إجازة فترة سابقة"}
+                  </p>
+                )}
+                {selectedLeaveStudentBlockedReason && (
+                  <p
+                    className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm font-medium text-destructive"
+                    role="alert"
+                  >
+                    {selectedLeaveStudentBlockedReason}
+                  </p>
+                )}
+                <Button
+                  className="w-full"
+                  onClick={() => void saveLeave()}
+                  disabled={
+                    leaveSaving ||
+                    leaveLoading ||
+                    Boolean(leaveError) ||
+                    Boolean(selectedLeaveStudentBlockedReason)
+                  }
                 >
-                  {selectedLeaveStudentBlockedReason}
-                </p>
-              )}
-              <Button
-                className="w-full"
-                onClick={() => void saveLeave()}
-                disabled={
-                  leaveSaving ||
-                  leaveLoading ||
-                  Boolean(leaveError) ||
-                  Boolean(selectedLeaveStudentBlockedReason)
-                }
-              >
-                {leaveSaving ? "جاري الحفظ..." : "حفظ الإجازة"}
-              </Button>
-            </CardContent>
-          </Card>
+                  {leaveSaving
+                    ? "جاري الحفظ..."
+                    : editingLeaveId
+                      ? "تحديث الإجازة"
+                      : "حفظ الإجازة"}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
           {renderLeaveList()}
         </div>
       )}
