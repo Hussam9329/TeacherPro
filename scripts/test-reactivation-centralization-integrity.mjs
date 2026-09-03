@@ -32,9 +32,9 @@ check(
   management.includes("expectedMutationToken") &&
   management.includes("students.edit") &&
   management.includes("canReactivate") &&
-  management.includes("استرجاع الطالب") &&
+  management.includes("تم تعهد الطالب") &&
   statusAction.includes("REACTIVATION_OPPORTUNITY_GRANT"),
-  "إدارة المفصولين تستخدم المسار الخادمي الوحيد لاسترجاع المفصول بفرصتين",
+  "إدارة المفصولين تستخدم المسار الخادمي الوحيد لتعهد المفصول بفرصتين",
 );
 
 check(

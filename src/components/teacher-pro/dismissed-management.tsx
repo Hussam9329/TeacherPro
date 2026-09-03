@@ -63,6 +63,7 @@ import {
   Download,
   FileClock,
   GraduationCap,
+  Handshake,
   MessageCircle,
   Phone,
   RotateCcw,
@@ -755,7 +756,7 @@ export function DismissedManagementView() {
 
   const handleReactivate = runReactivateLocked(async (student: ManagedDismissalStudent) => {
     if (!canReactivate) {
-      toast.error("لا تملك صلاحية استرجاع الطلاب المفصولين.");
+      toast.error("لا تملك صلاحية تنفيذ تعهد الطلاب المفصولين.");
       return;
     }
     if (student.status !== "مفصول") {
@@ -771,7 +772,7 @@ export function DismissedManagementView() {
       expectedMutationToken: student.mutationToken || "",
     });
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر استرجاع الطالب من بيانات النظام.");
+      toast.error(result.error || "تعذر تثبيت تعهد الطالب من بيانات النظام.");
       return;
     }
 
@@ -809,8 +810,8 @@ export function DismissedManagementView() {
       scopes: ["students", "opportunities", "dismissed", "dashboard", "follow-up"],
       dispatchLocal: true,
     });
-    toast.success("تم استرجاع الطالب", {
-      description: "أصبح الطالب نشطاً برصيد فرصتين. بقي سجل الفصل محفوظاً كـ«مفصول سابقاً».",
+    toast.success("تم تعهد الطالب", {
+      description: "أصبح الطالب نشطاً برصيد فرصتين بسبب تعهده. بقي سجل الفصل محفوظاً كـ«مفصول سابقاً».",
     });
   });
 
@@ -1167,8 +1168,8 @@ export function DismissedManagementView() {
                       disabled={isReactivating}
                       onClick={() => setReactivateDialog({ student, open: true })}
                     >
-                      <RotateCcw className="size-4" />
-                      استرجاع الطالب
+                      <Handshake className="size-4" />
+                      تم تعهد الطالب
                     </Button>
                   ) : null}
                   <Button
@@ -1319,9 +1320,9 @@ export function DismissedManagementView() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>استرجاع الطالب المفصول</AlertDialogTitle>
+            <AlertDialogTitle>تم تعهد الطالب المفصول</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تريد استرجاع «{reactivateDialog.student?.name || "الطالب المحدد"}»؟ سيزول الفصل الحالي ويصبح الطالب نشطاً برصيد فرصتين، مع بقاء سجل الفصل محفوظاً في إدارة المفصولين.
+              هل تم تعهد «{reactivateDialog.student?.name || "الطالب المحدد"}»؟ سيزول الفصل الحالي ويصبح الطالب نشطاً برصيد فرصتين بسبب تعهده، مع بقاء سجل الفصل محفوظاً في إدارة المفصولين.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1335,7 +1336,7 @@ export function DismissedManagementView() {
                 }
               }}
             >
-              {isReactivating ? "جاري الاسترجاع..." : "تأكيد الاسترجاع بفرصتين"}
+              {isReactivating ? "جاري تثبيت التعهد..." : "تأكيد التعهد بفرصتين"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
