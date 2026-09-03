@@ -1050,15 +1050,21 @@ export function recalculateAcademicState(
       opportunities = Math.min(opportunities, opportunityCap);
     }
 
-    // Recalculation may correct a dismissed student's balance, but it must
-    // never reactivate them implicitly. The only authorized dismissed→active
-    // transition updates Student.status first through students/status-action;
-    // all maintenance, chapter-settlement, grade, and opportunity replays see
-    // the stored dismissed status and preserve it here.
+    // A dismissed student carries NO opportunities (المفصول لا يحمل فرصاً).
+    // Recalculation must never reactivate them implicitly, and it must never
+    // leave them with a positive balance either: the only authorized
+    // dismissed→active transition updates Student.status first through
+    // students/status-action, which grants the reactivation balance (two
+    // opportunities) and writes the reactivation logs the engine replays
+    // afterwards. Until that happens the persisted balance stays 0 so no
+    // rule, settlement, or manual replay can reproduce the «مفصول عنده فرص»
+    // inconsistency. All maintenance, chapter-settlement, grade, and
+    // opportunity replays see the stored dismissed status and preserve it
+    // here together with the zero balance.
     if (student.status === "مفصول" && !dismissed) {
       return {
         ...student,
-        opportunities,
+        opportunities: 0,
         status: "مفصول" as AcademicStudent["status"],
         dismissalReason: student.dismissalReason,
       };
@@ -1066,7 +1072,7 @@ export function recalculateAcademicState(
 
     return {
       ...student,
-      opportunities,
+      opportunities: dismissed ? 0 : opportunities,
       status: (dismissed ? "مفصول" : "نشط") as AcademicStudent["status"],
       dismissalReason,
     };
