@@ -6,19 +6,28 @@ type GradeCountRow = Pick<
 >;
 
 /**
- * Counts ALL manual grades for an exam including pending ones.
+ * Counts ALL manually entered grades for an exam.
  * 
  * This includes:
  * - Numeric grades with status "درجة" and valid score ✅
- * - Pre-registration numeric grades (status "درجة" or "قبل تسجيل الطالب") ✅ 🆕
- * - Pending grades with status "درجة" but null score (ورقة معلقة)
- * - Pending grades with status "درجة معلّقة" (الدرجات المعلقة للمراجعة) ✅🆕
+ * - Pre-registration numeric grades (status "درجة" or "قبل تسجيل الطالب") ✅
+ * - Explicit pending-review grades with status "درجة معلّقة" ✅
+ * 
+ * ROOT-CAUSE FIX (عداد الأوراق المدخلة يدوياً):
+ * A Grade row with status "درجة" and a NULL score is NOT counted anymore.
+ * Such rows are system-generated placeholders meaning "الورقة استُلمت و
+ * بانتظار التصحيح" — they are created automatically by the Telegram bot
+ * submission flow / e-correction pipeline (e.g. ids like correction_grade_*),
+ * never by the teacher (ورقة الإدخال ترفض حفظ «درجة» بدون رقم).
+ * Counting them made the counter show «معلقة 1» even when the teacher had
+ * not entered any grade at all.
  * 
  * Excludes ONLY purely automatic system statuses:
  * - "غائب" (absent - system generated)
  * - "غش" (cheating - system generated)
  * - "مجاز" (on leave - system generated)
  * - "ضمن فترة السماح" (grace period - system generated)
+ * - "درجة" بدون رقم (placeholder بانتظار التصحيح - system generated)
  * 
  * IMPORTANT: 
  * - "قبل تسجيل الطالب" WITH a numeric score IS included because it was manually entered!
@@ -49,26 +58,24 @@ export function countAllManualGradesForExam(
     // تخطي الحالات التلقائية البحتة للنظام
     if (purelyAutomaticStatuses.has(grade.status)) continue;
 
-    // === حالة 0: درجة معلّقة (درجة معلّقة) -> دائماً تُحتسب كمعلقة 🆕===
+    // === حالة 0: درجة معلّقة (درجة معلّقة) -> دائماً تُحتسب كمعلقة ===
     if (grade.status === "درجة معلّقة") {
       pendingStudentIds.add(grade.studentId);
       continue;
     }
 
     // === حالة 1: درجة عادية محفوظة (درجة + رقمية) ===
-    if (grade.status === "درجة") {
-      if (
-        typeof grade.score === "number" &&
-        Number.isFinite(grade.score)
-      ) {
-        numericStudentIds.add(grade.studentId);
-      } else if (grade.score === null || grade.score === undefined) {
-        // درجة معلقة (ورقة بدون درجة بعد)
-        pendingStudentIds.add(grade.studentId);
-      }
+    if (
+      grade.status === "درجة" &&
+      typeof grade.score === "number" &&
+      Number.isFinite(grade.score)
+    ) {
+      numericStudentIds.add(grade.studentId);
     }
-    
-    // === حالة 2: درجة قبل التسجيل (قبل تسجيل الطالب + رقمية) 🆕 ===
+    // ملاحظة: «درجة» بدون رقم (score = null/undefined) هي ورقة انتظار
+    // أنشأها النظام تلقائياً من مسار التصحيح/بوت تلغرام وليست إدخالاً
+    // يدوياً من المعلم، لذلك لا تُحتسب هنا (انظر ROOT-CAUSE FIX أعلاه).
+    // === حالة 2: درجة قبل التسجيل (قبل تسجيل الطالب + رقمية) ===
     else if (
       grade.status === "قبل تسجيل الطالب" &&
       typeof grade.score === "number" &&
