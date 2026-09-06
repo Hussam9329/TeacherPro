@@ -56,8 +56,9 @@ must(
 );
 
 must(
-  followUp.includes("leaveRowsFromDb.some") &&
-    followUp.includes("هذا الطالب لديه إجازة فترة تتداخل مع النطاق المحدد حسب بيانات النظام"),
+  followUp.includes("leaveRowsFromDb.find((leave) => {") &&
+    followUp.includes("توجد إجازة فترة سابقة لهذا الطالب") &&
+    followUp.includes("هذا الطالب لديه إجازة سابقة على هذا الامتحان بالفعل"),
   "فحص التداخل يعتمد على الإجازات القادمة من قاعدة البيانات",
   "فحص تداخل الإجازة يجب ألا يعتمد على كاش محلي قديم.",
 );

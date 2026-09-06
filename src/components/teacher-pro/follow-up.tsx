@@ -851,7 +851,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   );
 
   // معاينة عدد الامتحانات التي ستغطيها إجازة الفترة قبل الحفظ، بنفس منطق
-  // الخادم (دورة الطالب + موقعه) حتى لا يكتشف المستخدم التغطية بعد الحفظ.
+  // النظام (دورة الطالب + موقعه) حتى لا يكتشف المستخدم التغطية بعد الحفظ.
   const periodPreviewExamCount = useMemo(() => {
     if (leaveMode !== "period" || !selectedLeaveStudent) return null;
     const from = leaveDateFrom <= leaveDateTo ? leaveDateFrom : leaveDateTo;
