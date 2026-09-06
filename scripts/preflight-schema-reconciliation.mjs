@@ -52,21 +52,6 @@ const checks = [
     sql: `SELECT COUNT(*)::int AS count FROM "OpportunityLog" child WHERE child."examId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Exam" parent WHERE parent."id" = child."examId")`,
   },
   {
-    label: "CorrectionSheet.studentId -> Student.id",
-    tables: ["CorrectionSheet", "Student"],
-    sql: `SELECT COUNT(*)::int AS count FROM "CorrectionSheet" child WHERE NOT EXISTS (SELECT 1 FROM "Student" parent WHERE parent."id" = child."studentId")`,
-  },
-  {
-    label: "CorrectionSheet.examId -> Exam.id",
-    tables: ["CorrectionSheet", "Exam"],
-    sql: `SELECT COUNT(*)::int AS count FROM "CorrectionSheet" child WHERE NOT EXISTS (SELECT 1 FROM "Exam" parent WHERE parent."id" = child."examId")`,
-  },
-  {
-    label: "CorrectionSheet.correctorId -> AppUser.id",
-    tables: ["CorrectionSheet", "AppUser"],
-    sql: `SELECT COUNT(*)::int AS count FROM "CorrectionSheet" child WHERE NOT EXISTS (SELECT 1 FROM "AppUser" parent WHERE parent."id" = child."correctorId")`,
-  },
-  {
     label: "AuditLog.userId -> AppUser.id",
     tables: ["AuditLog", "AppUser"],
     sql: `SELECT COUNT(*)::int AS count FROM "AuditLog" child WHERE child."userId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "AppUser" parent WHERE parent."id" = child."userId")`,
@@ -130,21 +115,6 @@ const checks = [
     label: "StudentLeaveGradeBackup.examId -> Exam.id",
     tables: ["StudentLeaveGradeBackup", "Exam"],
     sql: `SELECT COUNT(*)::int AS count FROM "StudentLeaveGradeBackup" child WHERE NOT EXISTS (SELECT 1 FROM "Exam" parent WHERE parent."id" = child."examId")`,
-  },
-  {
-    label: "TelegramExamSubmission.studentId -> Student.id",
-    tables: ["TelegramExamSubmission", "Student"],
-    sql: `SELECT COUNT(*)::int AS count FROM "TelegramExamSubmission" child WHERE NOT EXISTS (SELECT 1 FROM "Student" parent WHERE parent."id" = child."studentId")`,
-  },
-  {
-    label: "TelegramExamSubmission.examId -> Exam.id",
-    tables: ["TelegramExamSubmission", "Exam"],
-    sql: `SELECT COUNT(*)::int AS count FROM "TelegramExamSubmission" child WHERE NOT EXISTS (SELECT 1 FROM "Exam" parent WHERE parent."id" = child."examId")`,
-  },
-  {
-    label: "TelegramExamSubmission.gradeId -> Grade.id",
-    tables: ["TelegramExamSubmission", "Grade"],
-    sql: `SELECT COUNT(*)::int AS count FROM "TelegramExamSubmission" child WHERE child."gradeId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Grade" parent WHERE parent."id" = child."gradeId")`,
   },
 ];
 

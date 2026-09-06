@@ -15,10 +15,9 @@ type GradeCountRow = Pick<
  * 
  * ROOT-CAUSE FIX (عداد الأوراق المدخلة يدوياً):
  * A Grade row with status "درجة" and a NULL score is NOT counted anymore.
- * Such rows are system-generated placeholders meaning "الورقة استُلمت و
- * بانتظار التصحيح" — they are created automatically by the Telegram bot
- * submission flow / e-correction pipeline (e.g. ids like correction_grade_*),
- * never by the teacher (ورقة الإدخال ترفض حفظ «درجة» بدون رقم).
+ * Such rows are legacy system-generated placeholders that were created
+ * automatically by old intake pipelines, never by the teacher
+ * (ورقة الإدخال ترفض حفظ «درجة» بدون رقم).
  * Counting them made the counter show «معلقة 1» even when the teacher had
  * not entered any grade at all.
  * 
@@ -27,7 +26,7 @@ type GradeCountRow = Pick<
  * - "غش" (cheating - system generated)
  * - "مجاز" (on leave - system generated)
  * - "ضمن فترة السماح" (grace period - system generated)
- * - "درجة" بدون رقم (placeholder بانتظار التصحيح - system generated)
+ * - "درجة" بدون رقم (legacy placeholder - system generated)
  * 
  * IMPORTANT: 
  * - "قبل تسجيل الطالب" WITH a numeric score IS included because it was manually entered!
@@ -72,9 +71,9 @@ export function countAllManualGradesForExam(
     ) {
       numericStudentIds.add(grade.studentId);
     }
-    // ملاحظة: «درجة» بدون رقم (score = null/undefined) هي ورقة انتظار
-    // أنشأها النظام تلقائياً من مسار التصحيح/بوت تلغرام وليست إدخالاً
-    // يدوياً من المعلم، لذلك لا تُحتسب هنا (انظر ROOT-CAUSE FIX أعلاه).
+    // ملاحظة: «درجة» بدون رقم (score = null/undefined) هي سجل placeholder
+    // قديم أنشأه النظام تلقائياً وليس إدخالاً يدوياً من المعلم،
+    // لذلك لا تُحتسب هنا (انظر ROOT-CAUSE FIX أعلاه).
     // === حالة 2: درجة قبل التسجيل (قبل تسجيل الطالب + رقمية) ===
     else if (
       grade.status === "قبل تسجيل الطالب" &&

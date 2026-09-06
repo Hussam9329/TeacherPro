@@ -188,7 +188,7 @@ function linkedStudentsSupportFilters(
 
 /**
  * Unified filter matching for academic records (exams, grades).
- * Used across grade-entry, grade-records, and e-correction pages
+ * Used across grade-entry and grade-records pages
  * to ensure consistent filter behavior.
  */
 export function examMatchesAcademicFilters(

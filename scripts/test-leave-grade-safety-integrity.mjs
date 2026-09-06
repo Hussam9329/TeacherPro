@@ -12,8 +12,6 @@ const leaveRoute = read("src/app/api/student-leaves/route.ts");
 const followUp = read("src/components/teacher-pro/follow-up.tsx");
 const offlineOutbox = read("src/lib/grade-entry-offline-outbox.ts");
 const shared = read("src/lib/grade-leave-safety.ts");
-const correctionRoute = read("src/app/api/correction-sheets/route.ts");
-const telegramRoute = read("src/app/api/telegram-exam-submissions/route.ts");
 const pkg = JSON.parse(read("package.json"));
 
 let failed = false;
@@ -70,15 +68,6 @@ must(
     gradeRecords.includes("اعتماد الدرجة وإنهاء الإجازة"),
   "سجل الدرجات يعيد المحاولة فقط بعد تأكيد المستخدم الصريح",
   "يجب ألا يبقى PUT في سجل الدرجات قادراً على إنهاء الإجازة دون نافذة تأكيد.",
-);
-
-must(
-  correctionRoute.includes("{ error: error.message, code: error.code }") &&
-    telegramRoute.includes("{ error: error.message, code: error.code }") &&
-    !correctionRoute.includes("confirmLeaveEnd: true") &&
-    !telegramRoute.includes("confirmLeaveEnd: true"),
-  "التصحيح وتيليجرام يتوقفان بكود واضح ولا يملكان تجاوزاً آلياً للتأكيد",
-  "يجب منع مسارات التصحيح وتيليجرام من إنهاء الإجازة بصمت.",
 );
 
 must(

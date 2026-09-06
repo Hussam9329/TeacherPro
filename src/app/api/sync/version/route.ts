@@ -33,14 +33,11 @@ type SyncVersionRow = {
   studentleaves: bigint;
   studentcalls: bigint;
   studentnotes: bigint;
-  correctionsheets: bigint;
-  telegramsubmissions: bigint;
   users: bigint;
   roles: bigint;
   auditlogs: bigint;
   gradesmartnotes: bigint;
   gradesmax: Date | null;
-  telegramsubmissionsmax: Date | null;
   auditlogsmax: Date | null;
   gradesmartnotesmax: Date | null;
 };
@@ -76,14 +73,11 @@ const SYNC_VERSION_SQL = `
     (SELECT COUNT(*) FROM "StudentLeave") AS studentleaves,
     (SELECT COUNT(*) FROM "StudentCall") AS studentcalls,
     (SELECT COUNT(*) FROM "StudentNote") AS studentnotes,
-    (SELECT COUNT(*) FROM "CorrectionSheet") AS correctionsheets,
-    COALESCE((SELECT COUNT(*) FROM "TelegramExamSubmission"), 0) AS telegramsubmissions,
     (SELECT COUNT(*) FROM "AppUser") AS users,
     (SELECT COUNT(*) FROM "Role") AS roles,
     (SELECT COUNT(*) FROM "AuditLog") AS auditlogs,
     (SELECT COUNT(*) FROM "GradeSmartNote") AS gradesmartnotes,
     (SELECT MAX("updatedAt") FROM "Grade") AS gradesmax,
-    COALESCE((SELECT MAX("updatedAt") FROM "TelegramExamSubmission"), NULL) AS telegramsubmissionsmax,
     (SELECT MAX("time") FROM "AuditLog") AS auditlogsmax,
     (SELECT MAX("updatedAt") FROM "GradeSmartNote") AS gradesmartnotesmax
 `;
@@ -115,8 +109,6 @@ export async function GET(req: NextRequest) {
       studentLeaves: toNumber(row.studentleaves),
       studentCalls: toNumber(row.studentcalls),
       studentNotes: toNumber(row.studentnotes),
-      correctionSheets: toNumber(row.correctionsheets),
-      telegramSubmissions: toNumber(row.telegramsubmissions),
       users: toNumber(row.users),
       roles: toNumber(row.roles),
       auditLogs: toNumber(row.auditlogs),
@@ -125,7 +117,6 @@ export async function GET(req: NextRequest) {
 
     const maxDates: Record<string, string> = {
       grades: toIso(row.gradesmax),
-      telegramSubmissions: toIso(row.telegramsubmissionsmax),
       auditLogs: toIso(row.auditlogsmax),
       gradeSmartNotes: toIso(row.gradesmartnotesmax),
     };

@@ -312,8 +312,6 @@ export async function GET(req: NextRequest) {
       leaves,
       calls,
       scoredAttempts,
-      correctionAttempts,
-      submissionAttempts,
     ] = await withDatabaseSchema(
       () =>
         Promise.all([
@@ -396,26 +394,6 @@ export async function GET(req: NextRequest) {
             },
             select: { studentId: true },
           }),
-          db.correctionSheet.findMany({
-            where: {
-              examId,
-              student: { is: studentCourseScopeWhere(courseId, "followup") },
-            },
-            select: { studentId: true },
-          }),
-          db.telegramExamSubmission.findMany({
-            where: {
-              examId,
-              student: { is: studentCourseScopeWhere(courseId, "followup") },
-              OR: [
-                { pageCount: { gt: 0 } },
-                {
-                  AND: [{ pages: { not: "[]" } }, { pages: { not: "" } }],
-                },
-              ],
-            },
-            select: { studentId: true },
-          }),
         ]),
       "StudentCallStats",
     );
@@ -436,11 +414,9 @@ export async function GET(req: NextRequest) {
         if (hasManualCallNote(call)) studentIdsWithNotes.add(call.studentId);
       });
     }
-    const attemptEvidenceStudentIds = new Set([
-      ...scoredAttempts.map((note) => note.studentId),
-      ...correctionAttempts.map((sheet) => sheet.studentId),
-      ...submissionAttempts.map((submission) => submission.studentId),
-    ]);
+    const attemptEvidenceStudentIds = new Set(
+      scoredAttempts.map((note) => note.studentId),
+    );
     const leavesByStudentId = new Map<string, DbLeaveLite[]>();
     leaves.forEach((leave) => {
       const current = leavesByStudentId.get(leave.studentId) || [];

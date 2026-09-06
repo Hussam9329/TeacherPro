@@ -36,8 +36,6 @@ const PREFERRED_PERMISSION_CATEGORIES = [
   'المتابعة',
   'المتابعة / المكالمات',
   'المتابعة / الإجازات',
-  'التصحيح',
-  'التصحيح الإلكتروني',
   'إدارة الحسابات / المستخدمين',
   'إدارة الحسابات / الأدوار',
   'إدارة الحسابات / الصلاحيات',
@@ -1182,8 +1180,8 @@ type BackupRecordCounts = {
   students?: number; exams?: number; examCourses?: number;
   grades?: number; opportunityLogs?: number;
   studentLeaves?: number; studentCalls?: number; studentNotes?: number;
-  correctionSheets?: number; users?: number; roles?: number; logs?: number;
-  telegramExamSubmissions?: number; studentLeaveGradeBackups?: number;
+  users?: number; roles?: number; logs?: number;
+  studentLeaveGradeBackups?: number;
   studentEnrollmentArchives?: number;
   permissionCatalog?: number;
 };
@@ -1325,9 +1323,9 @@ function BackupTab() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground leading-relaxed">
-            يقوم النظام بتصدير جميع الجداول التشغيلية (20 جدولاً) بما فيها:
+            يقوم النظام بتصدير جميع الجداول التشغيلية (18 جدولاً) بما فيها:
             الطلاب، الدورات، الفصول، الدرجات، الفرص، الإجازات، المكالمات،
-            مستلمات تيليجرام، أوراق التصحيح، أرشيف التسجيل، نسخ درجات الإجازات،
+            أرشيف التسجيل، نسخ درجات الإجازات،
             وسجلات التدقيق كاملةً.
           </p>
           <Button onClick={handleExport} disabled={exporting || exportLocked}>

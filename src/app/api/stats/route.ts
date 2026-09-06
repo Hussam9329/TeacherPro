@@ -80,22 +80,6 @@ function getTodayBaghdadRange(now = new Date()) {
   return { key, start, end: dayAfter(start) };
 }
 
-async function countPendingCorrectionItems(tx: StatsClient): Promise<number> {
-  const rows = await tx.$queryRaw<Array<{ count: bigint | number | string }>>`
-    SELECT COUNT(*)::bigint AS "count"
-    FROM (
-      SELECT "studentId", "examId"
-      FROM "CorrectionSheet"
-      WHERE "status" IS DISTINCT FROM 'مكتمل'
-      UNION
-      SELECT "studentId", "examId"
-      FROM "TelegramExamSubmission"
-      WHERE "status" IS DISTINCT FROM 'مكتمل'
-    ) AS "pendingCorrectionItems"
-  `;
-  return Number(rows[0]?.count || 0);
-}
-
 async function countActiveExamsWithMissingGrades(
   tx: StatsClient,
   healthyCourseIds: Set<string>,
@@ -452,7 +436,6 @@ export async function GET(req: NextRequest) {
         const [
           dismissedCount,
           totalCount,
-          pendingSheetsCount,
           zeroOpportunityActiveCount,
           todaysLeavesCount,
           recentLogs,
@@ -460,7 +443,6 @@ export async function GET(req: NextRequest) {
         ] = await Promise.all([
           tx.student.count({ where: { status: "مفصول" } }),
           tx.student.count(),
-          countPendingCorrectionItems(tx),
           positiveOpportunityCourseIds.size
             ? tx.student.count({
                 where: {
@@ -559,7 +541,6 @@ export async function GET(req: NextRequest) {
           activeStudents: activeCount,
           dismissedStudents: dismissedCount,
           totalStudents: totalCount,
-          pendingCorrectionSheets: pendingSheetsCount,
           alerts: allAlerts.filter((alert) => alert.count > 0),
           recentLogs,
           canViewLogs,

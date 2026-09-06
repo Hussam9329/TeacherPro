@@ -14,7 +14,6 @@ export const STUDENT_PROFILE_ACCESS_PERMISSIONS = [
   "follow-up.calls.view",
   "follow-up.leaves.view",
   "logs.view",
-  "correction.view",
 ] as const;
 
 export type StudentProfileSectionAccess = {
@@ -23,7 +22,6 @@ export type StudentProfileSectionAccess = {
   opportunities: boolean;
   followUp: boolean;
   logs: boolean;
-  correction: boolean;
   archives: boolean;
 };
 
@@ -41,7 +39,6 @@ export function studentProfileSectionAccess(
     "follow-up.leaves.view",
   ].some((permission) => hasPermission(principal, permission));
   const logs = hasPermission(principal, "logs.view");
-  const correction = hasPermission(principal, "correction.view");
 
   return {
     students,
@@ -49,7 +46,6 @@ export function studentProfileSectionAccess(
     opportunities,
     followUp,
     logs,
-    correction,
     archives: students,
   };
 }
@@ -357,10 +353,6 @@ export function sanitizeEnrollmentArchiveSnapshot(
     allowed.add("studentCalls");
     allowed.add("studentNotes");
   }
-  if (access.correction) {
-    allowed.add("correctionSheets");
-    allowed.add("telegramExamSubmissions");
-  }
   if (access.grades && access.followUp) {
     allowed.add("studentLeaveGradeBackups");
   }
@@ -381,10 +373,6 @@ export function sanitizeEnrollmentArchiveSnapshot(
       countKeys.add("studentLeaves");
       countKeys.add("studentCalls");
       countKeys.add("studentNotes");
-    }
-    if (access.correction) {
-      countKeys.add("correctionSheets");
-      countKeys.add("telegramExamSubmissions");
     }
     if (access.grades && access.followUp)
       countKeys.add("studentLeaveGradeBackups");

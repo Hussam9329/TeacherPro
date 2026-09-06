@@ -62,7 +62,6 @@ const ADMIN_FULL_PERMISSIONS = [
   'grades.view', 'grades.add', 'grades.edit', 'grades.delete',
   'opportunities.view', 'opportunities.manage',
   'follow-up.view', 'follow-up.manage',
-  'correction.view', 'correction.manage',
   'accounts.view', 'accounts.manage',
   'logs.view',
 ];

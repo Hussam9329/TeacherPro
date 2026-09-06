@@ -24,8 +24,6 @@ export type StudentEnrollmentArchiveSummary = {
     studentLeaves: number;
     studentCalls: number;
     studentNotes: number;
-    correctionSheets: number;
-    telegramExamSubmissions: number;
     studentLeaveGradeBackups: number;
     gradeSmartNotes: number;
     auditLogs: number;
@@ -70,8 +68,6 @@ export async function archiveAndResetStudentEnrollment(
     studentLeaves,
     studentCalls,
     studentNotes,
-    correctionSheets,
-    telegramExamSubmissions,
     studentLeaveGradeBackups,
     gradeSmartNotes,
     activeCourseChapters,
@@ -100,19 +96,6 @@ export async function archiveAndResetStudentEnrollment(
     tx.studentNote.findMany({
       where: { studentId: input.studentId },
       orderBy: [{ date: "asc" }, { id: "asc" }],
-    }),
-    tx.correctionSheet.findMany({
-      where: { studentId: input.studentId },
-      include: {
-        exam: true,
-        corrector: { select: { id: true, name: true, username: true } },
-      },
-      orderBy: { id: "asc" },
-    }),
-    tx.telegramExamSubmission.findMany({
-      where: { studentId: input.studentId },
-      include: { exam: true },
-      orderBy: [{ receivedAt: "asc" }, { id: "asc" }],
     }),
     tx.studentLeaveGradeBackup.findMany({
       where: { studentId: input.studentId },
@@ -144,8 +127,6 @@ export async function archiveAndResetStudentEnrollment(
     studentLeaves: studentLeaves.length,
     studentCalls: studentCalls.length,
     studentNotes: studentNotes.length,
-    correctionSheets: correctionSheets.length,
-    telegramExamSubmissions: telegramExamSubmissions.length,
     studentLeaveGradeBackups: studentLeaveGradeBackups.length,
     gradeSmartNotes: gradeSmartNotes.length,
     auditLogs: auditLogs.length,
@@ -166,8 +147,6 @@ export async function archiveAndResetStudentEnrollment(
     studentLeaves,
     studentCalls,
     studentNotes,
-    correctionSheets,
-    telegramExamSubmissions,
     studentLeaveGradeBackups,
     gradeSmartNotes,
     auditLogs,
@@ -193,10 +172,6 @@ export async function archiveAndResetStudentEnrollment(
   await tx.studentLeaveGradeBackup.deleteMany({
     where: { studentId: input.studentId },
   });
-  await tx.telegramExamSubmission.deleteMany({
-    where: { studentId: input.studentId },
-  });
-  await tx.correctionSheet.deleteMany({ where: { studentId: input.studentId } });
   await tx.grade.deleteMany({ where: { studentId: input.studentId } });
   await tx.gradeSmartNote.deleteMany({ where: { studentId: input.studentId } });
   await tx.studentLeave.deleteMany({ where: { studentId: input.studentId } });

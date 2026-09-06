@@ -90,11 +90,6 @@ const ALLOWED_CLIENT_LOG_ENTRIES: Record<string, Set<string>> = {
     'تسجيل إجازة',
     // 'حذف إجازة' → server-only (delete is sensitive)
   ]),
-  'التصحيح الإلكتروني': new Set([
-    'إضافة ورقة تصحيح',
-    'بدء تصحيح',
-    'إنهاء تصحيح',
-  ]),
   // 'النسخ الاحتياطي' → ENTIRELY server-only (export may contain PII,
   //   import overwrites data — both are sensitive)
   'تصدير': new Set([

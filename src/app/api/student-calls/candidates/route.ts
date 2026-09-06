@@ -612,41 +612,16 @@ export async function GET(req: NextRequest) {
       },
     })) as Array<DbGradeLite & { student: DbStudentLite }>;
 
-    const [scoredAttempts, correctionAttempts, submissionAttempts] =
-      await Promise.all([
-        db.gradeSmartNote.findMany({
-          where: {
-            examId,
-            score: { not: null },
-            student: { is: studentCourseScopeWhere(courseId, "followup") },
-          },
-          select: { studentId: true },
-        }),
-        db.correctionSheet.findMany({
-          where: {
-            examId,
-            student: { is: studentCourseScopeWhere(courseId, "followup") },
-          },
-          select: { studentId: true },
-        }),
-        db.telegramExamSubmission.findMany({
-          where: {
-            examId,
-            student: { is: studentCourseScopeWhere(courseId, "followup") },
-            OR: [
-              { pageCount: { gt: 0 } },
-              {
-                AND: [{ pages: { not: "[]" } }, { pages: { not: "" } }],
-              },
-            ],
-          },
-          select: { studentId: true },
-        }),
-      ]);
+    const scoredAttempts = await db.gradeSmartNote.findMany({
+      where: {
+        examId,
+        score: { not: null },
+        student: { is: studentCourseScopeWhere(courseId, "followup") },
+      },
+      select: { studentId: true },
+    });
     const attemptEvidenceStudentIds = new Set([
       ...scoredAttempts.map((note) => note.studentId),
-      ...correctionAttempts.map((sheet) => sheet.studentId),
-      ...submissionAttempts.map((submission) => submission.studentId),
     ]);
 
     if (selectedStudents.length === 0) {

@@ -24,6 +24,8 @@ const reconciliationMigrationName =
   "20260820140000_schema_authority_reconciliation";
 const requiredRuntimeMigrationName =
   "20260828034500_single_dismissal_policy";
+const requiredDatabaseMigrationName =
+  "20260906120000_remove_electronic_correction";
 const graceTerminationMigrationName =
   "20260822210000_end_grace_on_numeric_grade";
 const initialBridgeMigrationName = "20260601000000_initial_schema_bridge";
@@ -128,7 +130,7 @@ check(
   "deployment uses a direct migration URL when available and safely redacts credentials",
 );
 check(
-  schemaReadiness.includes(requiredRuntimeMigrationName) &&
+  schemaReadiness.includes(requiredDatabaseMigrationName) &&
     schemaReadiness.includes('FROM "_prisma_migrations"') &&
     schemaReadiness.includes('"finished_at" IS NOT NULL') &&
     schemaReadiness.includes('"rolled_back_at" IS NULL') &&

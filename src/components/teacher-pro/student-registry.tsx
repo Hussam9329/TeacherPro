@@ -1521,7 +1521,7 @@ export function StudentRegistryView() {
     setServerRefreshKey((value) => value + 1);
     toast.success("تمت أرشفة الطالب بدل الحذف النهائي", {
       description:
-        "بقيت درجاته وإجازاته ومكالماته وفرصه وملاحظاته وأوراق تصحيحه محفوظة.",
+        "بقيت درجاته وإجازاته ومكالماته وفرصه وملاحظاته محفوظة.",
     });
     setDeleteDialog({ open: false, id: "", studentName: "" });
     setDeleteImpact(null);
@@ -2784,7 +2784,7 @@ export function StudentRegistryView() {
                                   : "اعتباره طالباً جديداً داخل الدورة"}
                               </span>
                               <span className="mt-1 block text-xs leading-6 text-muted-foreground">
-                                يُحفظ الملف الحالي للقراءة فقط، ثم تُزال الدرجات والخصومات والإجازات والمكالمات والملاحظات وأوراق التصحيح من الملف الحي. يبدأ برصيد {editTargetOpportunities} / {editTargetOpportunities} وتاريخ تسجيل جديد لحظة الحفظ.
+                                يُحفظ الملف الحالي للقراءة فقط، ثم تُزال الدرجات والخصومات والإجازات والمكالمات والملاحظات من الملف الحي. يبدأ برصيد {editTargetOpportunities} / {editTargetOpportunities} وتاريخ تسجيل جديد لحظة الحفظ.
                               </span>
                             </span>
                           </label>
@@ -3280,7 +3280,7 @@ export function StudentRegistryView() {
                 </p>
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-destructive">
                   الحذف النهائي معطّل لحماية الدرجات والإجازات والمكالمات
-                  والملاحظات وسجلات الفرص وأوراق التصحيح من الضياع أو ظهور حالات
+                  والملاحظات وسجلات الفرص من الضياع أو ظهور حالات
                   “طالب محذوف”.
                 </div>
                 <div className="rounded-2xl border bg-muted/40 p-3 text-foreground">

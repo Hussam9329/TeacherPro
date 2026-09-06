@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   BookOpen,
   CheckCircle2,
-  Clock,
   Shield,
   Users,
 } from "lucide-react";
@@ -38,7 +37,6 @@ type DashboardStats = {
   activeStudents: number;
   dismissedStudents: number;
   totalStudents: number;
-  pendingCorrectionSheets: number;
   alerts: DashboardAlert[];
   recentLogs: Array<{
     id: string;
@@ -154,7 +152,7 @@ function formatStatsTime(value?: string) {
 
 export function DashboardView() {
   const { setSection, canAccess } = useTeacherStore();
-  const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams", "correction"]);
+  const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const beginStatsRequest = useLatestRequest();
   const statsLoadedRef = useRef(false);
@@ -292,13 +290,6 @@ export function DashboardView() {
       icon: BookOpen,
       tone: "info" as const,
       hint: "كل الطلاب المسجلين في بيانات النظام",
-    },
-    {
-      label: "أوراق بانتظار التصحيح",
-      value: stats?.pendingCorrectionSheets,
-      icon: Clock,
-      tone: "danger" as const,
-      hint: "كل الأوراق غير المكتملة في بيانات النظام",
     },
   ];
 

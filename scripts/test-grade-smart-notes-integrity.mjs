@@ -18,8 +18,6 @@ const [
   graceCronRoute,
   academicRecalculation,
   vercelConfig,
-  correctionSheetsRoute,
-  telegramSubmissionsRoute,
   gradeWriteback,
   preRegistrationHelper,
   preRegistrationPromotion,
@@ -38,8 +36,6 @@ const [
     read("src/app/api/internal/grace-smart-notes/settle/route.ts"),
     read("src/lib/academic-recalculate-server.ts"),
     read("vercel.json"),
-    read("src/app/api/correction-sheets/route.ts"),
-    read("src/app/api/telegram-exam-submissions/route.ts"),
     read("src/lib/academic-grade-writeback-server.ts"),
     read("src/lib/pre-registration-grade.ts"),
     read("src/lib/pre-registration-grade-promotion-server.ts"),
@@ -188,12 +184,6 @@ assert.doesNotMatch(entrySheet, /reconcileExpiredGracePendingGrades/);
 
 assert.match(gradesRoute, /isProtectedSmartNoteHistoricalGrade\(freshTargetGrade\)[\s\S]*nextStatus !== "درجة"/);
 assert.match(gradesRoute, /isProtectedSmartNoteHistoricalGrade\(targetGrade\)[\s\S]*لا يمكن حذف هذه الدرجة التاريخية/);
-for (const deletionRoute of [correctionSheetsRoute, telegramSubmissionsRoute]) {
-  assert.match(
-    deletionRoute,
-    /academicEffectExclusionSource:\s*\{[\s\S]*startsWith:\s*"GradeSmartNote:"/,
-  );
-}
 
 assert.match(notesRoute, /requireAnyPermission\([\s\S]*"grades\.view"[\s\S]*"grades\.add"/);
 assert.match(notesRoute, /requirePermission\(req, "grades\.edit"\)/);

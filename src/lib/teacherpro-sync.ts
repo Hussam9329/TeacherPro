@@ -49,7 +49,6 @@ export type TeacherProSyncScope =
   | "opportunities"
   | "opportunity-logs"
   | "follow-up"
-  | "correction"
   | "accounts"
   | "logs"
   | "bulk-import";
@@ -377,7 +376,6 @@ export function inferTeacherProScopesFromEndpoint(endpoint: string): TeacherProS
   else if (path.includes("courses")) add(["courses", "students", "exams", "dashboard"]);
   else if (path.includes("chapters")) add(["chapters", "courses", "students", "opportunities", "dashboard"]);
   else if (path.includes("student-leaves") || path.includes("student-calls") || path.includes("student-notes")) add(["follow-up", "students", "grades", "opportunities", "dashboard"]);
-  else if (path.includes("correction-sheets") || path.includes("telegram-exam-submissions")) add(["correction", "students", "exams", "grades", "dashboard"]);
   else if (path.includes("users") || path.includes("roles")) add(["accounts", "logs"]);
   else if (path.includes("logs")) add(["logs"]);
 

@@ -84,9 +84,7 @@ async function main() {
       (SELECT count(*) FROM "Exam") AS exams,
       (SELECT count(*) FROM "Course") AS courses,
       (SELECT count(*) FROM "AuditLog") AS audit_logs,
-      (SELECT count(*) FROM "StudentLeave") AS leaves,
-      (SELECT count(*) FROM "TelegramExamSubmission") AS telegram_submissions,
-      (SELECT count(*) FROM "CorrectionSheet") AS correction_sheets
+      (SELECT count(*) FROM "StudentLeave") AS leaves
   `, '4. الإحصائيات الإجمالية');
 
   // 5. أبطأ الاستعلامات (من pg_stat_statements لو متاح)

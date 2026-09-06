@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
         severity: Boolean(botToken) ? (botToken.length >= 32 ? 'ok' : 'warn') : 'warn',
         message: Boolean(botToken)
           ? 'مفعّل في متغيرات البيئة. لا يتم كشف قيمته في الواجهة.'
-          : 'غير مضبوط. سيُرفض استقبال مستلمات البوت حتى تضبط TEACHERPRO_BOT_INGEST_TOKEN.',
+          : 'غير مضبوط. سيُرفض وصول البوت حتى تضبط TEACHERPRO_BOT_INGEST_TOKEN.',
       },
       {
         id: 'admin-account',

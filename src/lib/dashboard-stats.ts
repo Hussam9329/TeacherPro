@@ -72,7 +72,6 @@ const MODULE_LABELS: Record<string, string> = {
   grades: "الدرجات",
   opportunities: "إدارة الفرص",
   "follow-up": "المتابعة",
-  correction: "التصحيح الإلكتروني",
   accounts: "الحسابات والصلاحيات",
   backup: "النسخ الاحتياطي",
   logs: "سجل العمليات",

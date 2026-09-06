@@ -53,12 +53,6 @@ const LOG_RESET_SCOPES = [
     danger: false,
   },
   {
-    id: "audit-correction",
-    title: "تصفير إجراءات التصحيح الإلكتروني",
-    description: "إضافة وتعديل وحذف أوراق التصحيح وحالات التصحيح.",
-    danger: false,
-  },
-  {
     id: "audit-accounts",
     title: "تصفير إجراءات الحسابات والأمان",
     description: "الحسابات، الأدوار، الصلاحيات، ومحاولات الدخول.",

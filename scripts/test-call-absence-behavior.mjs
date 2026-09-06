@@ -446,9 +446,6 @@ test("candidate rows and stats protect all scored notes and submitted papers", (
     assert.match(source, /gradeSmartNote\.findMany/);
     assert.match(source, /score:\s*\{\s*not:\s*null\s*\}/);
     assert.doesNotMatch(source, /gradeSmartNote\.findMany\([\s\S]{0,180}status:\s*"PENDING"/);
-    assert.match(source, /correctionSheet\.findMany/);
-    assert.match(source, /telegramExamSubmission\.findMany/);
-    assert.match(source, /pageCount:\s*\{\s*gt:\s*0\s*\}/);
     assert.match(source, /attemptEvidenceStudentIds/);
   }
 });

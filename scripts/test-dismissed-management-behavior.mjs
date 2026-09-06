@@ -69,7 +69,6 @@ test("follow-up permissions remain isolated by domain", () => {
   const baseAccess = {
     grades: false,
     opportunities: false,
-    correction: false,
     archives: true,
   };
   const accessFor = (permissions) =>
@@ -166,16 +165,6 @@ test("professional Telegram report consolidates exams and follows action semanti
           "تاريخ الامتحان: 2026/7/12",
         ],
       },
-      {
-        date: "2026-07-12T13:00:00Z",
-        kind: "correction",
-        title: "سجل تصحيح ورقة امتحان",
-        details: [
-          "الامتحان: الامتحان 2",
-          "حالة التصحيح: مكتمل",
-          "المصحح: موظف داخلي",
-        ],
-      },
     ],
   );
 
@@ -183,7 +172,7 @@ test("professional Telegram report consolidates exams and follows action semanti
   assert.match(message, /2\. الامتحان 2 — 2026\/7\/12\nالنتيجة: غائب/);
   assert.match(message, /الإجراء: تم خصم فرصة — السبب: غياب في الامتحان/);
   assert.equal((message.match(/الامتحان 2 —/g) || []).length, 1);
-  assert.doesNotMatch(message, /تمت إضافة فرصة|المصحح|حالة التصحيح|HTML/);
+  assert.doesNotMatch(message, /تمت إضافة فرصة|HTML/);
 });
 
 test("automatic deductions are deductions even when legacy amounts are positive", () => {

@@ -22,7 +22,6 @@ try {
     'page.exam-records.view': ['exams.edit', 'exams.delete'],
     'page.grade-records.view': ['grades.edit', 'grades.delete'],
     'page.opportunities.view': ['opportunities.manage'],
-    'page.e-correction.view': ['correction.manage'],
   };
 
   let totalAffectedRoles = 0;

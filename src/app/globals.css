@@ -3285,21 +3285,7 @@
   }
 }
 
-/* Electronic correction page contract. */
-.tp-e-correction-page > .grid {
-  align-items: stretch;
-}
-
-.tp-e-correction-page > .grid > [data-slot="card"] {
-  box-shadow: none;
-}
-
-.tp-e-correction-page > .grid > [data-slot="card"]:first-child {
-  border-color: color-mix(in srgb, var(--primary) 30%, transparent);
-  background: color-mix(in srgb, var(--primary) 6%, var(--card));
-}
-
-.tp-e-correction-page [role="tablist"],
+/* Shared tablist contract. */
 .tp-accounts-page [role="tablist"] {
   position: sticky;
   top: 0.5rem;
@@ -3313,24 +3299,14 @@
   scrollbar-width: thin;
 }
 
-.tp-e-correction-page [role="tab"],
 .tp-accounts-page [role="tab"] {
   flex: 0 0 auto;
   min-width: max-content;
   white-space: nowrap;
 }
 
-.tp-e-correction-page [data-state="active"][role="tab"] {
-  font-weight: 800;
-}
-
-.tp-e-correction-page [role="tabpanel"],
 .tp-accounts-page [role="tabpanel"] {
   scroll-margin-top: 6rem;
-}
-
-.tp-e-correction-page [role="tabpanel"] > .tp-filter-card {
-  border-color: color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 /* Follow-up pages contract. */
@@ -3431,7 +3407,6 @@
   .tp-exam-records-page,
   .tp-grade-records-page,
   .tp-opportunities-page,
-  .tp-e-correction-page,
   .tp-follow-up-page--calls,
   .tp-follow-up-page--leaves,
   .tp-accounts-page,
@@ -3451,7 +3426,6 @@
     gap: 0.75rem;
   }
 
-  .tp-e-correction-page [role="tablist"],
   .tp-accounts-page [role="tablist"] {
     margin-inline: -0.25rem;
     padding-inline: 0.25rem;

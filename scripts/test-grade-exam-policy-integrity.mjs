@@ -13,9 +13,6 @@ const must = (condition, ok, bad = ok) => {
 const gradeRoute = read("src/app/api/grades/route.ts");
 const writeback = read("src/lib/academic-grade-writeback-server.ts");
 const examRoute = read("src/app/api/exams/route.ts");
-const botRoute = read("src/app/api/bot/exams/route.ts");
-const correctionRoute = read("src/app/api/correction-sheets/route.ts");
-const telegramRoute = read("src/app/api/telegram-exam-submissions/route.ts");
 const examUtils = read("src/lib/exam-utils.ts");
 const recalc = read("src/lib/academic-recalculate-server.ts");
 const gradeClassification = read("src/lib/grade-classification.ts");
@@ -59,10 +56,8 @@ must(
 must(
   writeback.includes('student.status === "مفصول"') &&
     writeback.includes('student.status === "مؤرشف"') &&
-    writeback.includes("courseIds.includes(student.courseId)") &&
-    correctionRoute.includes("syncAcademicGradeWriteback") &&
-    telegramRoute.includes("syncAcademicGradeWriteback"),
-  "التصحيح والبوت يخضعان لنفس فحص حالة الطالب والدورة مثل تسجيل الدرجات",
+    writeback.includes("courseIds.includes(student.courseId)"),
+  "كل مصادر اعتماد الدرجات تمر بفحص حالة الطالب والدورة الموحد على الخادم",
   "كل مصادر اعتماد الدرجات يجب أن تمر بالعقدة الخادمية الموحدة.",
 );
 
@@ -160,14 +155,6 @@ must(
 );
 
 must(
-  botRoute.includes("getExamEntryAvailability(exam).available") &&
-    !botRoute.includes("where: { active: true") &&
-    botRoute.includes("isExamOnOrAfterStudentRegistration"),
-  "قائمة امتحانات البوت تستخدم حالة الإتاحة الزمنية الموحدة",
-  "البوت يجب ألا يعتمد على active:true الخام.",
-);
-
-must(
   examRoute.includes("parseBaghdadDateOnly") &&
     examUtils.includes("baghdadTodayKey") &&
     read("src/lib/baghdad-time.ts").includes("parseBaghdadDateOnly"),
@@ -187,20 +174,16 @@ must(
 
 must(
   recalc.includes("client.studentCall.findMany") &&
-    recalc.includes("client.correctionSheet.findMany") &&
-    recalc.includes("client.telegramExamSubmission.findMany") &&
     recalc.includes("client.opportunityLog.findMany") &&
     recalc.includes("client.studentLeaveGradeBackup.findMany"),
   "إعادة احتساب الامتحان تجمع جميع الطلاب المرتبطين لا أصحاب الدرجات فقط",
-  "قائمة المتأثرين يجب أن تشمل المكالمات والتصحيح والبوت والفرص ونسخ الإجازات.",
+  "قائمة المتأثرين يجب أن تشمل المكالمات والفرص ونسخ الإجازات.",
 );
 
 must(
   examRoute.includes("gradeCount") &&
     examRoute.includes("leaveCount") &&
     examRoute.includes("callCount") &&
-    examRoute.includes("correctionSheetCount") &&
-    examRoute.includes("telegramSubmissionCount") &&
     examRoute.includes("opportunityLogCount") &&
     examRoute.includes("smartNoteCount") &&
     examRoute.includes("leaveBackupCount") &&

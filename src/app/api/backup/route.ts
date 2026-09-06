@@ -19,14 +19,14 @@ type AnyDelegate = { upsert: (args: any) => Promise<any>; createMany: (args: any
 // Backup shape
 // ----------------------------------------------------------------------------
 // Version history:
-//  - v4 (legacy): missing TelegramExamSubmission, StudentLeaveGradeBackup,
-//    StudentEnrollmentArchive, PermissionCatalog;
-//    audit logs capped to last 500.
+//  - v4 (legacy): missing StudentLeaveGradeBackup, StudentEnrollmentArchive,
+//    PermissionCatalog; audit logs capped to last 500.
 //  - v5: all legacy operational tables exported; audit logs unbounded.
-//  - v6 (current): adds structured GradeSmartNote records and Grade provenance.
+//  - v6: adds structured GradeSmartNote records and Grade provenance.
 //    Safe to restore on v4+ databases (restore skips unknown tables).
+//  - v7 (current): operational tables only; restore skips unknown tables.
 // ============================================================================
-const BACKUP_VERSION = 6;
+const BACKUP_VERSION = 7;
 
 const RESTORE_CONFIRMATION_TOKEN = 'RESTORE';
 
@@ -49,8 +49,6 @@ const RESTORE_ORDER = [
   'studentLeaveGradeBackups',
   'studentCalls',
   'studentNotes',
-  'correctionSheets',
-  'telegramExamSubmissions',
   'studentEnrollmentArchives',
   'logs',
 ] as const;
@@ -80,12 +78,10 @@ export async function GET(req: NextRequest) {
       studentLeaves,
       studentCalls,
       studentNotes,
-      correctionSheets,
       users,
       roles,
       logs,
       // v5 additions — previously missing from backup
-      telegramExamSubmissions,
       studentLeaveGradeBackups,
       studentEnrollmentArchives,
       permissionCatalog,
@@ -102,7 +98,6 @@ export async function GET(req: NextRequest) {
       db.studentLeave.findMany(),
       db.studentCall.findMany(),
       db.studentNote.findMany(),
-      db.correctionSheet.findMany(),
       db.appUser.findMany({
         select: {
           id: true,
@@ -121,7 +116,6 @@ export async function GET(req: NextRequest) {
       // Now export the full audit log to preserve complete accountability.
       db.auditLog.findMany({ orderBy: { time: 'asc' } }),
       // v5 additions
-      db.telegramExamSubmission.findMany(),
       db.studentLeaveGradeBackup.findMany(),
       db.studentEnrollmentArchive.findMany(),
       db.permissionCatalog.findMany(),
@@ -131,7 +125,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       version: BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
-      tableCount: 20,
+      tableCount: 18,
       recordCounts: {
         courses: courses.length,
         chapters: chapters.length,
@@ -144,11 +138,9 @@ export async function GET(req: NextRequest) {
         studentLeaves: studentLeaves.length,
         studentCalls: studentCalls.length,
         studentNotes: studentNotes.length,
-        correctionSheets: correctionSheets.length,
         users: users.length,
         roles: roles.length,
         logs: logs.length,
-        telegramExamSubmissions: telegramExamSubmissions.length,
         studentLeaveGradeBackups: studentLeaveGradeBackups.length,
         studentEnrollmentArchives: studentEnrollmentArchives.length,
         permissionCatalog: permissionCatalog.length,
@@ -165,12 +157,10 @@ export async function GET(req: NextRequest) {
       studentLeaves,
       studentCalls,
       studentNotes,
-      correctionSheets,
       users,
       roles,
       logs,
       // v5 additions
-      telegramExamSubmissions,
       studentLeaveGradeBackups,
       studentEnrollmentArchives,
       permissionCatalog,
@@ -387,8 +377,6 @@ async function collectTableCounts(): Promise<Record<string, number>> {
     ['studentLeaveGradeBackups', db.studentLeaveGradeBackup.count()],
     ['studentCalls', db.studentCall.count()],
     ['studentNotes', db.studentNote.count()],
-    ['correctionSheets', db.correctionSheet.count()],
-    ['telegramExamSubmissions', db.telegramExamSubmission.count()],
     ['studentEnrollmentArchives', db.studentEnrollmentArchive.count()],
     ['logs', db.auditLog.count()],
   ];
@@ -682,28 +670,6 @@ async function restoreTable(
           ),
         );
         break;
-      case 'correctionSheets':
-        await Promise.all(
-          batch.map((row) =>
-            upsertRecord(tx.correctionSheet, row as never, mode).then((r) => {
-              if (r === 'inserted') inserted++;
-              else if (r === 'updated') updated++;
-              else skipped++;
-            }),
-          ),
-        );
-        break;
-      case 'telegramExamSubmissions':
-        await Promise.all(
-          batch.map((row) =>
-            upsertRecord(tx.telegramExamSubmission, row as never, mode).then((r) => {
-              if (r === 'inserted') inserted++;
-              else if (r === 'updated') updated++;
-              else skipped++;
-            }),
-          ),
-        );
-        break;
       case 'studentEnrollmentArchives':
         await Promise.all(
           batch.map((row) =>
@@ -752,8 +718,6 @@ const PRISMA_TABLE_NAMES: Record<string, string> = {
   studentLeaveGradeBackups: 'StudentLeaveGradeBackup',
   studentCalls: 'StudentCall',
   studentNotes: 'StudentNote',
-  correctionSheets: 'CorrectionSheet',
-  telegramExamSubmissions: 'TelegramExamSubmission',
   studentEnrollmentArchives: 'StudentEnrollmentArchive',
   logs: 'AuditLog',
 };

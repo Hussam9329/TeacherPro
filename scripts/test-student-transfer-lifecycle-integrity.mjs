@@ -41,8 +41,6 @@ check(
     "studentLeaves",
     "studentCalls",
     "studentNotes",
-    "correctionSheets",
-    "telegramExamSubmissions",
     "studentLeaveGradeBackups",
     "auditLogs",
   ].every((key) => archiveHelper.includes(key)) &&
@@ -52,8 +50,6 @@ check(
     archiveHelper.includes("studentLeave.deleteMany") &&
     archiveHelper.includes("studentCall.deleteMany") &&
     archiveHelper.includes("studentNote.deleteMany") &&
-    archiveHelper.includes("correctionSheet.deleteMany") &&
-    archiveHelper.includes("telegramExamSubmission.deleteMany") &&
     archiveHelper.includes("studentLeaveGradeBackup.deleteMany"),
 );
 check(
@@ -157,8 +153,6 @@ check(
     profileHelper.includes('{ time: { gte: options.from } }') &&
     profile.includes("الملفات السابقة — للقراءة فقط") &&
     profile.includes("لا تدخل درجاتها أو فرصها أو إجراءاتها في ملفه الحالي") &&
-    profile.includes("أوراق التصحيح القديمة") &&
-    profile.includes("مستلمات تيليجرام القديمة") &&
     profile.includes("نسخ درجات الإجازات القديمة") &&
     profile.includes("كود الملف السابق") &&
     api.includes("StudentEnrollmentArchiveRecord"),

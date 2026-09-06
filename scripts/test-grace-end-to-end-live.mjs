@@ -4,7 +4,7 @@
  *
  * Creates an isolated fixture (course + exam + student in active automatic
  * grace), runs the REAL syncAcademicGradeWriteback (the exact code path behind
- * /api/grades, correction sheets, telegram submissions, and batch tools), and
+ * /api/grades and batch tools), and
  * asserts that entering a numeric grade:
  *   1. ends the grace period (gracePeriodEndedAt set),
  *   2. zeroes/resets grace config (accountingGraceDays = 0, start = null),

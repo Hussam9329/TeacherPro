@@ -110,15 +110,14 @@ test("excludes only purely automatic statuses", () => {
   assert.equal(result.preRegistration, 1);
 });
 
-test("REGRESSION: ورقة انتظار التصحيح (درجة بدون رقم) لا تُحتسب — حالة الامتحان الثامن فصل ثاني ص1", () => {
+test("REGRESSION: سجل placeholder (درجة بدون رقم) لا يُحتسب — حالة الامتحان الثامن فصل ثاني ص1", () => {
   // السيناريو الفعلي من قاعدة البيانات:
   // - أنشئ الامتحان ولم يدخل المعلم أي درجة بعد
-  // - استلم النظام ورقة الطالب عبر التصحيح/بوت تلغرام فأنشأ سجلاً
-  //   تلقائياً بحالة «درجة» و score=null (مثل id: correction_grade_*)
+  // - أنشأ النظام قديماً سجلاً تلقائياً بحالة «درجة» و score=null (سجل placeholder)
   // - القديم: العداد كان يعرض «معلقة 1» والإجمالي 1
   // - الصحيح: الإجمالي يجب أن يكون 0 لأن المعلم لم يُدخل شيئاً
   const rows = [
-    { studentId: "st_hussein", examId: "exam-8-p1", status: "درجة", score: null }, // ورقة بانتظار التصحيح
+    { studentId: "st_hussein", examId: "exam-8-p1", status: "درجة", score: null }, // سجل placeholder بدون رقم
     { studentId: "auto-1", examId: "exam-8-p1", status: "مجاز", score: null },
     { studentId: "auto-2", examId: "exam-8-p1", status: "ضمن فترة السماح", score: null },
   ];
@@ -133,8 +132,8 @@ test("REGRESSION: ورقة انتظار التصحيح (درجة بدون رقم
 test("REGRESSION: ورقة الانتظار لا تُحتسب حتى مع وجود درجات يدوية أخرى", () => {
   const rows = [
     { studentId: "manual-1", examId: "exam-x", status: "درجة", score: 30 },
-    { studentId: "placeholder-1", examId: "exam-x", status: "درجة", score: null }, // بانتظار التصحيح
-    { studentId: "placeholder-2", examId: "exam-x", status: "درجة", score: undefined }, // بانتظار التصحيح
+    { studentId: "placeholder-1", examId: "exam-x", status: "درجة", score: null }, // placeholder بدون رقم
+    { studentId: "placeholder-2", examId: "exam-x", status: "درجة", score: undefined }, // placeholder بدون رقم
   ];
   
   const result = countAllManualGradesForExam(rows, "exam-x");

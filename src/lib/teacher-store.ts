@@ -13,7 +13,6 @@ import {
   studentLeaveApi,
   studentCallApi,
   studentNoteApi,
-  correctionSheetApi,
   userApi,
   roleApi,
   logApi,
@@ -377,18 +376,6 @@ export interface StudentNote {
   dismissalDate?: string;
 }
 
-export interface CorrectionSheet {
-  id: string;
-  studentId: string;
-  examId: string;
-  correctorId: string;
-  status: string;
-  startedAt: string;
-  finishedAt: string;
-  correctionErrors: number;
-  sumErrors: number;
-}
-
 export interface User {
   id: string;
   username: string;
@@ -443,7 +430,6 @@ const LOG_CLEAR_SCOPE_MODULES: Record<
   "audit-students": ["تسجيل الطلاب", "سجل الطلاب", "الطلاب"],
   "audit-exams": ["الامتحانات", "الدورات", "الفصول والفرص"],
   "audit-followup": ["المتابعة"],
-  "audit-correction": ["التصحيح الإلكتروني"],
   "audit-accounts": ["الحسابات", "أمان الحسابات", "تسجيل الدخول", "الصلاحيات", "إدارة الحسابات"],
   "audit-exports": ["تصدير", "النسخ الاحتياطي"],
   "opportunity-logs": "opportunity",
@@ -498,12 +484,6 @@ function shouldClearOpportunityLogLocally(
   return valueIsWithinClearRange(log.date, options.dateFrom, options.dateTo);
 }
 
-export interface LeaderboardSettings {
-  correctionErrorPenalty: number;
-  sumErrorPenalty: number;
-  excludedExamIds: string[];
-}
-
 export type SectionId =
   | "dashboard"
   | "courses"
@@ -520,7 +500,6 @@ export type SectionId =
   | "follow-up"
   | "follow-up-calls"
   | "follow-up-leaves"
-  | "e-correction"
   | "accounts"
   | "logs"
   | "admin-log-reset";
@@ -774,21 +753,6 @@ export const PERMISSION_CATALOG: PermissionEntry[] = [
     level: "manage",
     description: "إضافة وحذف إجازات الطلاب مع الأثر الأكاديمي.",
   },
-  // التصحيح
-  {
-    id: "correction.view",
-    label: "عرض التصحيح الإلكتروني",
-    category: "التصحيح الإلكتروني",
-    level: "read",
-    description: "عرض لوحة التصحيح الإلكتروني ومستلمات البوت",
-  },
-  {
-    id: "correction.manage",
-    label: "إدارة التصحيح الإلكتروني",
-    category: "التصحيح الإلكتروني",
-    level: "manage",
-    description: "إضافة وتعديل أوراق التصحيح ومستلمات البوت",
-  },
   // الحسابات
   {
     id: "accounts.view",
@@ -930,7 +894,6 @@ export const SECTION_PERMISSIONS: Record<SectionId, string> = {
   "follow-up": "follow-up.view",
   "follow-up-calls": "follow-up.calls.view",
   "follow-up-leaves": "follow-up.leaves.view",
-  "e-correction": "correction.view",
   accounts: "accounts.users.view",
   logs: "logs.view",
   "admin-log-reset": "logs.clear",
@@ -984,6 +947,8 @@ const DEPRECATED_PERMISSION_IDS = new Set([
   "sites.delete",
   "demos.view",
   "demos.manage",
+  "correction.view",
+  "correction.manage",
 ]);
 
 function sanitizePermissionIds(permissions: string[] = []): string[] {
@@ -1086,13 +1051,7 @@ const DEFAULT_ROLES: Role[] = [
     id: "role_checker",
     name: "مصحح",
     isDefault: true,
-    permissions: [
-      "correction.view",
-      "correction.manage",
-      "grades.view",
-      "students.view",
-      "exams.view",
-    ],
+    permissions: ["grades.view", "students.view", "exams.view"],
   },
   {
     id: "role_viewer",
@@ -1115,11 +1074,9 @@ export interface BackupShape {
   studentLeaves?: StudentLeave[];
   studentCalls?: StudentCall[];
   studentNotes?: StudentNote[];
-  correctionSheets?: CorrectionSheet[];
   users?: User[];
   roles?: Role[];
   logs?: LogEntry[];
-  leaderboardSettings?: LeaderboardSettings;
 }
 
 // ─── Store State ────────────────────────────────────────────────────────────
@@ -1135,11 +1092,9 @@ interface TeacherState {
   studentLeaves: StudentLeave[];
   studentCalls: StudentCall[];
   studentNotes: StudentNote[];
-  correctionSheets: CorrectionSheet[];
   users: User[];
   roles: Role[];
   logs: LogEntry[];
-  leaderboardSettings: LeaderboardSettings;
   dbConnected: boolean;
   dbLoading: boolean;
 
@@ -1246,13 +1201,6 @@ interface TeacherState {
   updateStudentCall: (id: string, updates: Partial<StudentCall>) => void;
   addStudentNote: (note: Omit<StudentNote, "id">) => void;
   deleteStudentNote: (id: string) => void;
-
-  addCorrectionSheet: (sheet: Omit<CorrectionSheet, "id">) => void;
-  updateCorrectionSheet: (
-    id: string,
-    updates: Partial<CorrectionSheet>,
-  ) => void;
-  deleteCorrectionSheet: (id: string) => boolean;
 
   addUser: (user: Omit<User, "id">) => void;
   updateUser: (id: string, updates: Partial<Omit<User, "id">>) => void;
@@ -1466,15 +1414,9 @@ function seedData() {
     studentLeaves: [] as StudentLeave[],
     studentCalls: [] as StudentCall[],
     studentNotes: [] as StudentNote[],
-    correctionSheets: [] as CorrectionSheet[],
     users,
     roles,
     logs: [] as LogEntry[],
-    leaderboardSettings: {
-      correctionErrorPenalty: 3,
-      sumErrorPenalty: 1,
-      excludedExamIds: [] as string[],
-    },
   };
 }
 
@@ -1489,11 +1431,9 @@ const DATA_KEYS: (keyof BackupShape)[] = [
   "studentLeaves",
   "studentCalls",
   "studentNotes",
-  "correctionSheets",
   "users",
   "roles",
   "logs",
-  "leaderboardSettings",
 ];
 
 // ─── Migrate old users (no roleId) ──────────────────────────────────────────
@@ -2539,16 +2479,6 @@ export const useTeacherStore = create<TeacherState>()(
               })) as StudentNote[])
             : get().studentNotes;
 
-          const correctionSheets = serverData.correctionSheets
-            ? (serverData.correctionSheets.map(
-                (cs: Record<string, unknown>) => ({
-                  ...cs,
-                  correctionErrors: Number(cs.correctionErrors || 0),
-                  sumErrors: Number(cs.sumErrors || 0),
-                }),
-              ) as CorrectionSheet[])
-            : get().correctionSheets;
-
           const parsedUsers = (serverData.users || []).map(
             (u: Record<string, unknown>) => ({
               ...u,
@@ -2628,7 +2558,6 @@ export const useTeacherStore = create<TeacherState>()(
             studentLeaves,
             studentCalls,
             studentNotes,
-            correctionSheets,
             users,
             roles,
             logs,
@@ -2795,19 +2724,6 @@ export const useTeacherStore = create<TeacherState>()(
                     : todayISO(),
                 }),
               ) as StudentNote[];
-            }
-          }
-
-          if (section === "e-correction") {
-            const data = await correctionSheetApi.list();
-            if (data?.correctionSheets) {
-              nextState.correctionSheets = data.correctionSheets.map(
-                (cs: Record<string, unknown>) => ({
-                  ...cs,
-                  correctionErrors: Number(cs.correctionErrors || 0),
-                  sumErrors: Number(cs.sumErrors || 0),
-                }),
-              ) as CorrectionSheet[];
             }
           }
 
@@ -3846,7 +3762,7 @@ export const useTeacherStore = create<TeacherState>()(
           exam?.active ? "تعطيل امتحان" : "تفعيل امتحان",
           exam?.name || id,
         );
-        // active يعني الظهور للإدخال/التصحيح فقط، وليس إدخال أو إخراج الامتحان
+        // active يعني الظهور لإدخال الدرجات فقط، وليس إدخال أو إخراج الامتحان
         // من الحساب الأكاديمي. لذلك لا نعيد احتساب الطلاب هنا حتى لا تنتج
         // آثار عالمية أو رجفة واجهة من زر إظهار/إخفاء بسيط.
         syncToServer(get, () =>
@@ -3875,9 +3791,6 @@ export const useTeacherStore = create<TeacherState>()(
         const relatedOpportunityLogs = state.opportunityLogs.filter((log) =>
           opportunityLogBelongsToExam(log, id),
         );
-        const relatedCorrectionSheets = state.correctionSheets.filter(
-          (sheet) => sheet.examId === id,
-        );
         const relatedLeaves = state.studentLeaves.filter(
           (leave) => leave.examId === id,
         );
@@ -3886,14 +3799,13 @@ export const useTeacherStore = create<TeacherState>()(
         );
         const relatedTotal =
           relatedOpportunityLogs.length +
-          relatedCorrectionSheets.length +
           relatedLeaves.length +
           relatedCalls.length;
         if (relatedTotal > 0) {
           get().logAction(
             "الامتحانات",
             "منع حذف امتحان له سجلات تابعة",
-            `${exam.name} - فرص: ${relatedOpportunityLogs.length} - تصحيح: ${relatedCorrectionSheets.length} - إجازات: ${relatedLeaves.length} - مكالمات: ${relatedCalls.length}`,
+            `${exam.name} - فرص: ${relatedOpportunityLogs.length} - إجازات: ${relatedLeaves.length} - مكالمات: ${relatedCalls.length}`,
           );
           return false;
         }
@@ -3905,7 +3817,6 @@ export const useTeacherStore = create<TeacherState>()(
               ...relatedOpportunityLogs.map((log) => log.studentId),
               ...relatedLeaves.map((leave) => leave.studentId),
               ...relatedCalls.map((call) => call.studentId),
-              ...relatedCorrectionSheets.map((sheet) => sheet.studentId),
             ].filter((studentId): studentId is string => Boolean(studentId)),
           ),
         );
@@ -3940,9 +3851,6 @@ export const useTeacherStore = create<TeacherState>()(
               },
             ),
           );
-        relatedCorrectionSheets.forEach((sheet) =>
-          syncToServer(get, () => correctionSheetApi.remove(sheet.id)),
-        );
         relatedLeaves.forEach((leave) =>
           syncToServer(get, () => studentLeaveApi.remove(leave.id)),
         );
@@ -3953,7 +3861,6 @@ export const useTeacherStore = create<TeacherState>()(
         set((s) => ({
           exams: s.exams.filter((e) => e.id !== id),
           grades: s.grades.filter((g) => g.examId !== id),
-          correctionSheets: s.correctionSheets.filter((sh) => sh.examId !== id),
           opportunityLogs: s.opportunityLogs.filter(
             (log) => !opportunityLogBelongsToExam(log, id),
           ),
@@ -4887,44 +4794,6 @@ export const useTeacherStore = create<TeacherState>()(
           `${student.name} - ${log.action}`,
         );
         return false;
-      },
-
-      addCorrectionSheet: (sheet) => {
-        const entry: CorrectionSheet = { ...sheet, id: uid("sh") };
-        set((s) => ({ correctionSheets: [...s.correctionSheets, entry] }));
-        get().logAction(
-          "التصحيح الإلكتروني",
-          "إضافة ورقة تصحيح",
-          `${get().studentName(sheet.studentId)} - ${get().userName(sheet.correctorId)}`,
-        );
-        syncToServer(get, () =>
-          correctionSheetApi.add(entry as unknown as Record<string, unknown>),
-        );
-      },
-      updateCorrectionSheet: (id, updates) => {
-        set((s) => ({
-          correctionSheets: s.correctionSheets.map((sh) =>
-            sh.id === id ? { ...sh, ...updates } : sh,
-          ),
-        }));
-        get().logAction("التصحيح الإلكتروني", "تعديل ورقة تصحيح", id);
-        syncToServer(get, () =>
-          correctionSheetApi.update(id, updates as Record<string, unknown>),
-        );
-      },
-      deleteCorrectionSheet: (id) => {
-        const sheet = get().correctionSheets.find((sh) => sh.id === id);
-        if (!sheet) return false;
-        set((s) => ({
-          correctionSheets: s.correctionSheets.filter((sh) => sh.id !== id),
-        }));
-        get().logAction(
-          "التصحيح الإلكتروني",
-          "حذف ورقة تصحيح",
-          `${get().studentName(sheet.studentId)} - ${get().userName(sheet.correctorId)}`,
-        );
-        syncToServer(get, () => correctionSheetApi.remove(id));
-        return true;
       },
 
       addUser: (userData) => {

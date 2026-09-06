@@ -50,12 +50,6 @@ const CLEAR_SCOPE_DEFINITIONS = {
     includesAudit: true,
     includesOpportunity: false,
   },
-  'audit-correction': {
-    label: 'إجراءات التصحيح الإلكتروني',
-    modules: ['التصحيح الإلكتروني'],
-    includesAudit: true,
-    includesOpportunity: false,
-  },
   'audit-accounts': {
     label: 'إجراءات الحسابات والصلاحيات والأمان وتسجيل الدخول',
     modules: ['الحسابات', 'أمان الحسابات', 'تسجيل الدخول', 'الصلاحيات', 'إدارة الحسابات'],

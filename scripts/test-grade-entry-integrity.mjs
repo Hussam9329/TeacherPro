@@ -28,10 +28,6 @@ const gradesRoute = read("src/app/api/grades/route.ts");
 const gradeWriteback = read("src/lib/academic-grade-writeback-server.ts");
 const entrySheetRoute = read("src/app/api/grades/entry-sheet/route.ts");
 const markMissingAbsentRoute = read("src/app/api/grades/mark-missing-absent/route.ts");
-const correctionSheetsRoute = read("src/app/api/correction-sheets/route.ts");
-const telegramSubmissionsRoute = read(
-  "src/app/api/telegram-exam-submissions/route.ts",
-);
 const teacherStore = read("src/lib/teacher-store.ts");
 const profileDialog = read("src/components/teacher-pro/student-profile-dialog.tsx");
 const profileLogRoute = read("src/app/api/students/profile-log/route.ts");
@@ -196,13 +192,6 @@ must(
   ),
   "تصحيح درجة موجودة لطالب مفصول مسموح دون السماح بإنشاء درجة جديدة له",
   "يجب أن يطابق الخادم سماح الواجهة بتصحيح الدرجة التي سببت الفصل.",
-);
-
-must(
-  correctionSheetsRoute.includes('const deleteGrade = deleteGradeRaw === "true"') &&
-    telegramSubmissionsRoute.includes('const deleteGrade = deleteGradeRaw === "true"'),
-  "حذف ورقة التصحيح أو مستلم تيليجرام لا يحذف درجة الطالب افتراضياً",
-  "يجب ألا تمسح المسارات المساندة درجة عُدلت يدوياً دون طلب صريح.",
 );
 
 must(

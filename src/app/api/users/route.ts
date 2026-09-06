@@ -146,7 +146,6 @@ function safeUserSelect() {
     active: true,
     createdAt: true,
     roleRef: true,
-    correctionSheets: true,
     logs: true,
   } as const;
 }
@@ -313,10 +312,6 @@ export async function DELETE(req: NextRequest) {
     if (!user) return validationError('المستخدم غير موجود', 404);
     if (isPrimaryAdminUser(user) || isAdminRoleUser(user)) {
       return validationError('لا يمكن حذف حساب مدير النظام. عطّل أو عدّل حسابات المستخدمين العادية فقط.', 403);
-    }
-    const linkedSheets = await db.correctionSheet.count({ where: { correctorId: id } });
-    if (linkedSheets > 0) {
-      return validationError('لا يمكن حذف المستخدم لأنه مرتبط بأوراق تصحيح. عطّل الحساب بدلاً من حذفه.', 409);
     }
     await db.appUser.delete({ where: { id } });
     await writeSecurityAudit(principal, 'حذف مستخدم', {

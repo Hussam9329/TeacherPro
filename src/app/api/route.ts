@@ -24,10 +24,7 @@ export async function GET(req: NextRequest) {
       '/api/bot/health',
       '/api/bot/students/resolve',
       '/api/bot/students/link',
-      '/api/bot/exams',
       '/api/bot/opportunities',
-      '/api/telegram-exam-submissions',
-      '/api/telegram-file',
     ],
   });
 }

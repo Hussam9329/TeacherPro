@@ -72,8 +72,6 @@
 
 ### جداول أخرى (كلها فارغة كما هو متوقع)
 - StudentCall: 0 سجل
-- TelegramExamSubmission: 0 سجل
-- CorrectionSheet: 0 سجل
 - GradeSmartNote: 0 سجل
 - StudentLeaveGradeBackup: 0 سجل
 
@@ -136,7 +134,6 @@
 | 9 | إجازات الطلاب | (صفحة الإجازات) | تظهر إجازتها للامتحان 16 | ✅ صحيح |
 | 10 | تعهدات الفصل | `student-notes/pledges/route.ts` | لا يوجد تعهدات | ✅ صحيح |
 | 11 | اتصالات المتابعة | `student-calls/route.ts` | 0 اتصالات | ✅ صحيح |
-| 12 | التصحيح الإلكتروني | `e-correction.tsx` | لا توجد أوراق تصحيح | ✅ صحيح |
 | 13 | تصدير CSV | `export-dialog.tsx` + `/api/grades/export` | يظهر بدرجة مجازة بشكل صحيح | ✅ صحيح |
 | 14 | إحصائيات سجل الدرجات | `/api/grades/stats` | محسوبة ضمن "with grade" | ✅ صحيح |
 | 15 | المتصدرين | `leaderboard` (إن وجد) | بناءً على الدرجات | ✅ صحيح |

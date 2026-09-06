@@ -370,7 +370,7 @@ export function StudentProfileDialog({
   isStudentCurrentlyInGrace,
   graceEndDate,
 }: StudentProfileDialogProps) {
-  const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "opportunity-logs", "follow-up", "correction", "logs"]);
+  const syncKey = useTeacherProSyncKey(["students", "grades", "opportunities", "opportunity-logs", "follow-up", "logs"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const [tab, setTab] = useState<StudentFileTab>("details");
   const [gradeViewFilter, setGradeViewFilter] = useState<StudentProfileGradeFilter>("all");
@@ -1299,8 +1299,6 @@ export function StudentProfileDialog({
                     const oldNotes = archiveSnapshotList(archive, "studentNotes").filter(
                       (note) => !isRetiredFollowupNote(note),
                     );
-                    const oldCorrectionSheets = archiveSnapshotList(archive, "correctionSheets");
-                    const oldTelegramSubmissions = archiveSnapshotList(archive, "telegramExamSubmissions");
                     const oldLeaveGradeBackups = archiveSnapshotList(archive, "studentLeaveGradeBackups");
                     const oldAuditLogs = archiveSnapshotList(archive, "auditLogs");
                     const oldStudent = archiveSnapshotObject(archive, "student");
@@ -1345,14 +1343,12 @@ export function StudentProfileDialog({
                           <InfoBox label="المدرسة" value={oldStudent.school || "—"} />
                         </div>
 
-                        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+                        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
                           <InfoBox label="الدرجات" value={counts.grades || 0} />
                           <InfoBox label="حركات الفرص" value={counts.opportunityLogs || 0} />
                           <InfoBox label="الإجازات" value={counts.studentLeaves || 0} />
                           <InfoBox label="المكالمات" value={counts.studentCalls || 0} />
                           <InfoBox label="الملاحظات" value={oldNotes.length} />
-                          <InfoBox label="أوراق التصحيح" value={counts.correctionSheets || 0} />
-                          <InfoBox label="مستلمات تيليجرام" value={counts.telegramExamSubmissions || 0} />
                           <InfoBox label="نسخ درجات الإجازات" value={counts.studentLeaveGradeBackups || 0} />
                           <InfoBox label="سجلات النظام" value={counts.auditLogs || 0} />
                         </div>
@@ -1398,33 +1394,6 @@ export function StudentProfileDialog({
                                 <div key={String(note.id)} className="rounded-xl bg-background p-3 text-xs">
                                   <p className="font-bold">{note.kind || "ملاحظة"} — {formatAppDate(note.date)}</p>
                                   <p className="mt-1 break-words text-muted-foreground">{note.text || "—"}</p>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                          <details className="rounded-2xl border bg-muted/30 p-3">
-                            <summary className="cursor-pointer font-black">أوراق التصحيح القديمة ({oldCorrectionSheets.length})</summary>
-                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                              {oldCorrectionSheets.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد أوراق تصحيح</p> : oldCorrectionSheets.map((sheet) => (
-                                <div key={String(sheet.id)} className="rounded-xl bg-background p-3 text-xs">
-                                  <p className="font-bold">{sheet.exam?.name || "امتحان"} — {sheet.status || "—"}</p>
-                                  <p className="mt-1 break-words text-muted-foreground">
-                                    المصحح: {sheet.corrector?.name || sheet.corrector?.username || "—"} — أخطاء التصحيح: {Number(sheet.correctionErrors || 0)} — أخطاء الجمع: {Number(sheet.sumErrors || 0)}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                          <details className="rounded-2xl border bg-muted/30 p-3">
-                            <summary className="cursor-pointer font-black">مستلمات تيليجرام القديمة ({oldTelegramSubmissions.length})</summary>
-                            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                              {oldTelegramSubmissions.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد مستلمات تيليجرام</p> : oldTelegramSubmissions.map((submission) => (
-                                <div key={String(submission.id)} className="rounded-xl bg-background p-3 text-xs">
-                                  <p className="font-bold">{submission.exam?.name || "امتحان"} — {submission.status || "—"}</p>
-                                  <p className="mt-1 break-words text-muted-foreground">
-                                    الصفحات: {Number(submission.pageCount || 0)} — المطابقة: {submission.matchType || "—"} — الاستلام: {formatAppDate(submission.receivedAt || submission.submittedAt)}
-                                  </p>
-                                  {submission.notes ? <p className="mt-1 break-words text-muted-foreground">{submission.notes}</p> : null}
                                 </div>
                               ))}
                             </div>

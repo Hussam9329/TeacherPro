@@ -472,7 +472,6 @@ export function ExamRecordsView() {
     "courses",
     "grades",
     "students",
-    "correction",
     "dashboard",
   ]);
   const {
@@ -482,7 +481,6 @@ export function ExamRecordsView() {
     courses,
     courseChapters,
     opportunityLogs,
-    correctionSheets,
     studentLeaves,
     studentCalls,
     loadFromServer,
@@ -807,7 +805,6 @@ export function ExamRecordsView() {
       const exam = examById.get(String(examId));
       const dependentCount =
         opportunityLogs.filter((log) => log.examId === examId).length +
-        correctionSheets.filter((sheet) => sheet.examId === examId).length +
         studentLeaves.filter((leave) => leave.examId === examId).length +
         studentCalls.filter((call) => call.examId === examId).length;
       setDeleteDialog({
@@ -819,7 +816,6 @@ export function ExamRecordsView() {
       });
     },
     [
-      correctionSheets,
       examById,
       examStatNumber,
       opportunityLogs,
@@ -1130,7 +1126,7 @@ export function ExamRecordsView() {
                 ) : deleteDialog.dependentCount > 0 ? (
                   <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 font-semibold text-destructive">
                     لا يمكن حذف هذا الامتحان لأنه مرتبط بـ{" "}
-                    {deleteDialog.dependentCount} سجل تابع مثل تصحيح أو إجازات
+                    {deleteDialog.dependentCount} سجل تابع مثل إجازات أو مكالمات
                     أو مكالمات أو سجلات فرص. عطّل الامتحان بدل حذفه حتى لا يضيع
                     التاريخ.
                   </p>

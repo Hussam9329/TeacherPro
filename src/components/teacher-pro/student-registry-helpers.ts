@@ -115,8 +115,6 @@ const studentDeleteImpactLabels: Array<
   ["calls", "مكالمات"],
   ["notes", "ملاحظات"],
   ["opportunityLogs", "سجلات فرص"],
-  ["correctionSheets", "أوراق تصحيح"],
-  ["telegramSubmissions", "مستلمات بوت"],
 ];
 
 export function formatStudentDeleteImpact(

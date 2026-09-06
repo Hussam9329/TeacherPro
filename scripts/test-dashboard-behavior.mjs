@@ -484,7 +484,6 @@ test("dashboard component integrates permissions, deep links, stale errors, huma
   assert.match(statsRoute, /hasPermission\([^,]+,\s*["']logs\.view["']\)/);
   assert.doesNotMatch(statsRoute, /ensureExamSchema|ensureFollowupTables\(|ensureGradeEntryMissingNoteSchema\(/);
   assert.match(statsRoute, /routeErrorResponse\(/);
-  assert.match(statsRoute, /TelegramExamSubmission|telegramExamSubmission/);
   assert.match(statsRoute, /normalizeExamSiteValue/);
   assert.match(statsRoute, /isAllMainSitesSelection/);
   assert.match(statsRoute, /jsonb_to_recordset/);

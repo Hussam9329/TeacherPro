@@ -12,16 +12,6 @@ export function readBotIngestToken(): string {
   return (readServerEnv("TEACHERPRO_BOT_INGEST_TOKEN") || "").trim();
 }
 
-export function readTelegramBotToken(): string {
-  return (
-    readServerEnv("TEACHERPRO_BOT_TOKEN") ||
-    readServerEnv("TEACHERPRO_TELEGRAM_BOT_TOKEN") ||
-    readServerEnv("TELEGRAM_BOT_TOKEN") ||
-    readServerEnv("BOT_TOKEN") ||
-    ""
-  ).trim();
-}
-
 export function constantTimeEqual(left: string, right: string): boolean {
   if (!left || !right || left.length !== right.length) return false;
   let diff = 0;

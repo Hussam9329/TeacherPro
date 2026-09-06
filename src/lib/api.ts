@@ -552,7 +552,6 @@ export interface ServerData {
   studentLeaves?: Array<Record<string, unknown>>;
   studentCalls?: Array<Record<string, unknown>>;
   studentNotes?: Array<Record<string, unknown>>;
-  correctionSheets?: Array<Record<string, unknown>>;
   users?: Array<Record<string, unknown>>;
   roles?: Array<Record<string, unknown>>;
   logs?: Array<Record<string, unknown>>;
@@ -643,8 +642,7 @@ export interface StudentDeleteImpactResponse {
     calls: number;
     notes: number;
     opportunityLogs: number;
-    correctionSheets: number;
-    telegramSubmissions: number;
+    gradeSmartNotes: number;
   };
   totalRelations: number;
   hasRelations: boolean;
@@ -783,7 +781,6 @@ export interface StudentProfileSectionAccess {
   opportunities: boolean;
   followUp: boolean;
   logs: boolean;
-  correction: boolean;
   archives: boolean;
 }
 
@@ -1318,7 +1315,7 @@ export async function loadAllFromServer(): Promise<ServerData | null> {
     apiGetResponse<Pick<ServerData, "chapters">>("chapters", [403]),
     // Heavy, fast-growing tables are intentionally not loaded here:
     // course-chapters, opportunity-logs, student-leaves, student-calls,
-    // student-notes, correction-sheets, logs, students and grades.
+    // student-notes, logs, students and grades.
     // Their screens/actions load them lazily so the first app open stays light.
     apiGetResponse<Pick<ServerData, "exams">>("exams", [403]),
     apiGetResponse<Pick<ServerData, "users">>("users", [403]),
@@ -2059,23 +2056,6 @@ export const studentNoteApi = {
   update: (id: string, updates: Record<string, unknown>) =>
     apiPut("student-notes", { id, ...updates }),
   remove: (id: string) => apiDelete("student-notes", id),
-};
-
-// ─── CorrectionSheet API ──────────────────────────────────────────────────────
-
-export const correctionSheetApi = {
-  list: () =>
-    apiGetAllPages<Pick<ServerData, "correctionSheets">>(
-      "correction-sheets",
-      "correctionSheets",
-    ),
-  add: (sheet: Record<string, unknown>) => apiPost("correction-sheets", sheet),
-  update: (id: string, updates: Record<string, unknown>) =>
-    apiPut("correction-sheets", { id, ...updates }),
-  remove: (id: string, options: { deleteGrade?: boolean } = {}) =>
-    apiDelete("correction-sheets", id, {
-      deleteGrade: options.deleteGrade ? "true" : "false",
-    }),
 };
 
 // ─── User API ─────────────────────────────────────────────────────────────────

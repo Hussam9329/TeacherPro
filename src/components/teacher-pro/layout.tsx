@@ -33,7 +33,6 @@ import {
   FileCheck,
   BarChart3,
   Target,
-  CheckSquare,
   PhoneCall,
   CalendarCheck,
   Shield,
@@ -103,12 +102,6 @@ const menuItems: {
   { id: "exam-records", title: "سجل الامتحانات", sub: "PDF", icon: FileCheck },
   { id: "grade-records", title: "سجل الدرجات", sub: "سجل", icon: BarChart3 },
   { id: "opportunities", title: "إدارة الفرص", sub: "خصم/إضافة", icon: Target },
-  {
-    id: "e-correction",
-    title: "التصحيح الإلكتروني",
-    sub: "المتصدرين",
-    icon: CheckSquare,
-  },
   { id: "follow-up-calls", title: "المكالمات", sub: "اتصالات المتابعة", icon: PhoneCall },
   { id: "follow-up-leaves", title: "الإجازات", sub: "إجازات الطلاب", icon: CalendarCheck },
   { id: "accounts", title: "إدارة الحسابات", sub: "صلاحيات", icon: Shield },
@@ -144,7 +137,6 @@ const sectionDescriptions: Partial<Record<SectionId, string>> = {
   "exam-records": "مراجعة الامتحانات السابقة وإعداداتها وحالتها.",
   "grade-records": "البحث في سجل الدرجات ومراجعة النتائج المسجلة.",
   opportunities: "متابعة فرص الطلاب وتنفيذ الإضافة أو الخصم بضوابط النظام.",
-  "e-correction": "مراجعة أوراق التصحيح والمستلمات ونتائج التدقيق.",
   "follow-up-calls": "تنظيم اتصالات المتابعة وتسجيل نتائج المكالمات.",
   "follow-up-leaves": "إدارة إجازات الطلاب ومراجعة الفترات المسجلة.",
   accounts: "إدارة المستخدمين والأدوار والصلاحيات وإعدادات الأمان.",
@@ -157,7 +149,6 @@ const sectionsWithPageSearch = new Set<SectionId>([
   "exam-records",
   "grade-records",
   "opportunities",
-  "e-correction",
   "follow-up-calls",
   "follow-up-leaves",
   "logs",
@@ -175,7 +166,7 @@ const dashboardActionQueryKeys = [
 ] as const;
 
 const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
-  dashboard: ["dashboard", "students", "grades", "opportunities", "exams", "correction"],
+  dashboard: ["dashboard", "students", "grades", "opportunities", "exams"],
   courses: ["courses", "students", "exams", "dashboard"],
   chapters: ["chapters", "courses", "students", "opportunities", "dashboard"],
   "student-register": ["students", "courses", "opportunities", "dashboard"],
@@ -184,10 +175,9 @@ const SECTION_SYNC_SCOPES: Record<SectionId, string[]> = {
   "dismissed-management": ["students", "grades", "opportunities", "dismissed", "follow-up", "dashboard"],
   "exam-new": ["exams", "courses", "grades", "dashboard"],
   "grade-entry": ["grades", "students", "exams", "opportunities", "dashboard"],
-  "exam-records": ["exams", "courses", "grades", "students", "correction", "dashboard"],
+  "exam-records": ["exams", "courses", "grades", "students", "dashboard"],
   "grade-records": ["grades", "students", "exams", "opportunities", "dashboard"],
   opportunities: ["opportunities", "opportunity-logs", "students", "grades", "dashboard"],
-  "e-correction": ["correction", "students", "exams", "grades", "dashboard"],
   "follow-up": ["follow-up", "students", "grades", "opportunities", "dashboard"],
   "follow-up-calls": ["follow-up", "students", "dashboard"],
   "follow-up-leaves": ["follow-up", "students", "grades", "opportunities", "dashboard"],
@@ -215,7 +205,6 @@ const PAGE_OWNED_SYNC_SECTIONS = new Set<SectionId>([
   "dismissed-management",
   "exam-new",
   "grade-records",
-  "e-correction",
   "accounts",
   "logs",
 ]);
@@ -258,7 +247,6 @@ const SYNC_VERSION_SCOPE_MAP: Record<string, string[]> = {
     "exams",
     "grades",
     "students",
-    "correction",
     "dashboard",
   ],
   grades: ["grades", "students", "opportunities", "dashboard"],
@@ -266,8 +254,6 @@ const SYNC_VERSION_SCOPE_MAP: Record<string, string[]> = {
   studentLeaves: ["follow-up", "students", "grades", "opportunities", "dashboard"],
   studentCalls: ["follow-up", "students", "dashboard"],
   studentNotes: ["follow-up", "students", "opportunities", "dashboard"],
-  correctionSheets: ["correction", "students", "exams", "grades", "dashboard"],
-  telegramSubmissions: ["correction", "students", "exams", "grades", "dashboard"],
   users: ["accounts"],
   roles: ["accounts"],
   auditLogs: ["logs"],
@@ -381,7 +367,6 @@ import { GradeEntryView } from "./grade-entry";
 import { ExamRecordsView } from "./exam-records";
 import { GradeRecordsView } from "./grade-records";
 import { OpportunitiesView } from "./opportunities";
-import { ECorrectionView } from "./e-correction";
 import { FollowUpCallsView, FollowUpLeavesView, FollowUpView } from "./follow-up";
 import { AccountsView } from "./accounts";
 import { LogsView } from "./logs";
@@ -403,7 +388,6 @@ const sectionComponents: Record<SectionId, React.ComponentType> = {
   "follow-up": FollowUpView,
   "follow-up-calls": FollowUpCallsView,
   "follow-up-leaves": FollowUpLeavesView,
-  "e-correction": ECorrectionView,
   accounts: AccountsView,
   logs: LogsView,
   // Keep the legacy key type-safe while rendering the safe destination only.

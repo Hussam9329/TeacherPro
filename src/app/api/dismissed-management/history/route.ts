@@ -432,65 +432,6 @@ function pushStudentNoteEvents(
   }
 }
 
-function pushCorrectionEvents(
-  events: TimelineEvent[],
-  rows: LooseRecord[],
-  courseName: string,
-  idPrefix: string,
-) {
-  for (const sheet of rows) {
-    const exam = record(sheet.exam);
-    const corrector = record(sheet.corrector);
-    events.push({
-      id: `${idPrefix}:correction:${text(sheet.id) || events.length}`,
-      date: iso(sheet.finishedAt) || iso(sheet.startedAt) || iso(exam.date),
-      kind: "correction",
-      title: "سجل تصحيح ورقة امتحان",
-      details: [
-        sourceCourseDetail(courseName),
-        text(exam.name) ? `الامتحان: ${text(exam.name)}` : "",
-        text(sheet.status) ? `حالة التصحيح: ${text(sheet.status)}` : "",
-        text(corrector.name) ? `المصحح: ${text(corrector.name)}` : "",
-        Number.isFinite(Number(sheet.correctionErrors))
-          ? `أخطاء التصحيح: ${integer(sheet.correctionErrors)}`
-          : "",
-        Number.isFinite(Number(sheet.sumErrors))
-          ? `أخطاء الجمع: ${integer(sheet.sumErrors)}`
-          : "",
-      ].filter(Boolean),
-      tone: "neutral",
-    });
-  }
-}
-
-function pushTelegramSubmissionEvents(
-  events: TimelineEvent[],
-  rows: LooseRecord[],
-  courseName: string,
-  idPrefix: string,
-) {
-  for (const submission of rows) {
-    const exam = record(submission.exam);
-    events.push({
-      id: `${idPrefix}:telegram-submission:${text(submission.id) || events.length}`,
-      date: iso(submission.submittedAt) || iso(submission.receivedAt),
-      kind: "telegram-submission",
-      title: "استلام أوراق امتحان عبر تيليجرام",
-      details: [
-        sourceCourseDetail(courseName),
-        text(exam.name) ? `الامتحان: ${text(exam.name)}` : "",
-        text(submission.status) ? `الحالة: ${text(submission.status)}` : "",
-        integer(submission.pageCount) > 0
-          ? `عدد الصفحات: ${integer(submission.pageCount)}`
-          : "",
-        text(submission.matchType) ? `نوع المطابقة: ${text(submission.matchType)}` : "",
-        text(submission.notes) ? `الملاحظات: ${text(submission.notes)}` : "",
-      ].filter(Boolean),
-      tone: "info",
-    });
-  }
-}
-
 function countPendingDismissedNotes(rows: LooseRecord[]): number {
   return rows.filter(
     (note) =>
@@ -531,7 +472,6 @@ export async function GET(req: NextRequest) {
     baseAccess: {
       grades: access.grades,
       opportunities: access.opportunities,
-      correction: access.correction,
       archives: access.archives,
     },
   });
@@ -580,8 +520,6 @@ export async function GET(req: NextRequest) {
           leaves,
           calls,
           notes,
-          corrections,
-          telegramSubmissions,
           archives,
         ] = await Promise.all([
           access.opportunities
@@ -702,38 +640,6 @@ export async function GET(req: NextRequest) {
                 orderBy: [{ date: "asc" }, { id: "asc" }],
               })
             : Promise.resolve([]),
-          access.correction
-            ? tx.correctionSheet.findMany({
-                where: { studentId },
-                select: {
-                  id: true,
-                  status: true,
-                  startedAt: true,
-                  finishedAt: true,
-                  correctionErrors: true,
-                  sumErrors: true,
-                  exam: { select: { name: true, date: true } },
-                  corrector: { select: { name: true } },
-                },
-                orderBy: { id: "asc" },
-              })
-            : Promise.resolve([]),
-          access.correction
-            ? tx.telegramExamSubmission.findMany({
-                where: { studentId },
-                select: {
-                  id: true,
-                  status: true,
-                  matchType: true,
-                  pageCount: true,
-                  notes: true,
-                  submittedAt: true,
-                  receivedAt: true,
-                  exam: { select: { name: true } },
-                },
-                orderBy: [{ receivedAt: "asc" }, { id: "asc" }],
-              })
-            : Promise.resolve([]),
           access.archives
             ? tx.studentEnrollmentArchive.findMany({
                 where: { studentId },
@@ -760,8 +666,6 @@ export async function GET(req: NextRequest) {
           leaves,
           calls,
           notes,
-          corrections,
-          telegramSubmissions,
           archives,
         };
       },
@@ -783,8 +687,6 @@ export async function GET(req: NextRequest) {
       leaves,
       calls,
       notes,
-      corrections,
-      telegramSubmissions,
       archives,
     } = historySnapshot;
 
@@ -794,8 +696,6 @@ export async function GET(req: NextRequest) {
     const liveLeaves = leaves as unknown as LooseRecord[];
     const liveCalls = calls as unknown as LooseRecord[];
     const liveNotes = notes as unknown as LooseRecord[];
-    const liveCorrections = corrections as unknown as LooseRecord[];
-    const liveTelegramSubmissions = telegramSubmissions as unknown as LooseRecord[];
 
     const currentDismissalAt = latestDismissalDate(
       liveOpportunityLogs,
@@ -868,8 +768,6 @@ export async function GET(req: NextRequest) {
       const archivedLeaves = records(snapshot.studentLeaves);
       const archivedCalls = records(snapshot.studentCalls);
       const archivedNotes = records(snapshot.studentNotes);
-      const archivedCorrections = records(snapshot.correctionSheets);
-      const archivedTelegramSubmissions = records(snapshot.telegramExamSubmissions);
       const archivedTimelineNotes = withoutDuplicatedDismissalActionNotes(
         archivedNotes,
         archivedOpportunityLogs,
@@ -897,13 +795,6 @@ export async function GET(req: NextRequest) {
       pushCallEvents(events, archivedCalls, courseName, prefix);
       pushManualCallNoteEvents(events, archivedCalls, courseName, prefix);
       pushStudentNoteEvents(events, archivedTimelineNotes, courseName, prefix);
-      pushCorrectionEvents(events, archivedCorrections, courseName, prefix);
-      pushTelegramSubmissionEvents(
-        events,
-        archivedTelegramSubmissions,
-        courseName,
-        prefix,
-      );
 
       events.push({
         id: `${prefix}:transition`,
@@ -952,18 +843,6 @@ export async function GET(req: NextRequest) {
         liveNotes,
         liveOpportunityLogs,
       ),
-      currentCourseName,
-      "current",
-    );
-    pushCorrectionEvents(
-      events,
-      liveCorrections,
-      currentCourseName,
-      "current",
-    );
-    pushTelegramSubmissionEvents(
-      events,
-      liveTelegramSubmissions,
       currentCourseName,
       "current",
     );
@@ -1037,7 +916,6 @@ export async function GET(req: NextRequest) {
         calls: historyAccess.calls,
         leaves: historyAccess.leaves,
         notes: historyAccess.studentNotes || historyAccess.calls,
-        correction: access.correction,
         archives: access.archives,
       },
       generatedAt: new Date().toISOString(),

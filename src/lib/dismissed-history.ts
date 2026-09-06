@@ -28,7 +28,6 @@ type TelegramDraftParts = {
 export type DismissedHistoryAccess = {
   grades: boolean;
   opportunities: boolean;
-  correction: boolean;
   archives: boolean;
   calls: boolean;
   leaves: boolean;
@@ -40,7 +39,7 @@ type DismissedHistoryAccessInput = {
   permissions: string[];
   baseAccess: Pick<
     DismissedHistoryAccess,
-    "grades" | "opportunities" | "correction" | "archives"
+    "grades" | "opportunities" | "archives"
   >;
 };
 

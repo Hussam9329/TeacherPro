@@ -103,8 +103,6 @@ const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
   "studentLeaves",
   "studentCalls",
   "studentNotes",
-  "correctionSheets",
-  "telegramExamSubmissions",
   // Client-only / stale accounting fields from older builds
   "receiptNo",
   "codeSequence",

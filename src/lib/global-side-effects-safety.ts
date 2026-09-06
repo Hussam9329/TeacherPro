@@ -6,11 +6,9 @@ type DbClient = typeof db | Prisma.TransactionClient;
 
 export interface ExamDeleteImpact {
   gradeCount: number;
-  correctionSheetCount: number;
   opportunityLogCount: number;
   studentLeaveCount: number;
   studentCallCount: number;
-  telegramSubmissionCount: number;
   gradeSmartNoteCount: number;
   leaveGradeBackupCount: number;
 }
@@ -47,11 +45,9 @@ export function globalImpactConfirmationResponse(
 export function sumExamDeleteImpact(impact: ExamDeleteImpact): number {
   return (
     impact.gradeCount +
-    impact.correctionSheetCount +
     impact.opportunityLogCount +
     impact.studentLeaveCount +
     impact.studentCallCount +
-    impact.telegramSubmissionCount +
     impact.gradeSmartNoteCount +
     impact.leaveGradeBackupCount
   );
@@ -67,31 +63,25 @@ export async function getExamDeleteImpact(
 ): Promise<ExamDeleteImpact> {
   const [
     gradeCount,
-    correctionSheetCount,
     opportunityLogCount,
     studentLeaveCount,
     studentCallCount,
-    telegramSubmissionCount,
     gradeSmartNoteCount,
     leaveGradeBackupCount,
   ] = await Promise.all([
     client.grade.count({ where: { examId } }),
-    client.correctionSheet.count({ where: { examId } }),
     client.opportunityLog.count({ where: { examId } }),
     client.studentLeave.count({ where: { examId } }),
     client.studentCall.count({ where: { examId } }),
-    client.telegramExamSubmission.count({ where: { examId } }),
     client.gradeSmartNote.count({ where: { examId } }),
     client.studentLeaveGradeBackup.count({ where: { examId } }),
   ]);
 
   return {
     gradeCount,
-    correctionSheetCount,
     opportunityLogCount,
     studentLeaveCount,
     studentCallCount,
-    telegramSubmissionCount,
     gradeSmartNoteCount,
     leaveGradeBackupCount,
   };

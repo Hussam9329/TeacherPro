@@ -836,8 +836,6 @@ export async function recalculateStudentsForExam(
     grades,
     leaves,
     calls,
-    correctionSheets,
-    telegramSubmissions,
     opportunityLogs,
     leaveGradeBackups,
   ] = await Promise.all([
@@ -855,14 +853,6 @@ export async function recalculateStudentsForExam(
       where: { examId: trimmedExamId },
       select: { studentId: true },
     }),
-    client.correctionSheet.findMany({
-      where: { examId: trimmedExamId },
-      select: { studentId: true },
-    }),
-    client.telegramExamSubmission.findMany({
-      where: { examId: trimmedExamId },
-      select: { studentId: true },
-    }),
     client.opportunityLog.findMany({
       where: { examId: trimmedExamId },
       select: { studentId: true },
@@ -877,8 +867,6 @@ export async function recalculateStudentsForExam(
       ...grades.map((grade) => grade.studentId),
       ...leaves.map((leave) => leave.studentId),
       ...calls.map((call) => call.studentId),
-      ...correctionSheets.map((sheet) => sheet.studentId),
-      ...telegramSubmissions.map((submission) => submission.studentId),
       ...opportunityLogs.map((log) => log.studentId),
       ...leaveGradeBackups.map((backup) => backup.studentId),
     ],

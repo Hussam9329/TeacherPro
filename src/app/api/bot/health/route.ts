@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireBotToken, readTelegramBotToken } from "@/lib/bot-integration-auth";
+import { requireBotToken } from "@/lib/bot-integration-auth";
 
 export async function GET(req: NextRequest) {
   const tokenError = requireBotToken(req);
@@ -14,13 +14,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       database: "ok",
-      telegramBotTokenConfigured: Boolean(readTelegramBotToken()),
       endpoints: [
         "/api/bot/students/resolve",
         "/api/bot/students/link",
-        "/api/bot/exams",
         "/api/bot/opportunities",
-        "/api/telegram-exam-submissions",
       ],
     });
   } catch (error) {
