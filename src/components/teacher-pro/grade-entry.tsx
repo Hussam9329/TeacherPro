@@ -284,7 +284,9 @@ export function GradeEntryView() {
     string | null
   >(null);
   const [gradeSmartNotesRefreshKey, setGradeSmartNotesRefreshKey] = useState(0);
-  const [editableRows, setEditableRows] = useState<Record<string, boolean>>({});
+  // الإدخال المباشر للجميع: لم يعد القفل عبر editableRows مستخدماً بعد الآن،
+  // فكل صفوف ورقة الإدخال قابلة للكتابة مباشرة دون الضغط على «تعديل».
+  const [, setEditableRows] = useState<Record<string, boolean>>({});
   const [reactivationWarningsAccepted, setReactivationWarningsAccepted] =
     useState<Record<string, boolean>>({});
   const [clockTick, setClockTick] = useState(0);
@@ -1099,7 +1101,6 @@ export function GradeEntryView() {
     return visibleExamStudents
       .filter((student) => {
         const leave = getStudentLeaveForSelectedExam(student.id);
-        const grade = getGrade(student.id);
         const draft = getDraft(student.id);
         const protectedNumericCapture = Boolean(
           leave ||
@@ -1108,12 +1109,10 @@ export function GradeEntryView() {
         );
         if (!canEditGradeForStudent(student.id) && !protectedNumericCapture)
           return false;
-        const entered = isGradeEntered(grade, selectedExam);
-        const rowLocked = Boolean(
-          entered && !protectedNumericCapture && !editableRows[student.id],
-        );
-        return !rowLocked &&
-          (protectedNumericCapture || draft.status === "درجة");
+        // الإدخال المباشر للجميع دون استثناء: كل صف قابل للكتابة يدخل في
+        // سلسلة التنقل بـ Tab، بمن فيهم الطلبة ضمن فترة السماح وذوو
+        // الدرجات المحفوظة مسبقاً — لا يلزم الضغط على «تعديل» أبداً.
+        return protectedNumericCapture || draft.status === "درجة";
       })
       .map((student) => student.id);
   }, [
@@ -1122,7 +1121,6 @@ export function GradeEntryView() {
     grades,
     studentLeaves,
     opportunityLogs,
-    editableRows,
     drafts,
     clockTick,
   ]);
@@ -1811,7 +1809,18 @@ export function GradeEntryView() {
 
     if (draft.status === "درجة") {
       if (!normalizedScore) {
-        if (existing && !protectedNumericCapture)
+        // الإدخال المباشر: صفوف «ضمن فترة السماح» و«قبل تسجيل الطالب»
+        // أصبحت قابلة للكتابة مباشرة، لذلك الخروج من الخلية دون كتابة رقم
+        // (Tab/blur) يجب ألا يحذف وسم السماح. الحذف يبقى مخصصاً
+        // للدرجات الرقمية وحالات غائب/غش الفعلية.
+        const existingIsGraceMarker =
+          existing?.status === "ضمن فترة السماح" ||
+          existing?.status === "قبل تسجيل الطالب";
+        if (
+          existing &&
+          !protectedNumericCapture &&
+          !existingIsGraceMarker
+        )
           void deleteExistingGradeFromServer(studentId, existing);
         return;
       }
@@ -2777,21 +2786,16 @@ export function GradeEntryView() {
                       examBeforeRegistration ||
                       student.status === "مفصول",
                   );
-                  const rowLocked = Boolean(
-                    entered &&
-                      !protectedNumericCapture &&
-                      !editableRows[student.id],
-                  );
+                  // الإدخال المباشر للجميع دون استثناء: أُزيل القفل الذي كان
+                  // يفرض الضغط على «تعديل» قبل كتابة الدرجة. كل قيود
+                  // الصلاحيات الحقيقية (مؤرشف/مفصول/قبل التسجيل) تبقى مطبقة.
                   const numericEntryMode =
                     protectedNumericCapture || draft.status === "درجة";
                   const numericInputDisabled =
-                    rowLocked ||
-                    (!canEditPersistedGrade && !protectedNumericCapture);
-                  const structuredControlsDisabled =
-                    rowLocked || !canEditPersistedGrade;
+                    !canEditPersistedGrade && !protectedNumericCapture;
+                  const structuredControlsDisabled = !canEditPersistedGrade;
                   const notesInputDisabled =
-                    rowLocked ||
-                    (!canEditPersistedGrade && !protectedNumericCapture);
+                    !canEditPersistedGrade && !protectedNumericCapture;
                   return (
                     <div
                       key={student.id}
@@ -3118,48 +3122,8 @@ export function GradeEntryView() {
                                               ? "محفوظ"
                                               : "غير مدخل")}
                         </Badge>
-                        {rowLocked ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={!canEditPersistedGrade}
-                            onClick={() => {
-                              setSavedRows((prev) => {
-                                const next = { ...prev };
-                                delete next[student.id];
-                                return next;
-                              });
-                              setRowSaveStates((prev) => ({
-                                ...prev,
-                                [student.id]: {
-                                  phase: "idle",
-                                  message: "جاهز للتعديل",
-                                },
-                              }));
-                              if (
-                                grade?.status === "ضمن فترة السماح" ||
-                                grade?.status === "قبل تسجيل الطالب"
-                              ) {
-                                setDrafts((prev) => ({
-                                  ...prev,
-                                  [student.id]: {
-                                    status: "درجة",
-                                    score: "",
-                                    notes: grade.notes || "",
-                                  },
-                                }));
-                              }
-                              setEditableRows((prev) => ({
-                                ...prev,
-                                [student.id]: true,
-                              }));
-                            }}
-                          >
-                            تعديل
-                          </Button>
-                        ) : (
-                          protectedNumericCapture &&
-                          student.status === "مفصول" ? (
+                        {protectedNumericCapture &&
+                        student.status === "مفصول" ? (
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                               <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                                 ✓
@@ -3182,7 +3146,6 @@ export function GradeEntryView() {
                                 ? "جارٍ الحفظ..."
                                 : "حفظ الآن"}
                             </Button>
-                          )
                         )}
                       </div>
                     </div>
