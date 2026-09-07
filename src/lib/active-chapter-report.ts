@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 // استيراد نسبي (مثل academic-engine.ts) حتى يبقى الملف قابلاً للاستيراد
 // من اختبارات node --experimental-strip-types مباشرة.
 import { baghdadDateKey } from "./baghdad-time";
+import { CHAPTER_TRANSITION_SETTLEMENT_REASON_PREFIX } from "./second-chapter-transition";
 
 /**
  * سياق «الفصل النشط الحالي» لتقارير إدارة الفرص.
@@ -10,18 +11,28 @@ import { baghdadDateKey } from "./baghdad-time";
  * الحالي — نحدد شوكت بده الفصل النشط (لحظة انتقال الدورة إليه)، ثم نبدأ من
  * أول امتحان انصنع بعد تلك اللحظة مباشرة.
  *
- * مصدر لحظة الانتقال: أرشيف الروابط غير المفعلة للدورة. عند تحويل فصل يدوي
- * يُخزَّن على رابط الفصل القديم أرشيف رصيد الطلاب بتاريخ التنفيذ (نفس الآلية
- * في /api/course-chapters/activate)، لذا آخر تاريخ أرشفة عبر الروابط غير
- * المفعلة = لحظة تسلّم الفصل النشط الحالي للدورة.
+ * مصدر لحظة الانتقال باليوم: أرشيف الروابط غير المفعلة للدورة. عند تحويل
+ * فصل يدوي يُخزَّن على رابط الفصل القديم أرشيف رصيد الطلاب بتاريخ التنفيذ
+ * (نفس الآلية في /api/course-chapters/activate)، لذا آخر تاريخ أرشفة عبر
+ * الروابط غير المفعلة = يوم تسلّم الفصل النشط الحالي للدورة.
+ *
+ * مصدر لحظة الانتقال الدقيقة (ضمن نفس اليوم): أقدم حركة تسوية تاريخية
+ * (سببها يبدأ بـ"تسوية تاريخية:") موسومة بمعرّف الفصل النشط. الانتقال نفسه
+ * يكتب تسوية جماعية بلحظة تنفيذ دقيقة، وكل تسويات ما بعده (تعهدات فاينل
+ * الفصل السابق، إعادة التفعيل) تحدث بعد الانتقال بالضرورة — لذلك أقدم
+ * طابع زمني موسوم بالفصل النشط هو لحظة الانتقال الفعلية. هذا يحل الالتباس
+ * داخل يوم الانتقال: فاينل أُدخل بعد التحويل بقليل يدخل التقرير، وفاينل
+ * الفصل السابق المُدخل قبل التحويل بنفس اليوم يبقى مستبعداً.
  *
  * مصدر لحظة إنشاء الامتحان: أقدم درجة مسجلة له (MIN(Grade.createdAt)) —
  * سجل الدرجات يُنشأ بذات العملية التي تنشئ الامتحان (أقدم إدخال = لحظة
  * الإنشاء تقريباً). إن لم توجد درجات نرجع لتاريخ الامتحان نفسه.
  *
- * المقارنة على مستوى «اليوم بغداد» (baghdadDateKey) حتى تعمل الحدود المخزنة
- * كمفتاح يوم (مثل "2026-08-30") والحدود المخزنة كطابع زمني كامل بنفس
- * الدقة، ويُشترط أن يكون يوم أقدم أثر للامتحان بعد يوم الانتقال بصرامة.
+ * المقارنة: الامتحان الذي يوم أقدم أثره بعد يوم الانتقال يدخل دائماً،
+ * والذي يقع بنفس يوم الانتقال يُحسم بطابع اللحظة الدقيقة (للدرجات فقط —
+ * الامتحان بلا درجات يبقى مستبعداً ويوم الانتقال حماية من تسريب فاينل
+ * الفصل السابق). ويُعتمد الطابع الدقيق فقط إذا كان ضمن يوم حد الأرشيف
+ * نفسه اتساقاً مع حد اليوم.
  */
 
 export type ActiveChapterReportLink = {
@@ -82,6 +93,12 @@ export function computeActiveChapterReportContext(
   links: readonly ActiveChapterReportLink[],
   courseExams: readonly ActiveChapterReportExam[],
   examFirstEvidenceAt: ReadonlyMap<string, Date | string | null>,
+  /**
+   * لحظة الانتقال الدقيقة (اختيارية): أقدم تسوية تاريخية موسومة بالفصل
+   * النشط. تُعتمد فقط إذا كانت ضمن يوم حد الأرشيف نفسها، وتُستخدم لحسم
+   * امتحانات أول درجة لها بنفس يوم الانتقال (درجات فقط).
+   */
+  preciseBoundaryAt?: Date | string | null,
 ): ActiveChapterReportContext | null {
   const activeLinks = links.filter((link) => link.active && !link.archived);
   if (activeLinks.length !== 1) return null;
@@ -101,13 +118,52 @@ export function computeActiveChapterReportContext(
     }
   }
 
+  // اللحظة الدقيقة للانتقال داخل يوم الحد: تُعتمد فقط إذا طابقت يوم حد
+  // الأرشيف — وإلا فالبيانات غير متسقة ويبقى حسم نفس اليوم على القاعدة
+  // اليومية الصارمة (السلوك المحافظ السابق).
+  let boundaryTimestamp: Date | null = null;
+  if (preciseBoundaryAt) {
+    const parsed =
+      preciseBoundaryAt instanceof Date
+        ? preciseBoundaryAt
+        : new Date(preciseBoundaryAt);
+    if (
+      Number.isFinite(parsed.getTime()) &&
+      baghdadDateKey(parsed) === boundaryDay
+    ) {
+      boundaryTimestamp = parsed;
+    }
+  }
+
   const examIds: string[] = [];
   for (const exam of courseExams) {
-    // أقدم أثر لوجود الامتحان: أول درجة له، وإلا تاريخ الامتحان نفسه.
-    const firstEvidence = examFirstEvidenceAt.get(exam.id) ?? exam.date;
+    // أقدم أثر لوجود الامتحان: أول درجة له (طابع دقيق)، وإلا تاريخ
+    // الامتحان نفسه (بلا دقة زمنية موثوقة).
+    const gradeEvidence = examFirstEvidenceAt.get(exam.id) ?? null;
+    const firstEvidence = gradeEvidence ?? exam.date;
     const evidenceDay = baghdadDateKey(firstEvidence ?? null);
     // بلا حد انتقال → كل امتحانات الدورة من الفصل النشط الحالي.
-    if (!boundaryDay || (evidenceDay && evidenceDay > boundaryDay)) {
+    // بعد يوم الانتقال → يدخل. بنفس يوم الانتقال → يُحسم باللحظة الدقيقة
+    // فقط عند وجود طابع درجة (فاينل أُدخل بعد التحويل يدخل، وما دُخل
+    // قبله يبقى مستبعداً)، والامتحان بلا درجات يبقى مستبعداً حماية
+    // من تسريب فاينل الفصل السابق المؤرخ يوم التحويل.
+    let include =
+      !boundaryDay || (evidenceDay && evidenceDay > boundaryDay);
+    if (
+      !include &&
+      gradeEvidence &&
+      boundaryTimestamp &&
+      evidenceDay === boundaryDay
+    ) {
+      const evidenceTimestamp =
+        gradeEvidence instanceof Date
+          ? gradeEvidence
+          : new Date(gradeEvidence);
+      include =
+        Number.isFinite(evidenceTimestamp.getTime()) &&
+        evidenceTimestamp.getTime() >= boundaryTimestamp.getTime();
+    }
+    if (include) {
       examIds.push(exam.id);
     }
   }
@@ -168,7 +224,7 @@ export function opportunityLogWithinActiveChapter(
 
 type ActiveChapterReportDbClient = Pick<
   Prisma.TransactionClient,
-  "courseChapter" | "exam" | "grade"
+  "courseChapter" | "exam" | "grade" | "opportunityLog"
 >;
 
 /**
@@ -200,9 +256,11 @@ export async function loadActiveChapterReportContext(
   ]);
 
   // بلا فصل نشط وحيد لا نرجع سياقاً (التقرير يبقى بلا فلترة).
-  if (links.filter((link) => link.active && !link.archived).length !== 1) {
+  const activeLinks = links.filter((link) => link.active && !link.archived);
+  if (activeLinks.length !== 1) {
     return null;
   }
+  const activeLink = activeLinks[0];
 
   const examIds = courseExams.map((exam) => exam.id);
   const gradeMinRows = examIds.length
@@ -216,9 +274,24 @@ export async function loadActiveChapterReportContext(
     gradeMinRows.map((row) => [row.examId, row._min.createdAt ?? null]),
   );
 
+  // اللحظة الدقيقة لانتقال الدورة إلى الفصل النشط: أقدم حركة تسوية تاريخية
+  // موسومة بالفصل النشط. الانتقال يكتب تسوية جماعية بلحظة تنفيذه، وكل
+  // تسويات ما بعده (تعهدات فاينل الفصل السابق، إعادة التفعيل) لاحقة له
+  // بالضرورة — لذلك أقدم طابع زمني هو لحظة الانتقال الفعلية.
+  const transitionSettlement = await client.opportunityLog.findFirst({
+    where: {
+      student: { courseId: courseIdKey },
+      chapterId: activeLink.chapter.id,
+      reason: { startsWith: CHAPTER_TRANSITION_SETTLEMENT_REASON_PREFIX },
+    },
+    orderBy: { date: "asc" },
+    select: { date: true },
+  });
+
   return computeActiveChapterReportContext(
     links,
     courseExams,
     firstEvidenceByExamId,
+    transitionSettlement?.date ?? null,
   );
 }

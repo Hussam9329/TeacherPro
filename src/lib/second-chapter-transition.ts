@@ -38,6 +38,14 @@ export const CHAPTER_TRANSITION_SETTLEMENT_REASON =
   "تسوية تاريخية: تحويل فصل يدوي؛ تجاهل آثار امتحانات الفصل السابق وبدء رصيد جديد من الفصل النشط الجديد";
 
 /**
+ * البادئة المشتركة لكل أسباب التسوية التاريخية ("تسوية تاريخية: ...").
+ * المحرك الأكاديمي يعتبر أي حركة فرص يبدأ سببها بهذه البادئة حدّاً زمنياً
+ * لتجاهل امتحانات الفصل السابق، وسياق تقرير الفصل النشط يستخدم نفس البادئة
+ * لاستخراج اللحظة الدقيقة لانتقال الدورة (أقدم تسوية موسومة بالفصل النشط).
+ */
+export const CHAPTER_TRANSITION_SETTLEMENT_REASON_PREFIX = "تسوية تاريخية:";
+
+/**
  * Audit-log identifier minted once per chapter transition execution. It lets
  * us trace every batch of settlement logs created through the regular
  * activate flow, and lets a future admin see exactly when a chapter was

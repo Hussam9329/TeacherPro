@@ -136,6 +136,94 @@ must(
   "حد الانتقال بمفتاح يوم: يبدأ من اليوم التالي فقط",
 );
 
+/* ============ حسم نفس يوم الانتقال باللحظة الدقيقة (لحظة التسوية) ============ */
+
+// حالة حقيقية (بلاغ المالك): «فاينل الصيفية الثانية» دُخّلت درجاته
+// 2026-08-30T15:36:49Z بعد لحظة انتقال الدورة 2026-08-30T15:17:53Z بقليل —
+// يوم الأثر يطابق يوم الانتقال فكان يُستبعد بالمقارنة اليومية الصارمة.
+// مع تمرير لحظة التسوية الدقيقة يميّز النظام بين:
+//  - فاينل جديد أُدخل بعد التحويل → يدخل.
+//  - فاينل الفصل السابق المُدخل قبل التحويل بنفس اليوم → يبقى مستبعداً.
+const sameDayArchive = JSON.stringify([
+  { studentId: "s1", opportunities: 3, date: "2026-08-30" },
+]);
+const preciseBoundary = "2026-08-30T15:17:53.543Z";
+const preciseContext = computeActiveChapterReportContext(
+  [
+    { active: true, archived: false, archive: "[]", chapter },
+    { active: false, archived: false, archive: sameDayArchive, chapter: { id: "ch1", name: "الفصل الاول - الخلية" } },
+  ],
+  [
+    newExam("final-after", "2026-08-29T00:00:00.000Z"),
+    newExam("final-before", "2026-08-29T00:00:00.000Z"),
+    newExam("old-exam", "2026-08-22T00:00:00.000Z"),
+    newExam("next-day-exam", "2026-09-02T00:00:00.000Z"),
+  ],
+  evidence({
+    "final-after": "2026-08-30T15:36:49.254Z",
+    "final-before": "2026-08-30T09:30:00.000Z",
+    "old-exam": "2026-08-23T13:50:24.384Z",
+    "next-day-exam": "2026-09-03T12:25:45.531Z",
+  }),
+  preciseBoundary,
+);
+assert.deepEqual(preciseContext.examIds, ["final-after", "next-day-exam"]);
+must(
+  preciseContext.examIds.includes("final-after") &&
+    !preciseContext.examIds.includes("final-before") &&
+    !preciseContext.examIds.includes("old-exam") &&
+    preciseContext.examIds.includes("next-day-exam"),
+  "نفس يوم الانتقال يُحسم بلحظة التسوية: فاينل ما بعد التحويل يدخل وما قبله يبقى مستبعداً",
+);
+
+// امتحان بلا درجات مؤرخ يوم الانتقال يبقى مستبعداً حتى مع اللحظة الدقيقة
+// (تاريخ الامتحان بلا طابع درجة لا يثبت أنه انصنع بعد التحويل).
+const dateOnlyContext = computeActiveChapterReportContext(
+  [
+    { active: true, archived: false, archive: "[]", chapter },
+    { active: false, archived: false, archive: sameDayArchive, chapter: { id: "ch1", name: "الفصل الاول - الخلية" } },
+  ],
+  [newExam("dated-same-day", "2026-08-30T05:00:00.000Z")],
+  evidence({ "dated-same-day": null }),
+  preciseBoundary,
+);
+assert.deepEqual(dateOnlyContext.examIds, []);
+must(
+  dateOnlyContext.examIds.length === 0,
+  "امتحان بلا درجات مؤرخ يوم الانتقال يبقى مستبعداً حماية من تسريب فاينل الفصل السابق",
+);
+
+// لحظة دقيقة خارج يوم حد الأرشيف تُتجاهل اتساقاً (يعود الحكم اليومي الصارم).
+const inconsistentBoundaryContext = computeActiveChapterReportContext(
+  [
+    { active: true, archived: false, archive: "[]", chapter },
+    { active: false, archived: false, archive: sameDayArchive, chapter: { id: "ch1", name: "الفصل الاول - الخلية" } },
+  ],
+  [newExam("same-day-exam", "2026-08-30T05:00:00.000Z")],
+  evidence({ "same-day-exam": "2026-08-30T15:36:49.254Z" }),
+  "2026-09-05T10:00:00.000Z",
+);
+assert.deepEqual(inconsistentBoundaryContext.examIds, []);
+must(
+  inconsistentBoundaryContext.examIds.length === 0,
+  "لحظة دقيقة لا تطابق يوم حد الأرشيف تُتجاهل ويبقى الحكم اليومي الصارم",
+);
+
+// بلا لحظة دقيقة (لا تسويات) يعمل السلوك المحافظ القديم كما هو.
+const noPreciseContext = computeActiveChapterReportContext(
+  [
+    { active: true, archived: false, archive: "[]", chapter },
+    { active: false, archived: false, archive: sameDayArchive, chapter: { id: "ch1", name: "الفصل الاول - الخلية" } },
+  ],
+  [newExam("same-day-exam", "2026-08-30T05:00:00.000Z")],
+  evidence({ "same-day-exam": "2026-08-30T15:36:49.254Z" }),
+);
+assert.deepEqual(noPreciseContext.examIds, []);
+must(
+  noPreciseContext.examIds.length === 0,
+  "بلا لحظة تسوية دقيقة: نفس يوم الانتقال يبقى مستبعداً (السلوك المحافظ السابق)",
+);
+
 // بلا أي رابط غير مفعلة → الفصل النشط منذ بداية الدورة: كل الامتحانات.
 const noTransition = computeActiveChapterReportContext(
   [{ active: true, archived: false, archive: "[]", chapter }],
@@ -317,6 +405,19 @@ must(
       chapterLogScope,
     ),
   "غياب السياق = بلا فلترة، وتاريخ حركة غير صالح لا يظهر داخل نطاق الفصل",
+);
+
+must(
+  lib.includes('reason: { startsWith: CHAPTER_TRANSITION_SETTLEMENT_REASON_PREFIX }') &&
+    lib.includes('chapterId: activeLink.chapter.id') &&
+    lib.includes('orderBy: { date: "asc" }'),
+  "اللحظة الدقيقة للانتقال تُقرأ من أقدم تسوية تاريخية موسومة بالفصل النشط",
+);
+
+must(
+  lib.includes("gradeEvidence.getTime() >= boundaryTimestamp.getTime()") ||
+    lib.includes("evidenceTimestamp.getTime() >= boundaryTimestamp.getTime()"),
+  "امتحانات يوم الانتقال تُحسم بمقارنة طابع أول درجة بلحظة التسوية",
 );
 
 /* ===================== الربط بالمصدر الموحد للتقرير ===================== */
