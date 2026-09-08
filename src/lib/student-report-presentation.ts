@@ -15,7 +15,7 @@ export function studentReportText(value: unknown): string {
     .trim();
 }
 
-export type ReportMovementKind = "add" | "deduct" | "reset" | "chapter-start" | "return-balance" | "return" | "dismiss" | "other";
+export type ReportMovementKind = "add" | "deduct" | "reset" | "chapter-start" | "confirm-balance" | "return-balance" | "return" | "dismiss" | "other";
 type Movement = {
   action: string; amount: number; reason?: string | null;
   appliedAmount?: number | null; balanceBefore?: number | null; balanceAfter?: number | null;
@@ -31,11 +31,12 @@ export function presentOpportunityMovement(log: Movement) {
     action === "رصيد بعد تعهد" || action === "رصيد إعادة التفعيل" ? "return-balance" :
     action === "إعادة تفعيل" ? "return" :
     action.startsWith("فصل") ? "dismiss" :
-    action === "إعادة تعيين" ? (/انتقال|تحويل فصل/.test(rawReason) ? "chapter-start" : "reset") : "other"
+    action === "إعادة تعيين" ? (/حماية P\d+|دون تغيير بتوجيه المالك/.test(rawReason) ? "confirm-balance" : /انتقال|تحويل فصل/.test(rawReason) ? "chapter-start" : "reset") : "other"
   );
   const labels: Record<ReportMovementKind, string> = {
     add: "إضافة فرص", deduct: "خصم فرص", reset: "رصيد جديد",
     "chapter-start": "بداية رصيد الفصل", "return-balance": "رصيد العودة للدراسة",
+    "confirm-balance": "تأكيد الرصيد",
     return: "العودة للدراسة", dismiss: "فصل من الدراسة", other: "تحديث مسجّل",
   };
   const amount = reportNumber(log.appliedAmount) ?? reportNumber(log.amount);
@@ -43,7 +44,8 @@ export function presentOpportunityMovement(log: Movement) {
   const after = reportNumber(log.balanceAfter);
   let reason = log.movementKind ? rawReason : studentReportText(rawReason);
   if (!log.movementKind) {
-    if (kind === "chapter-start") reason = "بدأ حساب فرص هذا الفصل برصيد جديد؛ خصومات الفصل السابق لا تُخصم منه.";
+    if (kind === "confirm-balance") reason = "تم تثبيت رصيدك كما هو؛ لم تُضف أو تُخصم فرص في هذا الإجراء.";
+    else if (kind === "chapter-start") reason = "بدأ حساب فرص هذا الفصل برصيد جديد؛ خصومات الفصل السابق لا تُخصم منه.";
     else if (kind === "reset" && /تجاهل آثار الامتحانات|تثبيت رصيد/.test(rawReason)) {
       reason = /تعهد/.test(rawReason)
         ? "بدأ رصيد جديد بعد قبول التعهّد."
@@ -56,7 +58,7 @@ export function presentOpportunityMovement(log: Movement) {
       reason = reason.replace(/درجة\s+([\d.]+)\s+ضمن الخصم/, "الدرجة $1 تستوجب خصم فرص")
         .replace(/درجة خصم\s*\(([\d.]+)\)/, "الدرجة $1 تستوجب خصم فرص");
     }
-    if (reason === "تسوية") reason = "تعديل الرصيد من الإدارة.";
+    if (/^تسوي[ةه]$/.test(reason)) reason = "تعديل الرصيد من الإدارة.";
     if (reason === "تعهد") reason = "بعد قبول التعهّد.";
   }
   if (!reason) reason = "لم يُسجّل سبب إضافي لهذه الحركة.";
@@ -64,6 +66,9 @@ export function presentOpportunityMovement(log: Movement) {
   let effectText = "لا يوجد تغيير في عدد الفرص مسجّل لهذه الحركة";
   if (kind === "add" || kind === "deduct") {
     effectText = amount === null ? "عدد الفرص غير مسجّل" : amount === 0 ? "لم يتغيّر عدد الفرص" : `${kind === "add" ? "إضافة" : "خصم"} ${amount}`;
+  } else if (kind === "confirm-balance") {
+    const balance = after ?? reportNumber(log.amount);
+    effectText = balance === null ? "لم يتغيّر الرصيد" : `بقي الرصيد ${balance}`;
   } else if (["reset", "chapter-start", "return-balance"].includes(kind)) {
     const target = after ?? reportNumber(log.amount);
     effectText = target === null ? "الرصيد الجديد غير مسجّل" : `أصبح الرصيد ${target}`;

@@ -750,6 +750,17 @@ check("الحركات بلا سبب تبقى ظاهرة والصفر محفوظ 
 
 export { buildHtml, buildStudentDetailsFromProfileLog, sanitizeStudentDetailsForHtml };
 
+check("حماية الرصيد القديم لا توصف كمنح فرص جديدة ولا تعرض أسماء مراحل الصيانة", () => {
+  const details = sanitizeStudentDetailsForHtml({ s1: { grades: [], opportunityLogs: [{
+    action: "إعادة تعيين", amount: 1, appliedAmount: 0, balanceBefore: 1, balanceAfter: 1,
+    reason: "حماية P2: تثبيت الرصيد الموجود دون تغيير بتوجيه المالك؛ حفظ السجلات والدرجات السابقة ومنع إعادة احتسابها",
+    date: "2026-09-08", examName: null,
+  }] } });
+  assert.equal(details.s1.opportunityLogs[0].effectText, "بقي الرصيد 1");
+  assert.equal(details.s1.opportunityLogs[0].action, "تأكيد الرصيد");
+  assert.doesNotMatch(details.s1.opportunityLogs[0].reason, /P2|المالك|احتساب/);
+});
+
 if (failures > 0) {
   console.error(`\nفشل ${failures} من اختبارات HTML السلوكية لإدارة الفرص.`);
   process.exit(1);
