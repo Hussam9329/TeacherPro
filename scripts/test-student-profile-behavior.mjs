@@ -381,7 +381,8 @@ test("the fullscreen profile exposes loading, failure, and modal semantics", () 
   assert.match(profileDialogSource, /visibleStudentLog\.map/);
 });
 
-test("the mobile profile uses the dynamic viewport and reachable horizontal navigation", () => {
+test("the mobile profile uses the dynamic viewport and wrapping statistics navigation", () => {
   assert.match(profileDialogSource, /\bh-dvh\b/);
-  assert.match(globalCssSource, /\.tp-student-profile__nav[^}]*overflow-x:\s*auto/s);
+  assert.match(globalCssSource, /\.tp-student-profile__nav\s*\{[^}]*position:\s*static[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+  assert.doesNotMatch(globalCssSource, /\.tp-student-profile__nav[^}]*overflow-x:\s*auto/s);
 });

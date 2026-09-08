@@ -22,7 +22,7 @@ import {
   type StudentProfileStatsResponse,
 } from "@/lib/api";
 import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib/grade-classification";
-import { ArrowRightIcon } from "lucide-react";
+import { ArrowRightIcon, XIcon } from "lucide-react";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { formatAuditLogDisplay } from "@/lib/audit-log-display";
@@ -397,7 +397,9 @@ export function StudentProfileDialog({
   const [databaseProfileSnapshotVersion, setDatabaseProfileSnapshotVersion] = useState("");
   const [timelineVisibleCount, setTimelineVisibleCount] = useState(100);
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
+  const [profileNavigationVersion, setProfileNavigationVersion] = useState(0);
   const contentScrollRef = useRef<HTMLDivElement | null>(null);
+  const profilePanelRef = useRef<HTMLDivElement | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
   const initialFocusRef = useRef<HTMLButtonElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -626,12 +628,13 @@ export function StudentProfileDialog({
   useEffect(() => {
     if (!open) return;
     contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
-  }, [open, student?.id, tab]);
+  }, [open, student?.id]);
 
   useEffect(() => {
     setTab("details");
     setGradeViewFilter("all");
     setProfileAnchor(null);
+    setProfileNavigationVersion(0);
     setDatabaseStats(null);
     setDatabaseStatsLoading(false);
     setDatabaseStatsError(null);
@@ -799,12 +802,15 @@ export function StudentProfileDialog({
   }, [open, isMounted, student?.id]);
 
   useEffect(() => {
-    if (!open || tab !== "followup" || !profileAnchor) return;
+    if (!open || profileNavigationVersion === 0) return;
     const frame = window.requestAnimationFrame(() => {
-      sectionRefs.current[profileAnchor]?.scrollIntoView({ block: "start", behavior: "smooth" });
+      const target = tab === "followup" && profileAnchor
+        ? sectionRefs.current[profileAnchor]
+        : profilePanelRef.current;
+      target?.scrollIntoView({ block: "start", behavior: "auto" });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [open, tab, profileAnchor]);
+  }, [open, tab, gradeViewFilter, profileAnchor, profileNavigationVersion]);
 
   if (!open || !student || !isMounted) return null;
 
@@ -904,17 +910,17 @@ export function StudentProfileDialog({
 
   const allCards: { key: StudentProfileCardKey; label: string; value: string | number; hint: string }[] = [
     { key: "grades", label: "الدرجات", value: profileStatValue(statsForStudent?.grades), hint: "عرض درجات الطالب" },
+    { key: "exams", label: "الامتحانات", value: examCount, hint: "عدد الامتحانات" },
     { key: "absences", label: "الغيابات", value: absentCount, hint: "عرض الغيابات المؤثرة" },
+    { key: "grace-grades", label: "ضمن السماح", value: graceGradeCount, hint: "درجات مسجلة بدون خصم" },
+    { key: "no-discount-grades", label: "بدون خصم", value: noDiscountGradeCount, hint: "درجات امتحانات لا تحاسب الطالب" },
     { key: "opportunities", label: "الخصومات/الفرص", value: opportunityText, hint: "الفرص والخصومات" },
+    { key: "status-actions", label: "فصل/إعادة تفعيل", value: `${dismissalsCount}/${reactivationsCount}`, hint: "مسار حالة الطالب" },
     { key: "calls", label: "المكالمات", value: callsCount, hint: "متابعة واتصالات" },
     { key: "leaves", label: "الإجازات", value: leavesCount, hint: "إجازات امتحان/فترة" },
-    { key: "status-actions", label: "فصل/إعادة تفعيل", value: `${dismissalsCount}/${reactivationsCount}`, hint: "مسار حالة الطالب" },
     { key: "notes", label: "الملاحظات", value: notesCount, hint: "عرض ملاحظات الطالب" },
     { key: "archives", label: "الملفات السابقة", value: profileLogPending ? "…" : databaseEnrollmentArchives.length, hint: "أرشيف قراءة فقط قبل النقل أو إعادة البداية" },
     { key: "timeline", label: "السجل الزمني", value: timelineCount, hint: "كل حركة مرتبطة بالطالب" },
-    { key: "exams", label: "الامتحانات", value: examCount, hint: "عدد الامتحانات" },
-    { key: "grace-grades", label: "ضمن السماح", value: graceGradeCount, hint: "درجات مسجلة بدون خصم" },
-    { key: "no-discount-grades", label: "بدون خصم", value: noDiscountGradeCount, hint: "درجات امتحانات لا تحاسب الطالب" },
   ];
   const sectionAccess = statsForStudent?.sections;
   const gradeCardKeys = new Set<StudentProfileCardKey>([
@@ -937,6 +943,13 @@ export function StudentProfileDialog({
         return true;
       });
 
+  const showOverview = () => {
+    setTab("details");
+    setGradeViewFilter("all");
+    setProfileAnchor(null);
+    setProfileNavigationVersion((value) => value + 1);
+  };
+
   const profileContent = (
     <section
       ref={dialogRef}
@@ -950,74 +963,95 @@ export function StudentProfileDialog({
       tabIndex={-1}
     >
       <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background">
-        <div className="tp-student-profile__header sticky top-0 z-30 shrink-0 border-b bg-background/95 px-4 pb-4 pt-[max(1rem,env(safe-area-inset-top))] text-right shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6 sm:pb-6 sm:pt-[max(1.5rem,env(safe-area-inset-top))]">
-          <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="min-w-0 space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
+        <header className="tp-student-profile__header shrink-0 border-b text-right">
+          <div className="tp-student-profile__heading">
+            <div className="min-w-0">
+              <h2 id="student-profile-title" className="font-black">{profileStudent.name}</h2>
+              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
                 <Badge variant={profileStudent.status === "نشط" ? "default" : "destructive"}>{profileStudent.status}</Badge>
-                <Badge variant="outline">{profileStudent.code}</Badge>
-                <Badge variant="secondary" className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">{courseName(profileStudent.courseId)}</Badge>
-                <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary font-bold">فرص: {opportunityText}</Badge>
-                <Badge variant="outline" className="border-sky-300/60 bg-sky-500/10 font-bold text-sky-700 dark:text-sky-300">تاريخ الإضافة: {formatAppDate(profileStudent.createdAt, profileStudent.createdAt || "-")}</Badge>
+                <Badge variant="outline" className="max-w-full whitespace-normal [overflow-wrap:anywhere]">{profileStudent.code}</Badge>
               </div>
-              <h2 id="student-profile-title" className="break-words text-2xl font-black sm:text-3xl">{profileStudent.name}</h2>
-              <p id="student-profile-description" className="break-words text-xs leading-6 text-muted-foreground sm:text-sm">
-                {profileStudent.school || "بدون مدرسة"} - شاشة ملف الطالب
-              </p>
+              <p id="student-profile-description" className="sr-only">ملف الطالب: المعلومات والإحصائيات والمتابعة</p>
             </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="tp-student-profile__header-actions">
               <button
                 ref={initialFocusRef}
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-primary/25 bg-primary/10 px-4 py-2 text-sm font-black text-primary shadow-sm transition hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="tp-student-profile__control border-primary/25 bg-primary/10 font-black text-primary hover:bg-primary/15"
                 aria-label="الرجوع من ملف الطالب"
               >
-                <ArrowRightIcon className="size-4" />
-                رجوع
+                <ArrowRightIcon className="size-4 shrink-0" />
+                <span className="hidden sm:inline">رجوع</span>
               </button>
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="inline-flex min-h-11 items-center rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-black text-red-700 shadow-sm transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/50"
+                className="tp-student-profile__control border-border bg-background text-muted-foreground hover:bg-muted"
                 aria-label="إغلاق ملف الطالب"
               >
-                إغلاق
+                <XIcon className="size-4 shrink-0" />
               </button>
             </div>
           </div>
-        </div>
+        </header>
 
         <div ref={contentScrollRef} className="tp-student-profile__content min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 lg:p-6 [scrollbar-gutter:stable]">
-          <div className="space-y-4 sm:space-y-5">
-            <div className="tp-student-profile__nav grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5" aria-label="أقسام ملف الطالب">
-              {cards.map((item) => {
-                const target = getStudentProfileCardTarget(item.key);
-                const targetAnchor = target.followupFilter === "all" ? null : target.followupFilter;
-                const isActive = tab === target.tab &&
-                  (target.tab !== "grades" || gradeViewFilter === target.gradeFilter) &&
-                  (target.tab !== "followup" || profileAnchor === targetAnchor);
-                return (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => {
-                    setTab(target.tab);
-                    setGradeViewFilter(target.gradeFilter);
-                    setProfileAnchor(targetAnchor);
-                  }}
-                  aria-pressed={isActive}
-                  aria-controls="student-profile-panel"
-                  className={`min-h-11 min-w-0 touch-manipulation rounded-2xl border p-3 text-right shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md sm:rounded-3xl sm:p-4 ${
-                    isActive ? "border-primary/50 bg-primary/10 text-primary" : "bg-card/80 hover:border-primary/25"
-                  }`}
-                >
-                  <p className="truncate text-[11px] font-bold text-muted-foreground sm:text-xs">{item.label}</p>
-                  <p className="mt-1 truncate text-xl font-black sm:mt-2 sm:text-2xl">{item.value}</p>
-                  <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-muted-foreground sm:text-[11px]">{item.hint}</p>
-                </button>
-              );})}
+          <div className="tp-student-profile__body space-y-4 sm:space-y-5">
+            <div className="tp-student-profile__metadata" aria-label="معلومات الطالب المختصرة">
+              <span>{courseName(profileStudent.courseId)}</span>
+              <span>{profileStudent.school || "بدون مدرسة"}</span>
+              <span>تاريخ الإضافة: {formatAppDate(profileStudent.createdAt, profileStudent.createdAt || "-")}</span>
+              <span className="font-bold text-primary">فرص: {opportunityText}</span>
             </div>
+
+            <section className="tp-student-profile__summary" aria-labelledby="student-profile-summary-title">
+              <div className="tp-student-profile__section-heading">
+                <div className="min-w-0">
+                  <h3 id="student-profile-summary-title" className="font-black">إحصائيات الطالب</h3>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">اختر أي بطاقة لعرض التفاصيل المرتبطة بها.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={showOverview}
+                  aria-pressed={tab === "details"}
+                  aria-controls="student-profile-panel"
+                  className="tp-student-profile__control border-primary/20 bg-primary/5 font-bold text-primary hover:bg-primary/10"
+                >
+                  المعلومات العامة
+                </button>
+              </div>
+              <div className="tp-student-profile__nav" aria-label="أقسام ملف الطالب">
+                {cards.map((item) => {
+                  const target = getStudentProfileCardTarget(item.key);
+                  const targetAnchor = target.followupFilter === "all" ? null : target.followupFilter;
+                  const isActive = tab === target.tab &&
+                    (target.tab !== "grades" || gradeViewFilter === target.gradeFilter) &&
+                    (target.tab !== "followup" || profileAnchor === targetAnchor);
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        setTab(target.tab);
+                        setGradeViewFilter(target.gradeFilter);
+                        setProfileAnchor(targetAnchor);
+                        setProfileNavigationVersion((value) => value + 1);
+                      }}
+                      aria-pressed={isActive}
+                      aria-controls="student-profile-panel"
+                      className={`tp-student-profile__stat ${
+                        isActive ? "border-primary/50 bg-primary/10 text-primary" : "border-border bg-card hover:border-primary/35 hover:bg-primary/5"
+                      }`}
+                    >
+                      <span className="tp-student-profile__stat-label">{item.label}</span>
+                      <span dir="ltr" className="tp-student-profile__stat-value">{item.value}</span>
+                      <span className="tp-student-profile__stat-hint">{item.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
 
             <ProfileLoadNotice
               loading={(statsPending || profileLogPending) && !profileError}
@@ -1026,7 +1060,21 @@ export function StudentProfileDialog({
               onRetry={retryProfile}
             />
 
-            <div id="student-profile-panel" role="region" aria-live="polite">
+            <div ref={profilePanelRef} id="student-profile-panel" className="tp-student-profile__panel" role="region" aria-live="polite">
+              <div className="tp-student-profile__panel-actions">
+                <button
+                  type="button"
+                  onClick={() => contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" })}
+                  className="tp-student-profile__control border-border bg-card font-bold text-muted-foreground hover:bg-muted"
+                >
+                  العودة للإحصائيات
+                </button>
+                {tab !== "details" && (
+                  <button type="button" onClick={showOverview} className="tp-student-profile__control border-primary/20 bg-primary/5 font-bold text-primary hover:bg-primary/10">
+                    المعلومات العامة
+                  </button>
+                )}
+              </div>
             {tab === "details" && (
               <div className="space-y-4">
                 <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-4">

@@ -2838,76 +2838,211 @@
 }
 
 
-/* Student profile layout contract. */
+/* Student profile layout contract: one main scroll area at every viewport. */
 .tp-student-profile__header {
-  border-color: color-mix(in oklch, var(--primary) 14%, var(--border));
-  max-height: 50dvh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding-top: max(1rem, calc(env(safe-area-inset-top) + 0.5rem));
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  padding-top: max(0.75rem, env(safe-area-inset-top));
   padding-inline-start: max(1rem, env(safe-area-inset-left));
   padding-inline-end: max(1rem, env(safe-area-inset-right));
-  background:
-    linear-gradient(135deg, color-mix(in oklch, var(--primary) 6%, var(--background)), var(--background) 64%);
+  border-color: color-mix(in oklch, var(--primary) 14%, var(--border));
+  background: var(--background);
+}
+
+.tp-student-profile__heading {
+  display: flex;
+  min-width: 0;
+  max-width: 96rem;
+  margin-inline: auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tp-student-profile__header h2 {
+  font-size: clamp(1rem, 2vw, 1.35rem);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.tp-student-profile__header-actions,
+.tp-student-profile__panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tp-student-profile__header-actions {
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
+.tp-student-profile__control {
+  display: inline-flex;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border-width: 1px;
+  border-radius: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  touch-action: manipulation;
+}
+
+.tp-student-profile__control:focus-visible,
+.tp-student-profile__stat:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .tp-student-profile__content {
-  background: color-mix(in oklch, var(--muted) 10%, var(--background));
+  min-width: 0;
+  background: color-mix(in oklch, var(--muted) 16%, var(--background));
+}
+
+.tp-student-profile__body {
+  min-width: 0;
+  max-width: 96rem;
+  margin-inline: auto;
+}
+
+.tp-student-profile__metadata {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 0.75rem;
+  line-height: 1.7;
+  color: var(--muted-foreground);
+}
+
+.tp-student-profile__metadata > span {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.tp-student-profile__summary {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  background: var(--background);
+}
+
+.tp-student-profile__section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .tp-student-profile__nav {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  padding-block: 0.35rem 0.75rem;
-  background: linear-gradient(to bottom, var(--background) 74%, transparent);
+  position: static;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.625rem;
+  min-width: 0;
 }
 
-.tp-student-profile__nav > button {
-  min-height: 6.4rem;
-  box-shadow: none;
+.tp-student-profile__stat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: start;
+  align-items: center;
+  gap: 0.375rem 0.5rem;
+  min-width: 0;
+  min-height: 5.5rem;
+  padding: 0.75rem;
+  border-width: 1px;
+  border-radius: 0.875rem;
+  text-align: start;
+  touch-action: manipulation;
+  transition: background-color 150ms, border-color 150ms;
 }
 
-.tp-student-profile__nav > button:hover {
-  transform: none;
+.tp-student-profile__stat-label {
+  min-width: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.tp-student-profile__stat-value {
+  min-width: 0;
+  max-width: 100%;
+  font-size: 1.4rem;
+  font-weight: 900;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.tp-student-profile__stat-hint {
+  grid-column: 1 / -1;
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.tp-student-profile__panel {
+  min-width: 0;
+  scroll-margin-top: 0.75rem;
+}
+
+.tp-student-profile__panel-actions {
+  margin-bottom: 1rem;
 }
 
 .tp-student-profile__content h4 {
   letter-spacing: -0.015em;
 }
 
+/* History sections participate in the same page scroll instead of trapping
+   touch/wheel events in small independently scrolling boxes. */
 .tp-student-profile__content [class*="max-h-"] {
-  scrollbar-gutter: stable;
+  max-height: none;
+  overflow-y: visible;
+  padding-inline-end: 0;
 }
 
-@media (max-width: 1024px) {
+.tp-student-profile [data-slot="badge"] {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 640px) {
   .tp-student-profile__nav {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 640px) {
-  .tp-student-profile__header {
-    padding: 0.9rem;
-    padding-top: max(0.9rem, calc(env(safe-area-inset-top) + 0.45rem));
-    padding-inline-start: max(0.9rem, env(safe-area-inset-left));
-    padding-inline-end: max(0.9rem, env(safe-area-inset-right));
+@media (min-width: 1024px) {
+  .tp-student-profile__nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
 
-  .tp-student-profile__header h2 {
-    font-size: 1.35rem;
-    line-height: 1.7;
+@media (min-width: 1280px) {
+  .tp-student-profile__nav {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
+}
 
-  .tp-student-profile__header > div > div:last-child {
-    width: 100%;
-  }
-
-  .tp-student-profile__header button {
-    flex: 1 1 0;
-    justify-content: center;
-  }
-
+@media (max-width: 639px) {
   .tp-student-profile__content {
     padding: 0.75rem;
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
@@ -2915,42 +3050,16 @@
     padding-inline-end: max(0.75rem, env(safe-area-inset-right));
   }
 
-  .tp-student-profile__nav {
-    position: static;
-    display: flex;
-    max-width: 100%;
-    grid-template-columns: none;
-    gap: 0.5rem;
-    margin-inline: -0.75rem;
-    padding-inline: 0.75rem;
-    padding-bottom: 0.6rem;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-inline: contain;
-    scroll-snap-type: inline proximity;
-    scrollbar-width: thin;
-  }
-
-  .tp-student-profile__nav > button {
-    flex: 0 0 8.75rem;
-    min-height: 4.75rem;
+  .tp-student-profile__summary {
     padding: 0.75rem;
-    border-radius: 1rem;
-    scroll-snap-align: start;
+  }
+
+  .tp-student-profile__stat {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.2rem;
+    padding: 0.625rem;
   }
 }
-
-@media (orientation: landscape) and (max-height: 560px) {
-  .tp-student-profile__header {
-    max-height: 46dvh;
-  }
-
-  .tp-student-profile__header h2 {
-    font-size: 1.2rem;
-    line-height: 1.45;
-  }
-}
-
 
 /* New exam layout contract. */
 .tp-exam-new__shell {

@@ -25,6 +25,8 @@ that P3 introduced that query.
   one HTTP request and one server session lookup. Preserve the existing resource
   permissions, safe account projections, chapter links and exam mutation tokens.
 - Keep Student, Grade, opportunity history and other growing tables out of startup.
+- Select only chapter-link identifiers and state flags at startup, excluding the
+  nested archive JSON. Dedicated chapter/archive reads retain their full history.
 - Bound shared GET requests and response-body parsing to 30 seconds, retaining
   caller cancellation and never retrying a mutation. Session restoration uses
   the same bounded reader.
@@ -43,5 +45,8 @@ that P3 introduced that query.
 - Production build with a dummy database URL passed.
 - No Prisma schema changes, migrations or balance repair commands are included.
 
-Production verification must check the deployed alias, actual startup payload
-size, authenticated registry results and a read-only before/after student snapshot.
+Production verification of `d4f5e6b` confirmed the READY deployment and matching
+alias, HTTP 200 for startup/users/students/grades, a 1,481-byte account response,
+and identical IDs, balances, statuses and courses across 2,997 stored student rows
+(including archived rows). The first bootstrap response was 633,413 bytes;
+most of its remaining size came from chapter-link archive JSON, now excluded.

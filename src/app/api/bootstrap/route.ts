@@ -33,7 +33,11 @@ export async function GET(req: NextRequest) {
       loaders.push(
         db.chapter.findMany({
           orderBy: { name: "asc" },
-          include: { courseLinks: true },
+          include: {
+            courseLinks: {
+              select: { id: true, courseId: true, chapterId: true, active: true, archived: true },
+            },
+          },
         }).then((chapters) => ({ chapters })),
       );
     }

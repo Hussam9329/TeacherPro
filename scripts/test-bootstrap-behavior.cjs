@@ -94,6 +94,7 @@ const reset = (permissions, admin = false) => {
   assert.deepEqual(Object.keys(payload).sort(), ['chapters', 'courses', 'exams', 'roles', 'users']);
   assert.deepEqual(calls.map((call) => call.model).sort(), Object.keys(fixtures).sort());
   assert.deepEqual(payload.chapters[0].courseLinks, fixtures.chapter[0].courseLinks);
+  assert.equal('archive' in calls.find((call) => call.model === 'chapter').args.include.courseLinks.select, false);
   assert.equal('passwordHash' in payload.users[0], false);
   console.log('PASS: bootstrap authenticates once, preserves GET permissions/projections/tokens, omits credentials, and never reads or changes students/grades');
 })().catch((error) => { console.error(error); process.exitCode = 1; });
