@@ -146,7 +146,6 @@ function safeUserSelect() {
     active: true,
     createdAt: true,
     roleRef: true,
-    logs: true,
   } as const;
 }
 

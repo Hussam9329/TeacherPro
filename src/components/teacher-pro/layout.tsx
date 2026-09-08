@@ -1639,7 +1639,10 @@ export function TeacherProLayout() {
 
         {!dbLoading && !dbConnected && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100 md:px-6">
-            غير متصل بالنظام. قد تبقى التغييرات محفوظة محليًا حتى عودة الاتصال؛ تحقق من حالة الاتصال قبل إغلاق النظام.
+            تعذر إكمال تحميل البيانات من النظام.
+            <Button className="ms-3" variant="outline" size="sm" onClick={() => void loadFromServer()}>
+              إعادة المحاولة
+            </Button>
           </div>
         )}
 

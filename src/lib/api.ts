@@ -1,3 +1,4 @@
+import { withReadDeadline } from "./read-deadline";
 import { getOutboxOwner, ownerHeaders } from "./outbox-session";
 import {
   beginTeacherProInteractionBlocker,
@@ -418,19 +419,21 @@ async function apiGetResponse<T>(
       const qs = search.toString();
       if (qs) url += `?${qs}`;
     }
-    const res = await fetch(url, {
-      credentials: "same-origin",
-      signal: options.signal,
-    });
-    if (!res.ok) {
-      const error = await readApiError(res, "تعذر تحميل البيانات");
-      if (!quietStatuses.includes(res.status)) {
-        console.warn(`[API] GET /api/${endpoint} failed:`, error);
+    return await withReadDeadline(async (signal) => {
+      const res = await fetch(url, {
+        credentials: "same-origin",
+        signal,
+      });
+      if (!res.ok) {
+        const error = await readApiError(res, "تعذر تحميل البيانات");
+        if (!quietStatuses.includes(res.status)) {
+          console.warn(`[API] GET /api/${endpoint} failed:`, error);
+        }
+        return { ok: false, status: res.status, data: null, error };
       }
-      return { ok: false, status: res.status, data: null, error };
-    }
-    const json = await res.json();
-    return { ok: true, status: res.status, data: json as T };
+      const json = await res.json();
+      return { ok: true, status: res.status, data: json as T };
+    }, options.signal);
   } catch (e) {
     if (isAbortError(e)) {
       if (!options.quietAbort) {
@@ -521,27 +524,12 @@ export const authApi = {
     }
   },
   session: async (): Promise<AuthApiResult> => {
-    try {
-      const res = await fetch("/api/auth/session", {
-        credentials: "same-origin",
-      });
-      if (!res.ok)
-        return {
-          ok: false,
-          status: res.status,
-          error: await readApiError(res, "تعذر التحقق من الجلسة حالياً"),
-        };
-      const json = (await res.json()) as { user?: AuthApiUser; passwordWeak?: boolean };
-      return { ok: true, user: json.user, passwordWeak: json.passwordWeak };
-    } catch (e) {
-      return {
-        ok: false,
-        status: 0,
-        error: toUserFriendlyError(
-          e instanceof Error ? e.message : "Network error",
-        ),
-      };
-    }
+    const result = await apiGetResponse<{ user?: AuthApiUser; passwordWeak?: boolean }>(
+      "auth/session", [401],
+    );
+    return result.ok
+      ? { ok: true, user: result.data?.user, passwordWeak: result.data?.passwordWeak }
+      : { ok: false, status: result.status, error: result.error };
   },
 };
 
@@ -1293,55 +1281,19 @@ function buildQueryString(
   return searchParams.toString();
 }
 
-/**
- * Load all data from the server via parallel per-resource endpoints.
- *
- * Previously this tried /api/backup first (one huge JSON response with
- * all tables). Now it uses only lightweight per-resource endpoints in
- * parallel and deliberately skips heavy tables (students and grades) on
- * the first load. Those datasets are loaded by their own screens using
- * paginated/search endpoints.
- *
- * Why this matters: opening the app must not download thousands of students
- * and grades before the user even chooses a page. /api/backup remains
- * available only for the dedicated backup/export feature.
- *
- * Returns null if the session is invalid (401) or no data could be loaded.
- */
+/** Load the small, permission-filtered startup payload in one authenticated read.
+ * Students, grades and history stay paginated in their owning screens. */
 export async function loadAllFromServer(): Promise<ServerData | null> {
-  // First check if the session is valid at all.
-  const sessionCheck = await apiGetResponse<{ user: unknown }>(
-    "auth/session",
-    [401],
-  );
-  if (sessionCheck.status === 401) return null;
+  const result = await apiGetResponse<ServerData>("bootstrap", [401]);
+  if (!result.ok || !result.data) return null;
 
-  const endpointLoaders = [
-    apiGetResponse<Pick<ServerData, "courses">>("courses", [403]),
-    apiGetResponse<Pick<ServerData, "chapters">>("chapters", [403]),
-    // Heavy, fast-growing tables are intentionally not loaded here:
-    // course-chapters, opportunity-logs, student-leaves, student-calls,
-    // student-notes, logs, students and grades.
-    // Their screens/actions load them lazily so the first app open stays light.
-    apiGetResponse<Pick<ServerData, "exams">>("exams", [403]),
-    apiGetResponse<Pick<ServerData, "users">>("users", [403]),
-    apiGetResponse<Pick<ServerData, "roles">>("roles", [403]),
-  ];
-  const results = await Promise.all(endpointLoaders);
-  const merged = results.reduce<ServerData>((acc, result) => {
-    if (result.ok && result.data) Object.assign(acc, result.data);
-    return acc;
-  }, {});
-
-  // Opportunistically flush any pending mutations from a previous session.
   try {
     const { flushOutbox } = require("./mutation-outbox");
     void flushOutbox();
   } catch {
     // SSR; skip.
   }
-
-  return Object.keys(merged).length > 0 ? merged : null;
+  return result.data;
 }
 
 // ─── Course API ───────────────────────────────────────────────────────────────

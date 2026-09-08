@@ -145,7 +145,9 @@ assert(
 );
 assert(
   api.includes('ApiGetOptions') &&
-    api.includes('signal: options.signal') &&
+    api.includes('withReadDeadline(async (signal) =>') &&
+    api.includes('}, options.signal)') &&
+    read('src/lib/read-deadline.ts').includes('callerSignal?.addEventListener("abort", cancel') &&
     followUp.includes('new AbortController()') &&
     followUp.includes('controller.abort()') &&
     followUp.includes('quietAbort: true'),

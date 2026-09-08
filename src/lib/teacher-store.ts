@@ -1950,7 +1950,8 @@ export const useTeacherStore = create<TeacherState>()(
           const keepAdminSession =
             get().isAuthenticated && hasFullAdminAccess(previousSessionUser);
 
-          let users = parsedUsers.length > 0 ? parsedUsers : seedUsers;
+          let users = serverData.users ? parsedUsers : get().users;
+          if (!users.length) users = seedUsers;
           const hasPrimaryAdmin = users.some((u: User) =>
             isPrimaryAdminUser(u),
           );
@@ -1968,7 +1969,7 @@ export const useTeacherStore = create<TeacherState>()(
               isDefault: Boolean(r.isDefault),
             }),
           ) as Role[];
-          const roles = mergeDefaultRoles(parsedRoles);
+          const roles = serverData.roles ? mergeDefaultRoles(parsedRoles) : get().roles;
           const loadedAdmin =
             users.find((u) => isPrimaryAdminUser(u) && u.active) ||
             users.find((u) => u.roleId === ADMIN_ROLE_ID && u.active);

@@ -1,0 +1,28 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs'), path = require('node:path'), Module = require('node:module'), ts = require('typescript');
+const resolve = Module._resolveFilename;
+Module._resolveFilename = function(r,p,...args) { return resolve.call(this,r.startsWith('@/') ? path.join(process.cwd(),'src',r.slice(2)) : r,p,...args); };
+require.extensions['.ts'] = (m,f) => m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
+const { withReadDeadline } = require('../src/lib/read-deadline.ts');
+(async () => {
+ let signal;
+ await assert.rejects(withReadDeadline(s => {signal=s;return new Promise(()=>{});},undefined,15), /تأخر تحميل/);
+ assert.equal(signal.aborted,true);
+ const cancel=new AbortController();let called=false;cancel.abort();
+ await assert.rejects(withReadDeadline(async()=>{called=true;},cancel.signal,100),{name:'AbortError'});
+ assert.equal(called,false);
+ assert.equal(await withReadDeadline(async()=>42,undefined,15),42);
+ const bodyBlocked = s => Promise.resolve({json:()=>new Promise(()=>{}),signal:s}).then(r=>r.json());
+ await assert.rejects(withReadDeadline(bodyBlocked,undefined,15), /تأخر تحميل/);
+ const abortDuringRead=new AbortController();
+ const pending=withReadDeadline(()=>new Promise(()=>{}),abortDuringRead.signal,100);
+ abortDuringRead.abort();await assert.rejects(pending,{name:'AbortError'});
+ console.log('PASS: hung requests and bodies stop; caller cancellation remains silent and successful reads work');
+ const {loadAllFromServer,authApi}=require('../src/lib/api.ts');
+ const calls=[];global.fetch=async(url)=>{calls.push(url);return Response.json({courses:[],chapters:[],exams:[]});};
+ const result=await loadAllFromServer();assert.deepEqual(calls,['/api/bootstrap']);assert.deepEqual(result,{courses:[],chapters:[],exams:[]});
+ global.fetch=async()=>Response.json({error:'Unauthorized'},{status:401});
+ assert.equal(await loadAllFromServer(),null);
+ assert.equal((await authApi.session()).status,401);
+ console.log('PASS: startup makes one read, skips duplicate session and rejects unauthorized responses');
+})().catch(e=>{console.error(e);process.exitCode=1;});
