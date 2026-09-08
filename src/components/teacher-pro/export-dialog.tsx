@@ -534,7 +534,8 @@ const DETAILS_MODAL_CSS = `
   .tp-details-table tr:nth-child(even) { background: #f9fbfc; }
   .tp-grades-table th:first-child { width: 26%; }
   .tp-grades-table th:last-child { width: 27%; }
-  .tp-logs-table th:nth-child(2) { width: 35%; }
+  .tp-logs-table th:first-child { width: 20%; }
+  .tp-logs-table th:nth-child(2) { width: 50%; }
   .tp-mobile-field-label { display: none; }
   .tp-mobile-field-value { min-width: 0; }
   .tp-event-title { display: block; font-weight: 700; color: #172b3a; margin-bottom: 4px; }
@@ -593,11 +594,9 @@ const DETAILS_MODAL_HTML = `
           <th scope="col" role="columnheader">التاريخ</th>
           <th scope="col" role="columnheader">ماذا حدث؟</th>
           <th scope="col" role="columnheader">التغيير في الفرص</th>
-          <th scope="col" role="columnheader">الرصيد بعد الحركة</th>
         </tr></thead>
         <tbody id="tpLogsBody"></tbody>
       </table>
-      <p class="tp-section-help">إذا ظهر «غير مسجّل»، فهذا يعني أن الرصيد بعد تلك الحركة غير محفوظ في السجل القديم. فرصك المتبقية معروضة أعلى الصفحة.</p>
     </section>
     <section class="tp-details-section" aria-labelledby="tpGradesSectionTitle">
       <h3 id="tpGradesSectionTitle">درجاتك في الامتحانات</h3>
@@ -865,18 +864,16 @@ const DETAILS_MODAL_JS = `
       logsSection.style.display = '';
       var movementLogs = data.opportunityLogs || [];
       logsBody.innerHTML = movementLogs.length ? movementLogs.map(function(l){
-        var after = l.balanceAfter;
-        if (after == null && ['reset','chapter-start','return-balance'].indexOf(l.movementKind) >= 0) after = l.amount;
         var change = esc(l.effectText || l.action || 'تحديث مسجّل');
         if (l.balanceBefore != null && l.balanceAfter != null) change += '<span class="tp-event-exam">من ' + fmtNum(l.balanceBefore) + ' إلى ' + fmtNum(l.balanceAfter) + '</span>';
+        else if (l.balanceAfter != null) change += '<span class="tp-event-exam">الرصيد بعدها: ' + fmtNum(l.balanceAfter) + '</span>';
         var kind = ['add','deduct','reset','chapter-start','return-balance','return','dismiss'].indexOf(l.movementKind) >= 0 ? l.movementKind : 'other';
         return '<tr role="row">'
           + mobileCell('التاريخ', fmtDate(l.date) || 'غير مسجّل')
           + mobileCell('ماذا حدث؟', '<strong class="tp-event-title">' + esc(l.action) + '</strong>' + esc(l.reason || 'السبب غير مسجّل') + (l.examName ? '<span class="tp-event-exam">الامتحان: ' + esc(l.examName) + '</span>' : ''))
           + mobileCell('التغيير في الفرص', '<span class="tp-effect tp-effect-' + kind + '">' + change + '</span>')
-          + mobileCell('الرصيد بعد الحركة', after == null ? 'غير مسجّل' : fmtNum(after))
           + '</tr>';
-      }).join('') : '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">لا توجد إضافات أو خصومات مسجّلة في هذا الفصل حتى الآن.</td></tr>';
+      }).join('') : '<tr class="tp-empty-row" role="row"><td colspan="3" role="cell">لا توجد إضافات أو خصومات مسجّلة في هذا الفصل حتى الآن.</td></tr>';
     }
     if (!overlay.classList.contains('open')) {
       previouslyFocusedElement = document.activeElement;

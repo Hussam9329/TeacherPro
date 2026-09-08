@@ -465,14 +465,14 @@ check("سجل الفرص يفرّق الإضافة والخصم ولا يختر�
   assert.equal(dom.elements.tpLogsSectionTitle.textContent, "كيف تغيّرت فرصك؟ — الفصل الأول");
   const movementHtml = dom.elements.tpLogsBody.innerHTML;
   assert.deepEqual(labelsFromRenderedCells(movementHtml), [
-    "التاريخ", "ماذا حدث؟", "التغيير في الفرص", "الرصيد بعد الحركة",
-    "التاريخ", "ماذا حدث؟", "التغيير في الفرص", "الرصيد بعد الحركة",
+    "التاريخ", "ماذا حدث؟", "التغيير في الفرص",
+    "التاريخ", "ماذا حدث؟", "التغيير في الفرص",
   ]);
   assert.match(movementHtml, /خصم فرص/);
   assert.match(movementHtml, /إضافة فرص/);
   assert.match(movementHtml, /خصم 4/);
   assert.match(movementHtml, /إضافة 7/);
-  assert.match(movementHtml, /غير مسجّل/);
+  assert.doesNotMatch(movementHtml, /الرصيد بعدها|من 4 إلى|من 7 إلى/);
 });
 
 check("سجل الفرص مقيد بالفصل النشط: خصومات الفصل السابق مخفية والتسوية ظاهرة", () => {

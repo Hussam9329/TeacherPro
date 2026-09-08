@@ -164,7 +164,7 @@ check(
 check(
   exportDialog.includes('كيف تغيّرت فرصك؟') &&
     exportDialog.includes('ماذا حدث؟') &&
-    exportDialog.includes('الرصيد بعد الحركة') &&
+    exportDialog.includes('الرصيد بعدها:') &&
     exportDialog.includes("mobileCell('التغيير في الفرص'") &&
     !exportDialog.includes('سجل فقدان الفرص') &&
     !exportDialog.includes('عدد الفرص المفقودة'),
