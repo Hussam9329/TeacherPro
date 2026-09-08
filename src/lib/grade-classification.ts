@@ -1,3 +1,5 @@
+import { gradeSettlementExclusion } from "./grade-settlement";
+import { numericGradeScore } from "@/lib/grade-score";
 import { getExamEntryAvailability } from "@/lib/exam-utils";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
@@ -34,6 +36,11 @@ export type GradeClassificationKind =
   | "no-discount-protected";
 
 export type GradeLike = {
+  effectiveImpactExcluded?: boolean;
+  effectiveImpactExclusionReason?: string | null;
+  id?: string;
+  studentId?: string;
+  notes?: string | null;
   status?: string | null;
   score?: number | null;
   academicEffectExcluded?: boolean | null;
@@ -105,8 +112,8 @@ export function isGradeEnteredUnified(
 ): boolean {
   if (!grade || !exam) return false;
   if (grade.status === "درجة") {
-    const score = Number(grade.score);
-    return Number.isFinite(score) && score >= 0 && score <= Number(exam.fullMark || 0);
+    const score = numericGradeScore(grade.score);
+    return score !== null && score >= 0 && score <= Number(exam.fullMark || 0);
   }
   return grade.status === "غائب" || grade.status === "غش" || grade.status === "مجاز" || grade.status === "ضمن فترة السماح" || grade.status === "قبل تسجيل الطالب";
 }
@@ -151,10 +158,11 @@ export function hasStudentLeaveForExam(
 export function classifyGradeAcademicImpact(
   grade: GradeLike | null | undefined,
   exam: ExamLike,
-  options: { student?: StudentGraceLike | null; leaves?: StudentLeaveLike[] } = {},
+  options: { student?: StudentGraceLike | null; leaves?: StudentLeaveLike[]; opportunityLogs?: Parameters<typeof gradeSettlementExclusion>[2]; chapterId?: string | null } = {},
 ): GradeClassificationKind {
   const { student, leaves = [] } = options;
-  if (grade?.academicEffectExcluded) return "academic-effect-excluded";
+  if (grade && gradeSettlementExclusion(grade, exam, options.opportunityLogs, options.chapterId)) return "academic-effect-excluded";
+  if (grade?.academicEffectExcluded || grade?.effectiveImpactExcluded) return "academic-effect-excluded";
   if (hasStudentLeaveForExam(leaves, exam)) return "excused";
   if (grade?.status === "مجاز") return "excused";
   if (!isGradeEnteredUnified(grade, exam)) return "missing";
@@ -200,7 +208,7 @@ export function gradeMatchesStatusFilterUnified(
   filter: GradeStatusFilter,
   grade: GradeLike | null | undefined,
   exam: ExamLike,
-  options: { student?: StudentGraceLike | null; leaves?: StudentLeaveLike[] } = {},
+  options: { student?: StudentGraceLike | null; leaves?: StudentLeaveLike[]; opportunityLogs?: Parameters<typeof gradeSettlementExclusion>[2]; chapterId?: string | null } = {},
 ): boolean {
   if (!filter || filter === "all") return true;
   const kind = classifyGradeAcademicImpact(grade, exam, options);

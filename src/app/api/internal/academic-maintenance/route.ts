@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
+import { db } from "@/lib/db";
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { routeErrorResponse } from "@/lib/route-helpers";
@@ -38,6 +39,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    await db.loginRateBucket.deleteMany({ where: { expiresAt: { lt: new Date() } } });
     const scheduledActivation = {
       scanned: 0,
       activated: 0,

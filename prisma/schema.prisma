@@ -29,6 +29,7 @@ model Chapter {
   name          String
   opportunities Int             @default(0)
   courseLinks   CourseChapter[]
+  examCourses ExamCourse[]
   opportunityLogs OpportunityLog[]
 }
 
@@ -112,6 +113,8 @@ model Exam {
   noDiscount         Boolean @default(false)
   active             Boolean @default(true)
   scheduledActivateAt   DateTime?
+  createdAt          DateTime? @default(now())
+  createdAtSource    String @default("recorded")
   grades             Grade[]
   opportunityLogs    OpportunityLog[]
   studentLeaves      StudentLeave[]
@@ -130,6 +133,9 @@ model ExamCourse {
   courseId String
   exam     Exam   @relation(fields: [examId], references: [id], onDelete: Cascade)
   course   Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  chapterId String?
+  chapterSource String @default("unknown")
+  chapter Chapter? @relation(fields: [chapterId], references: [id], onDelete: Restrict)
 
   @@unique([examId, courseId])
   @@index([courseId])
@@ -382,6 +388,7 @@ model AppUser {
   username         String   @unique
   name             String
   passwordHash     String?
+  sessionVersion   Int      @default(0)
   role             String
   roleId           String?
   permissions      String   @default("[]")
@@ -446,4 +453,12 @@ model GradeEntryMissingNote {
   userName String?
   createdAt DateTime @default(now())
   updatedAt DateTime
+}
+
+// Operational counters contain hashed identifiers, never usernames or addresses.
+model LoginRateBucket {
+  key String @id
+  attempts Int
+  expiresAt DateTime
+  @@index([expiresAt])
 }

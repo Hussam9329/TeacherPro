@@ -384,12 +384,16 @@ export async function POST(req: NextRequest) {
         const transitionSettlementAt = new Date();
         const transitionChapterId = target.chapterId;
         const transitionChapterName = target.chapter.name;
-        if (isChapterTransition && activeStudentIds.length > 0) {
+        if ((isChapterTransition || !target.active || target.archived) && activeStudentIds.length > 0) {
+          const settledGrades = await tx.grade.findMany({ where: { studentId: { in: activeStudentIds } }, select: { id: true, studentId: true } });
           await tx.opportunityLog.createMany({
             data: activeStudents.map((student) => ({
               studentId: student.id,
               action: "إعادة تعيين",
-              amount: baseOpportunities,
+              amount: restoredArchive.has(student.id) ? Math.min(restoredArchive.get(student.id)!, baseOpportunities) : baseOpportunities,
+              balanceAfter: restoredArchive.has(student.id) ? Math.min(restoredArchive.get(student.id)!, baseOpportunities) : baseOpportunities,
+              ledgerVersion: 2,
+              settledGradeIds: JSON.stringify(settledGrades.filter(grade => grade.studentId === student.id).map(grade => grade.id)),
               reason: CHAPTER_TRANSITION_SETTLEMENT_REASON,
               date: transitionSettlementAt,
               chapterId: transitionChapterId,
@@ -400,7 +404,7 @@ export async function POST(req: NextRequest) {
             data: activeStudents.map((student) => ({
               studentId: student.id,
               kind: "إجراء",
-              text: `تحويل فصل يدوي إلى «${transitionChapterName}»: تم تجاهل آثار امتحانات الفصل السابق وبدء رصيد جديد بـ ${baseOpportunities} فرص. الرصيد السابق قبل التحويل: ${student.opportunities}/${student.baseOpportunities}.`,
+              text: `تحويل فصل يدوي إلى «${transitionChapterName}»: تم تجاهل آثار امتحانات الفصل السابق وتثبيت رصيد الفصل بـ ${restoredArchive.has(student.id) ? Math.min(restoredArchive.get(student.id)!, baseOpportunities) : baseOpportunities} فرص. الرصيد السابق قبل التحويل: ${student.opportunities}/${student.baseOpportunities}.`,
               date: transitionSettlementAt,
             })),
           });

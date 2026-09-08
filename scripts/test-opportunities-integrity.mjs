@@ -128,8 +128,9 @@ check(
   'قانون الفرص موحد: الوصول إلى صفر لا يفصل، والفصل فقط عند عقوبة جديدة تبدأ والرصيد صفر',
 );
 check(
-  teacherStore.includes('manualPenaltyEffect?.dismissalTrigger') &&
-    teacherStore.includes('penaltyEffectsByStudentId.get(student.id)?.dismissalTrigger'),
+  !teacherStore.includes('adjustOpportunities:') &&
+    !teacherStore.includes('bulkAdjustOpportunities:') &&
+    studentActionRoute.includes('balanceBefore === 0') && bulkAdjustRoute.includes('ZERO_BALANCE_VIOLATION_MARKER'),
   'الخصم اليدوي الفردي والجماعي يستخدم رصيد ما قبل الحدث ولا يفصل عند مجرد الوصول إلى صفر',
 );
 check(

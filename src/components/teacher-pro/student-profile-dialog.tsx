@@ -291,14 +291,14 @@ function gradeLogDetailsWithAccounting(
 ) {
   const base = gradeLogDetails(grade, exam);
   if (!exam) return base;
-  const kind = classifyGradeAcademicImpact(grade, exam, { student, leaves });
+  const kind = classifyGradeAcademicImpact(grade, exam, { student, leaves, opportunityLogs });
   const relatedLogs = relatedOpportunityLogsForGrade(grade, exam, opportunityLogs);
   const logSummary = relatedLogs.length
     ? ` | سجل الفرص المرتبط: ${relatedLogs
         .map((log) => `${displayOpportunityAction(log.action)}${log.amount ? ` ${log.amount}` : ""}`)
         .join("، ")}`
     : " | لا يوجد سجل خصم مرتبط بهذا الامتحان";
-  return `${base} | الأثر الأكاديمي: ${gradeImpactLabel(kind, grade, exam)}${logSummary}`;
+  return `${base} | تصنيف الدرجة وفق التسويات: ${gradeImpactLabel(kind, grade, exam)}${logSummary}`;
 }
 
 type OpportunityTraceRow = {

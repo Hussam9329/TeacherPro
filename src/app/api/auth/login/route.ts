@@ -2,7 +2,6 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { ensureInitialAdminSeed } from '@/lib/admin-seed';
 import { db } from '@/lib/db';
 import { findUserByUsername, setAuthCookie, toAuthPrincipal } from '@/lib/server-auth';
 import { hashPassword, isPasswordHash, verifyPassword } from '@/lib/passwords';
@@ -24,8 +23,6 @@ function getRequestIdentifier(req: NextRequest, username: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureInitialAdminSeed();
-
     const body = await req.json();
     const username = String(body.username || '').trim();
     const password = String(body.password || '');

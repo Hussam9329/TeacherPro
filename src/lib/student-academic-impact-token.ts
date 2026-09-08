@@ -29,6 +29,9 @@ export async function buildStudentAcademicImpactToken(
     select: {
       id: true,
       courseId: true,
+      mainSite: true,
+      subSite: true,
+      locationScope: true,
       status: true,
       opportunities: true,
       baseOpportunities: true,
@@ -58,6 +61,10 @@ export async function buildStudentAcademicImpactToken(
         examId: true,
         status: true,
         score: true,
+        notes: true,
+        academicEffectExcluded: true,
+        academicEffectExclusionReason: true,
+        academicEffectExclusionSource: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -127,6 +134,8 @@ export async function buildStudentAcademicImpactToken(
         name: true,
         type: true,
         courseIds: true,
+        examCourses: { select: { courseId: true, chapterId: true }, orderBy: { courseId: "asc" } },
+        mainSite: true,
         date: true,
         fullMark: true,
         passMark: true,
@@ -156,7 +165,7 @@ export async function buildStudentAcademicImpactToken(
   ]);
 
   const payload = {
-    version: 4,
+    version: 5,
     student,
     proposedCreatedAt: dayKey(input.proposedCreatedAt),
     proposedGraceStartDate: input.proposedGraceStartDate

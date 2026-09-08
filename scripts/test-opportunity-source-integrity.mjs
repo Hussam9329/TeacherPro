@@ -100,7 +100,7 @@ check(
 );
 check(
   academicEngine.includes("historicalSettlementDate") &&
-    academicEngine.includes("examEventDate <= historicalSettlementDate") &&
+    academicEngine.includes("historicalGradeExclusion(grade, exam, historicalSettlementDate)") &&
     academicRepair.includes('scope === "restore-excess-dismissed"') &&
     academicRepair.includes("retiredDismissedReactivationPath: true") &&
     !academicRepair.includes('status: "نشط"') &&

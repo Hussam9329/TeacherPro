@@ -45,6 +45,8 @@ export type ActiveChapterReportLink = {
 export type ActiveChapterReportExam = {
   id: string;
   date: Date | string | null;
+  createdAt?: Date | string | null;
+  chapterId?: string | null;
 };
 
 export type ActiveChapterReportContext = {
@@ -137,9 +139,13 @@ export function computeActiveChapterReportContext(
 
   const examIds: string[] = [];
   for (const exam of courseExams) {
+    if (exam.chapterId) {
+      if (exam.chapterId === activeLink.chapter.id) examIds.push(exam.id);
+      continue;
+    }
     // أقدم أثر لوجود الامتحان: أول درجة له (طابع دقيق)، وإلا تاريخ
     // الامتحان نفسه (بلا دقة زمنية موثوقة).
-    const gradeEvidence = examFirstEvidenceAt.get(exam.id) ?? null;
+    const gradeEvidence = exam.createdAt ?? examFirstEvidenceAt.get(exam.id) ?? null;
     const firstEvidence = gradeEvidence ?? exam.date;
     const evidenceDay = baghdadDateKey(firstEvidence ?? null);
     // بلا حد انتقال → كل امتحانات الدورة من الفصل النشط الحالي.
@@ -251,7 +257,7 @@ export async function loadActiveChapterReportContext(
     }),
     client.exam.findMany({
       where: { courseIds: { contains: `"${courseIdKey}"` } },
-      select: { id: true, date: true },
+      select: { id: true, date: true, createdAt: true, examCourses: { where: { courseId: courseIdKey }, select: { chapterId: true } } },
     }),
   ]);
 
@@ -290,7 +296,7 @@ export async function loadActiveChapterReportContext(
 
   return computeActiveChapterReportContext(
     links,
-    courseExams,
+    courseExams.map(exam => ({ ...exam, chapterId: exam.examCourses?.[0]?.chapterId })),
     firstEvidenceByExamId,
     transitionSettlement?.date ?? null,
   );

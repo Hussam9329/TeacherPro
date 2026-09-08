@@ -1,3 +1,4 @@
+import { historicalGradeExclusion } from "./grade-settlement";
 import {
   isExamAvailableForEntry,
   isGradeEntered,
@@ -618,7 +619,7 @@ export function recalculateAcademicState(
     const allStudentManualLogs = manualLogs
       .filter((log) => log.studentId === student.id)
       .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
-    const historicalSettlementDate = latestStudentLogDate(
+    let historicalSettlementDate = latestStudentLogDate(
       allStudentManualLogs,
       (log) => String(log.reason || "").startsWith("تسوية تاريخية:"),
     );
@@ -685,7 +686,12 @@ export function recalculateAcademicState(
       string,
       AcademicReactivationLink
     >();
+    // A structured settlement supersedes earlier inferred source exemptions.
+    const structuredBoundary = allStudentManualLogs.filter(log => log.ledgerVersion === 2 && log.chapterId === activeChapter?.id &&
+      (log.action === "إعادة تعيين" || isReactivationBalanceOpportunityLog(log))).at(-1);
+    if (structuredBoundary && dayKey(structuredBoundary.date) >= historicalSettlementDate) historicalSettlementDate = "";
     const linkedSourceLinks = allStudentManualLogs
+      .filter(log => !structuredBoundary || String(log.date) >= String(structuredBoundary.date))
       .map((log) => {
         const link = resolveAcademicReactivationLinkForLog(log, state, student);
         if (link && academicReactivationSourceKey(link))
@@ -897,7 +903,13 @@ export function recalculateAcademicState(
       );
     };
 
-    const pendingCommands = currentCommands.filter(log => (!lastReset || String(log.date) >= String(lastReset.date)) && (!latestGrant || String(log.date) >= String(latestGrant.date)));
+    // Establish a reset's opening balance before evaluating unsettled grades.
+    // A grade entered later for an old exam must not be silently overwritten
+    // by a reset that never included that grade ID.
+    if (settlement === lastReset && lastReset) {
+      opportunities = Math.max(0, Math.min(Number(activeChapter?.opportunities ?? student.baseOpportunities ?? 0), Number(lastReset.balanceAfter ?? lastReset.amount)));
+    }
+    const pendingCommands = currentCommands.filter(log => log !== lastReset && (!lastReset || String(log.date) >= String(lastReset.date)) && (!latestGrant || String(log.date) >= String(latestGrant.date)));
     let commandIndex = 0;
     const applyCommandsThrough = (through: string) => {
       while (commandIndex < pendingCommands.length && String(pendingCommands[commandIndex].date) <= through) {
@@ -922,24 +934,13 @@ export function recalculateAcademicState(
       if (settledGradeIds.has(grade.id)) continue;
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
+      const assignedChapter = exam.examCourses?.find(link => link.courseId === student.courseId)?.chapterId;
+      if (assignedChapter && activeChapter && assignedChapter !== activeChapter.id &&
+          !String(grade.notes || "").startsWith("أثر أكاديمي فعّال بعد التسوية:")) continue;
       if (grade.academicEffectExcluded) continue;
-      if (
-        grade.status === "مجاز" ||
-        String(grade.notes || "").startsWith("تسوية تاريخية بلا أثر:")
-      )
-        continue;
+      if (grade.status === "مجاز" || historicalGradeExclusion(grade, exam, historicalSettlementDate)) continue;
       if (!isExamAvailableForEntry(exam)) continue;
       if (!isGradeEntered(grade, exam)) continue;
-      const examEventDate = dayKey(exam.date || grade.createdAt || "");
-      if (
-        historicalSettlementDate &&
-        examEventDate &&
-        examEventDate <= historicalSettlementDate &&
-        !String(grade.notes || "").startsWith(
-          "أثر أكاديمي فعّال بعد التسوية:",
-        )
-      )
-        continue;
       // Academic chronology belongs to the exam day, not to the timestamp at
       // which a grade happened to be entered/edited. This is essential when an
       // administrator corrects an exam date after grades already exist.

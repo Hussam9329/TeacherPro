@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
+import { ScheduledExamWorker } from "./scheduled-exam-worker";
 import { syncVersionApi } from "@/lib/api";
 import { flushGradeEntryOfflineSaves } from "@/lib/grade-entry-offline-outbox";
 import {
@@ -402,6 +403,12 @@ type LoginScreenProps = {
 };
 
 function LoginScreen({ theme, toggleTheme, login }: LoginScreenProps) {
+  useEffect(() => {
+    const warn = () => toast.warning("كلمة مرورك ضعيفة. حدّثها من إدارة الحسابات إلى 8 أحرف على الأقل مع حرف ورقم.");
+    window.addEventListener("teacherpro:weak-password", warn);
+    return () => window.removeEventListener("teacherpro:weak-password", warn);
+  }, []);
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1162,6 +1169,7 @@ export function TeacherProLayout() {
 
   return (
     <div className="app-bg tp-readable-ui tp-semantic-colors tp-app-shell flex h-dvh overflow-hidden bg-background" dir="rtl">
+      <ScheduledExamWorker />
       <a className="tp-skip-link" href="#teacherpro-main-content">
         تجاوز إلى المحتوى الرئيسي
       </a>

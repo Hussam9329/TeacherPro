@@ -77,8 +77,9 @@ assert.match(cronHelper, /scheduledActivateAt:\s*\{ not: null, lte: now \}/);
 assert.match(cronHelper, /data:\s*\{ active: true \}/);
 assert.match(cronHelper, /recalculateStudentsForExam/);
 assert.match(vercelConfig, /\/api\/internal\/academic-maintenance/);
-assert.match(examsRoute, /settleDueScheduledExamActivations\(\{ batchSize: 5 \}\)/);
-assert.match(dashboardStats, /settleDueScheduledExamActivations\(\{ batchSize: 5 \}\)/);
+assert.doesNotMatch(examsRoute, /settleDueScheduledExamActivations/);
+assert.match(read("src/app/api/exams/settle-scheduled/route.ts"), /requirePermission\(req, 'exams.edit'\)/);
+assert.doesNotMatch(dashboardStats, /settleDueScheduledExamActivations/);
 assert.match(vercelConfig, /0 0 \* \* \*/);
 console.log('✅ التفعيل المجدول وانتهاء فترة السماح لهما صيانة يومية، مع تسوية كسولة للتفعيل عند استخدام النظام');
 

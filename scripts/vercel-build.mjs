@@ -268,6 +268,7 @@ const migrationEnv = {
 };
 
 runNode("scripts/check-migration-history.mjs", migrationEnv);
+runNode("scripts/check-deployment-contract.mjs", migrationEnv);
 runNode("scripts/preflight-schema-reconciliation.mjs", migrationEnv);
 
 const initialSchemaBridgeState = getInitialSchemaBridgeState(directUrl);
@@ -300,3 +301,5 @@ for (const migrationName of RECOVERABLE_IDEMPOTENT_MIGRATIONS) {
 // code and database schema to diverge.
 run("prisma", ["migrate", "deploy"], migrationEnv);
 run("prisma", ["migrate", "status"], migrationEnv);
+runNode("scripts/check-current-schema.mjs", migrationEnv);
+runNode("scripts/bootstrap-admin.cjs", migrationEnv);

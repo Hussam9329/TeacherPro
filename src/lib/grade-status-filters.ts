@@ -1,3 +1,4 @@
+import { numericGradeScore } from "@/lib/grade-score";
 export type GradeStatusFilter =
   | "all"
   | "excused"
@@ -34,8 +35,7 @@ function numericScore(grade: {
   score?: unknown;
 }): number | null {
   if (grade.status !== "درجة") return null;
-  const score = Number(grade.score);
-  return Number.isFinite(score) ? score : null;
+  return numericGradeScore(grade.score);
 }
 
 function isFailedNotDiscounted(

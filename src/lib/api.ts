@@ -470,6 +470,7 @@ export interface AuthApiUser {
 }
 
 export interface AuthApiResult extends ApiResult {
+  passwordWeak?: boolean;
   user?: AuthApiUser;
   status?: number;
 }
@@ -487,8 +488,8 @@ export const authApi = {
         const error = await readApiError(res, "تعذر تسجيل الدخول");
         return { ok: false, error };
       }
-      const json = (await res.json()) as { user?: AuthApiUser };
-      return { ok: true, user: json.user };
+      const json = (await res.json()) as { user?: AuthApiUser; passwordWeak?: boolean };
+      return { ok: true, user: json.user, passwordWeak: json.passwordWeak };
     } catch (e) {
       return {
         ok: false,
@@ -530,8 +531,8 @@ export const authApi = {
           status: res.status,
           error: await readApiError(res, "تعذر التحقق من الجلسة حالياً"),
         };
-      const json = (await res.json()) as { user?: AuthApiUser };
-      return { ok: true, user: json.user };
+      const json = (await res.json()) as { user?: AuthApiUser; passwordWeak?: boolean };
+      return { ok: true, user: json.user, passwordWeak: json.passwordWeak };
     } catch (e) {
       return {
         ok: false,

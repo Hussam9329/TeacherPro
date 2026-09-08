@@ -1,0 +1,230 @@
+{
+  "20260615120000_link_pledges_to_dismissals": {
+    "kind": "historical-bootstrap",
+    "checksum": "0b758ec01dd24fa753b6ac0f356b4dd55f87bf3bf3e1126b5b664c674e0f2020"
+  },
+  "20260708140000_database_relations_hardening_full": {
+    "kind": "historical-bootstrap",
+    "checksum": "d17478d351914bf5190fad866c4d23b2c8bbd9893b3688cce789b3388eb2ebfd"
+  },
+  "20260908131000_p2_exam_chapter_provenance": {
+    "kind": "expand",
+    "checksum": "2756b7e0489ad1fbee3fcfaa3d5a70c4a32d815cabfcf5ff975cfd1989dcf263"
+  },
+  "20260713200000_telegram_submission_versions_and_grade_fk": {
+    "kind": "historical-bootstrap",
+    "checksum": "bd0afc569390b116b2f192b61d398edc8136c3650f73356ebcd725db588b75f4"
+  },
+  "20260722235500_allow_pre_registration_grade_status": {
+    "kind": "historical-bootstrap",
+    "checksum": "8ef8f1b1bf1385cedc5343edcba0c0b216908d998bc94d5dfe2fde3f289d474b"
+  },
+  "20260810090000_grade_smart_notes": {
+    "kind": "historical-bootstrap",
+    "checksum": "e13764251d3c8937d4fdc4aae695dd9b23cfc72393d474f9c379af95e997538b"
+  },
+  "202606110001_add_student_followup_records": {
+    "kind": "historical-bootstrap",
+    "checksum": "6693d0bbdd75bef986caf4b7eda95ff801c4a74f7f50be97e9d3e0e4c3c067fd"
+  },
+  "20260708162000_student_call_unique_key": {
+    "kind": "historical-bootstrap",
+    "checksum": "c1a5820b8b75f54459c8f499dcf38bf7e3cdeb017dd4c69ff54d3da55a1a6a34"
+  },
+  "20260908121000_grace_calendar_contract": {
+    "kind": "historical-bootstrap",
+    "checksum": "33a79ffc0050f4f9b645f70c8657038400cc3ad9f176deaa776ee63e42234b70"
+  },
+  "20260723003000_allow_excused_grade_status": {
+    "kind": "historical-bootstrap",
+    "checksum": "08259a006752426af4061c713bbe573dbcc2854b532ae234487c407874112363"
+  },
+  "20260702002000_grade_status_cleanup_and_indexes": {
+    "kind": "historical-bootstrap",
+    "checksum": "842204806884f7ce3e7bb21700e35b5c2a911c73aaffb1c5893dfdb9302b5a86"
+  },
+  "20260705194000_telegram_submission_match_type": {
+    "kind": "historical-bootstrap",
+    "checksum": "2080723e57a7dce1bb58450ca055b98a05fa213f91b22866c39d865219d88107"
+  },
+  "20260712220000_student_enrollment_archives": {
+    "kind": "historical-bootstrap",
+    "checksum": "f8334cd27296e61a54f9aca1e01ab397fae10a8624b1a073abaf2522dd27e188"
+  },
+  "20260702003000_general_indexes": {
+    "kind": "historical-bootstrap",
+    "checksum": "d7f0f65da52c62945d3e1160471f51b0571655fe980c365903f18d91c034deb0"
+  },
+  "20260608193000_dismissal_notes_followup_filters": {
+    "kind": "historical-bootstrap",
+    "checksum": "2d6defec235adccb854ceef1fe944efe17312af8dd20cdfa534eee5895f01169"
+  },
+  "20260702001000_student_search_indexes": {
+    "kind": "historical-bootstrap",
+    "checksum": "3ac3b8925988ecaceb7d13dc94c2ccd3c5bb0556beb198baa03f0e29e3467fa3"
+  },
+  "20260820090000_grade_status_score_safety_trigger": {
+    "kind": "historical-bootstrap",
+    "checksum": "4b8667aefcf324c0bb3b66a33561ad67c9e0b09afc7f4676d828e529e91ba12d"
+  },
+  "20260828034500_single_dismissal_policy": {
+    "kind": "historical-bootstrap",
+    "checksum": "e3fc94f40c295fd5aed2a44a37a6b35861034e5d8eb5e274062fa1b55956e803"
+  },
+  "20260605000000_course_builder_availability": {
+    "kind": "historical-bootstrap",
+    "checksum": "fd046cfef5f7703cd6f20facb250ba626092abb0b8a3eeaaa42fbbcad08fee10"
+  },
+  "20260601000000_initial_schema_bridge": {
+    "kind": "historical-bootstrap",
+    "checksum": "104d0342f81fd86104bd4e3ea403b3bf8cfbcdda5e8a20d72594b156d948b4f7"
+  },
+  "20260820110000_fix_excused_with_absence_notes": {
+    "kind": "historical-bootstrap",
+    "checksum": "8334dd34c74e1ae2f4b433d05aebf2617f5f776f3deebf65932171a3a2d4c86e"
+  },
+  "20260820120000_backfill_student_leaves_for_excused_grades": {
+    "kind": "historical-bootstrap",
+    "checksum": "c3445d659423cadfc2a0f583da04bec9871e5e2292ed4e4d9dd11fc9c256ec67"
+  },
+  "20260908130000_p2_session_and_login_contract": {
+    "kind": "expand",
+    "checksum": "a01c2255e554d407564047c9a0aed1190fa0ee89d4224cc38f40af89ff8eeb2e"
+  },
+  "202606110003_harden_runtime_integrity": {
+    "kind": "historical-bootstrap",
+    "checksum": "c300da39d2157d1348dbd5ea5175a1fa7c9d7b2ee05a015c8075ba7771a8d7a4"
+  },
+  "20260614170000_cumulative_exam_daily_rules": {
+    "kind": "historical-bootstrap",
+    "checksum": "b5c41f0d219c028b4593790d1a421c552d7ccaa6c099ef56c95202485ee3f0e0"
+  },
+  "20260908133000_p2_reviewed_balance_settlement": {
+    "kind": "audited-data-reconciliation",
+    "checksum": "574096d431895e5c517601b7d5619e97d5dcb60370fc190ed22897ee5ac77769"
+  },
+  "20260712143000_grade_exam_integrity": {
+    "kind": "historical-bootstrap",
+    "checksum": "46907cfdd07a8fc6ee6f890846aad250ff881e1e88311cec00e11eefbf2694f2"
+  },
+  "20260608050000_academic_opportunity_accounting": {
+    "kind": "historical-bootstrap",
+    "checksum": "ce4adb0c9721aa7a4ca8796c60c137d4bf32e7492d9d2a025fbc7b80088b3905"
+  },
+  "20260630120000_grade_entry_missing_notes": {
+    "kind": "historical-bootstrap",
+    "checksum": "19c256c23bb20b955ba9cc928282ccb508396a0fe8c692a75ce933d89a81eb8e"
+  },
+  "20260820130000_fix_status_with_active_leave": {
+    "kind": "historical-bootstrap",
+    "checksum": "3d351198016a4939ad7ff7526ff9f935b928324f2399adef3f5c47003a8c5432"
+  },
+  "20260713210000_performance_indexes": {
+    "kind": "historical-bootstrap",
+    "checksum": "b2e488e6d92d120910f99122b94869cab6970630032480291230b06510eb19e8"
+  },
+  "20260908120000_p1_ledger_and_history_contract": {
+    "kind": "historical-bootstrap",
+    "checksum": "4274933a909fb169ef85e4b59258a430cb29fc7381da8c7b0c440a49463193d6"
+  },
+  "20260617120000_exam_no_discount": {
+    "kind": "historical-bootstrap",
+    "checksum": "e2fbdb9ef333451c6fc56d7aef1ebdf7128b591e8fb24ddd6884c0cacfdd0467"
+  },
+  "20260822210000_end_grace_on_numeric_grade": {
+    "kind": "historical-bootstrap",
+    "checksum": "8e9a3c817632ac8c167c431ce14e1df506266e9ecb0b9a4bb3cd26b5b1d5be33"
+  },
+  "20260712140000_schedule_prerequisite_bridge": {
+    "kind": "historical-bootstrap",
+    "checksum": "7db87cb189483547c3a9babd3a8375b3385d5570688e9ceecafcd5a8c3dfc179"
+  },
+  "20260908122000_exam_course_consistency": {
+    "kind": "historical-bootstrap",
+    "checksum": "f1d3fc483e6f146fb0b4c89cb363d8aa21b035d1c89e84376f432672bacb8a7a"
+  },
+  "20260820100000_clean_stale_absence_notes": {
+    "kind": "historical-bootstrap",
+    "checksum": "39aba821c20f711faafcc22c8187c3e723288665c2af814a85410f79d5a065e4"
+  },
+  "20260722223000_allow_grace_grade_status": {
+    "kind": "historical-bootstrap",
+    "checksum": "6f7ebd0f3b3dc5adfd865d567b9cc9f45f4faadc20eed16d10526b41b3016bee"
+  },
+  "20260712234500_operational_integrity_hardening": {
+    "kind": "historical-bootstrap",
+    "checksum": "a0b0e7241e1f89e0cb291694bbf8d451f7076c9340ff12b5683970e7adaf2f93"
+  },
+  "20260608010000_remove_financial_attendance": {
+    "kind": "historical-bootstrap",
+    "checksum": "b83116b08cff307692684f2fa44ba978534331f5e3fd8d9d2ee11accc8153237"
+  },
+  "20260705170000_student_leave_grade_backup": {
+    "kind": "historical-bootstrap",
+    "checksum": "8ec42c23b334a447a2e0fae994f69ed4f0291482dd874ca4e3bd4655f67d3ef5"
+  },
+  "20260712190000_atomic_student_codes_and_active_chapter_guard": {
+    "kind": "historical-bootstrap",
+    "checksum": "90eb611bbb5cf2341a963ffc4e9d438d6875b0d063777d4c4b7db9e961e4da19"
+  },
+  "20260712185000_missing_runtime_columns": {
+    "kind": "historical-bootstrap",
+    "checksum": "c361e0e6bb825a0c824b2c94d0fc6e5d41aac92d375cc4998caa522b59d71e6e"
+  },
+  "20260826190000_remove_exam_scheduled_deactivate": {
+    "kind": "historical-bootstrap",
+    "checksum": "36aa0011d365dab942e7a0d8c9a159ce154d4685673c977c86a7f67a88c177d8"
+  },
+  "20260614143000_student_call_status": {
+    "kind": "historical-bootstrap",
+    "checksum": "4f0ca810b93a34c88802c59567d9d243fb3e84a6d7bf05d18301425629939886"
+  },
+  "20260902190000_student_call_history_migration_backup": {
+    "kind": "historical-bootstrap",
+    "checksum": "2bcf07a575c41d7e0a5928e63c80a007746d283b510e5b22d5d86df639486428"
+  },
+  "202606110002_remove_demo_sites_grade_excused": {
+    "kind": "historical-bootstrap",
+    "checksum": "850b64a6e5d0ec06d341c1be9a1c3e354d17e969098712def95ee314741fe07a"
+  },
+  "20260820140000_schema_authority_reconciliation": {
+    "kind": "historical-bootstrap",
+    "checksum": "c033168f1ab5397ec9c4b97ab7cf06f760d3772d3ab3f378faeda29a8d8e6550"
+  },
+  "20260713220000_grace_period_start_date": {
+    "kind": "historical-bootstrap",
+    "checksum": "670a7dd4ecd4ba2c13ab3d5ee8c452aee40749725cac46b0552abe60e6c777ea"
+  },
+  "20260828010000_unify_dismissal_and_zero_balance": {
+    "kind": "historical-bootstrap",
+    "checksum": "6b5b1000ad17337d59d7fbb9f4a2215480cd9e6e44c02cbaa7e93bb829206980"
+  },
+  "20260906120000_remove_electronic_correction": {
+    "kind": "historical-bootstrap",
+    "checksum": "ffdeec969ba8cb4a8a42594daacbfaecc1dc6bcba2ca9b6a92cb350b515c876f"
+  },
+  "20260616183000_out_of_country_and_location_cleanup": {
+    "kind": "historical-bootstrap",
+    "checksum": "ab04aa57886ad9780b94c87cdfb4a2ed90c85c3dd73fe48102396e22f636de7c"
+  },
+  "20260625160000_telegram_exam_submissions": {
+    "kind": "historical-bootstrap",
+    "checksum": "5beb61a3555be71420f233caa9b743940ff5d0a9e2c40c82870b353d8d0329e5"
+  },
+  "20260608000000_study_types_by_program": {
+    "kind": "historical-bootstrap",
+    "checksum": "1729e2ebe39d0f95f2c23135725d39e1f4de149f48e3ffbf268bd60bb973c646"
+  },
+  "20260826194500_unify_grace_numeric_grade_contract": {
+    "kind": "historical-bootstrap",
+    "checksum": "c15b53065df573005e7453a923ed1e33a141b5e2b5ac913218d555fdb65fcc3e"
+  },
+  "20260713120000_add_exam_scheduled_columns": {
+    "kind": "historical-bootstrap",
+    "checksum": "7aacb42c35c0ce36ef0360144ec7514be5a8ce38ecffb751baad1f319b61180c"
+  },
+  "202606110004_student_leave_period_scope": {
+    "kind": "historical-bootstrap",
+    "checksum": "ab8ef3898a4b786d81f8444b5c532699d1c7b9fbf99da06bf7f82cc329b5728c"
+  }
+}

@@ -19,7 +19,6 @@ import {
   reconcileProtectedGradeMarkersForExamEdit,
 } from '@/lib/protected-grade-markers-server';
 import { repairProtectedAbsencesForStudents } from '@/lib/grace-period-repair-server';
-import { settleDueScheduledExamActivations } from '@/lib/scheduled-exam-activation-server';
 import {
   parseExamNumber,
   validateExamForm,
@@ -219,15 +218,11 @@ export async function GET(req: NextRequest) {
 
   try {
     await assertDatabaseSchemaReady();
-    // A scheduled exam becomes logically active as time passes. Materialize any
-    // due activation before returning the exam registry so persisted student
-    // opportunities/dismissal state cannot remain stale until a later write.
-    await settleDueScheduledExamActivations({ batchSize: 5 });
     const { isPaginatedRequest, parsePagination } = await import('@/lib/pagination');
     if (isPaginatedRequest(req)) {
       const { page, limit, skip } = parsePagination(req);
       const [exams, total] = await Promise.all([
-        db.exam.findMany({ orderBy: { date: 'desc' }, skip, take: limit }),
+        db.exam.findMany({ include: { examCourses: true }, orderBy: { date: 'desc' }, skip, take: limit }),
         db.exam.count(),
       ]);
       return NextResponse.json({
@@ -242,7 +237,7 @@ export async function GET(req: NextRequest) {
       });
     }
     // Default: return all exams WITHOUT grades (grades fetched separately via /api/grades)
-    const exams = await db.exam.findMany({ orderBy: { date: 'desc' } });
+    const exams = await db.exam.findMany({ include: { examCourses: true }, orderBy: { date: 'desc' } });
     return NextResponse.json({
       exams: exams.map((exam) => ({
         ...exam,

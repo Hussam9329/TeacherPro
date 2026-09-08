@@ -334,7 +334,7 @@ async function executeRestore(
       const recoveryUser = await tx.appUser.findUnique({ where: { id: recoveryUserId } });
       if (!recoveryUser?.active || !recoveryUser.passwordHash) throw new Error('تعذر ضمان حساب الدخول بعد الاستعادة.');
       const recoveryRole = recoveryUser.roleId ? await tx.role.findUnique({ where: { id: recoveryUser.roleId } }) : null;
-      const currentCredentials = await tx.appUser.findMany({ select: { id: true, passwordHash: true } });
+      const currentCredentials = await tx.appUser.findMany({ select: { id: true, passwordHash: true, sessionVersion: true } });
       if (mode === 'replace') {
         // One closed table list, RESTRICT by default: never cascade into omitted tables.
         const names = RESTORE_ORDER.map(key => `"${PRISMA_TABLE_NAMES[key]}"`).join(', ');
@@ -368,11 +368,12 @@ async function executeRestore(
         const restored = (tables.users || []).find(row => (row as { id?: string }).id === user.id) as { active?: boolean } | undefined;
         if (user.passwordHash) await tx.appUser.updateMany({ where: { id: user.id }, data: {
           passwordHash: user.passwordHash,
+          sessionVersion: (user.sessionVersion ?? 0) + 1,
           ...(typeof restored?.active === 'boolean' ? { active: restored.active } : {}),
         } });
       }
       if (recoveryRole) await tx.role.upsert({ where: { id: recoveryRole.id }, create: recoveryRole, update: recoveryRole });
-      await tx.appUser.upsert({ where: { id: recoveryUser.id }, create: recoveryUser, update: recoveryUser });
+      await tx.appUser.upsert({ where: { id: recoveryUser.id }, create: { ...recoveryUser, sessionVersion: (recoveryUser.sessionVersion ?? 0) + 1 }, update: { ...recoveryUser, sessionVersion: (recoveryUser.sessionVersion ?? 0) + 1 } });
       for (const row of tables.exams || []) {
         const exam = row as { id: string; courseIds: string };
         await syncExamCourseLinks(tx, exam.id, exam.courseIds);
@@ -683,6 +684,7 @@ async function upsertUser(
   if (!row || typeof row.id !== 'string' || !row.id) throw new Error('حساب استعادة بلا معرّف.');
   const sanitized = sanitizeRow(row);
   delete sanitized.passwordHash;
+  delete sanitized.sessionVersion;
   const existing = await delegate.findUnique({ where: { id: row.id } });
   // Accounts without a current credential cannot silently become active.
   if (!existing?.passwordHash) sanitized.active = false;

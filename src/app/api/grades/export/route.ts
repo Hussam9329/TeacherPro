@@ -1,7 +1,7 @@
+import { annotateGradeSettlementEffects } from "@/lib/grade-settlement-server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { requirePermission } from "@/lib/server-auth";
@@ -10,6 +10,7 @@ import { normalizeArabicText } from "@/lib/route-helpers";
 import { normalizeListFilter } from "@/lib/all-filter";
 import {
   classifyGradeAcademicImpact,
+  isGradeEnteredUnified as isGradeEnteredForExport,
   type GradeClassificationKind,
   gradeMatchesStatusFilterUnified,
   parseCourseIds,
@@ -246,67 +247,6 @@ const databaseComputedGradeFilters = new Set<GradeStatusFilter>([
   "has-grade",
 ]);
 
-function dateKey(value: unknown): string {
-  return String(value || "").slice(0, 10);
-}
-
-function isGradeEnteredForExport(
-  grade: { status?: string | null; score?: number | null },
-  exam: { fullMark?: number | null },
-): boolean {
-  if (grade.status === "درجة") {
-    const score = Number(grade.score);
-    return (
-      Number.isFinite(score) &&
-      score >= 0 &&
-      score <= Number(exam.fullMark || 0)
-    );
-  }
-  return grade.status === "غائب" || grade.status === "غش" || grade.status === "مجاز" || grade.status === "ضمن فترة السماح" || grade.status === "قبل تسجيل الطالب";
-}
-
-function isExamBeforeStudentRegistration(
-  student: { createdAt?: Date | string | null },
-  exam: { date?: Date | string | null },
-): boolean {
-  const registeredAt = dateKey(student.createdAt);
-  const examDate = dateKey(exam.date);
-  return Boolean(registeredAt && examDate && examDate < registeredAt);
-}
-
-function isExamWithinGracePeriod(
-  student: {
-    createdAt?: Date | string | null;
-    accountingGraceDays?: number | null;
-    gracePeriodStartDate?: Date | string | null;
-    gracePeriodEndedAt?: Date | string | null;
-  },
-  exam: { date?: Date | string | null },
-): boolean {
-  return isExamWithinStudentGraceWindow(student, exam);
-}
-
-function leaveAppliesToExam(
-  leave: {
-    examId?: string | null;
-    leaveType?: string | null;
-    date?: Date | string | null;
-    dateFrom?: Date | string | null;
-    dateTo?: Date | string | null;
-  },
-  exam: { id: string; date?: Date | string | null },
-): boolean {
-  if ((leave.leaveType || "exam") === "period") {
-    const examDate = dateKey(exam.date);
-    const from = dateKey(leave.dateFrom || leave.date);
-    const to = dateKey(leave.dateTo || leave.dateFrom || leave.date);
-    return Boolean(
-      examDate && from && to && examDate >= from && examDate <= to,
-    );
-  }
-  return leave.examId === exam.id;
-}
-
 function exportClassificationKind(
   grade: GradeWithRelations,
 ): GradeClassificationKind {
@@ -536,6 +476,7 @@ async function completeGradeExportRows(searchParams: URLSearchParams) {
   const grades = await db.grade.findMany({
     where: { studentId: { in: studentIds }, examId: { in: examIds } },
   });
+  await annotateGradeSettlementEffects(grades);
   const gradeByStudentExam = new Map(
     grades.map((grade) => [`${grade.studentId}:${grade.examId}`, grade]),
   );
@@ -604,6 +545,7 @@ export async function GET(req: NextRequest) {
         orderBy: { updatedAt: "desc" },
         include: { student: { include: { studentLeaves: true } }, exam: true },
       });
+      await annotateGradeSettlementEffects(allGrades);
       const grades = allGrades.filter((grade) =>
         gradeMatchesExportStatusFilter(statusFilter, grade),
       );
@@ -630,6 +572,7 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+    await annotateGradeSettlementEffects(grades);
     return NextResponse.json({
       grades,
       total: grades.length,

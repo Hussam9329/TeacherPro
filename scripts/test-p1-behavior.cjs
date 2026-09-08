@@ -30,7 +30,7 @@ function command(action,amount,date,extra={}) {return {id:'l'+date,studentId:'s'
  s=state();s.opportunityLogs=[command('إعادة تعيين',1,'2026-02-02',{balanceAfter:1,chapterId:'old-chapter',settledGradeIds:'[]'})];assert.equal(balance(s),3);
  pass('capped additions, chronology, reset settlement, reactivation, zero and chapter transitions');
 
- mocks.set('@/lib/db',{db:{appUser:{findUnique:async ({where})=>({id:where.id,username:'employee',name:'employee',permissions:'[]',active:true,role:'staff',roleId:null,roleRef:null})}}});
+ mocks.set('@/lib/db',{db:{loginRateBucket:{deleteMany:async()=>({count:0})},appUser:{findUnique:async ({where})=>({id:where.id,username:'employee',name:'employee',permissions:'[]',active:true,role:'staff',roleId:null,roleRef:null,sessionVersion:0})}}});
  const serverEngine=source('lib/academic-recalculate-server.ts');
  const fixture=state();fixture.exams=[exam('e','2026-02-01')];fixture.grades=[grade('e','2026-02-01')];
  fixture.opportunityLogs=[command('إعادة تعيين',3,'2026-02-02',{balanceAfter:3,settledGradeIds:'["ge"]'})];

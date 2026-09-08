@@ -1,10 +1,8 @@
+import { annotateGradeSettlementEffects } from "@/lib/grade-settlement-server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-import {
-  isExamWithinStudentGraceWindow,
-} from "@/lib/student-grace";
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthPrincipal, requirePermission } from "@/lib/server-auth";
@@ -17,7 +15,7 @@ import {
 import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import { normalizeListFilter } from "@/lib/all-filter";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
-import { gradeMatchesStatusFilterUnified } from "@/lib/grade-classification";
+import { gradeMatchesStatusFilterUnified, isExamBeforeStudentRegistration } from "@/lib/grade-classification";
 import { STUDENT_STATUS_ARCHIVED } from "@/lib/student-scope";
 import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import {
@@ -25,7 +23,6 @@ import {
   syncAcademicGradeWriteback,
 } from "@/lib/academic-grade-writeback-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
-import { baghdadDateKey } from "@/lib/baghdad-time";
 import {
   examSiteDatabaseValues,
   getExamEntryAvailability,
@@ -407,108 +404,6 @@ async function inspectNumericGradeAttempt(
   return { student, exam, category, reason, score };
 }
 
-function dateKey(value: unknown): string {
-  return baghdadDateKey(value as Date | string | null | undefined);
-}
-
-function isGradeEnteredForServer(
-  grade: { status?: string | null; score?: number | null },
-  exam: { fullMark?: number | null },
-): boolean {
-  if (grade.status === "درجة") {
-    const score = Number(grade.score);
-    return (
-      Number.isFinite(score) &&
-      score >= 0 &&
-      score <= Number(exam.fullMark || 0)
-    );
-  }
-  return grade.status === "غائب" || grade.status === "غش" || grade.status === "مجاز" || grade.status === "ضمن فترة السماح" || grade.status === "قبل تسجيل الطالب";
-}
-
-function isExamBeforeStudentRegistration(
-  student: { createdAt?: Date | string | null },
-  exam: { date?: Date | string | null },
-): boolean {
-  const registeredAt = dateKey(student.createdAt);
-  const examDate = dateKey(exam.date);
-  if (!registeredAt || !examDate) return false;
-  return examDate < registeredAt;
-}
-
-function isExamWithinGracePeriod(
-  student: {
-    createdAt?: Date | string | null;
-    accountingGraceDays?: number | null;
-    gracePeriodStartDate?: Date | string | null;
-    gracePeriodEndedAt?: Date | string | null;
-  },
-  exam: { date?: Date | string | null },
-): boolean {
-  return isExamWithinStudentGraceWindow(student, exam);
-}
-
-function leaveAppliesToExam(
-  leave: {
-    examId?: string | null;
-    leaveType?: string | null;
-    date?: Date | string | null;
-    dateFrom?: Date | string | null;
-    dateTo?: Date | string | null;
-  },
-  exam: { id: string; date?: Date | string | null },
-): boolean {
-  if ((leave.leaveType || "exam") === "period") {
-    const examDate = dateKey(exam.date);
-    const from = dateKey(leave.dateFrom || leave.date);
-    const to = dateKey(leave.dateTo || leave.dateFrom || leave.date);
-    return Boolean(
-      examDate && from && to && examDate >= from && examDate <= to,
-    );
-  }
-  return leave.examId === exam.id;
-}
-
-function serverClassificationKind(grade: GradeWithRelations): string {
-  const student = grade.student;
-  const exam = grade.exam;
-  if (student.studentLeaves.some((leave) => leaveAppliesToExam(leave, exam)))
-    return "excused";
-  if (!isGradeEnteredForServer(grade, exam)) return "missing";
-  if (isExamWithinGracePeriod(student, exam)) return "grace";
-  if (isExamBeforeStudentRegistration(student, exam)) return "grace";
-  if (grade.status === "غش") return "cheat";
-  if (exam.noDiscount) {
-    if (
-      grade.status === "درجة" &&
-      Number(grade.score || 0) >= Number(exam.passMark || 0)
-    )
-      return "pass";
-    return "no-discount";
-  }
-  if (grade.status === "غائب") {
-    if (exam.type === "فاينل") return "dismissal";
-    return "deducted";
-  }
-  const score = Number(grade.score) || 0;
-  if (exam.type === "فاينل") {
-    if (
-      score === 0 ||
-      (exam.dismissalGrade !== null && score <= Number(exam.dismissalGrade))
-    )
-      return "dismissal";
-    if (score >= Number(exam.passMark || 0)) return "pass";
-    return "fail";
-  }
-  if (score >= Number(exam.passMark || 0)) return "pass";
-  if (
-    score > Number(exam.discountMark || 0) &&
-    score < Number(exam.passMark || 0)
-  )
-    return "academic-accounting";
-  return "deducted";
-}
-
 function gradeMatchesServerStatusFilter(
   filter: GradeStatusFilter,
   grade: GradeWithRelations,
@@ -564,6 +459,7 @@ export async function GET(req: NextRequest) {
         orderBy: { updatedAt: "desc" },
         include: { student: { include: { studentLeaves: true } }, exam: true },
       });
+      await annotateGradeSettlementEffects(allGrades);
       const matchingGrades = allGrades.filter((grade) =>
         gradeMatchesServerStatusFilter(statusFilter, grade),
       );
@@ -603,6 +499,7 @@ export async function GET(req: NextRequest) {
       }),
     ]);
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    await annotateGradeSettlementEffects(grades);
 
     return NextResponse.json({
       grades,

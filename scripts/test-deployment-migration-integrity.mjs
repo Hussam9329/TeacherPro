@@ -25,7 +25,7 @@ const reconciliationMigrationName =
 const requiredRuntimeMigrationName =
   "20260828034500_single_dismissal_policy";
 const requiredDatabaseMigrationName =
-  "20260908122000_exam_course_consistency";
+  "20260908133000_p2_reviewed_balance_settlement";
 const graceTerminationMigrationName =
   "20260822210000_end_grace_on_numeric_grade";
 const initialBridgeMigrationName = "20260601000000_initial_schema_bridge";

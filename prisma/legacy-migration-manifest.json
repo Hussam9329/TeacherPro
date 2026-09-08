@@ -21,5 +21,16 @@
       "migration_name": "20260826000000_add_grace_period_start_date",
       "checksum": "4c94959c1ed917a4af67cb2d40352ccbe70efe80287d8afebf4ae460e7b39017"
     }
-  ]
+  ],
+  "operationalResolution": {
+    "method": "forward-schema-contract",
+    "checks": [
+      "scripts/check-migration-history.mjs",
+      "scripts/check-current-schema.mjs",
+      "scripts/test-p1-database.cjs",
+      "scripts/test-p2-behavior.cjs"
+    ],
+    "originalSqlRecovered": false,
+    "historyRewritten": false
+  }
 }

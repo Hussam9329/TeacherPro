@@ -1,0 +1,65 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),Module=require('node:module'),ts=require('typescript');
+const {PGlite}=require('@electric-sql/pglite');
+const resolve=Module._resolveFilename,load=Module._load,mocks=new Map();
+Module._resolveFilename=function(r,p,...a){return resolve.call(this,r.startsWith('@/')?path.join(process.cwd(),'src',r.slice(2)):r,p,...a)};
+Module._load=function(r,p,...a){return mocks.has(r)?mocks.get(r):load.call(this,r,p,...a)};
+require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,f);
+(async()=>{
+ const classify=require('../src/lib/grade-classification.ts'),filters=require('../src/lib/grade-status-filters.ts');
+ for(const score of [null,undefined,'',' ',false,NaN]){assert.equal(classify.isGradeEnteredUnified({status:'درجة',score},{fullMark:100}),false);assert.equal(filters.gradeMatchesStatusFilter('has-grade',{status:'درجة',score},{fullMark:100}),false)}
+ assert.equal(classify.isGradeEnteredUnified({status:'درجة',score:0},{fullMark:100}),true);
+ assert.equal(classify.classifyGradeAcademicImpact({status:'درجة',score:null},{id:'e',type:'فاينل',fullMark:100}), 'missing');
+ assert.equal(classify.classifyGradeAcademicImpact({id:'g',studentId:'s',status:'درجة',score:0},{id:'e',type:'فاينل',date:'2026-08-01',fullMark:100},{opportunityLogs:[{studentId:'s',action:'إعادة تعيين',ledgerVersion:2,settledGradeIds:'["g"]'}]}),'academic-effect-excluded');
+ console.log('PASS: null/blank are missing, true zero remains valid, settled grades have no current effect');
+ const engine=require('../src/lib/academic-engine.ts');
+ const state={students:[{id:'s',courseId:'c',status:'نشط',dismissalReason:'',opportunities:1,baseOpportunities:3,createdAt:'2026-01-01',accountingGraceDays:0}],exams:[{id:'e',name:'e',courseIds:['c'],type:'يومي',date:'2026-02-01',active:true,fullMark:100,passMark:50,discountMark:20,opportunitiesPenalty:1}],grades:[],opportunityLogs:[],studentLeaves:[],studentNotes:[],chapters:[{id:'a',name:'a',opportunities:3},{id:'b',name:'b',opportunities:3}],courseChapters:[{id:'ca',courseId:'c',chapterId:'a',active:true,archived:false}]};
+ const balance=()=>engine.recalculateAcademicState(state,new Set(['s'])).students[0].opportunities;
+ state.opportunityLogs=[{id:'reset',studentId:'s',action:'إعادة تعيين',amount:1,balanceAfter:1,date:'2026-02-02',chapterId:'a',ledgerVersion:2,settledGradeIds:'[]'}];
+ assert.equal(balance(),1);state.courseChapters[0].chapterId='b';assert.equal(balance(),3);state.courseChapters[0].chapterId='a';assert.equal(balance(),1);
+ state.grades=[{id:'late',studentId:'s',examId:'e',status:'درجة',score:10,createdAt:'2026-02-03',updatedAt:'2026-02-03'}];assert.equal(balance(),0);
+ state.opportunityLogs[0].reason='تسوية تاريخية: تحويل فصل';state.exams[0].date='2026-02-02';assert.equal(balance(),0);
+ state.exams[0].examCourses=[{courseId:'c',chapterId:'b'}];assert.equal(balance(),1);
+ console.log('PASS: A→B→A preserves balance; late grade counts once; explicit chapter scope excludes another chapter');
+ let user={id:'u',username:'user',name:'User',active:true,role:'staff',roleId:null,permissions:'[]',sessionVersion:0};
+ mocks.set('@/lib/db',{db:{appUser:{findUnique:async()=>({...user})}}});
+ const auth=require('../src/lib/server-auth.ts'),token=await auth.createSessionToken('u'),req={cookies:{get:()=>({value:token})},headers:new Headers()};
+ assert.equal((await auth.getAuthPrincipal(req)).id,'u');user.sessionVersion++;assert.equal(await auth.getAuthPrincipal(req),null);
+ const principal={id:'u',username:'user',isAdmin:false,permissions:['exams.view']};assert.equal(auth.hasPermission(principal,'exams.edit'),false);
+ console.log('PASS: session revocation rejects copied signed tokens; viewers cannot run worker');
+ const fingerprint=require('../src/lib/student-academic-impact-token.ts');
+ const tx={student:{findUnique:async()=>({id:'s',mainSite:site})}};let site='A',examSite='A';
+ for(const model of ['grade','studentLeave','opportunityLog','studentNote','courseChapter','chapter'])tx[model]={findMany:async()=>[]};tx.exam={findMany:async()=>[{id:'e',mainSite:examSite}]};
+ const input={studentId:'s',proposedCreatedAt:'2026-01-01',proposedGraceDays:0};const first=await fingerprint.buildStudentAcademicImpactToken(tx,input);site='B';const second=await fingerprint.buildStudentAcademicImpactToken(tx,input);assert.notEqual(first,second);examSite='B';assert.notEqual(second,await fingerprint.buildStudentAcademicImpactToken(tx,input));
+ console.log('PASS: student and exam site changes invalidate preview fingerprints');
+ mocks.set('@/lib/db',{db:{opportunityLog:{findMany:async()=>[{id:'l',studentId:'s',action:'إعادة تعيين',date:'2026-03-01',chapterId:'a',ledgerVersion:2,settledGradeIds:'["g"]'}]},student:{findMany:async()=>[{id:'s',courseId:'c'}]},exam:{findMany:async()=>[{id:'e',date:'2026-02-01'}]},courseChapter:{findMany:async()=>[{courseId:'c',chapterId:'a'}]}}});
+ const rows=[{id:'g',studentId:'s',examId:'e',status:'درجة',score:0}];
+ await require('../src/lib/grade-settlement-server.ts').annotateGradeSettlementEffects(rows);
+ assert.equal(rows[0].effectiveImpactExcluded,true);assert.equal(rows[0].score,0);
+ assert.equal(classify.gradeMatchesStatusFilterUnified('discounted',rows[0],{id:'e',fullMark:100,discountMark:20}),false);
+ console.log('PASS: server listing/export annotations preserve scores and exclude settled deductions');
+
+ const pg=new PGlite();for(const dir of fs.readdirSync('prisma/migrations').sort()){const f=`prisma/migrations/${dir}/migration.sql`;if(fs.existsSync(f))await pg.exec(fs.readFileSync(f,'utf8'))}
+ await pg.exec(`INSERT INTO "AppUser" (id,username,name,role,"passwordHash") VALUES ('u','u','u','staff','old'); UPDATE "AppUser" SET "passwordHash"='new' WHERE id='u'`);
+ assert.equal((await pg.query('SELECT "sessionVersion" FROM "AppUser" WHERE id=\'u\'')).rows[0].sessionVersion,1);
+ await pg.exec(`UPDATE "AppUser" SET "sessionVersion"=0 WHERE id='u'`);assert.equal((await pg.query('SELECT "sessionVersion" FROM "AppUser" WHERE id=\'u\'')).rows[0].sessionVersion,1);
+ mocks.set('@/lib/db',{db:{$queryRaw:async(parts,...values)=>{let q=parts[0];values.forEach((_,i)=>q+=`$${i+1}`+parts[i+1]);return(await pg.query(q,values)).rows},loginRateBucket:{deleteMany:async({where})=>pg.query('DELETE FROM "LoginRateBucket" WHERE key=$1',[where.key])}}});
+ const limiter=require('../src/lib/login-rate-limit.ts');const attempts=await Promise.all(Array.from({length:20},()=>limiter.checkLoginRateLimit('user@ip')));assert.equal(attempts.filter(x=>x.allowed).length,5);await limiter.clearLoginFailures('user@ip');assert.equal((await limiter.checkLoginRateLimit('user@ip')).allowed,true);
+ console.log('PASS: PostgreSQL revokes every password writer and atomically limits concurrent login attempts');
+ const {validatePendingMigration}=await import('./check-deployment-contract.mjs');const {createHash}=require('node:crypto');let sql='ALTER TABLE "Student" DROP COLUMN "name";';const policy={kind:'expand',checksum:createHash('sha256').update(sql).digest('hex')};assert.throws(()=>validatePendingMigration('bad',sql,policy,true),/Destructive/);assert.throws(()=>validatePendingMigration('unknown','SELECT 1',null,true),/Unreviewed/);
+ assert.ok(!fs.readFileSync('src/app/api/exams/route.ts','utf8').includes('settleDueScheduledExamActivations'));
+ for(const file of ['cleanup_invalid_absences.mjs','repair-final-pledge-residual.mjs','repair-exam1-bulk-register.mjs'])assert.match(fs.readFileSync('scripts/'+file,'utf8'),/^throw new Error\("Retired/);
+
+ await pg.exec(`CREATE TABLE IF NOT EXISTS "DemoCopy" (id TEXT); CREATE TABLE IF NOT EXISTS "Site" (id TEXT); INSERT INTO "DemoCopy" VALUES ('must-preserve')`);
+ const contract=fs.readFileSync('scripts/contracts/retire-empty-schema.sql','utf8');
+ await assert.rejects(pg.exec(contract),/not empty/);await pg.exec('ROLLBACK');
+ assert.equal((await pg.query('SELECT count(*)::int n FROM "DemoCopy"')).rows[0].n,1);
+ await pg.exec('DELETE FROM "DemoCopy"');await pg.exec(contract);
+ assert.equal((await pg.query(`SELECT to_regclass('"DemoCopy"') t`)).rows[0].t,null);
+ const protectionSQL=fs.readFileSync('prisma/migrations/20260908133000_p2_reviewed_balance_settlement/migration.sql','utf8');
+ assert.doesNotMatch(protectionSQL,/UPDATE\s+"Student"/i);assert.match(protectionSQL,/protected_balances/);
+ await pg.exec(`INSERT INTO "Course" (id,name) VALUES ('c','c'); INSERT INTO "Student" (id,name,gender,code,"courseId") VALUES ('cmqh32z1q00wlju04lml2609b','fixture','ذكر','TEST','c')`);
+ await assert.rejects(pg.exec(fs.readFileSync('prisma/migrations/20260908133000_p2_reviewed_balance_settlement/migration.sql','utf8')),/history changed|balance preservation review changed/);await pg.exec('ROLLBACK');
+ assert.equal((await pg.query(`SELECT count(*)::int n FROM "OpportunityLog" WHERE id LIKE 'p2_settlement_%'`)).rows[0].n,0);
+ console.log('PASS: nonempty retired tables and stale reconciliation fingerprints abort without data loss');
+ await pg.close();console.log('PASS: build contract rejects destructive/unreviewed schema changes and historical repairs cannot execute');
+})().catch(e=>{console.error(e);process.exitCode=1});

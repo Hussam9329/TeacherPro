@@ -136,8 +136,7 @@ check(
     repairHelper.includes('status: "ضمن فترة السماح"') &&
     repairHelper.includes('status: "قبل تسجيل الطالب"') &&
     repairHelper.includes("grade.updateMany") &&
-    repair.includes("recalculateStudentsAcademicState") &&
-    repair.includes("withSerializableTransaction"),
+    repair.includes('throw new Error("Retired historical repair'),
 );
 check(
   "الإصلاح الإداري يبقي إصلاح الحماية والسماح ويغلق أي مسار صيانة قد يسترجع المفصول تلقائياً",
@@ -160,7 +159,7 @@ check(
 );
 check(
   "حارس قاعدة البيانات لا يغير المخطط ويتطلب migration المصالحة",
-  schemaReadiness.includes("20260908122000_exam_course_consistency") &&
+  schemaReadiness.includes("20260908133000_p2_reviewed_balance_settlement") &&
     schemaReadiness.includes('FROM "_prisma_migrations"') &&
     !schemaReadiness.includes("$executeRaw"),
 );

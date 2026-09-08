@@ -19,6 +19,7 @@ export interface AuthPrincipal {
 
 interface SignedSessionPayload {
   sub: string;
+  version?: number;
   iat: number;
   exp: number;
 }
@@ -122,9 +123,12 @@ export function toAuthPrincipal(user: NonNullable<DbUserWithRole>): AuthPrincipa
 }
 
 export async function createSessionToken(userId: string): Promise<string> {
+  const user = await findUserById(userId);
+  if (!user || !user.active) throw new Error("Account unavailable");
   const now = Math.floor(Date.now() / 1000);
   const payload: SignedSessionPayload = {
     sub: userId,
+    version: user.sessionVersion,
     iat: now,
     exp: now + SESSION_MAX_AGE_SECONDS,
   };
@@ -153,7 +157,7 @@ export async function getAuthPrincipal(req: NextRequest): Promise<AuthPrincipal 
   const expectedOwner = req.headers.get('x-teacherpro-owner-id');
   if (expectedOwner && expectedOwner !== payload.sub) return null;
   const user = await findUserById(payload.sub);
-  if (!user || !user.active) return null;
+  if (!user || !user.active || (payload.version ?? 0) !== user.sessionVersion) return null;
   return toAuthPrincipal(user);
 }
 

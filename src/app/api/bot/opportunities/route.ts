@@ -1,3 +1,4 @@
+import { loadActiveChapterReportContext, opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -36,12 +37,14 @@ export async function POST(req: NextRequest) {
     const student = await resolveStudent(body);
     if (!student) return validationError("الطالب غير مرتبط أو غير موجود في TeacherPro.", 404);
 
-    const logs = await db.opportunityLog.findMany({
+    const chapter = await loadActiveChapterReportContext(db, student.courseId);
+    const allLogs = await db.opportunityLog.findMany({
       where: { studentId: student.id },
       orderBy: { date: "desc" },
-      take: 15,
+
     });
 
+    const logs = allLogs.filter(log => (!log.chapterId || !chapter || log.chapterId === chapter.id) && opportunityLogWithinActiveChapter(log, chapter)).slice(0, 15);
     return NextResponse.json({
       ok: true,
       student: {
@@ -53,10 +56,15 @@ export async function POST(req: NextRequest) {
         opportunities: student.opportunities,
       },
       opportunities: student.opportunities,
+      status: student.status,
+      dismissalReason: student.dismissalReason,
+      activeChapter: chapter,
       logs: logs.map((log) => ({
         id: log.id,
         action: log.action,
-        amount: log.amount,
+        amount: log.appliedAmount ?? log.amount,
+        balanceBefore: log.balanceBefore,
+        balanceAfter: log.balanceAfter,
         reason: log.reason,
         date: log.date,
         chapterId: log.chapterId,
