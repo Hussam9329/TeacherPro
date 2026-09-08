@@ -26,6 +26,7 @@ const chapters = read("src/components/teacher-pro/chapters.tsx");
 const statusAction = read("src/app/api/students/status-action/route.ts");
 const academicRepair = read("src/app/api/students/academic-repair/route.ts");
 const engine = read("src/lib/academic-engine.ts");
+const recalculation = read("src/lib/academic-recalculate-server.ts");
 
 check(
   management.includes('action: "reactivate"') &&
@@ -98,6 +99,13 @@ check(
   engine.includes("never reactivate them implicitly") &&
   engine.includes('status: "مفصول"'),
   "المحرك نفسه يحفظ حالة المفصول أمام كل إعادة احتساب غير صريحة",
+);
+
+check(
+  !recalculation.includes("migrateDismissedPendingGradesAfterActivation") &&
+  !recalculation.includes("reactivatedStudentIds") &&
+  statusAction.includes("await migrateDismissedPendingGradesAfterActivation("),
+  "ترحيل درجات المفصول محصور بمسار الاسترجاع الصريح ولا يوجد فرع ميت داخل إعادة الاحتساب",
 );
 
 check(

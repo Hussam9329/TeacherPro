@@ -302,7 +302,6 @@ const ExamRecordCard = React.memo(function ExamRecordCard(props: ExamRecordVisua
     status,
     entryAvailable,
     entryAnswer,
-    entryReason,
     totalStat,
     passStat,
     notPassedStat,

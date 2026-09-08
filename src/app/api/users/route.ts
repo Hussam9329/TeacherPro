@@ -2,7 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAnyPermission, requirePermission, requirePermissionPrincipal, type AuthPrincipal } from '@/lib/server-auth';
+import { requireAnyPermission, requirePermissionPrincipal, type AuthPrincipal } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { normalizePasswordForStorage } from '@/lib/passwords';
 import { validatePasswordPolicy } from '@/lib/password-policy';

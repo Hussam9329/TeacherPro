@@ -86,7 +86,6 @@ export type StudentDetailsFetcher = (
   context: ExportFetchContext,
 ) => Promise<StudentDetailsMap>;
 
-const HTML_VISIBLE_GRADE_STATUSES = new Set(["درجة", "غائب"]);
 const GRACE_DEFERRED_REPORT_STATUS = "لا يحاسب الطالب ( ضمن فترة السماح )";
 // تُهمل أنواع الملاحظات الأخرى عمداً لأن عمود الملاحظات أزيل من التقرير،
 // وتلك الحالات لا تؤثر على عرض الحالة في التقرير.

@@ -12,7 +12,6 @@ import {
   consumeTeacherProLocalMutationEcho,
   emitTeacherProDataChanged,
   isTeacherProInteractionBusy,
-  requestTeacherProSyncNow,
   subscribeTeacherProDataChanged,
   subscribeTeacherProLocalMutation,
   TEACHERPRO_SYNC_PENDING_EVENT,

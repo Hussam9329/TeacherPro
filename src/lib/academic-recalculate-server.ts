@@ -1,7 +1,6 @@
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 import { reconcileExpiredGracePendingGrades } from "@/lib/grade-smart-note-grace-expiry-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import {
@@ -745,32 +744,13 @@ export async function recalculateStudentsAcademicState(
     state,
     new Set(recalculableStudentIds),
   );
-  const previouslyDismissedStudentIds = new Set(
-    state.students
-      .filter((student) => student.status === "مفصول")
-      .map((student) => student.id),
-  );
-  const reactivatedStudentIds = result.students
-    .filter(
-      (student) =>
-        student.status === "نشط" &&
-        previouslyDismissedStudentIds.has(student.id),
-    )
-    .map((student) => student.id);
-
-  const persisted = await persistAcademicRecalculation(
+  // Recalculation preserves dismissed status. Explicit reactivation and pending
+  // grade migration belong exclusively to the student status-action route.
+  return persistAcademicRecalculation(
     client,
     recalculableStudentIds,
     result,
   );
-  for (const reactivatedStudentId of reactivatedStudentIds) {
-    await migrateDismissedPendingGradesAfterActivation(
-      transaction,
-      reactivatedStudentId,
-      { name: "TeacherPro - إعادة الاحتساب الأكاديمي" },
-    );
-  }
-  return persisted;
 }
 
 /** Pure multi-student preview used by guarded maintenance routes. It reads the

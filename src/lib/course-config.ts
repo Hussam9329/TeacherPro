@@ -281,7 +281,7 @@ export function resolveSubSite(
   course: CourseSettingsSource,
   studyType: string,
   locationScope: string,
-  baghdadMode: string | undefined,
+  _baghdadMode: string | undefined,
   subSite: string | undefined,
 ): string {
   if (locationScope === "بغداد") {
