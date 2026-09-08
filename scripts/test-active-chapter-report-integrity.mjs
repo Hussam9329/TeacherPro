@@ -453,7 +453,7 @@ must(
 
 must(
   exportDialog.includes('id="tpLogsSectionTitle"') &&
-    exportDialog.includes("سجل حركات الفرص — الفصل النشط ("),
+    exportDialog.includes("كيف تغيّرت فرصك؟ — "),
   "عنوان قسم السجل بملف HTML يوضح أن الحركات مقيدة بالفصل النشط",
 );
 
@@ -466,17 +466,17 @@ must(
 
 must(
   exportDialog.includes("tpGradesSectionTitle") &&
-    exportDialog.includes("امتحانات الفصل النشط الحالي (") &&
-    exportDialog.includes("لا توجد امتحانات للفصل النشط الحالي لهذا الطالب"),
+    exportDialog.includes("درجاتك — ") &&
+    exportDialog.includes("لا توجد امتحانات في هذا الفصل ضمن التقرير حتى الآن."),
   "ملف HTML يعرض عنوان قسم الامتحانات باسم الفصل النشط وحالة الفراغ الخاصة به",
 );
 
 must(
   exportDialog.includes(".tp-search-wrap") &&
-    exportDialog.includes("max-width: 760px") &&
-    exportDialog.includes("margin: 6px auto 22px") &&
+    exportDialog.includes("max-width: 700px") &&
+    exportDialog.includes("margin: 0 auto 24px") &&
     exportDialog.includes("text-align: center") &&
-    exportDialog.includes("clamp(16px, 2.2dvw, 18px)") &&
+    exportDialog.includes("font-size: 16px") &&
     !/(?:^|[^a-z])\d+(?:\.\d+)?vw\b/i.test(
       exportDialog.slice(
         exportDialog.indexOf("DETAILS_MODAL_CSS"),

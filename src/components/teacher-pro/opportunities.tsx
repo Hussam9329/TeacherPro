@@ -840,6 +840,8 @@ export function OpportunitiesView() {
           const profile = await studentProfileLogApi.get(studentId);
           if (profile) {
             result[studentId] = buildStudentDetailsFromProfileLog(profile);
+            const snapshot = result[studentId].studentSnapshot;
+            if (snapshot && profile.student?.courseId) snapshot.courseName = courseName(String(profile.student.courseId));
           } else {
             failedStudentIds.add(studentId);
             console.error(
@@ -994,7 +996,7 @@ export function OpportunitiesView() {
                 fetchRows={fetchOpportunityExportRows}
                 columns={opportunityExportColumns}
                 triggerLabel="تصدير"
-                description="تقرير إدارة الفرص حسب الفلاتر الحالية — زر HTML يفتح ملف بحث بخانة وسطية مرنة، يعرض درجات امتحانات الفصل النشط الحالي فقط مع سجل فرص مقيد بنفس الفصل (مع صف تسوية الانتقال)، والطالب المفصول تظهر شارة «مفصول» بجانب اسمه"
+                description="تصدير HTML للطلاب: يبحث الطالب عن اسمه ليشاهد فرصه المتبقية، وتاريخ بدء حساب فرص الفصل، وأسباب الإضافة والخصم، ودرجات امتحانات الفصل الحالي. كل امتحان بلا درجة يظهر غياباً. البيانات تُجلب من النظام وقت التصدير."
                 fetchStudentDetails={fetchOpportunityStudentDetails}
                 getRowId={(s) => String((s as Record<string, unknown>)?.id ?? "")}
                 totalRowCount={

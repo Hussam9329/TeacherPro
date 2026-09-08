@@ -151,7 +151,7 @@ check(
 check(
   !exportDialog.includes('<th>ملاحظات</th>') &&
     !exportDialog.includes("+ '<td>' + esc(g.notes) + '</td>'") &&
-    exportDialog.includes('colspan="6"'),
+    exportDialog.includes('colspan="5"'),
   'تفاصيل تقرير HTML لا تحتوي عمود الملاحظات وتستخدم عدد الأعمدة الصحيح بعد حذفه',
 );
 check(
@@ -162,10 +162,10 @@ check(
   'بيانات تقرير HTML تُحقن عبر serializer آمن ولا يمكنها إغلاق عنصر script',
 );
 check(
-  exportDialog.includes('سجل حركات الفرص') &&
-    exportDialog.includes('نوع الحركة') &&
-    exportDialog.includes('العدد المسجل') &&
-    exportDialog.includes("mobileCell('نوع الحركة', esc(l.action || '—'))") &&
+  exportDialog.includes('كيف تغيّرت فرصك؟') &&
+    exportDialog.includes('ماذا حدث؟') &&
+    exportDialog.includes('الرصيد بعد الحركة') &&
+    exportDialog.includes("mobileCell('التغيير في الفرص'") &&
     !exportDialog.includes('سجل فقدان الفرص') &&
     !exportDialog.includes('عدد الفرص المفقودة'),
   'تقرير HTML يعرض كل حركة فرص بنوعها ولا يصف الإضافات وإعادة التفعيل كفقدان',

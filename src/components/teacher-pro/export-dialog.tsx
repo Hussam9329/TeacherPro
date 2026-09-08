@@ -18,6 +18,7 @@ import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
+import { presentOpportunityMovement, reportGradeEffect, reportGradeOutcome, reportNumber, type ReportMovementKind } from "@/lib/student-report-presentation";
 
 export type ExportColumn<T = Record<string, unknown>> = {
   key: string;
@@ -40,6 +41,9 @@ export type StudentGradeDetail = {
   status: string;
   /** داخلي فقط لتحديد حالة تقرير HTML؛ لا يُحقن في الملف المتولد. */
   notes?: string | null;
+  outcome?: string;
+  opportunityEffect?: string;
+  passMark?: number | null;
 };
 
 export type StudentOpportunityLogDetail = {
@@ -48,6 +52,11 @@ export type StudentOpportunityLogDetail = {
   reason: string | null;
   date: string;
   examName: string | null;
+  appliedAmount?: number | null;
+  balanceBefore?: number | null;
+  balanceAfter?: number | null;
+  movementKind?: ReportMovementKind;
+  effectText?: string;
 };
 
 export type StudentDetails = {
@@ -58,6 +67,12 @@ export type StudentDetails = {
    * ملف HTML ويُستخدم لصياغة حالة «لا توجد امتحانات للفصل النشط».
    */
   activeChapterName?: string | null;
+  activeChapterSince?: string | null;
+  generatedAt?: string | null;
+  studentSnapshot?: {
+    name: string; code: string; status: string; opportunities: number | null; courseName?: string;
+    opportunityLimit: number | null; registeredAt: string | null;
+  };
 };
 
 export type StudentDetailsMap = Record<string, StudentDetails>;
@@ -94,9 +109,6 @@ const GRACE_DEFERRED_GRADE_NOTE_PREFIXES = [
   "درجة مؤجلة خلال فترة سماح الطالب",
   "درجة حقيقية داخل فترة السماح؛ محفوظة للمتابعة دون أثر أكاديمي",
 ] as const;
-const HISTORICAL_OPPORTUNITY_RESET_REASON =
-  "تسوية تاريخية: تجاهل آثار الامتحانات السابقة للتسوية حتى عند تعديل درجاتها لاحقاً";
-
 function normalizeArabicComparisonText(value: unknown): string {
   return String(value ?? "")
     .toLocaleLowerCase("ar-IQ")
@@ -112,15 +124,6 @@ function normalizeArabicComparisonText(value: unknown): string {
     .trim();
 }
 
-function tidyReportText(value: string): string {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .replace(/\s+([:،؛])/g, "$1")
-    .replace(/([:،؛]){2,}/g, "$1")
-    .replace(/^[\s:،؛.\-–—|]+|[\s:،؛.\-–—|]+$/g, "")
-    .trim();
-}
-
 function isGraceDeferredGradeForHtml(grade: StudentGradeDetail): boolean {
   // لا نحول أي حالة أخرى (مثل «غائب») حتى لو احتوت ملاحظة مشابهة.
   if (String(grade.status || "").trim() !== "درجة") return false;
@@ -133,38 +136,15 @@ function isGraceDeferredGradeForHtml(grade: StudentGradeDetail): boolean {
   );
 }
 
-function sanitizeOpportunityReasonForHtml(
-  reason: string | null | undefined,
-): string | null {
-  let text = String(reason || "")
-    .replace(/\s*\[academic-reactivation-link:[^\]]+\]/g, "")
-    .trim();
-  if (!text) return null;
-
-  const normalized = normalizeArabicComparisonText(text);
-  if (
-    normalized.includes(
-      normalizeArabicComparisonText(HISTORICAL_OPPORTUNITY_RESET_REASON),
-    )
-  ) {
-    return "اعادة تعيين جميع الفرص";
-  }
-
-  // كلمة "تلقائي" ليست معلومة مفيدة للمستخدم داخل سبب سجل الفرص.
-  text = text.replace(
-    /(^|[\s:،؛\-–—])تلقائي(?=\s|[:،؛\-–—]|$)/g,
-    "$1",
-  );
-  text = tidyReportText(text);
-  return text || null;
-}
-
 export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): StudentDetailsMap {
   return Object.fromEntries(
     Object.entries(details).map(([studentId, studentDetails]) => [
       studentId,
       {
         activeChapterName: studentDetails.activeChapterName ?? null,
+        activeChapterSince: studentDetails.activeChapterSince ?? null,
+        generatedAt: studentDetails.generatedAt ?? null,
+        studentSnapshot: studentDetails.studentSnapshot,
         grades: (studentDetails.grades || [])
           .map((grade) => {
             const { notes: _notes, ...reportGrade } = grade;
@@ -178,7 +158,7 @@ export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): Stude
           .sort((a, b) => {
             const da = new Date(a.examDate).getTime() || 0;
             const db = new Date(b.examDate).getTime() || 0;
-            return db - da;
+            return da - db;
           }),
         // سجل الفرص يصل هنا مقيداً بالفصل النشط من buildStudentDetailsFromProfileLog،
         // لذا تبقى صفوف التسوية (بداية رصيد الفصل) ظاهرة: هي الخط الفاصل الذي
@@ -186,15 +166,17 @@ export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): Stude
         opportunityLogs: (studentDetails.opportunityLogs || [])
           .map((log) => ({
             ...log,
-            reason: sanitizeOpportunityReasonForHtml(log.reason),
+            ...presentOpportunityMovement(log),
           }))
-          .filter((log) => log.reason !== null),
+          .sort((a, b) => (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0)),
       },
     ]),
   );
 }
 
 export type StudentProfileLogSnapshot = {
+  student?: Record<string, unknown> | null;
+  generatedAt?: string;
   exams?: Array<Record<string, unknown>> | null;
   grades?: Array<Record<string, unknown>> | null;
   allCourseExams?: Array<Record<string, unknown>> | null;
@@ -287,6 +269,9 @@ export function buildStudentDetailsFromProfileLog(
   }
 
   const rawGrades = Array.isArray(profile.grades) ? profile.grades : [];
+  const rawLogs = Array.isArray(profile.opportunityLogs) ? profile.opportunityLogs : [];
+  const logScope = resolveActiveChapterLogScope(profile);
+  const scopedLogs = rawLogs.filter(log => opportunityLogWithinActiveChapter(log, logScope));
   const gradeExamIds = new Set<string>();
   const grades: StudentGradeDetail[] = rawGrades
     // درجات امتحانات الفصل النشط الحالي فقط: عند توفر سياق الفصل النشط
@@ -313,6 +298,9 @@ export function buildStudentDetailsFromProfileLog(
           fullMark === null || fullMark === undefined ? null : Number(fullMark),
         status: String(grade.status || ""),
         notes: grade.notes ? String(grade.notes) : null,
+        outcome: reportGradeOutcome(grade, exam),
+        opportunityEffect: reportGradeEffect(grade, exam, scopedLogs.filter(log => log.examId === examId)),
+        passMark: reportNumber(exam?.passMark),
       };
     });
 
@@ -327,8 +315,7 @@ export function buildStudentDetailsFromProfileLog(
     if (
       examId &&
       (!chapterExamIds || chapterExamIds.has(examId)) &&
-      !gradeExamIds.has(examId) &&
-      !examMap.has(examId)
+      !gradeExamIds.has(examId)
     ) {
       examMap.set(examId, examRecord);
       grades.push({
@@ -342,14 +329,13 @@ export function buildStudentDetailsFromProfileLog(
             : Number(examRecord.fullMark),
         status: "غائب",
         notes: null,
+        outcome: "غياب",
+        opportunityEffect: reportGradeEffect({ status: "غائب" }, examRecord, scopedLogs.filter(log => log.examId === examId)),
+        passMark: reportNumber(examRecord.passMark),
       });
     }
   }
 
-  const rawLogs = Array.isArray(profile.opportunityLogs)
-    ? profile.opportunityLogs
-    : [];
-  const logScope = resolveActiveChapterLogScope(profile);
   const opportunityLogs: StudentOpportunityLogDetail[] = rawLogs
     // سجل الفرص مقيد بنفس حدود الفصل النشط المطبقة على الدرجات (حسب طلب
     // المالك): تُعرض حركات امتحانات الفصل النشط فقط، ومعها التسوية/الحركات
@@ -370,10 +356,23 @@ export function buildStudentDetailsFromProfileLog(
         reason: log.reason ? String(log.reason) : null,
         date: String(log.date || ""),
         examName: exam?.name ? String(exam.name) : null,
+        appliedAmount: reportNumber(log.appliedAmount),
+        balanceBefore: reportNumber(log.balanceBefore),
+        balanceAfter: reportNumber(log.balanceAfter),
       };
     });
 
-  return { grades, opportunityLogs, activeChapterName };
+  const student = profile.student;
+  return {
+    grades, opportunityLogs, activeChapterName,
+    activeChapterSince: logScope?.since ?? null,
+    generatedAt: profile.generatedAt ?? null,
+    studentSnapshot: student ? {
+      name: String(student.name || ""), code: String(student.code || ""),
+      status: String(student.status || ""), opportunities: reportNumber(student.opportunities),
+      opportunityLimit: reportNumber(student.opportunityLimit), registeredAt: student.createdAt ? String(student.createdAt) : null,
+    } : undefined,
+  };
 }
 
 function normalizeExportValue(value: string | number | null | undefined): string | number {
@@ -483,357 +482,137 @@ function buildTableRows<T>(
 }
 
 const DETAILS_MODAL_CSS = `
-  .tp-search-report-body {
-    width: 100%; max-width: 100%;
-    padding-top: max(16px, env(safe-area-inset-top, 0px));
-    padding-right: max(16px, env(safe-area-inset-right, 0px));
-    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
-    padding-left: max(16px, env(safe-area-inset-left, 0px));
-    -webkit-text-size-adjust: 100%; text-size-adjust: 100%;
-  }
-  .report-search-mode h1 {
-    font-size: 24px; font-size: clamp(20px, 3dvw, 26px);
-    overflow-wrap: anywhere;
-  }
-  .tp-search-wrap {
-    position: relative;
-    width: 100%; max-width: 760px;
-    margin: 6px auto 22px;
-  }
-  .tp-search-label {
-    display: block; margin: 0 0 7px;
-    color: #334155; font-size: 14px; font-weight: 900; text-align: center;
-  }
-  .tp-search-input {
-    width: 100%;
-    padding: 14px 16px;
-    padding: clamp(13px, 3dvw, 15px) clamp(14px, 3.5dvw, 18px);
-    font-size: 16px; font-size: clamp(16px, 2.2dvw, 18px);
-    font-weight: 800; font-family: inherit;
-    border: 2px solid #111827; border-radius: 10px;
-    background: #fff; color: #111827; outline: none;
-    transition: border-color .15s, box-shadow .15s;
-    text-align: center;
-  }
-  .tp-search-input:focus {
-    border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.18);
-  }
-  .tp-search-input::placeholder { color: #64748b; font-weight: 700; opacity: 1; }
-  .tp-search-hint {
-    margin: 8px 4px 0;
-    font-size: 12.5px; font-size: clamp(12.5px, 1.8dvw, 14px);
-    font-weight: 700; color: #475569; line-height: 1.65; text-align: center;
-  }
-  .tp-suggestions {
-    position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
-    display: none; max-height: 360px; max-height: min(360px, 52dvh);
-    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
-    background: #fff; border: 1px solid #d1d5db; border-top: 0;
-    border-radius: 0 0 10px 10px; box-shadow: 0 12px 24px rgba(15,23,42,.12);
-  }
+  .tp-search-report-body { padding: 24px; color: #172b3a; background: #f3f6f8; font-weight: 400; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  .report-search-mode { max-width: 1120px; margin: auto; border-radius: 20px; border-color: #dbe5e9; padding: 28px; }
+  .report-search-mode .report-header { display: block; text-align: center; border: 0; margin-bottom: 24px; }
+  .report-search-mode h1 { color: #123f4d; font-size: clamp(23px, 4dvw, 32px); overflow-wrap: anywhere; }
+  .tp-report-intro { margin: 10px 0; color: #435d6b; line-height: 1.9; font-size: 15px; }
+  .tp-report-date { color: #536974; font-size: 13px; line-height: 1.8; }
+  .tp-search-wrap { width: 100%; max-width: 700px; margin: 0 auto 24px; }
+  .tp-search-label { display: block; margin-bottom: 10px; font-size: 16px; font-weight: 700; }
+  .tp-search-input { width: 100%; min-height: 52px; padding: 14px 16px; font: inherit; font-size: 16px; border: 2px solid #8faab5; border-radius: 12px; background: white; color: #172b3a; }
+  .tp-search-input:focus { border-color: #087f80; outline: 3px solid #c2ece6; outline-offset: 2px; }
+  .tp-search-hint { font-size: 14px; color: #536974; line-height: 1.8; margin: 10px 0; }
+  .tp-suggestions { display: none; max-height: min(360px, 48dvh); overflow-y: auto; border: 1px solid #cfdee3; border-radius: 12px; margin-top: 10px; background: white; overscroll-behavior: contain; }
   .tp-suggestions.open { display: block; }
-  .tp-suggestion {
-    min-height: 44px; padding: 12px 16px; cursor: pointer;
-    border-bottom: 1px solid #f3f4f6;
-    font-size: 16px; font-weight: 700; color: #111827;
-    outline: none; transition: background .1s, box-shadow .1s;
-  }
+  .tp-suggestion { min-height: 44px; padding: 14px; border-bottom: 1px solid #e7eef1; cursor: pointer; overflow-wrap: anywhere; }
   .tp-suggestion:last-child { border-bottom: 0; }
-  .tp-suggestion:hover, .tp-suggestion.active, .tp-suggestion[aria-selected="true"] {
-    background: #eff6ff; box-shadow: inset -3px 0 #2563eb;
-  }
-  @media (forced-colors: active) {
-    .tp-search-input:focus,
-    .tp-suggestion.active,
-    .tp-suggestion[aria-selected="true"] {
-      outline: 2px solid CanvasText; outline-offset: 2px;
-    }
-  }
-  .tp-suggestion-name { font-weight: 900; }
-  .tp-suggestion-meta {
-    margin-top: 3px; color: #64748b; font-size: 13px; font-weight: 700;
-  }
-  .tp-dismissed-badge {
-    display: inline-block; margin-right: 8px; padding: 2px 12px;
-    border-radius: 999px; background: #fef2f2; border: 1px solid #fecaca;
-    color: #b91c1c; font-size: 12px; font-weight: 900; line-height: 1.7;
-    vertical-align: middle; white-space: nowrap;
-  }
-  .tp-empty-search {
-    padding: 15px 16px; color: #475569;
-    font-size: 14px; font-weight: 700; text-align: center;
-  }
+  .tp-suggestion:hover, .tp-suggestion.active, .tp-suggestion[aria-selected="true"] { background: #e7f5f1; box-shadow: inset -3px 0 #087f80; }
+  .tp-suggestion-name { font-weight: 700; line-height: 1.8; }
+  .tp-suggestion-meta { font-size: 13px; color: #536974; margin-top: 4px; line-height: 1.7; }
+  .tp-dismissed-badge { display: inline-block; margin-inline-start: 6px; border: 1px solid #efb7b7; border-radius: 999px; padding: 2px 10px; color: #9d2222; background: #fff0f0; font-size: 12px; line-height: 1.8; vertical-align: middle; }
+  .tp-empty-search { padding: 16px; color: #536974; }
+  .tp-student-card { display: none; max-width: 700px; margin: auto; }
+  .tp-student-card.visible { display: block; }
+  .tp-student-card table { width: 100%; min-width: 0; table-layout: fixed; font-weight: 400; }
+  .tp-student-card td, .tp-student-card th { overflow-wrap: anywhere; }
+  .tp-details-btn, .tp-modal-close { min-height: 44px; max-width: 100%; touch-action: manipulation; padding: 10px 16px; border: 1px solid #087f80; border-radius: 10px; background: #087f80; color: white; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 700; white-space: normal; }
+  .tp-details-btn:hover, .tp-modal-close:hover { background: #076366; }
+  .tp-details-btn:focus-visible, .tp-modal-close:focus-visible { outline: 3px solid #287bab; outline-offset: 3px; }
+  .tp-modal-overlay { position: fixed; inset: 0; z-index: 100; display: none; padding: 16px; background: #17333ec9; overflow: hidden; }
+  .tp-modal-overlay.open { display: flex; }
+  .tp-modal { width: 100%; max-width: 1120px; min-width: 0; max-height: 100%; margin: auto; padding: 0 24px 24px; background: #fff; border-radius: 18px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .tp-modal:focus { outline: none; }
+  .tp-modal-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 0; margin-bottom: 18px; border-bottom: 1px solid #dbe5e9; background: white; }
+  .tp-modal-header h2 { min-width: 0; margin: 0; font-size: clamp(17px, 3dvw, 23px); line-height: 1.6; overflow-wrap: anywhere; }
+  .tp-modal-close { flex-shrink: 0; }
+  .tp-report-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tp-summary-item { min-width: 0; padding: 18px; background: #f2f7f8; border: 1px solid #dbe5e9; border-radius: 14px; overflow-wrap: anywhere; }
+  .tp-summary-item strong { display: block; font-size: 20px; color: #123f4d; line-height: 1.6; }
+  .tp-summary-item:first-child { background: #e5f5ef; border-color: #b1d9c9; }
+  .tp-summary-item:first-child strong { font-size: 32px; }
+  .tp-summary-label { display: block; font-size: 13px; color: #435d6b; margin-bottom: 6px; }
+  .tp-report-notice { padding: 12px 16px; margin: 10px 0 20px; border: 1px solid #dbe5e9; border-radius: 12px; background: #f7fafb; font-size: 14px; line-height: 1.9; overflow-wrap: anywhere; }
+  .tp-report-notice.is-dismissed { color: #8b2424; background: #fff3f3; border-color: #eec2c2; }
+  .tp-details-section { min-width: 0; margin: 28px 0 0; scroll-margin-top: 90px; }
+  .tp-details-section h3 { font-size: 20px; line-height: 1.7; color: #123f4d; margin: 0 0 6px; }
+  .tp-section-help { margin: 0 0 14px; color: #536974; font-size: 14px; line-height: 1.8; }
+  .tp-details-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 14px; font-weight: 400; border: 1px solid #dbe5e9; border-radius: 12px; }
+  .tp-details-table th, .tp-details-table td { padding: 13px 10px; border: 0; border-bottom: 1px solid #e4ecef; text-align: right; line-height: 1.9; vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
+  .tp-details-table th { background: #edf4f6; color: #314f5e; font-weight: 700; }
+  .tp-details-table tr:last-child td { border-bottom: 0; }
+  .tp-details-table tr:nth-child(even) { background: #f9fbfc; }
+  .tp-grades-table th:first-child { width: 26%; }
+  .tp-grades-table th:last-child { width: 27%; }
+  .tp-logs-table th:nth-child(2) { width: 35%; }
   .tp-mobile-field-label { display: none; }
   .tp-mobile-field-value { min-width: 0; }
-
-  .tp-student-card {
-    display: none; width: 100%; max-width: 760px;
-    margin: 0 auto; padding: 0;
-    overflow-x: auto; overflow-y: hidden;
-    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
-    overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch;
-  }
-  .tp-student-card.visible { display: block; }
-  .tp-student-card table { margin: 0; border: 0; }
-  .tp-student-card th, .tp-student-card td {
-    border: 0; border-bottom: 1px solid #f3f4f6;
-  }
-  .tp-student-card tr:last-child th,
-  .tp-student-card tr:last-child td { border-bottom: 0; }
-
-  .tp-details-cell { text-align: center; white-space: nowrap; }
-  .tp-details-btn, .tp-modal-close {
-    min-height: 44px; touch-action: manipulation;
-    background: #111827; color: #fff; border: 0; cursor: pointer;
-    font-family: inherit; font-weight: 800;
-  }
-  .tp-details-btn { padding: 9px 17px; border-radius: 7px; font-size: 14px; }
-  .tp-modal-close { padding: 8px 15px; border-radius: 8px; font-size: 14px; }
-  .tp-details-btn:hover, .tp-modal-close:hover { background: #1f2937; }
-  .tp-details-btn:focus-visible, .tp-modal-close:focus-visible {
-    outline: 3px solid #60a5fa; outline-offset: 2px;
-  }
-  .tp-modal-overlay {
-    position: fixed; inset: 0; z-index: 100;
-    display: none; align-items: flex-start; justify-content: center;
-    padding: 20px 16px; padding: clamp(8px, 2.5dvw, 20px);
-    overflow: hidden; overscroll-behavior: contain;
-    background: rgba(15,23,42,.55);
-  }
-  .tp-modal-overlay.open { display: flex; }
-  .tp-modal {
-    width: 100%; width: min(100%, 1180px); max-width: 1180px;
-    max-height: calc(100% - 40px);
-    max-height: calc(100dvh - clamp(16px, 5dvw, 40px));
-    margin: auto; padding: 22px; padding: clamp(14px, 2.4dvw, 22px);
-    padding-top: max(clamp(14px, 2.4dvw, 22px), env(safe-area-inset-top, 0px));
-    padding-right: max(clamp(14px, 2.4dvw, 22px), env(safe-area-inset-right, 0px));
-    padding-bottom: max(clamp(14px, 2.4dvw, 22px), env(safe-area-inset-bottom, 0px));
-    padding-left: max(clamp(14px, 2.4dvw, 22px), env(safe-area-inset-left, 0px));
-    overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
-    background: #fff; border-radius: 14px;
-    box-shadow: 0 24px 60px rgba(15,23,42,.25);
-  }
-  .tp-modal:focus { outline: none; }
-  .tp-modal-header {
-    position: sticky; top: 0; z-index: 2;
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 12px; margin: 0 0 18px; padding: 2px 0 12px;
-    border-bottom: 2px solid #111827; background: #fff;
-  }
-  .tp-modal-header h2 {
-    min-width: 0; margin: 0; color: #111827;
-    font-size: 21px; font-weight: 900; overflow-wrap: anywhere;
-  }
-  .tp-details-section {
-    max-width: 100%; margin-bottom: 20px; overflow-x: auto;
-    overscroll-behavior-inline: contain; -webkit-overflow-scrolling: touch;
-  }
-  .tp-details-section:last-child { margin-bottom: 0; }
-  .tp-details-section h3 {
-    margin: 0 0 10px; padding-right: 9px;
-    border-right: 4px solid #111827;
-    color: #111827; font-size: 17px; font-weight: 900;
-  }
-  .tp-details-table {
-    width: max-content; min-width: 100%;
-    border-collapse: collapse; table-layout: auto;
-    font-size: 14px; font-weight: 700;
-  }
-  .tp-details-table th, .tp-details-table td {
-    padding: 8px 10px; border: 1px solid #d1d5db;
-    text-align: center; vertical-align: middle;
-    line-height: 1.6; white-space: normal;
-    word-break: normal; overflow-wrap: normal; hyphens: none;
-  }
-  .tp-details-table th { background: #f3f4f6; color: #111827; font-weight: 900; }
-  .tp-details-table tr:nth-child(even) { background: #fafafa; }
-  .tp-grades-table th:nth-child(1), .tp-grades-table td:nth-child(1) { min-width: 170px; }
-  .tp-logs-table th:nth-child(2), .tp-logs-table td:nth-child(2) { min-width: 300px; }
-  .tp-empty-row td {
-    padding: 16px !important; color: #64748b; text-align: center !important;
-  }
-  .tp-error-row td { color: #b91c1c; background: #fef2f2; }
-
-  @media screen and (max-width: 960px) {
-    .tp-modal-header h2 { font-size: 17px; font-size: clamp(17px, 3dvw, 20px); }
-    .tp-details-table { font-size: 13px; }
-    .tp-details-table th, .tp-details-table td { padding: 7px 8px; }
-  }
-
+  .tp-event-title { display: block; font-weight: 700; color: #172b3a; margin-bottom: 4px; }
+  .tp-event-exam { display: block; font-size: 12px; color: #536974; margin-top: 5px; }
+  .tp-effect { display: inline-block; max-width: 100%; border-radius: 8px; padding: 2px 8px; background: #eef3f5; font-weight: 700; }
+  .tp-effect-add, .tp-effect-return-balance, .tp-effect-chapter-start { background: #e5f5ef; color: #176345; }
+  .tp-effect-deduct, .tp-effect-dismiss { background: #fff0ed; color: #a0382d; }
+  .tp-empty-row td { padding: 20px; color: #536974; text-align: center; }
+  .tp-error-row td { color: #a0382d; }
+  @media (forced-colors: active) { .tp-search-input:focus, .tp-suggestion.active { outline: 2px solid CanvasText; outline-offset: 2px; } }
+  @media screen and (max-width: 960px) { .tp-modal { padding-inline: 16px; } .tp-details-table { font-size: 13px; } }
   @media screen and (max-width: 720px) {
-    .tp-search-report-body { padding: 0; background: #fff; }
-    .report-search-mode {
-      min-height: 100%; min-height: 100dvh;
-      padding: 12px; border: 0; border-radius: 0; box-shadow: none;
-      padding-top: max(12px, env(safe-area-inset-top, 0px));
-      padding-right: max(12px, env(safe-area-inset-right, 0px));
-      padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
-      padding-left: max(12px, env(safe-area-inset-left, 0px));
-    }
-    .report-search-mode .report-header {
-      align-items: flex-start; margin-bottom: 12px; padding-bottom: 9px;
-    }
-    .tp-search-wrap { margin-bottom: 16px; }
-    .tp-search-label { font-size: 13px; }
-    .tp-search-input { padding: 13px 12px; font-size: 16px; border-radius: 9px; }
-    .tp-suggestions { max-height: 320px; max-height: min(320px, 48dvh); }
-    .tp-suggestion { padding: 11px 12px; font-size: 15px; }
-    .tp-suggestion-meta { font-size: 12px; line-height: 1.6; }
-
-    .tp-student-card { overflow: visible; border: 0; background: transparent; }
-    .tp-student-card table,
-    .tp-student-card tbody,
-    .tp-student-card tr { display: block; width: 100%; min-width: 0; }
-    .tp-student-card thead,
-    .tp-details-table thead {
-      position: absolute; width: 1px; height: 1px;
-      margin: -1px; padding: 0; overflow: hidden;
-      clip: rect(0, 0, 0, 0); clip-path: inset(50%);
-      white-space: nowrap; border: 0;
-    }
-    .tp-student-card tr {
-      padding: 4px 12px; overflow: hidden;
-      background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
-      box-shadow: 0 5px 16px rgba(15,23,42,.05);
-    }
-    .tp-student-card td,
-    .tp-details-table tr:not(.tp-empty-row) td {
-      display: grid; grid-template-columns: minmax(96px, 38%) minmax(0, 1fr);
-      align-items: start; gap: 10px; width: 100%; min-width: 0 !important;
-      min-height: 44px; padding: 10px 4px;
-      border: 0; border-bottom: 1px solid #eef2f7;
-      text-align: right; white-space: normal; overflow-wrap: anywhere;
-    }
-    .tp-student-card td:last-child,
-    .tp-details-table tr:not(.tp-empty-row) td:last-child { border-bottom: 0; }
-    .tp-mobile-field-label {
-      display: block; min-width: 0;
-      color: #475569; font-size: 12px; font-weight: 900;
-      line-height: 1.6; text-align: right; overflow-wrap: anywhere;
-    }
-    .tp-mobile-field-value {
-      display: block; min-width: 0;
-      line-height: 1.65; text-align: right; overflow-wrap: anywhere;
-    }
-    .tp-details-cell { white-space: normal; }
-    .tp-details-cell .tp-mobile-field-value { width: 100%; }
-    .tp-details-btn { width: 100%; min-height: 44px; padding: 10px 12px; }
-
-    .tp-modal-overlay { padding: 0; align-items: stretch; }
-    .tp-modal {
-      width: 100%; max-width: none;
-      min-height: 100%; max-height: 100%;
-      min-height: 100dvh; max-height: 100dvh;
-      margin: 0; padding: 12px; border-radius: 0; box-shadow: none;
-      padding-top: max(12px, env(safe-area-inset-top, 0px));
-      padding-right: max(12px, env(safe-area-inset-right, 0px));
-      padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
-      padding-left: max(12px, env(safe-area-inset-left, 0px));
-    }
-    .tp-modal-header { gap: 8px; margin-bottom: 14px; padding: 4px 0 10px; }
-    .tp-modal-header h2 { line-height: 1.55; }
-    .tp-modal-close { flex: 0 0 auto; min-height: 44px; padding: 8px 12px; }
-    .tp-dismissed-badge { margin-right: 5px; padding-inline: 8px; }
-    .tp-details-section { margin-bottom: 18px; overflow: visible; }
-    .tp-details-section h3 { font-size: 15px; line-height: 1.6; }
-
-    .tp-details-table { display: block; width: 100%; min-width: 0; background: transparent; }
-    .tp-details-table tbody { display: grid; gap: 10px; width: 100%; }
-    .tp-details-table tr:not(.tp-empty-row) {
-      display: block; width: 100%; min-width: 0;
-      padding: 4px 10px; overflow: hidden;
-      background: #fff !important; border: 1px solid #e5e7eb; border-radius: 12px;
-      box-shadow: 0 3px 12px rgba(15,23,42,.04);
-    }
-    .tp-details-table tr:not(.tp-empty-row) td {
-      font-size: 13px; line-height: 1.65;
-    }
-    .tp-details-table .tp-empty-row { display: block; width: 100%; }
-    .tp-details-table .tp-empty-row td {
-      display: block; width: 100%;
-      padding: 14px !important; border: 1px dashed #d1d5db; border-radius: 10px;
-      background: #f8fafc; text-align: center !important;
-    }
-    .tp-details-table .tp-error-row td { background: #fef2f2; border-color: #fecaca; }
+    .tp-search-report-body { padding: 12px; padding-top: max(12px, env(safe-area-inset-top, 0px)); padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+    .report-search-mode { padding: 18px 14px; }
+    .tp-modal-overlay { padding: 0; }
+    .tp-modal { max-height: 100%; height: 100%; border-radius: 0; padding: 0 12px max(16px, env(safe-area-inset-bottom, 0px)); }
+    .tp-modal-header { padding-top: max(12px, env(safe-area-inset-top, 0px)); gap: 8px; }
+    .tp-modal-close { padding-inline: 10px; }
+    .tp-report-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .tp-summary-item { padding: 12px; }
+    .tp-summary-item:first-child { grid-column: 1 / -1; }
+    .tp-summary-item strong { font-size: 16px; }
+    .tp-details-table, .tp-details-table tbody, .tp-details-table tr, .tp-student-card table, .tp-student-card tbody, .tp-student-card tr { display: block; width: 100%; min-width: 0; }
+    .tp-details-table, .tp-student-card table { border: 0; background: transparent; }
+    .tp-details-table thead, .tp-student-card thead { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .tp-details-table tr, .tp-student-card tr { border: 1px solid #dbe5e9; border-radius: 12px; margin-bottom: 12px; padding: 6px 12px; background: white; }
+    .tp-details-table tr:not(.tp-empty-row) td, .tp-student-card td { display: grid; grid-template-columns: minmax(96px, 38%) minmax(0, 1fr); gap: 10px; width: 100%; min-width: 0; min-height: 44px; padding: 10px 0; border: 0; border-bottom: 1px solid #e4ecef; }
+    .tp-mobile-field-label { display: block; color: #536974; font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+    .tp-mobile-field-value { display: block; overflow-wrap: anywhere; }
+    .tp-details-table tr:last-child td { border-bottom: 1px solid #e4ecef; }
+    .tp-details-table tr td:last-child, .tp-student-card td:last-child { border-bottom: 0; }
   }
-
-  @media screen and (max-width: 420px) {
-    .report-search-mode {
-      padding: 10px;
-      padding-top: max(10px, env(safe-area-inset-top, 0px));
-      padding-right: max(10px, env(safe-area-inset-right, 0px));
-      padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
-      padding-left: max(10px, env(safe-area-inset-left, 0px));
-    }
-    .tp-search-input { padding-inline: 10px; }
-    .tp-student-card td,
-    .tp-details-table tr:not(.tp-empty-row) td {
-      grid-template-columns: minmax(88px, 40%) minmax(0, 1fr); gap: 8px;
-    }
-    .tp-modal {
-      padding: 10px;
-      padding-top: max(10px, env(safe-area-inset-top, 0px));
-      padding-right: max(10px, env(safe-area-inset-right, 0px));
-      padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
-      padding-left: max(10px, env(safe-area-inset-left, 0px));
-    }
-    .tp-modal-close { font-size: 13px; padding-inline: 10px; }
-  }
-
-  @media screen and (max-height: 520px) and (orientation: landscape) {
-    .tp-suggestions { max-height: 180px; max-height: min(180px, 42dvh); }
-    .tp-modal-header { margin-bottom: 10px; }
-  }
+  @media screen and (max-width: 420px) { .tp-report-summary { grid-template-columns: minmax(0, 1fr); } .tp-summary-item:first-child { grid-column: auto; } .tp-details-table tr:not(.tp-empty-row) td { grid-template-columns: minmax(76px, 32%) minmax(0, 1fr); gap: 8px; } }
 `;
 
 const DETAILS_MODAL_HTML = `
 <div class="tp-search-wrap">
-  <label class="tp-search-label" for="tpStudentSearch">البحث عن طالب داخل التقرير</label>
-  <input type="text" id="tpStudentSearch" class="tp-search-input" autocomplete="off" placeholder="اكتب اسم الطالب الثنائي فما فوق (مثال: محمد علي)" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tpSuggestions" aria-describedby="tpSearchHint">
+  <label class="tp-search-label" for="tpStudentSearch">ابحث عن اسمك</label>
+  <input type="text" id="tpStudentSearch" class="tp-search-input" autocomplete="off" placeholder="اكتب اسمك واسم أبيك" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="tpSuggestions" aria-describedby="tpSearchHint">
   <div id="tpSuggestions" class="tp-suggestions" role="listbox" aria-label="الطلاب المطابقون"></div>
-  <p class="tp-search-hint" id="tpSearchHint" role="status" aria-live="polite">اكتب كلمتين على الأقل (الاسم واسم الأب) لعرض قائمة الطلاب المطابقين.</p>
+  <p class="tp-search-hint" id="tpSearchHint" role="status" aria-live="polite">اكتب اسمك واسم أبيك، ثم اختر اسمك الكامل من النتائج.</p>
 </div>
-
 <div id="tpStudentCard" class="tp-student-card" aria-live="polite"></div>
-
 <div id="tpDetailsModal" class="tp-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="tpModalTitle" aria-hidden="true">
   <div class="tp-modal" role="document" tabindex="-1">
     <div class="tp-modal-header">
-      <h2 id="tpModalTitle"><span id="tpModalTitleText">تفاصيل الطالب</span> <span class="tp-dismissed-badge" id="tpModalDismissedBadge" style="display:none">مفصول</span></h2>
-      <button type="button" class="tp-modal-close" id="tpModalClose">إغلاق</button>
+      <h2 id="tpModalTitle"><span id="tpModalTitleText">درجاتك وفرصك</span> <span class="tp-dismissed-badge" id="tpModalDismissedBadge" style="display:none">مفصول</span></h2>
+      <button type="button" class="tp-modal-close" id="tpModalClose">رجوع للبحث</button>
     </div>
-    <div class="tp-details-section">
-      <h3 id="tpGradesSectionTitle">كل الامتحانات</h3>
-      <table class="tp-details-table tp-grades-table" role="table" aria-label="درجات الطالب">
-        <thead>
-          <tr role="row">
-            <th scope="col" role="columnheader">الامتحان</th>
-            <th scope="col" role="columnheader">النوع</th>
-            <th scope="col" role="columnheader">التاريخ</th>
-            <th scope="col" role="columnheader">الدرجة</th>
-            <th scope="col" role="columnheader">الامتحان من</th>
-            <th scope="col" role="columnheader">الحالة</th>
-          </tr>
-        </thead>
-        <tbody id="tpGradesBody"></tbody>
-      </table>
-    </div>
-    <div class="tp-details-section" id="tpLogsSection">
-      <h3 id="tpLogsSectionTitle">سجل حركات الفرص</h3>
-      <table class="tp-details-table tp-logs-table" role="table" aria-label="سجل حركات الفرص">
-        <thead>
-          <tr role="row">
-            <th scope="col" role="columnheader">نوع الحركة</th>
-            <th scope="col" role="columnheader">السبب</th>
-            <th scope="col" role="columnheader">العدد المسجل</th>
-            <th scope="col" role="columnheader">تاريخ الحركة</th>
-            <th scope="col" role="columnheader">الامتحان</th>
-          </tr>
-        </thead>
+    <div id="tpStudentOverview"></div>
+    <section class="tp-details-section" id="tpLogsSection" aria-labelledby="tpLogsSectionTitle">
+      <h3 id="tpLogsSectionTitle">كيف تغيّرت فرصك؟</h3>
+      <p class="tp-section-help">من الأقدم إلى الأحدث. «أصبح الرصيد» يعني بداية رصيد جديد، وليس إضافة هذا العدد إلى رصيدك السابق.</p>
+      <table class="tp-details-table tp-logs-table" role="table" aria-label="تغيّر فرص الطالب">
+        <thead><tr role="row">
+          <th scope="col" role="columnheader">التاريخ</th>
+          <th scope="col" role="columnheader">ماذا حدث؟</th>
+          <th scope="col" role="columnheader">التغيير في الفرص</th>
+          <th scope="col" role="columnheader">الرصيد بعد الحركة</th>
+        </tr></thead>
         <tbody id="tpLogsBody"></tbody>
       </table>
-    </div>
+      <p class="tp-section-help">إذا ظهر «غير مسجّل»، فهذا يعني أن الرصيد بعد تلك الحركة غير محفوظ في السجل القديم. فرصك المتبقية معروضة أعلى الصفحة.</p>
+    </section>
+    <section class="tp-details-section" aria-labelledby="tpGradesSectionTitle">
+      <h3 id="tpGradesSectionTitle">درجاتك في الامتحانات</h3>
+      <p class="tp-section-help">الامتحان الذي لا توجد لك درجة فيه يظهر «غياب». أثره على الفرص مبيّن بجانبه حسب سجلّك.</p>
+      <table class="tp-details-table tp-grades-table" role="table" aria-label="درجات الطالب">
+        <thead><tr role="row">
+          <th scope="col" role="columnheader">الامتحان</th>
+          <th scope="col" role="columnheader">التاريخ</th>
+          <th scope="col" role="columnheader">درجتك</th>
+          <th scope="col" role="columnheader">النتيجة</th>
+          <th scope="col" role="columnheader">أثره على فرصك</th>
+        </tr></thead>
+        <tbody id="tpGradesBody"></tbody>
+      </table>
+    </section>
   </div>
 </div>
 `;
@@ -877,6 +656,12 @@ const DETAILS_MODAL_JS = `
     try {
       return d.toLocaleDateString('ar-IQ-u-nu-latn', {day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Baghdad'});
     } catch(e){ return esc(s); }
+  }
+
+  function fmtDateTime(s){
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return 'غير مسجّل';
+    return esc(d.toLocaleString('ar-IQ-u-nu-latn', {timeZone:'Asia/Baghdad',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}));
   }
 
   function mobileCell(label, valueHtml, extraClass){
@@ -956,7 +741,7 @@ const DETAILS_MODAL_JS = `
       var s = currentMatches[i];
       html += '<div class="tp-suggestion" id="tpSuggestion-' + i + '" role="option" aria-selected="false" data-idx="' + i + '">'
         + '<div class="tp-suggestion-name">' + esc(s.name) + ' ' + dismissedBadgeHtml(s) + '</div>'
-        + '<div class="tp-suggestion-meta">الدورة: ' + esc(s.courseName || '—') + ' · الفرص: ' + fmtNum(s.opportunities) + (isDismissed(s) ? ' · الطالب مفصول' : '') + '</div>'
+        + '<div class="tp-suggestion-meta">' + (s.code ? esc(s.code) + ' · ' : '') + 'الدورة: ' + esc(s.courseName || '—') + ' · الفرص: ' + fmtNum(s.opportunities) + (isDismissed(s) ? ' · الطالب مفصول' : '') + '</div>'
         + '</div>';
     }
     if (totalMatches > limit) {
@@ -1002,8 +787,9 @@ const DETAILS_MODAL_JS = `
     clearTimeout(debounceTimer);
     searchInput.value = student.name;
     hideSuggestions();
-    hintEl.textContent = 'تم اختيار: ' + student.name + (isDismissed(student) ? ' — الطالب مفصول' : '') + ' — اضغط زر «إظهار التفاصيل» لعرض درجاته وسجل فرصه.';
+    hintEl.textContent = 'تم اختيار: ' + student.name + '. يمكنك الرجوع للبحث عن اسم آخر.';
     renderStudentCard(student);
+    showDetails(student.id, student.name);
   }
 
   function handleSearchInput(){
@@ -1014,7 +800,7 @@ const DETAILS_MODAL_JS = `
       hideSuggestions();
       cardEl.classList.remove('visible');
       cardEl.innerHTML = '';
-      hintEl.textContent = 'اكتب كلمتين على الأقل (الاسم واسم الأب) لعرض قائمة الطلاب المطابقين.';
+      hintEl.textContent = 'اكتب اسمك واسم أبيك، ثم اختر اسمك الكامل.';
       return;
     }
 
@@ -1026,7 +812,7 @@ const DETAILS_MODAL_JS = `
       return;
     }
 
-    hintEl.textContent = 'البحث يتجاهل اختلافات الكتابة العربية الشائعة، مع بقاء شرط الاسم الثنائي أو أكثر.';
+    hintEl.textContent = 'اختر اسمك الكامل من النتائج.';
 
     var matches = STUDENTS.filter(function(s){
       return matchesQuery(s, q);
@@ -1037,82 +823,70 @@ const DETAILS_MODAL_JS = `
 
   function showDetails(studentId, studentLabel){
     var data = DATA[studentId];
+    var student = STUDENTS.find(function(s){ return String(s.id) === String(studentId); }) || {};
+    var snapshot = data && data.studentSnapshot;
+    var balance = snapshot ? snapshot.opportunities : student.opportunities;
+    var status = snapshot ? snapshot.status : student.status;
     var badgeEl = document.getElementById('tpModalDismissedBadge');
-    var titleTextEl = document.getElementById('tpModalTitleText');
+    var overview = document.getElementById('tpStudentOverview');
     var gradesTitleEl = document.getElementById('tpGradesSectionTitle');
-    var dismissed = false;
-    for (var i = 0; i < STUDENTS.length; i++) {
-      if (STUDENTS[i] && String(STUDENTS[i].id) === String(studentId)) {
-        dismissed = isDismissed(STUDENTS[i]);
-        break;
-      }
+    if (badgeEl) badgeEl.style.display = status === 'مفصول' ? '' : 'none';
+    if (titleTextEl) titleTextEl.textContent = studentLabel || student.name || 'درجاتك وفرصك';
+    if (gradesTitleEl) gradesTitleEl.textContent = data && data.activeChapterName ? 'درجاتك — ' + data.activeChapterName : 'درجاتك في الامتحانات';
+    document.getElementById('tpLogsSectionTitle').textContent = data && data.activeChapterName ? 'كيف تغيّرت فرصك؟ — ' + data.activeChapterName : 'كيف تغيّرت فرصك؟';
+    if (overview) {
+      var statusHelp = status === 'مفصول'
+        ? 'حالتك: مفصول. تواصل مع مسؤول الفرص لحل سبب الفصل والعودة للدراسة.'
+        : status === 'نشط' && balance !== null && balance !== undefined && balance !== '' && Number(balance) === 0
+          ? 'حالتك: مستمر بالدراسة، لكن لم تبقَ لك فرص. الوصول إلى صفر وحده لا يعني الفصل؛ مخالفة جديدة وأنت بلا فرص قد تؤدي إلى الفصل.'
+          : 'حالتك: ' + (status === 'نشط' ? 'مستمر بالدراسة' : (status || 'غير مسجّلة')) + '.';
+      overview.innerHTML = '<div class="tp-report-summary">'
+        + '<div class="tp-summary-item"><span class="tp-summary-label">فرصك المتبقية</span><strong>' + fmtNum(balance) + '</strong><span class="tp-summary-label">حسب رصيدك المحفوظ وقت إعداد التقرير</span></div>'
+        + '<div class="tp-summary-item"><span class="tp-summary-label">الفصل الحالي</span><strong>' + esc(data && data.activeChapterName || 'غير محدّد') + '</strong><span class="tp-summary-label">' + esc(student.courseName || '') + '</span></div>'
+        + '<div class="tp-summary-item"><span class="tp-summary-label">بداية حساب فرص هذا الفصل</span><strong>' + (data && data.activeChapterSince ? fmtDate(data.activeChapterSince) : 'التاريخ غير مسجّل') + '</strong><span class="tp-summary-label">تاريخ بدء رصيد الفصل، وقد يختلف عن أول محاضرة أو امتحان</span></div></div>'
+        + '<p class="tp-report-notice' + (status === 'مفصول' ? ' is-dismissed' : '') + '">' + esc(statusHelp) + '</p>'
+        + (snapshot && snapshot.registeredAt ? '<p class="tp-report-date">تاريخ تسجيلك في النظام: ' + fmtDate(snapshot.registeredAt) + '</p>' : '')
+        + (data && data.generatedAt ? '<p class="tp-report-date">بياناتك حتى: ' + fmtDateTime(data.generatedAt) + ' — هذا التقرير نسخة وقت إعداده؛ لا يتحدث بعد نشره.</p>' : '');
     }
-    if (badgeEl) badgeEl.style.display = dismissed ? '' : 'none';
-    // نص العنوان داخل span مستقل حتى لا يمسح textContent شارة «مفصول» المجاورة.
-    if (titleTextEl) {
-      titleTextEl.textContent = 'تفاصيل الطالب' + (studentLabel ? ' · ' + studentLabel : '');
-    }
-    // عنوان قسم الامتحانات: يبين اسم الفصل النشط الحالي عندما تتوفر بياناته،
-    // لأن التقرير يعرض درجات امتحانات الفصل النشط وحدها.
-    if (gradesTitleEl) {
-      gradesTitleEl.textContent = (data && data.activeChapterName)
-        ? 'امتحانات الفصل النشط الحالي (' + data.activeChapterName + ')'
-        : 'كل الامتحانات';
-    }
-    // عنوان قسم السجل: نفس توضيح الفصل النشط لأن حركات الفرص مقيدة به
-    // (خصومات الفصل السابق مخفية وأثرها انمحى بالتسوية عند التحويل).
-    var logsTitleEl = document.getElementById('tpLogsSectionTitle');
-    if (logsTitleEl) {
-      logsTitleEl.textContent = (data && data.activeChapterName)
-        ? 'سجل حركات الفرص — الفصل النشط (' + data.activeChapterName + ')'
-        : 'سجل حركات الفرص';
-    }
-
     if (!data) {
-      gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row" role="row"><td colspan="6" role="cell">تعذر العثور على تفاصيل هذا الطالب داخل الملف. أعد إنشاء التقرير من النظام.</td></tr>';
+      gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row" role="row"><td colspan="5" role="cell">تفاصيل هذا الطالب غير موجودة في هذه النسخة. اطلب نسخة جديدة من الإدارة.</td></tr>';
       logsSection.style.display = 'none';
-    } else if (data.grades && data.grades.length > 0) {
-      gradesBody.innerHTML = data.grades.map(function(g){
-        return '<tr role="row">'
-          + mobileCell('الامتحان', esc(g.examName))
-          + mobileCell('النوع', esc(g.examType))
-          + mobileCell('التاريخ', fmtDate(g.examDate))
-          + mobileCell('الدرجة', fmtNum(g.score))
-          + mobileCell('الامتحان من', fmtNum(g.fullMark))
-          + mobileCell('الحالة', esc(g.status))
-          + '</tr>';
-      }).join('');
     } else {
-      gradesBody.innerHTML = '<tr class="tp-empty-row" role="row"><td colspan="6" role="cell">'
-        + ((data && data.activeChapterName)
-          ? 'لا توجد امتحانات للفصل النشط الحالي لهذا الطالب'
-          : 'لا توجد امتحانات مسجلة لهذا الطالب')
-        + '</td></tr>';
-    }
-
-    var movementLogs = (data && data.opportunityLogs || []).filter(function(l){
-      return l.reason !== null && l.reason !== '';
-    });
-    if (data && movementLogs.length > 0) {
+      gradesBody.innerHTML = data.grades && data.grades.length ? data.grades.map(function(g){
+        var score = g.score === null || g.score === undefined ? '—' : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
+        return '<tr role="row">'
+          + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
+          + mobileCell('التاريخ', fmtDate(g.examDate) || 'غير مسجّل')
+          + mobileCell('درجتك', score)
+          + mobileCell('النتيجة', esc(g.outcome || (g.status === 'درجة' && g.score != null ? 'درجة مسجّلة' : g.status === 'غائب' ? 'غياب' : g.status)))
+          + mobileCell('أثره على فرصك', esc(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.'))
+          + '</tr>';
+      }).join('') : '<tr class="tp-empty-row" role="row"><td colspan="5" role="cell">لا توجد امتحانات في هذا الفصل ضمن التقرير حتى الآن.</td></tr>';
       logsSection.style.display = '';
-      logsBody.innerHTML = movementLogs.map(function(l){
+      var movementLogs = data.opportunityLogs || [];
+      logsBody.innerHTML = movementLogs.length ? movementLogs.map(function(l){
+        var after = l.balanceAfter;
+        if (after == null && ['reset','chapter-start','return-balance'].indexOf(l.movementKind) >= 0) after = l.amount;
+        var change = esc(l.effectText || l.action || 'تحديث مسجّل');
+        if (l.balanceBefore != null && l.balanceAfter != null) change += '<span class="tp-event-exam">من ' + fmtNum(l.balanceBefore) + ' إلى ' + fmtNum(l.balanceAfter) + '</span>';
+        var kind = ['add','deduct','reset','chapter-start','return-balance','return','dismiss'].indexOf(l.movementKind) >= 0 ? l.movementKind : 'other';
         return '<tr role="row">'
-          + mobileCell('نوع الحركة', esc(l.action || '—'))
-          + mobileCell('السبب', esc(l.reason))
-          + mobileCell('العدد المسجل', fmtNum(l.amount))
-          + mobileCell('تاريخ الحركة', fmtDate(l.date))
-          + mobileCell('الامتحان', esc(l.examName || '—'))
+          + mobileCell('التاريخ', fmtDate(l.date) || 'غير مسجّل')
+          + mobileCell('ماذا حدث؟', '<strong class="tp-event-title">' + esc(l.action) + '</strong>' + esc(l.reason || 'السبب غير مسجّل') + (l.examName ? '<span class="tp-event-exam">الامتحان: ' + esc(l.examName) + '</span>' : ''))
+          + mobileCell('التغيير في الفرص', '<span class="tp-effect tp-effect-' + kind + '">' + change + '</span>')
+          + mobileCell('الرصيد بعد الحركة', after == null ? 'غير مسجّل' : fmtNum(after))
           + '</tr>';
-      }).join('');
-    } else {
-      logsSection.style.display = 'none';
+      }).join('') : '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">لا توجد إضافات أو خصومات مسجّلة في هذا الفصل حتى الآن.</td></tr>';
     }
-
-    previouslyFocusedElement = document.activeElement;
-    previousBodyOverflow = document.body.style.overflow;
+    if (!overlay.classList.contains('open')) {
+      previouslyFocusedElement = document.activeElement;
+      previousBodyOverflow = document.body.style.overflow;
+    }
     overlay.setAttribute('aria-hidden', 'false');
     overlay.classList.add('open');
     document.body.style.overflow = 'hidden';
+    var panel = overlay.querySelector('.tp-modal');
+    if (panel) panel.scrollTop = 0;
     setTimeout(function(){ try { closeBtn.focus({ preventScroll: true }); } catch(e){ closeBtn.focus(); } }, 0);
   }
 
@@ -1279,6 +1053,17 @@ export function buildHtml<T>(
   const interactiveMode = Boolean(
     options.studentDetails && options.studentList && options.studentList.length > 0,
   );
+  const reportDetails = interactiveMode ? sanitizeStudentDetailsForHtml(options.studentDetails || {}) : {};
+  // Prefer the per-student database snapshot over the earlier list request.
+  const reportStudents = (options.studentList || []).map(student => {
+    const snapshot = reportDetails[student.id]?.studentSnapshot;
+    return snapshot ? {
+      id: student.id, name: snapshot.name || student.name, code: snapshot.code,
+      courseName: snapshot.courseName || student.courseName,
+      opportunities: snapshot.opportunities, status: snapshot.status,
+    } : student;
+  });
+  const reportHeading = interactiveMode ? "درجاتك وفرصك" : title;
   const bodyClassName = interactiveMode ? "tp-search-report-body" : "";
   const reportClassName = interactiveMode ? "report report-search-mode" : "report";
   const viewportMeta = interactiveMode
@@ -1293,10 +1078,10 @@ export function buildHtml<T>(
     : "";
 
   const detailsDataScript = interactiveMode
-    ? `<script>window.STUDENT_DETAILS=${serializeForInlineScript(options.studentDetails || {})};</script>`
+    ? `<script>window.STUDENT_DETAILS=${serializeForInlineScript(reportDetails)};</script>`
     : "";
   const studentListScript = interactiveMode
-    ? `<script>window.STUDENT_LIST=${serializeForInlineScript(options.studentList || [])};</script>`
+    ? `<script>window.STUDENT_LIST=${serializeForInlineScript(reportStudents)};</script>`
     : "";
   const detailsModalHtml = interactiveMode ? DETAILS_MODAL_HTML : "";
   const detailsModalJs = interactiveMode ? DETAILS_MODAL_JS : "";
@@ -1313,10 +1098,10 @@ export function buildHtml<T>(
           getRowId: options.getRowId,
         })}</tbody></table></div>`;
   const metaLine = interactiveMode
-    ? ""
+    ? '<p class="tp-report-intro">اعرف درجاتك، وفرصك المتبقية، وسبب كل إضافة أو خصم.</p><p class="tp-report-date">هذا التقرير يعرض بياناتك وقت إعداده. للحصول على آخر التغييرات افتح أحدث نسخة تنشرها الإدارة.</p>'
     : `<div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}</div>`;
 
-  return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">${viewportMeta}<title>${escapeHtml(humanizeTeacherProText(documentTitle))}</title><style>
+  return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">${viewportMeta}<title>${escapeHtml(humanizeTeacherProText(interactiveMode && !options.documentTitle ? reportHeading : documentTitle))}</title><style>
   @page { size: A4 ${options.orientation || "portrait"}; margin: 10mm; }
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; }
@@ -1371,7 +1156,7 @@ export function buildHtml<T>(
     th, td { padding: 5px 6px; }
     .tp-modal-overlay, .tp-suggestions { display: none !important; }
   }
-  </style>${printableScript}</head><body class="${bodyClassName}">${printableToolbar}<main class="${reportClassName}"><header class="report-header"><h1>${escapeHtml(humanizeTeacherProText(title))}</h1>${metaLine}</header>${mainTableHtml}${detailsModalHtml}${studentListScript}${detailsDataScript}${detailsModalJs}</main></body></html>`;
+  </style>${printableScript}</head><body class="${bodyClassName}">${printableToolbar}<main class="${reportClassName}"><header class="report-header"><h1>${escapeHtml(humanizeTeacherProText(reportHeading))}</h1>${metaLine}</header>${mainTableHtml}${detailsModalHtml}${studentListScript}${detailsDataScript}${detailsModalJs}</main></body></html>`;
 }
 
 function downloadBlob(content: BlobPart | Blob, fileName: string, mime: string) {
