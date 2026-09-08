@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.manage");
+  const authError = await requirePermission(req, "follow-up.calls.manage");
   if (authError) return authError;
 
   try {
@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.manage");
+  const authError = await requirePermission(req, "follow-up.calls.manage");
   if (authError) return authError;
 
   try {
@@ -237,7 +237,7 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.manage");
+  const authError = await requirePermission(req, "follow-up.calls.manage");
   if (authError) return authError;
 
   try {

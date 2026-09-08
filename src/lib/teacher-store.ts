@@ -1,4 +1,5 @@
 "use client";
+import { setOutboxOwner } from "./outbox-session";
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -2799,11 +2800,13 @@ export const useTeacherStore = create<TeacherState>()(
             authResult.error || authResult.status || "unknown error",
           );
           if (wasAuthenticated) return true;
+          setOutboxOwner(null);
           set({ isAuthenticated: false });
           return false;
         }
 
         if (!authResult.user) {
+          setOutboxOwner(null);
           set({ isAuthenticated: false });
           return false;
         }
@@ -2811,6 +2814,7 @@ export const useTeacherStore = create<TeacherState>()(
         const sessionUser = normalizeAdminAccessUser(
           userFromAuthApi(authResult.user),
         );
+        setOutboxOwner(sessionUser.id);
         const previousUserId = get().currentUserId;
         set((s) => ({
           users: s.users.some((u) => u.id === sessionUser.id)
@@ -2841,6 +2845,7 @@ export const useTeacherStore = create<TeacherState>()(
         const sessionUser = normalizeAdminAccessUser(
           userFromAuthApi(authResult.user),
         );
+        setOutboxOwner(sessionUser.id);
         set((s) => ({
           users: s.users.some((u) => u.id === sessionUser.id)
             ? s.users.map((u) =>
@@ -2879,6 +2884,7 @@ export const useTeacherStore = create<TeacherState>()(
         );
       },
       logout: () => {
+        setOutboxOwner(null);
         void authApi.logout();
         const admin =
           get().users.find((u) => isPrimaryAdminUser(u) && u.active) ||

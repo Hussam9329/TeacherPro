@@ -3,11 +3,12 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
-import { requireAnyPermission, requirePermission, getAuthPrincipal } from '@/lib/server-auth';
+import { requirePermission, getAuthPrincipal } from '@/lib/server-auth';
 import { db } from '@/lib/db';
 import { routeErrorResponse, validationError } from '@/lib/route-helpers';
 import { assertDatabaseSchemaReady } from '@/lib/schema-readiness';
 import { API_RATE_LIMITS, checkApiRateLimit } from '@/lib/api-rate-limit';
+import { syncExamCourseLinks } from '@/lib/exam-course-links';
 import { writeSystemAuditLog } from '@/lib/audit-log-server';
 
 // TxClient is the type passed to db.$transaction callbacks.
@@ -26,7 +27,7 @@ type AnyDelegate = { upsert: (args: any) => Promise<any>; createMany: (args: any
 //    Safe to restore on v4+ databases (restore skips unknown tables).
 //  - v7 (current): operational tables only; restore skips unknown tables.
 // ============================================================================
-const BACKUP_VERSION = 7;
+const BACKUP_VERSION = 8;
 
 const RESTORE_CONFIRMATION_TOKEN = 'RESTORE';
 
@@ -51,13 +52,17 @@ const RESTORE_ORDER = [
   'studentNotes',
   'studentEnrollmentArchives',
   'logs',
+  'logClearBackups',
+  'studentCallHistoryMigrationRuns',
+  'studentCallHistoryBackups',
+  'gradeEntryMissingNotes',
 ] as const;
 
 // ============================================================================
 // GET /api/backup — Export full backup
 // ============================================================================
 export async function GET(req: NextRequest) {
-  const authError = await requireAnyPermission(req, ['backup.view', 'accounts.manage', 'system.settings']);
+  const authError = await requirePermission(req, 'backup.view');
   if (authError) return authError;
 
   const rateLimitError = await checkApiRateLimit(req, API_RATE_LIMITS.backup);
@@ -66,105 +71,25 @@ export async function GET(req: NextRequest) {
   try {
     await assertDatabaseSchemaReady();
 
-    const [
-      courses,
-      chapters,
-      courseChapters,
-      students,
-      exams,
-      examCourses,
-      grades,
-      opportunityLogs,
-      studentLeaves,
-      studentCalls,
-      studentNotes,
-      users,
-      roles,
-      logs,
-      // v5 additions — previously missing from backup
-      studentLeaveGradeBackups,
-      studentEnrollmentArchives,
-      permissionCatalog,
-      gradeSmartNotes,
-    ] = await Promise.all([
-      db.course.findMany(),
-      db.chapter.findMany(),
-      db.courseChapter.findMany(),
-      db.student.findMany(),
-      db.exam.findMany(),
-      db.examCourse.findMany(),
-      db.grade.findMany(),
-      db.opportunityLog.findMany(),
-      db.studentLeave.findMany(),
-      db.studentCall.findMany(),
-      db.studentNote.findMany(),
-      db.appUser.findMany({
-        select: {
-          id: true,
-          username: true,
-          name: true,
-          role: true,
-          roleId: true,
-          permissions: true,
-          active: true,
-          createdAt: true,
-        },
-      }),
-      db.role.findMany(),
-      // Audit logs: previously capped to 500 most recent entries.
-      // This silently lost historical audit trail when restoring from backup.
-      // Now export the full audit log to preserve complete accountability.
-      db.auditLog.findMany({ orderBy: { time: 'asc' } }),
-      // v5 additions
-      db.studentLeaveGradeBackup.findMany(),
-      db.studentEnrollmentArchive.findMany(),
-      db.permissionCatalog.findMany(),
-      db.gradeSmartNote.findMany(),
-    ]);
+    const snapshot = await db.$transaction(async tx => {
+      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+      const result: Record<string, unknown[]> = {};
+      for (const key of RESTORE_ORDER) {
+        const model = MODEL_NAMES[key];
+        const rows = await (tx[model] as unknown as { findMany(): Promise<Record<string, unknown>[]> }).findMany();
+        result[key] = key === 'users' ? rows.map(({ passwordHash: _passwordHash, ...user }) => user) : rows;
+      }
+      return result;
+    }, { isolationLevel: 'RepeatableRead', maxWait: 30_000, timeout: 120_000 });
 
     return NextResponse.json({
       version: BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
-      tableCount: 18,
-      recordCounts: {
-        courses: courses.length,
-        chapters: chapters.length,
-        courseChapters: courseChapters.length,
-        students: students.length,
-        exams: exams.length,
-        examCourses: examCourses.length,
-        grades: grades.length,
-        opportunityLogs: opportunityLogs.length,
-        studentLeaves: studentLeaves.length,
-        studentCalls: studentCalls.length,
-        studentNotes: studentNotes.length,
-        users: users.length,
-        roles: roles.length,
-        logs: logs.length,
-        studentLeaveGradeBackups: studentLeaveGradeBackups.length,
-        studentEnrollmentArchives: studentEnrollmentArchives.length,
-        permissionCatalog: permissionCatalog.length,
-        gradeSmartNotes: gradeSmartNotes.length,
-      },
-      courses,
-      chapters,
-      courseChapters,
-      students,
-      exams,
-      examCourses,
-      grades,
-      opportunityLogs,
-      studentLeaves,
-      studentCalls,
-      studentNotes,
-      users,
-      roles,
-      logs,
-      // v5 additions
-      studentLeaveGradeBackups,
-      studentEnrollmentArchives,
-      permissionCatalog,
-      gradeSmartNotes,
+      scope: 'application-recovery',
+      credentialsIncluded: false,
+      tableCount: RESTORE_ORDER.length,
+      recordCounts: Object.fromEntries(Object.entries(snapshot).map(([key, rows]) => [key, rows.length])),
+      ...snapshot,
     });
   } catch (error) {
     return routeErrorResponse(error, 'تعذر تحميل البيانات');
@@ -307,11 +232,20 @@ export async function POST(req: NextRequest) {
       return validationError('النسخة الاحتياطية لا تحتوي على أي جدول قابل للاستعادة.');
     }
 
+    if (mode === 'replace' && RESTORE_ORDER.some(key => !Array.isArray(backupObj[key]))) {
+      return validationError('استعادة الاستبدال تتطلب نسخة كاملة بالإصدار الحالي وجميع جداولها، حتى الفارغة.');
+    }
+    if (backupVersion >= 8) {
+      const counts = backupObj.recordCounts as Record<string, unknown> | undefined;
+      if (!counts || RESTORE_ORDER.some(key => !Array.isArray(backupObj[key]) || Number(counts[key]) !== (backupObj[key] as unknown[]).length)) {
+        return validationError('أعداد جداول النسخة لا تطابق محتواها؛ أُلغيت الاستعادة.');
+      }
+    }
     // 9. Snapshot current counts (for audit + rollback decision)
     const beforeCounts = await collectTableCounts();
 
     // 10. Execute restore inside a single transaction
-    const result = await executeRestore(tablesToRestore, mode);
+    const result = await executeRestore(tablesToRestore, mode, restoredBy);
 
     // 11. Write audit log (outside the restore transaction)
     try {
@@ -360,26 +294,9 @@ export async function POST(req: NextRequest) {
 
 async function collectTableCounts(): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
-  const queries: Array<[string, Promise<number>]> = [
-    ['roles', db.role.count()],
-    ['users', db.appUser.count()],
-    ['permissionCatalog', db.permissionCatalog.count()],
-    ['courses', db.course.count()],
-    ['chapters', db.chapter.count()],
-    ['courseChapters', db.courseChapter.count()],
-    ['exams', db.exam.count()],
-    ['examCourses', db.examCourse.count()],
-    ['students', db.student.count()],
-    ['gradeSmartNotes', db.gradeSmartNote.count()],
-    ['grades', db.grade.count()],
-    ['opportunityLogs', db.opportunityLog.count()],
-    ['studentLeaves', db.studentLeave.count()],
-    ['studentLeaveGradeBackups', db.studentLeaveGradeBackup.count()],
-    ['studentCalls', db.studentCall.count()],
-    ['studentNotes', db.studentNote.count()],
-    ['studentEnrollmentArchives', db.studentEnrollmentArchive.count()],
-    ['logs', db.auditLog.count()],
-  ];
+  const queries: Array<[string, Promise<number>]> = RESTORE_ORDER.map(key => [
+    key, (db[MODEL_NAMES[key]] as unknown as { count(): Promise<number> }).count(),
+  ]);
 
   const results = await Promise.allSettled(queries.map(([, p]) => p));
   results.forEach((r, i) => {
@@ -399,6 +316,7 @@ type RestoreResult = {
 async function executeRestore(
   tables: Record<string, unknown[]>,
   mode: 'merge' | 'replace',
+  recoveryUserId: string,
 ): Promise<RestoreResult> {
   const inserted: Record<string, number> = {};
   const updated: Record<string, number> = {};
@@ -411,21 +329,16 @@ async function executeRestore(
   // within a table; the transaction still commits if no fatal error).
   await db.$transaction(
     async (tx) => {
-      // Replace mode: truncate tables in reverse FK order (children first)
+      await tx.$executeRaw`SELECT set_config('teacherpro.restore_snapshot', 'on', true)`;
+      await tx.$executeRaw`LOCK TABLE "Student" IN SHARE ROW EXCLUSIVE MODE`;
+      const recoveryUser = await tx.appUser.findUnique({ where: { id: recoveryUserId } });
+      if (!recoveryUser?.active || !recoveryUser.passwordHash) throw new Error('تعذر ضمان حساب الدخول بعد الاستعادة.');
+      const recoveryRole = recoveryUser.roleId ? await tx.role.findUnique({ where: { id: recoveryUser.roleId } }) : null;
+      const currentCredentials = await tx.appUser.findMany({ select: { id: true, passwordHash: true } });
       if (mode === 'replace') {
-        for (const table of [...RESTORE_ORDER].reverse()) {
-          if (!tables[table]) continue;
-          try {
-            await truncateTable(tx, table);
-          } catch (err) {
-            errors.push({
-              table,
-              message: `فشل التفريغ قبل الاستعادة: ${(err as Error).message}`,
-            });
-            // In replace mode, truncation failure is fatal — abort
-            throw err;
-          }
-        }
+        // One closed table list, RESTRICT by default: never cascade into omitted tables.
+        const names = RESTORE_ORDER.map(key => `"${PRISMA_TABLE_NAMES[key]}"`).join(', ');
+        await tx.$executeRaw(Prisma.raw(`TRUNCATE TABLE ${names} RESTART IDENTITY`));
       }
 
       // Insert/upsert in forward FK order (parents first)
@@ -450,6 +363,26 @@ async function executeRestore(
           throw err;
         }
       }
+      // Account recovery is independent of credentials deliberately excluded from export.
+      for (const user of currentCredentials) {
+        const restored = (tables.users || []).find(row => (row as { id?: string }).id === user.id) as { active?: boolean } | undefined;
+        if (user.passwordHash) await tx.appUser.updateMany({ where: { id: user.id }, data: {
+          passwordHash: user.passwordHash,
+          ...(typeof restored?.active === 'boolean' ? { active: restored.active } : {}),
+        } });
+      }
+      if (recoveryRole) await tx.role.upsert({ where: { id: recoveryRole.id }, create: recoveryRole, update: recoveryRole });
+      await tx.appUser.upsert({ where: { id: recoveryUser.id }, create: recoveryUser, update: recoveryUser });
+      for (const row of tables.exams || []) {
+        const exam = row as { id: string; courseIds: string };
+        await syncExamCourseLinks(tx, exam.id, exam.courseIds);
+      }
+      await tx.$executeRaw`
+        SELECT setval('"Student_code_seq"', GREATEST(
+          (SELECT last_value FROM "Student_code_seq"),
+          COALESCE((SELECT MAX(substring("code" from '^BIO-([0-9]+)$')::bigint) FROM "Student"), 1)
+        ), true)
+      `;
     },
     {
       maxWait: 60_000,
@@ -460,18 +393,6 @@ async function executeRestore(
 
   const afterCounts = await collectTableCounts();
   return { inserted, updated, skipped, errors, afterCounts };
-}
-
-async function truncateTable(tx: TxClient, table: string): Promise<void> {
-  // Use raw SQL for TRUNCATE with CASCADE to handle FK constraints
-  // Order is reverse-FK so children are truncated before parents
-  const tableName = PRISMA_TABLE_NAMES[table];
-  if (!tableName) throw new Error(`Unknown table: ${table}`);
-
-  // tableName comes exclusively from the closed PRISMA_TABLE_NAMES mapping.
-  await tx.$executeRaw(
-    Prisma.raw(`TRUNCATE TABLE "${tableName}" RESTART IDENTITY CASCADE;`),
-  );
 }
 
 async function restoreTable(
@@ -572,15 +493,14 @@ async function restoreTable(
         );
         break;
       case 'examCourses':
-        await Promise.all(
-          batch.map((row) =>
-            upsertRecord(tx.examCourse, row as never, mode).then((r) => {
-              if (r === 'inserted') inserted++;
-              else if (r === 'updated') updated++;
-              else skipped++;
-            }),
-          ),
-        );
+        for (const raw of batch) {
+          const row = raw as { id: string; examId: string; courseId: string };
+          if (!row?.id || !row.examId || !row.courseId) throw new Error('رابط امتحان غير صالح.');
+          // Exam INSERT already creates the projection. Restore the original
+          // link ID by its business key instead of colliding with that row.
+          await tx.examCourse.upsert({ where: { examId_courseId: { examId: row.examId, courseId: row.courseId } }, create: row, update: row });
+          updated++;
+        }
         break;
       case 'students':
         await Promise.all(
@@ -681,6 +601,15 @@ async function restoreTable(
           ),
         );
         break;
+      case 'logClearBackups':
+      case 'studentCallHistoryMigrationRuns':
+      case 'studentCallHistoryBackups':
+      case 'gradeEntryMissingNotes':
+        for (const row of batch) {
+          await upsertRecord(tx[MODEL_NAMES[table]] as unknown as AnyDelegate, row as Record<string, unknown>, mode);
+          updated++;
+        }
+        break;
       case 'logs':
         await Promise.all(
           batch.map((row) =>
@@ -720,49 +649,28 @@ const PRISMA_TABLE_NAMES: Record<string, string> = {
   studentNotes: 'StudentNote',
   studentEnrollmentArchives: 'StudentEnrollmentArchive',
   logs: 'AuditLog',
+  logClearBackups: 'LogClearBackup',
+  studentCallHistoryMigrationRuns: 'StudentCallHistoryMigrationRun',
+  studentCallHistoryBackups: 'StudentCallHistoryBackup',
+  gradeEntryMissingNotes: 'GradeEntryMissingNote',
 };
 
-// Generic upsert — uses createMany with skipDuplicates for insert-only,
-// or upsert for merge mode. Falls back to skipDuplicates on P2002.
-async function upsertRecord(
-  delegate: AnyDelegate,
-  row: Record<string, unknown>,
-  _mode: 'merge' | 'replace',
-): Promise<'inserted' | 'updated' | 'skipped'> {
-  if (!row || typeof row !== 'object' || !row.id || typeof row.id !== 'string') {
-    return 'skipped';
-  }
+const MODEL_NAMES = {
+  roles: 'role', users: 'appUser', permissionCatalog: 'permissionCatalog',
+  courses: 'course', chapters: 'chapter', courseChapters: 'courseChapter',
+  exams: 'exam', examCourses: 'examCourse', students: 'student',
+  gradeSmartNotes: 'gradeSmartNote', grades: 'grade', opportunityLogs: 'opportunityLog',
+  studentLeaves: 'studentLeave', studentLeaveGradeBackups: 'studentLeaveGradeBackup',
+  studentCalls: 'studentCall', studentNotes: 'studentNote', studentEnrollmentArchives: 'studentEnrollmentArchive',
+  logs: 'auditLog', logClearBackups: 'logClearBackup',
+  studentCallHistoryMigrationRuns: 'studentCallHistoryMigrationRun',
+  studentCallHistoryBackups: 'studentCallHistoryBackup', gradeEntryMissingNotes: 'gradeEntryMissingNote',
+} as const;
 
-  try {
-    // Try upsert — works for both merge and replace modes
-    await delegate.upsert({
-      where: { id: row.id },
-      update: sanitizeRow(row),
-      create: sanitizeRow(row) as never,
-    });
-    // Prisma upsert doesn't tell us if it was insert or update.
-    // We approximate by counting as 'updated' (covers both insert and update
-    // in upsert semantics — the row exists after the call).
-    return 'updated';
-  } catch (err) {
-    const code = (err as { code?: string }).code;
-    if (code === 'P2002') {
-      // Unique constraint violation on a non-id field — skip
-      return 'skipped';
-    }
-    // For other errors, try createMany with skipDuplicates as fallback
-    try {
-      const r = await delegate.createMany({
-        data: sanitizeRow(row) as never,
-        skipDuplicates: true,
-      });
-      return r.count > 0 ? 'inserted' : 'skipped';
-    } catch (innerErr) {
-      const innerCode = (innerErr as { code?: string }).code;
-      if (innerCode === 'P2002' || innerCode === 'P2003') return 'skipped';
-      throw innerErr;
-    }
-  }
+async function upsertRecord(delegate: AnyDelegate, row: Record<string, unknown>, _mode: 'merge' | 'replace'): Promise<'inserted' | 'updated' | 'skipped'> {
+  if (!row || typeof row !== 'object' || typeof row.id !== 'string' || !row.id) throw new Error('سجل استعادة بلا معرّف صالح.');
+  await delegate.upsert({ where: { id: row.id }, update: sanitizeRow(row), create: sanitizeRow(row) });
+  return 'updated';
 }
 
 // Special-case for users: in merge mode, preserve existing passwordHash
@@ -770,42 +678,16 @@ async function upsertRecord(
 async function upsertUser(
   delegate: AnyDelegate & { findUnique: (args: any) => Promise<any> },
   row: Record<string, unknown>,
-  mode: 'merge' | 'replace',
+  _mode: 'merge' | 'replace',
 ): Promise<'inserted' | 'updated' | 'skipped'> {
-  if (!row || typeof row !== 'object' || !row.id || typeof row.id !== 'string') {
-    return 'skipped';
-  }
-
-  // Strip passwordHash from the row entirely — never restore passwords from backup
-  // (admins must use the password reset flow if they need to recover access).
+  if (!row || typeof row.id !== 'string' || !row.id) throw new Error('حساب استعادة بلا معرّف.');
   const sanitized = sanitizeRow(row);
   delete sanitized.passwordHash;
-
-  if (mode === 'merge') {
-    const existing = await delegate.findUnique({ where: { id: row.id } });
-    if (existing) {
-      // Don't touch passwordHash — keep the current one
-      await delegate.upsert({
-        where: { id: row.id },
-        update: sanitized,
-        create: sanitized as never,
-      });
-      return 'updated';
-    }
-  }
-
-  try {
-    await delegate.upsert({
-      where: { id: row.id },
-      update: sanitized,
-      create: sanitized as never,
-    });
-    return 'inserted';
-  } catch (err) {
-    const code = (err as { code?: string }).code;
-    if (code === 'P2002' || code === 'P2003') return 'skipped';
-    throw err;
-  }
+  const existing = await delegate.findUnique({ where: { id: row.id } });
+  // Accounts without a current credential cannot silently become active.
+  if (!existing?.passwordHash) sanitized.active = false;
+  await delegate.upsert({ where: { id: row.id }, update: sanitized, create: sanitized });
+  return existing ? 'updated' : 'inserted';
 }
 
 // Strip fields that shouldn't be restored or could break Prisma types

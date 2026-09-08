@@ -25,7 +25,7 @@ const reconciliationMigrationName =
 const requiredRuntimeMigrationName =
   "20260828034500_single_dismissal_policy";
 const requiredDatabaseMigrationName =
-  "20260906120000_remove_electronic_correction";
+  "20260908122000_exam_course_consistency";
 const graceTerminationMigrationName =
   "20260822210000_end_grace_on_numeric_grade";
 const initialBridgeMigrationName = "20260601000000_initial_schema_bridge";
@@ -192,8 +192,8 @@ check(
 check(
   examStatsRoute.includes("await assertDatabaseSchemaReady()") &&
     opportunityLogsRoute.includes("await assertDatabaseSchemaReady()") &&
-    clearLogsRoute.includes("await assertDatabaseSchemaReady()") &&
-    restoreLogsRoute.includes("await assertDatabaseSchemaReady()") &&
+    clearLogsRoute.includes("LEDGER_HISTORY_IMMUTABLE") &&
+    restoreLogsRoute.includes("LEDGER_HISTORY_IMMUTABLE") &&
     studentsRoute.includes("await assertDatabaseSchemaReady()") &&
     bulkStudentsRoute.includes("await assertDatabaseSchemaReady()") &&
     !opportunityLogsRoute.includes("$executeRawUnsafe"),

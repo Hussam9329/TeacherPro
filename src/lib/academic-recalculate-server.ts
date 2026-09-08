@@ -169,12 +169,20 @@ function mapOpportunityLog(log: {
   examId: string | null;
   action: string;
   amount: number;
+  requestedAmount?: number | null;
+  appliedAmount?: number | null;
+  balanceBefore?: number | null;
+  balanceAfter?: number | null;
+  reversalOfLogId?: string | null;
+  ledgerVersion?: number | null;
+  settledGradeIds?: string | null;
   reason: string | null;
   date: Date;
   chapterId: string | null;
   chapterNameSnapshot?: string | null;
 }): AcademicOpportunityLog {
   return {
+    ...log,
     id: log.id,
     studentId: log.studentId,
     examId: nullableText(log.examId),
@@ -433,6 +441,13 @@ async function loadAcademicStateForStudents(
         examId: true,
         action: true,
         amount: true,
+        requestedAmount: true,
+        appliedAmount: true,
+        balanceBefore: true,
+        balanceAfter: true,
+        reversalOfLogId: true,
+        ledgerVersion: true,
+        settledGradeIds: true,
         reason: true,
         date: true,
         chapterId: true,

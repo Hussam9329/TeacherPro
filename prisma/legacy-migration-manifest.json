@@ -1,0 +1,25 @@
+{
+  "note": "Applied production-only history; original SQL unavailable in 636 Git commits. Never execute invented substitutes or change production checksums. Current schema is reconciled by new migrations.",
+  "migrations": [
+    {
+      "migration_name": "20260825120000_close_expired_grace_periods",
+      "checksum": "597063e5d2d1339ac53c8bd1471c48581a728444fa206b5de16a00387033c516"
+    },
+    {
+      "migration_name": "20260825220000_restore_natural_grace_windows",
+      "checksum": "15c2d830597deef9a7d8bc8d08b212c49c808e9a7b67d43f5a37079896396765"
+    },
+    {
+      "migration_name": "20260825230000_preserve_grace_history_on_numeric_grade",
+      "checksum": "c4cfe3a255b868992c1877a86ad90ede2bbe9d5d4b014342a5a07920e7a03b88"
+    },
+    {
+      "migration_name": "20260825140000_promote_pending_smart_notes",
+      "checksum": "e0360697b3b790740c8f25f72e8c345c33692c0b30da08a78433f83b339f685c"
+    },
+    {
+      "migration_name": "20260826000000_add_grace_period_start_date",
+      "checksum": "4c94959c1ed917a4af67cb2d40352ccbe70efe80287d8afebf4ae460e7b39017"
+    }
+  ]
+}

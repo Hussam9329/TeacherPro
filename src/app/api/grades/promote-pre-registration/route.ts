@@ -10,7 +10,7 @@ import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { promotePendingPreRegistrationGrades } from "@/lib/pre-registration-grade-promotion-server";
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, "grades.edit");
+  const authError = await requirePermission(req, "system.maintenance");
   if (authError) return authError;
 
   const principal = await getAuthPrincipal(req);

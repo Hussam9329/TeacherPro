@@ -1,3 +1,7 @@
+import { parseCourseIds } from "@/lib/exam-course-links";
+import { splitSelection, studentMatchesExamMainSites } from "@/lib/exam-utils";
+import { baghdadDateKey } from "@/lib/baghdad-time";
+import { normalizeStudentLeave } from "@/lib/academic-engine";
 import type { Prisma } from "@prisma/client";
 import { recalculateStudentsAcademicState } from "@/lib/academic-recalculate-server";
 
@@ -33,7 +37,7 @@ export async function promotePendingPreRegistrationGrades(
     },
     orderBy: [{ attemptedAt: "asc" }, { id: "asc" }],
     take: BATCH_SIZE,
-    include: { exam: { select: { fullMark: true, date: true } } },
+    include: { exam: { select: { fullMark: true, date: true, courseIds: true, mainSite: true } } },
   });
 
   let promoted = 0;
@@ -76,17 +80,42 @@ export async function promotePendingPreRegistrationGrades(
       },
     });
 
-    // Unified rule: adopting a pre-registration numeric grade moves the
-    // student's registration date back to the exam date, ends grace, and
-    // counts the grade officially.
+    const student = await tx.student.findUnique({ where: { id: note.studentId } });
+    const courseIds = parseCourseIds(note.exam.courseIds);
+    const examDay = baghdadDateKey(note.exam.date);
+    const leaves = (await tx.studentLeave.findMany({ where: { studentId: note.studentId } }))
+      .map(leave => normalizeStudentLeave(leave))
+      .filter(leave => leave.leaveType === "exam" ? leave.examId === note.examId : examDay >= leave.dateFrom && examDay <= leave.dateTo);
+    if (
+      !student || student.status !== "نشط" || !courseIds.includes(student.courseId) || leaves.length > 0 ||
+      !studentMatchesExamMainSites(student, splitSelection(note.exam.mainSite || "")) ||
+      (existing && !(existing.status === "قبل تسجيل الطالب" && existing.score === null) &&
+       !(existing.status === "درجة" && existing.score === score))
+    ) {
+      conflicts += 1;
+      await tx.gradeSmartNote.update({
+        where: { id: note.id },
+        data: {
+          status: "CONFLICT",
+          resolution:
+            "لم تُستبدل المحاولة لأن هناك حالة مختلفة محفوظة لهذا الطالب في الامتحان.",
+          resolutionById: actor.id || null,
+          resolutionByName: actor.name || null,
+          resolvedAt: now,
+        },
+      });
+      continue;
+    }
+
+    // Resolve all conflicts before changing the student's accounting window.
+    // Conditional update can move registration backward only, even across notes.
     await tx.student.updateMany({
+      where: { id: note.studentId, createdAt: { gt: note.exam.date } },
+      data: { createdAt: note.exam.date },
+    });
+    await tx.student.update({
       where: { id: note.studentId },
-      data: {
-        createdAt: note.exam.date,
-        accountingGraceDays: 0,
-        gracePeriodStartDate: null,
-        gracePeriodEndedAt: now,
-      },
+      data: { accountingGraceDays: 0, gracePeriodStartDate: null, gracePeriodEndedAt: student.gracePeriodEndedAt || now },
     });
     if (existing?.status === "درجة" && existing.score !== null) {
       await tx.grade.update({
@@ -110,25 +139,6 @@ export async function promotePendingPreRegistrationGrades(
       });
       normalizedExisting += 1;
       affectedStudentIds.push(note.studentId);
-      continue;
-    }
-
-    if (
-      existing &&
-      !(existing.status === "قبل تسجيل الطالب" && existing.score === null)
-    ) {
-      conflicts += 1;
-      await tx.gradeSmartNote.update({
-        where: { id: note.id },
-        data: {
-          status: "CONFLICT",
-          resolution:
-            "لم تُستبدل المحاولة لأن هناك حالة مختلفة محفوظة لهذا الطالب في الامتحان.",
-          resolutionById: actor.id || null,
-          resolutionByName: actor.name || null,
-          resolvedAt: now,
-        },
-      });
       continue;
     }
 

@@ -150,6 +150,8 @@ async function readSessionPayload(req: NextRequest): Promise<SignedSessionPayloa
 export async function getAuthPrincipal(req: NextRequest): Promise<AuthPrincipal | null> {
   const payload = await readSessionPayload(req);
   if (!payload) return null;
+  const expectedOwner = req.headers.get('x-teacherpro-owner-id');
+  if (expectedOwner && expectedOwner !== payload.sub) return null;
   const user = await findUserById(payload.sub);
   if (!user || !user.active) return null;
   return toAuthPrincipal(user);
@@ -245,11 +247,13 @@ const SERVER_PERMISSION_EQUIVALENTS: Record<string, string[]> = {
 
   // Follow-up: view-only alias; manage must be granted explicitly
   "follow-up.view": ["page.follow-up-calls.view", "page.follow-up-leaves.view"],
-  "follow-up.manage": ["follow-up.calls.manage", "follow-up.leaves.manage"],
+  "follow-up.manage": [],
+  "follow-up.calls.manage": ["follow-up.manage"],
+  "follow-up.leaves.manage": ["follow-up.manage"],
 
   // Accounts: view-only alias; manage must be granted explicitly
   "accounts.view": ["page.accounts.view", "accounts.users.view", "accounts.roles.view", "accounts.security.view"],
-  "accounts.manage": ["accounts.users.add", "accounts.users.edit", "accounts.users.delete", "accounts.roles.add", "accounts.roles.edit", "accounts.roles.delete", "accounts.permissions.manage"],
+  "accounts.manage": [],
 
   // Logs: view-only alias; clear/restore must be granted explicitly
   "logs.view": ["page.logs.view", "logs.export"],

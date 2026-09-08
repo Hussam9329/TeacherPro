@@ -1,3 +1,4 @@
+import { getOutboxOwner, ownerHeaders, withOutboxLock } from "./outbox-session";
 import {
   announceTeacherProSyncError,
   emitTeacherProDataChanged,
@@ -28,6 +29,7 @@ import {
 
 export type QueuedMutation = {
   id: string;
+  ownerUserId: string;
   endpoint: string;
   method: 'POST' | 'PUT' | 'DELETE';
   payload: unknown;
@@ -37,7 +39,6 @@ export type QueuedMutation = {
   lastAttemptAt?: number;
 };
 
-const OUTBOX_KEY = 'teacherpro-mutation-outbox-v1';
 const FAILED_OUTBOX_KEY = 'teacherpro-mutation-outbox-failed-v1';
 const MAX_OUTBOX = 1000;
 const MAX_FAILED_OUTBOX = 100;
@@ -53,23 +54,28 @@ function canUseStorage(): boolean {
   return typeof window !== 'undefined' && Boolean(window.localStorage);
 }
 
-function readOutbox(): QueuedMutation[] {
-  if (!canUseStorage()) return [];
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(OUTBOX_KEY) || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+const ITEM_PREFIX = 'teacherpro-mutation-item-v2:';
+function itemKey(item: QueuedMutation): string {
+  return `${ITEM_PREFIX}${encodeURIComponent(item.ownerUserId)}:${item.id}`;
 }
-
-function writeOutbox(items: QueuedMutation[]): void {
-  if (!canUseStorage()) return;
-  try {
-    window.localStorage.setItem(OUTBOX_KEY, JSON.stringify(items.slice(-MAX_OUTBOX)));
-  } catch (error) {
-    console.warn('[MutationOutbox] failed to write:', error);
+function readOutbox(owner = getOutboxOwner()): QueuedMutation[] {
+  if (!canUseStorage() || !owner) return [];
+  const items: QueuedMutation[] = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i);
+    if (!key?.startsWith(`${ITEM_PREFIX}${encodeURIComponent(owner)}:`)) continue;
+    try {
+      const item = JSON.parse(window.localStorage.getItem(key) || 'null');
+      if (item?.ownerUserId === owner && item.id) items.push(item);
+    } catch { /* Preserve unreadable entries for recovery. */ }
   }
+  return items.sort((a, b) => a.queuedAt - b.queuedAt);
+}
+function saveItem(item: QueuedMutation): void {
+  window.localStorage.setItem(itemKey(item), JSON.stringify(item));
+}
+function removeItem(item: QueuedMutation): void {
+  window.localStorage.removeItem(itemKey(item));
 }
 
 function recordFailedMutation(
@@ -80,12 +86,12 @@ function recordFailedMutation(
   if (!canUseStorage()) return;
   try {
     const parsed = JSON.parse(
-      window.localStorage.getItem(FAILED_OUTBOX_KEY) || '[]',
+      window.localStorage.getItem(`${FAILED_OUTBOX_KEY}:${getOutboxOwner() || ''}`) || '[]',
     );
     const failed = Array.isArray(parsed) ? parsed as FailedQueuedMutation[] : [];
     failed.push({ ...item, failedAt: Date.now(), status, error });
     window.localStorage.setItem(
-      FAILED_OUTBOX_KEY,
+      `${FAILED_OUTBOX_KEY}:${item.ownerUserId}`,
       JSON.stringify(failed.slice(-MAX_FAILED_OUTBOX)),
     );
   } catch (storageError) {
@@ -130,23 +136,15 @@ function sameQueuedMutation(
   }
 }
 
-function dedupeQueuedMutations(items: QueuedMutation[]): QueuedMutation[] {
-  const unique: QueuedMutation[] = [];
-  for (const item of items) {
-    if (!unique.some((existing) => sameQueuedMutation(existing, item))) {
-      unique.push(item);
-    }
-  }
-  return unique;
-}
-
 function purgeMaintenanceRepairMutations(
   items: QueuedMutation[],
 ): QueuedMutation[] {
   const safeItems = items.filter(
     (item) => !isMaintenanceRepairEndpoint(item.endpoint),
   );
-  if (safeItems.length !== items.length) writeOutbox(safeItems);
+  for (const item of items) {
+    if (!safeItems.includes(item)) { recordFailedMutation(item, "أُوقف مسار الصيانة القديم."); removeItem(item); }
+  }
   return safeItems;
 }
 
@@ -162,12 +160,14 @@ export async function enqueueMutation(input: {
   description?: string;
 }): Promise<{ ok: boolean; outboxId?: string }> {
   const { endpoint, method, payload, description } = input;
+  const ownerUserId = getOutboxOwner();
+  if (!ownerUserId) return { ok: false };
 
   // Try immediate send first.
   try {
     const res = await fetch(endpoint, {
       method,
-      headers: payload !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      headers: { ...ownerHeaders(ownerUserId), ...(payload !== undefined ? { 'Content-Type': 'application/json' } : {}) },
       credentials: 'same-origin',
       body: payload !== undefined ? JSON.stringify(payload) : undefined,
     });
@@ -198,7 +198,7 @@ export async function enqueueMutation(input: {
     return { ok: false };
   }
 
-  return queueOnly(input);
+  return queueOnly({ ...input, ownerUserId });
 }
 
 /**
@@ -206,12 +206,16 @@ export async function enqueueMutation(input: {
  * apiPut/apiDelete after they've already exhausted their own retries.
  */
 export function queueOnly(input: {
+  ownerUserId?: string | null;
   endpoint: string;
   method: 'POST' | 'PUT' | 'DELETE';
   payload?: unknown;
   description?: string;
 }): { ok: boolean; outboxId: string } {
+  const ownerUserId = input.ownerUserId ?? getOutboxOwner();
+  if (!ownerUserId) return { ok: false, outboxId: "" };
   const item: QueuedMutation = {
+    ownerUserId,
     id: generateId(),
     endpoint: input.endpoint,
     method: input.method,
@@ -220,13 +224,13 @@ export function queueOnly(input: {
     queuedAt: Date.now(),
     attempts: 0,
   };
-  const items = readOutbox();
+  const items = readOutbox(ownerUserId);
   const duplicate = items.find((existing) => sameQueuedMutation(existing, input));
   if (duplicate) {
     return { ok: false, outboxId: duplicate.id };
   }
-  items.push(item);
-  writeOutbox(items);
+  if (items.length >= MAX_OUTBOX) { announceTeacherProSyncError("طابور المزامنة ممتلئ؛ تعذر حفظ الطلب محلياً."); return { ok: false, outboxId: "" }; }
+  try { saveItem(item); } catch { announceTeacherProSyncError("تعذر حفظ الطلب محلياً."); return { ok: false, outboxId: "" }; }
   return { ok: false, outboxId: item.id };
 }
 
@@ -238,23 +242,25 @@ let flushInFlight = false;
  * mutations.
  */
 export async function flushOutbox(): Promise<number> {
+  return withOutboxLock("teacherpro-mutations", flushOwnedOutbox);
+}
+async function flushOwnedOutbox(): Promise<number> {
   if (!canUseStorage()) return 0;
   if (flushInFlight) return 0;
-  const items = dedupeQueuedMutations(
-    purgeMaintenanceRepairMutations(readOutbox()),
-  );
+  const items = purgeMaintenanceRepairMutations(readOutbox());
   if (items.length === 0) return 0;
 
   flushInFlight = true;
   let flushed = 0;
   const touchedScopes = new Set<string>();
   try {
-    const remaining: QueuedMutation[] = [];
     for (const item of items) {
+      if (getOutboxOwner() !== item.ownerUserId) break;
       if (!mutationCanBeReplayed(item.endpoint, item.method, item.payload)) {
         const message =
           'أوقف النظام إعادة طلب قديم غير قابل للتكرار بأمان لتجنب مضاعفة البيانات.';
         recordFailedMutation(item, message);
+        removeItem(item);
         announceTeacherProSyncError(
           `${message} حدّث البيانات وتحقق من النتيجة قبل تكرار العملية يدوياً.`,
         );
@@ -263,21 +269,24 @@ export async function flushOutbox(): Promise<number> {
       if (item.attempts >= MAX_ATTEMPTS) {
         const message = 'تعذر تنفيذ تعديل مؤجل بعد عدة محاولات. راجع الاتصال وأعد العملية.';
         recordFailedMutation(item, message);
+        removeItem(item);
         announceTeacherProSyncError(message);
         continue;
       }
       try {
         const res = await fetch(item.endpoint, {
           method: item.method,
-          headers: item.payload !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+          headers: { ...ownerHeaders(item.ownerUserId), ...(item.payload !== undefined ? { 'Content-Type': 'application/json' } : {}) },
           credentials: 'same-origin',
           body: item.payload !== undefined ? JSON.stringify(item.payload) : undefined,
         });
         if (res.ok) {
+          removeItem(item);
           flushed += 1;
           inferTeacherProScopesFromEndpoint(item.endpoint).forEach((scope) => touchedScopes.add(scope));
           continue;
         }
+        if (res.status === 401 || getOutboxOwner() !== item.ownerUserId) break;
         // Explicitly non-retryable responses (including schema mismatch)
         // and permanent 4xx are dropped immediately. This also cleans old
         // queued requests created by versions that treated every 503 as transient.
@@ -287,27 +296,27 @@ export async function flushOutbox(): Promise<number> {
         ) {
           const message = await responseErrorMessage(res);
           recordFailedMutation(item, message, res.status);
+          removeItem(item);
           announceTeacherProSyncError(
             `لم يُنفذ تعديل مؤجل: ${message} حدّث البيانات وكرر العملية يدوياً عند الحاجة.`,
           );
           continue;
         }
         // Transient: keep with incremented attempts.
-        remaining.push({
+        saveItem({
           ...item,
           attempts: item.attempts + 1,
           lastAttemptAt: Date.now(),
         });
       } catch {
         // Network error: keep with incremented attempts.
-        remaining.push({
+        saveItem({
           ...item,
           attempts: item.attempts + 1,
           lastAttemptAt: Date.now(),
         });
       }
     }
-    writeOutbox(remaining);
     if (flushed > 0) {
       emitTeacherProDataChanged({
         source: 'local-mutation',
@@ -329,7 +338,7 @@ export function getFailedMutationCount(): number {
   if (!canUseStorage()) return 0;
   try {
     const parsed = JSON.parse(
-      window.localStorage.getItem(FAILED_OUTBOX_KEY) || '[]',
+      window.localStorage.getItem(`${FAILED_OUTBOX_KEY}:${getOutboxOwner() || ''}`) || '[]',
     );
     return Array.isArray(parsed) ? parsed.length : 0;
   } catch {

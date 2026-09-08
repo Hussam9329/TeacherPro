@@ -145,7 +145,7 @@ must(
 );
 
 must(
-  route.includes("requirePermission(req, \"follow-up.manage\")") &&
+  route.includes("requirePermission(req, \"follow-up.leaves.manage\")") &&
     route.includes("writeRequestAuditLog"),
   "API الإجازات محمي بالصلاحيات ويسجل Audit log",
   "API الإجازات يجب أن يتطلب صلاحيات المتابعة ويسجل تدقيقاً.",

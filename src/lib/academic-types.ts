@@ -82,6 +82,13 @@ export interface AcademicOpportunityLog {
   examId: string;
   action: string;
   amount: number;
+  requestedAmount?: number | null;
+  appliedAmount?: number | null;
+  balanceBefore?: number | null;
+  balanceAfter?: number | null;
+  reversalOfLogId?: string | null;
+  ledgerVersion?: number | null;
+  settledGradeIds?: string | null;
   reason: string;
   date: string;
   chapterId: string;

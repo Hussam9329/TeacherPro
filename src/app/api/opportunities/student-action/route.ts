@@ -147,6 +147,8 @@ export async function POST(req: NextRequest) {
                   studentId: true,
                   action: true,
                   amount: true,
+                  appliedAmount: true,
+                  ledgerVersion: true,
                   reason: true,
                   chapterId: true,
                   chapterNameSnapshot: true,
@@ -177,7 +179,7 @@ export async function POST(req: NextRequest) {
             const priorUndo = await tx.opportunityLog.findFirst({
               where: {
                 studentId: sourceLog.studentId,
-                reason: { contains: undoMarker },
+                OR: [{ reversalOfLogId: sourceLog.id }, { reason: { contains: undoMarker } }],
               },
               select: { id: true, date: true, reason: true },
             });
@@ -189,6 +191,8 @@ export async function POST(req: NextRequest) {
           }
 
           const resolvedStudentId = actionType === "undo" ? String(sourceLog!.studentId) : studentId;
+          // Calculate the authoritative balance in this same serializable transaction.
+          await recalculateStudentsAcademicState([resolvedStudentId], { tx });
           const student = await tx.student.findUnique({
             where: { id: resolvedStudentId },
             select: {
@@ -202,6 +206,7 @@ export async function POST(req: NextRequest) {
             },
           });
           if (!student) throw new Error("الطالب غير موجود أو تم حذفه.");
+          if (student.status === "مفصول") throw new Error("أعد تفعيل الطالب من إجراء الحالة قبل تعديل فرصه.");
           if (student.status === "مؤرشف") {
             throw new Error("لا يمكن تعديل فرص طالب مؤرشف.");
           }
@@ -211,6 +216,9 @@ export async function POST(req: NextRequest) {
             throw new Error(activeChapterResult.message);
           }
 
+          if (sourceLog && sourceLog.chapterId !== activeChapterResult.activeLink.chapter.id) {
+            throw new Error("لا يمكن التراجع عن حركة تخص فصلاً سابقاً.");
+          }
           const now = new Date();
           const action = actionType === "add" || (actionType === "undo" && sourceLog?.action === "خصم")
             ? "إضافة"
@@ -247,7 +255,7 @@ export async function POST(req: NextRequest) {
             actualAppliedAmount = chapterCeiling - currentOpportunities; // delta (can be negative if current > ceiling)
             balanceAfter = chapterCeiling;
           } else if (actionType === "undo") {
-            const undoAmount = Math.max(1, Math.trunc(Number(sourceLog?.amount || 1)));
+            const undoAmount = Math.abs(Math.trunc(Number(sourceLog?.appliedAmount ?? sourceLog?.amount ?? 0)));
             logAmount = undoAmount;
             if (action === "إضافة") {
               // Undo of a deduct = add back, capped at ceiling
@@ -289,12 +297,22 @@ export async function POST(req: NextRequest) {
                 ? `${reason || ""} [مطلوب: ${logAmount}، مطبّق: ${actualAppliedAmount}، قبل: ${balanceBefore} → بعد: ${balanceAfter}]${zeroBalanceMarker}`
                 : `${reason}${zeroBalanceMarker}`);
 
+          const settledGrades = actionType === "reset"
+            ? await tx.grade.findMany({ where: { studentId: resolvedStudentId }, select: { id: true } })
+            : [];
           const createdLog = await tx.opportunityLog.create({
             data: {
               studentId: resolvedStudentId,
               examId: null,
               action,
-              amount: logAmount,
+              amount: actionType === "reset" ? balanceAfter : actualAppliedAmount,
+              requestedAmount: logAmount,
+              appliedAmount: actualAppliedAmount,
+              balanceBefore,
+              balanceAfter,
+              reversalOfLogId: sourceLog?.id || null,
+              ledgerVersion: 2,
+              settledGradeIds: actionType === "reset" ? JSON.stringify(settledGrades.map(grade => grade.id)) : null,
               reason: finalReason,
               date: now,
               chapterId: activeChapterResult.activeLink.chapter.id,

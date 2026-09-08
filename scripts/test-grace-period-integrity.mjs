@@ -160,7 +160,7 @@ check(
 );
 check(
   "حارس قاعدة البيانات لا يغير المخطط ويتطلب migration المصالحة",
-  schemaReadiness.includes("20260906120000_remove_electronic_correction") &&
+  schemaReadiness.includes("20260908122000_exam_course_consistency") &&
     schemaReadiness.includes('FROM "_prisma_migrations"') &&
     !schemaReadiness.includes("$executeRaw"),
 );

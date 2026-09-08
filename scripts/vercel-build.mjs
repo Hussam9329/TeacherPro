@@ -267,6 +267,7 @@ const migrationEnv = {
   DATABASE_URL: directUrl,
 };
 
+runNode("scripts/check-migration-history.mjs", migrationEnv);
 runNode("scripts/preflight-schema-reconciliation.mjs", migrationEnv);
 
 const initialSchemaBridgeState = getInitialSchemaBridgeState(directUrl);

@@ -147,7 +147,7 @@ assert.match(
 );
 assert.match(
   preRegistrationPromotionRoute,
-  /requirePermission\(req, "grades\.edit"\)[\s\S]*promotePendingPreRegistrationGrades/,
+  /requirePermission\(req, "system\.maintenance"\)[\s\S]*promotePendingPreRegistrationGrades/,
 );
 assert.match(
   smartNotesPanel,

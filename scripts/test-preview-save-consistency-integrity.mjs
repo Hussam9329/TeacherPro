@@ -158,11 +158,10 @@ check(
     opportunitiesView.includes("previewToken: bulkTargetStats?.previewToken"),
 );
 check(
-  "حذف حركة فرص مؤثرة مرتبط بـsnapshot أكاديمي ويُراجع داخل transaction",
-  opportunityLogsRoute.includes("buildOpportunityLogDeletePreview") &&
-    opportunityLogsRoute.includes("buildStudentAcademicImpactToken") &&
-    opportunityLogsRoute.includes("submittedPreviewToken !== preview.previewToken") &&
-    opportunityLogsRoute.includes("withSerializableTransaction"),
+  "حذف حركة الفرص متقاعد؛ التصحيح بحركة موثقة فقط",
+  opportunityLogsRoute.includes("OPPORTUNITY_LEDGER_COMMAND_REQUIRED") &&
+    opportunityLogsRoute.includes("export const DELETE = retiredMutation") &&
+    !opportunityLogsRoute.includes("deleteMany"),
 );
 check(
   "تغير نطاق أو رصيد فعلي بعد المعاينة يرفض بـ409 قبل كتابة الفرص الجماعية",

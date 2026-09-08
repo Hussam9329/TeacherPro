@@ -47,8 +47,8 @@ check(
 );
 
 check(
-  !schema.includes("dismissalType"),
-  "Prisma runtime schema لا يعرّف حقلاً لنوع الفصل",
+  schema.includes("dismissalType String?") && !statusAction.includes("dismissalType"),
+  "Schema تحفظ عمود التوافق للتعافي دون استخدامه في سياسة الفصل",
 );
 
 check(

@@ -68,6 +68,9 @@ model Student {
   subSite         String?
   code            String   @unique
   status          String   @default("نشط")
+  dismissalType String?
+  gracePeriodEndedByExamId String?
+  gracePeriodHistoryPreserved Boolean @default(false)
   dismissalReason String?
   dismissalNotes  String?
   opportunities   Int      @default(0)
@@ -194,6 +197,13 @@ model OpportunityLog {
   id        String   @id @default(cuid())
   action    String
   amount    Int
+  requestedAmount Int?
+  appliedAmount Int?
+  balanceBefore Int?
+  balanceAfter Int?
+  reversalOfLogId String?
+  ledgerVersion Int?
+  settledGradeIds String?
   reason    String?
   date      DateTime @default(now())
   chapterId String?
@@ -300,6 +310,7 @@ model StudentNote {
   sourceType      String   @default("")
   sourceId        String   @default("")
   dismissalKey    String   @default("")
+  dismissalType String @default("")
   dismissalReason String   @default("")
   dismissalDate   DateTime?
   student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -422,4 +433,17 @@ model LogClearBackup {
 
   @@index([createdAt])
   @@index([restoredAt])
+}
+
+// Retained historical notes; included in recovery exports, never auto-promoted.
+model GradeEntryMissingNote {
+  id String @id
+  examId String
+  examName String @default("")
+  examDate String @default("")
+  text String
+  userId String?
+  userName String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime
 }

@@ -58,9 +58,8 @@ check(
 );
 
 check(
-  bulkAdjust.includes('log.action !== "إعادة تفعيل"') &&
-  bulkAdjust.includes("RETIRED_BULK_STATUS_TRANSITION") &&
-  bulkAdjust.includes("requiresRefresh: true") &&
+  bulkAdjust.includes("OPPORTUNITY_LEDGER_COMMAND_REQUIRED") &&
+  bulkAdjust.includes("status: 410") &&
   !bulkAdjust.includes('data: {\n              status: "نشط"') &&
   !bulkAdjust.includes("migrateDismissedPendingGradesAfterActivation"),
   "مسار bulk-adjust القديم لا يستطيع تمرير إعادة تفعيل أو ترحيل درجات مفصول",

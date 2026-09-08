@@ -113,7 +113,7 @@ must(
   "يجب ألا يكون للـOffline Outbox اتحاد حالات أضيق من حالات تسجيل الدرجات؛ هذا يمنع فشل TypeScript وقت Vercel build.",
 );
 must(
-  gradeEntryOfflineOutbox.includes('const STORAGE_KEY = "teacherpro-grade-entry-offline-v2"') &&
+  gradeEntryOfflineOutbox.includes('const STORAGE_KEY = "teacherpro-grade-entry-offline-v3"') &&
     gradeEntryOfflineOutbox.includes("let flushTimer: number | null = null") &&
     !gradeEntryOfflineOutbox.includes("ReturnType<typeof window.setTimeout>") &&
     gradeEntryOfflineOutbox.includes('window.addEventListener("online"') &&
@@ -148,7 +148,7 @@ must(
 );
 
 must(
-  gradeEntryOfflineOutbox.includes('const STORAGE_KEY = "teacherpro-grade-entry-offline-v2"') &&
+  gradeEntryOfflineOutbox.includes('const STORAGE_KEY = "teacherpro-grade-entry-offline-v3"') &&
     gradeEntryOfflineOutbox.includes('window.addEventListener("online"') &&
     gradeEntryOfflineOutbox.includes("currentMatchesAttempted") &&
     gradeEntryOfflineOutbox.includes("currentMatchesBaseline") &&

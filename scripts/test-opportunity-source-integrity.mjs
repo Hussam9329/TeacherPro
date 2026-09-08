@@ -89,7 +89,7 @@ check(
 check(
   academicEngine.includes("activeCourseChapterGroups") &&
     academicEngine.includes(".filter(([, links]) => links.length === 1)") &&
-    academicEngine.match(/activeChapter\?\.opportunities \?\? student\.baseOpportunities \?\? 0/g)?.length === 2 &&
+    academicEngine.match(/activeChapter\?\.opportunities \?\? student\.baseOpportunities \?\? 0/g)?.length >= 2 &&
     academicEngine.includes("opportunities = amount"),
   "محرك الاحتساب يفضل الفصل النشط ويمنع اختيار فصل عشوائي عند التعارض",
 );

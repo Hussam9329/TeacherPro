@@ -1,4 +1,5 @@
 "use client";
+import { getOutboxOwner, withOutboxLock } from "./outbox-session";
 
 import { gradeApi, type ApiResult } from "./api";
 import { GRADE_STATUSES, type GradeStatus } from "./academic-types";
@@ -20,6 +21,7 @@ export type OfflineGradeDesired = {
 
 export type GradeEntryOfflineSave = {
   key: string;
+  ownerUserId: string;
   revision: string;
   studentId: string;
   examId: string;
@@ -37,7 +39,7 @@ export type GradeEntryOfflineSave = {
 
 export type GradeEntryOfflineAttempt = Pick<
   GradeEntryOfflineSave,
-  "key" | "revision" | "studentId" | "examId" | "desired"
+  "ownerUserId" | "key" | "revision" | "studentId" | "examId" | "desired"
 >;
 
 export type GradeEntryOfflineEvent = {
@@ -47,7 +49,8 @@ export type GradeEntryOfflineEvent = {
   message?: string;
 };
 
-const STORAGE_KEY = "teacherpro-grade-entry-offline-v2";
+const STORAGE_KEY = "teacherpro-grade-entry-offline-v3";
+function storageKey(): string { return `${STORAGE_KEY}:${encodeURIComponent(getOutboxOwner() || "")}`; }
 const EVENT_NAME = "teacherpro:grade-entry-offline";
 const MAX_ITEMS = 4000;
 const MAX_ATTEMPTED_SNAPSHOTS = 12;
@@ -114,6 +117,7 @@ function normalizeItem(value: unknown): GradeEntryOfflineSave | null {
     : "pending";
 
   return {
+    ownerUserId: String(record.ownerUserId || ""),
     key: makeKey(examId, studentId),
     revision: String(record.revision || makeRevision()),
     studentId,
@@ -132,35 +136,25 @@ function normalizeItem(value: unknown): GradeEntryOfflineSave | null {
 }
 
 function readItems(): GradeEntryOfflineSave[] {
-  if (!canUseStorage()) return [];
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "[]");
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map(normalizeItem)
-      .filter((item): item is GradeEntryOfflineSave => Boolean(item));
-  } catch (error) {
-    console.warn("[GradeEntryOffline] failed to read queue:", error);
-    return [];
+  if (!canUseStorage() || !getOutboxOwner()) return [];
+  const items: GradeEntryOfflineSave[] = [];
+  const prefix = storageKey() + ':';
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i);
+    if (!key?.startsWith(prefix)) continue;
+    try {
+      const item = normalizeItem(JSON.parse(window.localStorage.getItem(key) || 'null'));
+      if (item?.ownerUserId === getOutboxOwner()) items.push(item);
+    } catch { /* Retain malformed entries for explicit recovery. */ }
   }
+  return items.sort((a, b) => a.queuedAt - b.queuedAt);
 }
-
-function writeItems(items: GradeEntryOfflineSave[]): boolean {
-  if (!canUseStorage()) return false;
+function writeItem(item: GradeEntryOfflineSave): boolean {
+  if (!canUseStorage() || item.ownerUserId !== getOutboxOwner()) return false;
   try {
-    const sorted = items
-      .slice(-MAX_ITEMS)
-      .sort((a, b) => a.queuedAt - b.queuedAt);
-    if (sorted.length === 0) {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } else {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted));
-    }
+    window.localStorage.setItem(`${storageKey()}:${item.key}`, JSON.stringify(item));
     return true;
-  } catch (error) {
-    console.error("[GradeEntryOffline] failed to persist queue:", error);
-    return false;
-  }
+  } catch { return false; }
 }
 
 function updateItem(
@@ -171,9 +165,8 @@ function updateItem(
   const index = items.findIndex((item) => item.key === key);
   if (index === -1) return null;
   const next = updater(items[index]);
-  if (next) items[index] = next;
-  else items.splice(index, 1);
-  if (!writeItems(items)) return null;
+  if (next) { if (!writeItem(next)) return null; }
+  else window.localStorage.removeItem(`${storageKey()}:${key}`);
   return next;
 }
 
@@ -283,7 +276,8 @@ export function stageGradeEntryOfflineSave(input: {
   installBrowserEvents();
   const studentId = String(input.studentId || "").trim();
   const examId = String(input.examId || "").trim();
-  if (!studentId || !examId) return null;
+  const ownerUserId = getOutboxOwner();
+  if (!studentId || !examId || !ownerUserId) return null;
 
   const desired: OfflineGradeDesired = {
     status: input.status,
@@ -322,6 +316,7 @@ export function stageGradeEntryOfflineSave(input: {
       }
     : {
         key,
+        ownerUserId,
         revision,
         studentId,
         examId,
@@ -336,11 +331,10 @@ export function stageGradeEntryOfflineSave(input: {
         state: "pending",
       };
 
-  if (existingIndex >= 0) items[existingIndex] = next;
-  else items.push(next);
-  if (!writeItems(items)) return null;
+  if (!existing && items.length >= MAX_ITEMS) return null;
+  if (!writeItem(next)) return null;
 
-  const attempt = { key, revision, studentId, examId, desired };
+  const attempt = { key, revision, ownerUserId, studentId, examId, desired };
   dispatch({ type: "queued", item: next });
   return attempt;
 }
@@ -348,6 +342,7 @@ export function stageGradeEntryOfflineSave(input: {
 export function markGradeEntryOfflineAttempted(
   attempt: GradeEntryOfflineAttempt,
 ): void {
+  if (attempt.ownerUserId !== getOutboxOwner()) return;
   updateItem(attempt.key, (item) => {
     if (item.revision !== attempt.revision) return item;
     return {
@@ -370,6 +365,7 @@ export function confirmGradeEntryOfflineAttempt(
   attempt: GradeEntryOfflineAttempt,
   serverGrade?: Record<string, unknown> | null,
 ): void {
+  if (attempt.ownerUserId !== getOutboxOwner()) return;
   const current = readItems().find((item) => item.key === attempt.key);
   if (!current) return;
 
@@ -398,6 +394,7 @@ export function markGradeEntryOfflineAttention(
   state: "conflict" | "rejected",
   message: string,
 ): void {
+  if (attempt.ownerUserId !== getOutboxOwner()) return;
   const next = updateItem(attempt.key, (item) => {
     if (item.revision !== attempt.revision) return item;
     return {
@@ -437,6 +434,7 @@ async function fetchCurrentGrade(
 
 function buildPayload(item: GradeEntryOfflineSave): Record<string, unknown> {
   return {
+    _outboxOwnerUserId: item.ownerUserId,
     studentId: item.studentId,
     examId: item.examId,
     status: item.desired.status,
@@ -470,6 +468,7 @@ function currentMatchesAttempted(
 function snapshotAttempt(item: GradeEntryOfflineSave): GradeEntryOfflineAttempt {
   return {
     key: item.key,
+    ownerUserId: item.ownerUserId,
     revision: item.revision,
     studentId: item.studentId,
     examId: item.examId,
@@ -481,6 +480,7 @@ function persistState(
   item: GradeEntryOfflineSave,
   patch: Partial<GradeEntryOfflineSave>,
 ): GradeEntryOfflineSave | null {
+  if (item.ownerUserId !== getOutboxOwner()) return null;
   return updateItem(item.key, (current) => {
     if (current.revision !== item.revision) return current;
     return { ...current, ...patch, updatedAt: Date.now() };
@@ -495,7 +495,7 @@ async function flushOne(item: GradeEntryOfflineSave): Promise<
   if (latest.state !== "pending") return "attention";
 
   const currentLookup = await fetchCurrentGrade(latest);
-  if (!currentLookup.reachable) return "pending";
+  if (!currentLookup.reachable || latest.ownerUserId !== getOutboxOwner()) return "pending";
   let currentGrade = currentLookup.grade;
 
   if (desiredMatchesServerGrade(latest.desired, currentGrade)) {
@@ -533,7 +533,9 @@ async function flushOne(item: GradeEntryOfflineSave): Promise<
 
   const attempt = snapshotAttempt(sendItem);
   markGradeEntryOfflineAttempted(attempt);
+  if (sendItem.ownerUserId !== getOutboxOwner()) return "pending";
   const result = await gradeApi.add(buildPayload(sendItem));
+  if (sendItem.ownerUserId !== getOutboxOwner() || result.status === 401) return "pending";
 
   if (result.ok) {
     const serverGrade = serverGradeFromResult(result);
@@ -559,7 +561,7 @@ async function flushOne(item: GradeEntryOfflineSave): Promise<
   // lost. Re-read once before calling it a real conflict.
   if (result.status === 409) {
     const verification = await fetchCurrentGrade(sendItem);
-    if (!verification.reachable) return "pending";
+    if (!verification.reachable || sendItem.ownerUserId !== getOutboxOwner()) return "pending";
     currentGrade = verification.grade;
     if (desiredMatchesServerGrade(sendItem.desired, currentGrade)) {
       confirmGradeEntryOfflineAttempt(attempt, currentGrade);
@@ -593,6 +595,9 @@ async function flushOne(item: GradeEntryOfflineSave): Promise<
 }
 
 export async function flushGradeEntryOfflineSaves(): Promise<number> {
+  return withOutboxLock("teacherpro-grade-saves", flushOwnedGradeSaves);
+}
+async function flushOwnedGradeSaves(): Promise<number> {
   installBrowserEvents();
   if (!canUseStorage() || flushInFlight) return 0;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return 0;
@@ -606,6 +611,7 @@ export async function flushGradeEntryOfflineSaves(): Promise<number> {
   let networkStopped = false;
   try {
     for (const item of pending) {
+      if (item.ownerUserId !== getOutboxOwner()) break;
       const outcome = await flushOne(item);
       if (outcome === "synced") synced += 1;
       if (outcome === "pending") {
@@ -651,6 +657,16 @@ export function clearGradeEntryOfflineSave(key: string): void {
 }
 
 if (typeof window !== "undefined") {
+  window.addEventListener("teacherpro:outbox-owner", () => {
+    if (flushTimer) window.clearTimeout(flushTimer);
+    flushTimer = null;
+    if (getOutboxOwner()) {
+      if (window.localStorage.getItem("teacherpro-grade-entry-offline-v2") || window.localStorage.getItem("teacherpro-mutation-outbox-v1")) {
+        announceTeacherProSyncError("توجد طلبات مؤجلة من إصدار سابق بلا هوية صاحبها. حُفظت محلياً للمراجعة ولن تُرسل تلقائياً بحسابك.");
+      }
+      scheduleFlush(250);
+    }
+  });
   installBrowserEvents();
   if (navigator.onLine && readItems().some((item) => item.state === "pending")) {
     scheduleFlush(250);

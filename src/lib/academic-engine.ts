@@ -532,6 +532,7 @@ function resolveAcademicReactivationLinkForLog(
 ): AcademicReactivationLink | null {
   const parsed = parseAcademicReactivationLink(log.reason);
   if (parsed) return parsed;
+  if (log.ledgerVersion === 2) return null;
   if (!isSystemAcademicReactivationLog(log)) return null;
   const inferred = findLatestAcademicReactivationSourceForStudent(
     state,
@@ -625,7 +626,7 @@ export function recalculateAcademicState(
     const undoneManualOpportunityLogIds = new Set(
       allStudentManualLogs
         .map((log) =>
-          String(log.reason || "").match(/\[undo-ref:([^\]]+)\]/)?.[1] || "",
+          log.reversalOfLogId || String(log.reason || "").match(/\[undo-ref:([^\]]+)\]/)?.[1] || "",
         )
         .filter(Boolean),
     );
@@ -730,7 +731,7 @@ export function recalculateAcademicState(
         parseAcademicReactivationLink(log.reason) ||
         resolvedAcademicLinksByLogId.get(log.id) ||
         null;
-      if (!link) return !isSystemAcademicReactivationLog(log);
+      if (!link) return log.ledgerVersion === 2 || !isSystemAcademicReactivationLog(log);
       const key = academicReactivationSourceKey(link);
       return Boolean(
         key &&
@@ -753,7 +754,28 @@ export function recalculateAcademicState(
       isReactivationBalanceOpportunityLog,
     );
     let manualZeroBalanceViolation: AcademicOpportunityLog | null = null;
+    // Version 2 commands replay with exam chronology. Legacy records retain
+    // their original interpretation until explicitly reconciled.
+    const versionedLedgerLogs = studentManualLogs.filter(log =>
+      log.ledgerVersion === 2 && log.chapterId === activeChapter?.id &&
+      (!historicalSettlementDate || dayKey(log.date) >= historicalSettlementDate),
+    );
+    const currentCommands = versionedLedgerLogs.filter(log => ["إضافة", "خصم", "إعادة تعيين"].includes(log.action));
+    const lastReset = currentCommands.filter(log => log.action === "إعادة تعيين").at(-1);
+    const settledGradeIds = new Set<string>();
+    const latestGrant = versionedLedgerLogs.filter(isReactivationBalanceOpportunityLog).at(-1);
+    const settlement = lastReset && (!latestGrant || String(lastReset.date) >= String(latestGrant.date)) ? lastReset : latestGrant;
+    if (settlement?.settledGradeIds) {
+      try {
+        const ids = JSON.parse(settlement.settledGradeIds);
+        if (Array.isArray(ids)) ids.forEach(id => settledGradeIds.add(String(id)));
+      } catch { throw new Error("Invalid opportunity settlement ledger"); }
+    }
     for (const log of studentManualLogs) {
+      if (log.ledgerVersion === 2 && !versionedLedgerLogs.includes(log)) continue;
+      if (currentCommands.includes(log)) continue;
+      if (latestGrant && String(log.date) < String(latestGrant.date)) continue;
+      if (lastReset && String(log.date) <= String(lastReset.date)) continue;
       if (
         reactivationStartDate &&
         !isReactivationBalanceOpportunityLog(log) &&
@@ -761,7 +783,7 @@ export function recalculateAcademicState(
       )
         continue;
       const amount = Math.abs(Number(log.amount || 0));
-      if (!amount && !isReactivationBalanceOpportunityLog(log)) continue;
+      if (!amount && log.action !== "إعادة تعيين" && !hasZeroBalanceViolationMarker(log.reason) && !isReactivationBalanceOpportunityLog(log)) continue;
       // Every dismissal reactivation starts a fresh two-opportunity balance.
       // Historical one-opportunity markers are intentionally interpreted by
       // the current policy as 2 without ever storing a negative balance.
@@ -875,7 +897,29 @@ export function recalculateAcademicState(
       );
     };
 
+    const pendingCommands = currentCommands.filter(log => (!lastReset || String(log.date) >= String(lastReset.date)) && (!latestGrant || String(log.date) >= String(latestGrant.date)));
+    let commandIndex = 0;
+    const applyCommandsThrough = (through: string) => {
+      while (commandIndex < pendingCommands.length && String(pendingCommands[commandIndex].date) <= through) {
+        const log = pendingCommands[commandIndex++];
+        const cap = Math.max(0, Number(activeChapter?.opportunities ?? student.baseOpportunities ?? 0));
+        const amount = Math.abs(Number(log.appliedAmount ?? log.amount ?? 0));
+        if (log.action === "إعادة تعيين") opportunities = Math.max(0, Math.min(cap, Number(log.balanceAfter ?? log.amount)));
+        else if (log.action === "إضافة") opportunities = Math.min(cap, opportunities + amount);
+        else if (log.action === "خصم") {
+          const effect = applyOpportunityPenalty(opportunities, amount);
+          opportunities = effect.after;
+          if ((effect.dismissalTrigger || hasZeroBalanceViolationMarker(log.reason)) && !undoneManualOpportunityLogIds.has(log.id)) {
+            setDismissal(`مخالفة بعد انتهاء الفرص - خصم يدوي: ${log.reason || "بدون سبب مسجل"}`, 60);
+          }
+        }
+      }
+    };
+
     for (const grade of studentGrades) {
+      const eventExam = examsById.get(grade.examId);
+      applyCommandsThrough(String(eventExam?.date || grade.createdAt || ""));
+      if (settledGradeIds.has(grade.id)) continue;
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
       if (grade.academicEffectExcluded) continue;
@@ -1042,6 +1086,8 @@ export function recalculateAcademicState(
       }
     }
 
+    applyCommandsThrough("\uffff");
+
     const opportunityCap = Number(
       activeChapter?.opportunities ?? student.baseOpportunities ?? 0,
     );
@@ -1094,7 +1140,7 @@ export function recalculateAcademicState(
       parseAcademicReactivationLink(log.reason) ||
       resolvedAcademicLinksByOpportunityLogId.get(log.id) ||
       null;
-    if (!link) return !isSystemAcademicReactivationLog(log);
+    if (!link) return log.ledgerVersion === 2 || !isSystemAcademicReactivationLog(log);
     const key = academicReactivationSourceKey(link);
     const activeLinks = activeLinkedSourcesByStudent.get(log.studentId) || [];
     return Boolean(

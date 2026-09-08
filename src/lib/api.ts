@@ -1,3 +1,4 @@
+import { getOutboxOwner, ownerHeaders } from "./outbox-session";
 import {
   beginTeacherProInteractionBlocker,
   inferTeacherProScopesFromEndpoint,
@@ -117,13 +118,14 @@ async function retryTransientMutation(
 }
 
 async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
+  const requestOwner = (data && typeof data === "object" && "_outboxOwnerUserId" in data) ? String((data as Record<string, unknown>)._outboxOwnerUserId) : getOutboxOwner();
   const releaseBlocker = beginTeacherProInteractionBlocker("api-post");
   try {
     const runOnce = async (): Promise<ApiResult> => {
       try {
         const res = await fetch(`/api/${endpoint}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...ownerHeaders(requestOwner) },
           credentials: "same-origin",
           body: JSON.stringify(data),
         });
@@ -179,14 +181,14 @@ async function apiPost(endpoint: string, data: unknown): Promise<ApiResult> {
     ) {
       try {
         const { queueOnly } = require("./mutation-outbox");
-        queueOnly({
+        const queued = queueOnly({ ownerUserId: requestOwner,
           endpoint: `/api/${endpoint}`,
           method: "POST",
           payload: data,
         });
         return {
           ...result,
-          queued: true,
+          queued: Boolean(queued.outboxId),
           syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
         };
       } catch {
@@ -211,13 +213,14 @@ async function apiPut(
   endpoint: string,
   data: Record<string, unknown>,
 ): Promise<ApiResult> {
+  const requestOwner = (data && typeof data === "object" && "_outboxOwnerUserId" in data) ? String((data as Record<string, unknown>)._outboxOwnerUserId) : getOutboxOwner();
   const releaseBlocker = beginTeacherProInteractionBlocker("api-put");
   try {
     const runOnce = async (): Promise<ApiResult> => {
       try {
         const res = await fetch(`/api/${endpoint}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...ownerHeaders(requestOwner) },
           credentials: "same-origin",
           body: JSON.stringify(data),
         });
@@ -261,14 +264,14 @@ async function apiPut(
     if (!result.ok && result.transient && replaySafe) {
       try {
         const { queueOnly } = require("./mutation-outbox");
-        queueOnly({
+        const queued = queueOnly({ ownerUserId: requestOwner,
           endpoint: `/api/${endpoint}`,
           method: "PUT",
           payload: data,
         });
         return {
           ...result,
-          queued: true,
+          queued: Boolean(queued.outboxId),
           syncScopes: inferTeacherProScopesFromEndpoint(`/api/${endpoint}`),
         };
       } catch {
@@ -294,6 +297,7 @@ async function apiDelete(
   id: string,
   extraParams: Record<string, string | undefined> = {},
 ): Promise<ApiResult> {
+  const requestOwner = getOutboxOwner();
   const releaseBlocker = beginTeacherProInteractionBlocker("api-delete");
   try {
     const params = new URLSearchParams();
@@ -308,6 +312,7 @@ async function apiDelete(
       try {
         const res = await fetch(fullEndpoint, {
           method: "DELETE",
+          headers: ownerHeaders(requestOwner),
           credentials: "same-origin",
         });
         if (!res.ok) {
@@ -350,13 +355,13 @@ async function apiDelete(
     if (!result.ok && result.transient && replaySafe) {
       try {
         const { queueOnly } = require("./mutation-outbox");
-        queueOnly({
+        const queued = queueOnly({ ownerUserId: requestOwner,
           endpoint: fullEndpoint,
           method: "DELETE",
         });
         return {
           ...result,
-          queued: true,
+          queued: Boolean(queued.outboxId),
           syncScopes: inferTeacherProScopesFromEndpoint(fullEndpoint),
         };
       } catch {

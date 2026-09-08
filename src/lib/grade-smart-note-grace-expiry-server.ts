@@ -12,6 +12,8 @@ export type GracePendingGradeResolutionActor = {
 };
 
 export type GracePendingGradeMigrationResult = {
+  legacyMigrationDisabled?: boolean;
+  message?: string;
   processed: number;
   conflicts: number;
   rejected: number;
@@ -96,9 +98,9 @@ export async function reconcileExpiredGracePendingGrades(
 if (process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION !== "1") {
   return {
     legacyMigrationDisabled: true,
-    processed: 0,
+    ...emptyResult(),
     message: "GRACE_SCORED settlement is available only through maintenance:grace:migrate",
-  } as never;
+  };
 }
 
   if (!input.tx) {
