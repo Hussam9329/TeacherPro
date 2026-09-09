@@ -534,6 +534,8 @@ const DETAILS_MODAL_CSS = `
   .tp-grades-table th:last-child { width: 30%; }
   .tp-mobile-field-label { display: none; }
   .tp-mobile-field-value { min-width: 0; }
+  .tp-grade-deduction .tp-mobile-field-value { color: #b42318; font-weight: 700; }
+  .tp-grade-no-deduction .tp-mobile-field-value { color: #067647; font-weight: 700; }
   .tp-event-title { display: block; font-weight: 700; color: #172b3a; margin-bottom: 4px; }
   .tp-event-exam { display: block; font-size: 12px; color: #536974; margin-top: 5px; }
   .tp-empty-row td { padding: 20px; color: #536974; text-align: center; }
@@ -810,11 +812,14 @@ const DETAILS_MODAL_JS = `
     } else {
       gradesBody.innerHTML = data.grades && data.grades.length ? data.grades.map(function(g){
         var score = g.score === null || g.score === undefined ? 'غياب' : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
+        var effectText = String(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.').trim();
+        var effectClass = effectText === 'لا يوجد خصم لهذا الامتحان' ? 'tp-grade-no-deduction'
+          : /^(تم خصم |عدد الفرص المخصومة لهذا الامتحان:)/.test(effectText) ? 'tp-grade-deduction' : '';
         return '<tr role="row">'
           + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
           + mobileCell('تاريخ الامتحان', fmtDate(g.examDate) || 'غير مسجّل')
           + mobileCell('الدرجة', score)
-          + mobileCell('الأثر على الفرص', esc(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.'))
+          + mobileCell('الأثر على الفرص', esc(effectText), effectClass)
           + '</tr>';
       }).join('') : '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">لا توجد امتحانات في هذا الفصل ضمن التقرير حتى الآن.</td></tr>';
     }
