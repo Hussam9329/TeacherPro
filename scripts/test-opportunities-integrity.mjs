@@ -151,7 +151,7 @@ check(
 check(
   !exportDialog.includes('<th>ملاحظات</th>') &&
     !exportDialog.includes("+ '<td>' + esc(g.notes) + '</td>'") &&
-    exportDialog.includes('colspan="5"'),
+    exportDialog.includes('colspan="4"'),
   'تفاصيل تقرير HTML لا تحتوي عمود الملاحظات وتستخدم عدد الأعمدة الصحيح بعد حذفه',
 );
 check(
@@ -162,13 +162,13 @@ check(
   'بيانات تقرير HTML تُحقن عبر serializer آمن ولا يمكنها إغلاق عنصر script',
 );
 check(
-  exportDialog.includes('كيف تغيّرت فرصك؟') &&
-    exportDialog.includes('ماذا حدث؟') &&
-    exportDialog.includes('الرصيد بعدها:') &&
-    exportDialog.includes("mobileCell('التغيير في الفرص'") &&
-    !exportDialog.includes('سجل فقدان الفرص') &&
-    !exportDialog.includes('عدد الفرص المفقودة'),
-  'تقرير HTML يعرض كل حركة فرص بنوعها ولا يصف الإضافات وإعادة التفعيل كفقدان',
+  !exportDialog.includes('id="tpLogsSection"') &&
+    !exportDialog.includes('كيف تغيّرت فرصك؟') &&
+    !exportDialog.includes("mobileCell('النتيجة'") &&
+    exportDialog.includes("mobileCell('تاريخ الامتحان'") &&
+    exportDialog.includes("mobileCell('الدرجة'") &&
+    exportDialog.includes("mobileCell('الأثر على الفرص'"),
+  'تقرير HTML مختصر بجدول امتحانات من أربعة أعمدة دون قسم سجل الفرص',
 );
 check(
   exportDialog.includes('role="combobox"') &&

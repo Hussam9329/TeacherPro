@@ -448,13 +448,13 @@ must(
 must(
   !exportDialog.includes("isOpportunityResetLog") &&
     !exportDialog.includes("RESET_REASON_PATTERNS"),
-  "صفوف تسوية انتقال الفصول تبقى ظاهرة بالتقرير (لم تعد تُخفى) لأن السجل مقيد بالفصل النشط",
+  "بيانات تسوية انتقال الفصول تبقى متاحة للمستهلكين المشتركين ضمن الفصل النشط",
 );
 
 must(
-  exportDialog.includes('id="tpLogsSectionTitle"') &&
-    exportDialog.includes("كيف تغيّرت فرصك؟ — "),
-  "عنوان قسم السجل بملف HTML يوضح أن الحركات مقيدة بالفصل النشط",
+  !exportDialog.includes('id="tpLogsSectionTitle"') &&
+    exportDialog.includes("reportGradeEffect(grade, exam, scopedLogs.filter(log => log.examId === examId))"),
+  "حذف قسم السجل من HTML لا يغير اعتماد أثر الامتحان على سجل الفصل النشط",
 );
 
 must(

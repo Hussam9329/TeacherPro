@@ -190,9 +190,6 @@ function createDomHarness() {
     "tpModalDismissedBadge",
     "tpGradesSectionTitle",
     "tpGradesBody",
-    "tpLogsSectionTitle",
-    "tpLogsBody",
-    "tpLogsSection",
     "tpModalClose",
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, createDomElement(id)]));
@@ -451,28 +448,23 @@ check("بطاقة الطالب وجداول التفاصيل تعرض data-label
   openStudentDetails(dom, "s1", "محمد علي حسن");
   assert.deepEqual(labelsFromRenderedCells(dom.elements.tpGradesBody.innerHTML), [
     "الامتحان",
-    "التاريخ",
-    "درجتك",
-    "النتيجة",
-    "أثره على فرصك",
+    "تاريخ الامتحان",
+    "الدرجة",
+    "الأثر على الفرص",
   ]);
   assert.ok(dom.elements.tpDetailsModal.classList.contains("open"));
 });
 
-check("سجل الفرص يفرّق الإضافة والخصم ولا يخترع رصيداً تاريخياً", () => {
-  const { dom } = executeInlineScripts(validHtml, "opportunities-movements");
+check("التقرير المختصر يبقي كارت الفرص ويحذف السجل والنصوص الزائدة", () => {
+  const { dom } = executeInlineScripts(validHtml, "opportunities-summary");
   openStudentDetails(dom, "s1", "محمد علي حسن");
-  assert.equal(dom.elements.tpLogsSectionTitle.textContent, "كيف تغيّرت فرصك؟ — الفصل الأول");
-  const movementHtml = dom.elements.tpLogsBody.innerHTML;
-  assert.deepEqual(labelsFromRenderedCells(movementHtml), [
-    "التاريخ", "ماذا حدث؟", "التغيير في الفرص",
-    "التاريخ", "ماذا حدث؟", "التغيير في الفرص",
-  ]);
-  assert.match(movementHtml, /خصم فرص/);
-  assert.match(movementHtml, /إضافة فرص/);
-  assert.match(movementHtml, /خصم 4/);
-  assert.match(movementHtml, /إضافة 7/);
-  assert.doesNotMatch(movementHtml, /الرصيد بعدها|من 4 إلى|من 7 إلى/);
+  assert.doesNotMatch(validHtml, /tpLogsSection|tpLogsBody|كيف تغيّرت فرصك؟|ماذا حدث؟/);
+  assert.doesNotMatch(validHtml, /الفصل الحالي|بداية حساب فرص هذا الفصل|حالتك:|تاريخ تسجيلك في النظام|بياناتك حتى:|هذا التقرير يعرض بياناتك وقت إعداده/);
+  const overview = dom.elements.tpStudentOverview.innerHTML;
+  assert.equal((overview.match(/class="tp-summary-item"/g) || []).length, 1);
+  assert.match(overview, /فرصك المتبقية/);
+  assert.match(overview, /<strong>2<\/strong>/);
+  assert.equal(dom.elements.tpGradesSectionTitle.textContent, "درجاتك — الفصل الأول");
 });
 
 check("سجل الفرص مقيد بالفصل النشط: خصومات الفصل السابق مخفية والتسوية ظاهرة", () => {
@@ -679,7 +671,7 @@ check("صف الخطأ الدفاعي يحتفظ بدلالات row وcell عل�
 
   assert.match(
     dom.elements.tpGradesBody.innerHTML,
-    /<tr class="tp-empty-row tp-error-row" role="row"><td colspan="5" role="cell">/,
+    /<tr class="tp-empty-row tp-error-row" role="row"><td colspan="4" role="cell">/,
   );
 });
 
@@ -710,7 +702,12 @@ check("الامتحان بلا درجة يظهر غياباً بلا اخترا�
   assert.equal(report.grades.length, 1);
   assert.equal(report.grades[0].status, "غائب");
   assert.equal(report.grades[0].outcome, "غياب");
-  assert.match(report.grades[0].opportunityEffect, /لا يوجد خصم مسجّل/);
+  assert.equal(report.grades[0].opportunityEffect, "لا يوجد خصم لهذا الامتحان");
+  const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: report } });
+  const { dom } = executeInlineScripts(html, "missing-grade-cell");
+  openStudentDetails(dom, "s1", "محمد علي حسن");
+  assert.match(dom.elements.tpGradesBody.innerHTML, /data-label="الدرجة"[^]*?tp-mobile-field-value">غياب<\/span>/);
+  assert.doesNotMatch(dom.elements.tpGradesBody.innerHTML, /data-label="النتيجة"/);
   assert.equal(report.activeChapterSince, null);
 });
 
@@ -726,8 +723,8 @@ check("الرصيد من لقطة الطالب نفسها وليس قائمة ق
   assert.equal(sandbox.STUDENT_LIST[0].name, "محمد علي جديد");
   assert.doesNotMatch(html, /PRIVATE_PHONE|PRIVATE_NOTES/);
   openStudentDetails(dom, "s1", "محمد علي جديد");
-  assert.match(dom.elements.tpStudentOverview.innerHTML, /مستمر بالدراسة، لكن لم تبقَ لك فرص/);
-  assert.match(dom.elements.tpStudentOverview.innerHTML, /التاريخ غير مسجّل/);
+  assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>0<\/strong>/);
+  assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /حالتك:|التاريخ غير مسجّل|بياناتك حتى/);
 });
 
 check("الحركات بلا سبب تبقى ظاهرة والصفر محفوظ وإعادة التفعيل ليست جمعاً مرتين", () => {
@@ -746,6 +743,44 @@ check("الحركات بلا سبب تبقى ظاهرة والصفر محفوظ 
   assert.equal(report.s1.opportunityLogs[3].balanceAfter, 0);
   assert.doesNotMatch(JSON.stringify(report), /تلقائي|تسوية تاريخية|academic-reactivation|zero-balance/);
   assert.deepEqual(sanitizeStudentDetailsForHtml(report), report, "التنظيف المتكرر لا يبدل معنى الحركة");
+});
+
+check("تواريخ الامتحانات تستخدم يونيو ويوليو مع يوم بغداد والجدول أربعة أعمدة", () => {
+  const exams = [
+    { id: "june", name: "امتحان يونيو", date: "2026-06-15T22:00:00Z", fullMark: 20 },
+    { id: "july", name: "امتحان يوليو", date: "2026-07-15T22:00:00Z", fullMark: 20 },
+  ];
+  const report = buildStudentDetailsFromProfileLog({ exams, allCourseExams: exams, grades: [
+    { examId: "june", status: "درجة", score: 0 },
+  ], opportunityLogs: [] });
+  const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: report } });
+  const { dom } = executeInlineScripts(html, "report-months");
+  openStudentDetails(dom, "s1", "محمد علي حسن");
+  const grades = dom.elements.tpGradesBody.innerHTML;
+  assert.match(grades, /16 يونيو 2026/);
+  assert.match(grades, /16 يوليو 2026/);
+  assert.doesNotMatch(grades, /حزيران|تموز/);
+  assert.match(grades, /<bdi>0 \/ 20<\/bdi>/, "درجة الصفر تبقى درجة ولا تتحول إلى غياب");
+  assert.match(grades, /tp-mobile-field-value">غياب<\/span>/);
+  const headings = [...html.match(/<table class="tp-details-table tp-grades-table"[^]*?<\/thead>/)[0].matchAll(/role="columnheader">([^<]+)</g)].map(m => m[1]);
+  assert.deepEqual(headings, ["الامتحان", "تاريخ الامتحان", "الدرجة", "الأثر على الفرص"]);
+  assert.equal(labelsFromRenderedCells(grades).length, 8);
+});
+
+check("نص أثر الامتحان مبسط ويحفظ عدد الخصومات الفعلية والصفر والفصل", () => {
+  const exam = { id: "exam", name: "امتحان", date: "2026-07-01", fullMark: 20 };
+  function effect(logs) {
+    return buildStudentDetailsFromProfileLog({ exams: [exam], allCourseExams: [exam], grades: [],
+      opportunityLogs: logs.map(log => ({ examId: exam.id, date: exam.date, ...log })),
+    }).grades[0].opportunityEffect;
+  }
+  assert.equal(effect([]), "لا يوجد خصم لهذا الامتحان");
+  assert.equal(effect([{ action: "خصم تلقائي", amount: 1 }]), "تم خصم فرصة لهذا الامتحان");
+  assert.equal(effect([{ action: "خصم", amount: 3, appliedAmount: 1 }]), "تم خصم فرصة لهذا الامتحان");
+  assert.equal(effect([{ action: "خصم", amount: 1, appliedAmount: 0 }]), "لا يوجد خصم لهذا الامتحان");
+  assert.equal(effect([{ action: "خصم", amount: 2 }]), "تم خصم فرصتين لهذا الامتحان");
+  assert.equal(effect([{ action: "خصم", amount: 3 }]), "عدد الفرص المخصومة لهذا الامتحان: 3");
+  assert.match(effect([{ action: "فصل", amount: 0 }]), /سُجّل فصل بسبب هذا الامتحان/);
 });
 
 export { buildHtml, buildStudentDetailsFromProfileLog, sanitizeStudentDetailsForHtml };

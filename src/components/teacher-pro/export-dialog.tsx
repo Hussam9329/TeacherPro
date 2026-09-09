@@ -487,7 +487,6 @@ const DETAILS_MODAL_CSS = `
   .report-search-mode .report-header { display: block; text-align: center; border: 0; margin-bottom: 24px; }
   .report-search-mode h1 { color: #123f4d; font-size: clamp(23px, 4dvw, 32px); overflow-wrap: anywhere; }
   .tp-report-intro { margin: 10px 0; color: #435d6b; line-height: 1.9; font-size: 15px; }
-  .tp-report-date { color: #536974; font-size: 13px; line-height: 1.8; }
   .tp-search-wrap { width: 100%; max-width: 700px; margin: 0 auto 24px; }
   .tp-search-label { display: block; margin-bottom: 10px; font-size: 16px; font-weight: 700; }
   .tp-search-input { width: 100%; min-height: 52px; padding: 14px 16px; font: inherit; font-size: 16px; border: 2px solid #8faab5; border-radius: 12px; background: white; color: #172b3a; }
@@ -516,14 +515,12 @@ const DETAILS_MODAL_CSS = `
   .tp-modal-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 0; margin-bottom: 18px; border-bottom: 1px solid #dbe5e9; background: white; }
   .tp-modal-header h2 { min-width: 0; margin: 0; font-size: clamp(17px, 3dvw, 23px); line-height: 1.6; overflow-wrap: anywhere; }
   .tp-modal-close { flex-shrink: 0; }
-  .tp-report-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tp-report-summary { display: grid; grid-template-columns: minmax(0, 320px); margin-bottom: 16px; }
   .tp-summary-item { min-width: 0; padding: 18px; background: #f2f7f8; border: 1px solid #dbe5e9; border-radius: 14px; overflow-wrap: anywhere; }
   .tp-summary-item strong { display: block; font-size: 20px; color: #123f4d; line-height: 1.6; }
   .tp-summary-item:first-child { background: #e5f5ef; border-color: #b1d9c9; }
   .tp-summary-item:first-child strong { font-size: 32px; }
   .tp-summary-label { display: block; font-size: 13px; color: #435d6b; margin-bottom: 6px; }
-  .tp-report-notice { padding: 12px 16px; margin: 10px 0 20px; border: 1px solid #dbe5e9; border-radius: 12px; background: #f7fafb; font-size: 14px; line-height: 1.9; overflow-wrap: anywhere; }
-  .tp-report-notice.is-dismissed { color: #8b2424; background: #fff3f3; border-color: #eec2c2; }
   .tp-details-section { min-width: 0; margin: 28px 0 0; scroll-margin-top: 90px; }
   .tp-details-section h3 { font-size: 20px; line-height: 1.7; color: #123f4d; margin: 0 0 6px; }
   .tp-section-help { margin: 0 0 14px; color: #536974; font-size: 14px; line-height: 1.8; }
@@ -532,17 +529,14 @@ const DETAILS_MODAL_CSS = `
   .tp-details-table th { background: #edf4f6; color: #314f5e; font-weight: 700; }
   .tp-details-table tr:last-child td { border-bottom: 0; }
   .tp-details-table tr:nth-child(even) { background: #f9fbfc; }
-  .tp-grades-table th:first-child { width: 26%; }
-  .tp-grades-table th:last-child { width: 27%; }
-  .tp-logs-table th:first-child { width: 20%; }
-  .tp-logs-table th:nth-child(2) { width: 50%; }
+  .tp-grades-table th:first-child { width: 35%; }
+  .tp-grades-table th:nth-child(2) { width: 20%; }
+  .tp-grades-table th:nth-child(3) { width: 15%; }
+  .tp-grades-table th:last-child { width: 30%; }
   .tp-mobile-field-label { display: none; }
   .tp-mobile-field-value { min-width: 0; }
   .tp-event-title { display: block; font-weight: 700; color: #172b3a; margin-bottom: 4px; }
   .tp-event-exam { display: block; font-size: 12px; color: #536974; margin-top: 5px; }
-  .tp-effect { display: inline-block; max-width: 100%; border-radius: 8px; padding: 2px 8px; background: #eef3f5; font-weight: 700; }
-  .tp-effect-add, .tp-effect-return-balance, .tp-effect-chapter-start { background: #e5f5ef; color: #176345; }
-  .tp-effect-deduct, .tp-effect-dismiss { background: #fff0ed; color: #a0382d; }
   .tp-empty-row td { padding: 20px; color: #536974; text-align: center; }
   .tp-error-row td { color: #a0382d; }
   @media (forced-colors: active) { .tp-search-input:focus, .tp-suggestion.active { outline: 2px solid CanvasText; outline-offset: 2px; } }
@@ -554,9 +548,7 @@ const DETAILS_MODAL_CSS = `
     .tp-modal { max-height: 100%; height: 100%; border-radius: 0; padding: 0 12px max(16px, env(safe-area-inset-bottom, 0px)); }
     .tp-modal-header { padding-top: max(12px, env(safe-area-inset-top, 0px)); gap: 8px; }
     .tp-modal-close { padding-inline: 10px; }
-    .tp-report-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .tp-summary-item { padding: 12px; }
-    .tp-summary-item:first-child { grid-column: 1 / -1; }
     .tp-summary-item strong { font-size: 16px; }
     .tp-details-table, .tp-details-table tbody, .tp-details-table tr, .tp-student-card table, .tp-student-card tbody, .tp-student-card tr { display: block; width: 100%; min-width: 0; }
     .tp-details-table, .tp-student-card table { border: 0; background: transparent; }
@@ -568,7 +560,7 @@ const DETAILS_MODAL_CSS = `
     .tp-details-table tr:last-child td { border-bottom: 1px solid #e4ecef; }
     .tp-details-table tr td:last-child, .tp-student-card td:last-child { border-bottom: 0; }
   }
-  @media screen and (max-width: 420px) { .tp-report-summary { grid-template-columns: minmax(0, 1fr); } .tp-summary-item:first-child { grid-column: auto; } .tp-details-table tr:not(.tp-empty-row) td { grid-template-columns: minmax(76px, 32%) minmax(0, 1fr); gap: 8px; } }
+  @media screen and (max-width: 420px) { .tp-details-table tr:not(.tp-empty-row) td { grid-template-columns: minmax(76px, 32%) minmax(0, 1fr); gap: 8px; } }
 `;
 
 const DETAILS_MODAL_HTML = `
@@ -586,28 +578,15 @@ const DETAILS_MODAL_HTML = `
       <button type="button" class="tp-modal-close" id="tpModalClose">رجوع للبحث</button>
     </div>
     <div id="tpStudentOverview"></div>
-    <section class="tp-details-section" id="tpLogsSection" aria-labelledby="tpLogsSectionTitle">
-      <h3 id="tpLogsSectionTitle">كيف تغيّرت فرصك؟</h3>
-      <p class="tp-section-help">من الأقدم إلى الأحدث. «أصبح الرصيد» يعني بداية رصيد جديد، وليس إضافة هذا العدد إلى رصيدك السابق.</p>
-      <table class="tp-details-table tp-logs-table" role="table" aria-label="تغيّر فرص الطالب">
-        <thead><tr role="row">
-          <th scope="col" role="columnheader">التاريخ</th>
-          <th scope="col" role="columnheader">ماذا حدث؟</th>
-          <th scope="col" role="columnheader">التغيير في الفرص</th>
-        </tr></thead>
-        <tbody id="tpLogsBody"></tbody>
-      </table>
-    </section>
     <section class="tp-details-section" aria-labelledby="tpGradesSectionTitle">
       <h3 id="tpGradesSectionTitle">درجاتك في الامتحانات</h3>
       <p class="tp-section-help">الامتحان الذي لا توجد لك درجة فيه يظهر «غياب». أثره على الفرص مبيّن بجانبه حسب سجلّك.</p>
       <table class="tp-details-table tp-grades-table" role="table" aria-label="درجات الطالب">
         <thead><tr role="row">
           <th scope="col" role="columnheader">الامتحان</th>
-          <th scope="col" role="columnheader">التاريخ</th>
-          <th scope="col" role="columnheader">درجتك</th>
-          <th scope="col" role="columnheader">النتيجة</th>
-          <th scope="col" role="columnheader">أثره على فرصك</th>
+          <th scope="col" role="columnheader">تاريخ الامتحان</th>
+          <th scope="col" role="columnheader">الدرجة</th>
+          <th scope="col" role="columnheader">الأثر على الفرص</th>
         </tr></thead>
         <tbody id="tpGradesBody"></tbody>
       </table>
@@ -629,8 +608,6 @@ const DETAILS_MODAL_JS = `
   var overlay = document.getElementById('tpDetailsModal');
   var titleTextEl = document.getElementById('tpModalTitleText');
   var gradesBody = document.getElementById('tpGradesBody');
-  var logsBody = document.getElementById('tpLogsBody');
-  var logsSection = document.getElementById('tpLogsSection');
   var closeBtn = document.getElementById('tpModalClose');
 
   var activeIndex = -1;
@@ -653,14 +630,8 @@ const DETAILS_MODAL_JS = `
     var d = new Date(s);
     if (isNaN(d.getTime())) return esc(s);
     try {
-      return d.toLocaleDateString('ar-IQ-u-nu-latn', {day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Baghdad'});
+      return d.toLocaleDateString('ar-EG-u-nu-latn', {day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Baghdad'});
     } catch(e){ return esc(s); }
-  }
-
-  function fmtDateTime(s){
-    var d = new Date(s);
-    if (isNaN(d.getTime())) return 'غير مسجّل';
-    return esc(d.toLocaleString('ar-IQ-u-nu-latn', {timeZone:'Asia/Baghdad',year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}));
   }
 
   function mobileCell(label, valueHtml, extraClass){
@@ -832,48 +803,22 @@ const DETAILS_MODAL_JS = `
     if (badgeEl) badgeEl.style.display = status === 'مفصول' ? '' : 'none';
     if (titleTextEl) titleTextEl.textContent = studentLabel || student.name || 'درجاتك وفرصك';
     if (gradesTitleEl) gradesTitleEl.textContent = data && data.activeChapterName ? 'درجاتك — ' + data.activeChapterName : 'درجاتك في الامتحانات';
-    document.getElementById('tpLogsSectionTitle').textContent = data && data.activeChapterName ? 'كيف تغيّرت فرصك؟ — ' + data.activeChapterName : 'كيف تغيّرت فرصك؟';
     if (overview) {
-      var statusHelp = status === 'مفصول'
-        ? 'حالتك: مفصول. تواصل مع مسؤول الفرص لحل سبب الفصل والعودة للدراسة.'
-        : status === 'نشط' && balance !== null && balance !== undefined && balance !== '' && Number(balance) === 0
-          ? 'حالتك: مستمر بالدراسة، لكن لم تبقَ لك فرص. الوصول إلى صفر وحده لا يعني الفصل؛ مخالفة جديدة وأنت بلا فرص قد تؤدي إلى الفصل.'
-          : 'حالتك: ' + (status === 'نشط' ? 'مستمر بالدراسة' : (status || 'غير مسجّلة')) + '.';
       overview.innerHTML = '<div class="tp-report-summary">'
-        + '<div class="tp-summary-item"><span class="tp-summary-label">فرصك المتبقية</span><strong>' + fmtNum(balance) + '</strong><span class="tp-summary-label">حسب رصيدك المحفوظ وقت إعداد التقرير</span></div>'
-        + '<div class="tp-summary-item"><span class="tp-summary-label">الفصل الحالي</span><strong>' + esc(data && data.activeChapterName || 'غير محدّد') + '</strong><span class="tp-summary-label">' + esc(student.courseName || '') + '</span></div>'
-        + '<div class="tp-summary-item"><span class="tp-summary-label">بداية حساب فرص هذا الفصل</span><strong>' + (data && data.activeChapterSince ? fmtDate(data.activeChapterSince) : 'التاريخ غير مسجّل') + '</strong><span class="tp-summary-label">تاريخ بدء رصيد الفصل، وقد يختلف عن أول محاضرة أو امتحان</span></div></div>'
-        + '<p class="tp-report-notice' + (status === 'مفصول' ? ' is-dismissed' : '') + '">' + esc(statusHelp) + '</p>'
-        + (snapshot && snapshot.registeredAt ? '<p class="tp-report-date">تاريخ تسجيلك في النظام: ' + fmtDate(snapshot.registeredAt) + '</p>' : '')
-        + (data && data.generatedAt ? '<p class="tp-report-date">بياناتك حتى: ' + fmtDateTime(data.generatedAt) + ' — هذا التقرير نسخة وقت إعداده؛ لا يتحدث بعد نشره.</p>' : '');
+        + '<div class="tp-summary-item"><span class="tp-summary-label">فرصك المتبقية</span><strong>' + fmtNum(balance) + '</strong></div></div>';
     }
     if (!data) {
-      gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row" role="row"><td colspan="5" role="cell">تفاصيل هذا الطالب غير موجودة في هذه النسخة. اطلب نسخة جديدة من الإدارة.</td></tr>';
-      logsSection.style.display = 'none';
+      gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row" role="row"><td colspan="4" role="cell">تفاصيل هذا الطالب غير موجودة في هذه النسخة. اطلب نسخة جديدة من الإدارة.</td></tr>';
     } else {
       gradesBody.innerHTML = data.grades && data.grades.length ? data.grades.map(function(g){
-        var score = g.score === null || g.score === undefined ? '—' : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
+        var score = g.score === null || g.score === undefined ? 'غياب' : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
         return '<tr role="row">'
           + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
-          + mobileCell('التاريخ', fmtDate(g.examDate) || 'غير مسجّل')
-          + mobileCell('درجتك', score)
-          + mobileCell('النتيجة', esc(g.outcome || (g.status === 'درجة' && g.score != null ? 'درجة مسجّلة' : g.status === 'غائب' ? 'غياب' : g.status)))
-          + mobileCell('أثره على فرصك', esc(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.'))
+          + mobileCell('تاريخ الامتحان', fmtDate(g.examDate) || 'غير مسجّل')
+          + mobileCell('الدرجة', score)
+          + mobileCell('الأثر على الفرص', esc(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.'))
           + '</tr>';
-      }).join('') : '<tr class="tp-empty-row" role="row"><td colspan="5" role="cell">لا توجد امتحانات في هذا الفصل ضمن التقرير حتى الآن.</td></tr>';
-      logsSection.style.display = '';
-      var movementLogs = data.opportunityLogs || [];
-      logsBody.innerHTML = movementLogs.length ? movementLogs.map(function(l){
-        var change = esc(l.effectText || l.action || 'تحديث مسجّل');
-        if (l.balanceBefore != null && l.balanceAfter != null) change += '<span class="tp-event-exam">من ' + fmtNum(l.balanceBefore) + ' إلى ' + fmtNum(l.balanceAfter) + '</span>';
-        else if (l.balanceAfter != null) change += '<span class="tp-event-exam">الرصيد بعدها: ' + fmtNum(l.balanceAfter) + '</span>';
-        var kind = ['add','deduct','reset','chapter-start','return-balance','return','dismiss'].indexOf(l.movementKind) >= 0 ? l.movementKind : 'other';
-        return '<tr role="row">'
-          + mobileCell('التاريخ', fmtDate(l.date) || 'غير مسجّل')
-          + mobileCell('ماذا حدث؟', '<strong class="tp-event-title">' + esc(l.action) + '</strong>' + esc(l.reason || 'السبب غير مسجّل') + (l.examName ? '<span class="tp-event-exam">الامتحان: ' + esc(l.examName) + '</span>' : ''))
-          + mobileCell('التغيير في الفرص', '<span class="tp-effect tp-effect-' + kind + '">' + change + '</span>')
-          + '</tr>';
-      }).join('') : '<tr class="tp-empty-row" role="row"><td colspan="3" role="cell">لا توجد إضافات أو خصومات مسجّلة في هذا الفصل حتى الآن.</td></tr>';
+      }).join('') : '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">لا توجد امتحانات في هذا الفصل ضمن التقرير حتى الآن.</td></tr>';
     }
     if (!overlay.classList.contains('open')) {
       previouslyFocusedElement = document.activeElement;
@@ -1095,7 +1040,7 @@ export function buildHtml<T>(
           getRowId: options.getRowId,
         })}</tbody></table></div>`;
   const metaLine = interactiveMode
-    ? '<p class="tp-report-intro">اعرف درجاتك، وفرصك المتبقية، وسبب كل إضافة أو خصم.</p><p class="tp-report-date">هذا التقرير يعرض بياناتك وقت إعداده. للحصول على آخر التغييرات افتح أحدث نسخة تنشرها الإدارة.</p>'
+    ? '<p class="tp-report-intro">اعرف درجاتك، وفرصك المتبقية، وأثر كل امتحان عليها.</p>'
     : `<div class="meta">عدد الصفوف: ${rows.length} | عدد الأعمدة: ${columns.length}</div>`;
 
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8">${viewportMeta}<title>${escapeHtml(humanizeTeacherProText(interactiveMode && !options.documentTitle ? reportHeading : documentTitle))}</title><style>

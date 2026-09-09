@@ -93,11 +93,16 @@ export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<s
   const deductions = logs.filter(l => l.action === "خصم" || l.action === "خصم تلقائي");
   const deducted = deductions.reduce((sum, l) => sum + (reportNumber(l.appliedAmount) ?? reportNumber(l.amount) ?? 0), 0);
   const dismissed = logs.some(l => String(l.action || "").startsWith("فصل"));
-  if (deducted || dismissed) return [deducted ? `خصم مسجّل: ${deducted}` : "", dismissed ? "سُجّل فصل بسبب هذا الامتحان" : ""].filter(Boolean).join(". ");
+  const deductionText = deducted === 1
+    ? "تم خصم فرصة لهذا الامتحان"
+    : deducted === 2
+      ? "تم خصم فرصتين لهذا الامتحان"
+      : deducted > 0 ? `عدد الفرص المخصومة لهذا الامتحان: ${deducted}` : "";
+  if (deducted || dismissed) return [deductionText, dismissed ? "سُجّل فصل بسبب هذا الامتحان" : ""].filter(Boolean).join(". ");
   if (grade.academicEffectExcluded) return "لا خصم: هذه الدرجة مستثناة من حساب الفرص.";
   if (grade.status === "مجاز") return "لا خصم: لديك إجازة لهذا الامتحان.";
   if (grade.status === "قبل تسجيل الطالب") return "لا خصم: الامتحان قبل تسجيلك.";
   if (grade.status === "ضمن فترة السماح" || /درجة (?:مؤجلة خلال فترة سماح الطالب|مؤجلة خلال فترة السماح|حقيقية داخل فترة السماح)/.test(String(grade.notes || ""))) return "لا خصم: الامتحان ضمن فترة السماح.";
   if (exam?.noDiscount) return "هذا الامتحان لا يخصم فرصاً.";
-  return "لا يوجد خصم مسجّل لهذا الامتحان.";
+  return "لا يوجد خصم لهذا الامتحان";
 }
