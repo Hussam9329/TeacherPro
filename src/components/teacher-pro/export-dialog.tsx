@@ -523,7 +523,6 @@ const DETAILS_MODAL_CSS = `
   .tp-summary-label { display: block; font-size: 13px; color: #435d6b; margin-bottom: 6px; }
   .tp-details-section { min-width: 0; margin: 28px 0 0; scroll-margin-top: 90px; }
   .tp-details-section h3 { font-size: 20px; line-height: 1.7; color: #123f4d; margin: 0 0 6px; }
-  .tp-section-help { margin: 0 0 14px; color: #536974; font-size: 14px; line-height: 1.8; }
   .tp-details-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 14px; font-weight: 400; border: 1px solid #dbe5e9; border-radius: 12px; }
   .tp-details-table th, .tp-details-table td { padding: 13px 10px; border: 0; border-bottom: 1px solid #e4ecef; text-align: right; line-height: 1.9; vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
   .tp-details-table th { background: #edf4f6; color: #314f5e; font-weight: 700; }
@@ -580,7 +579,6 @@ const DETAILS_MODAL_HTML = `
     <div id="tpStudentOverview"></div>
     <section class="tp-details-section" aria-labelledby="tpGradesSectionTitle">
       <h3 id="tpGradesSectionTitle">درجاتك في الامتحانات</h3>
-      <p class="tp-section-help">الامتحان الذي لا توجد لك درجة فيه يظهر «غياب». أثره على الفرص مبيّن بجانبه حسب سجلّك.</p>
       <table class="tp-details-table tp-grades-table" role="table" aria-label="درجات الطالب">
         <thead><tr role="row">
           <th scope="col" role="columnheader">الامتحان</th>
