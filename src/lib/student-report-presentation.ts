@@ -15,6 +15,31 @@ export function studentReportText(value: unknown): string {
     .trim();
 }
 
+/** Read the recorded grant, including historical settlements and manual pledges. */
+export function hasTwoOpportunityPledge(logs: Record<string, unknown>[]): boolean {
+  return logs.some(log => {
+    const action = String(log.action || "").trim();
+    const reason = studentReportText(log.reason).normalize("NFKD").replace(/[\u064B-\u065F\u0670]/g, "");
+    const mentionsPledge = action === "رصيد بعد تعهد" || /تعهد/.test(reason);
+    if (!mentionsPledge || /حماية P\d+|دون تغيير بتوجيه المالك/.test(reason)) return false;
+    if (/(?:بدون|دون|لا يوجد)\s+(?:ال)?تعهد|لم\s+(?:يتعهد|يتم\s+(?:قبول\s+)?(?:ال)?تعهد)|الغاء\s+(?:ال)?تعهد/.test(reason)) return false;
+
+    // Balance setters record the new balance; appliedAmount can be zero even
+    // when a historical settlement explicitly established a two-chance pledge.
+    if (["رصيد بعد تعهد", "رصيد إعادة التفعيل", "إعادة تعيين"].includes(action)) {
+      return (reportNumber(log.balanceAfter) ?? reportNumber(log.amount)) === 2;
+    }
+    if (action === "إضافة") {
+      return (reportNumber(log.appliedAmount) ?? reportNumber(log.amount)) === 2;
+    }
+    // Some older manual returns have only the completed reactivation event.
+    const savedBalance = reportNumber(log.balanceAfter);
+    return (savedBalance === null || savedBalance === 2) &&
+      (action === "إعادة تفعيل" || action === "إعادة تفعيل بفرصتين") &&
+      (action === "إعادة تفعيل بفرصتين" || /فرصتين/.test(reason));
+  });
+}
+
 export type ReportMovementKind = "add" | "deduct" | "reset" | "chapter-start" | "confirm-balance" | "return-balance" | "return" | "dismiss" | "other";
 type Movement = {
   action: string; amount: number; reason?: string | null;

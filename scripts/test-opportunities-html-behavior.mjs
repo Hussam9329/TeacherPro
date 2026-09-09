@@ -783,6 +783,68 @@ check("نص أثر الامتحان مبسط ويحفظ عدد الخصومات 
   assert.match(effect([{ action: "فصل", amount: 0 }]), /سُجّل فصل بسبب هذا الامتحان/);
 });
 
+check("عبارة التعهد تشمل التسوية والتعهد اليدوي وتبقى بجانب الرصيد الفعلي", () => {
+  const pledgeLogs = [
+    { action: "رصيد بعد تعهد", amount: 2, reason: "تسوية تاريخية: تثبيت رصيد الطالب عند 2/3 بموجب تعهده للامتحان الفاينل للفصل الأول" },
+    { action: "رصيد إعادة التفعيل", amount: 2, reason: "تم تعهد الطالب: إرجاعه إلى الحالة النشطة برصيد فرصتين بسبب التعهد" },
+    { action: "إعادة تعيين", amount: 2, appliedAmount: 0, balanceBefore: 2, balanceAfter: 2, reason: "تسوية تاريخية: تعهد الطالب للامتحان الفاينل الفصل الأول" },
+    { action: "إضافة", amount: 2, appliedAmount: 2, balanceAfter: 3, reason: "تعهد" },
+    { action: "إعادة تفعيل", amount: 0, reason: "تثبيت إعادة التفعيل بعد تعهد الطالب: الطالب نشط برصيد فرصتين" },
+  ];
+  const message = "تم منح الطالب فرصتين بسبب تعهده";
+  for (const log of pledgeLogs) {
+    const profile = {
+      student: { name: studentList[0].name, status: "نشط", opportunities: 1 },
+      // A pledge can precede this chapter or refer to an older final exam.
+      currentChapter: { id: "ch2", name: "الفصل الثاني", since: "2026-09-01", examIds: [] },
+      opportunityLogs: [{ ...log, date: "2026-08-31", examId: "old-final" }],
+    };
+    const before = JSON.stringify(profile);
+    const details = buildStudentDetailsFromProfileLog(profile);
+    assert.equal(details.hasTwoOpportunityPledge, true, log.action);
+    assert.equal(details.opportunityLogs.length, 0, "حدود سجل الفصل لا تتغير بسبب العبارة");
+    const sanitized = sanitizeStudentDetailsForHtml({ s1: details });
+    assert.deepEqual(sanitizeStudentDetailsForHtml(sanitized), sanitized);
+    const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: sanitized });
+    const { dom } = executeInlineScripts(html, "pledge-grant");
+    dom.elements.tpStudentSearch.value = "محمد علي";
+    dom.elements.tpStudentSearch.dispatch("input", {});
+    clickFirstSuggestion(dom);
+    assert.ok(dom.elements.tpStudentCard.innerHTML.includes(message));
+    assert.ok(dom.elements.tpStudentOverview.innerHTML.includes(message));
+    assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>1<\/strong>/);
+    assert.equal((dom.elements.tpStudentOverview.innerHTML.match(/tp-summary-item/g) || []).length, 1);
+    assert.equal(JSON.stringify(profile), before, "الإظهار لا يغيّر الرصيد أو سجل الطالب");
+  }
+});
+
+check("الرصيد الحالي أو ذكر التعهد في خصم لا يخترع منح فرصتين", () => {
+  const unrelatedLogs = [
+    [],
+    [{ action: "إضافة", amount: 2, reason: "إضافة عادية" }],
+    [{ action: "إضافة", amount: 2, reason: "إضافة بدون تعهد" }],
+    [{ action: "إضافة", amount: 2, appliedAmount: 0, reason: "تعهد" }],
+    [{ action: "رصيد بعد تعهد", amount: 1, reason: "تعهد قديم بفرصة واحدة" }],
+    [{ action: "رصيد بعد تعهد", amount: 2, balanceAfter: 1 }],
+    [{ action: "إعادة تفعيل", amount: 0, reason: "بعد تعهد الطالب" }],
+    [{ action: "إعادة تفعيل", amount: 0, balanceAfter: 1, reason: "إعادة بعد تعهد بفرصتين" }],
+    [{ action: "رصيد إعادة التفعيل", amount: 2, reason: "بداية الفصل الجديد" }],
+    [{ action: "فصل", amount: 2, reason: "عدم الالتزام بالتعهد" }],
+    [{ action: "خصم", amount: 2, reason: "عدم الالتزام بالتعهد" }],
+    [{ action: "إعادة تعيين", amount: 2, reason: "حماية P2: تثبيت الرصيد بعد التعهد دون تغيير بتوجيه المالك" }],
+  ];
+  for (const opportunityLogs of unrelatedLogs) {
+    const details = buildStudentDetailsFromProfileLog({
+      student: { name: studentList[0].name, opportunities: 2, status: "نشط" }, opportunityLogs,
+    });
+    assert.equal(details.hasTwoOpportunityPledge, false);
+    const { dom } = executeInlineScripts(buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: details } }), "no-pledge-grant");
+    openStudentDetails(dom, "s1", studentList[0].name);
+    assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /تم منح الطالب فرصتين بسبب تعهده/);
+    assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>2<\/strong>/);
+  }
+});
+
 export { buildHtml, buildStudentDetailsFromProfileLog, sanitizeStudentDetailsForHtml };
 
 check("حماية الرصيد القديم لا توصف كمنح فرص جديدة ولا تعرض أسماء مراحل الصيانة", () => {

@@ -19,6 +19,13 @@ search results stay in normal flow and the profile has one scrolling panel.
   deductions retain their actual count; saved zero is never treated as a deduction.
 - Format displayed dates with `ar-EG-u-nu-latn` and the Baghdad time zone, using
   month names such as يونيو and يوليو.
+- Show «تم منح الطالب فرصتين بسبب تعهده» beside the balance when the enrollment
+  ledger proves a two-opportunity pledge grant, including historical settlements
+  and manual pledges. Read this evidence before filtering exams to the chapter.
+  The note describes the past grant and survives later deductions; the displayed
+  remaining balance is still the database snapshot, never reset to two. Ordinary
+  two-opportunity balances, deductions and maintenance confirmations do not
+  establish a pledge. The note wraps inside the existing card on phones.
 - Read the displayed current balance and status from the same `profile-log`
   database snapshot as the student's grades and history, overriding the earlier
   list response. This remains an offline snapshot; timestamps are not displayed.
