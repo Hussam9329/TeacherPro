@@ -46,7 +46,7 @@ mocks.set('@/lib/server-auth', {
 });
 mocks.set('@/lib/schema-readiness', { assertDatabaseSchemaReady: async () => { readinessChecks++; } });
 const { GET } = require('../src/app/api/bootstrap/route.ts');
-const { buildMutationPreviewToken } = require('../src/lib/mutation-preview-token.ts');
+const { buildExamMutationToken } = require('../src/lib/exam-mutation-token.ts');
 const request = {};
 const reset = (permissions, admin = false) => {
   calls.length = 0; authChecks = 0; readinessChecks = 0;
@@ -73,8 +73,15 @@ const reset = (permissions, admin = false) => {
   let response = await GET(request), payload = await response.json();
   assert.deepEqual(Object.keys(payload), ['exams']);
   assert.equal(readinessChecks, 1);
-  assert.equal(payload.exams[0].mutationToken, buildMutationPreviewToken('exam-edit:e', fixtures.exam[0]));
+  assert.equal(payload.exams[0].mutationToken, buildExamMutationToken(fixtures.exam[0]));
   assert.deepEqual(calls[0].args.include, { examCourses: true });
+  const { examCourses: _relations, ...scalarExam } = fixtures.exam[0];
+  assert.equal(payload.exams[0].mutationToken, buildExamMutationToken(scalarExam), 'bootstrap token matches the scalar PUT read');
+  assert.equal(payload.exams[0].mutationToken, buildExamMutationToken({ ...scalarExam, examCourses: [{ id: 'relation' }], mutationToken: 'display-only' }));
+  const { Prisma } = require('@prisma/client');
+  for (const field of Prisma.dmmf.datamodel.models.find(model => model.name === 'Exam').fields.filter(field => field.kind !== 'object')) {
+    assert.notEqual(buildExamMutationToken(scalarExam), buildExamMutationToken({ ...scalarExam, [field.name]: 'changed-' + field.name }), 'actual change invalidates token: ' + field.name);
+  }
 
   reset(['accounts.users.view']);
   payload = await (await GET(request)).json();

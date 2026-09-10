@@ -47,7 +47,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
   if(!row)return null;const out=args.select?{}:{...row};
   for(const [key,spec]of Object.entries(args.select||args.include||{})){
    if(!spec)continue;
-   if(typeof spec==='object'||(args.include&&['student','exam'].includes(key))){
+   if(typeof spec==='object'||(args.include&&['student','exam','examCourses'].includes(key))){
     const relation=key==='examCourses'?'examCourse':key;
     if(!relations.has(relation))relations.set(relation,all(relation));
     const related=(await relations.get(relation)).filter(r=>key==='examCourses'?r.examId===row.id:r.id===row[key+'Id']);
@@ -113,7 +113,6 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  mocks.set('@/lib/grace-period-repair-server',{...repairs,repairProtectedAbsencesForStudents:async(...args)=>{markerCalls.push('repairProtectedAbsencesForStudents');return repairs.repairProtectedAbsencesForStudents(...args);}});
  const route=require('../src/app/api/exams/route.ts');
  const {previewStudentsAcademicState}=require('../src/lib/academic-recalculate-server.ts');
- const {buildMutationPreviewToken}=require('../src/lib/mutation-preview-token.ts');
  await pg.exec(`INSERT INTO "Course"(id,name) VALUES('c','الصيفية الأولى'),('isolated','دورة أخرى');
  INSERT INTO "Chapter"(id,name,opportunities) VALUES('ch','الفصل الثاني',3),('old-ch','الفصل الأول',3);
  INSERT INTO "CourseChapter"(id,"courseId","chapterId",active) VALUES('cc','c','ch',true),('ic','isolated','ch',true);
@@ -172,12 +171,25 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  assert.ok(legacyEvent);
  await client.opportunityLog.update({where:{id:legacyEvent.id},data:{id:'legacy-s6-e8'}});
  const before=await snapshot(),original=await row('exam','e9');
+ // Consume the real listing token exactly as the UI does. Both listing
+ // variants include examCourses; PUT reads the scalar Exam for its guard.
+ const listingResponse=await route.GET({url:'https://example.test/api/exams'});
+ assert.equal(listingResponse.status,200);
+ const listed=(await listingResponse.json()).exams.find(e=>e.id==='e9');
+ assert.ok(listed&&listed.examCourses.length>0,'GET returns actual exam-course relations');
+ const pagedResponse=await route.GET({url:'https://example.test/api/exams?page=1&pageSize=500'});
+ assert.equal(pagedResponse.status,200);
+ const paged=(await pagedResponse.json()).exams.find(e=>e.id==='e9');
+ assert.ok(paged&&paged.examCourses.length>0);
+ assert.equal(paged.mutationToken,listed.mutationToken,'paginated and full GET use the same edit token');
  const fullPayload={id:'e9',name:original.name,type:original.type,courseIds:['c'],mainSite:'بغداد',date:'2026-09-09',fullMark:20,passMark:10,discountMark:0,opportunitiesPenalty:0,dismissalGrade:null,noDiscount:true,active:true,scheduledActivateAt:null,
-  expectedMutationToken:buildMutationPreviewToken('exam-edit:e9',original)};
+  expectedMutationToken:listed.mutationToken};
  const writesStart=statements.length;
  const changed=await put(fullPayload);
  assert.equal(changed.status,200,JSON.stringify(changed.data));
  assert.equal(changed.data.exam.noDiscount,true);
+ const savedListing=(await (await route.GET({url:'https://example.test/api/exams?page=1&pageSize=500'})).json()).exams.find(e=>e.id==='e9');
+ assert.equal(savedListing.mutationToken,changed.data.exam.mutationToken,'PUT response token matches relation-bearing GET after save');
  assert.equal(changed.data.exam.discountMark,0);assert.equal(changed.data.exam.opportunitiesPenalty,'0');assert.equal(changed.data.exam.dismissalGrade,null);
  assert.equal(new Date(changed.data.exam.date).toISOString(),original.date.toISOString(),'UI resubmission of unchanged Baghdad day must retain the existing timestamp');
  assert.deepEqual(markerCalls,[],'policy edit must not rebuild protected markers or repair unrelated grades');

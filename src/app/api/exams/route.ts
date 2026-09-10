@@ -13,6 +13,7 @@ import { recalculateStudentsForExam, toAcademicExam } from '@/lib/academic-recal
 import { writeRequestAuditLog } from '@/lib/audit-log-server';
 import type { Prisma } from '@prisma/client';
 import { buildMutationPreviewToken } from '@/lib/mutation-preview-token';
+import { buildExamMutationToken } from '@/lib/exam-mutation-token';
 import { withSerializableTransaction } from '@/lib/serializable-transaction';
 import {
   ensureProtectedGradeMarkers,
@@ -82,7 +83,7 @@ function hasProtectedMarkerScopeChange(before: unknown, after: unknown): boolean
 }
 
 function examMutationToken(exam: Record<string, unknown>): string {
-  return buildMutationPreviewToken(`exam-edit:${String(exam.id || '')}`, exam);
+  return buildExamMutationToken(exam);
 }
 
 

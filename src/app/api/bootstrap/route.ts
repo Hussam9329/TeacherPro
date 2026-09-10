@@ -9,7 +9,7 @@ import {
   unauthorizedResponse,
 } from "@/lib/server-auth";
 import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
-import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
+import { buildExamMutationToken } from "@/lib/exam-mutation-token";
 import { routeErrorResponse } from "@/lib/route-helpers";
 
 /**
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
         return {
           exams: exams.map((exam) => ({
             ...exam,
-            mutationToken: buildMutationPreviewToken(`exam-edit:${exam.id}`, exam),
+            mutationToken: buildExamMutationToken(exam),
           })),
         };
       })());
