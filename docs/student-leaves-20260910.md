@@ -1,0 +1,11 @@
+# Leave performance and dismissal review
+
+The leave list requests 40 records per page, with search, type/date filtering and aggregate totals computed by the server. The form loads only the selected student's leave history for overlap validation. Existing rows remain visible during refresh; aborted or pre-mutation responses cannot overwrite saved results. A synchronous operation guard prevents duplicate submissions. Student summaries use the committed result of academic recalculation.
+
+Dismissed students may receive exam or period leave. Archived students remain protected. Only an explicit leave mutation can reconsider dismissal: a current-chapter automatic dismissal must match the stored reason, no later manual dismissal may supersede it, and the leave must cover a deduction at or before that dismissal. Replaying the actual records must leave no valid dismissal. Recovery retains the calculated balance, including zero, and creates no pledge, grant, settlement reset or pending-grade promotion. Manual and independently valid dismissals remain effective. Ordinary academic recalculation retains its existing dismissal policy.
+
+Grade backup, excused markers and restoration use bulk writes inside the existing serializable transaction. Cancelling leave preserves the original grade identity, score (including zero) and accounting/exclusion metadata. If another leave still covers an exam, its excused marker remains and the original backup transfers to the remaining leave; the final cancellation restores the original grade. Invalid historical absence backups retain the existing registration/grace checks. Leave operations preserve automatic opportunity logs outside the active chapter, including their original metadata.
+
+No schema migration or bulk production balance correction is included. This release changes future user-triggered leave operations only.
+
+`npm run test:student-leaves-integrity` includes real route and academic-service execution against PostgreSQL-compatible migrations, covering dismissal recovery, remaining/manual dismissal, overlap cancellation in both creation and deletion orders, original grade identity and zero preservation, authorization, transaction rollback and paginated search/totals. The full side-effects suite, TypeScript checks and production application build also pass.

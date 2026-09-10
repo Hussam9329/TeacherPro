@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { reconcileExpiredGracePendingGrades } from "@/lib/grade-smart-note-grace-expiry-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { historicalLeaveLogIds, recalculateWithLeaveReview, type LeaveDismissalReview } from "@/lib/leave-dismissal-review";
 import {
   isAutomaticOpportunityLog,
   recalculateAcademicState,
@@ -501,6 +502,7 @@ async function persistAcademicRecalculation(
   client: PrismaClientLike,
   studentIds: string[],
   result: ReturnType<typeof recalculateAcademicState>,
+  preservedAutomaticIds: Set<string> = new Set(),
 ): Promise<AcademicServerRecalculationResult> {
   const targetStudentIds = new Set(studentIds);
   const students = result.students.filter((student) =>
@@ -526,13 +528,14 @@ async function persistAcademicRecalculation(
 
   if (studentIds.length > 0) {
     await client.opportunityLog.deleteMany({
-      where: automaticOpportunityLogWhere(studentIds),
+      where: { ...automaticOpportunityLogWhere(studentIds), ...(preservedAutomaticIds.size ? { id: { notIn: [...preservedAutomaticIds] } } : {}) },
     });
   }
 
-  if (automaticOpportunityLogs.length > 0) {
+  const replacementLogs = automaticOpportunityLogs.filter(log => !preservedAutomaticIds.has(log.id));
+  if (replacementLogs.length > 0) {
     await client.opportunityLog.createMany({
-      data: automaticOpportunityLogs.map((log) => ({
+      data: replacementLogs.map((log) => ({
         id: log.id,
         studentId: log.studentId,
         examId: log.examId || null,
@@ -700,12 +703,12 @@ export async function previewStudentAcademicUpdate(
 
 export async function recalculateStudentsAcademicState(
   rawStudentIds: Array<string | null | undefined>,
-  options: { tx?: Prisma.TransactionClient } = {},
+  options: { tx?: Prisma.TransactionClient; leaveReview?: LeaveDismissalReview } = {},
 ): Promise<AcademicServerRecalculationResult> {
   const transaction = options.tx;
   if (!transaction) {
     return withSerializableTransaction((tx) =>
-      recalculateStudentsAcademicState(rawStudentIds, { tx }),
+      recalculateStudentsAcademicState(rawStudentIds, { ...options, tx }),
     );
   }
   const studentIds = uniqueIds(rawStudentIds);
@@ -740,16 +743,18 @@ export async function recalculateStudentsAcademicState(
       automaticOpportunityLogs: [],
     };
   }
-  const result = recalculateAcademicState(
+  const result = recalculateWithLeaveReview(
     state,
     new Set(recalculableStudentIds),
+    options.leaveReview,
   );
-  // Recalculation preserves dismissed status. Explicit reactivation and pending
-  // grade migration belong exclusively to the student status-action route.
+  // Only leave mutations may remove a proved obsolete exam dismissal. This
+  // creates no grant and does not promote dismissed pending grades.
   return persistAcademicRecalculation(
     client,
     recalculableStudentIds,
     result,
+    options.leaveReview ? historicalLeaveLogIds(state, new Set(recalculableStudentIds)) : undefined,
   );
 }
 

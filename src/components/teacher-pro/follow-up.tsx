@@ -367,6 +367,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   useEffect(() => {
     if (view !== "leaves") return;
     let cancelled = false;
+    const controller = new AbortController();
     setLeavePickerLoading(true);
     studentApi
       .list({
@@ -374,7 +375,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         opportunityMode: true,
         includeArchived: true,
         pageSize: 30,
-      })
+      }, { signal: controller.signal, quietAbort: true })
       .then((result) => {
         if (cancelled) return;
         const next = (result?.students || []) as unknown as Student[];
@@ -393,10 +394,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [view, debouncedGlobalSearch, mergeStudentsCache]);
 
   const [leaveStudentId, setLeaveStudentId] = useState("");
+  const [leaveStudentSnapshot, setLeaveStudentSnapshot] = useState<Student | null>(null);
   const [leaveMode, setLeaveMode] = useState<LeaveMode>("exam");
   const [leaveExamId, setLeaveExamId] = useState("");
   const [leaveReasonChoice, setLeaveReasonChoice] =
@@ -420,63 +423,87 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const debouncedLeaveSearch = useDebouncedValue(leaveSearch, 180);
   const [leaveTypeFilter, setLeaveTypeFilter] = useState<"all" | LeaveMode>("all");
   const [leaveDateFilter, setLeaveDateFilter] = useState("");
+  const [leavePage, setLeavePage] = useState(1);
+  const [leavePageInfo, setLeavePageInfo] = useState({ totalCount: 0, totalPages: 1 });
+  const [leaveStats, setLeaveStats] = useState({ total: 0, exam: 0, period: 0, withNotes: 0 });
+  const [selectedLeaveRows, setSelectedLeaveRows] = useState<StudentLeave[]>([]);
+  const [selectedLeavesLoading, setSelectedLeavesLoading] = useState(false);
+  const [selectedLeavesError, setSelectedLeavesError] = useState("");
+  const leaveOperationRef = useRef(false);
+  const leaveMutationVersionRef = useRef(0);
+  const leaveListAbortRef = useRef<AbortController | null>(null);
+  const selectedLeavesAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => setLeavePage(1), [debouncedLeaveSearch, leaveTypeFilter, leaveDateFilter]);
 
   useEffect(() => {
-    if (view !== "leaves") return;
+    if (view !== "leaves" || leaveOperationRef.current) return;
     const controller = new AbortController();
+    leaveListAbortRef.current = controller;
+    const version = leaveMutationVersionRef.current;
+    setLeaveLoading(true);
+    setLeaveError("");
+    const params = new URLSearchParams({ page: String(leavePage), pageSize: "40", stats: "1" });
+    if (debouncedLeaveSearch.trim()) params.set("q", debouncedLeaveSearch.trim());
+    if (leaveTypeFilter !== "all") params.set("leaveType", leaveTypeFilter);
+    if (leaveDateFilter) params.set("date", leaveDateFilter);
+    void fetch(`/api/student-leaves?${params.toString()}`, {
+      credentials: "same-origin", signal: controller.signal,
+    }).then(async response => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      if (controller.signal.aborted || version !== leaveMutationVersionRef.current) return;
+      setLeaveRowsFromDb(payload.studentLeaves || []);
+      const totalPages = Math.max(1, Number(payload.totalPages || 1));
+      setLeavePageInfo({ totalCount: Number(payload.totalCount || 0), totalPages });
+      if (leavePage > totalPages) setLeavePage(totalPages);
+      if (payload.stats) setLeaveStats(payload.stats);
+    }).catch(() => {
+      if (!controller.signal.aborted && version === leaveMutationVersionRef.current)
+        setLeaveError("تعذر تحديث قائمة الإجازات. أعد المحاولة؛ بيانات النموذج محفوظة.");
+    }).finally(() => {
+      if (!controller.signal.aborted && version === leaveMutationVersionRef.current) setLeaveLoading(false);
+    });
+    return () => controller.abort();
+  }, [view, syncKey, leaveRefreshKey, leavePage, debouncedLeaveSearch, leaveTypeFilter, leaveDateFilter]);
 
-    async function loadLeavesFromDatabase() {
-      const silent = isBackgroundSync();
-      if (!silent) setLeaveLoading(true);
-      if (!silent) setLeaveError("");
+  // The form needs only this student's complete leave history, independently
+  // of list pagination/search. Never validate overlap against one table page.
+  useEffect(() => {
+    if (view !== "leaves" || !leaveStudentId) {
+      setSelectedLeaveRows([]); setSelectedLeavesLoading(false); setSelectedLeavesError(""); return;
+    }
+    if (leaveOperationRef.current) return;
+    const controller = new AbortController();
+    selectedLeavesAbortRef.current = controller;
+    const version = leaveMutationVersionRef.current;
+    setSelectedLeavesLoading(true); setSelectedLeavesError("");
+    async function loadSelectedStudentLeaves() {
       try {
         const collected: StudentLeave[] = [];
         let page = 1;
-        let totalPages = 1;
-
-        while (page <= totalPages) {
-          const params = new URLSearchParams({
-            page: String(page),
-            pageSize: "500",
-          });
+        while (true) {
+          const params = new URLSearchParams({ studentId: leaveStudentId, page: String(page), pageSize: "500" });
           const response = await fetch(`/api/student-leaves?${params.toString()}`, {
-            credentials: "same-origin",
-            signal: controller.signal,
+            credentials: "same-origin", signal: controller.signal,
           });
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const payload = (await response.json()) as {
-            studentLeaves?: StudentLeave[];
-            totalPages?: number;
-            hasMore?: boolean;
-          };
-          collected.push(...((payload.studentLeaves || []) as StudentLeave[]));
-          totalPages = Math.max(1, Number(payload.totalPages || 1));
-          if (!payload.hasMore || page >= totalPages) break;
+          const payload = await response.json();
+          collected.push(...(payload.studentLeaves || []));
+          if (!payload.hasMore) break;
           page += 1;
         }
-
-        if (controller.signal.aborted) return;
-        setLeaveRowsFromDb(collected);
-        const relatedStudents = collected
-          .map((leave) => leave.student)
-          .filter(Boolean) as Student[];
-        if (relatedStudents.length) mergeStudentsCache(relatedStudents);
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        console.warn("[FollowUp/leaves] failed to load leaves from database", error);
-        if (!silent) {
-          setLeaveRowsFromDb([]);
-          setLeaveError("تعذر تحميل الإجازات من بيانات النظام. تم تعطيل الحفظ والحذف حتى يرجع الاتصال.");
-        }
+        if (!controller.signal.aborted && version === leaveMutationVersionRef.current) setSelectedLeaveRows(collected);
+      } catch {
+        if (!controller.signal.aborted && version === leaveMutationVersionRef.current)
+          setSelectedLeavesError("تعذر تحميل إجازات الطالب للتحقق من التداخل. أعد المحاولة.");
       } finally {
-        if (!controller.signal.aborted) setLeaveLoading(false);
+        if (!controller.signal.aborted && version === leaveMutationVersionRef.current) setSelectedLeavesLoading(false);
       }
     }
-
-    void loadLeavesFromDatabase();
-
+    void loadSelectedStudentLeaves();
     return () => controller.abort();
-  }, [view, mergeStudentsCache, syncKey, leaveRefreshKey, isBackgroundSync]);
+  }, [view, leaveStudentId, syncKey, leaveRefreshKey]);
 
   const [callCourseId, setCallCourseId] = useState("");
   const [callExamId, setCallExamId] = useState("");
@@ -795,14 +822,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }, [leavePickerStudents, globalSearch]);
 
   const selectedLeaveStudent =
-    students.find((student) => student.id === leaveStudentId) ||
-    leavePickerStudents.find((student) => student.id === leaveStudentId);
+    (leaveStudentSnapshot?.id === leaveStudentId ? leaveStudentSnapshot : null) ||
+    leavePickerStudents.find((student) => student.id === leaveStudentId) ||
+    students.find((student) => student.id === leaveStudentId);
   const selectedLeaveStudentBlockedReason =
     selectedLeaveStudent?.status === "مؤرشف"
       ? "لا يمكن تسجيل إجازة لهذا الطالب لأنه مؤرشف."
-      : selectedLeaveStudent?.status === "مفصول"
-        ? "لا يمكن تسجيل إجازة لهذا الطالب لأنه مفصول. أعد تفعيله أولاً ثم سجل الإجازة."
-        : "";
+      : "";
   const leaveExamOptions = useMemo(
     () =>
       selectedLeaveStudent
@@ -823,7 +849,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const selectedStudentLeaves = useMemo(
     () =>
       leaveStudentId
-        ? leaveRowsFromDb
+        ? selectedLeaveRows
             .filter((leave) => leave.studentId === leaveStudentId)
             .sort((a, b) =>
               String(b.dateFrom || b.date || "").localeCompare(
@@ -831,7 +857,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               ),
             )
         : [],
-    [leaveRowsFromDb, leaveStudentId],
+    [selectedLeaveRows, leaveStudentId],
   );
 
   const studentHasExistingExamLeave = useMemo(
@@ -876,6 +902,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   ]);
   const selectedProfileStudent =
     callRowsFromDb.find((row) => row.student.id === profileStudentId)?.student ||
+    (selectedLeaveStudent?.id === profileStudentId ? selectedLeaveStudent : null) ||
     students.find((student) => student.id === profileStudentId) ||
     null;
   const selectedCallCourse =
@@ -959,10 +986,17 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
   const refreshLeavesFromPayload = (leave: StudentLeave | null | undefined) => {
     if (!leave) return;
-    setLeaveRowsFromDb((current) => [
-      leave,
-      ...current.filter((item) => item.id !== leave.id),
-    ]);
+    setSelectedLeaveRows((current) => [leave, ...current.filter(item => item.id !== leave.id)]);
+    setLeaveRowsFromDb((current) => current.some(item => item.id === leave.id)
+      ? current.map(item => item.id === leave.id ? leave : item)
+      : leavePage === 1 && !debouncedLeaveSearch && leaveTypeFilter === "all" && !leaveDateFilter
+        ? [leave, ...current].slice(0, 40) : current);
+    if (leave.student) {
+      const student = leave.student as Student;
+      setLeaveStudentSnapshot(student);
+      setLeavePickerStudents(current => current.map(item => item.id === student.id ? { ...item, ...student } : item));
+      mergeStudentsCache([student]);
+    }
   };
 
   const cancelLeaveEdit = () => {
@@ -973,8 +1007,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const startEditLeave = (leave: StudentLeave) => {
-    if (leaveError || leaveLoading) {
-      toast.error("انتظر تحميل الإجازات من بيانات النظام قبل التعديل.");
+    if (leaveOperationRef.current) {
+      toast.error("انتظر اكتمال العملية الحالية قبل التعديل.");
       return;
     }
     const isPeriod = (leave.leaveType || "exam") === "period";
@@ -984,6 +1018,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       relatedStudent?.name ||
       students.find((item) => item.id === leave.studentId)?.name ||
       "";
+    if (relatedStudent) setLeaveStudentSnapshot(relatedStudent as Student);
     setEditingLeaveId(leave.id);
     setGlobalSearch(studentName);
     setLeaveStudentId(leave.studentId);
@@ -1010,8 +1045,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const saveLeave = async () => {
-    if (leaveError || leaveLoading) {
-      toast.error("انتظر تحميل الإجازات من بيانات النظام قبل الحفظ.");
+    if (leaveOperationRef.current) return;
+    if (selectedLeavesError || selectedLeavesLoading) {
+      toast.error("انتظر تحميل إجازات الطالب من بيانات النظام قبل الحفظ.");
       return;
     }
     if (!leaveStudentId || !leaveReason.trim()) {
@@ -1042,7 +1078,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const from = leaveDateFrom <= leaveDateTo ? leaveDateFrom : leaveDateTo;
     const to = leaveDateFrom <= leaveDateTo ? leaveDateTo : leaveDateFrom;
     // عند التعديل نستثني الإجازة قيد التعديل نفسها من فحص التعارض.
-    const duplicateLeave = leaveRowsFromDb.find((leave) => {
+    const duplicateLeave = selectedStudentLeaves.find((leave) => {
       if (leave.studentId !== leaveStudentId) return false;
       if (leave.id === editingLeaveId) return false;
       if (leaveMode === "exam")
@@ -1071,9 +1107,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       return;
     }
 
-    const student =
-      leavePickerStudents.find((item) => item.id === leaveStudentId) ||
-      students.find((item) => item.id === leaveStudentId);
+    const student = selectedLeaveStudent;
     const payload = {
       studentId: leaveStudentId,
       examId: leaveMode === "exam" ? leaveExamId : "",
@@ -1086,12 +1120,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       notes: leaveNotes.trim(),
     };
 
+    leaveOperationRef.current = true;
+    leaveMutationVersionRef.current += 1;
+    leaveListAbortRef.current?.abort(); selectedLeavesAbortRef.current?.abort();
     setLeaveSaving(true);
+    try {
     const result = editingLeaveId
       ? await studentLeaveApi.update(editingLeaveId, payload)
       : await studentLeaveApi.add(payload);
-    setLeaveSaving(false);
-
     if (!result.ok || result.queued) {
       toast.error(result.error || "تعذر حفظ الإجازة من النظام.");
       return;
@@ -1106,6 +1142,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       affectedAfter?: string[];
     };
     refreshLeavesFromPayload(response.studentLeave);
+    const wasDismissed = student?.status === "مفصول";
     const wasEditing = Boolean(editingLeaveId);
     setEditingLeaveId("");
     setCustomLeaveReason("");
@@ -1115,8 +1152,16 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       source: "local-mutation",
       reason: wasEditing ? "student-leave-updated" : "student-leave-created",
       scopes: ["follow-up", "grades", "students", "opportunities", "dashboard"],
+      dispatchLocal: false,
     });
 
+    if (wasDismissed && response.studentLeave?.student) {
+      const updated = response.studentLeave.student;
+      toast.success(updated.status === "نشط"
+        ? `حُفظت الإجازة وأُلغي سبب الفصل. الفرص المتبقية: ${updated.opportunities}.`
+        : "حُفظت الإجازة. بقي الطالب مفصولاً وفق سجله.");
+      return;
+    }
     if (wasEditing) {
       const restoredGradeCount = Number(response.restoredGradeCount || 0);
       toast.success(
@@ -1150,6 +1195,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         ? `تمت إضافة إجازة الفترة وهي تغطي ${coveredExamCount} امتحاناً تابعاً لدورة/موقع الطالب، مع إعادة احتساب الطالب`
         : "تمت إضافة الإجازة وإعادة احتساب الطالب بدون محاسبة هذا الامتحان",
     );
+    } catch {
+      toast.error("تعذر حفظ الإجازة. بقيت بيانات النموذج محفوظة للمحاولة مجدداً.");
+    } finally {
+      leaveOperationRef.current = false;
+      leaveMutationVersionRef.current += 1;
+      setLeaveSaving(false); setLeaveLoading(false); setSelectedLeavesLoading(false);
+      setLeaveRefreshKey((current) => current + 1);
+    }
   };
 
   const callExportRows = callRows.map((row) => ({
@@ -1375,7 +1428,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <button
               key={student.id}
               type="button"
-              onClick={() => setLeaveStudentId(student.id)}
+              onClick={() => { setLeaveStudentSnapshot(student); setLeaveStudentId(student.id); }}
               className={`flex min-h-11 w-full min-w-0 touch-manipulation flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-right text-sm transition ${leaveStudentId === student.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
             >
               <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">{student.name}</span>
@@ -1391,7 +1444,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         <p className="text-[11px] text-muted-foreground">
           {leavePickerLoading
             ? "جاري جلب النتائج من بيانات النظام…"
-            : `معروض ${filteredStudents.length} من ${leavePickerTotal || filteredStudents.length} طالب/طالبة في النظام حسب البحث. الطلاب المؤرشفون والمفصولون يظهرون مع شارة توضح حالتهم ولا يمكن منحهم إجازة قبل إعادة تفعيلهم.`}
+            : `معروض ${filteredStudents.length} من ${leavePickerTotal || filteredStudents.length} طالب/طالبة في النظام حسب البحث. يمكن تسجيل إجازة للمفصول ومراجعة سبب فصله. المؤرشف لا يقبل إجازة جديدة.`}
         </p>
         {selectedLeaveStudent && (
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card/80 p-2">
@@ -1412,72 +1465,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     );
   };
 
-  const leavesForDisplay = useMemo(() => {
-    const normalizedSearch = debouncedLeaveSearch.trim();
-    return leaveRowsFromDb
-      .filter((leave) => {
-        const relatedStudent =
-          leave.student && typeof leave.student === "object"
-            ? leave.student
-            : null;
-        const relatedExam =
-          leave.exam && typeof leave.exam === "object" ? leave.exam : null;
-        const student =
-          students.find((item) => item.id === leave.studentId) ||
-          relatedStudent;
-        const exam =
-          exams.find((item) => item.id === leave.examId) || relatedExam;
-        const isPeriod = (leave.leaveType || "exam") === "period";
-        if (leaveTypeFilter !== "all" && (isPeriod ? "period" : "exam") !== leaveTypeFilter)
-          return false;
-        if (leaveDateFilter) {
-          const targetDate = leaveDateFilter === "today" ? baghdadTodayKey() : leaveDateFilter;
-          const matchesToday = isPeriod
-            ? dayKey(leave.dateFrom || leave.date) <= targetDate &&
-              dayKey(leave.dateTo || leave.dateFrom || leave.date) >= targetDate
-            : dayKey(leave.date) === targetDate;
-          if (!matchesToday) return false;
-        }
-        if (!normalizedSearch) return true;
-        return searchAny(normalizedSearch, [
-          student?.name,
-          student?.code,
-          student?.phone,
-          student?.telegram,
-          exam?.name,
-          leave.reason,
-          leave.notes,
-          leave.studyType,
-          leave.date,
-          leave.dateFrom,
-          leave.dateTo,
-        ]);
-      })
-      .sort((a, b) =>
-        String(b.dateFrom || b.date || "").localeCompare(String(a.dateFrom || a.date || "")),
-      );
-  }, [
-    debouncedLeaveSearch,
-    leaveRowsFromDb,
-    leaveTypeFilter,
-    leaveDateFilter,
-    students,
-    exams,
-  ]);
-
-  const leaveStats = useMemo(() => {
-    const total = leaveRowsFromDb.length;
-    const exam = leaveRowsFromDb.filter((leave) => (leave.leaveType || "exam") === "exam").length;
-    const period = leaveRowsFromDb.filter((leave) => (leave.leaveType || "exam") === "period").length;
-    const withNotes = leaveRowsFromDb.filter((leave) => Boolean(String(leave.notes || "").trim())).length;
-    return { total, exam, period, withNotes };
-  }, [leaveRowsFromDb]);
+  const leavesForDisplay = leaveRowsFromDb;
+  const leaveStudentById = useMemo(() => new Map(students.map(student => [student.id, student])), [students]);
+  const leaveExamById = useMemo(() => new Map(exams.map(exam => [exam.id, exam])), [exams]);
 
   const deleteLeaveServerFirst = async (leave: StudentLeave) => {
-    if (leaveError || leaveLoading) {
-      toast.error("انتظر تحميل الإجازات من بيانات النظام قبل الحذف.");
-      return;
-    }
+    if (leaveOperationRef.current) return;
     const isPeriod = (leave.leaveType || "exam") === "period";
     const scopeText = isPeriod
       ? `فترة من ${formatAppDate(leave.dateFrom || leave.date)} إلى ${formatAppDate(leave.dateTo || leave.dateFrom || leave.date)}`
@@ -1487,9 +1480,12 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     );
     if (!ok) return;
 
+    leaveOperationRef.current = true;
+    leaveMutationVersionRef.current += 1;
+    leaveListAbortRef.current?.abort(); selectedLeavesAbortRef.current?.abort();
     setLeaveDeletingIds((current) => ({ ...current, [leave.id]: true }));
+    try {
     const result = await studentLeaveApi.remove(leave.id);
-    setLeaveDeletingIds((current) => ({ ...current, [leave.id]: false }));
 
     if (!result.ok || result.queued) {
       toast.error(result.error || "تعذر حذف الإجازة من النظام.");
@@ -1498,10 +1494,22 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
     if (editingLeaveId === leave.id) cancelLeaveEdit();
     setLeaveRowsFromDb((current) => current.filter((item) => item.id !== leave.id));
+    setSelectedLeaveRows((current) => current.filter((item) => item.id !== leave.id));
+    const academic = (result.data as { academicRecalculation?: { students?: Partial<Student>[] } })?.academicRecalculation;
+    for (const patch of academic?.students || []) {
+      const original = leaveStudentSnapshot?.id === patch.id ? leaveStudentSnapshot :
+        leave.student?.id === patch.id ? leave.student as Student : useTeacherStore.getState().students.find(s => s.id === patch.id);
+      if (!original) continue;
+      const updated = { ...original, ...patch } as Student;
+      mergeStudentsCache([updated]);
+      setLeaveStudentSnapshot(current => leaveStudentId === updated.id || current?.id === updated.id ? updated : current);
+      setLeavePickerStudents(current => current.map(item => item.id === updated.id ? updated : item));
+    }
     emitTeacherProDataChanged({
       source: "local-mutation",
       reason: "student-leave-deleted",
       scopes: ["follow-up", "grades", "students", "opportunities", "dashboard"],
+      dispatchLocal: false,
     });
 
     const response = (result.data || {}) as {
@@ -1534,6 +1542,15 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     toast.success("تم حذف الإجازة وإعادة احتساب الطالب.", {
       description: resultDetails,
     });
+    } catch {
+      toast.error("تعذر حذف الإجازة. حاول مجدداً.");
+    } finally {
+      leaveOperationRef.current = false;
+      leaveMutationVersionRef.current += 1;
+      setLeaveDeletingIds(current => ({ ...current, [leave.id]: false }));
+      setLeaveLoading(false); setSelectedLeavesLoading(false);
+      setLeaveRefreshKey((current) => current + 1);
+    }
   };
 
   const renderLeaveList = () => (
@@ -1617,7 +1634,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           </div>
         </div>
 
-        {leaveLoading ? (
+        {leaveLoading && leaveRowsFromDb.length === 0 ? (
           <div className="space-y-2" aria-busy="true" aria-live="polite">
             {[0, 1, 2].map((index) => (
               <div key={index} className="h-20 animate-pulse rounded-2xl bg-muted" />
@@ -1647,10 +1664,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             const relatedExam =
               leave.exam && typeof leave.exam === "object" ? leave.exam : null;
             const student =
-              students.find((item) => item.id === leave.studentId) ||
-              relatedStudent;
+              relatedStudent || leaveStudentById.get(leave.studentId);
             const exam =
-              exams.find((item) => item.id === leave.examId) || relatedExam;
+              relatedExam || leaveExamById.get(leave.examId);
             const isPeriod = (leave.leaveType || "exam") === "period";
             const studentDisplayName = student?.name || "طالب غير محمل";
             const studentDisplayCode = student?.code
@@ -1661,7 +1677,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             return (
               <div
                 key={leave.id}
-                className={`grid gap-2 rounded-2xl border p-3 text-sm lg:grid-cols-[1.1fr_1fr_1.4fr_1fr_auto] lg:items-center ${editingThis ? "border-sky-300 bg-sky-50/50 dark:border-sky-900/60 dark:bg-sky-950/20" : "bg-card/80"}`}
+                className={`grid min-w-0 gap-2 rounded-2xl border p-3 text-sm [overflow-wrap:anywhere] 2xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1fr)_auto] 2xl:items-center ${editingThis ? "border-sky-300 bg-sky-50/50 dark:border-sky-900/60 dark:bg-sky-950/20" : "bg-card/80"}`}
               >
                 <b>
                   {studentDisplayName}
@@ -1674,14 +1690,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     : `${exam?.name || "امتحان محذوف"} — امتحان بتاريخ ${exam ? formatAppDate(exam.date) : formatAppDate(leave.date)}`}
                 </span>
                 <span>{leave.studyType || student?.studyType || "—"}</span>
-                <div className="flex items-center justify-end gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <Badge variant={isPeriod ? "secondary" : "outline"}>
                     {isPeriod ? "فترة زمنية" : "حسب الامتحان"}
                   </Badge>
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={deleting || leaveSaving || leaveLoading || Boolean(leaveError)}
+                    disabled={deleting || leaveSaving}
                     onClick={() => startEditLeave(leave)}
                   >
                     {editingThis ? "قيد التعديل" : "تعديل"}
@@ -1690,7 +1706,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     variant="ghost"
                     size="sm"
                     className="text-destructive"
-                    disabled={deleting || leaveLoading || Boolean(leaveError)}
+                    disabled={deleting || leaveSaving}
                     onClick={() => void deleteLeaveServerFirst(leave)}
                   >
                     {deleting ? "جاري الحذف..." : "حذف"}
@@ -1705,6 +1721,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             );
           })
         )}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-sm" aria-busy={leaveLoading}>
+          <span>{leavePageInfo.totalCount} إجازة مطابقة · صفحة {leavePage} من {leavePageInfo.totalPages}{leaveLoading ? " · جاري التحديث…" : ""}</span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" disabled={leavePage <= 1 || leaveLoading} onClick={() => setLeavePage(page => page - 1)}>السابق</Button>
+            <Button variant="outline" size="sm" disabled={leavePage >= leavePageInfo.totalPages || leaveLoading} onClick={() => setLeavePage(page => page + 1)}>التالي</Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -2204,8 +2227,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       </Card>
 
       {view === "leaves" && (
-        <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
-          <div ref={leaveFormCardRef} className="scroll-mt-24">
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+          <div ref={leaveFormCardRef} className="min-w-0 scroll-mt-24">
             <Card>
               <CardHeader>
                 <CardTitle>
@@ -2218,6 +2241,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </p>
               </CardHeader>
               <CardContent className="space-y-3">
+                <fieldset disabled={leaveSaving} className="min-w-0 space-y-3">
                 {editingLeaveId && (
                   <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-sky-50/70 px-3 py-2 text-xs text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100">
                     <span>
@@ -2236,6 +2260,14 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   </div>
                 )}
                 {renderStudentPicker()}
+                {selectedLeavesLoading && <p className="text-xs text-muted-foreground">جاري مراجعة إجازات الطالب…</p>}
+                {selectedLeavesError && <div role="alert" className="space-y-2 text-sm text-destructive">
+                  <p>{selectedLeavesError}</p>
+                  <Button variant="outline" size="sm" onClick={() => setLeaveRefreshKey(current => current + 1)}>إعادة المحاولة</Button>
+                </div>}
+                {selectedLeaveStudent?.status === "مفصول" && <p className="rounded-xl bg-muted/50 p-3 text-xs">
+                  يمكن اعتماد إجازة لامتحان سابق. يُلغى الفصل إذا زال سببه بعد احتساب الإجازة، دون منحه فرص تعهد.
+                </p>}
                 {selectedLeaveStudent && selectedStudentLeaves.length > 0 && (
                   <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/25">
                     <p className="text-xs font-bold text-amber-900 dark:text-amber-100">
@@ -2271,7 +2303,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                               size="sm"
                               variant="ghost"
                               className="h-7 px-2 text-[11px]"
-                              disabled={Boolean(leaveDeletingIds[leave.id]) || leaveLoading}
+                              disabled={Boolean(leaveDeletingIds[leave.id]) || leaveSaving}
                               onClick={() => startEditLeave(leave)}
                             >
                               تعديل
@@ -2281,7 +2313,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                               size="sm"
                               variant="ghost"
                               className="h-7 px-2 text-[11px] text-destructive"
-                              disabled={Boolean(leaveDeletingIds[leave.id]) || leaveLoading}
+                              disabled={Boolean(leaveDeletingIds[leave.id]) || leaveSaving}
                               onClick={() => void deleteLeaveServerFirst(leave)}
                             >
                               {leaveDeletingIds[leave.id] ? "..." : "حذف"}
@@ -2429,8 +2461,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   onClick={() => void saveLeave()}
                   disabled={
                     leaveSaving ||
-                    leaveLoading ||
-                    Boolean(leaveError) ||
+                    selectedLeavesLoading ||
+                    Boolean(selectedLeavesError) ||
+                    !selectedLeaveStudent ||
                     Boolean(selectedLeaveStudentBlockedReason)
                   }
                 >
@@ -2440,6 +2473,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                       ? "تحديث الإجازة"
                       : "حفظ الإجازة"}
                 </Button>
+                </fieldset>
               </CardContent>
             </Card>
           </div>

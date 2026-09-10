@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { randomUUID } from "crypto";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/server-auth";
 import { db } from "@/lib/db";
@@ -27,6 +27,7 @@ import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { rejectPendingLeaveNotesForExams } from "@/lib/student-leave-grade-override-server";
+import { studentLeaveListWhere } from "@/lib/student-leave-query-server";
 
 function readListPagination(
   req: NextRequest,
@@ -236,6 +237,7 @@ type LeaveGradeBackupRow = {
   academicEffectExclusionSource: string | null;
   smartNoteId: string | null;
   gradeCreatedAt: Date | null;
+  gradeUpdatedAt: Date | null;
 };
 
 type RestoredGrade = {
@@ -284,53 +286,12 @@ async function backupGradesForLeave(
     },
   });
 
-  for (const grade of grades) {
-    await tx.$executeRaw`
-      INSERT INTO "StudentLeaveGradeBackup" (
-        "id",
-        "leaveId",
-        "studentId",
-        "examId",
-        "status",
-        "score",
-        "notes",
-        "academicAccountingChecked",
-        "academicEffectExcluded",
-        "academicEffectExclusionReason",
-        "academicEffectExclusionSource",
-        "smartNoteId",
-        "gradeCreatedAt",
-        "gradeUpdatedAt"
-      )
-      VALUES (
-        ${`slgb_${randomUUID()}`},
-        ${leaveId},
-        ${grade.studentId},
-        ${grade.examId},
-        ${grade.status},
-        ${grade.score},
-        ${grade.notes},
-        ${grade.academicAccountingChecked},
-        ${grade.academicEffectExcluded},
-        ${grade.academicEffectExclusionReason},
-        ${grade.academicEffectExclusionSource},
-        ${grade.smartNoteId},
-        ${grade.createdAt},
-        ${grade.updatedAt}
-      )
-      ON CONFLICT ("leaveId", "studentId", "examId") DO UPDATE SET
-        "status" = EXCLUDED."status",
-        "score" = EXCLUDED."score",
-        "notes" = EXCLUDED."notes",
-        "academicAccountingChecked" = EXCLUDED."academicAccountingChecked",
-        "academicEffectExcluded" = EXCLUDED."academicEffectExcluded",
-        "academicEffectExclusionReason" = EXCLUDED."academicEffectExclusionReason",
-        "academicEffectExclusionSource" = EXCLUDED."academicEffectExclusionSource",
-        "smartNoteId" = EXCLUDED."smartNoteId",
-        "gradeCreatedAt" = EXCLUDED."gradeCreatedAt",
-        "gradeUpdatedAt" = EXCLUDED."gradeUpdatedAt"
-    `;
-  }
+  if (grades.length) await tx.studentLeaveGradeBackup.createMany({
+    data: grades.map(({ createdAt, updatedAt, ...grade }) => ({
+      ...grade, leaveId, gradeCreatedAt: createdAt, gradeUpdatedAt: updatedAt,
+    })),
+    skipDuplicates: true,
+  });
 
   return grades.length;
 }
@@ -341,39 +302,35 @@ async function writeExcusedGradeMarkers(
   examIds: string[],
 ): Promise<number> {
   if (!examIds.length) return 0;
-  for (const examId of examIds) {
-    // This direct restoration remains inside the leave transaction. The PostgreSQL
-    // trigger tp_end_active_grace_on_numeric_grade_trg atomically closes any active
-    // grace period, clears grace exclusion, and rejects legacy GRACE_SCORED notes.
-    await tx.grade.upsert({
-      where: { studentId_examId: { studentId, examId } },
-      update: {
-        status: "مجاز",
-        score: null,
-        notes: "تسجيل تلقائي: الطالب مجاز من هذا الامتحان",
-        academicAccountingChecked: false,
-      },
-      create: {
-        studentId,
-        examId,
-        status: "مجاز",
-        score: null,
-        notes: "تسجيل تلقائي: الطالب مجاز من هذا الامتحان",
-        academicAccountingChecked: false,
-      },
-    });
-  }
+  const marker = {
+    status: "مجاز", score: null,
+    notes: "تسجيل تلقائي: الطالب مجاز من هذا الامتحان",
+    academicAccountingChecked: false,
+  };
+  await tx.grade.updateMany({ where: { studentId, examId: { in: examIds } }, data: marker });
+  await tx.grade.createMany({
+    data: examIds.map(examId => ({ studentId, examId, ...marker })),
+    skipDuplicates: true,
+  });
+
   return examIds.length;
 }
 
 async function clearExcusedGradeMarkersForLeave(
   tx: Prisma.TransactionClient,
   leaveId: string,
+  retainedExamIds: string[] = [],
 ): Promise<void> {
   const leave = await tx.studentLeave.findUnique({ where: { id: leaveId } });
   if (!leave) return;
   const data = normalizeStoredLeave(leave);
-  const examIds = await getAffectedExamIds(tx, data);
+  const affectedIds = (await getAffectedExamIds(tx, data)).filter(id => !retainedExamIds.includes(id));
+  if (!affectedIds.length) return;
+  const [otherLeaves, exams] = await Promise.all([
+    tx.studentLeave.findMany({ where: { studentId: data.studentId, id: { not: leaveId } } }),
+    tx.exam.findMany({ where: { id: { in: affectedIds } }, select: { id: true, date: true } }),
+  ]);
+  const examIds = exams.filter(exam => !otherLeaves.some(other => storedLeaveCoversExam(other, exam))).map(exam => exam.id);
   if (!examIds.length) return;
   await tx.grade.deleteMany({
     where: {
@@ -384,12 +341,18 @@ async function clearExcusedGradeMarkersForLeave(
   });
 }
 
+function storedLeaveCoversExam(leave: StudentLeaveRecord, exam: { id: string; date: Date }): boolean {
+  if (leave.leaveType !== "period") return leave.examId === exam.id;
+  const data = normalizeStoredLeave(leave);
+  const day = baghdadDateKey(exam.date);
+  return baghdadDateKey(data.dateFrom) <= day && day <= baghdadDateKey(data.dateTo);
+}
+
 async function restoreGradesForLeave(
   tx: Prisma.TransactionClient,
   leaveId: string,
   skippedSummary?: SkippedGradeRestoreSummary,
 ): Promise<RestoredGrade[]> {
-  await clearExcusedGradeMarkersForLeave(tx, leaveId);
   const backups = await tx.$queryRaw<LeaveGradeBackupRow[]>`
     SELECT
       "studentId",
@@ -402,16 +365,17 @@ async function restoreGradesForLeave(
       "academicEffectExclusionReason",
       "academicEffectExclusionSource",
       "smartNoteId",
-      "gradeCreatedAt"
+      "gradeCreatedAt",
+      "gradeUpdatedAt"
     FROM "StudentLeaveGradeBackup"
     WHERE "leaveId" = ${leaveId}
     ORDER BY "createdAt" ASC
   `;
 
-  const restoredGrades: RestoredGrade[] = [];
+  const validBackups: LeaveGradeBackupRow[] = [];
   const studentIds = uniqueIds(backups.map((backup) => backup.studentId));
   const examIds = uniqueIds(backups.map((backup) => backup.examId));
-  const [students, exams] = await Promise.all([
+  const [students, exams, otherLeaves] = await Promise.all([
     studentIds.length
       ? tx.student.findMany({
           where: { id: { in: studentIds } },
@@ -430,13 +394,25 @@ async function restoreGradesForLeave(
           select: { id: true, date: true },
         })
       : [],
+    studentIds.length
+      ? tx.studentLeave.findMany({ where: { studentId: { in: studentIds }, id: { not: leaveId } } })
+      : [],
   ]);
   const studentById = new Map(students.map((student) => [student.id, student] as const));
   const examById = new Map(exams.map((exam) => [exam.id, exam] as const));
+  const transferredBackups: Array<LeaveGradeBackupRow & { leaveId: string }> = [];
 
   for (const backup of backups) {
     const student = studentById.get(backup.studentId);
     const exam = examById.get(backup.examId);
+    const coveringLeaves = exam ? otherLeaves.filter(other =>
+      other.studentId === backup.studentId && storedLeaveCoversExam(other, exam)) : [];
+    if (coveringLeaves.length) {
+      // The last covering leave must restore the original grade, regardless
+      // of which leave was created or cancelled first.
+      transferredBackups.push(...coveringLeaves.map(other => ({ ...backup, leaveId: other.id })));
+      continue;
+    }
     // حذف الإجازة لا يجوز أن يعيد غياباً كان غير صالح أصلاً: قبل تسجيل
     // الطالب أو ضمن السماح التلقائي/اليدوي. بقية الحالات (درجة/غش) تبقى
     // قابلة للاستعادة لأن السماح يمنع العقوبة لا إدخال النتيجة.
@@ -451,39 +427,30 @@ async function restoreGradesForLeave(
         continue;
       }
     }
-    const restored = await tx.grade.upsert({
-      where: {
-        studentId_examId: {
-          studentId: backup.studentId,
-          examId: backup.examId,
-        },
-      },
-      update: {
-        status: backup.status,
-        score: backup.status === "درجة" ? backup.score : null,
-        notes: backup.notes,
-        academicAccountingChecked: backup.academicAccountingChecked,
-        academicEffectExcluded: backup.academicEffectExcluded,
-        academicEffectExclusionReason: backup.academicEffectExclusionReason,
-        academicEffectExclusionSource: backup.academicEffectExclusionSource,
-        smartNoteId: backup.smartNoteId,
-      },
-      create: {
-        studentId: backup.studentId,
-        examId: backup.examId,
-        status: backup.status,
-        score: backup.status === "درجة" ? backup.score : null,
-        notes: backup.notes,
-        academicAccountingChecked: backup.academicAccountingChecked,
-        academicEffectExcluded: backup.academicEffectExcluded,
-        academicEffectExclusionReason: backup.academicEffectExclusionReason,
-        academicEffectExclusionSource: backup.academicEffectExclusionSource,
-        smartNoteId: backup.smartNoteId,
-        ...(backup.gradeCreatedAt ? { createdAt: backup.gradeCreatedAt } : {}),
-      },
-    });
-    restoredGrades.push(restored);
+    validBackups.push(backup);
   }
+  if (transferredBackups.length) await tx.studentLeaveGradeBackup.createMany({
+    data: transferredBackups, skipDuplicates: true,
+  });
+  // Keep existing grade identities: settled grade IDs and linked submissions
+  // must still point to the same row after a leave is cancelled.
+  await clearExcusedGradeMarkersForLeave(tx, leaveId, validBackups.map(b => b.examId));
+  const restoredGrades = validBackups.length ? await tx.$queryRaw<RestoredGrade[]>(Prisma.sql`
+    INSERT INTO "Grade" (id,"studentId","examId",status,score,notes,"academicAccountingChecked",
+      "academicEffectExcluded","academicEffectExclusionReason","academicEffectExclusionSource","smartNoteId","createdAt","updatedAt")
+    VALUES ${Prisma.join(validBackups.map(backup => Prisma.sql`(
+      ${`grade_${randomUUID()}`},${backup.studentId},${backup.examId},${backup.status},${backup.status === "درجة" ? backup.score : null},${backup.notes},${backup.academicAccountingChecked},
+      ${backup.academicEffectExcluded},${backup.academicEffectExclusionReason},${backup.academicEffectExclusionSource},${backup.smartNoteId},${backup.gradeCreatedAt || new Date()},CURRENT_TIMESTAMP
+    )`))}
+    ON CONFLICT ("studentId","examId") DO UPDATE SET
+      status=EXCLUDED.status,score=EXCLUDED.score,notes=EXCLUDED.notes,
+      "academicAccountingChecked"=EXCLUDED."academicAccountingChecked",
+      "academicEffectExcluded"=EXCLUDED."academicEffectExcluded",
+      "academicEffectExclusionReason"=EXCLUDED."academicEffectExclusionReason",
+      "academicEffectExclusionSource"=EXCLUDED."academicEffectExclusionSource",
+      "smartNoteId"=EXCLUDED."smartNoteId","updatedAt"=EXCLUDED."updatedAt"
+    RETURNING *
+  `) : [];
 
   if (backups.length) {
     await tx.$executeRaw`DELETE FROM "StudentLeaveGradeBackup" WHERE "leaveId" = ${leaveId}`;
@@ -494,6 +461,12 @@ async function restoreGradesForLeave(
 
 
 type StudentLeaveWithRelations = StudentLeaveRecord & { student?: unknown; exam?: unknown };
+
+function withCurrentStudent(leave: StudentLeaveWithRelations, result: AcademicServerRecalculationResult) {
+  const current = result.students.find(student => student.id === leave.studentId);
+  return current && leave.student && typeof leave.student === "object"
+    ? { ...leave, student: { ...leave.student, ...current } } : leave;
+}
 
 type LeaveCreateResult = {
   leave: StudentLeaveWithRelations;
@@ -552,19 +525,29 @@ export async function GET(req: NextRequest) {
 
   try {
     const { page, pageSize, skip } = readListPagination(req);
-    const [totalCount, studentLeaves] = await withDatabaseSchema(
+    const params = new URL(req.url).searchParams;
+    const where = studentLeaveListWhere(params);
+    const [totalCount, studentLeaves, stats] = await withDatabaseSchema(
       () =>
         Promise.all([
-          db.studentLeave.count(),
+          db.studentLeave.count({ where }),
           db.studentLeave.findMany({
-            orderBy: [{ dateFrom: "desc" }, { date: "desc" }],
+            where,
+            orderBy: [{ dateFrom: "desc" }, { date: "desc" }, { id: "desc" }],
             skip,
             take: pageSize,
             include: {
               student: true,
-              exam: true,
+              exam: { select: { id: true, name: true, date: true, courseIds: true } },
             },
           }),
+          params.get("stats") === "1" ? db.$queryRaw<Array<{ total: number; exam: number; period: number; withNotes: number }>>`
+            SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE "leaveType"='exam')::int AS exam,
+              count(*) FILTER (WHERE "leaveType"='period')::int AS period,
+              count(*) FILTER (WHERE btrim(notes)<>'')::int AS "withNotes"
+            FROM "StudentLeave"
+          ` : Promise.resolve(null),
         ]),
       "StudentLeave",
     );
@@ -576,6 +559,7 @@ export async function GET(req: NextRequest) {
       pageSize,
       totalPages,
       hasMore: page < totalPages,
+      ...(stats ? { stats: stats[0] } : {}),
     });
   } catch (error) {
     return routeErrorResponse(error, "تعذر تحميل الإجازات حالياً.");
@@ -611,12 +595,6 @@ export async function POST(req: NextRequest) {
             if (student.status === "مؤرشف") {
               throw new Error("لا يمكن إضافة إجازة لطالب مؤرشف.");
             }
-            // Q69 FIX: Also reject dismissed students. A dismissed student
-            // should not receive leaves — they're not actively participating.
-            // Reactivate them first if needed.
-            if (student.status === "مفصول") {
-              throw new Error("لا يمكن إضافة إجازة لطالب مفصول. أعد تفعيله أولاً ثم أنشئ الإجازة.");
-            }
             // Check the exam belongs to the student's course via ExamCourse
             const link = await tx.examCourse.findFirst({
               where: { examId: data.examId, courseId: student.courseId },
@@ -651,10 +629,6 @@ export async function POST(req: NextRequest) {
             }
             if (student.status === "مؤرشف") {
               throw new Error("لا يمكن إضافة إجازة لطالب مؤرشف.");
-            }
-            // Q69 FIX: Also reject dismissed students for period leaves.
-            if (student.status === "مفصول") {
-              throw new Error("لا يمكن إضافة إجازة لطالب مفصول. أعد تفعيله أولاً ثم أنشئ الإجازة.");
             }
           }
 
@@ -711,10 +685,10 @@ export async function POST(req: NextRequest) {
           await writeExcusedGradeMarkers(tx, data.studentId, affectedExamIds);
           const academicRecalculation = await recalculateStudentsAcademicState(
             [data.studentId, ...restoredGrades.map((grade) => grade.studentId)],
-            { tx },
+            { tx, leaveReview: { studentId: data.studentId, examIds: affectedExamIds } },
           );
           return {
-            leave: savedLeave,
+            leave: withCurrentStudent(savedLeave, academicRecalculation),
             backedUpGrades,
             coveredExamCount: affectedExamIds.length,
             restoredGrades,
@@ -733,6 +707,7 @@ export async function POST(req: NextRequest) {
       coveredExamCount: result.coveredExamCount,
       restoredGradeCount: result.restoredGrades.length,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+      studentResults: result.academicRecalculation?.students.map(s => ({ studentId: s.id, status: s.status, opportunities: s.opportunities })),
     });
     return NextResponse.json(
       {
@@ -806,10 +781,6 @@ export async function PUT(req: NextRequest) {
             if (student.status === "مؤرشف") {
               throw new Error("لا يمكن تعديل إجازة لطالب مؤرشف.");
             }
-            // Q69 FIX: Also reject dismissed students on PUT.
-            if (student.status === "مفصول") {
-              throw new Error("لا يمكن تعديل إجازة لطالب مفصول. أعد تفعيله أولاً.");
-            }
             const link = await tx.examCourse.findFirst({
               where: { examId: nextData.examId, courseId: student.courseId },
               select: { id: true },
@@ -841,10 +812,6 @@ export async function PUT(req: NextRequest) {
             }
             if (student.status === "مؤرشف") {
               throw new Error("لا يمكن تعديل إجازة لطالب مؤرشف.");
-            }
-            // Q69 FIX: Also reject dismissed students on PUT (period leaves).
-            if (student.status === "مفصول") {
-              throw new Error("لا يمكن تعديل إجازة لطالب مفصول. أعد تفعيله أولاً.");
             }
           }
 
@@ -940,11 +907,11 @@ export async function PUT(req: NextRequest) {
               ...restoredGrades.map((grade) => grade.studentId),
               ...duplicateRestoredGrades.map((grade) => grade.studentId),
             ]),
-            { tx },
+            { tx, leaveReview: { studentId: nextData.studentId, examIds: affectedAfter } },
           );
 
           return {
-            studentLeave,
+            studentLeave: withCurrentStudent(studentLeave, academicRecalculation),
             backedUpGrades,
             restoredGrades: [...restoredGrades, ...duplicateRestoredGrades],
             restoredGradeCount: restoredGrades.length + duplicateRestoredGrades.length,
@@ -965,6 +932,7 @@ export async function PUT(req: NextRequest) {
       affectedBefore: result.affectedBefore,
       affectedAfter: result.affectedAfter,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+      studentResults: result.academicRecalculation?.students.map(s => ({ studentId: s.id, status: s.status, opportunities: s.opportunities })),
     });
     return NextResponse.json(result);
   } catch (error) {
@@ -1027,7 +995,7 @@ export async function DELETE(req: NextRequest) {
               existingLeave.studentId,
               ...restoredGrades.map((grade) => grade.studentId),
             ]),
-            { tx },
+            { tx, leaveReview: { studentId: existingLeave.studentId, examIds: [] } },
           );
           return {
             restoredGrades,
@@ -1045,6 +1013,7 @@ export async function DELETE(req: NextRequest) {
         result.skippedGradeRestores.absentBeforeRegistration,
       skippedAbsentWithinGrace: result.skippedGradeRestores.absentWithinGrace,
       recalculatedStudents: result.academicRecalculation?.students?.length || 0,
+      studentResults: result.academicRecalculation?.students.map(s => ({ studentId: s.id, status: s.status, opportunities: s.opportunities })),
       studentIds: result.academicRecalculation?.studentIds || [],
     });
     return NextResponse.json({

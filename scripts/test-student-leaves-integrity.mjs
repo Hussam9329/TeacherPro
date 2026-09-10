@@ -56,7 +56,8 @@ must(
 );
 
 must(
-  followUp.includes("leaveRowsFromDb.find((leave) => {") &&
+  followUp.includes("selectedStudentLeaves.find((leave) => {") &&
+    followUp.includes('studentId: leaveStudentId') &&
     followUp.includes("توجد إجازة فترة سابقة لهذا الطالب") &&
     followUp.includes("هذا الطالب لديه إجازة سابقة على هذا الامتحان بالفعل"),
   "فحص التداخل يعتمد على الإجازات القادمة من قاعدة البيانات",
@@ -64,13 +65,22 @@ must(
 );
 
 must(
-  followUp.includes("leaveError") &&
+  followUp.includes("selectedLeavesLoading") &&
     followUp.includes("leaveSaving ||") &&
-    followUp.includes("Boolean(leaveError) ||") &&
+    followUp.includes("Boolean(selectedLeavesError) ||") &&
     followUp.includes("Boolean(selectedLeaveStudentBlockedReason)") &&
-    followUp.includes("disabled={deleting || leaveLoading || Boolean(leaveError)}"),
-  "الإجراءات الحساسة تتوقف إذا فشل تحميل الإجازات من الخادم",
-  "يجب منع الحفظ والحذف عند فشل تحميل بيانات الخادم.",
+    followUp.includes("disabled={deleting || leaveSaving}") &&
+    followUp.includes("if (leaveOperationRef.current) return;"),
+  "الحفظ ينتظر سجل الطالب الصحيح ويمنع تكرار العملية أثناء الحفظ أو الحذف",
+  "يجب ربط الحفظ بتحميل سجل الطالب وحماية عمليات الإجازات من التكرار.",
+);
+
+must(
+  followUp.includes('pageSize: "40"') && followUp.includes('setLeavePage(page => page + 1)') &&
+    followUp.includes('version !== leaveMutationVersionRef.current') &&
+    followUp.includes('leaveLoading && leaveRowsFromDb.length === 0'),
+  "قائمة الإجازات محدودة الصفوف وتتجاهل الردود القديمة مع إبقاء الصفوف أثناء التحديث",
+  "يجب ألا تعود صفحة الإجازات إلى تحميل وعرض كل السجلات أو تطبيق رد قديم بعد الحفظ.",
 );
 
 must(

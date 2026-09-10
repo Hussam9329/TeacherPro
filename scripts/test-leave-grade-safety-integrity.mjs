@@ -100,9 +100,11 @@ must(
   followUp.includes('selectedLeaveStudent?.status === "مؤرشف"') &&
     followUp.includes('selectedLeaveStudent?.status === "مفصول"') &&
     followUp.includes("Boolean(selectedLeaveStudentBlockedReason)") &&
-    followUp.includes("role=\"alert\""),
-  "الطالب المؤرشف/المفصول يظهر سبب المنع ويعطّل حفظ الإجازة",
-  "يجب منع حفظ إجازة للمؤرشف/المفصول من الواجهة مع سبب واضح.",
+    followUp.includes("role=\"alert\"") &&
+    !leaveRoute.includes('throw new Error("لا يمكن تسجيل إجازة لطالب مفصول') &&
+    leaveRoute.includes('leaveReview: { studentId:'),
+  "المؤرشف يبقى محمياً والمفصول يمكنه أخذ إجازة مع مراجعة سبب الفصل",
+  "يجب السماح بإجازة المفصول مع مراجعة أكاديمية وحماية المؤرشف.",
 );
 
 must(
