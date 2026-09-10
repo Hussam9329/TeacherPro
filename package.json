@@ -70,6 +70,7 @@
     "test:p1": "node scripts/test-p1-behavior.cjs && node scripts/test-p1-database.cjs",
     "db:history": "node scripts/check-migration-history.mjs",
     "test:p2": "node scripts/test-p2-behavior.cjs",
+    "test:chapter-scope-repair": "node scripts/test-chapter-scope-repair.cjs",
     "db:contract-check": "node scripts/check-deployment-contract.mjs",
     "db:schema-contract": "node scripts/check-current-schema.mjs",
     "db:bootstrap-admin": "node scripts/bootstrap-admin.cjs",

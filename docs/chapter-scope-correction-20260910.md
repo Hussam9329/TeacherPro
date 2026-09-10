@@ -1,0 +1,13 @@
+# Current chapter accounting correction
+
+An old grade note (`أثر أكاديمي فعّال بعد التسوية:`) bypassed the exam's explicit chapter assignment. Absences on July 18 could consume the next chapter's opening balance. Separately, Summer 2's August 19 exam had an unresolved assignment and was treated as current. The owner confirmed that it belongs to the first chapter. Exams on August 19 in other courses retain their own assignments.
+
+The engine now checks the exam/course assignment before applying its effect. Notes cannot override another chapter, and explicitly unresolved assignments cannot change current opportunities. Historical grades still exist for educational history and recorded pledge grants. The shared grade classifier, grade API annotations, student profile, and current chapter HTML report use the same boundary.
+
+Ordinary recalculation continues to preserve dismissed status; it does not reactivate students. The separate reviewed correction identifies only existing automatic logs incorrectly attributed to the current chapter. It compares the old and corrected engine on the same database snapshot, preserves manual adjustments and pledge grants, and checks replay stability before preparing changes. A dismissal is reversed only when the corrected replay produces no dismissal and retains no dismissal log; legitimate current chapter dismissals stay in place.
+
+Reviewed scope: 191 students; 133 balances increase by one, 41 erroneous dismissals are reversed with a zero balance, and the remaining balances/statuses stay unchanged. Remove 250 incorrect or superseded automatic entries and insert 42 replacement entries for valid current chapter effects. Existing entries outside the active chapter, manual records, grades, and non-target student balances are preserved.
+
+`scripts/contracts/repair-cross-chapter-opportunities.sql` is an explicit one-time repair, never a migration or request side effect. It requires a reviewed JSON plan in a temporary table inside a serializable transaction. It checks complete source snapshots, rejects concurrent changes or balance reductions, validates every removed/inserted log, and stores the original records and before/after values in `AuditLog`. The completion key `chapter_scope_20260910_v1` prevents duplicate application. Its assignment update is restricted to the owner-confirmed Summer 2 exam.
+
+Validation: academic engine regressions cover old absences, zero scores, cheating, unresolved and course-specific assignments, valid current exams, repeat replay, and two-opportunity pledge grants. `npm run test:chapter-scope-repair` exercises atomic rollback, stale-source rejection, preservation of manual/non-target records, the audit backup, and idempotence against PostgreSQL-compatible PGlite.

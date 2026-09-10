@@ -49,6 +49,7 @@ export type GradeLike = {
 };
 
 export type ExamLike = {
+  examCourses?: readonly { courseId: string; chapterId?: string | null }[];
   id: string;
   type?: string | null;
   date?: Date | string | null;
@@ -62,6 +63,7 @@ export type ExamLike = {
 };
 
 export type StudentGraceLike = {
+  courseId?: string | null;
   createdAt?: Date | string | null;
   accountingGraceDays?: number | null;
   gracePeriodStartDate?: Date | string | null;
@@ -161,7 +163,7 @@ export function classifyGradeAcademicImpact(
   options: { student?: StudentGraceLike | null; leaves?: StudentLeaveLike[]; opportunityLogs?: Parameters<typeof gradeSettlementExclusion>[2]; chapterId?: string | null } = {},
 ): GradeClassificationKind {
   const { student, leaves = [] } = options;
-  if (grade && gradeSettlementExclusion(grade, exam, options.opportunityLogs, options.chapterId)) return "academic-effect-excluded";
+  if (grade && gradeSettlementExclusion(grade, exam, options.opportunityLogs, options.chapterId, student?.courseId)) return "academic-effect-excluded";
   if (grade?.academicEffectExcluded || grade?.effectiveImpactExcluded) return "academic-effect-excluded";
   if (hasStudentLeaveForExam(leaves, exam)) return "excused";
   if (grade?.status === "مجاز") return "excused";

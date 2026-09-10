@@ -1,4 +1,5 @@
 import { baghdadDateKey } from './baghdad-time';
+import { examChapterExclusion, type ExamChapterScope } from './exam-chapter-scope';
 type Ledger = { id?: string; studentId?: string; action?: string; date?: string | Date; reason?: string | null; chapterId?: string | null; ledgerVersion?: number | null; settledGradeIds?: string | null };
 export function historicalGradeExclusion(grade: { notes?: string | null }, exam: { date?: string | Date | null }, boundary?: string | null): string | null {
  if (String(grade.notes || '').startsWith('تسوية تاريخية بلا أثر:')) return 'درجة تاريخية محفوظة بلا أثر على الرصيد';
@@ -9,10 +10,13 @@ export function historicalGradeExclusion(grade: { notes?: string | null }, exam:
  * remain visible; this only describes whether they may affect today's balance. */
 export function gradeSettlementExclusion(
  grade: { id?: string; studentId?: string; notes?: string | null },
- exam: { date?: string | Date | null },
+ exam: { date?: string | Date | null } & ExamChapterScope,
  logs: readonly Ledger[] = [],
  chapterId?: string | null,
+ courseId?: string | null,
 ): string | null {
+ const chapterExclusion = examChapterExclusion(exam, courseId, chapterId);
+ if (chapterExclusion) return chapterExclusion;
  if (String(grade.notes || '').startsWith('تسوية تاريخية بلا أثر:')) return 'درجة تاريخية محفوظة بلا أثر على الرصيد';
  const ordered = logs.filter(l => !grade.studentId || l.studentId === grade.studentId).sort((a,b) => String(a.date).localeCompare(String(b.date)));
  const settlement = ordered.filter(l => l.ledgerVersion === 2 && (!chapterId || l.chapterId === chapterId) &&

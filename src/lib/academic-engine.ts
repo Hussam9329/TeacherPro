@@ -1,4 +1,5 @@
 import { historicalGradeExclusion } from "./grade-settlement";
+import { examChapterExclusion } from "./exam-chapter-scope";
 import {
   isExamAvailableForEntry,
   isGradeEntered,
@@ -930,13 +931,14 @@ export function recalculateAcademicState(
 
     for (const grade of studentGrades) {
       const eventExam = examsById.get(grade.examId);
+      // Retain historical grades above to resolve recorded pledge grants.
+      // Their exam effects cannot cross the chapter boundary, even when an
+      // old settlement note requests an academic effect.
+      if (eventExam && examChapterExclusion(eventExam, student.courseId, activeChapter?.id)) continue;
       applyCommandsThrough(String(eventExam?.date || grade.createdAt || ""));
       if (settledGradeIds.has(grade.id)) continue;
       const exam = examsById.get(grade.examId);
       if (!exam) continue;
-      const assignedChapter = exam.examCourses?.find(link => link.courseId === student.courseId)?.chapterId;
-      if (assignedChapter && activeChapter && assignedChapter !== activeChapter.id &&
-          !String(grade.notes || "").startsWith("أثر أكاديمي فعّال بعد التسوية:")) continue;
       if (grade.academicEffectExcluded) continue;
       if (grade.status === "مجاز" || historicalGradeExclusion(grade, exam, historicalSettlementDate)) continue;
       if (!isExamAvailableForEntry(exam)) continue;

@@ -56,6 +56,9 @@ const {
   includesOutsideCountryExamSite,
   studentMatchesExamMainSites,
 } = require(path.join(root, "src/lib/exam-utils.ts"));
+const { classifyGradeAcademicImpact } = require(path.join(root, "src/lib/grade-classification.ts"));
+const { examChapterExclusion } = require(path.join(root, "src/lib/exam-chapter-scope.ts"));
+const { computeActiveChapterReportContext } = require(path.join(root, "src/lib/active-chapter-report.ts"));
 
 const student = (overrides = {}) => ({
   id: "student-1",
@@ -125,6 +128,47 @@ function recalculatedStudent(input) {
   return recalculateAcademicState(input, new Set(["student-1"])).students.find(
     (item) => item.id === "student-1",
   );
+}
+
+{
+  const oldExam = exam({ id: "old", type: "تراكمي", date: "2026-07-18T00:00:00.000Z", examCourses: [{ courseId: "course-1", chapterId: "previous-chapter" }] });
+  const currentExam = exam({ id: "current", type: "يومي", date: "2026-08-29T00:00:00.000Z", examCourses: [{ courseId: "course-1", chapterId: "chapter-1" }] });
+  const oldGrade = grade({ id: "old-grade", examId: "old", status: "غائب", score: null, notes: "أثر أكاديمي فعّال بعد التسوية: تسجيل غياب قديم" });
+  const currentGrade = grade({ id: "current-grade", examId: "current", status: "غائب", score: null });
+  const input = state({ exams: [oldExam, currentExam], grades: [oldGrade, currentGrade], opportunityLogs: [{ id: "transition", studentId: "student-1", action: "إعادة تعيين", amount: 3, date: "2026-08-14T17:39:56.561Z", chapterId: "chapter-1", reason: "تسوية تاريخية: انتقال إلى الفصل التالي" }] });
+  const result = recalculateAcademicState(input, new Set(["student-1"]));
+  assert.equal(result.students[0].opportunities, 2, "July absence cannot consume August's chapter balance, despite its override note");
+  assert.deepEqual(result.opportunityLogs.filter(isAutomaticOpportunityLog).map(l => l.examId), ["current"]);
+  assert.equal(classifyGradeAcademicImpact(oldGrade, oldExam, { student: input.students[0], chapterId: "chapter-1" }), "academic-effect-excluded");
+  assert.equal(classifyGradeAcademicImpact(currentGrade, currentExam, { student: input.students[0], chapterId: "chapter-1" }), "absent-deducted");
+  for (const status of ["غش", "غائب", "درجة"]) {
+    const protectedState = state({ exams: [{ ...oldExam, type: "فاينل" }], grades: [{ ...oldGrade, status, score: 0 }] });
+    assert.equal(recalculatedStudent(protectedState).status, "نشط", "an older chapter cannot dismiss a current student");
+    assert.equal(recalculatedStudent(protectedState).opportunities, 3);
+  }
+  const summerExam = { ...currentExam, date: "2026-08-19T00:00:00.000Z", examCourses: [{ courseId: "course-1", chapterId: null }, { courseId: "other-course", chapterId: "chapter-1" }] };
+  assert.equal(recalculatedStudent(state({ exams: [summerExam], grades: [currentGrade] })).opportunities, 3, "another course's assignment cannot authorize an unassigned exam");
+  summerExam.examCourses[0].chapterId = "previous-chapter";
+  assert.equal(recalculatedStudent(state({ exams: [summerExam], grades: [currentGrade] })).opportunities, 3);
+  summerExam.examCourses[0].chapterId = "chapter-1";
+  assert.equal(recalculatedStudent(state({ exams: [summerExam], grades: [currentGrade] })).opportunities, 2, "a valid August 19 exam in another course still counts");
+  assert.equal(examChapterExclusion({ examCourses: [] }, "course-1", "chapter-1") !== null, true);
+  assert.equal(examChapterExclusion({}, "course-1", "chapter-1"), null, "legacy callers without assignment metadata remain compatible");
+  const report = computeActiveChapterReportContext([{ active: true, archived: false, archive: null, chapter: { id: "chapter-1", name: "current" } }], [{ id: "unknown", date: "2026-08-19", chapterId: null }, { id: "old", date: "2026-08-19", chapterId: "previous-chapter" }, { id: "valid", date: "2026-08-19", chapterId: "chapter-1" }], new Map());
+  assert.deepEqual(report.examIds, ["valid"], "report and engine use the same explicit chapter boundary");
+  const replayed = recalculateAcademicState({ ...input, ...result }, new Set(["student-1"]));
+  assert.equal(replayed.students[0].opportunities, 2);
+  assert.deepEqual(replayed.opportunityLogs, result.opportunityLogs, "repeating the repair cannot restore the old deduction");
+  console.log("PASS: chapter assignments override old notes, unknown assignments are protected, and valid current exams still count");
+}
+
+{
+  const historicalExam = exam({ id: "pledge-source", type: "فاينل", date: "2026-07-18T00:00:00.000Z", examCourses: [{ courseId: "course-1", chapterId: "previous-chapter" }] });
+  const currentExam = exam({ id: "before-pledge", type: "يومي", date: "2026-08-29T00:00:00.000Z", examCourses: [{ courseId: "course-1", chapterId: "chapter-1" }] });
+  const sourceGrade = grade({ id: "pledge-grade", examId: "pledge-source", status: "غائب", score: null });
+  const input = state({ exams: [historicalExam, currentExam], grades: [sourceGrade, grade({ examId: "before-pledge", status: "غائب", score: null })], opportunityLogs: [{ id: "grant", studentId: "student-1", action: "رصيد إعادة التفعيل", amount: 2, chapterId: "chapter-1", date: "2026-09-03T19:15:08.308Z", reason: "تم تعهد الطالب: إرجاعه إلى الحالة النشطة برصيد فرصتين بسبب التعهد" }] });
+  assert.equal(recalculatedStudent(input).opportunities, 2, "a recorded pledge grant remains valid when its source exam belongs to the previous chapter");
+  console.log("PASS: chapter protection preserves recorded two-opportunity pledge grants");
 }
 
 {

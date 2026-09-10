@@ -42,6 +42,8 @@ const OPPORTUNITY_LOG_SELECT = {
   appliedAmount: true,
   balanceBefore: true,
   balanceAfter: true,
+  ledgerVersion: true,
+  settledGradeIds: true,
   reason: true,
   date: true,
   chapterId: true,
@@ -92,6 +94,7 @@ const NOTE_SELECT = {
 } as const;
 
 const EXAM_SELECT = {
+  examCourses: { select: { courseId: true, chapterId: true } },
   id: true,
   name: true,
   type: true,

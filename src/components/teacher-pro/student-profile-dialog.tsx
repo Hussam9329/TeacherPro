@@ -291,7 +291,7 @@ function gradeLogDetailsWithAccounting(
 ) {
   const base = gradeLogDetails(grade, exam);
   if (!exam) return base;
-  const kind = classifyGradeAcademicImpact(grade, exam, { student, leaves, opportunityLogs });
+  const kind = classifyGradeAcademicImpact(grade, exam, { student, leaves, opportunityLogs, chapterId: student.activeChapter?.id });
   const relatedLogs = relatedOpportunityLogsForGrade(grade, exam, opportunityLogs);
   const logSummary = relatedLogs.length
     ? ` | سجل الفرص المرتبط: ${relatedLogs
@@ -890,6 +890,8 @@ export function StudentProfileDialog({
         ? classifyGradeAcademicImpact(grade, exam, {
             student: profileStudent,
             leaves: studentLeavesForProfile,
+            opportunityLogs: studentOpportunities,
+            chapterId: profileStudent.activeChapter?.id,
           })
         : "missing";
       const withinGrace = impactKind === "grace-period";
@@ -1223,6 +1225,8 @@ export function StudentProfileDialog({
                     const impactKind = classifyGradeAcademicImpact(grade, exam, {
                       student: profileStudent,
                       leaves: studentLeavesForProfile,
+                      opportunityLogs: studentOpportunities,
+                      chapterId: profileStudent.activeChapter?.id,
                     });
                     const withinGrace = impactKind === "grace-period";
                     const withoutDiscount = Boolean(

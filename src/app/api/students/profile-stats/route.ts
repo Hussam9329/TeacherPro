@@ -34,6 +34,7 @@ const GRADE_SELECT = {
   updatedAt: true,
   exam: {
     select: {
+      examCourses: { select: { courseId: true, chapterId: true } },
       id: true,
       name: true,
       type: true,
@@ -51,6 +52,8 @@ const GRADE_SELECT = {
 } as const;
 
 const OPPORTUNITY_LOG_SELECT = {
+  ledgerVersion: true,
+  settledGradeIds: true,
   id: true,
   studentId: true,
   examId: true,
@@ -211,6 +214,8 @@ export async function GET(req: NextRequest) {
       kind: classifyGradeAcademicImpact(grade, grade.exam, {
         student,
         leaves: studentLeaves,
+        opportunityLogs,
+        chapterId: studentWithOpportunity.activeChapter?.id,
       }),
     }));
     const countKinds = (...kinds: string[]) =>

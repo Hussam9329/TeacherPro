@@ -2368,7 +2368,7 @@ export const useTeacherStore = create<TeacherState>()(
           : null;
       },
       classification: (grade, exam, student) => {
-        if (grade?.academicEffectExcluded || grade?.effectiveImpactExcluded || (grade && gradeSettlementExclusion(grade, exam, get().opportunityLogs, student ? get().activeChapterForCourse(student.courseId)?.id : undefined)))
+        if (grade?.academicEffectExcluded || grade?.effectiveImpactExcluded || (grade && gradeSettlementExclusion(grade, exam, get().opportunityLogs, student ? get().activeChapterForCourse(student.courseId)?.id : undefined, student?.courseId)))
           return {
             text: "توثيق فقط - بلا أثر أكاديمي",
             type: "info",

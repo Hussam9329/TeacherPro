@@ -139,7 +139,9 @@ export function computeActiveChapterReportContext(
 
   const examIds: string[] = [];
   for (const exam of courseExams) {
-    if (exam.chapterId) {
+    // Explicit metadata (including an unresolved assignment) takes precedence
+    // over date inference, just as it does in the accounting engine.
+    if (exam.chapterId !== undefined) {
       if (exam.chapterId === activeLink.chapter.id) examIds.push(exam.id);
       continue;
     }
@@ -296,7 +298,7 @@ export async function loadActiveChapterReportContext(
 
   return computeActiveChapterReportContext(
     links,
-    courseExams.map(exam => ({ ...exam, chapterId: exam.examCourses?.[0]?.chapterId })),
+    courseExams.map(exam => ({ ...exam, chapterId: exam.examCourses?.[0]?.chapterId ?? null })),
     firstEvidenceByExamId,
     transitionSettlement?.date ?? null,
   );
