@@ -74,6 +74,7 @@ import { normalizeForSearch } from "@/lib/validation";
 import { GradeSmartNotesPanel } from "@/components/teacher-pro/grade-smart-notes-panel";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { studentMatchesListFilters } from "@/lib/student-list-filters";
+import { canBulkClearAbsence, retainUnremovedAbsences } from "@/lib/bulk-absence-clear";
 import {
   hasActiveChapterLink,
   isExamAvailableForEntry,
@@ -1921,22 +1922,23 @@ export function GradeEntryView() {
       selectedExam
         ? entryGradesSource.filter(
             (grade) =>
-              grade.examId === selectedExam.id && grade.status === "غائب",
+              grade.examId === selectedExam.id &&
+              canBulkClearAbsence(grade, studentById.get(grade.studentId)?.status),
           )
         : [],
-    [selectedExam, entryGradesSource],
+    [selectedExam, entryGradesSource, studentById],
   );
 
   const handleClearAbsentGrades = runClearAbsentGradesLocked(async () => {
     if (!selectedExam) return;
     if (absentGradesForSelectedExam.length === 0) {
-      toast.info("لا توجد حالات غياب محفوظة لهذا الامتحان");
+      toast.info("لا توجد حالات غياب قابلة للإلغاء للطلاب النشطين");
       return;
     }
 
     setPendingConfirm({
       title: "إلغاء حالات الغياب",
-      description: `سيتم إلغاء حالة غائب من ${absentGradesForSelectedExam.length} طالب في امتحان ${selectedExam.name} وإرجاعهم كأن الدرجة لم تُسجل لهم. هل تريد المتابعة؟`,
+      description: `سيتم إلغاء حالة غائب من ${absentGradesForSelectedExam.length} طالب نشط في امتحان ${selectedExam.name} وإرجاعهم كأن الدرجة لم تُسجل لهم. تبقى سجلات المفصولين والمؤرشفين والسجلات المحمية محفوظة. هل تريد المتابعة؟`,
       confirmLabel: "إلغاء الغياب",
       destructive: true,
       onConfirm: () => {
@@ -1978,9 +1980,9 @@ export function GradeEntryView() {
       return;
     }
 
-    const payload = (result.data || {}) as { deleted?: number; studentIds?: string[]; academicRecalculation?: { students?: Student[] } };
-    const removedCount = Number(payload.deleted ?? absentGradesForSelectedExam.length);
-    const realAffectedStudentIds = new Set(payload.studentIds?.length ? payload.studentIds : Array.from(affectedStudentIds));
+    const payload = (result.data || {}) as { deleted?: number; deletedGradeIds?: string[]; studentIds?: string[]; academicRecalculation?: { students?: Student[] } };
+    const removedCount = Number(payload.deleted || 0);
+    const realAffectedStudentIds = new Set(payload.studentIds || []);
 
     if (payload.academicRecalculation?.students?.length) {
       mergeStudentsCache(payload.academicRecalculation.students);
@@ -1988,10 +1990,7 @@ export function GradeEntryView() {
 
     if (removedCount > 0) {
       setEntrySheetGrades((current) =>
-        current.filter(
-          (grade) =>
-            grade.examId !== selectedExam.id || grade.status !== "غائب",
-        ),
+        retainUnremovedAbsences(current, selectedExam.id, payload),
       );
       setDrafts((prev) => {
         const next = { ...prev };
@@ -2017,7 +2016,7 @@ export function GradeEntryView() {
       emitGradeEntryServerSync("grade-entry-clear-absent");
       toast.success(`تم إلغاء حالة غائب من ${removedCount} طالب من بيانات النظام`);
     } else {
-      toast.info("لا توجد حالات غياب محفوظة في بيانات النظام لهذا الامتحان");
+      toast.info("لا توجد حالات غياب قابلة للإلغاء للطلاب النشطين");
     }
   };
 
@@ -2468,7 +2467,7 @@ export function GradeEntryView() {
                 absentGradesForSelectedExam.length === 0 ||
                 clearingAbsentGrades
               }
-              title="يحذف كل سجلات الغياب لهذا الامتحان ويرجع الطلاب كأنهم غير مسجلين"
+              title="يلغي غياب الطلاب النشطين فقط؛ تبقى سجلات المفصولين والمؤرشفين محفوظة"
               className="border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/30"
             >
               {clearingAbsentGrades

@@ -37,6 +37,7 @@ import {
   upsertGradeSmartNote,
 } from "@/lib/grade-smart-notes-server";
 import { assertGradeStatusScoreConsistency } from "@/lib/grade-status-score-validation";
+import { bulkAbsenceClearWhere } from "@/lib/bulk-absence-clear";
 
 function parsePositiveInt(
   value: string | null,
@@ -972,12 +973,9 @@ export async function DELETE(req: NextRequest) {
     if (examId && status === "غائب" && !studentId && !id) {
       // Q100 FIX: SERIALIZABLE isolation with retry on conflict.
       const result = await withSerializableTransaction(async (tx) => {
+        const clearWhere = bulkAbsenceClearWhere(examId);
         const targetGrades = await tx.grade.findMany({
-          where: {
-            examId,
-            status: "غائب",
-            academicEffectExcluded: false,
-          },
+          where: clearWhere,
           select: { id: true, studentId: true },
         });
         const studentIds: string[] = Array.from(
@@ -987,17 +985,20 @@ export async function DELETE(req: NextRequest) {
           return {
             ok: true,
             deleted: 0,
+            deletedGradeIds: [],
             studentIds: [],
             academicRecalculation: null,
           };
         }
         const deletedAbsences = await tx.grade.deleteMany({
           where: {
-            examId,
-            status: "غائب",
-            academicEffectExcluded: false,
+            ...clearWhere,
+            id: { in: targetGrades.map(grade => grade.id) },
           },
         });
+        if (deletedAbsences.count !== targetGrades.length) {
+          throw new GradeWriteConflictError();
+        }
         const academicRecalculation = await recalculateStudentsAcademicState(
           studentIds,
           { tx },
@@ -1005,6 +1006,7 @@ export async function DELETE(req: NextRequest) {
         return {
           ok: true,
           deleted: deletedAbsences.count,
+          deletedGradeIds: targetGrades.map(grade => grade.id),
           studentIds,
           academicRecalculation,
         };
@@ -1113,6 +1115,9 @@ export async function DELETE(req: NextRequest) {
     }
     return validationError("تعذر تحديد الدرجة المطلوبة");
   } catch (error) {
+    if (error instanceof GradeWriteConflictError) {
+      return validationError(error.message, 409);
+    }
     if (error instanceof AcademicGradeWritebackError) {
       return validationError(error.message, error.status);
     }
