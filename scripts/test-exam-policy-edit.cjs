@@ -152,12 +152,25 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  };
  const put=async patch=>{const response=await route.PUT({url:'https://example.test/api/exams',json:async()=>patch});return {status:response.status,data:await response.json()};};
  await pg.exec(`INSERT INTO "OpportunityLog"(id,"studentId","examId",action,amount,reason,date,"chapterId","balanceBefore","balanceAfter","ledgerVersion") VALUES('keep-unassigned-history','s1','historic','خصم تلقائي',1,'تلقائي: سجل قديم بلا فصل','2026-07-17 23:00',NULL,3,2,2);`);
- // Seed an unchanged current automatic log using the real engine's canonical
- // identity, then retain historical ledger metadata that replay cannot rebuild.
- const canonical=(await previewStudentsAcademicState(['s1'],{tx:client})).automaticOpportunityLogs.find(l=>l.examId==='e8');
- assert.ok(canonical);
- await client.opportunityLog.deleteMany({where:{id:'s1_e8_deduction'}});
- await client.opportunityLog.create({data:{...canonical,date:new Date(canonical.date),requestedAmount:1,appliedAmount:1,balanceBefore:3,balanceAfter:2,ledgerVersion:2,settledGradeIds:'["s1_e8"]'}});
+ // Seed current automatic IDs with the actual engine so settled historical
+ // evidence can be distinguished from deductions the changed policy removes.
+ const baselineReplay=await previewStudentsAcademicState(Array.from({length:1000},(_,i)=>'s'+(i+1)),{tx:client});
+ await client.opportunityLog.deleteMany({where:{chapterId:'ch'}});
+ await client.opportunityLog.createMany({data:baselineReplay.automaticOpportunityLogs.map(l=>({...l,date:new Date(l.date)}))});
+ const canonical=baselineReplay.automaticOpportunityLogs.find(l=>l.studentId==='s1'&&l.examId==='e8');
+ const settledCurrent=baselineReplay.automaticOpportunityLogs.find(l=>l.studentId==='s5'&&l.examId==='e8');
+ assert.ok(canonical);assert.ok(settledCurrent);
+ for(const log of [canonical,settledCurrent])await client.opportunityLog.update({where:{id:log.id},data:{requestedAmount:1,appliedAmount:1,balanceBefore:3,balanceAfter:2,ledgerVersion:2,settledGradeIds:JSON.stringify([log.studentId+'_e8'])}});
+ await client.opportunityLog.create({data:{id:'s5-reset',studentId:'s5',examId:null,action:'إعادة تعيين',amount:3,reason:'تسوية محفوظة',date:new Date('2026-09-07T12:00:00Z'),chapterId:'ch',chapterNameSnapshot:'الفصل الثاني',ledgerVersion:2,balanceBefore:2,balanceAfter:3,requestedAmount:3,appliedAmount:3,settledGradeIds:'["s5_e8"]'}});
+ await client.student.update({where:{id:'s5'},data:{opportunities:2}});
+ const settledPreview=await previewStudentsAcademicState(['s5'],{tx:client});
+ assert.equal(settledPreview.students[0].opportunities,2,'settled student has no pre-existing balance drift');
+ assert.ok(!settledPreview.automaticOpportunityLogs.some(l=>l.id===settledCurrent.id),'ordinary before-edit replay already omits the settled current-chapter evidence');
+ // A live event with a legacy ID is replayed once under the canonical ID;
+ // it must not be mistaken for settled history and preserved as a duplicate.
+ const legacyEvent=baselineReplay.automaticOpportunityLogs.find(l=>l.studentId==='s6'&&l.examId==='e8');
+ assert.ok(legacyEvent);
+ await client.opportunityLog.update({where:{id:legacyEvent.id},data:{id:'legacy-s6-e8'}});
  const before=await snapshot(),original=await row('exam','e9');
  const fullPayload={id:'e9',name:original.name,type:original.type,courseIds:['c'],mainSite:'بغداد',date:'2026-09-09',fullMark:20,passMark:10,discountMark:0,opportunitiesPenalty:0,dismissalGrade:null,noDiscount:true,active:true,scheduledActivateAt:null,
   expectedMutationToken:buildMutationPreviewToken('exam-edit:e9',original)};
@@ -171,15 +184,20 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  const after=await snapshot();
  for(const table of ['Grade','StudentLeave','StudentLeaveGradeBackup','ExamCourse'])assert.deepEqual(after[table],before[table],table+' unchanged by policy edit');
  assert.deepEqual(after.OpportunityLog.find(l=>l.id==='keep-history'),before.OpportunityLog.find(l=>l.id==='keep-history'),'historical automatic log keeps ID and ledger metadata');
- for(const id of ['keep-unassigned-history',canonical.id])assert.deepEqual(after.OpportunityLog.find(l=>l.id===id),before.OpportunityLog.find(l=>l.id===id),'preserved history/current metadata '+id);
- for(const id of ['keep-history','keep-unassigned-history',canonical.id]){
+ for(const id of ['keep-unassigned-history',canonical.id,settledCurrent.id])assert.deepEqual(after.OpportunityLog.find(l=>l.id===id),before.OpportunityLog.find(l=>l.id===id),'preserved history/current metadata '+id);
+ for(const id of ['keep-history','keep-unassigned-history',canonical.id,settledCurrent.id]){
   const stored=before.OpportunityLog.find(l=>l.id===id),returned=changed.data.academicRecalculation.opportunityLogs.find(l=>l.id===id);
   assert.ok(returned,'preserved log included in response '+id);
   for(const field of ['requestedAmount','appliedAmount','balanceBefore','balanceAfter','ledgerVersion','settledGradeIds'])assert.deepEqual(returned[field],stored[field],'response retains persisted '+field+' for '+id);
  }
  assert.equal(after.OpportunityLog.filter(l=>l.examId==='e9'&&l.chapterId==='ch'&&l.action==='خصم تلقائي').length,0,'chosen exam stops deducting');
  assert.equal(after.OpportunityLog.filter(l=>l.examId==='e8'&&l.action==='خصم تلقائي').length,1000,'other active exam still deducts');
+ assert.ok(!after.OpportunityLog.some(l=>l.id==='legacy-s6-e8'),'legacy ID for a still-live event is not preserved as duplicate history');
+ assert.equal(after.OpportunityLog.filter(l=>l.studentId==='s6'&&l.examId==='e8'&&l.action==='خصم تلقائي').length,1,'legacy event is replaced exactly once');
+ assert.ok(after.OpportunityLog.some(l=>l.id===legacyEvent.id),'live event uses the canonical replay ID');
+ assert.ok(!changed.data.academicRecalculation.opportunityLogs.some(l=>l.id==='legacy-s6-e8'),'response also excludes duplicate legacy ID');
  assert.equal((await row('student','s1')).opportunities,2);
+ assert.equal((await row('student','s5')).opportunities,3,'settled history stays historical while the later edited exam restores one chance');
  assert.equal((await row('student','s2')).status,'مفصول');assert.equal((await row('student','s2')).opportunities,0);assert.equal((await row('student','s2')).dismissalReason,'قرار إداري');
  for(const id of ['untouched','scope','archive'])assert.deepEqual(after.Student.find(s=>s.id===id),before.Student.find(s=>s.id===id),'unrelated/archive student unchanged');
  for(const student of after.Student){const stored=before.Student.find(s=>s.id===student.id);for(const key of Object.keys(stored))if(!['status','opportunities','dismissalReason'].includes(key))assert.deepEqual(student[key],stored[key],student.id+' '+key+' unchanged');}
@@ -209,8 +227,25 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  assert.ok(markerCalls.includes('ensureProtectedGradeMarkers'));
  const scopeGrade=await client.grade.findFirst({where:{studentId:'scope',examId:'scope-exam'}});assert.equal(scopeGrade.status,'ضمن فترة السماح','moving exam after registration replaces old marker with the correct grace marker');
  assert.equal(await client.grade.count({where:{studentId:'scope',examId:'scope-exam'}}),1,'stale protected marker replaced once');
+ // Removing an earlier deduction may also remove a later automatic dismissal.
+ // The historical safeguard must not preserve effects the old replay produced
+ // and the changed replay legitimately removes.
+ await pg.exec(`INSERT INTO "Student"(id,name,"nameKey",gender,code,"courseId","mainSite","createdAt","baseOpportunities",opportunities) VALUES('cascade','تسلسل','cascade','ذكر','CASCADE','isolated','بغداد','2026-06-01',3,3);
+ INSERT INTO "Exam"(id,name,type,date,"courseIds","mainSite","fullMark","passMark","discountMark","opportunitiesPenalty") SELECT 'cascade-'||i,'اختبار تسلسل '||i,'يومي','2026-06-05'::timestamp+i*INTERVAL '1 day','["isolated"]','بغداد',20,10,7,'1' FROM generate_series(1,4)i;
+ INSERT INTO "Grade"(id,"studentId","examId",status,"updatedAt") SELECT 'cascade-g'||i,'cascade','cascade-'||i,'غائب','2026-06-10' FROM generate_series(1,4)i;`);
+ const cascadeBefore=await previewStudentsAcademicState(['cascade'],{tx:client});
+ const oldDismissal=cascadeBefore.automaticOpportunityLogs.find(l=>l.action==='فصل تلقائي');
+ assert.ok(oldDismissal);assert.equal(oldDismissal.examId,'cascade-4');
+ const dismissed=cascadeBefore.students[0];
+ await client.student.update({where:{id:'cascade'},data:{status:dismissed.status,opportunities:dismissed.opportunities,dismissalReason:dismissed.dismissalReason}});
+ await client.opportunityLog.createMany({data:cascadeBefore.automaticOpportunityLogs.map(l=>({...l,date:new Date(l.date)}))});
+ const cascadeChanged=await put({id:'cascade-1',noDiscount:true});assert.equal(cascadeChanged.status,200,JSON.stringify(cascadeChanged.data));
+ assert.equal(await row('opportunityLog',oldDismissal.id),null,'later dismissal caused by removed earlier penalty is removed');
+ assert.ok(!cascadeChanged.data.academicRecalculation.opportunityLogs.some(l=>l.id===oldDismissal.id),'response removes obsolete later dismissal too');
+ assert.equal((await row('student','cascade')).status,'مفصول','exam editing keeps explicit reactivation policy');
+ assert.equal((await row('student','cascade')).opportunities,0);
  const deniedBefore=await snapshot();deny=true;assert.equal((await put({id:'e9',noDiscount:false})).status,403);deny=false;assert.deepEqual(await snapshot(),deniedBefore);
  assert.ok(audits.some(a=>a[3]?.examId==='e9'&&a[3]?.recalculatedStudents>=1000));
  await pg.close();
- console.log('PASS: actual exams PUT + migrations, 1,000-student no-discount update, unchanged Baghdad day and grade/leave/backups/history preserved, bounded student SQL writes, manual dismissal retained, idempotence, stale edit, authorization, rollback and real date-scope reconciliation');
+ console.log('PASS: actual exams PUT + migrations, 1,000-student no-discount update, unchanged Baghdad day and grade/leave/backups/history and settled current-chapter evidence preserved, later obsolete dismissal removed, bounded student SQL writes, manual dismissal retained, idempotence, stale edit, authorization, rollback and real date-scope reconciliation');
 })().catch(e=>{console.error(e);process.exitCode=1});

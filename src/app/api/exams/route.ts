@@ -9,7 +9,7 @@ import { baghdadDateKey, parseBaghdadDateOnly, parseBaghdadDateTime } from '@/li
 import { getExamEntryAvailability } from '@/lib/exam-utils';
 import { assertDatabaseSchemaReady } from '@/lib/schema-readiness';
 import { canonicalCourseIds, parseCourseIds, syncExamCourseLinks } from '@/lib/exam-course-links';
-import { recalculateStudentsForExam } from '@/lib/academic-recalculate-server';
+import { recalculateStudentsForExam, toAcademicExam } from '@/lib/academic-recalculate-server';
 import { writeRequestAuditLog } from '@/lib/audit-log-server';
 import type { Prisma } from '@prisma/client';
 import { buildMutationPreviewToken } from '@/lib/mutation-preview-token';
@@ -639,6 +639,9 @@ export async function PUT(req: NextRequest) {
             tx,
             periodLeaveDates: protectedScopeChanged ? [existingExam.date, exam.date] : [],
             preserveHistoricalLogs: true,
+            previousPolicyExam: !protectedScopeChanged && wasAvailable === candidateAvailability.available
+              ? toAcademicExam(existingExam)
+              : undefined,
           })
         : null;
       return {

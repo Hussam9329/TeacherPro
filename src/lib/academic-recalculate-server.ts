@@ -87,7 +87,7 @@ function mapStudent(student: {
   };
 }
 
-function mapExam(exam: {
+export function toAcademicExam(exam: {
   id: string;
   name: string;
   type: string;
@@ -490,7 +490,7 @@ async function loadAcademicStateForStudents(
   return {
     students: students.map(mapStudent),
     grades: grades.map(mapGrade),
-    exams: exams.map(mapExam),
+    exams: exams.map(toAcademicExam),
     courseChapters: courseChapters.map(mapCourseChapter),
     chapters: chapters.map(mapChapter),
     opportunityLogs: opportunityLogs.map(mapOpportunityLog),
@@ -710,7 +710,12 @@ export async function previewStudentAcademicUpdate(
 
 export async function recalculateStudentsAcademicState(
   rawStudentIds: Array<string | null | undefined>,
-  options: { tx?: Prisma.TransactionClient; leaveReview?: LeaveDismissalReview; preserveHistoricalLogs?: boolean } = {},
+  options: {
+    tx?: Prisma.TransactionClient;
+    leaveReview?: LeaveDismissalReview;
+    preserveHistoricalLogs?: boolean;
+    previousPolicyExam?: AcademicExam;
+  } = {},
 ): Promise<AcademicServerRecalculationResult> {
   const transaction = options.tx;
   if (!transaction) {
@@ -758,6 +763,34 @@ export async function recalculateStudentsAcademicState(
   const preservedHistory = options.leaveReview || options.preserveHistoricalLogs
     ? historicalLeaveLogIds(state, new Set(recalculableStudentIds))
     : new Set<string>();
+  if (options.preserveHistoricalLogs && options.previousPolicyExam) {
+    // Policy-only edits leave grades/course/date scope intact. Compare against
+    // the old policy so already-settled evidence from OTHER exams survives,
+    // while later deductions/dismissals changed by this edit still reconcile.
+    const previousExam = options.previousPolicyExam;
+    const beforeResult = recalculateAcademicState({
+      ...state,
+      exams: state.exams.map(exam => exam.id === previousExam.id
+        ? { ...previousExam, examCourses: exam.examCourses }
+        : exam),
+    }, new Set(recalculableStudentIds));
+    const beforeIds = new Set(beforeResult.opportunityLogs.map(log => log.id));
+    const afterIds = new Set(result.opportunityLogs.map(log => log.id));
+    // Legacy IDs can differ from replay IDs for the same live event.
+    const eventKey = (log: AcademicOpportunityLog) => JSON.stringify([
+      log.studentId, log.examId || "", log.action,
+    ]);
+    const replayedEvents = new Set([
+      ...beforeResult.opportunityLogs, ...result.opportunityLogs,
+    ].filter(isAutomaticOpportunityLog).map(eventKey));
+    for (const log of state.opportunityLogs) {
+      if (isAutomaticOpportunityLog(log) && log.examId !== previousExam.id &&
+          !beforeIds.has(log.id) && !afterIds.has(log.id) &&
+          !replayedEvents.has(eventKey(log))) {
+        preservedHistory.add(log.id);
+      }
+    }
+  }
   if (options.preserveHistoricalLogs) {
     result.opportunityLogs = [
       ...result.opportunityLogs.filter(log => !preservedHistory.has(log.id)),
@@ -819,6 +852,7 @@ export async function recalculateStudentsForExam(
     tx?: Prisma.TransactionClient;
     periodLeaveDates?: Array<Date | string | null | undefined>;
     preserveHistoricalLogs?: boolean;
+    previousPolicyExam?: AcademicExam;
   } = {},
 ): Promise<AcademicServerRecalculationResult> {
   const trimmedExamId = String(examId || "").trim();
@@ -891,7 +925,11 @@ export async function recalculateStudentsForExam(
       ...opportunityLogs.map((log) => log.studentId),
       ...leaveGradeBackups.map((backup) => backup.studentId),
     ],
-    { tx: options.tx, preserveHistoricalLogs: options.preserveHistoricalLogs },
+    {
+      tx: options.tx,
+      preserveHistoricalLogs: options.preserveHistoricalLogs,
+      previousPolicyExam: options.previousPolicyExam,
+    },
   );
 }
 
