@@ -46,6 +46,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
+import { toLatinDigits } from "@/lib/format";
+import { getOpportunityLimit } from "@/lib/opportunity-balance";
+import { DEFAULT_MANUAL_RESTORATION_REASON, manualRestorationAmount } from "@/lib/manual-restoration";
 import {
   Select,
   SelectContent,
@@ -393,6 +396,9 @@ export function DismissedManagementView() {
     student: ManagedDismissalStudent | null;
     open: boolean;
   }>({ student: null, open: false });
+  const [restorationMode, setRestorationMode] = useState<"pledge" | "manual">("pledge");
+  const [restorationAmount, setRestorationAmount] = useState("1");
+  const [restorationReason, setRestorationReason] = useState(DEFAULT_MANUAL_RESTORATION_REASON);
   const { locked: isReactivating, runLocked: runReactivateLocked } = useActionLock();
   const actor = currentUser();
   const canReactivate = Boolean(
@@ -755,8 +761,9 @@ export function DismissedManagementView() {
   };
 
   const handleReactivate = runReactivateLocked(async (student: ManagedDismissalStudent) => {
+    const isManual = restorationMode === "manual";
     if (!canReactivate) {
-      toast.error("لا تملك صلاحية تنفيذ تعهد الطلاب المفصولين.");
+      toast.error("لا تملك صلاحية استعادة الطلاب المفصولين.");
       return;
     }
     if (student.status !== "مفصول") {
@@ -764,15 +771,27 @@ export function DismissedManagementView() {
       toast.warning("الطالب ليس مفصولاً حالياً؛ لم يتم تنفيذ أي تغيير.");
       return;
     }
+    const requestedAmount = manualRestorationAmount(restorationAmount);
+    if (isManual && (requestedAmount === null || !restorationReason.trim())) {
+      toast.error("أدخل عدد فرص صحيحاً، فرصة واحدة على الأقل، مع سبب الاستعادة.");
+      return;
+    }
+    const limit = getOpportunityLimit(student);
+    if (isManual && limit !== null && requestedAmount! > limit) {
+      toast.error(`عدد الفرص يجب ألا يتجاوز سقف الفصل (${limit}).`);
+      return;
+    }
 
     const result = await studentApi.statusAction({
       action: "reactivate",
+      reactivationMode: restorationMode,
+      ...(isManual ? { amount: requestedAmount, reason: restorationReason.trim() } : {}),
       studentId: student.id,
       expectedStatus: student.status,
       expectedMutationToken: student.mutationToken || "",
     });
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر تثبيت تعهد الطالب من بيانات النظام.");
+      toast.error(result.error || "تعذر استعادة الطالب من بيانات النظام.");
       return;
     }
 
@@ -807,11 +826,13 @@ export function DismissedManagementView() {
     emitTeacherProDataChanged({
       source: "local-mutation",
       reason: "dismissed-management-reactivate",
-      scopes: ["students", "opportunities", "dismissed", "dashboard", "follow-up"],
+      scopes: ["students", "grades", "opportunities", "dismissed", "dashboard", "follow-up"],
       dispatchLocal: true,
     });
-    toast.success("تم تعهد الطالب", {
-      description: "أصبح الطالب نشطاً برصيد فرصتين بسبب تعهده. بقي سجل الفصل محفوظاً كـ«مفصول سابقاً».",
+    toast.success(isManual ? "تمت استعادة الطالب المفصول" : "تم تعهد الطالب", {
+      description: isManual
+        ? `أصبح الطالب نشطاً برصيد ${updatedStudent.opportunities} من الفرص، وحُفظ سبب الاستعادة وسجل الفصل السابق.`
+        : "أصبح الطالب نشطاً برصيد فرصتين بسبب تعهده. بقي سجل الفصل محفوظاً كـ«مفصول سابقاً».",
     });
   });
 
@@ -1162,15 +1183,34 @@ export function DismissedManagementView() {
 
                 <div className="flex flex-wrap gap-2 border-t pt-3">
                   {student.status === "مفصول" && canReactivate ? (
+                    <>
                     <Button
                       type="button"
                       variant="secondary"
                       disabled={isReactivating}
-                      onClick={() => setReactivateDialog({ student, open: true })}
+                      onClick={() => {
+                        setRestorationMode("pledge");
+                        setReactivateDialog({ student, open: true });
+                      }}
                     >
                       <Handshake className="size-4" />
                       تم تعهد الطالب
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isReactivating}
+                      onClick={() => {
+                        setRestorationMode("manual");
+                        setRestorationAmount("1");
+                        setRestorationReason(DEFAULT_MANUAL_RESTORATION_REASON);
+                        setReactivateDialog({ student, open: true });
+                      }}
+                    >
+                      <RotateCcw className="size-4" />
+                      استعادة الطالب المفصول
+                    </Button>
+                    </>
                   ) : null}
                   <Button
                     type="button"
@@ -1320,15 +1360,41 @@ export function DismissedManagementView() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>تم تعهد الطالب المفصول</AlertDialogTitle>
+            <AlertDialogTitle>{restorationMode === "manual" ? "استعادة الطالب المفصول" : "تم تعهد الطالب المفصول"}</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تم تعهد «{reactivateDialog.student?.name || "الطالب المحدد"}»؟ سيزول الفصل الحالي ويصبح الطالب نشطاً برصيد فرصتين بسبب تعهده، مع بقاء سجل الفصل محفوظاً في إدارة المفصولين.
+              {restorationMode === "manual"
+                ? `تريد إرجاع «${reactivateDialog.student?.name || "الطالب المحدد"}» بكم فرصة؟ حدّد العدد وسبب الاستعادة؛ يبقى سجل الفصل السابق محفوظاً.`
+                : `هل تم تعهد «${reactivateDialog.student?.name || "الطالب المحدد"}»؟ سيزول الفصل الحالي ويصبح الطالب نشطاً برصيد فرصتين بسبب تعهده، مع بقاء سجل الفصل محفوظاً في إدارة المفصولين.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {restorationMode === "manual" && (
+            <div className="min-w-0 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="restore-opportunity-count">عدد الفرص عند العودة</Label>
+                <Input
+                  id="restore-opportunity-count" type="text" inputMode="numeric" autoComplete="off"
+                  value={restorationAmount} disabled={isReactivating}
+                  onChange={event => setRestorationAmount(toLatinDigits(event.target.value))}
+                  aria-describedby="restore-opportunity-limit"
+                />
+                <p id="restore-opportunity-limit" className="text-xs text-muted-foreground">
+                  سقف فرص الفصل الحالي: {getOpportunityLimit(reactivateDialog.student) ?? "غير متاح"}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="restore-student-reason">سبب الاستعادة</Label>
+                <textarea
+                  id="restore-student-reason" value={restorationReason} rows={3} maxLength={2000}
+                  className="w-full min-w-0 resize-y rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  disabled={isReactivating} onChange={event => setRestorationReason(event.target.value)}
+                />
+              </div>
+            </div>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isReactivating}>إلغاء</AlertDialogCancel>
             <AlertDialogAction
-              disabled={!reactivateDialog.student || isReactivating}
+              disabled={!reactivateDialog.student || isReactivating || (restorationMode === "manual" && (manualRestorationAmount(restorationAmount) === null || !restorationReason.trim()))}
               onClick={(event) => {
                 event.preventDefault();
                 if (reactivateDialog.student) {
@@ -1336,7 +1402,9 @@ export function DismissedManagementView() {
                 }
               }}
             >
-              {isReactivating ? "جاري تثبيت التعهد..." : "تأكيد التعهد بفرصتين"}
+              {restorationMode === "manual"
+                ? isReactivating ? "جاري الاستعادة..." : "تأكيد استعادة الطالب"
+                : isReactivating ? "جاري تثبيت التعهد..." : "تأكيد التعهد بفرصتين"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

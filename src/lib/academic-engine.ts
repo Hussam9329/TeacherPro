@@ -791,11 +791,15 @@ export function recalculateAcademicState(
         continue;
       const amount = Math.abs(Number(log.amount || 0));
       if (!amount && log.action !== "إعادة تعيين" && !hasZeroBalanceViolationMarker(log.reason) && !isReactivationBalanceOpportunityLog(log)) continue;
-      // Every dismissal reactivation starts a fresh two-opportunity balance.
-      // Historical one-opportunity markers are intentionally interpreted by
-      // the current policy as 2 without ever storing a negative balance.
-      if (isReactivationBalanceOpportunityLog(log))
+      // A recorded manual recovery keeps its explicitly chosen balance.
+      // Pledges and legacy markers without a structured balance remain at 2.
+      if (isReactivationBalanceOpportunityLog(log)) {
         opportunities = REACTIVATION_OPPORTUNITY_GRANT;
+        if (log.ledgerVersion === 2 && log.balanceAfter != null &&
+          Number.isSafeInteger(log.balanceAfter) && log.balanceAfter >= 0) {
+          opportunities = log.balanceAfter;
+        }
+      }
       else if (log.action === "إضافة") opportunities += amount;
       if (log.action === "خصم") {
         const effect = applyOpportunityPenalty(opportunities, amount);
@@ -1103,8 +1107,8 @@ export function recalculateAcademicState(
     // Recalculation must never reactivate them implicitly, and it must never
     // leave them with a positive balance either: the only authorized
     // dismissed→active transition updates Student.status first through
-    // students/status-action, which grants the reactivation balance (two
-    // opportunities) and writes the reactivation logs the engine replays
+    // an explicit pledge or manual recovery, which grants the chosen balance
+    // and writes the reactivation logs the engine replays
     // afterwards. Until that happens the persisted balance stays 0 so no
     // rule, settlement, or manual replay can reproduce the «مفصول عنده فرص»
     // inconsistency. All maintenance, chapter-settlement, grade, and

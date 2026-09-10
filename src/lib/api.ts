@@ -670,6 +670,7 @@ export interface OpportunityStudentActionResponse {
   student?: Record<string, unknown> | null;
   opportunityLog?: Record<string, unknown> | null;
   source: "database";
+  reactivated?: boolean;
 }
 
 export interface OpportunityBulkTargetsResponse {
@@ -1826,6 +1827,7 @@ export const opportunityStatsApi = {
     actionType: "add" | "deduct" | "reset" | "undo";
     amount?: number;
     reason?: string;
+    expectedStatus?: string;
   }) =>
     apiPost("opportunities/student-action", payload) as Promise<
       ApiResult & { data?: OpportunityStudentActionResponse }

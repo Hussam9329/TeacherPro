@@ -57,17 +57,18 @@ check(
     statusAction.includes("REACTIVATION_OPPORTUNITY_GRANT") &&
     statusAction.includes("insufficient-reactivation-opportunity-limit") &&
     !statusAction.includes("dismissalType"),
-  "إعادة التفعيل العامة تمنح فرصتين فقط ضمن سقف فصل صالح وبلا نوع فصل",
+  "مسار التعهد يمنح فرصتين ضمن سقف فصل صالح وبلا نوع فصل",
 );
 
 check(
   engine.includes('log.action === "رصيد بعد تعهد"') &&
     engine.includes('log.action === "رصيد إعادة التفعيل"') &&
     engine.includes("opportunities = REACTIVATION_OPPORTUNITY_GRANT") &&
+    engine.includes("opportunities = log.balanceAfter") &&
     engine.includes("hasZeroBalanceViolationMarker") &&
     engine.includes('student.status === "مفصول" && !dismissed') &&
     !engine.includes("dismissalType"),
-  "المحرك يعيد تشغيل كل إعادة تفعيل على فرصتين ويحفظ مخالفة الرصيد الصفري",
+  "المحرك يحفظ رصيد الاستعادة المسجل وسياسة التعهد بفرصتين ومخالفة الرصيد الصفري",
 );
 
 check(

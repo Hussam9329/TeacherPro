@@ -24,6 +24,8 @@ const store = read("src/lib/teacher-store.ts");
 const transition = read("src/app/api/course-chapters/second-chapter-transition/route.ts");
 const chapters = read("src/components/teacher-pro/chapters.tsx");
 const statusAction = read("src/app/api/students/status-action/route.ts");
+const opportunityAction = read("src/app/api/opportunities/student-action/route.ts");
+const manualRecovery = read("src/lib/manual-student-restoration-server.ts");
 const academicRepair = read("src/app/api/students/academic-repair/route.ts");
 const engine = read("src/lib/academic-engine.ts");
 const recalculation = read("src/lib/academic-recalculate-server.ts");
@@ -36,6 +38,17 @@ check(
   management.includes("تم تعهد الطالب") &&
   statusAction.includes("REACTIVATION_OPPORTUNITY_GRANT"),
   "إدارة المفصولين تستخدم المسار الخادمي الوحيد لتعهد المفصول بفرصتين",
+);
+
+check(
+  statusAction.includes("restoreDismissedStudentManually(tx") &&
+  opportunityAction.includes("restoreDismissedStudentManually(tx") &&
+  opportunityAction.includes('hasPermission(principal, "students.edit")') &&
+  opportunityAction.includes("expectedStatus") &&
+  manualRecovery.includes("settledGradeIds") &&
+  manualRecovery.includes("tx.auditLog.create") &&
+  management.includes('setRestorationMode("manual")'),
+  "الاستعادة اليدوية من الزر وإضافة الفرص تستخدم خدمة واحدة بصلاحية الطالب وتسوية درجاته وتوثيق السبب",
 );
 
 check(

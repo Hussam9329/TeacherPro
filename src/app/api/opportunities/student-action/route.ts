@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { requirePermission } from "@/lib/server-auth";
+import { hasPermission, requirePermissionPrincipal } from "@/lib/server-auth";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { API_RATE_LIMITS, checkApiRateLimit } from "@/lib/api-rate-limit";
@@ -12,6 +12,8 @@ import { writeRequestAuditLog } from "@/lib/audit-log-server";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { ZERO_BALANCE_VIOLATION_MARKER } from "@/lib/opportunity-balance";
+import { DEFAULT_MANUAL_RESTORATION_REASON } from "@/lib/manual-restoration";
+import { restoreDismissedStudentManually, StudentActionError } from "@/lib/manual-student-restoration-server";
 
 const MANUAL_ACTIONS = new Set(["إضافة", "خصم", "إعادة تعيين"]);
 
@@ -106,8 +108,8 @@ function selectStudentForResponse() {
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, "opportunities.manage");
-  if (authError) return authError;
+  const principal = await requirePermissionPrincipal(req, "opportunities.manage");
+  if (principal instanceof NextResponse) return principal;
 
   const rateLimitError = await checkApiRateLimit(
     req,
@@ -124,11 +126,12 @@ export async function POST(req: NextRequest) {
     const logId = normalizeReason(body?.logId, "");
     const amount = normalizePositiveAmount(body?.amount);
     const reason = normalizeReason(body?.reason, "");
+    const expectedStatus = normalizeReason(body?.expectedStatus, "");
 
     if (actionType !== "undo" && !studentId) {
       return validationError("تعذر تحديد الطالب المطلوب.");
     }
-    if ((actionType === "add" || actionType === "deduct") && !reason) {
+    if (actionType === "deduct" && !reason) {
       return validationError("يرجى إدخال سبب حركة الفرص.");
     }
     if (actionType === "undo" && !logId) {
@@ -157,13 +160,13 @@ export async function POST(req: NextRequest) {
             : null;
 
           if (actionType === "undo" && !sourceLog) {
-            throw new Error("حركة الفرص المطلوبة غير موجودة أو تم حذفها.");
+            throw new StudentActionError("حركة الفرص المطلوبة غير موجودة أو تم حذفها.");
           }
           if (sourceLog && !MANUAL_ACTIONS.has(String(sourceLog.action || ""))) {
-            throw new Error("يمكن التراجع فقط عن الحركات اليدوية من إدارة الفرص.");
+            throw new StudentActionError("يمكن التراجع فقط عن الحركات اليدوية من إدارة الفرص.");
           }
           if (sourceLog?.action === "إعادة تعيين") {
-            throw new Error("إعادة التعيين لا تُعكس بحركة واحدة آمنة. استخدم إضافة أو خصم موثق بدل التراجع.");
+            throw new StudentActionError("إعادة التعيين لا تُعكس بحركة واحدة آمنة. استخدم إضافة أو خصم موثق بدل التراجع.");
           }
 
           // Q75 FIX: Prevent double-undo. Before creating an undo log,
@@ -184,13 +187,34 @@ export async function POST(req: NextRequest) {
               select: { id: true, date: true, reason: true },
             });
             if (priorUndo) {
-              throw new Error(
+              throw new StudentActionError(
                 "تم التراجع عن هذه الحركة مسبقاً. لا يمكن التراجع عن الحركة نفسها أكثر من مرة.",
               );
             }
           }
 
           const resolvedStudentId = actionType === "undo" ? String(sourceLog!.studentId) : studentId;
+          const currentStudent = await tx.student.findUnique({ where: { id: resolvedStudentId } });
+          if (!currentStudent) throw new StudentActionError("الطالب غير موجود أو تم حذفه.", 404);
+          if (expectedStatus && currentStudent.status !== expectedStatus) {
+            throw new StudentActionError("تغيرت حالة الطالب بعد فتح الإجراء. حدّث السجل وراجع الحالة قبل المحاولة مجدداً.");
+          }
+          if (currentStudent.status === "مفصول" && actionType === "add") {
+            if (!hasPermission(principal, "students.edit")) {
+              throw new StudentActionError("تحتاج إلى صلاحية تعديل الطلاب لاستعادة الطالب المفصول.", 403);
+            }
+            const restored = await restoreDismissedStudentManually(tx, {
+              studentId: resolvedStudentId, amount: body?.amount ?? 1,
+              reason: reason && reason !== DEFAULT_MANUAL_RESTORATION_REASON ? `${DEFAULT_MANUAL_RESTORATION_REASON} — ${reason}`.slice(0, 2000) : DEFAULT_MANUAL_RESTORATION_REASON,
+              actor: { id: principal.id, name: principal.name },
+            });
+            return { ...restored, ok: true, sourceLog: null, academicRecalculation: null, source: "database" as const };
+          }
+          if (currentStudent.status === "مفصول") {
+            throw new StudentActionError("لا يمكن خصم أو إعادة تعيين فرص الطالب المفصول. أضف فرصاً لاستعادته أو استخدم إجراء الاستعادة.");
+          }
+          if (currentStudent.status === "مؤرشف") throw new StudentActionError("لا يمكن تعديل فرص طالب مؤرشف.");
+          if (actionType === "add" && !reason) throw new StudentActionError("يرجى إدخال سبب حركة الفرص.", 400);
           // Calculate the authoritative balance in this same serializable transaction.
           await recalculateStudentsAcademicState([resolvedStudentId], { tx });
           const student = await tx.student.findUnique({
@@ -205,19 +229,19 @@ export async function POST(req: NextRequest) {
               baseOpportunities: true,
             },
           });
-          if (!student) throw new Error("الطالب غير موجود أو تم حذفه.");
-          if (student.status === "مفصول") throw new Error("أعد تفعيل الطالب من إجراء الحالة قبل تعديل فرصه.");
+          if (!student) throw new StudentActionError("الطالب غير موجود أو تم حذفه.");
+          if (student.status === "مفصول") throw new StudentActionError("أظهر احتساب السجل استحقاق فصل الطالب. حدّث بياناته وراجعها قبل استعادته.");
           if (student.status === "مؤرشف") {
-            throw new Error("لا يمكن تعديل فرص طالب مؤرشف.");
+            throw new StudentActionError("لا يمكن تعديل فرص طالب مؤرشف.");
           }
 
           const activeChapterResult = await getSingleActiveChapterForCourse(tx, student.courseId);
           if (!activeChapterResult.ok || !activeChapterResult.activeLink) {
-            throw new Error(activeChapterResult.message);
+            throw new StudentActionError(activeChapterResult.message);
           }
 
           if (sourceLog && sourceLog.chapterId !== activeChapterResult.activeLink.chapter.id) {
-            throw new Error("لا يمكن التراجع عن حركة تخص فصلاً سابقاً.");
+            throw new StudentActionError("لا يمكن التراجع عن حركة تخص فصلاً سابقاً.");
           }
           const now = new Date();
           const action = actionType === "add" || (actionType === "undo" && sourceLog?.action === "خصم")
@@ -336,6 +360,7 @@ export async function POST(req: NextRequest) {
             sourceLog,
             academicRecalculation,
             source: "database" as const,
+            reactivated: false as const,
           };
         }),
       "OpportunityStudentAction",
@@ -352,7 +377,7 @@ export async function POST(req: NextRequest) {
     await writeRequestAuditLog(
       req,
       "إدارة الفرص",
-      actionType === "undo"
+      result.reactivated ? "استعادة طالب مفصول بإضافة فرص يدوياً" : actionType === "undo"
         ? "تراجع موثق عن حركة فرص وإعادة احتساب"
         : actionType === "reset"
           ? "إعادة تعيين فرص طالب وإعادة احتساب"
@@ -365,7 +390,7 @@ export async function POST(req: NextRequest) {
         studentName: responseResult.student?.name,
         studentCode: responseResult.student?.code,
         amount,
-        reason,
+        reason: result.reactivated ? result.opportunityLog.reason : reason,
         logId,
         createdLogId: result.opportunityLog.id,
         recalculatedStudents: result.academicRecalculation?.students?.length || 0,
@@ -374,6 +399,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(responseResult);
   } catch (error) {
+    if (error instanceof StudentActionError) return validationError(error.message, error.statusCode);
     const message = error instanceof Error && error.message
       ? error.message
       : "تعذر تنفيذ إجراء الفرص من النظام حالياً.";

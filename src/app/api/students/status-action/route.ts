@@ -11,6 +11,7 @@ import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { migrateDismissedPendingGradesAfterActivation } from "@/lib/grade-smart-note-reactivation-server";
 import { STUDENT_STATUS_DISMISSED } from "@/lib/student-status-enums";
 import { REACTIVATION_OPPORTUNITY_GRANT } from "@/lib/opportunity-balance";
+import { restoreDismissedStudentManually, StudentActionError } from "@/lib/manual-student-restoration-server";
 import {
   buildStudentMutationToken,
   withStudentMutationToken,
@@ -145,6 +146,7 @@ export async function POST(req: NextRequest) {
   const studentId = cleanText(body.studentId || body.id);
   const expectedStatus = cleanText(body.expectedStatus);
   const expectedMutationToken = cleanText(body.expectedMutationToken);
+  const reactivationMode = cleanText(body.reactivationMode);
 
   if (!studentId) {
     return NextResponse.json(
@@ -157,6 +159,9 @@ export async function POST(req: NextRequest) {
       { error: "إجراء حالة الطالب غير معروف" },
       { status: 400 },
     );
+  }
+  if (reactivationMode && (action !== "reactivate" || !["manual", "pledge"].includes(reactivationMode))) {
+    return NextResponse.json({ error: "نوع استعادة الطالب غير صحيح." }, { status: 400 });
   }
 
   try {
@@ -389,6 +394,12 @@ export async function POST(req: NextRequest) {
         expectedStatus,
         expectedMutationToken,
       );
+      if (reactivationMode === "manual") {
+        return restoreDismissedStudentManually(tx, {
+          studentId, amount: body.amount, reason: cleanText(body.reason),
+          actor: { id: principal.id, name: principal.name },
+        });
+      }
       if (student.status === ARCHIVED_STUDENT_STATUS) {
         throw statusActionConflict(
           "الطالب مؤرشف. استخدم إجراء «استعادة من الأرشيف»؛ إعادة تفعيل المفصولين لا تستعيد المؤرشفين.",
@@ -510,6 +521,9 @@ export async function POST(req: NextRequest) {
       source: "database",
     });
   } catch (error) {
+    if (error instanceof StudentActionError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
     const err = error as {
       statusCode?: number;
       message?: string;

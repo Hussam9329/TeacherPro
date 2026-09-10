@@ -35,6 +35,8 @@ import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useActionLock } from "@/hooks/use-action-lock";
+import { DEFAULT_MANUAL_RESTORATION_REASON, manualRestorationAmount } from "@/lib/manual-restoration";
+import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { ExportDialog, buildStudentDetailsFromProfileLog, type ExportColumn, type StudentDetailsMap } from "./export-dialog";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { CountScopeSummary } from "./ui-kit";
@@ -167,6 +169,7 @@ export function OpportunitiesView() {
   // Action dialog
   const [actionDialog, setActionDialog] = useState<{
     studentId: string;
+    expectedStatus?: string;
     type: "add" | "deduct" | "reset";
     open: boolean;
   }>({ studentId: "", type: "add", open: false });
@@ -649,8 +652,13 @@ export function OpportunitiesView() {
       toast.error("لا يمكن تعديل فرص طالب قبل اختيار فصل نشط واحد وصالح لدورته");
       return;
     }
-    if (actionDialog.type !== "reset" && !reason.trim()) {
+    const restoresDismissed = actionDialog.type === "add" && selectedStudent.status === "مفصول";
+    if (actionDialog.type !== "reset" && !restoresDismissed && !reason.trim()) {
       toast.error("يرجى إدخال السبب");
+      return;
+    }
+    if (restoresDismissed && (manualRestorationAmount(amount) === null || amount > (getOpportunityLimit(selectedStudent) ?? 0))) {
+      toast.error("أدخل عدد فرص صحيحاً ضمن سقف الفصل، فرصة واحدة على الأقل.");
       return;
     }
 
@@ -660,9 +668,10 @@ export function OpportunitiesView() {
       actionType: actionDialog.type,
       amount: normalizedAmount,
       reason: reason.trim(),
+      expectedStatus: actionDialog.expectedStatus ?? selectedStudent.status,
     });
 
-    if (!result.ok) {
+    if (!result.ok || result.queued) {
       toast.error(result.error || "تعذر تنفيذ إجراء الفرص من النظام");
       return;
     }
@@ -680,12 +689,15 @@ export function OpportunitiesView() {
     }
 
     toast.success(
-      actionDialog.type === "deduct"
+      result.data?.reactivated ? `تمت استعادة الطالب نشطاً برصيد ${updatedStudent?.opportunities} من الفرص وتسجيل السبب` : actionDialog.type === "deduct"
         ? "تم خصم الفرص من النظام وإعادة الاحتساب"
         : actionDialog.type === "add"
           ? "تمت إضافة الفرص من النظام وإعادة الاحتساب"
           : "تمت إعادة تعيين الفرص من النظام وإعادة الاحتساب",
     );
+    if (result.data?.reactivated) {
+      emitTeacherProDataChanged({ source: "local-mutation", reason: "manual-student-restoration", scopes: ["students", "grades", "opportunities", "dismissed", "dashboard", "follow-up"], dispatchLocal: true });
+    }
     setActionDialog({ studentId: "", type: "add", open: false });
     setReason("");
     setAmount(1);
@@ -1206,13 +1218,16 @@ export function OpportunitiesView() {
                         size="sm"
                         className="text-xs text-emerald-600"
                         disabled={!hasChapter}
-                        onClick={() =>
+                        onClick={() => {
+                          setReason(student.status === "مفصول" ? DEFAULT_MANUAL_RESTORATION_REASON : "");
+                          setAmount(1);
                           setActionDialog({
                             studentId: student.id,
+                            expectedStatus: student.status,
                             type: "add",
                             open: true,
-                          })
-                        }
+                          });
+                        }}
                       >
                         إضافة
                       </Button>
@@ -1220,7 +1235,7 @@ export function OpportunitiesView() {
                         variant="outline"
                         size="sm"
                         className="text-xs text-rose-600"
-                        disabled={!hasChapter}
+                        disabled={!hasChapter || student.status === "مفصول"}
                         onClick={() =>
                           setActionDialog({
                             studentId: student.id,
@@ -1235,7 +1250,7 @@ export function OpportunitiesView() {
                         variant="ghost"
                         size="sm"
                         className="text-xs"
-                        disabled={!hasChapter}
+                        disabled={!hasChapter || student.status === "مفصول"}
                         onClick={() =>
                           setActionDialog({
                             studentId: student.id,
@@ -1767,6 +1782,11 @@ export function OpportunitiesView() {
               {selectedActionStudent?.name}
             </DialogTitle>
           </DialogHeader>
+          {actionDialog.type === "add" && selectedActionStudent?.status === "مفصول" && (
+            <p className="text-sm text-muted-foreground">
+              ستعيد هذه الإضافة الطالب إلى الحالة النشطة بالعدد المحدد، ويُحفظ سبب الاستعادة في سجله.
+            </p>
+          )}
           {actionDialog.type !== "reset" ? (
             <div className="space-y-4">
               <div className="space-y-2">
