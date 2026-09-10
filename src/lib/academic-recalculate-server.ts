@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { reconcileExpiredGracePendingGrades } from "@/lib/grade-smart-note-grace-expiry-server";
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
+import { persistAcademicStudentResults } from "@/lib/academic-student-writeback-server";
 import { historicalLeaveLogIds, recalculateWithLeaveReview, type LeaveDismissalReview } from "@/lib/leave-dismissal-review";
 import {
   isAutomaticOpportunityLog,
@@ -503,6 +504,7 @@ async function persistAcademicRecalculation(
   studentIds: string[],
   result: ReturnType<typeof recalculateAcademicState>,
   preservedAutomaticIds: Set<string> = new Set(),
+  previousLogs: AcademicOpportunityLog[] = [],
 ): Promise<AcademicServerRecalculationResult> {
   const targetStudentIds = new Set(studentIds);
   const students = result.students.filter((student) =>
@@ -512,18 +514,22 @@ async function persistAcademicRecalculation(
     (log) => targetStudentIds.has(log.studentId) && isAutomaticOpportunityLog(log),
   );
 
-  for (const student of students) {
-    await client.student.update({
-      where: { id: student.id },
-      data: {
-        status: student.status,
-        opportunities: Math.max(
-          0,
-          Math.trunc(Number(student.opportunities || 0)),
-        ),
-        dismissalReason: student.dismissalReason || null,
-      },
-    });
+  await persistAcademicStudentResults(client, students);
+
+  // Keep identical persisted rows, including their ledger metadata. Replaying
+  // an exam must not delete and reinsert unrelated historical/pledge evidence.
+  const previousById = new Map(previousLogs.map(log => [log.id, log]));
+  const logSignature = (log: AcademicOpportunityLog) => JSON.stringify([
+    log.studentId, log.examId || "", log.action,
+    Math.max(0, Math.trunc(Number(log.amount || 0))), log.reason || "",
+    log.date ? new Date(log.date).toISOString() : "",
+    log.chapterId || "", log.chapterNameSnapshot || "",
+  ]);
+  for (const log of automaticOpportunityLogs) {
+    const previous = previousById.get(log.id);
+    if (previous && logSignature(previous) === logSignature(log)) {
+      preservedAutomaticIds.add(log.id);
+    }
   }
 
   if (studentIds.length > 0) {
@@ -533,9 +539,9 @@ async function persistAcademicRecalculation(
   }
 
   const replacementLogs = automaticOpportunityLogs.filter(log => !preservedAutomaticIds.has(log.id));
-  if (replacementLogs.length > 0) {
+  for (const group of chunks(replacementLogs, 500)) {
     await client.opportunityLog.createMany({
-      data: replacementLogs.map((log) => ({
+      data: group.map((log) => ({
         id: log.id,
         studentId: log.studentId,
         examId: log.examId || null,
@@ -550,13 +556,14 @@ async function persistAcademicRecalculation(
     });
   }
 
+  const persistedLogs = result.opportunityLogs
+    .filter(log => targetStudentIds.has(log.studentId))
+    .map(log => preservedAutomaticIds.has(log.id) ? previousById.get(log.id) || log : log);
   return {
     studentIds,
     students,
-    opportunityLogs: result.opportunityLogs.filter((log) =>
-      targetStudentIds.has(log.studentId),
-    ),
-    automaticOpportunityLogs,
+    opportunityLogs: persistedLogs,
+    automaticOpportunityLogs: persistedLogs.filter(isAutomaticOpportunityLog),
   };
 }
 
@@ -703,7 +710,7 @@ export async function previewStudentAcademicUpdate(
 
 export async function recalculateStudentsAcademicState(
   rawStudentIds: Array<string | null | undefined>,
-  options: { tx?: Prisma.TransactionClient; leaveReview?: LeaveDismissalReview } = {},
+  options: { tx?: Prisma.TransactionClient; leaveReview?: LeaveDismissalReview; preserveHistoricalLogs?: boolean } = {},
 ): Promise<AcademicServerRecalculationResult> {
   const transaction = options.tx;
   if (!transaction) {
@@ -748,13 +755,23 @@ export async function recalculateStudentsAcademicState(
     new Set(recalculableStudentIds),
     options.leaveReview,
   );
+  const preservedHistory = options.leaveReview || options.preserveHistoricalLogs
+    ? historicalLeaveLogIds(state, new Set(recalculableStudentIds))
+    : new Set<string>();
+  if (options.preserveHistoricalLogs) {
+    result.opportunityLogs = [
+      ...result.opportunityLogs.filter(log => !preservedHistory.has(log.id)),
+      ...state.opportunityLogs.filter(log => preservedHistory.has(log.id)),
+    ];
+  }
   // Only leave mutations may remove a proved obsolete exam dismissal. This
   // creates no grant and does not promote dismissed pending grades.
   return persistAcademicRecalculation(
     client,
     recalculableStudentIds,
     result,
-    options.leaveReview ? historicalLeaveLogIds(state, new Set(recalculableStudentIds)) : undefined,
+    preservedHistory,
+    state.opportunityLogs,
   );
 }
 
@@ -801,6 +818,7 @@ export async function recalculateStudentsForExam(
   options: {
     tx?: Prisma.TransactionClient;
     periodLeaveDates?: Array<Date | string | null | undefined>;
+    preserveHistoricalLogs?: boolean;
   } = {},
 ): Promise<AcademicServerRecalculationResult> {
   const trimmedExamId = String(examId || "").trim();
@@ -873,7 +891,7 @@ export async function recalculateStudentsForExam(
       ...opportunityLogs.map((log) => log.studentId),
       ...leaveGradeBackups.map((backup) => backup.studentId),
     ],
-    { tx: options.tx },
+    { tx: options.tx, preserveHistoricalLogs: options.preserveHistoricalLogs },
   );
 }
 

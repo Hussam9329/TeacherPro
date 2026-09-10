@@ -77,7 +77,7 @@ function hasProtectedMarkerScopeChange(before: unknown, after: unknown): boolean
   return (
     canonicalCourseIds(left.courseIds) !== canonicalCourseIds(right.courseIds) ||
     String(left.mainSite ?? '') !== String(right.mainSite ?? '') ||
-    canonicalDateTime(left.date) !== canonicalDateTime(right.date)
+    baghdadDateKey(left.date as Date) !== baghdadDateKey(right.date as Date)
   );
 }
 
@@ -407,6 +407,12 @@ export async function PUT(req: NextRequest) {
         return { editConflict: true } as const;
       }
       const data = { ...normalizedPatch };
+      // The form edits a calendar day. Do not move legacy timestamps within
+      // that same Baghdad day or trigger grade/leave repair for a policy edit.
+      if (data.date !== undefined &&
+          baghdadDateKey(data.date as Date) === baghdadDateKey(existingExam.date)) {
+        delete data.date;
+      }
       const effectiveNoDiscount = Boolean(
         data.noDiscount ?? existingExam.noDiscount,
       );
@@ -577,7 +583,7 @@ export async function PUT(req: NextRequest) {
           }
         }
       }
-      if (normalizedPatch.date !== undefined) {
+      if (data.date !== undefined) {
         // Exam leaves are linked by examId, so their academic effect already
         // follows the edited exam date. Only move display-date fields that were
         // actually tracking the old exam day; preserve any intentionally custom
@@ -608,25 +614,31 @@ export async function PUT(req: NextRequest) {
       const protectedMarkerReconciliation = protectedScopeChanged
         ? await reconcileProtectedGradeMarkersForExamEdit(tx, exam.id)
         : null;
-      await ensureProtectedGradeMarkers(tx, {
-        examIds: [exam.id],
-        includeAbsent: protectedScopeChanged,
-      });
-      const examGradeStudents = await tx.grade.findMany({
-        where: { examId: exam.id },
-        distinct: ['studentId'],
-        select: { studentId: true },
-      });
-      if (examGradeStudents.length > 0) {
-        await repairProtectedAbsencesForStudents(
-          tx,
-          examGradeStudents.map((grade) => grade.studentId),
-        );
+      if (protectedScopeChanged || wasAvailable !== candidateAvailability.available) {
+        await ensureProtectedGradeMarkers(tx, {
+          examIds: [exam.id],
+          includeAbsent: protectedScopeChanged,
+        });
+      }
+      if (protectedScopeChanged) {
+        const examGradeStudents = await tx.grade.findMany({
+          where: { examId: exam.id },
+          distinct: ['studentId'],
+          select: { studentId: true },
+        });
+        if (examGradeStudents.length > 0) {
+          await repairProtectedAbsencesForStudents(
+            tx,
+            examGradeStudents.map((grade) => grade.studentId),
+            { examIds: [exam.id] },
+          );
+        }
       }
       const academicRecalculation = hasAcademicExamChange(existingExam, exam)
         ? await recalculateStudentsForExam(exam.id, {
             tx,
-            periodLeaveDates: [existingExam.date, exam.date],
+            periodLeaveDates: protectedScopeChanged ? [existingExam.date, exam.date] : [],
+            preserveHistoricalLogs: true,
           })
         : null;
       return {

@@ -45,7 +45,7 @@ function uniqueIds(values: Array<string | null | undefined>): string[] {
 export async function repairProtectedAbsencesForStudents(
   client: PrismaClientLike,
   rawStudentIds: Array<string | null | undefined>,
-  options: { deleteCalls?: boolean; onlyAbsences?: boolean } = {},
+  options: { deleteCalls?: boolean; onlyAbsences?: boolean; examIds?: string[] } = {},
 ): Promise<GracePeriodRepairResult> {
   const requestedStudentIds = uniqueIds(rawStudentIds);
   if (requestedStudentIds.length === 0) {
@@ -55,6 +55,7 @@ export async function repairProtectedAbsencesForStudents(
   const candidates = (await client.grade.findMany({
     where: {
       studentId: { in: requestedStudentIds },
+      ...(options.examIds ? { examId: { in: uniqueIds(options.examIds) } } : {}),
       status: { not: "قبل تسجيل الطالب" },
     },
     select: {

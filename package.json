@@ -59,7 +59,7 @@
     "test:deployment-migration-integrity": "node scripts/test-deployment-migration-integrity.mjs",
     "verify:grade-score-consistency": "node scripts/verify_grade_score_consistency.mjs",
     "test:responsive-ui-integrity": "node scripts/test-responsive-ui-integrity.mjs && node scripts/test-responsive-tailwind-compile.mjs",
-    "test:exam-edit-academic-integrity": "node scripts/test-exam-edit-academic-integrity.mjs && node --test scripts/test-exam-academic-integrity-behavior.mjs",
+    "test:exam-edit-academic-integrity": "node scripts/test-exam-edit-academic-integrity.mjs && node --test scripts/test-exam-academic-integrity-behavior.mjs && node scripts/test-academic-student-writeback.cjs && node scripts/test-exam-policy-edit.cjs",
     "maintenance:protected-grades": "node scripts/repair-protected-grade-integrity.mjs",
     "maintenance:zero-balance": "node scripts/repair-zero-balance-law.mjs",
     "test:single-dismissal-policy-integrity": "node scripts/test-single-dismissal-policy-integrity.mjs",
