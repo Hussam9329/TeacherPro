@@ -669,12 +669,16 @@ export function ExamRecordsView() {
 
   const refreshExamRecordsAfterMutation = useCallback(
     async (reason: string) => {
-      await loadFromServer();
-      // إصلاح: استخدام dispatchLocal لضمان تحديث الواجهة فوراً بعد التعديل
+      try {
+        await loadFromServer();
+      } catch {
+        toast.warning("تم حفظ التعديل، لكن تعذر تحديث العرض. حدّث الصفحة لعرض النتيجة.");
+      }
+      // Notify all affected screens after the committed edit.
       emitTeacherProDataChanged({
         source: "local-mutation",
         reason,
-        scopes: ["exams", "grades", "opportunities", "dashboard"],
+        scopes: ["exams", "grades", "students", "dismissed", "opportunities", "follow-up", "dashboard"],
         dispatchLocal: true,  // ← إضافة هذا السطر لإصلاح المشكلة
       });
     },
@@ -693,11 +697,12 @@ export function ExamRecordsView() {
     async (
       examId: string,
       patch: Record<string, unknown>,
+      expectedToken?: string,
     ): Promise<ApiResult | null> => {
       const guardedPatch = {
         ...patch,
         expectedMutationToken:
-          examById.get(String(examId))?.mutationToken || "",
+          expectedToken ?? (examById.get(String(examId))?.mutationToken || ""),
       };
     const initialResult = await examApi.update(examId, guardedPatch);
     const conflict = (initialResult.data || {}) as {
@@ -714,6 +719,7 @@ export function ExamRecordsView() {
         initialResult.status === 409 &&
         Boolean((initialResult.data as { requiresFreshExam?: boolean } | null)?.requiresFreshExam)
       ) {
+        setEditingExamId(null);
         await loadFromServer();
       }
       return initialResult;
@@ -730,7 +736,12 @@ export function ExamRecordsView() {
       ...guardedPatch,
       activationPreviewToken: conflict.previewToken,
     });
-      if (confirmedResult.status === 409) await loadFromServer();
+      if (confirmedResult.status === 409) {
+        if (Boolean((confirmedResult.data as { requiresFreshExam?: boolean } | null)?.requiresFreshExam)) {
+          setEditingExamId(null);
+        }
+        await loadFromServer();
+      }
       return confirmedResult;
     },
     [examById, loadFromServer],
@@ -762,31 +773,38 @@ export function ExamRecordsView() {
             };
 
     setExamMutating(editDialog.id, true);
-    const result = await updateExamWithActivationConfirmation(editDialog.id, {
-      name: editDialog.name.trim(),
-      type: editDialog.type,
-      courseIds: editDialog.courseIds,
-      mainSite: editDialog.mainSites.join(","),
-      date: editDialog.date,
-      fullMark: Number(toLatinDigits(editDialog.fullMark)),
-      passMark: Number(toLatinDigits(editDialog.passMark)),
-      discountMark:
-        isFinalExam || noDiscount
+    let result: ApiResult | null;
+    try {
+      result = await updateExamWithActivationConfirmation(editDialog.id, {
+        name: editDialog.name.trim(),
+        type: editDialog.type,
+        courseIds: editDialog.courseIds,
+        mainSite: editDialog.mainSites.join(","),
+        date: editDialog.date,
+        fullMark: Number(toLatinDigits(editDialog.fullMark)),
+        passMark: Number(toLatinDigits(editDialog.passMark)),
+        discountMark:
+          isFinalExam || noDiscount
+            ? 0
+            : Number(toLatinDigits(editDialog.discountMark)),
+        opportunitiesPenalty: noDiscount
           ? 0
-          : Number(toLatinDigits(editDialog.discountMark)),
-      opportunitiesPenalty: noDiscount
-        ? 0
-        : isFinalExam
-          ? 0
-          : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum)),
-      dismissalGrade:
-        !noDiscount && isFinalExam && editDialog.dismissalGrade
-          ? Number(toLatinDigits(editDialog.dismissalGrade))
-          : null,
-      noDiscount,
-      ...statusPatch,
-    });
-    setExamMutating(editDialog.id, false);
+          : isFinalExam
+            ? 0
+            : Number(toLatinDigits(editDialog.opportunitiesPenaltyNum)),
+        dismissalGrade:
+          !noDiscount && isFinalExam && editDialog.dismissalGrade
+            ? Number(toLatinDigits(editDialog.dismissalGrade))
+            : null,
+        noDiscount,
+        ...statusPatch,
+      }, editDialog.mutationToken);
+    } catch {
+      toast.error("تعذر إكمال الحفظ. حدّث البيانات وتحقق من النتيجة قبل إعادة المحاولة.");
+      return;
+    } finally {
+      setExamMutating(editDialog.id, false);
+    }
 
     if (!result) return;
     if (!result.ok || result.queued) {
@@ -862,11 +880,18 @@ export function ExamRecordsView() {
     async (exam: Exam) => {
       const enabling = !exam.active;
       setExamMutating(exam.id, true);
-      const result = await updateExamWithActivationConfirmation(exam.id, {
-        active: enabling,
-        scheduledActivateAt: "",
-      });
-      setExamMutating(exam.id, false);
+      let result: ApiResult | null;
+      try {
+        result = await updateExamWithActivationConfirmation(exam.id, {
+          active: enabling,
+          scheduledActivateAt: "",
+        });
+      } catch {
+        toast.error("تعذر إكمال تغيير حالة الامتحان. حدّث البيانات وتحقق من النتيجة.");
+        return;
+      } finally {
+        setExamMutating(exam.id, false);
+      }
       if (!result) return;
       if (!result.ok || result.queued) {
         toast.error(result.error || "تعذر تغيير حالة الامتحان من النظام.");

@@ -5,6 +5,7 @@ import { reconcileExpiredGracePendingGrades } from "@/lib/grade-smart-note-grace
 import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { persistAcademicStudentResults } from "@/lib/academic-student-writeback-server";
 import { historicalLeaveLogIds, recalculateWithLeaveReview, type LeaveDismissalReview } from "@/lib/leave-dismissal-review";
+import { recalculateWithExamEditReview } from "@/lib/exam-dismissal-review";
 import {
   isAutomaticOpportunityLog,
   recalculateAcademicState,
@@ -567,6 +568,79 @@ async function persistAcademicRecalculation(
   };
 }
 
+function examPeriodLeaveWhere(
+  dates: Array<Date | string | null | undefined>,
+): Prisma.StudentLeaveWhereInput[] {
+  const periodLeaveWhere: Prisma.StudentLeaveWhereInput[] = [];
+  const periodDayKeys = Array.from(
+    new Set(
+      dates
+        .map((value) =>
+          baghdadDateKey(value),
+        )
+        .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)),
+    ),
+  );
+  for (const key of periodDayKeys) {
+    const dayStart = new Date(`${key}T00:00:00.000Z`);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    periodLeaveWhere.push({
+      leaveType: "period",
+      dateFrom: { lt: dayEnd },
+      dateTo: { gte: dayStart },
+    });
+  }
+
+  return periodLeaveWhere;
+}
+
+/** Scope/availability edits can rewrite grade and leave markers. Capture the
+ * actual old state for existing dependents and the courses that can gain new
+ * markers; reconstructing old policy over already-mutated grades is unsafe. */
+export async function loadExamEditHistoryState(
+  client: PrismaClientLike,
+  examId: string,
+  courseIds: string[],
+  periodLeaveDates: Array<Date | string | null | undefined> = [],
+): Promise<AcademicStateInput> {
+  const rows = await Promise.all([
+    client.student.findMany({ where: { courseId: { in: uniqueIds(courseIds) } }, select: { id: true } })
+      .then(students => students.map(student => ({ studentId: student.id }))),
+    client.grade.findMany({ where: { examId }, select: { studentId: true } }),
+    client.opportunityLog.findMany({ where: { examId }, select: { studentId: true } }),
+    client.studentLeave.findMany({
+      where: { OR: [{ examId }, ...examPeriodLeaveWhere(periodLeaveDates)] },
+      select: { studentId: true },
+    }),
+    client.studentCall.findMany({ where: { examId }, select: { studentId: true } }),
+    client.studentLeaveGradeBackup.findMany({ where: { examId }, select: { studentId: true } }),
+  ]);
+  return loadAcademicStateForStudents(client, uniqueIds(rows.flat().map(row => row.studentId)));
+}
+
+/** Capture real pre-edit evidence before an exam can move grade/leave scope.
+ * Only dismissed students with an automatic contribution from this exam can
+ * qualify for recovery; ordinary recalculation remains unchanged. */
+export async function loadExamEditDismissalReviewState(
+  client: PrismaClientLike,
+  examId: string,
+): Promise<AcademicStateInput | undefined> {
+  const logs = await client.opportunityLog.findMany({
+    where: { examId, action: { in: ["خصم تلقائي", "فصل تلقائي"] } },
+    select: { studentId: true },
+  });
+  const ids = uniqueIds(logs.map(log => log.studentId));
+  if (!ids.length) return undefined;
+  const students = await client.student.findMany({
+    where: { id: { in: ids }, status: "مفصول" },
+    select: { id: true },
+  });
+  return students.length
+    ? loadAcademicStateForStudents(client, students.map(student => student.id))
+    : undefined;
+}
+
 function applyPreviewAcademicBaseline(
   state: AcademicStateInput,
   studentId: string,
@@ -715,6 +789,8 @@ export async function recalculateStudentsAcademicState(
     leaveReview?: LeaveDismissalReview;
     preserveHistoricalLogs?: boolean;
     previousPolicyExam?: AcademicExam;
+    previousExamState?: AcademicStateInput;
+    examEditReview?: { beforeState: AcademicStateInput; examId: string };
   } = {},
 ): Promise<AcademicServerRecalculationResult> {
   const transaction = options.tx;
@@ -755,25 +831,44 @@ export async function recalculateStudentsAcademicState(
       automaticOpportunityLogs: [],
     };
   }
-  const result = recalculateWithLeaveReview(
+  let result = recalculateWithLeaveReview(
     state,
     new Set(recalculableStudentIds),
     options.leaveReview,
   );
+  if (options.examEditReview) {
+    result = recalculateWithExamEditReview(
+      state, new Set(recalculableStudentIds), result,
+      options.examEditReview.beforeState, options.examEditReview.examId,
+    );
+    const previouslyDismissed = new Set(state.students.filter(student => student.status === "مفصول").map(student => student.id));
+    const restored = result.students.filter(student => previouslyDismissed.has(student.id) && student.status === "نشط");
+    const examName = state.exams.find(exam => exam.id === options.examEditReview?.examId)?.name || "الامتحان";
+    for (const group of chunks(restored, 500)) {
+      await client.studentNote.createMany({ data: group.map(student => ({
+        studentId: student.id,
+        kind: "إجراء",
+        text: `استعادة الطالب بعد تعديل الامتحان «${examName}» وزوال سبب الفصل المرتبط به. الرصيد المحسوب: ${student.opportunities}؛ دون منح فرص إضافية.`,
+        date: new Date(),
+      })) });
+    }
+  }
   const preservedHistory = options.leaveReview || options.preserveHistoricalLogs
     ? historicalLeaveLogIds(state, new Set(recalculableStudentIds))
     : new Set<string>();
-  if (options.preserveHistoricalLogs && options.previousPolicyExam) {
-    // Policy-only edits leave grades/course/date scope intact. Compare against
-    // the old policy so already-settled evidence from OTHER exams survives,
-    // while later deductions/dismissals changed by this edit still reconcile.
+  if (options.preserveHistoricalLogs && (options.previousPolicyExam || options.previousExamState)) {
+    // Keep already-settled evidence omitted by BOTH genuine before/after
+    // replays, while reconciling every event whose computed effect changed.
     const previousExam = options.previousPolicyExam;
-    const beforeResult = recalculateAcademicState({
+    const beforeState = options.previousExamState || {
       ...state,
-      exams: state.exams.map(exam => exam.id === previousExam.id
+      exams: state.exams.map(exam => exam.id === previousExam?.id
         ? { ...previousExam, examCourses: exam.examCourses }
         : exam),
-    }, new Set(recalculableStudentIds));
+    };
+    const beforeStudentIds = new Set(beforeState.students.map(student => student.id));
+    const editedExamId = previousExam?.id || options.examEditReview?.examId;
+    const beforeResult = recalculateAcademicState(beforeState, new Set(recalculableStudentIds));
     const beforeIds = new Set(beforeResult.opportunityLogs.map(log => log.id));
     const afterIds = new Set(result.opportunityLogs.map(log => log.id));
     // Legacy IDs can differ from replay IDs for the same live event.
@@ -784,7 +879,7 @@ export async function recalculateStudentsAcademicState(
       ...beforeResult.opportunityLogs, ...result.opportunityLogs,
     ].filter(isAutomaticOpportunityLog).map(eventKey));
     for (const log of state.opportunityLogs) {
-      if (isAutomaticOpportunityLog(log) && log.examId !== previousExam.id &&
+      if (isAutomaticOpportunityLog(log) && beforeStudentIds.has(log.studentId) && log.examId !== editedExamId &&
           !beforeIds.has(log.id) && !afterIds.has(log.id) &&
           !replayedEvents.has(eventKey(log))) {
         preservedHistory.add(log.id);
@@ -797,8 +892,8 @@ export async function recalculateStudentsAcademicState(
       ...state.opportunityLogs.filter(log => preservedHistory.has(log.id)),
     ];
   }
-  // Only leave mutations may remove a proved obsolete exam dismissal. This
-  // creates no grant and does not promote dismissed pending grades.
+  // Explicit leave/exam edits may remove only a proved obsolete exam dismissal.
+  // Neither creates a grant nor promotes dismissed pending grades.
   return persistAcademicRecalculation(
     client,
     recalculableStudentIds,
@@ -853,6 +948,8 @@ export async function recalculateStudentsForExam(
     periodLeaveDates?: Array<Date | string | null | undefined>;
     preserveHistoricalLogs?: boolean;
     previousPolicyExam?: AcademicExam;
+    previousExamState?: AcademicStateInput;
+    examEditReview?: { beforeState: AcademicStateInput; examId: string };
   } = {},
 ): Promise<AcademicServerRecalculationResult> {
   const trimmedExamId = String(examId || "").trim();
@@ -866,26 +963,7 @@ export async function recalculateStudentsForExam(
   }
   const client = options.tx || db;
 
-  const periodLeaveWhere: Prisma.StudentLeaveWhereInput[] = [];
-  const periodDayKeys = Array.from(
-    new Set(
-      (options.periodLeaveDates || [])
-        .map((value) =>
-          baghdadDateKey(value),
-        )
-        .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)),
-    ),
-  );
-  for (const key of periodDayKeys) {
-    const dayStart = new Date(`${key}T00:00:00.000Z`);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-    periodLeaveWhere.push({
-      leaveType: "period",
-      dateFrom: { lt: dayEnd },
-      dateTo: { gte: dayStart },
-    });
-  }
+  const periodLeaveWhere = examPeriodLeaveWhere(options.periodLeaveDates || []);
 
   const [
     grades,
@@ -929,6 +1007,8 @@ export async function recalculateStudentsForExam(
       tx: options.tx,
       preserveHistoricalLogs: options.preserveHistoricalLogs,
       previousPolicyExam: options.previousPolicyExam,
+      previousExamState: options.previousExamState,
+      examEditReview: options.examEditReview,
     },
   );
 }

@@ -35,6 +35,7 @@ export type ExamStatusMode = "نشط" | "تفعيل مجدول" | "معطل";
 
 export type FullExamEditState = {
   id: string;
+  mutationToken?: string;
   name: string;
   type: Exam["type"];
   courseIds: string[];
@@ -71,6 +72,7 @@ function toggleSelection(values: string[], value: string): string[] {
 function createEditState(exam: Exam): FullExamEditState {
   return {
     id: exam.id,
+    mutationToken: exam.mutationToken || "",
     name: exam.name,
     type: exam.type,
     courseIds: [...exam.courseIds],
@@ -463,20 +465,13 @@ export function ExamEditDialog({
                     setEditDialog((prev) => ({
                       ...prev,
                       noDiscount: enabled,
-                      discountMark:
-                        enabled || prev.type === "فاينل"
-                          ? "0"
-                          : prev.discountMark && prev.discountMark !== "0"
-                            ? prev.discountMark
-                            : "45",
+                      // Keep the draft policy when temporarily disabling it.
+                      // A stored no-discount exam starts safely at cutoff 0.
                       opportunitiesPenaltyNum:
-                        enabled || prev.type === "فاينل"
-                          ? "0"
-                          : prev.opportunitiesPenaltyNum &&
-                              prev.opportunitiesPenaltyNum !== "0"
-                            ? prev.opportunitiesPenaltyNum
-                            : "1",
-                      dismissalGrade: enabled ? "" : prev.dismissalGrade,
+                        !enabled && prev.type !== "فاينل" &&
+                        Number(toLatinDigits(prev.opportunitiesPenaltyNum)) === 0
+                          ? "1"
+                          : prev.opportunitiesPenaltyNum,
                     }));
                   }}
                 />

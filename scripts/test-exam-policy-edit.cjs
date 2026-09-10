@@ -146,7 +146,7 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  VALUES('keep-history','s1','historic','خصم تلقائي',1,'تلقائي: من الفصل السابق','2026-07-17 23:00','old-ch',3,2,1,1,2,'["old-grade"]','الفصل الأول');`);
  const row=async(model,id)=>client[model].findUnique({where:{id}});
  const snapshot=async()=>{
-  const out={};for(const name of ['Exam','ExamCourse','Student','Grade','StudentLeave','StudentLeaveGradeBackup','OpportunityLog'])out[name]=(await pg.query(`SELECT * FROM "${name}" ORDER BY id`)).rows;
+  const out={};for(const name of ['Exam','ExamCourse','Student','Grade','StudentLeave','StudentLeaveGradeBackup','OpportunityLog','StudentNote'])out[name]=(await pg.query(`SELECT * FROM "${name}" ORDER BY id`)).rows;
   return out;
  };
  const put=async patch=>{const response=await route.PUT({url:'https://example.test/api/exams',json:async()=>patch});return {status:response.status,data:await response.json()};};
@@ -254,10 +254,130 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  const cascadeChanged=await put({id:'cascade-1',noDiscount:true});assert.equal(cascadeChanged.status,200,JSON.stringify(cascadeChanged.data));
  assert.equal(await row('opportunityLog',oldDismissal.id),null,'later dismissal caused by removed earlier penalty is removed');
  assert.ok(!cascadeChanged.data.academicRecalculation.opportunityLogs.some(l=>l.id===oldDismissal.id),'response removes obsolete later dismissal too');
- assert.equal((await row('student','cascade')).status,'مفصول','exam editing keeps explicit reactivation policy');
+ assert.equal((await row('student','cascade')).status,'نشط','removing an earlier penalty restores a student when its proved later automatic dismissal disappears');
  assert.equal((await row('student','cascade')).opportunities,0);
+ assert.equal((await row('student','cascade')).dismissalReason,null);
+ // A final exam can consume the remaining balance and dismiss immediately.
+ // Removing its policy must recover that actual balance (including zero),
+ // while a later independent cause or manual decision still prevents recovery.
+ await pg.exec(`INSERT INTO "Student"(id,name,"nameKey",gender,code,"courseId","mainSite","createdAt","baseOpportunities",opportunities)
+ SELECT id,id,id,'ذكر',id,'isolated','بغداد','2026-06-01',3,3 FROM unnest(ARRAY['direct-zero','direct-one','manual-override','later-cause'])id;
+ INSERT INTO "Exam"(id,name,type,date,"courseIds","mainSite","fullMark","passMark","discountMark","opportunitiesPenalty")
+ SELECT 'direct-'||i,'خصم سابق '||i,'يومي','2026-06-03'::timestamp+i*INTERVAL '1 day','["isolated"]','بغداد',20,10,7,'1' FROM generate_series(1,3)i;
+ INSERT INTO "Exam"(id,name,type,date,"courseIds","mainSite","fullMark","passMark","discountMark","opportunitiesPenalty","dismissalGrade")
+ VALUES('direct-final','فاينل يستعاد أثره','فاينل','2026-06-08','["isolated"]','بغداد',20,10,0,'0',4),('later-final','فاينل آخر مستقل','فاينل','2026-06-09','["isolated"]','بغداد',20,10,0,'0',4);
+ INSERT INTO "Grade"(id,"studentId","examId",status,"updatedAt")
+ SELECT s||'-g'||i,s,'direct-'||i,'غائب','2026-06-10' FROM unnest(ARRAY['direct-zero','direct-one','manual-override','later-cause'])s CROSS JOIN generate_series(1,2)i;
+ INSERT INTO "Grade"(id,"studentId","examId",status,"updatedAt")
+ SELECT s||'-final',s,'direct-final','غائب','2026-06-10' FROM unnest(ARRAY['direct-zero','direct-one','manual-override','later-cause'])s;
+ INSERT INTO "Grade"(id,"studentId","examId",status,"updatedAt") VALUES('direct-zero-g3','direct-zero','direct-3','غائب','2026-06-10'),('later-cause-final2','later-cause','later-final','غائب','2026-06-10');`);
+ const directIds=['direct-zero','direct-one','manual-override','later-cause'];
+ const directReplay=await previewStudentsAcademicState(directIds,{tx:client});
+ for(const student of directReplay.students){
+  assert.equal(student.status,'مفصول');
+  await client.student.update({where:{id:student.id},data:{status:student.status,opportunities:student.opportunities,dismissalReason:student.dismissalReason}});
+ }
+ await client.opportunityLog.createMany({data:directReplay.automaticOpportunityLogs.map(l=>({...l,date:new Date(l.date)}))});
+ // Same saved reason and valid automatic evidence are insufficient when an
+ // explicit, later manual decision superseded that original automatic cause.
+ await client.studentNote.create({data:{id:'manual-override-note',studentId:'manual-override',kind:'إجراء',text:'فصل الطالب يدوياً بقرار الإدارة',date:new Date('2026-06-11')}});
+ const directBefore=await snapshot(),manualBefore=await row('student','manual-override'),laterBefore=await row('student','later-cause');
+ failWrite='opportunityLog';
+ const recoveryFailed=await put({id:'direct-final',noDiscount:true});
+ failWrite=null;
+ assert.equal(recoveryFailed.status,500);
+ assert.deepEqual(await snapshot(),directBefore,'a failure after recovery persistence rolls back exam, reactivation, balances and logs together');
+ const directChanged=await put({id:'direct-final',noDiscount:true});
+ assert.equal(directChanged.status,200,JSON.stringify(directChanged.data));
+ for(const [id,balance]of [['direct-zero',0],['direct-one',1]]){
+  const student=await row('student',id);
+  assert.equal(student.status,'نشط',id+' recovers from the edited exam’s proved automatic cause');
+  assert.equal(student.opportunities,balance,id+' receives its actual recomputed balance, without a pledge or arbitrary grant');
+  assert.equal(student.dismissalReason,null);
+  const returned=directChanged.data.academicRecalculation.students.find(s=>s.id===id);
+  assert.equal(returned.status,'نشط');assert.equal(returned.opportunities,balance,'response matches persisted recovery');
+ }
+ assert.deepEqual(await row('student','manual-override'),manualBefore,'a later manual decision is retained even with a matching automatic reason');
+ assert.deepEqual(await row('student','later-cause'),laterBefore,'a later independent exam still dismisses the student');
+ const directAfter=await snapshot();
+ for(const table of ['Grade','StudentLeave','StudentLeaveGradeBackup'])assert.deepEqual(directAfter[table],directBefore[table],table+' unchanged by automatic exam recovery');
+ for(const note of directBefore.StudentNote)assert.deepEqual(directAfter.StudentNote.find(n=>n.id===note.id),note,'existing action notes stay intact');
+ const recoveryNotes=directAfter.StudentNote.filter(n=>!directBefore.StudentNote.some(old=>old.id===n.id));
+ assert.deepEqual(recoveryNotes.map(n=>n.studentId).sort(),['direct-one','direct-zero'],'exactly the restored students receive a new explanation');
+ for(const note of recoveryNotes){assert.equal(note.kind,'إجراء');assert.ok(note.text.includes('استعادة الطالب بعد تعديل الامتحان'));assert.ok(note.text.includes('فاينل يستعاد أثره'));}
+ assert.equal(directAfter.OpportunityLog.filter(l=>directIds.includes(l.studentId)&&l.examId==='direct-final'&&l.action==='فصل تلقائي').length,0);
+ assert.ok(directAfter.OpportunityLog.some(l=>l.studentId==='later-cause'&&l.examId==='later-final'&&l.action==='فصل تلقائي'),'valid unrelated dismissal remains recorded');
+ assert.ok(!directAfter.OpportunityLog.some(l=>['direct-zero','direct-one'].includes(l.studentId)&&!['خصم تلقائي','فصل تلقائي'].includes(l.action)),'recovery adds no pledge, reset or manual opportunity grant');
+ const recoveredBefore=await snapshot();
+ assert.equal((await put({id:'direct-final',noDiscount:true})).status,200);
+ assert.deepEqual(await snapshot(),recoveredBefore,'repeated no-discount save does not grant again');
+ // Renaming must follow current, proved automatic references, but must not
+ // rewrite a manual decision that happens to use the old exam name/reason.
+ await pg.exec(`INSERT INTO "Student"(id,name,"nameKey",gender,code,"courseId","mainSite","createdAt","baseOpportunities",opportunities)
+ SELECT id,id,id,'ذكر',id,'isolated','بغداد','2026-06-01',3,3 FROM unnest(ARRAY['rename-auto','rename-manual','rename-manual-log'])id;
+ INSERT INTO "Exam"(id,name,type,date,"courseIds","mainSite","fullMark","passMark","discountMark","opportunitiesPenalty","dismissalGrade") VALUES('rename-final','اسم الفاينل القديم','فاينل','2026-06-08','["isolated"]','بغداد',20,10,0,'0',4);
+ INSERT INTO "Grade"(id,"studentId","examId",status,"updatedAt") SELECT id||'-g',id,'rename-final','غائب','2026-06-10' FROM unnest(ARRAY['rename-auto','rename-manual','rename-manual-log'])id;`);
+ const renameReplay=await previewStudentsAcademicState(['rename-auto','rename-manual','rename-manual-log'],{tx:client});
+ for(const student of renameReplay.students)await client.student.update({where:{id:student.id},data:{status:student.status,opportunities:student.opportunities,dismissalReason:student.dismissalReason}});
+ await client.opportunityLog.createMany({data:renameReplay.automaticOpportunityLogs.map(l=>({...l,date:new Date(l.date)}))});
+ // The previous UTC date is nevertheless the same Baghdad calendar day as
+ // the cause: conservative manual precedence must not depend on the time.
+ await client.studentNote.create({data:{id:'rename-manual-note',studentId:'rename-manual',kind:'إجراء',text:'فصل الطالب يدوياً: اسم الفاينل القديم',date:new Date('2026-06-07T22:00:00Z')}});
+ await client.opportunityLog.create({data:{id:'rename-manual-decision',studentId:'rename-manual-log',action:'فصل',amount:0,reason:'فصل الطالب يدوياً: اسم الفاينل القديم',date:new Date('2026-06-07T22:00:00Z'),chapterId:'ch'}});
+ const renameBefore=await snapshot(),oldAutomatic=await row('student','rename-auto'),oldManual=await row('student','rename-manual'),oldManualLog=await row('student','rename-manual-log');
+ assert.equal(oldAutomatic.dismissalReason,oldManual.dismissalReason,'manual reason deliberately matches automatic evidence exactly');
+ const renamed=await put({id:'rename-final',name:'اسم الفاينل الجديد'});
+ assert.equal(renamed.status,200,JSON.stringify(renamed.data));
+ assert.equal(renamed.data.academicRecalculation,null,'rename does not recalculate balances');
+ assert.deepEqual(await row('student','rename-auto'),{...oldAutomatic,dismissalReason:oldAutomatic.dismissalReason.replaceAll('اسم الفاينل القديم','اسم الفاينل الجديد')},'only the proved automatic current reason follows the rename');
+ assert.deepEqual(await row('student','rename-manual'),oldManual,'manual dismissal with identical wording is not rewritten');
+ assert.deepEqual(await row('student','rename-manual-log'),oldManualLog,'a manual log on the same Baghdad day also protects its identically worded dismissal');
+ const renameAfter=await snapshot();
+ for(const table of ['Grade','StudentLeave','StudentLeaveGradeBackup','StudentNote'])assert.deepEqual(renameAfter[table],renameBefore[table],table+' unchanged by rename');
+ for(const student of renameAfter.Student)if(!['rename-auto'].includes(student.id))assert.deepEqual(student,renameBefore.Student.find(s=>s.id===student.id),'unrelated student is unchanged by rename '+student.id);
+ assert.ok(renameAfter.OpportunityLog.filter(l=>l.examId==='rename-final').every(l=>!l.reason.includes('اسم الفاينل القديم')&&l.reason.includes('اسم الفاينل الجديد')),'exam-linked automatic reasons show the new name');
+ // A genuine scope change also retains settled evidence from other exams
+ // in the SAME chapter. Its before snapshot must precede marker replacement.
+ await pg.exec(`INSERT INTO "Course"(id,name) VALUES('history-course','دورة اختبار التسويات');
+ INSERT INTO "CourseChapter"(id,"courseId","chapterId",active) VALUES('history-cc','history-course','ch',true);
+ INSERT INTO "Student"(id,name,"nameKey",gender,code,"courseId","mainSite","createdAt","baseOpportunities",opportunities,"accountingGraceDays") VALUES('history-student','تاريخ محفوظ','history-student','ذكر','HISTORY','history-course','بغداد','2026-06-01',3,0,0);
+ INSERT INTO "Exam"(id,name,type,date,"courseIds","mainSite","fullMark","passMark","discountMark","opportunitiesPenalty") VALUES
+ ('history-settled','امتحان تمت تسويته','يومي','2026-06-05','["history-course"]','بغداد',20,10,7,'1'),
+ ('history-moving','امتحان ننقل تاريخه','يومي','2026-06-08','["history-course"]','بغداد',20,10,7,'1'),
+ ('history-other','امتحان آخر حي','يومي','2026-06-09','["history-course"]','بغداد',20,10,7,'1');
+ INSERT INTO "Grade"(id,"studentId","examId",status,"updatedAt") SELECT id||'-g','history-student',id,'غائب','2026-06-10' FROM unnest(ARRAY['history-settled','history-moving','history-other'])id;`);
+ const historyReplay=await previewStudentsAcademicState(['history-student'],{tx:client});
+ assert.equal(historyReplay.students[0].opportunities,0);
+ await client.opportunityLog.createMany({data:historyReplay.automaticOpportunityLogs.map(l=>({...l,date:new Date(l.date)}))});
+ const historySettled=historyReplay.automaticOpportunityLogs.find(l=>l.examId==='history-settled');
+ assert.ok(historySettled);
+ await client.opportunityLog.update({where:{id:historySettled.id},data:{requestedAmount:1,appliedAmount:1,balanceBefore:3,balanceAfter:2,ledgerVersion:2,settledGradeIds:'["history-settled-g"]'}});
+ await client.opportunityLog.create({data:{id:'history-reset',studentId:'history-student',action:'إعادة تعيين',amount:3,reason:'تسوية محفوظة',date:new Date('2026-06-07T12:00:00Z'),chapterId:'ch',chapterNameSnapshot:'الفصل الثاني',ledgerVersion:2,balanceBefore:2,balanceAfter:3,requestedAmount:3,appliedAmount:3,settledGradeIds:'["history-settled-g"]'}});
+ await client.student.update({where:{id:'history-student'},data:{opportunities:1}});
+ const scopeHistoryPreview=await previewStudentsAcademicState(['history-student'],{tx:client});
+ assert.equal(scopeHistoryPreview.students[0].opportunities,1,'scope fixture has no pre-existing balance drift');
+ assert.ok(!scopeHistoryPreview.automaticOpportunityLogs.some(l=>l.id===historySettled.id),'settled evidence was already absent from the old replay');
+ // Period-leave dependents are currently part of exam recalculation even if
+ // their own course is different. Their settled evidence needs the same guard.
+ await client.studentLeave.create({data:{id:'cross-course-period',studentId:'s5',leaveType:'period',reason:'إجازة فترة بدورة أخرى',date:new Date('2026-06-08'),dateFrom:new Date('2026-06-08'),dateTo:new Date('2026-06-08')}});
+ const scopeHistoryBefore=await snapshot();
+ assert.ok(scopeHistoryBefore.OpportunityLog.some(l=>l.id===settledCurrent.id),'cross-course dependent starts with its settled evidence intact');
+ const historyMoved=await put({id:'history-moving',date:'2026-05-30'});
+ assert.equal(historyMoved.status,200,JSON.stringify(historyMoved.data));
+ assert.equal((await row('student','history-student')).opportunities,2,'moving before registration removes only this exam’s actual penalty');
+ const scopeHistoryAfter=await snapshot();
+ assert.deepEqual(scopeHistoryAfter.Student.find(s=>s.id==='s5'),scopeHistoryBefore.Student.find(s=>s.id==='s5'),'cross-course period-leave student balance is unchanged');
+ assert.deepEqual(scopeHistoryAfter.OpportunityLog.find(l=>l.id===settledCurrent.id),scopeHistoryBefore.OpportunityLog.find(l=>l.id===settledCurrent.id),'cross-course period-leave dependent retains settled history');
+ for(const stored of scopeHistoryBefore.OpportunityLog.filter(l=>l.studentId==='history-student'&&l.examId!=='history-moving')){
+  assert.deepEqual(scopeHistoryAfter.OpportunityLog.find(l=>l.id===stored.id),stored,'scope edit preserves other live/settled history '+stored.id);
+  const returned=historyMoved.data.academicRecalculation.opportunityLogs.find(l=>l.id===stored.id);
+  assert.ok(returned,'scope edit response includes settled history '+stored.id);
+  for(const field of ['requestedAmount','appliedAmount','balanceBefore','balanceAfter','ledgerVersion','settledGradeIds'])assert.deepEqual(returned[field],stored[field],'scope response preserves ledger field '+field);
+ }
+ assert.ok(!scopeHistoryAfter.OpportunityLog.some(l=>l.studentId==='history-student'&&l.examId==='history-moving'&&l.action==='خصم تلقائي'),'removed exam effect is not misclassified as preserved history');
+ assert.equal((await client.grade.findFirst({where:{studentId:'history-student',examId:'history-moving'}})).status,'قبل تسجيل الطالب','new grade scope is reconciled');
  const deniedBefore=await snapshot();deny=true;assert.equal((await put({id:'e9',noDiscount:false})).status,403);deny=false;assert.deepEqual(await snapshot(),deniedBefore);
  assert.ok(audits.some(a=>a[3]?.examId==='e9'&&a[3]?.recalculatedStudents>=1000));
  await pg.close();
- console.log('PASS: actual exams PUT + migrations, 1,000-student no-discount update, unchanged Baghdad day and grade/leave/backups/history and settled current-chapter evidence preserved, later obsolete dismissal removed, bounded student SQL writes, manual dismissal retained, idempotence, stale edit, authorization, rollback and real date-scope reconciliation');
+ console.log('PASS: actual exams PUT + migrations, 1,000-student no-discount update, unchanged Baghdad day and grade/leave/backups/history and settled current-chapter evidence preserved, obsolete automatic dismissal recovered at actual 0/1 balance, manual/later causes retained, proof-gated reason rename, bounded student SQL writes, idempotence, stale edit, authorization, recovery rollback and real date-scope reconciliation');
 })().catch(e=>{console.error(e);process.exitCode=1});

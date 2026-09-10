@@ -20,6 +20,14 @@ const cronRoute = read('src/app/api/internal/academic-maintenance/route.ts');
 const cronHelper = read('src/lib/scheduled-exam-activation-server.ts');
 const repairRoute = read('src/app/api/internal/academic-integrity/protected-markers/route.ts');
 const vercelConfig = read('vercel.json');
+const examDialog = read('src/components/teacher-pro/exam-edit-dialog.tsx');
+const examRecords = read('src/components/teacher-pro/exam-records.tsx');
+
+// A background refresh must not lend a new token to an already-open stale draft.
+assert.match(examDialog, /mutationToken: exam\.mutationToken \|\| ""/);
+assert.match(examRecords, /expectedToken \?\? \(examById/);
+assert.match(examRecords, /\}, editDialog\.mutationToken\)/);
+
 
 assert.match(examsRoute, /mainSite:\s*String\(exam\.mainSite/);
 assert.match(examsRoute, /reconcileProtectedGradeMarkersForExamEdit\(tx, exam\.id\)/);
@@ -27,8 +35,8 @@ assert.match(examsRoute, /includeAbsent:\s*protectedScopeChanged/);
 assert.match(examsRoute, /studentLeave\.findMany[\s\S]*leaveType:\s*'exam'/);
 assert.match(examsRoute, /baghdadDateKey\(leave\.date\) === oldExamDay/);
 assert.match(examsRoute, /StudentLeaveUpdateInput/);
-assert.match(examsRoute, /opportunityLog\.findMany[\s\S]*reason:\s*\{ contains: oldName \}/);
-assert.match(examsRoute, /split\(oldName\)\.join\(newName\)/);
+assert.match(examsRoute, /UPDATE "OpportunityLog"/);
+assert.match(examsRoute, /replace\(reason, \$\{oldName\}, \$\{newName\}\)/);
 assert.match(examsRoute, /gradeSmartNote\.aggregate/);
 assert.match(examsRoute, /studentLeaveGradeBackup\.aggregate/);
 console.log('✅ الاسم يزامن النصوص دون إعادة احتساب، وباقي التعديلات الأكاديمية تعيد المزامنة وتحمي fullMark');

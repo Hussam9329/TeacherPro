@@ -9,7 +9,7 @@ import { baghdadDateKey, parseBaghdadDateOnly, parseBaghdadDateTime } from '@/li
 import { getExamEntryAvailability } from '@/lib/exam-utils';
 import { assertDatabaseSchemaReady } from '@/lib/schema-readiness';
 import { canonicalCourseIds, parseCourseIds, syncExamCourseLinks } from '@/lib/exam-course-links';
-import { recalculateStudentsForExam, toAcademicExam } from '@/lib/academic-recalculate-server';
+import { loadExamEditDismissalReviewState, loadExamEditHistoryState, recalculateStudentsForExam, toAcademicExam } from '@/lib/academic-recalculate-server';
 import { writeRequestAuditLog } from '@/lib/audit-log-server';
 import type { Prisma } from '@prisma/client';
 import { buildMutationPreviewToken } from '@/lib/mutation-preview-token';
@@ -556,6 +556,16 @@ export async function PUT(req: NextRequest) {
         }
       }
 
+      const academicChanged = hasAcademicExamChange(existingExam, candidateExam);
+      const previousExamState = academicChanged && (
+        hasProtectedMarkerScopeChange(existingExam, candidateExam) ||
+        wasAvailable !== candidateAvailability.available
+      ) ? await loadExamEditHistoryState(tx, id, [
+        ...parseCourseIds(existingExam.courseIds), ...parseCourseIds(candidateExam.courseIds),
+      ], [existingExam.date, candidateExam.date]) : undefined;
+      const dismissalReviewState = previousExamState || (academicChanged
+        ? await loadExamEditDismissalReviewState(tx, id)
+        : undefined);
       const exam = await tx.exam.update({ where: { id }, data });
       await syncExamCourseLinks(tx, exam.id, exam.courseIds);
       if (
@@ -569,19 +579,35 @@ export async function PUT(req: NextRequest) {
         const oldName = String(existingExam.name || '');
         const newName = String(exam.name || '');
         if (oldName && newName) {
-          const namedLogs = await tx.opportunityLog.findMany({
-            where: { examId: exam.id, reason: { contains: oldName } },
-            select: { id: true, reason: true },
-          });
-          for (const log of namedLogs) {
-            const nextReason = String(log.reason || '').split(oldName).join(newName);
-            if (nextReason !== log.reason) {
-              await tx.opportunityLog.update({
-                where: { id: log.id },
-                data: { reason: nextReason },
-              });
-            }
-          }
+          await tx.$executeRaw`
+            UPDATE "Student" AS student
+            SET "dismissalReason" = replace(student."dismissalReason", ${oldName}, ${newName})
+            FROM "OpportunityLog" AS evidence
+            WHERE evidence."examId" = ${exam.id}
+              AND evidence."studentId" = student.id
+              AND evidence.action = 'فصل تلقائي'
+              AND student.status = 'مفصول'
+              AND student."dismissalReason" = btrim(regexp_replace(evidence.reason, '^تلقائي:[[:space:]]*', ''))
+              AND strpos(evidence.reason, ${oldName}) > 0
+              AND NOT EXISTS (
+                SELECT 1 FROM "StudentNote" AS note
+                WHERE note."studentId" = student.id AND note.kind = 'إجراء'
+                  AND note.text LIKE 'فصل الطالب%'
+                  AND (note.date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Baghdad')::date
+                    >= (evidence.date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Baghdad')::date
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM "OpportunityLog" AS manual
+                WHERE manual."studentId" = student.id AND manual.reason LIKE 'فصل الطالب%'
+                  AND (manual.date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Baghdad')::date
+                    >= (evidence.date AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Baghdad')::date
+              )
+          `;
+          await tx.$executeRaw`
+            UPDATE "OpportunityLog"
+            SET reason = replace(reason, ${oldName}, ${newName})
+            WHERE "examId" = ${exam.id} AND strpos(reason, ${oldName}) > 0
+          `;
         }
       }
       if (data.date !== undefined) {
@@ -640,9 +666,11 @@ export async function PUT(req: NextRequest) {
             tx,
             periodLeaveDates: protectedScopeChanged ? [existingExam.date, exam.date] : [],
             preserveHistoricalLogs: true,
+            previousExamState,
             previousPolicyExam: !protectedScopeChanged && wasAvailable === candidateAvailability.available
               ? toAcademicExam(existingExam)
               : undefined,
+            examEditReview: dismissalReviewState ? { beforeState: dismissalReviewState, examId: exam.id } : undefined,
           })
         : null;
       return {

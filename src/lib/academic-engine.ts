@@ -464,15 +464,22 @@ function findLatestAcademicReactivationSourceForStudent(
     "grades" | "exams" | "opportunityLogs" | "studentLeaves"
   >,
   student: AcademicStudent,
+  reactivationDate?: string,
 ): Partial<AcademicReactivationLink> | null {
   const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
+  const cutoffDay = reactivationDate === undefined ? "" : dayKey(reactivationDate);
+  if (reactivationDate !== undefined && !cutoffDay) return null;
+  const isBeforeReactivation = (date: string) =>
+    !cutoffDay || Boolean(dayKey(date) && dayKey(date) <= cutoffDay);
   const normalizedLeaves = (state.studentLeaves || []).map((leave) =>
     normalizeStudentLeave(leave),
   );
 
   const studentAutomaticLogs = state.opportunityLogs
     .filter(
-      (log) => log.studentId === student.id && isAutomaticOpportunityLog(log),
+      (log) => log.studentId === student.id && isAutomaticOpportunityLog(log) &&
+        isBeforeReactivation(log.date) &&
+        (!examsById.has(log.examId) || isBeforeReactivation(examsById.get(log.examId)!.date)),
     )
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 
@@ -502,6 +509,7 @@ function findLatestAcademicReactivationSourceForStudent(
     .find((grade) => {
       const exam = examsById.get(grade.examId);
       if (!exam) return false;
+      if (!isBeforeReactivation(exam.date)) return false;
       if (!isExamAvailableForEntry(exam)) return false;
       if (!isGradeEntered(grade, exam)) return false;
       if (!isExamOnOrAfterStudentRegistration(student, exam)) return false;
@@ -531,6 +539,7 @@ function resolveAcademicReactivationLinkForLog(
     "grades" | "exams" | "opportunityLogs" | "studentLeaves"
   >,
   student: AcademicStudent,
+  respectLegacyReactivationDates = false,
 ): AcademicReactivationLink | null {
   const parsed = parseAcademicReactivationLink(log.reason);
   if (parsed) return parsed;
@@ -539,6 +548,10 @@ function resolveAcademicReactivationLinkForLog(
   const inferred = findLatestAcademicReactivationSourceForStudent(
     state,
     student,
+    // Legacy reactivations lack an explicit source. A newer dismissal cannot
+    // become the cause of an earlier reactivation and silently exempt itself.
+    // Explicit links returned above keep their established identity.
+    respectLegacyReactivationDates ? log.date : undefined,
   );
   if (!inferred) return null;
   return {
@@ -571,6 +584,7 @@ export function findAcademicReactivationSourceForStudent(
 export function recalculateAcademicState(
   state: AcademicStateInput,
   targetStudentIds?: Set<string>,
+  options: { respectLegacyReactivationDates?: boolean } = {},
 ): AcademicRecalculationResult {
   const examsById = new Map(state.exams.map((exam) => [exam.id, exam]));
   const activeCourseChapterGroups = new Map<string, AcademicCourseChapter[]>();
@@ -694,7 +708,12 @@ export function recalculateAcademicState(
     const linkedSourceLinks = allStudentManualLogs
       .filter(log => !structuredBoundary || String(log.date) >= String(structuredBoundary.date))
       .map((log) => {
-        const link = resolveAcademicReactivationLinkForLog(log, state, student);
+        // Exam-dismissal evidence review needs the actual dated source. Keep
+        // this opt-in: changing ordinary replay's legacy interpretation would
+        // retroactively alter historical balances unrelated to the exam edit.
+        const link = resolveAcademicReactivationLinkForLog(
+          log, state, student, options.respectLegacyReactivationDates,
+        );
         if (link && academicReactivationSourceKey(link))
           resolvedAcademicLinksByLogId.set(log.id, link);
         return link;
