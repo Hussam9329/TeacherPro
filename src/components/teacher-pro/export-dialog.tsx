@@ -3,7 +3,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatAppDate } from "@/lib/format";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +35,7 @@ type PageOrientation = "portrait" | "landscape";
 
 /* ============================ تفاصيل الطالب المضمّنة ============================ */
 export type StudentGradeDetail = {
+  examId?: string;
   examName: string;
   examType: string;
   examDate: string;
@@ -47,6 +50,7 @@ export type StudentGradeDetail = {
 };
 
 export type StudentOpportunityLogDetail = {
+  examId?: string;
   action: string;
   amount: number;
   reason: string | null;
@@ -78,6 +82,34 @@ export type StudentDetails = {
 };
 
 export type StudentDetailsMap = Record<string, StudentDetails>;
+
+/** Derive the choices from the exact report snapshot, after chapter scoping. */
+export function getHtmlReportExams(details: StudentDetailsMap) {
+  const exams = new Map<string, { id: string; name: string; date: string; courseNames: string[] }>();
+  for (const student of Object.values(details)) {
+    for (const grade of student.grades) {
+      if (grade.examId && !exams.has(grade.examId)) {
+        exams.set(grade.examId, { id: grade.examId, name: grade.examName, date: grade.examDate, courseNames: [] });
+      }
+      const exam = grade.examId ? exams.get(grade.examId) : undefined;
+      const courseName = student.studentSnapshot?.courseName;
+      if (exam && courseName && !exam.courseNames.includes(courseName)) exam.courseNames.push(courseName);
+    }
+  }
+  return [...exams.values()].sort((a, b) =>
+    (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0) ||
+    a.name.localeCompare(b.name, "ar") || a.id.localeCompare(b.id));
+}
+
+/** Presentation only: the authoritative balance, status and pledge stay intact. */
+export function selectHtmlReportExams(details: StudentDetailsMap, selectedExamIds: string[]): StudentDetailsMap {
+  const selected = new Set(selectedExamIds);
+  return Object.fromEntries(Object.entries(details).map(([id, student]) => [id, {
+    ...student,
+    grades: student.grades.filter(grade => Boolean(grade.examId && selected.has(grade.examId))),
+    opportunityLogs: student.opportunityLogs.filter(log => !log.examId || selected.has(log.examId)),
+  }]));
+}
 
 /**
  * بيانات الطالب الأساسية المعروضة في الجدول/البطاقة عند اختياره من البحث.
@@ -293,6 +325,7 @@ export function buildStudentDetailsFromProfileLog(
       const score = grade.score;
       const fullMark = exam?.fullMark;
       return {
+        examId,
         examName: String(exam?.name || "امتحان غير محدد"),
         examType: String(exam?.type || ""),
         examDate: String(exam?.date || ""),
@@ -322,6 +355,7 @@ export function buildStudentDetailsFromProfileLog(
     ) {
       examMap.set(examId, examRecord);
       grades.push({
+        examId,
         examName: String(examRecord.name || "امتحان غير محدد"),
         examType: String(examRecord.type || ""),
         examDate: String(examRecord.date || ""),
@@ -354,6 +388,7 @@ export function buildStudentDetailsFromProfileLog(
       const log = rawLog as Record<string, unknown>;
       const exam = examMap.get(String(log.examId || ""));
       return {
+        examId: String(log.examId || ""),
         action: String(log.action || ""),
         amount: Number(log.amount || 0),
         reason: log.reason ? String(log.reason) : null,
@@ -832,7 +867,7 @@ const DETAILS_MODAL_JS = `
           + mobileCell('الدرجة', score)
           + mobileCell('الأثر على الفرص', esc(effectText), effectClass)
           + '</tr>';
-      }).join('') : '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">لا توجد امتحانات في هذا الفصل ضمن التقرير حتى الآن.</td></tr>';
+      }).join('') : '<tr class="tp-empty-row" role="row"><td colspan="4" role="cell">لا توجد امتحانات لعرضها في هذه النسخة.</td></tr>';
     }
     if (!overlay.classList.contains('open')) {
       previouslyFocusedElement = document.activeElement;
@@ -1170,6 +1205,7 @@ export function ExportDialog<T = Record<string, unknown>>({
   disabled = false,
   fetchStudentDetails,
   getRowId,
+  selectHtmlExams = false,
 }: {
   title: string;
   fileName: string;
@@ -1194,6 +1230,8 @@ export function ExportDialog<T = Record<string, unknown>>({
   fetchStudentDetails?: StudentDetailsFetcher;
   /** يستخرج معرّف الطالب من كل صف لربطه بتفاصيله. افتراضياً row.id */
   getRowId?: (row: T) => string;
+  /** Ask which exams to include in this HTML file; other formats are unaffected. */
+  selectHtmlExams?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [selectedColumnKeys, setSelectedColumnKeys] = useState<string[]>(() =>
@@ -1206,9 +1244,34 @@ export function ExportDialog<T = Record<string, unknown>>({
     phase: "rows" | "details";
   } | null>(null);
   const exportAbortController = useRef<AbortController | null>(null);
+  const exportBusyRef = useRef(false);
+  const exportAttemptRef = useRef(0);
+  const [htmlExamSelectionOpen, setHtmlExamSelectionOpen] = useState(false);
+  const [preparedHtmlExport, setPreparedHtmlExport] = useState<{ rows: T[]; details: StudentDetailsMap } | null>(null);
+  const [selectedHtmlExamIds, setSelectedHtmlExamIds] = useState<string[]>([]);
+  const [htmlExamSearch, setHtmlExamSearch] = useState("");
+  const htmlReportExams = useMemo(() => getHtmlReportExams(preparedHtmlExport?.details || {}), [preparedHtmlExport]);
+  const visibleHtmlReportExams = useMemo(() => {
+    const query = normalizeArabicComparisonText(htmlExamSearch);
+    return htmlReportExams.filter(exam => normalizeArabicComparisonText(exam.name).includes(query));
+  }, [htmlReportExams, htmlExamSearch]);
+
+  const cancelExportPreparation = () => {
+    exportAttemptRef.current += 1;
+    exportAbortController.current?.abort();
+    exportAbortController.current = null;
+    exportBusyRef.current = false;
+    setExporting(false);
+    setExportProgress(null);
+    setPreparedHtmlExport(null);
+    setSelectedHtmlExamIds([]);
+    setHtmlExamSearch("");
+    setHtmlExamSelectionOpen(false);
+  };
 
   useEffect(
     () => () => {
+      exportAttemptRef.current += 1;
       exportAbortController.current?.abort();
     },
     [],
@@ -1262,12 +1325,15 @@ export function ExportDialog<T = Record<string, unknown>>({
     try {
       const loadedRows = await fetchRows({
         signal: controller.signal,
-        onProgress: (loaded, total) => setExportProgress({ loaded, total, phase: "rows" }),
+        onProgress: (loaded, total) => {
+          if (!controller.signal.aborted && exportAbortController.current === controller)
+            setExportProgress({ loaded, total, phase: "rows" });
+        },
       });
-      return loadedRows;
+      return controller.signal.aborted ? null : loadedRows;
     } catch (error) {
       console.error("[ExportDialog] failed to fetch server export rows:", error);
-      if (!(error instanceof Error && error.name === "AbortError")) {
+      if (!controller.signal.aborted && exportAbortController.current === controller && !(error instanceof Error && error.name === "AbortError")) {
         toast.error(
           error instanceof Error && error.message
             ? error.message
@@ -1278,15 +1344,15 @@ export function ExportDialog<T = Record<string, unknown>>({
     } finally {
       if (exportAbortController.current === controller) {
         exportAbortController.current = null;
+        setExporting(false);
+        setExportProgress(null);
       }
-      setExporting(false);
-      setExportProgress(null);
     }
   };
 
   /**
    * يجلب تفاصيل كل طالب (درجاته + سجل فرصه) على دفعات متوازية ليبني ملف
-   * HTML مستقل يعمل أوفلاين. لا يُوقف العملية كاملة عند فشل طالب واحد.
+   * HTML مستقل يعمل أوفلاين. فشل تحميل التفاصيل يمنع إنشاء تقرير ناقص.
    */
   const loadStudentDetails = async (
     exportRows: T[],
@@ -1309,13 +1375,15 @@ export function ExportDialog<T = Record<string, unknown>>({
     try {
       const details = await fetchStudentDetails(studentIds, {
         signal: controller.signal,
-        onProgress: (loaded, total) =>
-          setExportProgress({ loaded, total, phase: "details" }),
+        onProgress: (loaded, total) => {
+          if (!controller.signal.aborted && exportAbortController.current === controller)
+            setExportProgress({ loaded, total, phase: "details" });
+        },
       });
-      return details;
+      return controller.signal.aborted ? null : details;
     } catch (error) {
       console.error("[ExportDialog] failed to fetch student details:", error);
-      if (!(error instanceof Error && error.name === "AbortError")) {
+      if (!controller.signal.aborted && exportAbortController.current === controller && !(error instanceof Error && error.name === "AbortError")) {
         toast.error(
           error instanceof Error && error.message
             ? error.message
@@ -1326,9 +1394,9 @@ export function ExportDialog<T = Record<string, unknown>>({
     } finally {
       if (exportAbortController.current === controller) {
         exportAbortController.current = null;
+        setExporting(false);
+        setExportProgress(null);
       }
-      setExporting(false);
-      setExportProgress(null);
     }
   };
 
@@ -1373,20 +1441,8 @@ export function ExportDialog<T = Record<string, unknown>>({
     setOpen(false);
   };
 
-  const exportHtml = async (exportRows: T[]) => {
+  const exportHtml = (exportRows: T[], detailsMap: StudentDetailsMap | null = null) => {
     if (!ensureExportable(exportRows)) return;
-
-    let detailsMap: StudentDetailsMap | null = null;
-    if (fetchStudentDetails) {
-      exportAbortController.current?.abort();
-      const controller = new AbortController();
-      exportAbortController.current = controller;
-      detailsMap = await loadStudentDetails(exportRows, controller);
-      if (exportAbortController.current === null && detailsMap === null) {
-        // تم الإلغاء أو فشل التحميل — لا نكمل التصدير.
-        return;
-      }
-    }
 
     // ننظّف نسخة التقرير فقط: لا تتغير الدرجات أو السجلات الأصلية في النظام.
     const reportDetailsMap = detailsMap
@@ -1462,20 +1518,68 @@ export function ExportDialog<T = Record<string, unknown>>({
   };
 
   const handleExport = async (format: ExportFormat) => {
+    if (exportBusyRef.current) return;
+    exportBusyRef.current = true;
+    const attempt = ++exportAttemptRef.current;
+    setExporting(true);
+    if (format === "html" && selectHtmlExams && fetchStudentDetails) {
+      setHtmlExamSelectionOpen(true);
+      setPreparedHtmlExport(null);
+      setSelectedHtmlExamIds([]);
+      setHtmlExamSearch("");
+    }
     const pendingPdfWindow = format === "pdf" ? window.open("", `${safeFileName}-pdf`) : null;
+    try {
     if (pendingPdfWindow) {
       pendingPdfWindow.document.write("<p dir='rtl' style='font-family:sans-serif;padding:16px'>جاري تجهيز التقرير...</p>");
       pendingPdfWindow.document.close();
     }
     const exportRows = await loadExportRows();
-    if (!exportRows) {
+    if (attempt !== exportAttemptRef.current || !exportRows || !ensureExportable(exportRows)) {
       pendingPdfWindow?.close();
       return;
     }
     if (format === "csv") exportCsv(exportRows);
     if (format === "excel") exportExcel(exportRows);
-    if (format === "html") await exportHtml(exportRows);
+    if (format === "html") {
+      let details: StudentDetailsMap | null = null;
+      if (fetchStudentDetails) {
+        const controller = new AbortController();
+        exportAbortController.current = controller;
+        details = await loadStudentDetails(exportRows, controller);
+        if (attempt !== exportAttemptRef.current || !details) return;
+      }
+      if (selectHtmlExams && details) {
+        setPreparedHtmlExport({ rows: exportRows, details });
+        setSelectedHtmlExamIds(getHtmlReportExams(details).map(exam => exam.id));
+      } else exportHtml(exportRows, details);
+    }
     if (format === "pdf") exportPdf(exportRows, pendingPdfWindow);
+    } catch (error) {
+      pendingPdfWindow?.close();
+      console.error("[ExportDialog] failed to prepare export:", error);
+      if (attempt === exportAttemptRef.current) toast.error("تعذر تجهيز التقرير. أعد المحاولة.");
+    } finally {
+      if (attempt === exportAttemptRef.current) {
+        exportBusyRef.current = false;
+        setExporting(false);
+        setExportProgress(null);
+      }
+    }
+  };
+
+  const downloadSelectedHtmlExams = () => {
+    if (!preparedHtmlExport || exportBusyRef.current) return;
+    exportBusyRef.current = true;
+    try {
+      exportHtml(preparedHtmlExport.rows, selectHtmlReportExams(preparedHtmlExport.details, selectedHtmlExamIds));
+      cancelExportPreparation();
+    } catch (error) {
+      console.error("[ExportDialog] failed to build selected HTML report:", error);
+      toast.error("تعذر إنشاء التقرير. اختياراتك محفوظة للمحاولة مجدداً.");
+    } finally {
+      exportBusyRef.current = false;
+    }
   };
 
   const toggleColumn = (key: string, checked: boolean) => {
@@ -1498,7 +1602,7 @@ export function ExportDialog<T = Record<string, unknown>>({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) exportAbortController.current?.abort();
+        if (!nextOpen) cancelExportPreparation();
         setOpen(nextOpen);
       }}
     >
@@ -1508,19 +1612,22 @@ export function ExportDialog<T = Record<string, unknown>>({
           {triggerLabel}
         </Button>
       </DialogTrigger>
-      <DialogContent dir="rtl" className="sm:max-w-2xl">
+      <DialogContent dir="rtl" className="max-h-[90dvh] min-w-0 overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description ? <DialogDescription>{description}</DialogDescription> : null}
+          <DialogTitle>{htmlExamSelectionOpen ? "اختر امتحانات تقرير HTML" : title}</DialogTitle>
+          {htmlExamSelectionOpen ? <DialogDescription>أزل علامة الصح عن أي امتحان لا تريد عرضه في التقرير. رصيد الفرص يبقى حسب سجل الطالب في النظام.</DialogDescription>
+            : description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-1 gap-2 rounded-xl border bg-muted/30 p-3 text-sm sm:grid-cols-2">
             <p className="text-muted-foreground">
               عدد النتائج التي ستُصدّر:{" "}
-              <b>{totalRowCount ?? (fetchRows ? "يُحسب عند التصدير" : rows.length)}</b>
+              <b>{preparedHtmlExport?.rows.length ?? totalRowCount ?? (fetchRows ? "يُحسب عند التصدير" : rows.length)}</b>
             </p>
             <p className="text-muted-foreground">
-              الأعمدة المختارة: <b>{selectedColumns.length}</b> من <b>{columns.length}</b>
+              {htmlExamSelectionOpen
+                ? <>الامتحانات المختارة: <b>{selectedHtmlExamIds.length}</b> من <b>{htmlReportExams.length}</b></>
+                : <>الأعمدة المختارة: <b>{selectedColumns.length}</b> من <b>{columns.length}</b></>}
             </p>
           </div>
 
@@ -1545,14 +1652,41 @@ export function ExportDialog<T = Record<string, unknown>>({
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => exportAbortController.current?.abort()}
+                onClick={cancelExportPreparation}
               >
                 إلغاء التصدير
               </Button>
             </div>
           ) : null}
 
-          <div className="space-y-2">
+          {htmlExamSelectionOpen ? (
+            <div className="min-w-0 space-y-3">
+              {preparedHtmlExport ? <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setSelectedHtmlExamIds(htmlReportExams.map(exam => exam.id))}>تحديد الكل</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setSelectedHtmlExamIds([])}>إلغاء تحديد الكل</Button>
+                </div>
+                <Input aria-label="بحث في امتحانات التقرير" placeholder="ابحث عن امتحان…" value={htmlExamSearch} onChange={event => setHtmlExamSearch(event.target.value)} />
+                <div className="max-h-[45dvh] min-w-0 space-y-2 overflow-y-auto rounded-xl border p-2" role="group" aria-label="امتحانات التقرير">
+                  {visibleHtmlReportExams.map(exam => (
+                    <label key={exam.id} className="flex min-h-12 min-w-0 cursor-pointer items-start gap-3 rounded-lg border bg-background p-3 text-sm hover:bg-muted/40">
+                      <Checkbox className="mt-1 shrink-0" checked={selectedHtmlExamIds.includes(exam.id)} onCheckedChange={checked => setSelectedHtmlExamIds(current => checked === true ? [...new Set([...current, exam.id])] : current.filter(id => id !== exam.id))} />
+                      <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">
+                        <span className="block font-medium">{exam.name}</span>
+                        <span className="mt-1 block text-xs text-muted-foreground">{formatAppDate(exam.date)}</span>
+                        {exam.courseNames.length > 0 && <span className="mt-1 block text-xs text-muted-foreground">{exam.courseNames.join(" · ")}</span>}
+                      </span>
+                    </label>
+                  ))}
+                  {visibleHtmlReportExams.length === 0 && <p className="p-3 text-sm text-muted-foreground">{htmlReportExams.length ? "لا توجد امتحانات مطابقة للبحث." : "لا توجد امتحانات ضمن نطاق هذا التقرير."}</p>}
+                </div>
+                {selectedHtmlExamIds.length === 0 && <p className="text-sm text-muted-foreground">سيحتوي التقرير على الطلاب وفرصهم فقط، دون عرض امتحانات.</p>}
+              </> : !exporting ? <div role="alert" className="space-y-3 rounded-xl border p-3 text-sm">
+                <p>لم يكتمل تجهيز قائمة الامتحانات. أعد المحاولة لتحميل التقرير كاملاً.</p>
+                <Button type="button" variant="outline" onClick={() => void handleExport("html")}>إعادة المحاولة</Button>
+              </div> : null}
+            </div>
+          ) : <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Label className="text-sm font-bold">اختر الأعمدة المطلوبة في التصدير</Label>
               <div className="flex flex-wrap gap-2">
@@ -1587,10 +1721,13 @@ export function ExportDialog<T = Record<string, unknown>>({
                 ? " زر «تصدير HTML» يُنتج ملف بحث: خانة البحث وسطية ومرنة لكل الشاشات، تكتب الاسم الثنائي فما فوق فيظهر قائمة بالطلاب المطابقين، وعند اختيار طالب تظهر بياناته (الاسم + الدورة + عدد الفرص) مع زر «إظهار التفاصيل» يفتح درجات امتحانات الفصل النشط الحالي وسجل فرصه، والطالب المفصول تظهر بجانب اسمه شارة «مفصول»."
                 : ""}
             </p>
-          </div>
+          </div>}
         </div>
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:flex-wrap">
-          {availableFormats.map((format) => {
+          {htmlExamSelectionOpen ? <>
+            <Button type="button" variant="outline" onClick={cancelExportPreparation}>رجوع</Button>
+            <Button type="button" className="gap-2" disabled={exporting || !preparedHtmlExport} onClick={downloadSelectedHtmlExams}><Download className="h-4 w-4" />تنزيل تقرير HTML</Button>
+          </> : availableFormats.map((format) => {
             const Icon = exportFormatIcons[format];
             return (
               <Button

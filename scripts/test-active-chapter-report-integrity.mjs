@@ -467,8 +467,8 @@ must(
 must(
   exportDialog.includes("tpGradesSectionTitle") &&
     exportDialog.includes("درجاتك — ") &&
-    exportDialog.includes("لا توجد امتحانات في هذا الفصل ضمن التقرير حتى الآن."),
-  "ملف HTML يعرض عنوان قسم الامتحانات باسم الفصل النشط وحالة الفراغ الخاصة به",
+    exportDialog.includes("لا توجد امتحانات لعرضها في هذه النسخة."),
+  "ملف HTML يحتفظ بعنوان الفصل النشط ويصف فراغ النسخة بعد اختيار الامتحانات بدقة",
 );
 
 must(

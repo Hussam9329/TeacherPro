@@ -341,7 +341,13 @@ function assertNormalTableFallback(html, label) {
   );
 }
 
-const { buildHtml, buildStudentDetailsFromProfileLog, sanitizeStudentDetailsForHtml } = loadExportDialogModule();
+const {
+  buildHtml,
+  buildStudentDetailsFromProfileLog,
+  sanitizeStudentDetailsForHtml,
+  getHtmlReportExams,
+  selectHtmlReportExams,
+} = loadExportDialogModule();
 
 const rows = [{ id: "s1", name: "طالب اعتيادي" }];
 const columns = [
@@ -843,6 +849,105 @@ check("الرصيد الحالي أو ذكر التعهد في خصم لا يخ�
     assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /تم منح الطالب فرصتين بسبب تعهده/);
     assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>2<\/strong>/);
   }
+});
+
+function examSelectionFixture() {
+  const examA = { id: "choice-a", name: "امتحان بالاسم نفسه", date: "2026-09-01", fullMark: 20 };
+  const examB = { id: "choice-b", name: "امتحان بالاسم نفسه", date: "2026-09-02", fullMark: 20 };
+  const hiddenExam = { id: "choice-hidden", name: "EXCLUDED_EXAM_UNIQUE_NAME", date: "2026-09-03", fullMark: 20 };
+  const oldExam = { id: "choice-old", name: "OLD_CHAPTER_EXAM", date: "2026-08-01", fullMark: 20 };
+  const profile = {
+    student: { name: studentList[0].name, code: "BIO-choice", status: "مفصول", opportunities: 0, opportunityLimit: 3 },
+    generatedAt: "2026-09-10T09:00:00Z",
+    currentChapter: { id: "ch2", name: "الفصل الثاني", since: "2026-09-01", examIds: [examA.id, examB.id, hiddenExam.id] },
+    exams: [examA, hiddenExam, oldExam],
+    allCourseExams: [examA, hiddenExam, oldExam],
+    grades: [{ examId: examA.id, status: "درجة", score: 0 }, { examId: oldExam.id, status: "درجة", score: 10 }],
+    opportunityLogs: [
+      { examId: examA.id, action: "خصم", amount: 1, date: examA.date, reason: "درجة دون الحد" },
+      { examId: hiddenExam.id, action: "خصم", amount: 1, date: hiddenExam.date, reason: "EXCLUDED_EXAM_UNIQUE_REASON" },
+      { action: "رصيد بعد تعهد", amount: 2, date: "2026-09-01", reason: "تم منح فرصتين بسبب التعهد" },
+    ],
+  };
+  const secondProfile = {
+    ...profile,
+    student: { name: "طالب ثان للاختبار", status: "نشط", opportunities: 2, opportunityLimit: 3 },
+    exams: [examA, examB], allCourseExams: [examA, examB], grades: [], opportunityLogs: [],
+  };
+  return {
+    profile, secondProfile,
+    details: { s1: buildStudentDetailsFromProfileLog(profile), s2: buildStudentDetailsFromProfileLog(secondProfile) },
+  };
+}
+
+check("قائمة اختيار الامتحانات تجمع كل الطلاب وتميز المعرفات المتشابهة وتشمل الغياب ضمن الفصل فقط", () => {
+  const { details } = examSelectionFixture();
+  const choices = getHtmlReportExams(details);
+  assert.deepEqual(choices.map(exam => exam.id), ["choice-hidden", "choice-b", "choice-a"]);
+  assert.equal(choices.filter(exam => exam.name === "امتحان بالاسم نفسه").length, 2, "تشابه الاسم لا يدمج امتحانين مستقلين");
+  assert.ok(!choices.some(exam => exam.id === "choice-old"), "امتحان الفصل السابق لا يعود إلى الاختيار");
+  const missingGrade = details.s2.grades.find(grade => grade.examId === "choice-b");
+  assert.equal(missingGrade.status, "غائب");
+  assert.equal(missingGrade.score, null);
+  assert.equal(details.s1.grades.find(grade => grade.examId === "choice-a").score, 0);
+  assert.equal(details.s1.opportunityLogs.find(log => log.reason === "EXCLUDED_EXAM_UNIQUE_REASON").examId, "choice-hidden");
+  assert.deepEqual(getHtmlReportExams({}), []);
+});
+
+check("إلغاء امتحان يحذفه من بيانات HTML ودرجاته وخصمه فقط مع بقاء الرصيد والتعهد دون تغيير المصدر", () => {
+  const { details, profile } = examSelectionFixture();
+  const originalDetails = JSON.stringify(details);
+  const originalProfile = JSON.stringify(profile);
+  const selected = selectHtmlReportExams(details, ["choice-a", "choice-b"]);
+  assert.notEqual(selected, details);
+  assert.notEqual(selected.s1, details.s1);
+  assert.deepEqual(selected.s1.grades.map(grade => grade.examId), ["choice-a"]);
+  assert.deepEqual(selected.s2.grades.map(grade => grade.examId).sort(), ["choice-a", "choice-b"]);
+  assert.equal(selected.s1.opportunityLogs.length, 2);
+  assert.ok(selected.s1.opportunityLogs.some(log => !log.examId && log.action === "رصيد بعد تعهد"));
+  assert.equal(selected.s1.hasTwoOpportunityPledge, true);
+  assert.deepEqual(selected.s1.studentSnapshot, details.s1.studentSnapshot);
+  assert.equal(selected.s1.studentSnapshot.opportunities, 0);
+  assert.equal(selected.s1.studentSnapshot.status, "مفصول");
+  assert.equal(selected.s1.grades[0].opportunityEffect, details.s1.grades.find(grade => grade.examId === "choice-a").opportunityEffect);
+  const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: selected });
+  assert.doesNotMatch(html, /EXCLUDED_EXAM_UNIQUE_NAME|EXCLUDED_EXAM_UNIQUE_REASON|choice-hidden/);
+  const { sandbox, dom } = executeInlineScripts(html, "selected-exams");
+  assert.equal(sandbox.STUDENT_LIST[0].opportunities, 0);
+  assert.equal(sandbox.STUDENT_LIST[0].status, "مفصول");
+  openStudentDetails(dom, "s1", studentList[0].name);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /0 \/ 20/);
+  assert.match(dom.elements.tpStudentOverview.innerHTML, /تم منح الطالب فرصتين بسبب تعهده/);
+  assert.equal(labelsFromRenderedCells(dom.elements.tpGradesBody.innerHTML).length, 4);
+  assert.equal(JSON.stringify(details), originalDetails);
+  assert.equal(JSON.stringify(profile), originalProfile);
+});
+
+check("اختيار امتحان بالمعرف لا يظهر امتحاناً آخر يحمل الاسم نفسه", () => {
+  const { details } = examSelectionFixture();
+  const selected = selectHtmlReportExams(details, ["choice-b", "choice-b", "unknown-choice"]);
+  assert.deepEqual(selected.s1.grades, []);
+  assert.deepEqual(selected.s2.grades.map(grade => grade.examId), ["choice-b"]);
+  assert.equal(selected.s2.grades[0].status, "غائب");
+  assert.deepEqual(selected.s1.opportunityLogs.map(log => log.action), ["رصيد بعد تعهد"]);
+});
+
+check("مسح كل الامتحانات ينتج تقرير فرص بلا صفوف درجات مع بقاء سجلات الطالب الأصلية", () => {
+  const { details } = examSelectionFixture();
+  const before = JSON.stringify(details);
+  const selected = selectHtmlReportExams(details, []);
+  assert.deepEqual(Object.keys(selected).sort(), ["s1", "s2"]);
+  for (const student of Object.values(selected)) assert.deepEqual(student.grades, []);
+  assert.deepEqual(selected.s1.opportunityLogs.map(log => log.action), ["رصيد بعد تعهد"]);
+  const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: selected });
+  const { sandbox, dom } = executeInlineScripts(html, "no-selected-exams");
+  openStudentDetails(dom, "s1", studentList[0].name);
+  assert.equal(sandbox.STUDENT_LIST[0].opportunities, 0);
+  assert.equal(labelsFromRenderedCells(dom.elements.tpGradesBody.innerHTML).length, 0);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /colspan="4"/);
+  assert.doesNotMatch(dom.elements.tpGradesBody.innerHTML, /امتحان بالاسم نفسه|EXCLUDED_EXAM/);
+  assert.equal(JSON.stringify(details), before);
+  assert.deepEqual(selectHtmlReportExams({}, []), {});
 });
 
 export { buildHtml, buildStudentDetailsFromProfileLog, sanitizeStudentDetailsForHtml };

@@ -1010,6 +1010,7 @@ export function OpportunitiesView() {
                 triggerLabel="تصدير"
                 description="تصدير HTML للطلاب: يبحث الطالب عن اسمه ليشاهد فرصه المتبقية، وتاريخ بدء حساب فرص الفصل، وأسباب الإضافة والخصم، ودرجات امتحانات الفصل الحالي. كل امتحان بلا درجة يظهر غياباً. البيانات تُجلب من النظام وقت التصدير."
                 fetchStudentDetails={fetchOpportunityStudentDetails}
+                selectHtmlExams
                 getRowId={(s) => String((s as Record<string, unknown>)?.id ?? "")}
                 totalRowCount={
                   typeof databaseStats?.filtered?.total === "number"

@@ -46,6 +46,17 @@ There is no schema change, migration, balance repair, or new write route.
 
 ## Verification
 
+The opportunities HTML button now opens an exam-selection step. Its checkbox
+list is the union of exams in the complete, chapter-scoped student-detail
+snapshot, including missing-grade absences. All exams start selected; search,
+select-all and clear-all are available. IDs distinguish exams sharing names,
+and course names and dates appear in the picker. Download reuses this snapshot.
+Unchecked exams are removed from grade rows and exam-linked embedded report
+logs only. Actual balances, status, pledge notes and source records stay intact.
+An empty selection still exports the students and their balances. CSV, Excel and
+PDF keep their existing behavior. Closing or cancelling discards the prepared
+snapshot and prevents stale requests from creating a report.
+
 - Full existing side-effects suite, including HTML script execution, escaping,
   keyboard search, missing-detail handling and active-chapter boundaries.
 - Added cases for missing-grade absence, saved zero amounts, reset versus grant,
