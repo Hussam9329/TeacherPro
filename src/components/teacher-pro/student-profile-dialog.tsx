@@ -1,4 +1,6 @@
 "use client";
+import { isCurrentChapterOpportunityLog } from "@/lib/opportunity-chapter-scope";
+import { Button } from "@/components/ui/button";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -905,6 +907,9 @@ export function StudentProfileDialog({
         ),
         impactKind,
         deductionLog: exam ? deductionLogByExamId.get(exam.id) : undefined,
+        historicalDeduction: exam && deductionLogByExamId.has(exam.id)
+          ? !isCurrentChapterOpportunityLog(deductionLogByExamId.get(exam.id)!, profileStudent, exam)
+          : false,
       };
     }),
     gradeViewFilter,
@@ -1126,22 +1131,24 @@ export function StudentProfileDialog({
                   </div>
                 )}
 
-                {/* سجل الخصومات الكامل — مصدره الوحيد بيانات النظام عبر
-                    studentOpportunities (التي تعتمد على hasAuthoritativeProfile).
-                    نعرض كل حركة خصم (تلقائي/يدوي/خصم) مرتبة من الأحدث للأقدم،
-                    مع اسم الامتحان المرتبط وتاريخه ودرجة الطالب وحد الخصم والسبب. */}
+                {/* Current chapter deductions only; complete historical
+                    movements remain available in the opportunities tab. */}
                 {(() => {
                   const deductionLogs = studentOpportunities.filter((log) => {
                     const action = String(log.action || "");
-                    return action === "خصم" || action === "خصم تلقائي" || action === "خصم يدوي";
+                    return (action === "خصم" || action === "خصم تلقائي" || action === "خصم يدوي") &&
+                      isCurrentChapterOpportunityLog(log, profileStudent, log.examId ? profileExamById.get(log.examId) : undefined);
                   });
                   if (deductionLogs.length === 0) return null;
                   return (
                     <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:rounded-3xl">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-black text-destructive">سجل الخصومات ({deductionLogs.length})</p>
+                        <p className="font-black text-destructive">خصومات الفصل الحالي ({deductionLogs.length})</p>
                         <span className="text-xs text-muted-foreground">مصدر البيانات: النظام</span>
                       </div>
+                      <Button variant="link" size="sm" className="mt-1 h-auto px-0" onClick={() => setTab("opportunities")}>
+                        عرض سجل الفرص الكامل والفصول السابقة
+                      </Button>
                       <div className="mt-3 space-y-2">
                         {deductionLogs.map((log) => {
                           const exam = log.examId ? profileExamById.get(log.examId) : undefined;
@@ -1186,7 +1193,7 @@ export function StudentProfileDialog({
               <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
                 <h4 className="mb-4 text-base font-black sm:text-lg">{gradeViewFilter === "absent" ? "غيابات الطالب المؤثرة" : gradeViewFilter === "grace" ? "درجات ضمن السماح" : gradeViewFilter === "no-discount" ? "درجات بدون خصم" : "درجات الطالب"}</h4>
                 <div className="space-y-2">
-                  {filteredGradeRows.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText={gradeViewFilter === "all" ? gradesEmptyMessage : "لا توجد درجات مطابقة لهذا التصنيف"} /> : filteredGradeRows.map(({ grade, withinGrace, withoutDiscount, deductionLog }) => {
+                  {filteredGradeRows.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText={gradeViewFilter === "all" ? gradesEmptyMessage : "لا توجد درجات مطابقة لهذا التصنيف"} /> : filteredGradeRows.map(({ grade, withinGrace, withoutDiscount, deductionLog, historicalDeduction }) => {
                     const exam = profileExamById.get(grade.examId);
                     return (
                       <div key={grade.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
@@ -1200,8 +1207,8 @@ export function StudentProfileDialog({
                           {withinGrace && <Badge className="w-fit" variant="outline">ضمن السماح</Badge>}
                           {!withinGrace && withoutDiscount && <Badge className="w-fit" variant="secondary">بدون خصم</Badge>}
                           {deductionLog && (
-                            <Badge className="w-fit" variant="destructive" title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>
-                              خصم {deductionLog.amount} فرصة
+                            <Badge className="w-fit" variant={historicalDeduction ? "outline" : "destructive"} title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>
+                              {historicalDeduction ? `خصم سابق: ${deductionLog.amount} — لا يؤثر على الفصل الحالي` : `خصم ${deductionLog.amount} فرصة`}
                             </Badge>
                           )}
                           <Badge className="w-fit" variant={withinGrace || withoutDiscount ? "outline" : grade.status === "درجة" ? "default" : grade.status === "غائب" ? "destructive" : "secondary"}>{grade.status}</Badge>

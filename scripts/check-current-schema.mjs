@@ -11,7 +11,7 @@ try {
   if(field.isRequired && columns.get(key).is_nullable!=='NO') throw new Error(`Current runtime schema permits unexpected null: ${key}`);
  }
  const triggers=(await client.query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal")).rows.map(r=>r.tgname);
- for(const name of ['tp_sync_exam_course_projection_trg','tp_exam_course_projection_guard','tp_revoke_changed_credentials','tp_assign_exam_chapter']) if(!triggers.includes(name)) throw new Error(`Missing runtime database guard: ${name}`);
+ for(const name of ['tp_sync_exam_course_projection_trg','tp_exam_course_projection_guard','tp_revoke_changed_credentials','tp_assign_exam_chapter','tp_active_chapter_opportunity_scope']) if(!triggers.includes(name)) throw new Error(`Missing runtime database guard: ${name}`);
  await client.query('ROLLBACK');console.log('Current schema contract verified independently of legacy SQL provenance.');
 } catch(error) { console.error(error.message);process.exitCode=1; }
 finally { await client.end().catch(()=>{}); }

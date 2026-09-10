@@ -226,5 +226,9 @@
   "202606110004_student_leave_period_scope": {
     "kind": "historical-bootstrap",
     "checksum": "ab8ef3898a4b786d81f8444b5c532699d1c7b9fbf99da06bf7f82cc329b5728c"
+  },
+  "20260910140000_active_chapter_opportunity_guard": {
+    "kind": "expand",
+    "checksum": "0e5bf04c90a259b6a89882b785cfbfa722104fe16e9074829834cdac5ec2aaee"
   }
 }

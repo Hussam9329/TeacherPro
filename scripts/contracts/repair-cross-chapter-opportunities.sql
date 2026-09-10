@@ -6,13 +6,15 @@ DECLARE
  plan jsonb; item jsonb; actual jsonb; expected_rows jsonb;
  target_ids text[]; table_name text; run_id text; before_assignment jsonb;
  after_assignment jsonb; removed_logs jsonb; inserted_logs jsonb; n integer;
+ preserved_students_before text; preserved_students_after text;
+ grades_before text; grades_after text;
 BEGIN
  IF (SELECT count(*) FROM chapter_scope_repair_plan) <> 1 THEN
   RAISE EXCEPTION 'Exactly one reviewed repair plan is required';
  END IF;
  SELECT payload INTO plan FROM chapter_scope_repair_plan;
  run_id := plan->>'repairId';
- IF run_id IS DISTINCT FROM 'chapter_scope_20260910_v1' THEN
+ IF run_id IS DISTINCT FROM 'chapter_scope_20260910_v2' THEN
   RAISE EXCEPTION 'Unreviewed chapter repair';
  END IF;
  -- Serialize with ordinary writers and protect the reviewed source snapshot.
@@ -41,6 +43,10 @@ BEGIN
    RAISE EXCEPTION 'Stale repair snapshot: % changed; nothing was applied',table_name;
   END IF;
  END LOOP;
+ SELECT md5(coalesce(jsonb_agg(to_jsonb(s) ORDER BY s.id),'[]'::jsonb)::text)
+  INTO preserved_students_before FROM "Student" s WHERE NOT (s.id=ANY(target_ids));
+ SELECT md5(coalesce(jsonb_agg(to_jsonb(g) ORDER BY g.id),'[]'::jsonb)::text)
+  INTO grades_before FROM "Grade" g;
  before_assignment := plan->'assignment'->'before';
  after_assignment := plan->'assignment'->'after';
  IF before_assignment->>'examId' IS DISTINCT FROM 'cmt1hg0sx0000l104pb1asisz'
@@ -90,6 +96,21 @@ BEGIN
    RAISE EXCEPTION 'A proposed removal is missing, manual, historical, or belongs to another student';
   END IF;
   inserted_logs := item->'insertLogs';
+  IF item->'before'->>'status'='مفصول' AND item->'after'->>'status'='نشط'
+   AND NOT EXISTS (
+    SELECT 1 FROM jsonb_array_elements(removed_logs) l
+     WHERE l->>'id'=item->>'restorationEvidenceLogId'
+      AND l->>'action'='فصل تلقائي'
+      AND (regexp_replace(l->>'reason','^تلقائي:\s*','')=item->'before'->>'dismissalReason'
+       OR EXISTS (
+        SELECT 1 FROM "AuditLog" a JOIN "Exam" e ON e.id=l->>'examId'
+         WHERE a.id=item->>'renamedExamEvidenceId'
+          AND a.details::jsonb->>'examId'=e.id
+          AND replace(regexp_replace(l->>'reason','^تلقائي:\s*',''),e.name,a.details::jsonb->>'examName')=item->'before'->>'dismissalReason'
+       ))
+   ) THEN
+   RAISE EXCEPTION 'Restoration requires the exact obsolete automatic dismissal evidence';
+  END IF;
   IF EXISTS (SELECT 1 FROM jsonb_array_elements(inserted_logs) l
    WHERE l->>'studentId' IS DISTINCT FROM item->>'studentId'
     OR l->>'chapterId' IS DISTINCT FROM item->>'chapterId'
@@ -111,9 +132,19 @@ BEGIN
     status=item->'after'->>'status',"dismissalReason"=nullif(item->'after'->>'dismissalReason','')
    WHERE id=item->>'studentId';
  END LOOP;
+ SELECT md5(coalesce(jsonb_agg(to_jsonb(s) ORDER BY s.id),'[]'::jsonb)::text)
+  INTO preserved_students_after FROM "Student" s WHERE NOT (s.id=ANY(target_ids));
+ SELECT md5(coalesce(jsonb_agg(to_jsonb(g) ORDER BY g.id),'[]'::jsonb)::text)
+  INTO grades_after FROM "Grade" g;
+ IF preserved_students_after IS DISTINCT FROM preserved_students_before OR grades_after IS DISTINCT FROM grades_before THEN
+  RAISE EXCEPTION 'Repair changed an unrelated student or a grade';
+ END IF;
  INSERT INTO "AuditLog" (id,module,action,details,"userName") VALUES
   (run_id,'الفرص','إكمال تصحيح خصومات الفصول السابقة',
    jsonb_build_object('students',cardinality(target_ids),'assignmentBefore',before_assignment,
-    'assignmentAfter',after_assignment,'sourceFingerprint',md5((plan->'expected')::text))::text,'إصلاح النظام');
+    'assignmentAfter',after_assignment,'sourceFingerprint',md5((plan->'expected')::text),
+    'balancesIncreased',(SELECT count(*) FROM jsonb_array_elements(plan->'items') i WHERE (i->'after'->>'opportunities')::integer > (i->'before'->>'opportunities')::integer),
+    'dismissalsCorrected',(SELECT count(*) FROM jsonb_array_elements(plan->'items') i WHERE i->'after'->>'status' <> i->'before'->>'status'),
+    'nonTargetStudentChanges',0,'gradeChanges',0)::text,'إصلاح النظام');
 END;
 $$;
