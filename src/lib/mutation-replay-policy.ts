@@ -2,6 +2,7 @@ const REPLAY_SAFE_POST_ENDPOINTS = new Set([
   "/api/grades",
   "/api/grades/mark-missing-absent",
   "/api/student-calls",
+  "/api/students/unlink-telegram",
 ]);
 
 const NON_REPLAYABLE_MAINTENANCE_ENDPOINTS = new Set([

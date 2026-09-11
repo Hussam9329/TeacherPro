@@ -669,6 +669,24 @@ test("mutation reconciliation immediately removes stale filtered rows", () => {
   assert.equal(original[1].name, "Old");
 });
 
+test("only the real admin receives Telegram unlink capability", () => {
+  const admin = registryViewHelpers.getStudentRegistryCapabilities({
+    username: "assistant",
+    roleId: "role_admin",
+    permissions: [],
+  });
+  const editor = registryViewHelpers.getStudentRegistryCapabilities({
+    username: "editor",
+    roleId: "role_editor",
+    permissions: ["students.edit"],
+  });
+
+  assert.equal(admin.isAdmin, true);
+  assert.equal(admin.canEditStudents, true);
+  assert.equal(editor.isAdmin, false);
+  assert.equal(editor.canEditStudents, true);
+});
+
 test("grace remaining days decrease by Baghdad calendar day and stop at zero", () => {
   const student = {
     createdAt: "2026-08-01",

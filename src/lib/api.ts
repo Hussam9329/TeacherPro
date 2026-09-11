@@ -1478,6 +1478,8 @@ export const studentApi = {
   add: (student: Record<string, unknown>) => apiPost("students", student),
   statusAction: (payload: Record<string, unknown>) =>
     apiPost("students/status-action", payload),
+  unlinkTelegram: (payload: { studentId: string; expectedTelegram: string }) =>
+    apiPost("students/unlink-telegram", payload),
   updateImpact: (payload: Record<string, unknown>) =>
     apiPost("students/update-impact", payload) as Promise<
       ApiResult & { data?: StudentAcademicUpdateImpactResponse }

@@ -34,6 +34,7 @@ export function getStudentRegistryCapabilities(user?: {
   );
   const permissions = new Set(user?.permissions || []);
   return {
+    isAdmin,
     canAddStudents: isAdmin || permissions.has("students.add"),
     canEditStudents: isAdmin || permissions.has("students.edit"),
     canArchiveStudents: isAdmin || permissions.has("students.delete"),

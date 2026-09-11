@@ -749,6 +749,19 @@ export async function PUT(req: NextRequest) {
   }
   if (data.telegram !== undefined) {
     data.telegram = sanitizeTelegramInput(String(data.telegram ?? ""));
+    const currentTelegram = sanitizeTelegramInput(String(currentStudent.telegram ?? ""));
+    if (currentTelegram && !data.telegram) {
+      return NextResponse.json(
+        { error: "استخدم زر فك ارتباط تيليجرام لتأكيد العملية بأمان." },
+        { status: 400 },
+      );
+    }
+    if (data.telegram !== currentTelegram && !principal.isAdmin) {
+      return NextResponse.json(
+        { error: "تعديل ارتباط تيليجرام متاح لمدير النظام فقط." },
+        { status: 403 },
+      );
+    }
   }
   if (data.createdAt !== undefined) {
     const parsedCreatedAt = new Date(String(data.createdAt || ""));

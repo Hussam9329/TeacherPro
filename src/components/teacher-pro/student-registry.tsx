@@ -88,6 +88,7 @@ import {
   SearchX,
   ShieldCheck,
   SlidersHorizontal,
+  Unlink,
   UserPlus,
   UserRound,
   UserX,
@@ -154,7 +155,7 @@ export function StudentRegistryView() {
   } = useTeacherStore();
 
   const registryUser = currentUser();
-  const { canAddStudents, canEditStudents, canArchiveStudents } =
+  const { isAdmin, canAddStudents, canEditStudents, canArchiveStudents } =
     getStudentRegistryCapabilities(registryUser);
   const registryStateStorageKey = `${STUDENT_REGISTRY_STATE_KEY}:${
     registryUser?.id || registryUser?.username || "guest"
@@ -432,11 +433,14 @@ export function StudentRegistryView() {
   const [deleteImpact, setDeleteImpact] =
     useState<StudentDeleteImpactResponse | null>(null);
   const [deleteImpactLoading, setDeleteImpactLoading] = useState(false);
+  const [unlinkTelegramDialogOpen, setUnlinkTelegramDialogOpen] = useState(false);
   const { locked: isSavingEdit, runLocked: runSaveEditLocked } =
     useActionLock();
   const { locked: isDeletingStudent, runLocked: runDeleteStudentLocked } =
     useActionLock();
   const { locked: isStatusActionSaving, runLocked: runStatusActionLocked } =
+    useActionLock();
+  const { locked: isUnlinkingTelegram, runLocked: runUnlinkTelegramLocked } =
     useActionLock();
   const debouncedSearch = useDebouncedValue(search, 180);
   const registrySearchPending = search !== debouncedSearch;
@@ -1212,6 +1216,49 @@ export function StudentRegistryView() {
       form: { ...prev.form, telegram: sanitizeTelegramInput(value) },
     }));
   };
+
+  const handleUnlinkTelegram = runUnlinkTelegramLocked(async () => {
+    const sourceStudent = editOriginalStudent;
+    const expectedTelegram = String(sourceStudent?.telegram || "").trim();
+    if (!isAdmin || !sourceStudent || !expectedTelegram) {
+      setUnlinkTelegramDialogOpen(false);
+      toast.error("فك ارتباط تيليجرام متاح لمدير النظام فقط.");
+      return;
+    }
+
+    const result = await studentApi.unlinkTelegram({
+      studentId: sourceStudent.id,
+      expectedTelegram,
+    });
+    if (!result.ok) {
+      if (result.status === 409) {
+        setUnlinkTelegramDialogOpen(false);
+        setEditDialog({ open: false, id: "", form: emptyEditForm });
+        setEditOriginalStudent(null);
+        setServerRefreshKey((value) => value + 1);
+      }
+      toast.error(result.error || "تعذر فك ارتباط حساب تيليجرام.");
+      return;
+    }
+
+    const responseStudent = (result.data as { student?: Student } | null)?.student;
+    const updatedStudent = {
+      ...sourceStudent,
+      ...(responseStudent || {}),
+      telegram: "",
+    } as Student;
+    reconcileMutationStudent(updatedStudent);
+    setEditOriginalStudent(updatedStudent);
+    setEditDialog((current) => ({
+      ...current,
+      form: { ...current.form, telegram: "" },
+    }));
+    setUnlinkTelegramDialogOpen(false);
+    setServerRefreshKey((value) => value + 1);
+    toast.success("تم فك ارتباط حساب تيليجرام", {
+      description: "بقي رقم الطالب ورقم ولي الأمر بدون أي تغيير.",
+    });
+  });
 
   const updateEditPhone = (key: "phone" | "parentPhone", value: string) => {
     setEditDialog((prev) => ({
@@ -2624,9 +2671,32 @@ export function StudentRegistryView() {
                         autoComplete="off"
                         value={editDialog.form.telegram}
                         onChange={(e) => updateEditTelegram(e.target.value)}
+                        disabled={!isAdmin}
                         placeholder="اختياري - username بدون @"
                         className="h-12 rounded-2xl"
                       />
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+                        <span>
+                          {isAdmin
+                            ? editOriginalStudent?.telegram
+                              ? "فك الارتباط يمنع حساب تيليجرام الحالي من الدخول باسم هذا الطالب، ولا يغيّر أرقام الهاتف."
+                              : "لا يوجد حساب تيليجرام مرتبط بهذا الطالب حالياً."
+                            : "إدارة ارتباط تيليجرام متاحة لمدير النظام فقط."}
+                        </span>
+                        {isAdmin && editOriginalStudent?.telegram ? (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setUnlinkTelegramDialogOpen(true)}
+                            disabled={isUnlinkingTelegram}
+                            className="shrink-0 rounded-xl"
+                          >
+                            <Unlink aria-hidden="true" className="size-4" />
+                            فك ارتباط تيليجرام
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -3328,6 +3398,42 @@ export function StudentRegistryView() {
             >
               <Archive aria-hidden="true" className="size-4" />
               {isDeletingStudent ? "جاري الأرشفة..." : "أرشفة الطالب"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={unlinkTelegramDialogOpen}
+        onOpenChange={(open) => {
+          if (!isUnlinkingTelegram) setUnlinkTelegramDialogOpen(open);
+        }}
+      >
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>تأكيد فك ارتباط تيليجرام</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 leading-7">
+              <span className="block">
+                سيتم فك حساب تيليجرام «{editOriginalStudent?.telegram || "—"}» عن الطالب
+                «{editOriginalStudent?.name || "الطالب المحدد"}».
+              </span>
+              <span className="block rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-foreground">
+                لن يتغير رقم الطالب أو رقم ولي الأمر. يستطيع الطالب ربط حساب تيليجرام جديد لاحقاً باستخدام رقم هاتفه.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUnlinkingTelegram}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void handleUnlinkTelegram();
+              }}
+              disabled={isUnlinkingTelegram || !editOriginalStudent?.telegram}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              <Unlink aria-hidden="true" className="size-4" />
+              {isUnlinkingTelegram ? "جاري فك الارتباط..." : "تأكيد فك الارتباط"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
