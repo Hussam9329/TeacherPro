@@ -168,11 +168,6 @@ function loadStatsRoute({ principalResult, database }) {
             permissions.push(permission);
             return principalResult;
           },
-          hasPermission: (principal, permission) =>
-            Boolean(
-              principal?.isAdmin ||
-                principal?.permissions?.includes(permission),
-            ),
         },
       ],
     ]),
@@ -201,131 +196,57 @@ test("dashboard stats rejects a principal without system.dashboard before databa
   assert.equal(database.calls.length, 0);
 });
 
-test("dashboard audit payload is human-readable and does not expose raw identifiers", () => {
-  const loader = createTypeScriptLoader();
-  const policy = loader("src/lib/dashboard-stats.ts");
-  const safe = policy.sanitizeDashboardAuditLog({
-    id: "audit-1",
-    action: "student_update",
-    module: "student_registry",
-    details: JSON.stringify({
-      studentId: "student-secret-id",
-      examId: "exam-secret-id",
-      code: "P2022",
-    }),
-    user: "admin",
-    userName: "مدير النظام",
-    time: new Date("2026-07-01T09:00:00.000Z"),
-  });
-  const serialized = JSON.stringify(safe);
+test("stats route reads only student counts from one snapshot for every dashboard principal", async () => {
+  const principals = [
+    { id: "user-1", isAdmin: false, permissions: ["system.dashboard"] },
+    { id: "user-2", isAdmin: false, permissions: ["system.dashboard", "logs.view"] },
+    { id: "admin-1", isAdmin: true, permissions: [] },
+  ];
 
-  assert.doesNotMatch(serialized, /student-secret-id|exam-secret-id|P2022/);
-  assert.ok(
-    safe.display || safe.summary || safe.actionLabel,
-    "a human-readable display value is returned",
-  );
+  for (const principal of principals) {
+    const database = createDatabaseMock({
+      rows: {
+        "student.count": (query) => {
+          if (query?.where?.status === "نشط") return 21;
+          if (query?.where?.status === "مفصول") return 4;
+          return 27;
+        },
+      },
+    });
+    const { route, permissions } = loadStatsRoute({
+      principalResult: principal,
+      database,
+    });
+    const response = await route.GET({});
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.activeStudents, 21);
+    assert.equal(response.body.dismissedStudents, 4);
+    assert.equal(response.body.totalStudents, 27);
+    assert.equal(response.body.source, "database");
+    assert.ok(Number.isFinite(Date.parse(response.body.generatedAt)));
+    assert.deepEqual(Object.keys(response.body).sort(), [
+      "activeStudents", "dismissedStudents", "generatedAt", "source", "totalStudents",
+    ]);
+    assert.deepEqual(permissions, ["system.dashboard"]);
+    assert.equal(response.headers["Cache-Control"], "private, no-store, max-age=0");
+    assert.deepEqual(
+      database.calls.map((call) => call.key).sort(),
+      ["$transaction", "student.count", "student.count", "student.count"].sort(),
+      "no retired alert queries, audit-log reads, entity lookups, or writes run, including for admins",
+    );
+    const transactionCall = database.calls.find(
+      (call) => call.key === "$transaction",
+    );
+    assert.equal(
+      transactionCall?.args[1]?.isolationLevel,
+      "RepeatableRead",
+      "the snapshot prevents mutually inconsistent dashboard counts",
+    );
+  }
 });
 
-test("stats route uses one read snapshot, gates logs.view, and sanitizes failures", async () => {
-  const rawLog = {
-    id: "log-1",
-    action: "student_update",
-    module: "student_registry",
-    details: '{"studentId":"internal-student-id"}',
-    user: "admin",
-    userName: "مدير النظام",
-    time: new Date("2026-07-01T09:00:00.000Z"),
-  };
-  const database = createDatabaseMock({
-    rows: {
-      "auditLog.findMany": [rawLog],
-      "student.count": (query) => {
-        if (query?.where?.status === "نشط") return 21;
-        if (query?.where?.status === "مفصول") return 4;
-        return 27;
-      },
-    },
-  });
-  const { route } = loadStatsRoute({
-    principalResult: {
-      id: "user-1",
-      isAdmin: false,
-      permissions: ["system.dashboard"],
-    },
-    database,
-  });
-  const response = await route.GET({});
-
-  assert.equal(response.status, 200);
-  assert.equal(response.body.activeStudents, 21);
-  assert.equal(response.body.dismissedStudents, 4);
-  assert.equal(response.body.totalStudents, 27);
-  assert.equal(response.body.source, "database");
-  assert.ok(Number.isFinite(Date.parse(response.body.generatedAt)));
-  assert.deepEqual(response.body.recentLogs, []);
-  assert.equal(Object.hasOwn(response.body, "alerts"), false);
-  assert.deepEqual(
-    database.calls.map((call) => call.key).sort(),
-    ["$transaction", "student.count", "student.count", "student.count"].sort(),
-    "the dashboard reads only student counts when logs are forbidden; retired alert queries and writes do not run",
-  );
-  assert.equal(
-    database.calls.filter((call) => call.key === "auditLog.findMany").length,
-    0,
-    "audit logs are not fetched without logs.view",
-  );
-  assert.ok(
-    database.calls.some((call) => call.key === "$transaction"),
-    "related dashboard counts use a database snapshot transaction",
-  );
-  const transactionCall = database.calls.find(
-    (call) => call.key === "$transaction",
-  );
-  assert.equal(
-    transactionCall?.args[1]?.isolationLevel,
-    "RepeatableRead",
-    "the snapshot prevents mutually inconsistent dashboard counts",
-  );
-
-  const logsDatabase = createDatabaseMock({
-    rows: {
-      "auditLog.findMany": [rawLog],
-      "student.findMany": [
-        {
-          id: "internal-student-id",
-          name: "علي حسن",
-          code: "ST-100",
-        },
-      ],
-    },
-  });
-  const withLogs = loadStatsRoute({
-    principalResult: {
-      id: "user-2",
-      isAdmin: false,
-      permissions: ["system.dashboard", "logs.view"],
-    },
-    database: logsDatabase,
-  });
-  const withLogsResponse = await withLogs.route.GET({});
-  assert.equal(withLogsResponse.status, 200);
-  assert.equal(withLogsResponse.body.recentLogs.length, 1);
-  assert.equal(
-    logsDatabase.calls.filter((call) => call.key === "auditLog.findMany")
-      .length,
-    1,
-  );
-  assert.doesNotMatch(
-    JSON.stringify(withLogsResponse.body.recentLogs),
-    /internal-student-id|details/,
-    "authorized activity is still sanitized before it reaches the browser",
-  );
-  assert.match(
-    JSON.stringify(withLogsResponse.body.recentLogs),
-    /علي حسن/,
-    "audit identifiers are resolved to a student's readable name",
-  );
-
+test("stats route sanitizes schema failures without returning misleading zero counts", async () => {
   const privateMessage = "postgresql://secret-user:secret-password@private-host";
   const failingDatabase = createDatabaseMock({
     throwOn: "student.count",
@@ -363,72 +284,35 @@ test("stats route uses one read snapshot, gates logs.view, and sanitizes failure
   }
 });
 
-test("dashboard component integrates permissions, deep links, stale errors, humanized logs, and accessibility", () => {
+test("dashboard keeps KPI loading, stale errors, and accessibility after retired sections are removed", () => {
   const dashboard = read("src/components/teacher-pro/dashboard.tsx");
   const statsRoute = read("src/app/api/stats/route.ts");
   const globalCss = read("src/app/globals.css");
-  const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
-  const studentRegistry = read(
-    "src/components/teacher-pro/student-registry.tsx",
-  );
-  const followUp = read("src/components/teacher-pro/follow-up.tsx");
-  const opportunities = read(
-    "src/components/teacher-pro/opportunities.tsx",
-  );
-  const layout = read("src/components/teacher-pro/layout.tsx");
 
   assert.match(
     statsRoute,
     /requirePermissionPrincipal\(\s*req,\s*["']system\.dashboard["']\s*,?\s*\)/,
   );
-  assert.match(statsRoute, /hasPermission\([^,]+,\s*["']logs\.view["']\)/);
   assert.doesNotMatch(statsRoute, /ensureExamSchema|ensureFollowupTables\(|ensureGradeEntryMissingNoteSchema\(/);
   assert.match(statsRoute, /routeErrorResponse\(/);
-  assert.doesNotMatch(statsRoute, /courseChapter\.|studentLeave\.|countActiveExamsWithMissingGrades|\$queryRaw|allAlerts/);
+  assert.doesNotMatch(statsRoute, /courseChapter\.|studentLeave\.|countActiveExamsWithMissingGrades|\$queryRaw|allAlerts|auditLog|recentLogs|logs\.view|extractAuditEntityIds/);
   assert.match(statsRoute, /student\.count\(/);
 
-  assert.doesNotMatch(dashboard, /تنبيهات إدارية|DashboardAlert|alertToneClass|alertBadgeClass|alertFallbackQuery|tp-dashboard__alerts/);
-  assert.doesNotMatch(globalCss, /tp-dashboard__alerts|tp-dashboard__alert-card|tp-dashboard__alert-action/);
-  assert.match(dashboard, /canAccess\(/);
-  assert.match(dashboard, /history\.pushState\(/);
-  assert.match(dashboard, /dashboardAlert/);
+  assert.doesNotMatch(dashboard, /تنبيهات إدارية|آخر الفعاليات|DashboardAlert|alertToneClass|alertBadgeClass|alertFallbackQuery|tp-dashboard__alerts|tp-dashboard__activity|recentLogs|humanizeAudit|navigateFromDashboard/);
+  assert.doesNotMatch(globalCss, /tp-dashboard__alerts|tp-dashboard__alert-card|tp-dashboard__alert-action|tp-dashboard__activity/);
+  assert.equal(fs.existsSync(path.join(root, "src/lib/dashboard-stats.ts")), false);
   assert.match(dashboard, /data-dashboard-state=/);
   assert.match(dashboard, /statsStale|stale/i);
   assert.match(dashboard, /generatedAt/);
-  assert.match(dashboard, /humanizeTeacherProText/);
-  assert.doesNotMatch(dashboard, />\s*\{log\.action\}\s*</);
-  assert.doesNotMatch(dashboard, /\{log\.module\}/);
   assert.match(dashboard, /aria-live=["']polite["']/);
   assert.match(dashboard, /role=["'](?:status|alert)["']/);
-  assert.match(dashboard, /<ol\b/);
-  assert.match(dashboard, /<li\b/);
-  assert.match(dashboard, /<time\b[^>]*dateTime=/);
-  assert.match(
-    dashboard,
-    /initialError\s*\?\s*\([\s\S]*?تعذر تحميل آخر الفعاليات[\s\S]*?:\s*recentLogs\.length\s*===\s*0/,
-  );
-  assert.match(gradeEntry, /params\.get\(["']examId["']\)/);
-  assert.match(gradeEntry, /params\.get\(["']filterStatus["']\)/);
-  assert.match(studentRegistry, /params\.get\(["']registryIssue["']\)/);
-  assert.match(followUp, /params\.get\(["']dashboardDate["']\)/);
-  assert.match(opportunities, /params\.get\(["']status["']\)/);
-  for (const queryKey of [
-    "examId",
-    "filterStatus",
-    "registryIssue",
-    "dashboardDate",
-    "status",
-    "statusFilter",
-  ]) {
-    assert.match(
-      layout,
-      new RegExp(`["']${queryKey}["']`),
-      `layout preserves the ${queryKey} dashboard target`,
-    );
+  assert.match(dashboard, /initialError &&/);
+  assert.match(dashboard, /تعذر تحميل لوحة النظام/);
+  assert.match(dashboard, /إعادة المحاولة/);
+  assert.match(dashboard, /tp-dashboard__kpis/);
+  for (const label of ["طلاب نشطون", "طلاب مفصولون", "إجمالي الطلاب"]) {
+    assert.ok(dashboard.includes(label), `the ${label} KPI is retained`);
   }
-  assert.ok(
-    /md:max-h-\[[^\]]+\][^"']*md:overflow-y-auto/.test(dashboard) ||
-      /@media\s*\(max-width:\s*640px\)[\s\S]*?\.tp-dashboard__activity-list[\s\S]*?overflow[^;]*:\s*visible/.test(globalCss),
-    "the activity list does not create a nested scroll area on phones",
-  );
+  assert.match(dashboard, /grid-cols-1/);
+  assert.match(dashboard, /xl:grid-cols-3/);
 });
