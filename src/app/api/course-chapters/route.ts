@@ -153,25 +153,48 @@ export async function POST(req: NextRequest) {
     if (courseError) return validationError(courseError);
     const chapterError = requireText(body.chapterId, "الفصل");
     if (chapterError) return validationError(chapterError);
-    const existing = await db.courseChapter.findFirst({
-      where: {
-        courseId: String(body.courseId),
-        chapterId: String(body.chapterId),
-        archived: false,
-      },
-    });
-    if (existing) return validationError("الفصل مرتبط مسبقاً بهذه الدورة", 409);
-    const courseChapter = await db.courseChapter.create({
-      data: {
-        active: false,
-        archived: false,
-        archive: "[]",
-        courseId: String(body.courseId),
-        chapterId: String(body.chapterId),
-      },
-      include: { course: true, chapter: true },
-    });
-    return NextResponse.json({ courseChapter }, { status: 201 });
+    const courseId = String(body.courseId);
+    const chapterId = String(body.chapterId);
+    const findExistingLink = () =>
+      db.courseChapter.findFirst({
+        where: { courseId, chapterId, archived: false },
+        include: { course: true, chapter: true },
+      });
+    const existing = await findExistingLink();
+    if (existing) {
+      // Attaching again must not reactivate the chapter or reset its archive.
+      return NextResponse.json({ courseChapter: existing, alreadyLinked: true });
+    }
+
+    try {
+      const courseChapter = await db.courseChapter.create({
+        data: {
+          active: false,
+          archived: false,
+          archive: "[]",
+          courseId,
+          chapterId,
+        },
+        include: { course: true, chapter: true },
+      });
+      return NextResponse.json(
+        { courseChapter, alreadyLinked: false },
+        { status: 201 },
+      );
+    } catch (error) {
+      if ((error as { code?: string } | null)?.code === "P2002") {
+        // Another request may have attached this exact pair after our read.
+        // Keep the database uniqueness guard and return the committed link.
+        const concurrentLink = await findExistingLink();
+        if (concurrentLink) {
+          return NextResponse.json({
+            courseChapter: concurrentLink,
+            alreadyLinked: true,
+          });
+        }
+      }
+      throw error;
+    }
   } catch (error) {
     return courseChapterMutationError(error, "تعذر ربط الفصل بالدورة حالياً.");
   }

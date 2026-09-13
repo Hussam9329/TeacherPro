@@ -25,7 +25,7 @@
     "test:preview-save-consistency-integrity": "node scripts/test-preview-save-consistency-integrity.mjs",
     "test:direct-grade-entry": "node scripts/test-direct-grade-entry-behavior.mjs",
     "test:courses-integrity": "node scripts/test-courses-integrity.mjs",
-    "test:chapters-integrity": "node scripts/test-chapters-integrity.mjs",
+    "test:chapters-integrity": "node scripts/test-chapters-integrity.mjs && node --test scripts/test-course-chapter-attach-behavior.mjs",
     "test:opportunities-integrity": "node scripts/test-opportunities-integrity.mjs && npm run test:opportunities-html-behavior",
     "test:opportunities-html-behavior": "node scripts/test-opportunities-html-behavior.mjs",
     "test:active-chapter-report-integrity": "node scripts/test-active-chapter-report-integrity.mjs",

@@ -17,6 +17,7 @@ import {
   type CourseChapterActionPreview,
 } from "@/lib/api";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
+import { emitTeacherProActionStatus } from "@/lib/teacherpro-language";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -376,6 +377,16 @@ export function ChaptersView() {
     [filteredCourses],
   );
 
+  const selectedCourseLinks = useMemo(
+    () => new Map(
+      (overview?.courseRows.find((row) => row.course.id === courseId)?.links || [])
+        .filter((link) => !link.archived)
+        .map((link) => [link.chapterId, link]),
+    ),
+    [overview, courseId],
+  );
+  const selectedChapterAlreadyLinked = selectedCourseLinks.has(chapterId);
+
   const handleAddChapter = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await runAddChapterLocked(async () => {
@@ -403,18 +414,28 @@ export function ChaptersView() {
     event: React.FormEvent<HTMLFormElement>,
   ) => {
     event.preventDefault();
+    if (!courseId || !chapterId) {
+      toast.error("يرجى اختيار الدورة والفصل");
+      return;
+    }
+    if (selectedChapterAlreadyLinked) {
+      toast.info("الفصل موجود في الفصول المرتبطة بهذه الدورة. لا يحتاج إلى ربط جديد.");
+      return;
+    }
     await runAttachChapterLocked(async () => {
-      if (!courseId || !chapterId) {
-        toast.error("يرجى اختيار الدورة والفصل");
-        return;
-      }
       const result = await courseChapterApi.add({ courseId, chapterId });
       if (!result.ok) {
         toast.error(result.error || "تعذر ربط الفصل بالدورة");
         return;
       }
-      setCourseId("");
       setChapterId("");
+      if ((result.data as { alreadyLinked?: boolean } | null)?.alreadyLinked) {
+        await loadOverview({ quiet: true });
+        emitTeacherProActionStatus({ status: "idle", label: "" });
+        toast.info("الفصل مرتبط بهذه الدورة مسبقاً. تم تحديث قائمة الفصول المرتبطة.");
+        return;
+      }
+      setCourseId("");
       await refreshAfterMutation("ربط فصل بدورة بعد التحقق من الحفظ");
       toast.success("تم ربط الفصل بالدورة بعد التحقق من الحفظ");
     })();
@@ -1119,9 +1140,16 @@ export function ChaptersView() {
             >
               <p className="font-bold">ربط فصل بدورة</p>
               <div className="space-y-2">
-                <Label>الدورة</Label>
-                <Select value={courseId} onValueChange={setCourseId}>
-                  <SelectTrigger>
+                <Label htmlFor="attach-course">الدورة</Label>
+                <Select
+                  value={courseId}
+                  onValueChange={(value) => {
+                    setCourseId(value);
+                    setChapterId("");
+                  }}
+                  disabled={isAttachingChapter || loading}
+                >
+                  <SelectTrigger id="attach-course">
                     <SelectValue placeholder="اختر الدورة" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1134,23 +1162,41 @@ export function ChaptersView() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>الفصل</Label>
-                <Select value={chapterId} onValueChange={setChapterId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر الفصل" />
+                <Label htmlFor="attach-chapter">الفصل</Label>
+                <Select
+                  value={chapterId}
+                  onValueChange={setChapterId}
+                  disabled={!courseId || isAttachingChapter || loading}
+                >
+                  <SelectTrigger id="attach-chapter">
+                    <SelectValue placeholder={courseId ? "اختر الفصل" : "اختر الدورة أولاً"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {(overview?.chapterRows || []).map((row) => (
-                      <SelectItem key={row.chapter.id} value={row.chapter.id}>
-                        {row.chapter.name} - {row.chapter.opportunities} فرص
-                      </SelectItem>
-                    ))}
+                    {(overview?.chapterRows || []).map((row) => {
+                      const existingLink = selectedCourseLinks.get(row.chapter.id);
+                      return (
+                        <SelectItem
+                          key={row.chapter.id}
+                          value={row.chapter.id}
+                          disabled={Boolean(existingLink)}
+                        >
+                          {row.chapter.name} - {row.chapter.opportunities} فرص
+                          {existingLink ? (existingLink.active ? " — مرتبط ومفعّل" : " — مرتبط") : ""}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
+              {selectedCourseLinks.size > 0 && (
+                <p className="text-xs leading-6 text-muted-foreground" role="status">
+                  الفصول المعلّمة «مرتبط» موجودة في بطاقة الدورة أسفل الصفحة.
+                  لتفعيل فصل مرتبط وغير مفعّل، استخدم زر «تفعيل آمن» من بطاقته.
+                </p>
+              )}
               <Button
                 type="submit"
-                disabled={isAttachingChapter}
+                disabled={isAttachingChapter || loading || !courseId || !chapterId || selectedChapterAlreadyLinked}
                 className="w-full rounded-full"
               >
                 {isAttachingChapter ? "جاري الربط..." : "ربط الفصل بالدورة"}
