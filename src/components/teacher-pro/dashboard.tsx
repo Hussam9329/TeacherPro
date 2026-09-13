@@ -4,11 +4,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
   BookOpen,
-  CheckCircle2,
   Shield,
   Users,
 } from "lucide-react";
@@ -21,23 +19,10 @@ import { useLatestRequest } from "@/hooks/use-latest-request";
 import { formatAuditLogDisplay } from "@/lib/audit-log-display";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 
-type DashboardAlert = {
-  id: string;
-  title: string;
-  description: string;
-  count: number;
-  tone: "danger" | "warning" | "info" | "success";
-  actionSection: SectionId;
-  actionLabel: string;
-  actionQuery?: Record<string, string>;
-  sample?: string[];
-};
-
 type DashboardStats = {
   activeStudents: number;
   dismissedStudents: number;
   totalStudents: number;
-  alerts: DashboardAlert[];
   recentLogs: Array<{
     id: string;
     module: string;
@@ -63,20 +48,6 @@ type DashboardStats = {
   generatedAt: string;
 };
 
-const alertToneClass: Record<DashboardAlert["tone"], string> = {
-  danger: "border-rose-200 bg-rose-50/80 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-100",
-  warning: "border-amber-200 bg-amber-50/80 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100",
-  info: "border-sky-200 bg-sky-50/80 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/25 dark:text-sky-100",
-  success: "border-emerald-200 bg-emerald-50/80 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/25 dark:text-emerald-100",
-};
-
-const alertBadgeClass: Record<DashboardAlert["tone"], string> = {
-  danger: "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
-  warning: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  info: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300",
-  success: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-};
-
 const dashboardActionQueryKeys = [
   "dashboardAlert",
   "examId",
@@ -87,38 +58,6 @@ const dashboardActionQueryKeys = [
   "opportunityCount",
   "statusFilter",
 ] as const;
-
-const alertFallbackQuery: Record<string, Record<string, string>> = {
-  "exams-missing-grades": { filterStatus: "غير مسجل" },
-  "students-without-active-chapter": {
-    registryIssue: "no-active-chapter",
-  },
-  "today-leaves": { dashboardDate: "today" },
-  "active-zero-opportunities": {
-    status: "no-opportunities",
-    opportunityCount: "0",
-  },
-};
-
-function baghdadDayKey(now = Date.now()) {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Baghdad",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(now));
-}
-
-function millisecondsUntilNextBaghdadDay(now = Date.now()) {
-  const baghdadOffset = 3 * 60 * 60 * 1000;
-  const shiftedNow = new Date(now + baghdadOffset);
-  const nextMidnight = Date.UTC(
-    shiftedNow.getUTCFullYear(),
-    shiftedNow.getUTCMonth(),
-    shiftedNow.getUTCDate() + 1,
-  );
-  return Math.max(1_000, nextMidnight - shiftedNow.getTime() + 1_000);
-}
 
 function humanizeAuditLabel(value: string | null | undefined, fallback: string) {
   const normalized = String(value || "")
@@ -208,41 +147,8 @@ export function DashboardView() {
     void loadStats({ background: isBackgroundSync() });
   }, [isBackgroundSync, loadStats, syncKey]);
 
-  useEffect(() => {
-    let timer = 0;
-    let currentDay = baghdadDayKey();
-
-    const scheduleNextDayRefresh = () => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        currentDay = baghdadDayKey();
-        void loadStats({ background: true });
-        scheduleNextDayRefresh();
-      }, millisecondsUntilNextBaghdadDay());
-    };
-
-    const refreshAfterSuspension = () => {
-      if (document.visibilityState !== "visible") return;
-      const nextDay = baghdadDayKey();
-      if (nextDay === currentDay) return;
-      currentDay = nextDay;
-      void loadStats({ background: true });
-      scheduleNextDayRefresh();
-    };
-
-    scheduleNextDayRefresh();
-    document.addEventListener("visibilitychange", refreshAfterSuspension);
-    return () => {
-      window.clearTimeout(timer);
-      document.removeEventListener("visibilitychange", refreshAfterSuspension);
-    };
-  }, [loadStats]);
-
   const navigateFromDashboard = useCallback(
-    (
-      section: SectionId,
-      options: { alertId?: string; query?: Record<string, string> } = {},
-    ) => {
+    (section: SectionId) => {
       if (!canAccess(section)) return;
       if (typeof window !== "undefined") {
         const nextUrl = new URL(window.location.href);
@@ -250,13 +156,6 @@ export function DashboardView() {
           nextUrl.searchParams.delete(key);
         }
         nextUrl.searchParams.set("section", section);
-        if (options.alertId) {
-          nextUrl.searchParams.set("dashboardAlert", options.alertId);
-        }
-        for (const [key, value] of Object.entries(options.query || {})) {
-          const cleanValue = String(value || "").trim();
-          if (cleanValue) nextUrl.searchParams.set(key, cleanValue);
-        }
         nextUrl.hash = "";
         window.history.pushState(
           { section, source: "dashboard" },
@@ -294,7 +193,6 @@ export function DashboardView() {
   ];
 
   const recentLogs = stats?.recentLogs ?? [];
-  const alerts = stats?.alerts ?? [];
   const initialLoading = statsLoading && !stats;
   const initialError = Boolean(statsError && !stats);
   const staleData = Boolean(statsError && stats);
@@ -378,87 +276,6 @@ export function DashboardView() {
           />
         ))}
       </div>
-
-      <Card className="tp-dashboard__alerts overflow-hidden" aria-labelledby="dashboard-alerts-title">
-        <CardHeader className="pb-2">
-          <div>
-            <CardTitle id="dashboard-alerts-title" className="flex items-center gap-2 text-base">
-              <AlertTriangle className="size-5 text-amber-500" />
-              تنبيهات إدارية
-            </CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">
-              مشاكل محسوبة من بيانات النظام حتى لا تختفي بسبب بيانات مؤقتة أو فلتر جزئي.
-            </p>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {initialLoading ? (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3" role="status">
-              <span className="sr-only">جارٍ تحميل التنبيهات الإدارية.</span>
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} aria-hidden="true" className="h-28 animate-pulse rounded-3xl border bg-muted/40" />
-              ))}
-            </div>
-          ) : initialError ? (
-            <EmptyState
-              icon={AlertTriangle}
-              title="تعذر عرض التنبيهات"
-              description="التنبيهات لا تُحسب من بيانات محلية ناقصة. أعد المحاولة بعد التأكد من اتصال بيانات النظام."
-              action={
-                <Button type="button" variant="outline" onClick={() => void loadStats()}>
-                  إعادة المحاولة
-                </Button>
-              }
-            />
-          ) : alerts.length === 0 ? (
-            <EmptyState
-              icon={CheckCircle2}
-              title="لا توجد تنبيهات حرجة حالياً"
-              description="لم ترجع بيانات النظام أي امتحانات ناقصة الدرجات، طلاب بلا فصل نشط، إجازات اليوم، أو فرص صفر."
-            />
-          ) : (
-            <ul className="tp-dashboard__alert-grid grid list-none grid-cols-1 gap-4 p-0 lg:grid-cols-3">
-              {alerts.map((alert) => (
-                <li key={alert.id} className={cn("tp-dashboard__alert-card rounded-2xl border p-4", alertToneClass[alert.tone])}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-black">{alert.title}</p>
-                      <p className="mt-1 text-xs leading-6 opacity-80">{alert.description}</p>
-                      {alert.sample && alert.sample.length > 0 && (
-                        <p className="mt-2 break-words text-xs font-bold opacity-80">
-                          أمثلة: {alert.sample.join("، ")}
-                        </p>
-                      )}
-                    </div>
-                    <span className={cn("shrink-0 rounded-full px-3 py-1 text-sm font-black", alertBadgeClass[alert.tone])}>
-                      {alert.count}
-                    </span>
-                  </div>
-                  {canAccess(alert.actionSection) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="tp-dashboard__alert-action mt-4 bg-background/75"
-                      onClick={() =>
-                        navigateFromDashboard(alert.actionSection, {
-                          alertId: alert.id,
-                          query: {
-                            ...(alertFallbackQuery[alert.id] || {}),
-                            ...(alert.actionQuery || {}),
-                          },
-                        })
-                      }
-                    >
-                      {alert.actionLabel}
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
 
       {canAccess("logs") && (
       <Card className="tp-dashboard__activity">

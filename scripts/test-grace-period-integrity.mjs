@@ -26,7 +26,6 @@ const schema = read("prisma/schema.prisma");
 const gradesRoute = read("src/app/api/grades/route.ts");
 const gradeEntry = read("src/components/teacher-pro/grade-entry.tsx");
 const graceActivation = read("src/lib/grace-grade-activation.ts");
-const dashboardStats = read("src/app/api/stats/route.ts");
 
 check(
   "المصدر الموحد يطبق 3 أيام تلقائية ويجعل السماح اليدوي بديلاً عنها",
@@ -75,11 +74,6 @@ check(
   gradeEntry.includes("وتبدأ المحاسبة من نفس") &&
     gradeEntry.includes("تم حفظ الدرجة وإنهاء فترة السماح") &&
     !gradeEntry.includes("const canCaptureGraceScoreDirectly"),
-);
-check(
-  "إحصائيات لوحة التحكم تحترم إنهاء السماح ولا تعيد حمايته بصيغة SQL قديمة",
-  dashboardStats.includes('student."gracePeriodEndedAt" IS NOT NULL') &&
-    dashboardStats.includes("OR NOT ("),
 );
 check(
   "التسجيل والتعديل يدعمان اختيار تاريخ التسجيل أو اليوم",

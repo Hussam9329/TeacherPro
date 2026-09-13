@@ -201,118 +201,6 @@ test("dashboard stats rejects a principal without system.dashboard before databa
   assert.equal(database.calls.length, 0);
 });
 
-test("dashboard grade policy excludes protected and unavailable cases", () => {
-  const loader = createTypeScriptLoader();
-  const policy = loader("src/lib/dashboard-stats.ts");
-  const exam = {
-    id: "exam-past",
-    active: true,
-    date: "2026-07-01",
-    fullMark: 100,
-  };
-  const student = {
-    id: "student-1",
-    createdAt: "2026-01-01",
-    accountingGraceDays: 0,
-  };
-  const missing = (overrides = {}) =>
-    policy.isDashboardGradeMissing({
-      grade: null,
-      exam,
-      student,
-      leaves: [],
-      ...overrides,
-    });
-
-  assert.equal(missing(), true, "an eligible past exam without a grade is missing");
-  for (const status of [
-    "مجاز",
-    "ضمن فترة السماح",
-    "قبل تسجيل الطالب",
-    "غائب",
-    "غش",
-  ]) {
-    assert.equal(
-      missing({ grade: { status, score: null } }),
-      false,
-      `${status} is an entered state`,
-    );
-  }
-  assert.equal(
-    missing({
-      student: { ...student, createdAt: "2026-07-10" },
-    }),
-    false,
-    "an exam before registration is not missing",
-  );
-  assert.equal(
-    missing({
-      student: {
-        ...student,
-        createdAt: "2026-06-29",
-        accountingGraceDays: 5,
-      },
-    }),
-    false,
-    "an exam inside the grace period is not missing",
-  );
-  assert.equal(
-    missing({
-      leaves: [{
-        studentId: student.id,
-        examId: exam.id,
-        leaveType: "exam",
-        date: exam.date,
-      }],
-    }),
-    false,
-    "an excused exam is not missing",
-  );
-  assert.equal(
-    missing({ exam: { ...exam, date: "2999-01-01" } }),
-    false,
-    "a future exam is not missing",
-  );
-  assert.equal(
-    missing({
-      exam: {
-        ...exam,
-        scheduledActivateAt: "2999-01-01T09:00:00.000Z",
-      },
-    }),
-    false,
-    "a future scheduled activation is not missing",
-  );
-});
-
-test("dashboard chapter policy distinguishes healthy links from conflicts", () => {
-  const loader = createTypeScriptLoader();
-  const policy = loader("src/lib/dashboard-stats.ts");
-
-  const chapterHealth = policy.getActiveChapterHealth([
-    { id: "chapter-link-a", courseId: "course-a", active: true, archived: false },
-    { id: "chapter-link-b", courseId: "course-a", active: true, archived: false },
-    { id: "chapter-link-c", courseId: "course-b", active: true, archived: false },
-    { id: "chapter-link-d", courseId: "course-c", active: false, archived: false },
-  ]);
-  const conflictCourseIds =
-    chapterHealth.conflictCourseIds || chapterHealth.conflicts || [];
-  const activeCourseIds =
-    chapterHealth.healthyCourseIds ||
-    chapterHealth.activeCourseIds ||
-    chapterHealth.active ||
-    [];
-  assert.ok(
-    Array.from(conflictCourseIds).includes("course-a"),
-    "two active links are reported as a conflict",
-  );
-  assert.ok(
-    Array.from(activeCourseIds).includes("course-b"),
-    "one active link is healthy",
-  );
-
-});
-
 test("dashboard audit payload is human-readable and does not expose raw identifiers", () => {
   const loader = createTypeScriptLoader();
   const policy = loader("src/lib/dashboard-stats.ts");
@@ -349,7 +237,14 @@ test("stats route uses one read snapshot, gates logs.view, and sanitizes failure
     time: new Date("2026-07-01T09:00:00.000Z"),
   };
   const database = createDatabaseMock({
-    rows: { "auditLog.findMany": [rawLog] },
+    rows: {
+      "auditLog.findMany": [rawLog],
+      "student.count": (query) => {
+        if (query?.where?.status === "نشط") return 21;
+        if (query?.where?.status === "مفصول") return 4;
+        return 27;
+      },
+    },
   });
   const { route } = loadStatsRoute({
     principalResult: {
@@ -362,7 +257,18 @@ test("stats route uses one read snapshot, gates logs.view, and sanitizes failure
   const response = await route.GET({});
 
   assert.equal(response.status, 200);
+  assert.equal(response.body.activeStudents, 21);
+  assert.equal(response.body.dismissedStudents, 4);
+  assert.equal(response.body.totalStudents, 27);
+  assert.equal(response.body.source, "database");
+  assert.ok(Number.isFinite(Date.parse(response.body.generatedAt)));
   assert.deepEqual(response.body.recentLogs, []);
+  assert.equal(Object.hasOwn(response.body, "alerts"), false);
+  assert.deepEqual(
+    database.calls.map((call) => call.key).sort(),
+    ["$transaction", "student.count", "student.count", "student.count"].sort(),
+    "the dashboard reads only student counts when logs are forbidden; retired alert queries and writes do not run",
+  );
   assert.equal(
     database.calls.filter((call) => call.key === "auditLog.findMany").length,
     0,
@@ -422,7 +328,7 @@ test("stats route uses one read snapshot, gates logs.view, and sanitizes failure
 
   const privateMessage = "postgresql://secret-user:secret-password@private-host";
   const failingDatabase = createDatabaseMock({
-    throwOn: "courseChapter.findMany",
+    throwOn: "student.count",
     error: Object.assign(new Error(privateMessage), {
       code: "P2022",
       meta: { column: "private_column" },
@@ -470,12 +376,6 @@ test("dashboard component integrates permissions, deep links, stale errors, huma
     "src/components/teacher-pro/opportunities.tsx",
   );
   const layout = read("src/components/teacher-pro/layout.tsx");
-  const missingGradesBlock = statsRoute.slice(
-    statsRoute.indexOf("async function countActiveExamsWithMissingGrades"),
-    statsRoute.indexOf(
-      "async function readRecentDashboardLogs",
-    ),
-  );
 
   assert.match(
     statsRoute,
@@ -484,16 +384,11 @@ test("dashboard component integrates permissions, deep links, stale errors, huma
   assert.match(statsRoute, /hasPermission\([^,]+,\s*["']logs\.view["']\)/);
   assert.doesNotMatch(statsRoute, /ensureExamSchema|ensureFollowupTables\(|ensureGradeEntryMissingNoteSchema\(/);
   assert.match(statsRoute, /routeErrorResponse\(/);
-  assert.match(statsRoute, /normalizeExamSiteValue/);
-  assert.match(statsRoute, /isAllMainSitesSelection/);
-  assert.match(statsRoute, /jsonb_to_recordset/);
-  assert.match(statsRoute, /parseCourseIds\(/);
-  assert.match(statsRoute, /student\.groupBy\(/);
-  assert.doesNotMatch(missingGradesBlock, /tx\.student\.findMany\(/);
-  assert.doesNotMatch(missingGradesBlock, /tx\.grade\.findMany\(/);
-  assert.doesNotMatch(missingGradesBlock, /tx\.studentLeave\.findMany\(/);
+  assert.doesNotMatch(statsRoute, /courseChapter\.|studentLeave\.|countActiveExamsWithMissingGrades|\$queryRaw|allAlerts/);
+  assert.match(statsRoute, /student\.count\(/);
 
-  assert.match(dashboard, /actionQuery\??:/);
+  assert.doesNotMatch(dashboard, /تنبيهات إدارية|DashboardAlert|alertToneClass|alertBadgeClass|alertFallbackQuery|tp-dashboard__alerts/);
+  assert.doesNotMatch(globalCss, /tp-dashboard__alerts|tp-dashboard__alert-card|tp-dashboard__alert-action/);
   assert.match(dashboard, /canAccess\(/);
   assert.match(dashboard, /history\.pushState\(/);
   assert.match(dashboard, /dashboardAlert/);
@@ -501,8 +396,6 @@ test("dashboard component integrates permissions, deep links, stale errors, huma
   assert.match(dashboard, /statsStale|stale/i);
   assert.match(dashboard, /generatedAt/);
   assert.match(dashboard, /humanizeTeacherProText/);
-  assert.match(dashboard, /millisecondsUntilNextBaghdadDay\(/);
-  assert.match(dashboard, /visibilitychange/);
   assert.doesNotMatch(dashboard, />\s*\{log\.action\}\s*</);
   assert.doesNotMatch(dashboard, /\{log\.module\}/);
   assert.match(dashboard, /aria-live=["']polite["']/);

@@ -125,7 +125,7 @@ const familyItemIds = new Set<SectionId>(
 );
 
 const sectionDescriptions: Partial<Record<SectionId, string>> = {
-  dashboard: "ملخص سريع لحالة الطلاب والامتحانات والتنبيهات الإدارية.",
+  dashboard: "ملخص سريع لأعداد الطلاب وآخر عمليات النظام.",
   courses: "إنشاء الدورات ومراجعة إعداداتها وحالتها التشغيلية.",
   chapters: "تنظيم الفصول وربطها بالدورات ومتابعة حالة الفرص.",
   "student-register": "إضافة طالب جديد وربطه بالدورة والبرنامج والموقع المناسب.",

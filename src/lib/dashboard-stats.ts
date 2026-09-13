@@ -1,64 +1,8 @@
 import {
-  hasStudentLeaveForExam,
-  isExamBeforeStudentRegistration,
-  isExamWithinStudentGracePeriodUnified,
-  isGradeEnteredUnified,
-  type ExamLike,
-  type GradeLike,
-  type StudentGraceLike,
-  type StudentLeaveLike,
-} from "@/lib/grade-classification";
-import { getExamEntryAvailability } from "@/lib/exam-utils";
-import {
   formatAuditLogDisplay,
   type AuditLogEntityLabels,
 } from "@/lib/audit-log-display";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
-
-export type DashboardExamLike = ExamLike & {
-  active: boolean;
-  fullMark: number;
-};
-
-export function isDashboardGradeMissing(input: {
-  grade?: GradeLike | null;
-  exam: DashboardExamLike;
-  student: StudentGraceLike;
-  leaves?: StudentLeaveLike[];
-  now?: Date;
-}): boolean {
-  const { grade, exam, student, leaves = [], now = new Date() } = input;
-  if (!getExamEntryAvailability(exam, now).available) return false;
-  if (isExamBeforeStudentRegistration(student, exam)) return false;
-  if (isExamWithinStudentGracePeriodUnified(student, exam)) return false;
-  if (hasStudentLeaveForExam(leaves, exam)) return false;
-  return !isGradeEnteredUnified(grade, exam);
-}
-
-export function getActiveChapterHealth(
-  links: Array<{ courseId: string; active?: boolean; archived?: boolean }>,
-): {
-  healthyCourseIds: Set<string>;
-  conflictCourseIds: Set<string>;
-  activeLinkCountByCourse: Map<string, number>;
-} {
-  const activeLinkCountByCourse = new Map<string, number>();
-  for (const link of links) {
-    if (link.active === false || link.archived === true) continue;
-    activeLinkCountByCourse.set(
-      link.courseId,
-      (activeLinkCountByCourse.get(link.courseId) || 0) + 1,
-    );
-  }
-
-  const healthyCourseIds = new Set<string>();
-  const conflictCourseIds = new Set<string>();
-  for (const [courseId, count] of activeLinkCountByCourse) {
-    if (count === 1) healthyCourseIds.add(courseId);
-    if (count > 1) conflictCourseIds.add(courseId);
-  }
-  return { healthyCourseIds, conflictCourseIds, activeLinkCountByCourse };
-}
 
 const MODULE_LABELS: Record<string, string> = {
   auth: "تسجيل الدخول",
