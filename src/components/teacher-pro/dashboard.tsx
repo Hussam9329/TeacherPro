@@ -1,9 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Shield, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  CalendarCheck,
+  ChartColumn,
+  ClipboardList,
+  FilePlus2,
+  PenLine,
+  PhoneCall,
+  Shield,
+  ShieldAlert,
+  Target,
+  Users,
+} from "lucide-react";
 import { StatCard } from "./ui-kit";
+import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import {
   useTeacherProBackgroundSyncDetector,
   useTeacherProSyncKey,
@@ -17,6 +31,17 @@ type DashboardStats = {
   source: "database";
   generatedAt: string;
 };
+
+const dashboardShortcuts = [
+  { section: "student-registry", title: "سجل الطلاب", icon: ClipboardList, color: "bg-violet-500/10 text-violet-700 dark:text-violet-300" },
+  { section: "opportunities", title: "إدارة الفرص", icon: Target, color: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
+  { section: "dismissed-management", title: "إدارة المفصولين", icon: ShieldAlert, color: "bg-rose-500/10 text-rose-700 dark:text-rose-300" },
+  { section: "grade-entry", title: "تسجيل الدرجات", icon: PenLine, color: "bg-sky-500/10 text-sky-700 dark:text-sky-300" },
+  { section: "grade-records", title: "سجل الدرجات", icon: ChartColumn, color: "bg-cyan-500/10 text-cyan-700 dark:text-cyan-300" },
+  { section: "exam-new", title: "إضافة امتحان", icon: FilePlus2, color: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300" },
+  { section: "follow-up-calls", title: "المكالمات", icon: PhoneCall, color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+  { section: "follow-up-leaves", title: "الإجازات", icon: CalendarCheck, color: "bg-teal-500/10 text-teal-700 dark:text-teal-300" },
+] as const;
 
 function formatStatsTime(value?: string) {
   if (!value) return "—";
@@ -32,7 +57,13 @@ function formatStatsTime(value?: string) {
   }
 }
 
-export function DashboardView() {
+export function DashboardView({
+  onSectionLinkClick,
+}: {
+  onSectionLinkClick?: (event: MouseEvent<HTMLAnchorElement>, section: SectionId) => void;
+} = {}) {
+  const { canAccess } = useTeacherStore();
+  const visibleShortcuts = dashboardShortcuts.filter((shortcut) => canAccess(shortcut.section));
   const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const beginStatsRequest = useLatestRequest();
@@ -196,6 +227,30 @@ export function DashboardView() {
           />
         ))}
       </div>
+
+      {visibleShortcuts.length > 0 && (
+        <nav aria-label="اختصارات لوحة التحكم" className="space-y-3">
+          <h3 className="text-base font-bold">الوصول السريع</h3>
+          <div className="tp-dashboard__shortcuts grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+            {visibleShortcuts.map(({ section, title, icon: Icon, color }) => (
+              <a
+                key={section}
+                href={`/?section=${section}`}
+                onClick={(event) => onSectionLinkClick?.(event, section)}
+                className="tp-dashboard__shortcut group flex min-h-36 min-w-0 flex-col justify-between gap-5 rounded-2xl border border-border/80 bg-card p-4 text-start text-card-foreground shadow-sm transition-[background-color,border-color,box-shadow] hover:border-primary/40 hover:bg-accent/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none sm:p-5"
+              >
+                <span className={`flex size-12 items-center justify-center rounded-2xl ${color}`} aria-hidden="true">
+                  <Icon className="size-6" />
+                </span>
+                <span className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="min-w-0 break-words text-sm font-bold leading-6 sm:text-base">{title}</span>
+                  <ArrowLeft className="size-4 shrink-0 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
+                </span>
+              </a>
+            ))}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

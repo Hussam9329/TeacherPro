@@ -125,7 +125,7 @@ const familyItemIds = new Set<SectionId>(
 );
 
 const sectionDescriptions: Partial<Record<SectionId, string>> = {
-  dashboard: "ملخص سريع لأعداد الطلاب وحالتهم في النظام.",
+  dashboard: "",
   courses: "إنشاء الدورات ومراجعة إعداداتها وحالتها التشغيلية.",
   chapters: "تنظيم الفصول وربطها بالدورات ومتابعة حالة الفرص.",
   "student-register": "إضافة طالب جديد وربطه بالدورة والبرنامج والموقع المناسب.",
@@ -585,19 +585,16 @@ export function TeacherProLayout() {
       return;
     event.preventDefault();
     if (!isAdmin && !canAccess(section)) return;
-    React.startTransition(() => setSection(section));
     if (typeof window !== "undefined") {
-      window.requestAnimationFrame(() => {
-        const nextUrl = new URL(window.location.href);
-        for (const key of dashboardActionQueryKeys) {
-          nextUrl.searchParams.delete(key);
-        }
-        nextUrl.searchParams.set("section", section);
-        nextUrl.hash = "";
-        window.history.pushState({}, "", nextUrl.toString());
-        if (window.innerWidth < 1024) setSidebarOpen(false);
-      });
+      const nextUrl = new URL(window.location.href);
+      for (const key of dashboardActionQueryKeys) {
+        nextUrl.searchParams.delete(key);
+      }
+      nextUrl.searchParams.set("section", section);
+      nextUrl.hash = "";
+      window.history.pushState({}, "", nextUrl.toString());
     }
+    React.startTransition(() => setSection(section));
   };
 
   useEffect(() => {
@@ -1117,7 +1114,7 @@ export function TeacherProLayout() {
   );
   const CurrentMenuIcon = currentMenu?.icon || LayoutDashboard;
   const currentPageDescription =
-    sectionDescriptions[currentSection] ||
+    sectionDescriptions[currentSection] ??
     "إدارة ذكية وسريعة للطلاب والامتحانات والفرص.";
   const connectionVisualStatus = dbLoading
     ? "loading"
@@ -1544,9 +1541,11 @@ export function TeacherProLayout() {
                   </Badge>
                 </div>
 
-                <p className="tp-app-header__description mt-0.5 min-w-0 text-[11px] leading-5 text-muted-foreground sm:text-xs">
-                  {currentPageDescription}
-                </p>
+                {currentPageDescription && (
+                  <p className="tp-app-header__description mt-0.5 min-w-0 text-[11px] leading-5 text-muted-foreground sm:text-xs">
+                    {currentPageDescription}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -1655,7 +1654,11 @@ export function TeacherProLayout() {
           <div className="content-container tp-page-surface min-w-0 space-y-4 md:space-y-6" data-teacherpro-active-content="true" data-teacherpro-section={currentSection}>
             {dbLoading && <LoadingState />}
             {isAdmin || canAccess(currentSection) ? (
-              <CurrentComponent />
+              CurrentComponent === DashboardView ? (
+                <DashboardView onSectionLinkClick={handleSectionLinkClick} />
+              ) : (
+                <CurrentComponent />
+              )
             ) : (
               <div className="empty-state">لا توجد صلاحية لفتح هذا القسم.</div>
             )}
