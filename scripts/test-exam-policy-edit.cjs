@@ -149,8 +149,12 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
   const out={};for(const name of ['Exam','ExamCourse','Student','Grade','StudentLeave','StudentLeaveGradeBackup','OpportunityLog','StudentNote'])out[name]=(await pg.query(`SELECT * FROM "${name}" ORDER BY id`)).rows;
   return out;
  };
- const put=async patch=>{const response=await route.PUT({url:'https://example.test/api/exams',json:async()=>patch});return {status:response.status,data:await response.json()};};
- await pg.exec(`INSERT INTO "OpportunityLog"(id,"studentId","examId",action,amount,reason,date,"chapterId","balanceBefore","balanceAfter","ledgerVersion") VALUES('keep-unassigned-history','s1','historic','خصم تلقائي',1,'تلقائي: سجل قديم بلا فصل','2026-07-17 23:00',NULL,3,2,2);`);
+  const put=async patch=>{const response=await route.PUT({url:'https://example.test/api/exams',json:async()=>patch});return {status:response.status,data:await response.json()};};
+  const examCountBeforeMissingWindow=await client.exam.count({});
+  const missingWindowCreate=await route.POST({url:'https://example.test/api/exams',json:async()=>({name:'نافذة مطلوبة',type:'يومي',courseIds:['c'],mainSite:'بغداد',date:'2026-09-10',fullMark:20,passMark:10,discountMark:7,opportunitiesPenalty:1,noDiscount:false})});
+  assert.equal(missingWindowCreate.status,400,'POST requires both Telegram submission-window endpoints');
+  assert.equal(await client.exam.count({}),examCountBeforeMissingWindow,'invalid Telegram window creates no exam');
+  await pg.exec(`INSERT INTO "OpportunityLog"(id,"studentId","examId",action,amount,reason,date,"chapterId","balanceBefore","balanceAfter","ledgerVersion") VALUES('keep-unassigned-history','s1','historic','خصم تلقائي',1,'تلقائي: سجل قديم بلا فصل','2026-07-17 23:00',NULL,3,2,2);`);
  // Seed current automatic IDs with the actual engine so settled historical
  // evidence can be distinguished from deductions the changed policy removes.
  const baselineReplay=await previewStudentsAcademicState(Array.from({length:1000},(_,i)=>'s'+(i+1)),{tx:client});
@@ -169,8 +173,27 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  // it must not be mistaken for settled history and preserved as a duplicate.
  const legacyEvent=baselineReplay.automaticOpportunityLogs.find(l=>l.studentId==='s6'&&l.examId==='e8');
  assert.ok(legacyEvent);
- await client.opportunityLog.update({where:{id:legacyEvent.id},data:{id:'legacy-s6-e8'}});
- const before=await snapshot(),original=await row('exam','e9');
+  await client.opportunityLog.update({where:{id:legacyEvent.id},data:{id:'legacy-s6-e8'}});
+  let telegramWindowResponse=await put({id:'scope-exam',telegramOpenAt:'2026-09-13T23:00'});
+  assert.equal(telegramWindowResponse.status,400,'PUT rejects a one-sided Telegram window');
+  telegramWindowResponse=await put({id:'scope-exam',telegramOpenAt:'2026-09-14T01:00',telegramCloseAt:'2026-09-14T00:30'});
+  assert.equal(telegramWindowResponse.status,400,'PUT rejects Telegram close at or before open');
+  telegramWindowResponse=await put({id:'scope-exam',telegramOpenAt:'2026-09-13T23:00',telegramCloseAt:'2026-09-14T01:00'});
+  assert.equal(telegramWindowResponse.status,200,JSON.stringify(telegramWindowResponse.data));
+  assert.equal(new Date(telegramWindowResponse.data.exam.telegramOpenAt).toISOString(),'2026-09-13T20:00:00.000Z');
+  assert.equal(new Date(telegramWindowResponse.data.exam.telegramCloseAt).toISOString(),'2026-09-13T22:00:00.000Z');
+  assert.equal(telegramWindowResponse.data.academicRecalculation,null,'Telegram-only edit does not recalculate academics');
+  telegramWindowResponse=await put({id:'scope-exam',telegramOpenAt:'2026-09-14T00:30'});
+  assert.equal(telegramWindowResponse.status,200,'PUT compares a partial Baghdad-time patch with the stored UTC endpoint');
+  assert.equal(new Date(telegramWindowResponse.data.exam.telegramOpenAt).toISOString(),'2026-09-13T21:30:00.000Z');
+  telegramWindowResponse=await put({id:'scope-exam',telegramCloseAt:'2026-09-13T23:30'});
+  assert.equal(telegramWindowResponse.status,400,'PUT rejects a partial patch that becomes invalid after Baghdad-to-UTC conversion');
+  telegramWindowResponse=await put({id:'scope-exam',telegramOpenAt:'',telegramCloseAt:''});
+  assert.equal(telegramWindowResponse.status,200,JSON.stringify(telegramWindowResponse.data));
+  assert.equal(telegramWindowResponse.data.exam.telegramOpenAt,null);
+  assert.equal(telegramWindowResponse.data.exam.telegramCloseAt,null);
+  assert.equal(telegramWindowResponse.data.academicRecalculation,null,'clearing Telegram access does not recalculate academics');
+  const before=await snapshot(),original=await row('exam','e9');
  // Consume the real listing token exactly as the UI does. Both listing
  // variants include examCourses; PUT reads the scalar Exam for its guard.
  const listingResponse=await route.GET({url:'https://example.test/api/exams'});

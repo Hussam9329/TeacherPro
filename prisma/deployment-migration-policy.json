@@ -230,5 +230,9 @@
   "20260910140000_active_chapter_opportunity_guard": {
     "kind": "expand",
     "checksum": "0e5bf04c90a259b6a89882b785cfbfa722104fe16e9074829834cdac5ec2aaee"
+  },
+  "20260913120000_add_exam_telegram_submission_window": {
+    "kind": "expand",
+    "checksum": "20e64587a182e81d45979883d9a5b608a46fb44828794c29017c938a6fa43f5f"
   }
 }

@@ -1,5 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), Module = require('node:module'), ts = require('typescript');
+// Keep the SQL-backed adapter aligned with Prisma DateTime's UTC-instant contract.
+process.env.TZ = 'UTC';
 const { PGlite } = require('@electric-sql/pglite');
 const { Prisma } = require('@prisma/client');
 const resolve=Module._resolveFilename;
@@ -73,8 +75,9 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
   db.$transaction=async(fn,opts)=>{isolation.push(opts.isolationLevel);return pg.transaction(tx=>fn(adapter(tx)))};
   return db;
  }
- const db=adapter(pg);
- await pg.exec(`INSERT INTO "Role" (id,name,permissions) VALUES ('r','admin','[]');
+  const db=adapter(pg);
+  await pg.exec(`UPDATE "Exam" SET "telegramOpenAt"='2026-09-13 21:00:00', "telegramCloseAt"='2026-09-13 23:30:00' WHERE id='e';`);
+  await pg.exec(`INSERT INTO "Role" (id,name,permissions) VALUES ('r','admin','[]');
  INSERT INTO "AppUser" (id,username,name,role,"roleId",permissions,active,"passwordHash") VALUES ('admin','admin','Admin','admin','r','[]',true,'test-only-credential');
  INSERT INTO "GradeEntryMissingNote" (id,"examId",text,"updatedAt") VALUES ('legacy','e','retained history',CURRENT_TIMESTAMP);
  INSERT INTO "OpportunityLog" (id,action,amount,"studentId","requestedAmount","appliedAmount","ledgerVersion") VALUES ('ledger','إضافة',0,'inside',1,0,2);`);
@@ -90,18 +93,20 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
  const backup=require(path.join(process.cwd(),'src/app/api/backup/route.ts'));
  await pg.exec(`UPDATE "Student" SET code='BIO-90000' WHERE id='inside'; SELECT setval('"Student_code_seq"',1,true);`);
  await pg.exec(`UPDATE "ExamCourse" SET id='legacy-link-id' WHERE "examId"='e' AND "courseId"='c'`);
- const exported=await backup.GET({});assert.equal(exported.status,200);const snapshot=await exported.json();
- assert.equal(isolation.at(-1),'RepeatableRead');assert.equal(snapshot.tableCount,22);assert.equal(snapshot.gradeEntryMissingNotes.length,1);
+  const exported=await backup.GET({});assert.equal(exported.status,200);const snapshot=await exported.json();
+  assert.equal(isolation.at(-1),'RepeatableRead');assert.equal(snapshot.version,9);assert.equal(snapshot.tableCount,22);assert.equal(snapshot.gradeEntryMissingNotes.length,1);
+  const backedUpExam=snapshot.exams.find(exam=>exam.id==='e');const backedUpTelegramOpenAt=new Date(backedUpExam.telegramOpenAt).toISOString();const backedUpTelegramCloseAt=new Date(backedUpExam.telegramCloseAt).toISOString();assert.notEqual(backedUpTelegramOpenAt,backedUpTelegramCloseAt);
  assert.equal(snapshot.opportunityLogs[0].requestedAmount,1);assert.equal(snapshot.users[0].passwordHash,undefined);
  let res=await backup.POST({json:async()=>({version:8,confirm:'RESTORE',mode:'replace',backup:{version:8,courses:snapshot.courses}})});assert.equal(res.status,400);
  process.env.TEACHERPRO_ALLOW_RESTORE_REPLACE='1';
- const restore=()=>backup.POST({json:async()=>({version:8,confirm:'RESTORE',mode:'replace',backup:snapshot})});
+  const restore=()=>backup.POST({json:async()=>({version:snapshot.version,confirm:'RESTORE',mode:'replace',backup:snapshot})});
  failModel='grade';const prior=(await pg.query('SELECT count(*)::int AS n FROM "Grade"')).rows[0].n;
  res=await restore();assert.notEqual(res.status,200);assert.equal((await pg.query('SELECT count(*)::int AS n FROM "Grade"')).rows[0].n,prior);
  failModel=null;res=await restore();if(res.status!==200)console.error(await res.clone().text());assert.equal(res.status,200);
  assert.equal((await pg.query(`SELECT "passwordHash",active FROM "AppUser" WHERE id='admin'`)).rows[0].passwordHash,'test-only-credential');
  assert.equal((await pg.query(`SELECT "gracePeriodEndedAt" FROM "Student" WHERE id='restore'`)).rows[0].gracePeriodEndedAt,null);
- assert.equal((await pg.query(`SELECT text FROM "GradeEntryMissingNote" WHERE id='legacy'`)).rows[0].text,'retained history');
+  assert.equal((await pg.query(`SELECT text FROM "GradeEntryMissingNote" WHERE id='legacy'`)).rows[0].text,'retained history');
+  const restoredExam=(await pg.query(`SELECT "telegramOpenAt","telegramCloseAt" FROM "Exam" WHERE id='e'`)).rows[0];assert.equal(new Date(restoredExam.telegramOpenAt).toISOString(),backedUpTelegramOpenAt);assert.equal(new Date(restoredExam.telegramCloseAt).toISOString(),backedUpTelegramCloseAt);
  assert.equal(Number((await pg.query(`SELECT nextval('"Student_code_seq"') AS n`)).rows[0].n),90001);
  assert.equal((await pg.query(`SELECT id FROM "ExamCourse" WHERE "examId"='e' AND "courseId"='c'`)).rows[0].id,'legacy-link-id');
  await pg.exec(`CREATE TABLE "ExternalDependency" (id TEXT PRIMARY KEY, "courseId" TEXT REFERENCES "Course"(id)); INSERT INTO "ExternalDependency" VALUES ('outside','c');`);

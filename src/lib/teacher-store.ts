@@ -134,6 +134,8 @@ export interface Exam {
   noDiscount: boolean;
   active: boolean;
   scheduledActivateAt?: string;
+  telegramOpenAt?: string | null;
+  telegramCloseAt?: string | null;
   mutationToken?: string;
 }
 
@@ -1846,6 +1848,8 @@ export const useTeacherStore = create<TeacherState>()(
                 scheduledActivateAt: normalizeDateTimeValue(
                   ex.scheduledActivateAt,
                 ),
+                telegramOpenAt: normalizeDateTimeValue(ex.telegramOpenAt),
+                telegramCloseAt: normalizeDateTimeValue(ex.telegramCloseAt),
                 date: ex.date
                   ? baghdadDateKey(ex.date as string | Date) || todayISO()
                   : todayISO(),

@@ -25,9 +25,11 @@ type AnyDelegate = { upsert: (args: any) => Promise<any>; createMany: (args: any
 //  - v5: all legacy operational tables exported; audit logs unbounded.
 //  - v6: adds structured GradeSmartNote records and Grade provenance.
 //    Safe to restore on v4+ databases (restore skips unknown tables).
-//  - v7 (current): operational tables only; restore skips unknown tables.
+//  - v7: operational tables only; restore skips unknown tables.
+//  - v8: prior complete operational backup contract.
+//  - v9 (current): Exam Telegram submission-window timestamps round-trip.
 // ============================================================================
-const BACKUP_VERSION = 8;
+const BACKUP_VERSION = 9;
 
 const RESTORE_CONFIRMATION_TOKEN = 'RESTORE';
 

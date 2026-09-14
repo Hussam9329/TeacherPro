@@ -797,6 +797,8 @@ export function ExamRecordsView() {
             ? Number(toLatinDigits(editDialog.dismissalGrade))
             : null,
         noDiscount,
+        telegramOpenAt: editDialog.telegramOpenAt,
+        telegramCloseAt: editDialog.telegramCloseAt,
         ...statusPatch,
       }, editDialog.mutationToken);
     } catch {

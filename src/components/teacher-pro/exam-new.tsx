@@ -52,6 +52,8 @@ type ExamFormState = {
   noDiscount: boolean;
   statusMode: ExamStatusMode;
   scheduledActivateAt: string;
+  telegramOpenAt: string;
+  telegramCloseAt: string;
 };
 
 function todayISO() {
@@ -178,6 +180,8 @@ function emptyForm(): ExamFormState {
     noDiscount: false,
     statusMode: "نشط",
     scheduledActivateAt: "",
+    telegramOpenAt: "",
+    telegramCloseAt: "",
   };
 }
 
@@ -220,6 +224,8 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
         ? Number(toLatinDigits(form.dismissalGrade))
         : null,
     noDiscount,
+    telegramOpenAt: form.telegramOpenAt,
+    telegramCloseAt: form.telegramCloseAt,
     ...applyStatus(form),
   };
 }
@@ -315,6 +321,9 @@ export function ExamNewView() {
         noDiscount: state.noDiscount,
         statusMode: state.statusMode,
         scheduledActivateAt: state.scheduledActivateAt,
+        telegramOpenAt: state.telegramOpenAt,
+        telegramCloseAt: state.telegramCloseAt,
+        requireTelegramWindow: true,
         preflightError: contextLoading
           ? "انتظر تحميل سياق إضافة الامتحان من بيانات النظام"
           : contextError || null,
@@ -340,7 +349,7 @@ export function ExamNewView() {
       toast.error(validation.firstError || "راجع بيانات الامتحان قبل الحفظ");
       return;
     }
-    const result = await examApi.add(buildExamPayload(form) as unknown as Record<string, unknown>);
+    const result = await examApi.add(buildExamPayload(form));
     if (!result.ok || result.queued) {
       toast.error(result.error || "تعذر إضافة الامتحان من النظام.");
       return;
@@ -813,6 +822,49 @@ export function ExamNewView() {
           </div>
         </div>
         {renderStatusControls(state, setState, prefix)}
+        <div className="space-y-3 rounded-xl border p-4 md:col-span-2 xl:col-span-3">
+          <div>
+            <h3 className="font-bold">نافذة تسليم الإجابات عبر تيليجرام</h3>
+            <p id={`${prefix}-telegram-window-help`} className="mt-1 text-xs leading-5 text-muted-foreground">
+              تتحكم هذه المدة بتسليم الإجابات عبر تيليجرام فقط، ولا تفعّل الامتحان أكاديمياً ولا تغيّر احتساب الدرجات. يجب تحديد وقتي الفتح والإغلاق، ويمكن أن تمتد المدة إلى اليوم التالي.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor={`${prefix}-telegram-open-at`}>فتح التسليم عبر تيليجرام</Label>
+              <Input
+                id={`${prefix}-telegram-open-at`}
+                type="datetime-local"
+                value={state.telegramOpenAt}
+                required
+                aria-invalid={Boolean(fieldErrors.telegramOpenAt)}
+                aria-describedby={`${prefix}-telegram-window-help${fieldErrors.telegramOpenAt ? ` ${prefix}-telegram-open-at-error` : ""}`}
+                onChange={(e) => setState((prev) => ({ ...prev, telegramOpenAt: e.target.value }))}
+              />
+              <ExamFieldError
+                id={`${prefix}-telegram-open-at-error`}
+                message={fieldErrors.telegramOpenAt}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`${prefix}-telegram-close-at`}>إغلاق التسليم عبر تيليجرام</Label>
+              <Input
+                id={`${prefix}-telegram-close-at`}
+                type="datetime-local"
+                min={state.telegramOpenAt || undefined}
+                value={state.telegramCloseAt}
+                required
+                aria-invalid={Boolean(fieldErrors.telegramCloseAt)}
+                aria-describedby={`${prefix}-telegram-window-help${fieldErrors.telegramCloseAt ? ` ${prefix}-telegram-close-at-error` : ""}`}
+                onChange={(e) => setState((prev) => ({ ...prev, telegramCloseAt: e.target.value }))}
+              />
+              <ExamFieldError
+                id={`${prefix}-telegram-close-at-error`}
+                message={fieldErrors.telegramCloseAt}
+              />
+            </div>
+          </div>
+        </div>
       </div>
     );
   };

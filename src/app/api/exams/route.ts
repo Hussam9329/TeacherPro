@@ -136,7 +136,10 @@ async function courseSelectionProblems(
   return problems;
 }
 
-function validateExamPayload(body: Record<string, unknown>) {
+function validateExamPayload(
+  body: Record<string, unknown>,
+  options: { requireTelegramWindow?: boolean } = {},
+) {
   const parsedCourseIds = parseCourseIds(body.courseIds);
   const selectedMainSites = String(body.mainSite ?? '')
     .split(',')
@@ -155,6 +158,9 @@ function validateExamPayload(body: Record<string, unknown>) {
     opportunitiesPenalty: body.opportunitiesPenalty ?? 1,
     dismissalGrade: body.dismissalGrade,
     noDiscount,
+    telegramOpenAt: body.telegramOpenAt,
+    telegramCloseAt: body.telegramCloseAt,
+    requireTelegramWindow: options.requireTelegramWindow,
   });
   if (!validation.isValid) return validation.firstError;
 
@@ -258,7 +264,9 @@ export async function POST(req: NextRequest) {
     await assertDatabaseSchemaReady();
 
     const body = await req.json();
-    const validationMessage = validateExamPayload(body);
+    const validationMessage = validateExamPayload(body, {
+      requireTelegramWindow: true,
+    });
     if (validationMessage) return validationError(validationMessage);
     const parsedCourseIds = parseCourseIds(body.courseIds);
     const courseProblems = await courseSelectionProblems(db, parsedCourseIds);
@@ -271,6 +279,11 @@ export async function POST(req: NextRequest) {
     const examDate = parseBaghdadDateOnly(body.date as string | Date | null | undefined);
     if (!examDate) return validationError('تاريخ الامتحان غير صحيح');
     const scheduledActivateAt = body.scheduledActivateAt ? parseBaghdadDateTime(String(body.scheduledActivateAt)) : null;
+    const telegramOpenAt = parseBaghdadDateTime(String(body.telegramOpenAt));
+    const telegramCloseAt = parseBaghdadDateTime(String(body.telegramCloseAt));
+    if (!telegramOpenAt || !telegramCloseAt) {
+      return validationError('نافذة تسليم تيليجرام غير صحيحة');
+    }
     const requestedActive = body.active === undefined ? true : parseBoolean(body.active);
     const effectiveStoredActive = Boolean(scheduledActivateAt && scheduledActivateAt > new Date()) ? false : requestedActive;
     // Student creation uses the same SERIALIZABLE helper. Keeping exam
@@ -300,6 +313,8 @@ export async function POST(req: NextRequest) {
           noDiscount,
           active: effectiveStoredActive,
           scheduledActivateAt,
+          telegramOpenAt,
+          telegramCloseAt,
         },
       });
       await syncExamCourseLinks(tx, createdExam.id, parsedCourseIds);
@@ -346,7 +361,7 @@ export async function PUT(req: NextRequest) {
     const allowedUpdateKeys = new Set([
       'name', 'type', 'courseIds', 'mainSite', 'date', 'fullMark', 'passMark',
       'discountMark', 'opportunitiesPenalty', 'dismissalGrade', 'noDiscount',
-      'active', 'scheduledActivateAt',
+      'active', 'scheduledActivateAt', 'telegramOpenAt', 'telegramCloseAt',
     ]);
     for (const key of Object.keys(normalizedPatch)) {
       if (!allowedUpdateKeys.has(key)) delete normalizedPatch[key];
@@ -433,6 +448,16 @@ export async function PUT(req: NextRequest) {
       const candidateValidationMessage = validateExamPayload(candidateExam);
       if (candidateValidationMessage) {
         return { validationMessage: candidateValidationMessage } as const;
+      }
+      if (data.telegramOpenAt !== undefined) {
+        data.telegramOpenAt = data.telegramOpenAt
+          ? parseBaghdadDateTime(String(data.telegramOpenAt))
+          : null;
+      }
+      if (data.telegramCloseAt !== undefined) {
+        data.telegramCloseAt = data.telegramCloseAt
+          ? parseBaghdadDateTime(String(data.telegramCloseAt))
+          : null;
       }
       const candidateGradeValues = validatedGradeValues(candidateExam);
       if (data.fullMark !== undefined) {

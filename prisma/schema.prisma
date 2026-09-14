@@ -113,6 +113,8 @@ model Exam {
   noDiscount         Boolean @default(false)
   active             Boolean @default(true)
   scheduledActivateAt   DateTime?
+  telegramOpenAt     DateTime?
+  telegramCloseAt    DateTime?
   createdAt          DateTime? @default(now())
   createdAtSource    String @default("recorded")
   grades             Grade[]

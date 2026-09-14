@@ -182,6 +182,75 @@ test("validates required selections, date, name, and scheduled activation", () =
   assert.ok(result.fieldErrors.scheduledActivateAt);
 });
 
+test("new exams require both Telegram submission-window endpoints", () => {
+  const missing = validateExamForm(
+    validForm({ requireTelegramWindow: true }),
+  );
+  assert.equal(missing.isValid, false);
+  assert.ok(missing.fieldErrors.telegramOpenAt);
+  assert.ok(missing.fieldErrors.telegramCloseAt);
+
+  const complete = validateExamForm(
+    validForm({
+      requireTelegramWindow: true,
+      telegramOpenAt: "2026-08-26T20:00",
+      telegramCloseAt: "2026-08-26T22:00",
+    }),
+  );
+  assert.equal(complete.isValid, true);
+});
+
+test("exam edits accept a complete Telegram window or an empty pair only", () => {
+  assert.equal(
+    validateExamForm(
+      validForm({ telegramOpenAt: "", telegramCloseAt: "" }),
+    ).isValid,
+    true,
+  );
+  assert.equal(
+    validateExamForm(
+      validForm({
+        telegramOpenAt: "2026-08-26T20:00",
+        telegramCloseAt: "2026-08-26T22:00",
+      }),
+    ).isValid,
+    true,
+  );
+
+  const missingClose = validateExamForm(
+    validForm({ telegramOpenAt: "2026-08-26T20:00" }),
+  );
+  assert.equal(missingClose.isValid, false);
+  assert.ok(missingClose.fieldErrors.telegramCloseAt);
+
+  const missingOpen = validateExamForm(
+    validForm({ telegramCloseAt: "2026-08-26T22:00" }),
+  );
+  assert.equal(missingOpen.isValid, false);
+  assert.ok(missingOpen.fieldErrors.telegramOpenAt);
+});
+
+test("Telegram window requires open before close and may cross midnight", () => {
+  const overnight = validateExamForm(
+    validForm({
+      telegramOpenAt: "2026-08-26T23:30",
+      telegramCloseAt: "2026-08-27T01:00",
+    }),
+  );
+  assert.equal(overnight.isValid, true);
+
+  for (const telegramCloseAt of ["2026-08-26T23:30", "2026-08-26T22:00"]) {
+    const invalid = validateExamForm(
+      validForm({
+        telegramOpenAt: "2026-08-26T23:30",
+        telegramCloseAt,
+      }),
+    );
+    assert.equal(invalid.isValid, false);
+    assert.ok(invalid.fieldErrors.telegramCloseAt);
+  }
+});
+
 test("preflight and course eligibility blockers participate in the same form result", () => {
   const preflight = validateExamForm(
     validForm({ preflightError: "سياق الامتحان غير جاهز" }),

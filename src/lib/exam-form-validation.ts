@@ -16,7 +16,9 @@ export type ExamValidationField =
   | "discountMark"
   | "opportunitiesPenalty"
   | "dismissalGrade"
-  | "scheduledActivateAt";
+  | "scheduledActivateAt"
+  | "telegramOpenAt"
+  | "telegramCloseAt";
 
 export type ExamValidationFieldErrors = Partial<
   Record<ExamValidationField, string>
@@ -55,6 +57,9 @@ export type ExamFormValidationInput = ExamGradePolicyInput & {
   date: unknown;
   statusMode?: unknown;
   scheduledActivateAt?: unknown;
+  telegramOpenAt?: unknown;
+  telegramCloseAt?: unknown;
+  requireTelegramWindow?: boolean;
   /** A loading/server-context blocker supplied by the screen. */
   preflightError?: string | null;
   /** A course eligibility blocker supplied by the screen/API. */
@@ -127,6 +132,41 @@ function hasText(value: unknown): boolean {
 
 function hasSelection(value: readonly unknown[]): boolean {
   return Array.isArray(value) && value.some((item) => hasText(item));
+}
+
+function telegramWindowTime(value: unknown): number | null {
+  if (value instanceof Date) {
+    return Number.isFinite(value.getTime()) ? value.getTime() : null;
+  }
+  const raw = String(value ?? "").trim();
+  const local = raw.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/,
+  );
+  if (local) {
+    const [, year, month, day, hour, minute, second = "0"] = local;
+    const timestamp = Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second),
+    );
+    const parsed = new Date(timestamp);
+    const componentsMatch =
+      parsed.getUTCFullYear() === Number(year) &&
+      parsed.getUTCMonth() === Number(month) - 1 &&
+      parsed.getUTCDate() === Number(day) &&
+      parsed.getUTCHours() === Number(hour) &&
+      parsed.getUTCMinutes() === Number(minute) &&
+      parsed.getUTCSeconds() === Number(second);
+    // datetime-local values are Baghdad civil time. Converting here keeps
+    // partial API updates comparable with existing UTC Date values.
+    return componentsMatch ? timestamp - 3 * 60 * 60 * 1000 : null;
+  }
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw)) return null;
+  const parsed = new Date(raw);
+  return Number.isFinite(parsed.getTime()) ? parsed.getTime() : null;
 }
 
 function createCollector() {
@@ -345,6 +385,44 @@ export function validateExamForm(
       "scheduledActivateAt",
       "حدد تاريخ ووقت التفعيل المجدول",
     );
+  }
+
+  const hasTelegramOpen = hasText(input.telegramOpenAt);
+  const hasTelegramClose = hasText(input.telegramCloseAt);
+  if (input.requireTelegramWindow && !hasTelegramOpen) {
+    errors.add(
+      "telegramOpenAt",
+      "حدد تاريخ ووقت فتح التسليم عبر تيليجرام",
+    );
+  }
+  if (input.requireTelegramWindow && !hasTelegramClose) {
+    errors.add(
+      "telegramCloseAt",
+      "حدد تاريخ ووقت إغلاق التسليم عبر تيليجرام",
+    );
+  }
+  if (hasTelegramOpen !== hasTelegramClose) {
+    const missingField = hasTelegramOpen ? "telegramCloseAt" : "telegramOpenAt";
+    errors.add(
+      missingField,
+      "يجب تحديد وقتي فتح وإغلاق تسليم تيليجرام معاً، أو مسحهما معاً",
+    );
+  }
+  if (hasTelegramOpen && hasTelegramClose) {
+    const openAt = telegramWindowTime(input.telegramOpenAt);
+    const closeAt = telegramWindowTime(input.telegramCloseAt);
+    if (openAt === null) {
+      errors.add("telegramOpenAt", "تاريخ ووقت فتح تسليم تيليجرام غير صحيح");
+    }
+    if (closeAt === null) {
+      errors.add("telegramCloseAt", "تاريخ ووقت إغلاق تسليم تيليجرام غير صحيح");
+    }
+    if (openAt !== null && closeAt !== null && openAt >= closeAt) {
+      errors.add(
+        "telegramCloseAt",
+        "وقت إغلاق تسليم تيليجرام يجب أن يكون بعد وقت الفتح",
+      );
+    }
   }
 
   return errors.result();

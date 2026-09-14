@@ -152,8 +152,8 @@ check(
     academicRepair.includes("deletedCalls"),
 );
 check(
-  "حارس قاعدة البيانات لا يغير المخطط ويتطلب migration المصالحة",
-  schemaReadiness.includes("20260908133000_p2_reviewed_balance_settlement") &&
+  "حارس قاعدة البيانات لا يغير المخطط ويتطلب أحدث migration مطلوبة",
+  schemaReadiness.includes("20260913120000_add_exam_telegram_submission_window") &&
     schemaReadiness.includes('FROM "_prisma_migrations"') &&
     !schemaReadiness.includes("$executeRaw"),
 );

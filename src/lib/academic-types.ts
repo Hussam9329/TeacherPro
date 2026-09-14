@@ -58,6 +58,8 @@ export interface AcademicExam {
   noDiscount: boolean;
   active: boolean;
   scheduledActivateAt?: string | null;
+  telegramOpenAt?: string | null;
+  telegramCloseAt?: string | null;
   examCourses?: Array<{ courseId: string; chapterId: string | null }>;
   courseIds?: string[]; // الامتحانات قد تكون مرتبطة بأكثر من دورة
   mainSite?: string | null;

@@ -540,7 +540,7 @@ export interface ServerData {
   chapters?: Array<Record<string, unknown>>;
   courseChapters?: Array<Record<string, unknown>>;
   students?: Array<Record<string, unknown>>;
-  exams?: Array<Record<string, unknown>>;
+  exams?: ExamApiRecord[];
   grades?: Array<Record<string, unknown>>;
   opportunityLogs?: Array<Record<string, unknown>>;
   studentLeaves?: Array<Record<string, unknown>>;
@@ -549,6 +549,16 @@ export interface ServerData {
   users?: Array<Record<string, unknown>>;
   roles?: Array<Record<string, unknown>>;
   logs?: Array<Record<string, unknown>>;
+}
+
+export interface ExamApiRecord extends Record<string, unknown> {
+  telegramOpenAt?: string | null;
+  telegramCloseAt?: string | null;
+}
+
+export interface ExamMutationPayload extends Record<string, unknown> {
+  telegramOpenAt?: string | null;
+  telegramCloseAt?: string | null;
 }
 
 export interface StudentListQuery {
@@ -1539,8 +1549,8 @@ export const examCreateContextApi = {
 };
 
 export const examApi = {
-  add: (exam: Record<string, unknown>) => apiPost("exams", exam),
-  update: (id: string, updates: Record<string, unknown>) =>
+  add: (exam: ExamMutationPayload) => apiPost("exams", exam),
+  update: (id: string, updates: ExamMutationPayload) =>
     apiPut("exams", { id, ...updates }),
   remove: (id: string, options: { confirmImpact?: boolean } = {}) =>
     apiDelete("exams", id, {

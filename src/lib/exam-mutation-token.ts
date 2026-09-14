@@ -3,7 +3,8 @@ import { buildMutationPreviewToken } from "@/lib/mutation-preview-token";
 const EXAM_MUTATION_FIELDS = [
   "id", "name", "type", "courseIds", "mainSite", "date", "fullMark",
   "passMark", "discountMark", "opportunitiesPenalty", "dismissalGrade",
-  "noDiscount", "active", "scheduledActivateAt", "createdAt", "createdAtSource",
+  "noDiscount", "active", "scheduledActivateAt", "telegramOpenAt",
+  "telegramCloseAt", "createdAt", "createdAtSource",
 ] as const;
 
 /** GET/bootstrap include relations; scalar create/update reads do not. Hash

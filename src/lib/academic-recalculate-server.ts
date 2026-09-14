@@ -101,6 +101,8 @@ export function toAcademicExam(exam: {
   noDiscount: boolean;
   active: boolean;
   scheduledActivateAt: Date | null;
+  telegramOpenAt?: Date | null;
+  telegramCloseAt?: Date | null;
   courseIds?: string;
   examCourses?: Array<{ courseId: string; chapterId: string | null }>;
   mainSite?: string | null;
@@ -126,6 +128,8 @@ export function toAcademicExam(exam: {
     noDiscount: Boolean(exam.noDiscount),
     active: Boolean(exam.active),
     scheduledActivateAt: exam.scheduledActivateAt ? dateString(exam.scheduledActivateAt) : null,
+    telegramOpenAt: exam.telegramOpenAt ? dateString(exam.telegramOpenAt) : null,
+    telegramCloseAt: exam.telegramCloseAt ? dateString(exam.telegramCloseAt) : null,
     courseIds: parsedCourseIds,
     examCourses: exam.examCourses,
     mainSite: exam.mainSite || null,
@@ -421,6 +425,8 @@ async function loadAcademicStateForStudents(
         noDiscount: true,
         active: true,
         scheduledActivateAt: true,
+        telegramOpenAt: true,
+        telegramCloseAt: true,
         courseIds: true,
         examCourses: { select: { courseId: true, chapterId: true } },
         mainSite: true,

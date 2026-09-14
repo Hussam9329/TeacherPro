@@ -49,6 +49,8 @@ export type FullExamEditState = {
   noDiscount: boolean;
   statusMode: ExamStatusMode;
   scheduledActivateAt: string;
+  telegramOpenAt: string;
+  telegramCloseAt: string;
 };
 
 function toDateTimeLocalValue(value?: string | null) {
@@ -94,6 +96,8 @@ function createEditState(exam: Exam): FullExamEditState {
     scheduledActivateAt:
       toDateTimeLocalValue(exam.scheduledActivateAt) ||
       defaultDateTimeForDate(exam.date),
+    telegramOpenAt: toDateTimeLocalValue(exam.telegramOpenAt),
+    telegramCloseAt: toDateTimeLocalValue(exam.telegramCloseAt),
   };
 }
 
@@ -138,6 +142,8 @@ export function validateFullExamEditState(
     noDiscount: state.noDiscount,
     statusMode: state.statusMode,
     scheduledActivateAt: state.scheduledActivateAt,
+    telegramOpenAt: state.telegramOpenAt,
+    telegramCloseAt: state.telegramCloseAt,
     courseSelectionError:
       invalidCourses.length > 0
         ? `لا يمكن ربط الامتحان بدورات بدون فصل نشط: ${invalidCourses
@@ -662,6 +668,60 @@ export function ExamEditDialog({
                 />
               </div>
             )}
+
+            <div className="space-y-3 rounded-xl border p-4 md:col-span-2">
+              <div>
+                <h3 className="font-bold">نافذة تسليم الإجابات عبر تيليجرام</h3>
+                <p id="edit-exam-telegram-window-help" className="mt-1 text-xs leading-5 text-muted-foreground">
+                  تتحكم هذه المدة بتسليم الإجابات عبر تيليجرام فقط، ولا تغيّر حالة الامتحان الأكاديمية أو احتساب الدرجات. املأ الوقتين معاً، أو امسحهما معاً لتعطيل التسليم عبر تيليجرام.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="edit-exam-telegram-open-at">فتح التسليم عبر تيليجرام</Label>
+                  <Input
+                    id="edit-exam-telegram-open-at"
+                    type="datetime-local"
+                    className={lightInputClass}
+                    value={editDialog.telegramOpenAt}
+                    aria-invalid={Boolean(fieldErrors.telegramOpenAt)}
+                    aria-describedby={`edit-exam-telegram-window-help${fieldErrors.telegramOpenAt ? " edit-exam-telegram-open-at-error" : ""}`}
+                    onChange={(e) =>
+                      setEditDialog((prev) => ({
+                        ...prev,
+                        telegramOpenAt: e.target.value,
+                      }))
+                    }
+                  />
+                  <ExamEditFieldError
+                    id="edit-exam-telegram-open-at-error"
+                    message={fieldErrors.telegramOpenAt}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-exam-telegram-close-at">إغلاق التسليم عبر تيليجرام</Label>
+                  <Input
+                    id="edit-exam-telegram-close-at"
+                    type="datetime-local"
+                    min={editDialog.telegramOpenAt || undefined}
+                    className={lightInputClass}
+                    value={editDialog.telegramCloseAt}
+                    aria-invalid={Boolean(fieldErrors.telegramCloseAt)}
+                    aria-describedby={`edit-exam-telegram-window-help${fieldErrors.telegramCloseAt ? " edit-exam-telegram-close-at-error" : ""}`}
+                    onChange={(e) =>
+                      setEditDialog((prev) => ({
+                        ...prev,
+                        telegramCloseAt: e.target.value,
+                      }))
+                    }
+                  />
+                  <ExamEditFieldError
+                    id="edit-exam-telegram-close-at-error"
+                    message={fieldErrors.telegramCloseAt}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

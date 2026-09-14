@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
@@ -25,7 +26,7 @@ const reconciliationMigrationName =
 const requiredRuntimeMigrationName =
   "20260828034500_single_dismissal_policy";
 const requiredDatabaseMigrationName =
-  "20260908133000_p2_reviewed_balance_settlement";
+  "20260913120000_add_exam_telegram_submission_window";
 const graceTerminationMigrationName =
   "20260822210000_end_grace_on_numeric_grade";
 const initialBridgeMigrationName = "20260601000000_initial_schema_bridge";
@@ -43,6 +44,16 @@ const preflightScript = read("scripts/preflight-schema-reconciliation.mjs");
 const schemaReadiness = read("src/lib/schema-readiness.ts");
 const routeHelpers = read("src/lib/route-helpers.ts");
 const prismaSchema = read("prisma/schema.prisma");
+const deploymentMigrationPolicy = JSON.parse(
+  read("prisma/deployment-migration-policy.json"),
+);
+const requiredDatabaseMigration = read(
+  path.join(
+    "prisma/migrations",
+    requiredDatabaseMigrationName,
+    "migration.sql",
+  ),
+);
 const reconciliationMigration = read(reconciliationMigrationPath);
 const initialBridgeMigration = read(
   path.join("prisma/migrations", initialBridgeMigrationName, "migration.sql"),
@@ -135,7 +146,13 @@ check(
     schemaReadiness.includes('"finished_at" IS NOT NULL') &&
     schemaReadiness.includes('"rolled_back_at" IS NULL') &&
     !schemaReadiness.includes("$executeRaw"),
-  "runtime readiness is a cached read-only check for the reconciliation migration",
+  "runtime readiness is a cached read-only check for the latest required migration",
+);
+check(
+  deploymentMigrationPolicy[requiredDatabaseMigrationName]?.kind === "expand" &&
+    deploymentMigrationPolicy[requiredDatabaseMigrationName]?.checksum ===
+      createHash("sha256").update(requiredDatabaseMigration).digest("hex"),
+  "the Telegram exam-window migration has a checksum-bound expand policy",
 );
 check(
   prismaSchema.includes("gracePeriodEndedAt DateTime?") &&
