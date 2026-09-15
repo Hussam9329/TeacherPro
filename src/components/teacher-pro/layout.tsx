@@ -62,50 +62,44 @@ import {
 const menuItems: {
   id: SectionId;
   title: string;
-  sub: string;
   icon: React.ElementType;
 }[] = [
   {
     id: "dashboard",
     title: "لوحة النظام",
-    sub: "نظرة عامة",
     icon: LayoutDashboard,
   },
   {
     id: "courses",
     title: "الدورات",
-    sub: "صنع وإدارة",
     icon: BookOpen,
   },
-  { id: "chapters", title: "الفصول والفرص", sub: "الفصول", icon: BookMarked },
+  { id: "chapters", title: "الفصول والفرص", icon: BookMarked },
   {
     id: "student-register",
     title: "تسجيل الطلاب",
-    sub: "إضافة",
     icon: UserPlus,
   },
   {
     id: "student-registry",
     title: "سجل الطلاب",
-    sub: "بطاقات",
     icon: ClipboardList,
   },
   {
     id: "student-bulk-import",
     title: "إضافة جماعية للطلاب",
-    sub: "لصق ومعاينة",
     icon: UsersRound,
   },
-  { id: "dismissed-management", title: "إدارة المفصولين", sub: "السجل الكامل", icon: ShieldAlert },
-  { id: "exam-new", title: "إضافة الامتحان", sub: "القواعد", icon: FileText },
-  { id: "grade-entry", title: "تسجيل الدرجات", sub: "إدخال", icon: PenTool },
-  { id: "exam-records", title: "سجل الامتحانات", sub: "PDF", icon: FileCheck },
-  { id: "grade-records", title: "سجل الدرجات", sub: "سجل", icon: BarChart3 },
-  { id: "opportunities", title: "إدارة الفرص", sub: "خصم/إضافة", icon: Target },
-  { id: "follow-up-calls", title: "المكالمات", sub: "اتصالات المتابعة", icon: PhoneCall },
-  { id: "follow-up-leaves", title: "الإجازات", sub: "إجازات الطلاب", icon: CalendarCheck },
-  { id: "accounts", title: "إدارة الحسابات", sub: "صلاحيات", icon: Shield },
-  { id: "logs", title: "السجلات", sub: "تدقيق", icon: ScrollText },
+  { id: "dismissed-management", title: "إدارة المفصولين", icon: ShieldAlert },
+  { id: "exam-new", title: "إضافة الامتحان", icon: FileText },
+  { id: "grade-entry", title: "تسجيل الدرجات", icon: PenTool },
+  { id: "exam-records", title: "سجل الامتحانات", icon: FileCheck },
+  { id: "grade-records", title: "سجل الدرجات", icon: BarChart3 },
+  { id: "opportunities", title: "إدارة الفرص", icon: Target },
+  { id: "follow-up-calls", title: "المكالمات", icon: PhoneCall },
+  { id: "follow-up-leaves", title: "الإجازات", icon: CalendarCheck },
+  { id: "accounts", title: "إدارة الحسابات", icon: Shield },
+  { id: "logs", title: "السجلات", icon: ScrollText },
 ];
 
 const menuFamilies: { title: string; itemIds: SectionId[] }[] = [
@@ -124,24 +118,6 @@ const familyItemIds = new Set<SectionId>(
   menuFamilies.flatMap((family) => family.itemIds),
 );
 
-const sectionDescriptions: Partial<Record<SectionId, string>> = {
-  dashboard: "",
-  courses: "إنشاء الدورات ومراجعة إعداداتها وحالتها التشغيلية.",
-  chapters: "تنظيم الفصول وربطها بالدورات ومتابعة حالة الفرص.",
-  "student-register": "إضافة طالب جديد وربطه بالدورة والبرنامج والموقع المناسب.",
-  "student-registry": "البحث في ملفات الطلاب ومراجعة بياناتهم وحالتهم.",
-  "student-bulk-import": "إضافة مجموعة طلاب بعد لصق البيانات ومراجعتها قبل الحفظ.",
-  "dismissed-management": "إدارة الطلاب المفصولين من كل الدورات، واسترجاع المفصول بفرصتين، وعرض السجل الكامل والتواصل والتقارير.",
-  "exam-new": "إنشاء امتحان وتحديد الدورات والمواقع وقواعد الدرجات.",
-  "grade-entry": "إدخال درجات الطلاب ومتابعة حالات الحفظ والغياب.",
-  "exam-records": "مراجعة الامتحانات السابقة وإعداداتها وحالتها.",
-  "grade-records": "البحث في سجل الدرجات ومراجعة النتائج المسجلة.",
-  opportunities: "متابعة فرص الطلاب وتنفيذ الإضافة أو الخصم بضوابط النظام.",
-  "follow-up-calls": "تنظيم اتصالات المتابعة وتسجيل نتائج المكالمات.",
-  "follow-up-leaves": "إدارة إجازات الطلاب ومراجعة الفترات المسجلة.",
-  accounts: "إدارة المستخدمين والأدوار والصلاحيات وإعدادات الأمان.",
-  logs: "مراجعة سجل العمليات والتغييرات المنفذة داخل النظام.",
-};
 const sectionsWithPageSearch = new Set<SectionId>([
   "student-registry",
   "dismissed-management",
@@ -1113,9 +1089,6 @@ export function TeacherProLayout() {
     family.itemIds.includes(currentSection),
   );
   const CurrentMenuIcon = currentMenu?.icon || LayoutDashboard;
-  const currentPageDescription =
-    sectionDescriptions[currentSection] ??
-    "إدارة ذكية وسريعة للطلاب والامتحانات والفرص.";
   const connectionVisualStatus = dbLoading
     ? "loading"
     : !dbConnected
@@ -1301,16 +1274,6 @@ export function TeacherProLayout() {
                       <div className="truncate font-semibold leading-5">
                         {item.title}
                       </div>
-                      <div
-                        className={cn(
-                          "truncate text-[10px] leading-4",
-                          isActive
-                            ? "text-sidebar-primary-foreground/70"
-                            : "text-sidebar-foreground/40",
-                        )}
-                      >
-                        {item.sub}
-                      </div>
                     </div>
                   </a>
                 );
@@ -1398,16 +1361,6 @@ export function TeacherProLayout() {
                               <div className="truncate font-semibold leading-5">
                                 {item.title}
                               </div>
-                              <div
-                                className={cn(
-                                  "truncate text-[10px] leading-4",
-                                  isActive
-                                    ? "text-sidebar-primary-foreground/70"
-                                    : "text-sidebar-foreground/40",
-                                )}
-                              >
-                                {item.sub}
-                              </div>
                             </div>
                           </a>
                         );
@@ -1454,16 +1407,6 @@ export function TeacherProLayout() {
                   <div className="min-w-0 flex-1 text-right">
                     <div className="truncate font-semibold leading-5">
                       {item.title}
-                    </div>
-                    <div
-                      className={cn(
-                        "truncate text-[10px] leading-4",
-                        isActive
-                          ? "text-sidebar-primary-foreground/70"
-                          : "text-sidebar-foreground/40",
-                      )}
-                    >
-                      {item.sub}
                     </div>
                   </div>
                 </a>
@@ -1533,19 +1476,7 @@ export function TeacherProLayout() {
                   >
                     {currentMenu?.title || "لوحة النظام"}
                   </h2>
-                  <Badge
-                    variant="outline"
-                    className="hidden h-6 shrink-0 border-border/80 bg-muted/35 px-2 text-[10px] font-bold text-muted-foreground sm:inline-flex"
-                  >
-                    {currentMenu?.sub || "نظرة عامة"}
-                  </Badge>
                 </div>
-
-                {currentPageDescription && (
-                  <p className="tp-app-header__description mt-0.5 min-w-0 text-[11px] leading-5 text-muted-foreground sm:text-xs">
-                    {currentPageDescription}
-                  </p>
-                )}
               </div>
             </div>
 

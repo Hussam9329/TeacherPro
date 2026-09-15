@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   Target,
   Users,
+  UsersRound,
 } from "lucide-react";
 import { StatCard } from "./ui-kit";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
@@ -34,6 +35,7 @@ type DashboardStats = {
 
 const dashboardShortcuts = [
   { section: "student-registry", title: "سجل الطلاب", icon: ClipboardList, color: "bg-violet-500/10 text-violet-700 dark:text-violet-300" },
+  { section: "student-bulk-import", title: "إضافة الطلاب الجماعية", icon: UsersRound, color: "bg-purple-500/10 text-purple-700 dark:text-purple-300" },
   { section: "opportunities", title: "إدارة الفرص", icon: Target, color: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
   { section: "dismissed-management", title: "إدارة المفصولين", icon: ShieldAlert, color: "bg-rose-500/10 text-rose-700 dark:text-rose-300" },
   { section: "grade-entry", title: "تسجيل الدرجات", icon: PenLine, color: "bg-sky-500/10 text-sky-700 dark:text-sky-300" },

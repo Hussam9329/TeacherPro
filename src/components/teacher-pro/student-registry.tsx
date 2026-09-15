@@ -1841,10 +1841,6 @@ export function StudentRegistryView() {
             </div>
             <div className="min-w-0">
               <h2>الفلاتر الأساسية</h2>
-              <p>
-                حدّد بيانات الدراسة أو حالة الطالب للوصول إلى النتائج المطلوبة
-                بسرعة.
-              </p>
             </div>
           </div>
 
@@ -1854,7 +1850,6 @@ export function StudentRegistryView() {
                 <GraduationCap aria-hidden="true" className="size-4" />
                 <div>
                   <h3>الدورة ونوع البرنامج</h3>
-                  <p>الفلاتر الرئيسية المرتبطة بتسجيل الطالب.</p>
                 </div>
               </div>
               <div className="tp-student-registry__filter-grid">
@@ -1971,7 +1966,6 @@ export function StudentRegistryView() {
                 <UserRound aria-hidden="true" className="size-4" />
                 <div>
                   <h3>بيانات الطالب وحالته</h3>
-                  <p>الموقع والجنس والحالة وسلامة بيانات الملف.</p>
                 </div>
               </div>
               <div className="tp-student-registry__filter-grid">
@@ -2085,7 +2079,6 @@ export function StudentRegistryView() {
                 <Search aria-hidden="true" className="size-4" />
                 <div>
                   <h3>البحث والعرض</h3>
-                  <p>ابحث مباشرة، ثم اختر شكل النتائج أو صدّرها.</p>
                 </div>
               </div>
               <div className="tp-student-registry__filter-tools-grid">

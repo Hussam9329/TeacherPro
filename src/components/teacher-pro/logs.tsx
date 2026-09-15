@@ -177,9 +177,6 @@ export function LogsView() {
       <Card className="tp-filter-card tp-logs-page__filters">
         <CardHeader className="pb-2">
           <CardTitle>السجلات</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            سجل واضح يشرح ما حدث ومن نفّذه. المعرّفات والبيانات البرمجية مخفية افتراضياً، ويمكن فتحها للتدقيق التقني فقط.
-          </p>
         </CardHeader>
         <CardContent className="tp-filter-content space-y-3">
           <div className="tp-filter-grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6">

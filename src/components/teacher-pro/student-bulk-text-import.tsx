@@ -20,7 +20,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -937,10 +936,6 @@ export function StudentBulkTextImportView() {
                 <CardTitle className="text-2xl font-black tracking-tight text-gradient-brand md:text-3xl">
                   إضافة جماعية للطلاب
                 </CardTitle>
-                <CardDescription className="mt-2 leading-6">
-                  الصق كل طالب في سطر مستقل، والحقول مفصولة بزر Tab بنفس الصيغة
-                  المطلوبة.
-                </CardDescription>
               </div>
             </div>
           </div>

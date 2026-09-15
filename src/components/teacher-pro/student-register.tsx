@@ -16,7 +16,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -746,9 +745,6 @@ export function StudentRegisterView() {
                 <CardTitle className="text-xl font-black tracking-tight text-gradient-brand md:text-2xl">
                   إضافة طالب جديد
                 </CardTitle>
-                <CardDescription className="mt-2 leading-6">
-                  سجّل بيانات الطالب واختر الدورة والموقع المناسب.
-                </CardDescription>
               </div>
             </div>
           </div>

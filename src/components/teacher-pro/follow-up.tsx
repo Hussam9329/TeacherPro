@@ -112,16 +112,9 @@ type CallExportRow = {
   courseName: (id: string) => string;
 };
 
-const viewTitles: Record<FollowView, { title: string; description: string }> = {
-  calls: {
-    title: "المكالمات",
-    description:
-      "متابعة الغياب والرسوب والدرجات وحالات الفصل عبر الاتصال.",
-  },
-  leaves: {
-    title: "الإجازات",
-    description: "تسجيل إجازات الطلاب حسب الامتحان أو حسب فترة زمنية.",
-  },
+const viewTitles: Record<FollowView, string> = {
+  calls: "المكالمات",
+  leaves: "الإجازات",
 };
 
 const leaveReasonOptions = [
@@ -2219,10 +2212,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       <Card className="overflow-hidden tp-follow-up-page__intro">
         <div className="h-1 bg-gradient-to-l from-primary via-fuchsia-500 to-indigo-500" />
         <CardHeader>
-          <CardTitle>{viewTitles[view].title}</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {viewTitles[view].description}
-          </p>
+          <CardTitle>{viewTitles[view]}</CardTitle>
         </CardHeader>
       </Card>
 
@@ -2486,10 +2476,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           <Card className="tp-filter-card">
             <CardHeader>
               <CardTitle>المكالمات المرتبطة بسجل الدرجات</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                اختر الدورة أولاً، بعدها تظهر امتحاناتها فقط، ثم تظهر قائمة طلاب
-                الدورة حسب الامتحان المختار وحالة الدرجة.
-              </p>
             </CardHeader>
             <CardContent className="tp-filter-content space-y-4">
               <div className="tp-filter-grid grid-cols-1 md:grid-cols-6">
@@ -2778,10 +2764,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           <Card>
             <CardHeader>
               <CardTitle>قائمة الطلاب ودرجاتهم</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                لا تظهر القائمة إلا بعد اختيار دورة ثم امتحان. كل شيء داخل هذه التبويبة
-                يأتي من بيانات النظام: الطلاب، الدرجات، آخر امتحانين، المكالمات، والملاحظات.
-              </p>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-muted/40 px-3 py-2 text-sm">

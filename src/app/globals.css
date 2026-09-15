@@ -1183,10 +1183,6 @@
     max-inline-size: 100%;
   }
 
-  .tp-app-header__description {
-    overflow-wrap: anywhere;
-  }
-
   .tp-app-scroll {
     padding-block-end: max(0.75rem, env(safe-area-inset-bottom));
     padding-inline-start: max(0.75rem, env(safe-area-inset-left));
@@ -1498,10 +1494,6 @@
     min-inline-size: 2.5rem;
     inline-size: 2.5rem;
     padding-inline: 0;
-  }
-
-  .tp-app-header__description {
-    display: none;
   }
 
   .tp-app-header__title-row h2 {
@@ -2409,14 +2401,6 @@
   line-height: 1.5rem;
 }
 
-.tp-student-registry__filter-heading p,
-.tp-student-registry__filter-section-heading p {
-  margin-top: 0.1rem;
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  line-height: 1.25rem;
-}
-
 .tp-student-registry__filter-sections {
   display: grid;
   gap: 0.75rem;
@@ -2725,10 +2709,6 @@
   .tp-student-registry__filter-section {
     padding: 0.75rem;
     border-radius: 1rem;
-  }
-
-  .tp-student-registry__filter-section-heading p {
-    display: none;
   }
 
   .tp-student-registry__filter-grid,

@@ -1449,11 +1449,6 @@ export function CoursesView() {
               <BookOpen className="size-5 text-primary" />
               <h2 className="text-xl font-black">إدارة الدورات</h2>
             </div>
-            <p className="max-w-3xl text-sm leading-7 text-muted-foreground">
-              هذه الصفحة تقرأ الدورات وأثرها من بيانات النظام: الطلاب،
-              الامتحانات، الفصول، وإمكانية الحذف. أي تعديل لا يظهر كنجاح إلا بعد
-              تأكيد الحفظ.
-            </p>
           </div>
           <Button onClick={() => setShowCreateForm((value) => !value)}>
             {showCreateForm ? "إخفاء نموذج الإضافة" : "إضافة دورة جديدة"}

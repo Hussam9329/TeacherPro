@@ -291,9 +291,6 @@ function PermissionsArchitectureTab() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">هيكلة الصلاحيات الذكية</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            كل صفحة وكل إجراء حساس صار له رمز الصلاحية واضح. أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل PERMISSION_CATALOG وتنعكس تلقائياً في إدارة الأدوار والحسابات.
-          </p>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إجمالي الصلاحيات</p><p className="text-2xl font-black">{PERMISSION_CATALOG.length}</p></div>
@@ -416,7 +413,6 @@ function RolesTab() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold">الأدوار والصلاحيات</h3>
-          <p className="text-sm text-muted-foreground">إدارة أدوار المستخدمين وصلاحياتهم</p>
         </div>
         <Button onClick={() => setShowAddRoleDialog(true)}>إضافة دور</Button>
       </div>
@@ -648,7 +644,6 @@ function UsersTab() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold">المستخدمين</h3>
-          <p className="text-sm text-muted-foreground">إدارة حسابات المستخدمين وأدوارهم</p>
         </div>
         <Button onClick={() => {
           setNewUser({ username: '', name: '', password: generatePasscode(), roleId: 'role_checker', permissions: [] });
@@ -1056,7 +1051,6 @@ function SecurityTab() {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h3 className="text-lg font-bold">أمان الحسابات</h3>
-          <p className="text-sm text-muted-foreground">فحص سريع للأسرار، الصلاحيات الحساسة، وآخر تغييرات الحسابات.</p>
         </div>
         <Button variant="outline" disabled={refreshing} onClick={() => void loadOverview({ background: true })}>{refreshing ? 'جارٍ التحديث...' : 'تحديث الفحص'}</Button>
       </div>
@@ -1508,7 +1502,6 @@ export function AccountsView() {
     <div className="space-y-6 tp-accounts-page">
       <div className="tp-accounts-page__intro">
         <h2 className="text-xl font-bold">إدارة الحسابات</h2>
-        <p className="text-sm text-muted-foreground">إدارة المستخدمين والأدوار والصلاحيات</p>
       </div>
 
       <Tabs defaultValue="users" dir="rtl">
