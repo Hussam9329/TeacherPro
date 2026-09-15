@@ -202,7 +202,7 @@ for (const file of teacherProFiles.filter((file) => !file.endsWith("export-dialo
   const source = read(file);
   const tableCount = (source.match(/<table\b/g) || []).length;
   if (tableCount === 0) continue;
-  const accessibleWrappers = source.match(/<div\b(?=[^>]*className="[^"]*\btable-wrap\b[^"]*")(?=[^>]*tabIndex=\{0\})(?=[^>]*aria-label="[^"]+")[^>]*>\s*<table\b/gms) || [];
+  const accessibleWrappers = source.match(/<div\b(?=[^>]*className="[^"]*\btable-wrap\b[^"]*")(?=[^>]*tabIndex=\{0\})(?=[^>]*aria-label=(?:"[^"]+"|\{`[^`]+`\}))[^>]*>\s*<table\b/gms) || [];
   pass(accessibleWrappers.length === tableCount, `${file}: each table needs a labelled tabIndex={0} table-wrap (${accessibleWrappers.length}/${tableCount})`);
 }
 

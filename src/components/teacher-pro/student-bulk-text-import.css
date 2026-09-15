@@ -1,0 +1,252 @@
+/* Import controls inside the shared opportunities management layout. */
+.tp-bulk-import-page,
+.tp-bulk-import-page :where(p, span, label, h3, legend, summary) {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.tp-bulk-import__input-card {
+  gap: 0;
+  padding-block: 0;
+}
+
+.tp-bulk-import__input-card > [data-slot="card-header"] {
+  padding: 0.8rem 1rem 0.65rem;
+  border-block-end: 1px solid var(--border);
+}
+
+.tp-bulk-import__heading,
+.tp-bulk-import__input-footer,
+.tp-bulk-import__save-bar,
+.tp-bulk-import__group-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-inline-size: 0;
+}
+
+.tp-bulk-import__input,
+.tp-bulk-import__preview {
+  display: grid;
+  gap: 0.875rem;
+  min-inline-size: 0;
+}
+
+.tp-bulk-import__format {
+  min-inline-size: 0;
+  font-size: 0.75rem;
+  line-height: 1.75;
+}
+
+.tp-bulk-import__format > summary {
+  width: fit-content;
+  max-inline-size: 100%;
+  min-block-size: 2.75rem;
+  padding-block: 0.5rem;
+  color: var(--primary);
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.tp-bulk-import__format > ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: 0.5rem;
+  margin-block: 0.25rem 0.75rem;
+  list-style: none;
+}
+
+.tp-bulk-import__format li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  min-inline-size: 0;
+}
+
+.tp-bulk-import__format li > span {
+  flex-shrink: 0;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.tp-bulk-import__format > p {
+  margin-block: 0.5rem;
+  color: var(--muted-foreground);
+}
+
+.tp-bulk-import__textarea {
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  min-block-size: 12rem;
+  resize: vertical;
+  padding: 0.875rem;
+  border: 1px solid var(--input);
+  border-radius: 0.875rem;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 1rem;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tp-bulk-import__textarea::placeholder {
+  color: var(--muted-foreground);
+}
+
+.tp-bulk-import__textarea:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.tp-bulk-import__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-inline-size: 0;
+}
+
+.tp-bulk-import-page [data-slot="button"] {
+  min-block-size: 2.75rem;
+  block-size: auto;
+  max-inline-size: 100%;
+  padding-block: 0.5rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  touch-action: manipulation;
+}
+
+.tp-bulk-import__context-error {
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--destructive) 30%, var(--border));
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--destructive) 8%, var(--card));
+  color: var(--destructive);
+  font-size: 0.875rem;
+  line-height: 1.75;
+}
+
+.tp-bulk-import__policy {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tp-bulk-import__policy > legend {
+  margin-block-end: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.tp-bulk-import__policy-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 0.625rem;
+}
+
+.tp-bulk-import__policy-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  min-inline-size: 0;
+  min-block-size: 2.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--muted) 20%, var(--card));
+  font-size: 0.8125rem;
+  line-height: 1.75;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.tp-bulk-import__policy-option[data-selected="true"] {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  background: color-mix(in srgb, var(--primary) 5%, var(--card));
+}
+
+.tp-bulk-import__policy-option > [role="radio"] {
+  flex-shrink: 0;
+  margin-block-start: 0.2rem;
+}
+
+.tp-bulk-import__policy-description {
+  display: block;
+  margin-block-start: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.tp-bulk-import__group {
+  min-inline-size: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+}
+
+.tp-bulk-import__group-header {
+  padding: 0.75rem;
+  border-block-end: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 30%, var(--card));
+}
+
+.tp-bulk-import__table-scroll {
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  border: 0;
+  border-radius: 0;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.tp-bulk-import__table-scroll table {
+  min-inline-size: 980px;
+}
+
+.tp-bulk-import__table-scroll td {
+  max-inline-size: 20rem;
+  overflow-wrap: anywhere;
+}
+
+.tp-bulk-import__table-scroll td:nth-child(2),
+.tp-bulk-import__table-scroll td:last-child {
+  min-inline-size: 11rem;
+}
+
+.tp-bulk-import__save-bar {
+  padding-block-start: 0.875rem;
+  border-block-start: 1px solid var(--border);
+}
+
+.tp-bulk-import__save-bar > p {
+  flex: 1 1 12rem;
+}
+
+.tp-bulk-import__textarea:focus-visible,
+.tp-bulk-import__format > summary:focus-visible,
+.tp-bulk-import__table-scroll:focus-visible,
+.tp-bulk-import-page .tp-management-stats-rail .grid:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (max-width: 479px) {
+  .tp-bulk-import__actions {
+    inline-size: 100%;
+  }
+
+  .tp-bulk-import__actions > button {
+    flex: 1 1 auto;
+  }
+
+  .tp-bulk-import__save-bar > button {
+    inline-size: 100%;
+  }
+}

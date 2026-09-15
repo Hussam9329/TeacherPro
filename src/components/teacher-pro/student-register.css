@@ -1,0 +1,249 @@
+/* Registration uses the same workspace and statistic rail as Opportunities. */
+.tp-register-page,
+.tp-register-page :where(h3, p, li, label, dt, dd),
+.tp-register__form,
+.tp-register__section-content,
+.tp-register__fields > *,
+.tp-register__course-fields > * {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.tp-register__intro {
+  gap: 0;
+  padding-block: 0;
+}
+
+.tp-register__intro > [data-slot="card-header"] {
+  padding: 0.9rem 1rem 0;
+}
+
+.tp-register__progress {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tp-register__progress > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  color: var(--muted-foreground);
+  background: color-mix(in srgb, var(--muted) 20%, var(--card));
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.tp-register__progress > li[data-complete="true"] {
+  border-color: color-mix(in srgb, var(--primary) 25%, var(--border));
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 5%, var(--card));
+}
+
+.tp-register__step-number {
+  display: inline-flex;
+  flex: 0 0 1rem;
+  align-items: center;
+  justify-content: center;
+  block-size: 1rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.625rem;
+  line-height: 1;
+}
+
+.tp-register__form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.tp-register__section {
+  container-type: inline-size;
+  gap: 0;
+  padding-block: 0;
+}
+
+.tp-register__section > .tp-register__section-heading {
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tp-register__section-content {
+  padding: 1rem;
+}
+
+.tp-register__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+}
+
+.tp-register__course-fields {
+  display: contents;
+}
+
+.tp-register__fields
+  :is(
+    input:not([type="radio"]):not([type="checkbox"]),
+    [data-slot="select-trigger"]
+  ) {
+  inline-size: 100%;
+  min-inline-size: 0;
+  block-size: auto;
+  min-block-size: 2.75rem;
+}
+
+.tp-register__fields [data-slot="select-trigger"] {
+  height: auto;
+  padding-block: 0.5rem;
+  text-align: start;
+}
+
+.tp-register__fields [data-slot="select-trigger"] > [data-slot="select-value"] {
+  min-inline-size: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.tp-register__fields [data-slot="select-trigger"] > svg {
+  flex-shrink: 0;
+}
+
+.tp-register__fields :is(#reg-outOfCountrySite, #reg-accountingGraceDays) {
+  padding-inline: 0.75rem;
+}
+
+.tp-register__fields #reg-createdAt {
+  padding-right: 0.75rem;
+  padding-left: 3rem;
+}
+
+.tp-register__gender-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tp-register__choice {
+  display: inline-flex;
+  flex: 1 1 5rem;
+  align-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  min-block-size: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.tp-register__choice:has(input:checked) {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 5%, var(--card));
+}
+
+.tp-register__choice > input {
+  flex-shrink: 0;
+}
+
+.tp-register__choice > span {
+  margin: 0;
+}
+
+.tp-register__outside-choice {
+  display: flex;
+  margin-block-start: 0.5rem;
+}
+
+.tp-register__course-status {
+  display: grid;
+  gap: 0.75rem;
+  margin-block-start: 1rem;
+  padding: 0.75rem;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 0.875rem;
+  font-size: 0.75rem;
+  line-height: 1.8;
+}
+
+.tp-register__course-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.5rem), 1fr));
+  gap: 0.625rem;
+  padding-block-start: 0.625rem;
+  border-block-start: 1px solid var(--border);
+  text-align: center;
+}
+
+.tp-register__course-metrics dt {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.tp-register__course-metrics dd {
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tp-register__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--card);
+}
+
+.tp-register__actions > div {
+  flex: 1 1 12rem;
+}
+
+.tp-register__actions > .tp-register__submit {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  block-size: auto;
+  min-block-size: 2.75rem;
+  padding-block: 0.625rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  touch-action: manipulation;
+}
+
+.tp-register__choice:focus-within,
+.tp-register-page .tp-management-stats-rail .grid:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 0.75rem;
+}
+
+@container (min-width: 34rem) {
+  .tp-register__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 640px) {
+  .tp-register__actions > .tp-register__submit {
+    flex: 0 1 auto;
+  }
+}

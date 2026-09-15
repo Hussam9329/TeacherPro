@@ -1,5 +1,8 @@
 "use client";
-import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
+import {
+  useTeacherProBackgroundSyncDetector,
+  useTeacherProSyncKey,
+} from "@/hooks/use-teacherpro-sync";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -16,11 +19,10 @@ import {
 } from "@/lib/api";
 import { type GracePeriodStartMode } from "@/lib/student-grace";
 import { baghdadDateKey } from "@/lib/baghdad-time";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -35,7 +37,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -84,17 +85,14 @@ import {
   Phone,
   RotateCcw,
   Save,
-  Search,
   SearchX,
-  ShieldCheck,
-  SlidersHorizontal,
   Unlink,
   UserPlus,
   UserRound,
   UserX,
   X,
 } from "lucide-react";
-import { CountScopeSummary, EmptyState } from "./ui-kit";
+import { EmptyState } from "./ui-kit";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import {
   StudentRegistryResults,
@@ -136,6 +134,8 @@ import {
   type RegistryViewMode,
   type StudentEditForm,
 } from "./student-registry-helpers";
+import "./student-registry.css";
+
 export function StudentRegistryView() {
   const {
     students,
@@ -283,9 +283,7 @@ export function StudentRegistryView() {
       );
       setViewMode(saved.viewMode === "table" ? "table" : "cards");
       setPageSize([10, 50, 100].includes(savedPageSize) ? savedPageSize : 10);
-      setPage(
-        Number.isInteger(savedPage) && savedPage > 0 ? savedPage : 1,
-      );
+      setPage(Number.isInteger(savedPage) && savedPage > 0 ? savedPage : 1);
     } catch {
       try {
         window.localStorage.removeItem(registryStateStorageKey);
@@ -360,9 +358,18 @@ export function StudentRegistryView() {
     null,
   );
   const [serverRefreshKey, setServerRefreshKey] = useState(0);
-  const syncKey = useTeacherProSyncKey(["students", "courses", "opportunities", "grades", "follow-up", "dashboard"]);
+  const syncKey = useTeacherProSyncKey([
+    "students",
+    "courses",
+    "opportunities",
+    "grades",
+    "follow-up",
+    "dashboard",
+  ]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
-  const [studentsSystemTotal, setStudentsSystemTotal] = useState<number | null>(null);
+  const [studentsSystemTotal, setStudentsSystemTotal] = useState<number | null>(
+    null,
+  );
   const [activeStudentsTotal, setActiveStudentsTotal] = useState<number | null>(
     null,
   );
@@ -433,7 +440,8 @@ export function StudentRegistryView() {
   const [deleteImpact, setDeleteImpact] =
     useState<StudentDeleteImpactResponse | null>(null);
   const [deleteImpactLoading, setDeleteImpactLoading] = useState(false);
-  const [unlinkTelegramDialogOpen, setUnlinkTelegramDialogOpen] = useState(false);
+  const [unlinkTelegramDialogOpen, setUnlinkTelegramDialogOpen] =
+    useState(false);
   const { locked: isSavingEdit, runLocked: runSaveEditLocked } =
     useActionLock();
   const { locked: isDeletingStudent, runLocked: runDeleteStudentLocked } =
@@ -503,8 +511,7 @@ export function StudentRegistryView() {
         {
           courseId: filterCourseId,
           courseProgram: filterCourseProgram,
-          courseTerm:
-            filterCourseProgram === "كورسات" ? filterCourseTerm : "",
+          courseTerm: filterCourseProgram === "كورسات" ? filterCourseTerm : "",
           studyType: filterStudyType,
         },
       );
@@ -543,7 +550,8 @@ export function StudentRegistryView() {
         setLocationFilterOptions(fallbackLocations());
       })
       .catch((error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
         setLocationFilterOptions(fallbackLocations());
       });
 
@@ -720,9 +728,7 @@ export function StudentRegistryView() {
         setArchivedStudentsTotal(null);
         setOtherStudentsTotal(null);
         setNoActiveChapterStudentsTotal(null);
-        setStudentStatsError(
-          "تعذر تحميل أعداد الطلاب حالياً.",
-        );
+        setStudentStatsError("تعذر تحميل أعداد الطلاب حالياً.");
       })
       .finally(() => {
         if (!requestIsStale()) setStudentStatsLoading(false);
@@ -850,26 +856,30 @@ export function StudentRegistryView() {
 
   const editCourseChanged = Boolean(
     editOriginalStudent &&
-    editDialog.form.courseId &&
-    editDialog.form.courseId !== editOriginalStudent.courseId,
+      editDialog.form.courseId &&
+      editDialog.form.courseId !== editOriginalStudent.courseId,
   );
 
   // الفصل النشط للدورة المستهدفة يُجلب عبر API مخصص بدل الكاش المحلي،
   // حتى لا تظهر رسالة «الدورة لا تحتوي على فصل نشط» خطأً عندما يكون
   // الكاش قديماً أو غير محمّل بعد.
-  const [editTargetActiveChapterFromServer, setEditTargetActiveChapterFromServer] =
-    useState<{
-      id: string;
-      name: string;
-      opportunities: number;
-      chapterId: string;
-    } | null>(null);
+  const [
+    editTargetActiveChapterFromServer,
+    setEditTargetActiveChapterFromServer,
+  ] = useState<{
+    id: string;
+    name: string;
+    opportunities: number;
+    chapterId: string;
+  } | null>(null);
   const [editTargetActiveChapterLoading, setEditTargetActiveChapterLoading] =
     useState(false);
   const [editTargetActiveChapterConflict, setEditTargetActiveChapterConflict] =
     useState(false);
-  const [editTargetActiveChapterLookupFailed, setEditTargetActiveChapterLookupFailed] =
-    useState(false);
+  const [
+    editTargetActiveChapterLookupFailed,
+    setEditTargetActiveChapterLookupFailed,
+  ] = useState(false);
 
   useEffect(() => {
     const courseId = editDialog.form.courseId;
@@ -946,23 +956,25 @@ export function StudentRegistryView() {
 
   const editStudyTypeChanged = Boolean(
     editOriginalStudent &&
-    editDialog.form.studyType !== String(editOriginalStudent.studyType || ""),
+      editDialog.form.studyType !== String(editOriginalStudent.studyType || ""),
   );
   const editCourseProgramChanged = Boolean(
     editOriginalStudent &&
-    editEffectiveCourseProgram !== String(editOriginalStudent.courseProgram || ""),
+      editEffectiveCourseProgram !==
+        String(editOriginalStudent.courseProgram || ""),
   );
   const editCourseTermChanged = Boolean(
     editOriginalStudent &&
-    editDialog.form.courseTerm !== String(editOriginalStudent.courseTerm || ""),
+      editDialog.form.courseTerm !==
+        String(editOriginalStudent.courseTerm || ""),
   );
   const editLocationChanged = Boolean(
     editOriginalStudent &&
-    (
-      editDialog.form.locationScope !== String(editOriginalStudent.locationScope || "") ||
-      editDialog.form.baghdadMode !== String(editOriginalStudent.baghdadMode || "") ||
-      editDialog.form.subSite !== String(editOriginalStudent.subSite || "")
-    ),
+      (editDialog.form.locationScope !==
+        String(editOriginalStudent.locationScope || "") ||
+        editDialog.form.baghdadMode !==
+          String(editOriginalStudent.baghdadMode || "") ||
+        editDialog.form.subSite !== String(editOriginalStudent.subSite || "")),
   );
   const editSameCourseContextChanged =
     !editCourseChanged &&
@@ -970,7 +982,8 @@ export function StudentRegistryView() {
       editCourseProgramChanged ||
       editCourseTermChanged ||
       editLocationChanged);
-  const editNeedsTransferPolicy = editCourseChanged || editSameCourseContextChanged;
+  const editNeedsTransferPolicy =
+    editCourseChanged || editSameCourseContextChanged;
   const editTransferSignature = JSON.stringify([
     editDialog.form.courseId,
     editEffectiveCourseProgram,
@@ -986,12 +999,13 @@ export function StudentRegistryView() {
       : "";
   const editRegistrationDateChanged = Boolean(
     editOriginalStudent &&
-    editDialog.form.createdAt !== baghdadDateKey(editOriginalStudent.createdAt),
+      editDialog.form.createdAt !==
+        baghdadDateKey(editOriginalStudent.createdAt),
   );
   const editGraceDaysChanged = Boolean(
     editOriginalStudent &&
-    Number(editDialog.form.accountingGraceDays || 0) !==
-      Number(editOriginalStudent.accountingGraceDays || 0),
+      Number(editDialog.form.accountingGraceDays || 0) !==
+        Number(editOriginalStudent.accountingGraceDays || 0),
   );
   const editGraceRenewalRequested = Boolean(
     editOriginalStudent &&
@@ -1241,7 +1255,8 @@ export function StudentRegistryView() {
       return;
     }
 
-    const responseStudent = (result.data as { student?: Student } | null)?.student;
+    const responseStudent = (result.data as { student?: Student } | null)
+      ?.student;
     const updatedStudent = {
       ...sourceStudent,
       ...(responseStudent || {}),
@@ -1404,7 +1419,9 @@ export function StudentRegistryView() {
         });
         setAcademicImpactLoading(false);
         if (!previewResult.ok || !previewResult.data) {
-          toast.error(previewResult.error || "تعذر معاينة أثر التغيير الأكاديمي");
+          toast.error(
+            previewResult.error || "تعذر معاينة أثر التغيير الأكاديمي",
+          );
           return;
         }
         setAcademicImpactPreview(previewResult.data);
@@ -1443,7 +1460,8 @@ export function StudentRegistryView() {
       parentPhone: form.parentPhone.trim(),
       telegram: sanitizeTelegramInput(form.telegram),
       courseProgram: editEffectiveCourseProgram || "",
-      courseTerm: editEffectiveCourseProgram === "كورسات" ? form.courseTerm : "",
+      courseTerm:
+        editEffectiveCourseProgram === "كورسات" ? form.courseTerm : "",
       studyType: form.studyType,
       locationScope: form.locationScope,
       baghdadMode:
@@ -1474,7 +1492,8 @@ export function StudentRegistryView() {
       toast.error(result.error || "تعذر تعديل بيانات الطالب");
       return;
     }
-    const updatedStudent = (result.data as { student?: Student } | null)?.student;
+    const updatedStudent = (result.data as { student?: Student } | null)
+      ?.student;
     if (updatedStudent) {
       reconcileMutationStudent(updatedStudent);
     }
@@ -1504,7 +1523,9 @@ export function StudentRegistryView() {
       return;
     }
     if (registryServerUnavailable) {
-      toast.error("لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالنظام ثم حاول مجدداً.");
+      toast.error(
+        "لا يمكن أرشفة طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالنظام ثم حاول مجدداً.",
+      );
       return;
     }
     setDeleteDialog({ open: true, id: student.id, studentName: student.name });
@@ -1546,7 +1567,8 @@ export function StudentRegistryView() {
       toast.error(result.error || "تعذر أرشفة الطالب");
       return;
     }
-    const responseStudent = (result.data as { student?: Student } | null)?.student;
+    const responseStudent = (result.data as { student?: Student } | null)
+      ?.student;
     const sourceStudent =
       serverStudents?.find((student) => student.id === deleteDialog.id) ||
       students.find((student) => student.id === deleteDialog.id);
@@ -1567,8 +1589,7 @@ export function StudentRegistryView() {
     }
     setServerRefreshKey((value) => value + 1);
     toast.success("تمت أرشفة الطالب بدل الحذف النهائي", {
-      description:
-        "بقيت درجاته وإجازاته ومكالماته وفرصه وملاحظاته محفوظة.",
+      description: "بقيت درجاته وإجازاته ومكالماته وفرصه وملاحظاته محفوظة.",
     });
     setDeleteDialog({ open: false, id: "", studentName: "" });
     setDeleteImpact(null);
@@ -1602,7 +1623,9 @@ export function StudentRegistryView() {
   const paged = usingServerStudents
     ? filtered
     : localFiltered.slice((page - 1) * pageSize, page * pageSize);
-  const registryServerUnavailable = Boolean(serverStudentsError && !serverStudents);
+  const registryServerUnavailable = Boolean(
+    serverStudentsError && !serverStudents,
+  );
   const closeDismissDialog = () => {
     setDismissDialog({ student: null, open: false });
     setDismissReason("");
@@ -1625,7 +1648,9 @@ export function StudentRegistryView() {
       return;
     }
     if (registryServerUnavailable) {
-      toast.error("لا يمكن فصل طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالنظام ثم حاول مجدداً.");
+      toast.error(
+        "لا يمكن فصل طالب أثناء عرض نسخة محلية مؤقتة. أعد الاتصال بالنظام ثم حاول مجدداً.",
+      );
       return;
     }
     if (!dismissReason.trim()) {
@@ -1644,7 +1669,8 @@ export function StudentRegistryView() {
       toast.error(result.error || "تعذر فصل الطالب");
       return;
     }
-    const updatedStudent = (result.data as { student?: Student } | null)?.student;
+    const updatedStudent = (result.data as { student?: Student } | null)
+      ?.student;
     if (updatedStudent) {
       reconcileMutationStudent(updatedStudent);
     }
@@ -1653,44 +1679,50 @@ export function StudentRegistryView() {
     toast.success("تم فصل الطالب");
   });
 
-  const handleRestoreArchived = runStatusActionLocked(async (student: Student) => {
-    if (!canEditStudents) {
-      toast.error("لا تملك صلاحية استعادة الطلاب من الأرشيف");
-      return;
-    }
-    if (registryServerUnavailable) {
-      toast.error("لا يمكن استعادة طالب أثناء عرض نسخة محلية مؤقتة.");
-      return;
-    }
-    if (student.status !== ARCHIVED_STUDENT_STATUS) {
+  const handleRestoreArchived = runStatusActionLocked(
+    async (student: Student) => {
+      if (!canEditStudents) {
+        toast.error("لا تملك صلاحية استعادة الطلاب من الأرشيف");
+        return;
+      }
+      if (registryServerUnavailable) {
+        toast.error("لا يمكن استعادة طالب أثناء عرض نسخة محلية مؤقتة.");
+        return;
+      }
+      if (student.status !== ARCHIVED_STUDENT_STATUS) {
+        setRestoreDialog({ student: null, open: false });
+        toast.error(
+          "الاستعادة من سجل الطلاب مخصصة للطالب المؤرشف فقط. استرجاع المفصول يتم من إدارة المفصولين.",
+        );
+        return;
+      }
+      const result = await studentApi.statusAction({
+        action: "restore",
+        studentId: student.id,
+        expectedStatus: student.status,
+        expectedMutationToken: student.mutationToken || "",
+      });
+      if (!result.ok) {
+        toast.error(result.error || "تعذر استعادة الطالب من الأرشيف");
+        return;
+      }
+      const statusResult = result.data as {
+        student?: Student;
+        warning?: string | null;
+      } | null;
+      const updatedStudent = statusResult?.student;
+      if (updatedStudent) reconcileMutationStudent(updatedStudent);
       setRestoreDialog({ student: null, open: false });
-      toast.error("الاستعادة من سجل الطلاب مخصصة للطالب المؤرشف فقط. استرجاع المفصول يتم من إدارة المفصولين.");
-      return;
-    }
-    const result = await studentApi.statusAction({
-      action: "restore",
-      studentId: student.id,
-      expectedStatus: student.status,
-      expectedMutationToken: student.mutationToken || "",
-    });
-    if (!result.ok) {
-      toast.error(result.error || "تعذر استعادة الطالب من الأرشيف");
-      return;
-    }
-    const statusResult = result.data as {
-      student?: Student;
-      warning?: string | null;
-    } | null;
-    const updatedStudent = statusResult?.student;
-    if (updatedStudent) reconcileMutationStudent(updatedStudent);
-    setRestoreDialog({ student: null, open: false });
-    setServerRefreshKey((value) => value + 1);
-    if (statusResult?.warning) {
-      toast.warning("تمت استعادة الطالب من الأرشيف", { description: statusResult.warning });
-    } else {
-      toast.success("تمت استعادة الطالب من الأرشيف");
-    }
-  });
+      setServerRefreshKey((value) => value + 1);
+      if (statusResult?.warning) {
+        toast.warning("تمت استعادة الطالب من الأرشيف", {
+          description: statusResult.warning,
+        });
+      } else {
+        toast.success("تمت استعادة الطالب من الأرشيف");
+      }
+    },
+  );
 
   // Export rows: use current filtered results (server or local).
   // For full server-side export, the ExportDialog fetches from /api/students/export
@@ -1725,16 +1757,24 @@ export function StudentRegistryView() {
       course?: { name?: string } | null;
     };
     const exportedStudents = await collectStudentExportPages<ExportStudent>(
-      async ({ cursor, snapshotAt, pageSize: exportPageSize, signal: pageSignal }) => {
+      async ({
+        cursor,
+        snapshotAt,
+        pageSize: exportPageSize,
+        signal: pageSignal,
+      }) => {
         const pageParams = new URLSearchParams(params);
         pageParams.set("pageSize", String(exportPageSize));
         if (cursor) pageParams.set("cursor", cursor);
         if (snapshotAt) pageParams.set("snapshotAt", snapshotAt);
-        const res = await fetch(`/api/students/export?${pageParams.toString()}`, {
-          credentials: "same-origin",
-          cache: "no-store",
-          signal: pageSignal,
-        });
+        const res = await fetch(
+          `/api/students/export?${pageParams.toString()}`,
+          {
+            credentials: "same-origin",
+            cache: "no-store",
+            signal: pageSignal,
+          },
+        );
         const json = (await res.json().catch(() => null)) as {
           students?: ExportStudent[];
           totalCount?: number;
@@ -1744,9 +1784,7 @@ export function StudentRegistryView() {
           error?: string;
         } | null;
         if (!res.ok) {
-          throw new Error(
-            json?.error || "تعذر تحميل صفحة من بيانات التصدير.",
-          );
+          throw new Error(json?.error || "تعذر تحميل صفحة من بيانات التصدير.");
         }
         return {
           students: json?.students || [],
@@ -1765,7 +1803,10 @@ export function StudentRegistryView() {
 
     return exportedStudents.map((student) => ({
       ...student,
-      courseName: student.courseName || student.course?.name || courseName(student.courseId),
+      courseName:
+        student.courseName ||
+        student.course?.name ||
+        courseName(student.courseId),
       locationText: formatRegistryLocation(student),
     }));
   };
@@ -1829,673 +1870,650 @@ export function StudentRegistryView() {
   }
 
   return (
-    <div className="tp-student-registry space-y-4">
-      <Card className="tp-filter-card tp-student-registry__filters">
-        <CardContent className="tp-filter-content">
-          <div className="tp-student-registry__filter-heading">
-            <div className="tp-student-registry__filter-heading-icon">
-              <SlidersHorizontal aria-hidden="true" className="size-5" />
-            </div>
-            <div className="min-w-0">
-              <h2>الفلاتر الأساسية</h2>
+    <div className="tp-management-page tp-student-registry space-y-4">
+      <Card className="tp-filter-card tp-management-filters">
+        <CardHeader>
+          <div className="tp-registry-heading">
+            <CardTitle className="text-base">فلاتر الطلاب</CardTitle>
+            <div className="tp-registry-actions">
+              {canAddStudents && (
+                <Button onClick={() => setSection("student-register")}>
+                  <UserPlus className="size-4" aria-hidden="true" />
+                  إضافة طالب
+                </Button>
+              )}
+              <ExportDialog
+                title="تصدير سجل الطلاب"
+                fileName="students"
+                rows={studentExportRows}
+                fetchRows={fetchStudentExportRows}
+                totalRowCount={filteredTotalCount}
+                disabled={registryResultsPending || registryServerUnavailable}
+                columns={studentExportColumns}
+                triggerLabel="تصدير"
+                description="تقرير سجل الطلاب حسب الفلاتر الحالية"
+              />
             </div>
           </div>
-
-          <div className="tp-student-registry__filter-sections">
-            <section className="tp-student-registry__filter-section tp-student-registry__filter-section--study">
-              <div className="tp-student-registry__filter-section-heading">
-                <GraduationCap aria-hidden="true" className="size-4" />
-                <div>
-                  <h3>الدورة ونوع البرنامج</h3>
-                </div>
+        </CardHeader>
+        <CardContent className="tp-filter-content pt-2">
+          <div className="tp-filter-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="tp-filter-field tp-filter-search">
+              <Label htmlFor="registry-search" className="text-xs">
+                بحث
+              </Label>
+              <Input
+                id="registry-search"
+                name="search"
+                data-teacherpro-search="true"
+                autoComplete="off"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="اسم / كود / تيليجرام / هاتف"
+              />
+            </div>
+            <div className="tp-filter-field tp-filter-primary">
+              <Label htmlFor="registry-course" className="text-xs">
+                الدورة
+              </Label>
+              <Select
+                name="courseId"
+                value={filterCourseId || "all"}
+                onValueChange={(v) => {
+                  setFilterCourseId(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-course">
+                  <SelectValue placeholder="كل الدورات" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الدورات</SelectItem>
+                  {courses.map((course) => (
+                    <SelectItem key={course.id} value={course.id}>
+                      {course.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="tp-filter-field tp-filter-secondary">
+              <Label htmlFor="registry-status" className="text-xs">
+                الحالة
+              </Label>
+              <Select
+                name="status"
+                value={filterStatus || "all"}
+                onValueChange={(v) => {
+                  setFilterStatus(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-status">
+                  <SelectValue placeholder="كل الحالات" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الحالات</SelectItem>
+                  <SelectItem value="نشط">نشط</SelectItem>
+                  <SelectItem value="مفصول">مفصول</SelectItem>
+                  <SelectItem value="مؤرشف">مؤرشف</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="tp-filter-field tp-filter-primary">
+              <Label htmlFor="registry-program" className="text-xs">
+                نوع الدورة
+              </Label>
+              <Select
+                name="courseProgram"
+                value={filterCourseProgram || "all"}
+                onValueChange={(v) => {
+                  setFilterCourseProgram(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-program">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {availableProgramsForFilter.map((program) => (
+                    <SelectItem key={program} value={program}>
+                      {program}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {filterCourseProgram === "كورسات" && (
+              <div className="tp-filter-field tp-filter-primary">
+                <Label htmlFor="registry-term" className="text-xs">
+                  الكورس
+                </Label>
+                <Select
+                  name="courseTerm"
+                  value={filterCourseTerm || "all"}
+                  onValueChange={(v) => {
+                    setFilterCourseTerm(v === "all" ? "" : v);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger id="registry-term">
+                    <SelectValue placeholder="الكل" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">الكل</SelectItem>
+                    {STUDENT_FILTER_COURSE_TERMS.map((term) => (
+                      <SelectItem key={term} value={term}>
+                        {term}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="tp-student-registry__filter-grid">
-                <div className="tp-filter-field tp-filter-primary">
-                  <Label htmlFor="registry-course" className="text-xs">
-                    الدورة
-                  </Label>
-                  <Select
-                    name="courseId"
-                    value={filterCourseId || "all"}
-                    onValueChange={(v) => {
-                      setFilterCourseId(v === "all" ? "" : v);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger id="registry-course">
-                      <SelectValue placeholder="كل الدورات" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">كل الدورات</SelectItem>
-                      {courses.map((course) => (
-                        <SelectItem key={course.id} value={course.id}>
-                          {course.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="tp-filter-field tp-filter-primary">
-                  <Label htmlFor="registry-program" className="text-xs">
-                    نوع الدورة
-                  </Label>
-                  <Select
-                    name="courseProgram"
-                    value={filterCourseProgram || "all"}
-                    onValueChange={(v) => {
-                      setFilterCourseProgram(v === "all" ? "" : v);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger id="registry-program">
-                      <SelectValue placeholder="الكل" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">الكل</SelectItem>
-                      {availableProgramsForFilter.map((program) => (
-                        <SelectItem key={program} value={program}>
-                          {program}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {filterCourseProgram === "كورسات" && (
-                  <div className="tp-filter-field tp-filter-primary">
-                    <Label htmlFor="registry-term" className="text-xs">
-                      الكورس
-                    </Label>
-                    <Select
-                      name="courseTerm"
-                      value={filterCourseTerm || "all"}
-                      onValueChange={(v) => {
-                        setFilterCourseTerm(v === "all" ? "" : v);
-                        setPage(1);
-                      }}
-                    >
-                      <SelectTrigger id="registry-term">
-                        <SelectValue placeholder="الكل" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">الكل</SelectItem>
-                        {STUDENT_FILTER_COURSE_TERMS.map((term) => (
-                          <SelectItem key={term} value={term}>
-                            {term}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                <div className="tp-filter-field tp-filter-primary">
-                  <Label htmlFor="registry-study-type" className="text-xs">
-                    نوع البرنامج
-                  </Label>
-                  <Select
-                    name="studyType"
-                    value={filterStudyType || "all"}
-                    onValueChange={(v) => {
-                      setFilterStudyType(v === "all" ? "" : v);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger id="registry-study-type">
-                      <SelectValue placeholder="الكل" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">الكل</SelectItem>
-                      {availableStudyTypesForFilter.map((studyType) => (
-                        <SelectItem key={studyType} value={studyType}>
-                          {studyType}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </section>
-
-            <section className="tp-student-registry__filter-section">
-              <div className="tp-student-registry__filter-section-heading">
-                <UserRound aria-hidden="true" className="size-4" />
-                <div>
-                  <h3>بيانات الطالب وحالته</h3>
-                </div>
-              </div>
-              <div className="tp-student-registry__filter-grid">
-                <div className="tp-filter-field tp-filter-secondary">
-                  <Label htmlFor="registry-location" className="text-xs">
-                    المحافظة / الموقع
-                  </Label>
-                  <Select
-                    name="location"
-                    value={filterLocation || "all"}
-                    onValueChange={(v) => {
-                      setFilterLocation(v === "all" ? "" : v);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger id="registry-location">
-                      <SelectValue placeholder="الكل" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">الكل</SelectItem>
-                      {locationFilterOptions.map((location) => (
-                        <SelectItem key={location} value={location}>
-                          {location}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="tp-filter-field tp-filter-secondary">
-                  <Label htmlFor="registry-status" className="text-xs">
-                    الحالة
-                  </Label>
-                  <Select
-                    name="status"
-                    value={filterStatus || "all"}
-                    onValueChange={(v) => {
-                      setFilterStatus(v === "all" ? "" : v);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger id="registry-status">
-                      <SelectValue placeholder="كل الحالات" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">كل الحالات</SelectItem>
-                      <SelectItem value="نشط">نشط</SelectItem>
-                      <SelectItem value="مفصول">مفصول</SelectItem>
-                      <SelectItem value="مؤرشف">مؤرشف</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="tp-filter-field tp-filter-secondary">
-                  <Label htmlFor="registry-gender" className="text-xs">
-                    الجنس
-                  </Label>
-                  <Select
-                    name="gender"
-                    value={filterGender || "all"}
-                    onValueChange={(v) => {
-                      setFilterGender(v === "all" ? "" : v);
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger id="registry-gender">
-                      <SelectValue placeholder="كل الأجناس" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">الكل</SelectItem>
-                      <SelectItem value="ذكر">ذكر</SelectItem>
-                      <SelectItem value="أنثى">أنثى</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="tp-filter-field tp-filter-secondary">
-                  <Label htmlFor="registry-issue" className="text-xs">
-                    مشاكل/صحة الطالب
-                  </Label>
-                  <Select
-                    name="registryIssue"
-                    value={filterRegistryIssue || "all"}
-                    onValueChange={(v) => {
-                      setFilterRegistryIssue(
-                        v === "all" ? "" : (v as RegistryIssueFilter),
-                      );
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger id="registry-issue">
-                      <SelectValue placeholder="كل الطلاب" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">كل الطلاب</SelectItem>
-                      {Object.entries(registryIssueFilterLabels).map(
-                        ([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ),
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </section>
-
-            <section className="tp-student-registry__filter-section tp-student-registry__filter-section--tools">
-              <div className="tp-student-registry__filter-section-heading">
-                <Search aria-hidden="true" className="size-4" />
-                <div>
-                  <h3>البحث والعرض</h3>
-                </div>
-              </div>
-              <div className="tp-student-registry__filter-tools-grid">
-                <div className="tp-filter-field tp-filter-search">
-                  <Label htmlFor="registry-search" className="text-xs">
-                    بحث
-                  </Label>
-                  <Input
-                    id="registry-search"
-                    name="search"
-                    data-teacherpro-search="true"
-                    autoComplete="off"
-                    value={search}
-                    onChange={(e) => {
-                      setSearch(e.target.value);
-                      setPage(1);
-                    }}
-                    placeholder="اسم / كود / تيليجرام / هاتف"
-                  />
-                </div>
-
-                <div className="tp-filter-field tp-filter-meta">
-                  <Label htmlFor="registry-view" className="text-xs">
-                    طريقة العرض
-                  </Label>
-                  <Select
-                    value={viewMode}
-                    onValueChange={(v) => setViewMode(v as RegistryViewMode)}
-                  >
-                    <SelectTrigger id="registry-view">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cards">البطاقات</SelectItem>
-                      <SelectItem value="table">الجدول</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="tp-filter-field tp-filter-actions">
-                  <span className="text-xs font-medium">تصدير</span>
-                  <ExportDialog
-                    title="تصدير سجل الطلاب"
-                    fileName="students"
-                    rows={studentExportRows}
-                    fetchRows={fetchStudentExportRows}
-                    totalRowCount={filteredTotalCount}
-                    disabled={registryResultsPending || registryServerUnavailable}
-                    columns={studentExportColumns}
-                    triggerLabel="تصدير"
-                    description="تقرير سجل الطلاب حسب الفلاتر الحالية"
-                  />
-                </div>
-              </div>
-            </section>
+            )}
+            <div className="tp-filter-field tp-filter-primary">
+              <Label htmlFor="registry-study-type" className="text-xs">
+                نوع البرنامج
+              </Label>
+              <Select
+                name="studyType"
+                value={filterStudyType || "all"}
+                onValueChange={(v) => {
+                  setFilterStudyType(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-study-type">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {availableStudyTypesForFilter.map((studyType) => (
+                    <SelectItem key={studyType} value={studyType}>
+                      {studyType}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="tp-filter-field tp-filter-secondary">
+              <Label htmlFor="registry-location" className="text-xs">
+                المحافظة / الموقع
+              </Label>
+              <Select
+                name="location"
+                value={filterLocation || "all"}
+                onValueChange={(v) => {
+                  setFilterLocation(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-location">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  {locationFilterOptions.map((location) => (
+                    <SelectItem key={location} value={location}>
+                      {location}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="tp-filter-field tp-filter-secondary">
+              <Label htmlFor="registry-gender" className="text-xs">
+                الجنس
+              </Label>
+              <Select
+                name="gender"
+                value={filterGender || "all"}
+                onValueChange={(v) => {
+                  setFilterGender(v === "all" ? "" : v);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-gender">
+                  <SelectValue placeholder="كل الأجناس" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="ذكر">ذكر</SelectItem>
+                  <SelectItem value="أنثى">أنثى</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="tp-filter-field tp-filter-secondary">
+              <Label htmlFor="registry-issue" className="text-xs">
+                مشاكل/صحة الطالب
+              </Label>
+              <Select
+                name="registryIssue"
+                value={filterRegistryIssue || "all"}
+                onValueChange={(v) => {
+                  setFilterRegistryIssue(
+                    v === "all" ? "" : (v as RegistryIssueFilter),
+                  );
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger id="registry-issue">
+                  <SelectValue placeholder="كل الطلاب" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">كل الطلاب</SelectItem>
+                  {Object.entries(registryIssueFilterLabels).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="tp-filter-actions">
+              <Button
+                variant="outline"
+                onClick={resetFilters}
+                disabled={!hasActiveRegistryFilters}
+              >
+                <RotateCcw className="size-4" aria-hidden="true" />
+                تصفير الفلاتر
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
+      <div className="tp-management-workspace">
+        <section
+          className="tp-management-main-flow"
+          aria-label="نتائج سجل الطلاب"
+        >
+          {!registryStatsPending &&
+            !studentStatsError &&
+            (otherStudentsTotal ?? 0) > 0 && (
+              <Card
+                role="alert"
+                className="border-amber-500/40 bg-amber-500/10"
+                data-count-scope="system"
+              >
+                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle
+                      aria-hidden="true"
+                      className="size-5 shrink-0 text-amber-700 dark:text-amber-300"
+                    />
+                    <div>
+                      <p className="font-bold text-amber-900 dark:text-amber-100">
+                        حالات طلاب غير معروفة: {otherStudentsTotal}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        توجد حالات خارج نشط ومفصول ومؤرشف.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={resetFilters}
+                  >
+                    <Eye aria-hidden="true" className="size-4" />
+                    عرض كل الحالات
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
-      <div
-        className="tp-student-registry__stats grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"
-        aria-busy={registryStatsPending}
-      >
-        <Card
-          className="tp-student-registry__stat-card bg-card/80"
-          data-count-scope="system"
-        >
-          <CardContent className="flex items-center justify-between gap-3 p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">
-                الطلاب النشطون
-              </p>
-              <p className="text-2xl font-black">
-                {registryStatsPending
-                  ? "…"
-                  : studentStatsError
-                    ? "—"
-                    : (activeStudentsTotal ?? "—")}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="tp-student-registry__stat-action"
-              onClick={() => {
-                resetFilters();
-                setFilterStatus("نشط");
-                setPage(1);
-              }}
+          {studentStatsError && !registryStatsPending && (
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm font-medium text-destructive"
             >
-              <UserRound aria-hidden="true" className="size-4" />
-              عرض النشطين
-            </Button>
-          </CardContent>
-        </Card>
-        <Card
-          className="tp-student-registry__stat-card border-destructive/30 bg-destructive/5"
-          data-count-scope="system"
-        >
-          <CardContent className="flex items-center justify-between gap-3 p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">
-                المفصولون
-              </p>
-              <p className="text-2xl font-black text-destructive">
-                {registryStatsPending
-                  ? "…"
-                  : studentStatsError
-                    ? "—"
-                    : (dismissedStudentsTotal ?? "—")}
-              </p>
+              <span>{studentStatsError}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setStudentStatsRefreshKey((value) => value + 1)}
+              >
+                <RotateCcw aria-hidden="true" className="size-4" />
+                إعادة المحاولة
+              </Button>
             </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              className="tp-student-registry__stat-action"
-              onClick={() => {
-                resetFilters();
-                setFilterStatus("مفصول");
-                setPage(1);
-              }}
-            >
-              <UserX aria-hidden="true" className="size-4" />
-              عرض المفصولين
-            </Button>
-          </CardContent>
-        </Card>
-        <Card
-          className="tp-student-registry__stat-card border-slate-500/30 bg-slate-500/5"
-          data-count-scope="system"
-        >
-          <CardContent className="flex items-center justify-between gap-3 p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">
-                المؤرشفون
-              </p>
-              <p className="text-2xl font-black text-slate-600 dark:text-slate-300">
-                {registryStatsPending
-                  ? "…"
-                  : studentStatsError
-                    ? "—"
-                    : (archivedStudentsTotal ?? "—")}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="tp-student-registry__stat-action"
-              onClick={() => {
-                resetFilters();
-                setFilterStatus(ARCHIVED_STUDENT_STATUS);
-                setPage(1);
-              }}
-            >
-              <Archive aria-hidden="true" className="size-4" />
-              عرض المؤرشفين
-            </Button>
-          </CardContent>
-        </Card>
-        <Card className="tp-student-registry__stat-card border-amber-500/30 bg-amber-500/5">
-          <CardContent className="flex items-center justify-between gap-3 p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">بدون فصل نشط</p>
-              <p className="text-2xl font-black text-amber-600">
-                {registryStatsPending
-                  ? "…"
-                  : studentStatsError
-                    ? "—"
-                    : (noActiveChapterStudentsTotal ?? "—")}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="tp-student-registry__stat-action"
-              onClick={() => {
-                setFilterRegistryIssue("no-active-chapter");
-                setPage(1);
-              }}
-            >
-              <Eye aria-hidden="true" className="size-4" />
-              عرض الطلاب
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+          )}
 
-      {!registryStatsPending &&
-        !studentStatsError &&
-        (otherStudentsTotal ?? 0) > 0 && (
-          <Card
-            role="alert"
-            className="border-amber-500/40 bg-amber-500/10"
-            data-count-scope="system"
-          >
-            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-              <div className="flex items-center gap-3">
-                <AlertTriangle
-                  aria-hidden="true"
-                  className="size-5 shrink-0 text-amber-700 dark:text-amber-300"
-                />
-                <div>
-                  <p className="font-bold text-amber-900 dark:text-amber-100">
-                    حالات طلاب غير معروفة: {otherStudentsTotal}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    توجد حالات خارج نشط ومفصول ومؤرشف.
-                  </p>
+          <Card className="tp-management-results-card">
+            <CardHeader>
+              <div className="tp-registry-heading">
+                <CardTitle className="text-base">سجل الطلاب</CardTitle>
+                <div className="tp-registry-view-choice">
+                  <div className="tp-filter-field tp-filter-meta">
+                    <Label htmlFor="registry-view" className="text-xs">
+                      طريقة العرض
+                    </Label>
+                    <Select
+                      value={viewMode}
+                      onValueChange={(v) => setViewMode(v as RegistryViewMode)}
+                    >
+                      <SelectTrigger id="registry-view">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cards">البطاقات</SelectItem>
+                        <SelectItem value="table">الجدول</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
-                <Eye aria-hidden="true" className="size-4" />
-                عرض كل الحالات
-              </Button>
+              <div
+                ref={registryResultsRef}
+                className="tp-registry-results-toolbar"
+                aria-live="polite"
+                aria-busy={registryResultsPending}
+              >
+                <p
+                  className="tp-management-count-summary text-xs text-muted-foreground"
+                  data-count-scope="filtered"
+                >
+                  {registryResultsPending
+                    ? "…"
+                    : `${filteredTotalCount} طالب${registryServerUnavailable ? " محلياً" : ""} · المعروض ${paged.length}`}
+                </p>
+                <div className="tp-registry-page-size">
+                  <Label htmlFor="registry-pageSize" className="text-xs">
+                    حجم الصفحة:
+                  </Label>
+                  <Select
+                    name="pageSize"
+                    value={String(pageSize)}
+                    onValueChange={(v) => {
+                      setPageSize(Number(v));
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger
+                      id="registry-pageSize"
+                      className="h-10 w-24 rounded-xl"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {registryResultsPending && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary"
+                >
+                  جاري تحميل الطلاب...
+                </div>
+              )}
+
+              {serverStudentsError && !registrySearchPending && (
+                <div
+                  role="alert"
+                  aria-live="assertive"
+                  className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300"
+                >
+                  <strong>{serverStudentsError}</strong>
+                  <span className="mt-1 block text-xs">
+                    المعروض الآن نسخة محلية جزئية وقد لا تشمل جميع الطلاب. تم
+                    إيقاف التعديل والفصل والأرشفة مؤقتاً حتى تعود بيانات النظام،
+                    منعاً للتعامل مع بيانات قديمة.
+                  </span>
+                </div>
+              )}
+
+              {registryServerUnavailable &&
+              filteredTotalCount === 0 &&
+              !registryResultsPending ? (
+                <EmptyState
+                  icon={AlertTriangle}
+                  title="لا تتوفر نتائج محلية كافية"
+                  description="تعذر الاتصال ببيانات النظام، والنسخة المحلية الجزئية لا تحتوي نتائج لهذه الفلاتر. هذا لا يعني عدم وجود طلاب في النظام."
+                />
+              ) : !registryServerUnavailable &&
+                students.length === 0 &&
+                filteredTotalCount === 0 &&
+                !registryResultsPending ? (
+                <EmptyState
+                  icon={UserPlus}
+                  title="لم تقم بإضافة طلاب بعد"
+                  description={
+                    canAddStudents
+                      ? "ابدأ بإضافة أول طالب، وبعدها ستظهر البطاقات والفلاتر والإحصائيات هنا تلقائياً."
+                      : "لا توجد سجلات طلاب متاحة للعرض حالياً."
+                  }
+                  action={
+                    canAddStudents ? (
+                      <Button
+                        onClick={() => setSection("student-register")}
+                        className="tp-student-registry__empty-action"
+                      >
+                        <UserPlus aria-hidden="true" className="size-4" />
+                        إضافة طالب الآن
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ) : filteredTotalCount === 0 ? (
+                <EmptyState
+                  icon={SearchX}
+                  title="لا توجد نتائج مطابقة"
+                  description="الفلاتر تعمل معاً؛ غيّر شروط البحث أو امسح الفلاتر لعرض كل الطلاب."
+                  action={
+                    <Button
+                      variant="outline"
+                      onClick={resetFilters}
+                      className="tp-student-registry__empty-action"
+                    >
+                      <RotateCcw aria-hidden="true" className="size-4" />
+                      مسح الفلاتر
+                    </Button>
+                  }
+                />
+              ) : (
+                <StudentRegistryResults
+                  students={paged}
+                  viewMode={viewMode}
+                  activeIssue={filterRegistryIssue}
+                  courseName={courseName}
+                  whatsappLink={whatsappLink}
+                  telegramLink={telegramLink}
+                  canEdit={canEditStudents}
+                  canArchive={canArchiveStudents}
+                  serverUnavailable={registryServerUnavailable}
+                  statusActionSaving={isStatusActionSaving}
+                  deleting={isDeletingStudent}
+                  onFile={(student) => setFileDialog({ student, open: true })}
+                  onEdit={openEditDialog}
+                  onDismiss={openDismissDialog}
+                  onRestore={(student) =>
+                    setRestoreDialog({ student, open: true })
+                  }
+                  onArchive={openDeleteDialog}
+                />
+              )}
+
+              {totalPages > 1 && (
+                <div className="tp-student-registry__pagination">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="tp-student-registry__pagination-button tp-student-registry__pagination-button--previous"
+                    disabled={page <= 1}
+                    onClick={() => changeRegistryPage(page - 1)}
+                  >
+                    <ChevronRight aria-hidden="true" className="size-4" />
+                    السابق
+                  </Button>
+                  <span className="tp-student-registry__pagination-summary text-sm text-muted-foreground">
+                    صفحة {page} من {totalPages} · المعروض في الصفحة:{" "}
+                    {paged.length}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="tp-student-registry__pagination-button tp-student-registry__pagination-button--next"
+                    disabled={page >= totalPages}
+                    onClick={() => changeRegistryPage(page + 1)}
+                  >
+                    التالي
+                    <ChevronLeft aria-hidden="true" className="size-4" />
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
-        )}
-
-      {studentStatsError && !registryStatsPending && (
-        <div
-          role="alert"
-          aria-live="assertive"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm font-medium text-destructive"
+        </section>
+        <aside
+          className="tp-management-stats-rail"
+          aria-label="إحصائيات الطلاب"
         >
-          <span>{studentStatsError}</span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setStudentStatsRefreshKey((value) => value + 1)}
-          >
-            <RotateCcw aria-hidden="true" className="size-4" />
-            إعادة المحاولة
-          </Button>
-        </div>
-      )}
-
-      <div
-        ref={registryResultsRef}
-        className="tp-student-registry__results space-y-2"
-        aria-live="polite"
-        aria-busy={registryResultsPending}
-      >
-        <CountScopeSummary
-          subject="الطلاب (يشمل المؤرشفين)"
-          systemTotal={
-            registryStatsPending
-              ? "…"
-              : studentStatsError
-                ? "—"
-                : (studentsSystemTotal ?? "—")
-          }
-          filteredTotal={
-            registryResultsPending
-              ? "…"
-              : registryServerUnavailable
-                ? `${filteredTotalCount} محلياً`
-                : filteredTotalCount
-          }
-          pageCount={
-            registryResultsPending
-              ? "…"
-              : registryServerUnavailable
-                ? `${paged.length} محلياً`
-                : paged.length
-          }
-        />
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-          {hasActiveRegistryFilters ? (
-            <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
-              <RotateCcw aria-hidden="true" className="size-4" />
-              مسح الفلاتر
-            </Button>
-          ) : (
-            <span />
-          )}
-          <div className="flex items-center gap-2">
-          <Label htmlFor="registry-pageSize" className="text-xs">
-            حجم الصفحة:
-          </Label>
-          <Select
-            name="pageSize"
-            value={String(pageSize)}
-            onValueChange={(v) => {
-              setPageSize(Number(v));
-              setPage(1);
-            }}
-          >
-            <SelectTrigger id="registry-pageSize" className="h-10 w-24 rounded-xl">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10</SelectItem>
-              <SelectItem value="50">50</SelectItem>
-              <SelectItem value="100">100</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="space-y-2">
+            <h3 className="text-sm font-black">الإحصائيات</h3>
+            <div
+              className="grid"
+              role="group"
+              aria-label="أعداد الطلاب حسب الحالة"
+              tabIndex={0}
+              aria-busy={registryStatsPending}
+            >
+              <Card data-count-scope="system">
+                <CardContent className="p-4 text-center">
+                  <div className="tp-registry-stat-value">
+                    <span className="text-2xl font-bold text-primary">
+                      {registryStatsPending
+                        ? "…"
+                        : studentStatsError
+                          ? "—"
+                          : (studentsSystemTotal ?? "—")}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      الطلاب
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card data-count-scope="system">
+                <CardContent className="p-4 text-center">
+                  <Button
+                    variant="ghost"
+                    className="tp-registry-stat-choice"
+                    aria-label="عرض النشطين"
+                    onClick={() => {
+                      resetFilters();
+                      setFilterStatus("نشط");
+                      setPage(1);
+                    }}
+                  >
+                    <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                      {registryStatsPending
+                        ? "…"
+                        : studentStatsError
+                          ? "—"
+                          : (activeStudentsTotal ?? "—")}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      النشطون
+                    </span>
+                  </Button>
+                </CardContent>
+              </Card>
+              <Card data-count-scope="system">
+                <CardContent className="p-4 text-center">
+                  <Button
+                    variant="ghost"
+                    className="tp-registry-stat-choice"
+                    aria-label="عرض المفصولين"
+                    onClick={() => {
+                      resetFilters();
+                      setFilterStatus("مفصول");
+                      setPage(1);
+                    }}
+                  >
+                    <span className="text-2xl font-bold text-destructive">
+                      {registryStatsPending
+                        ? "…"
+                        : studentStatsError
+                          ? "—"
+                          : (dismissedStudentsTotal ?? "—")}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      المفصولون
+                    </span>
+                  </Button>
+                </CardContent>
+              </Card>
+              <Card data-count-scope="system">
+                <CardContent className="p-4 text-center">
+                  <Button
+                    variant="ghost"
+                    className="tp-registry-stat-choice"
+                    aria-label="عرض المؤرشفين"
+                    onClick={() => {
+                      resetFilters();
+                      setFilterStatus(ARCHIVED_STUDENT_STATUS);
+                      setPage(1);
+                    }}
+                  >
+                    <span className="text-2xl font-bold text-slate-600 dark:text-slate-300">
+                      {registryStatsPending
+                        ? "…"
+                        : studentStatsError
+                          ? "—"
+                          : (archivedStudentsTotal ?? "—")}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      المؤرشفون
+                    </span>
+                  </Button>
+                </CardContent>
+              </Card>
+              <Card data-count-scope="filtered">
+                <CardContent className="p-4 text-center">
+                  <Button
+                    variant="ghost"
+                    className="tp-registry-stat-choice"
+                    aria-label="عرض الطلاب بدون فصل نشط"
+                    onClick={() => {
+                      setFilterRegistryIssue("no-active-chapter");
+                      setPage(1);
+                    }}
+                  >
+                    <span className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                      {registryStatsPending
+                        ? "…"
+                        : studentStatsError
+                          ? "—"
+                          : (noActiveChapterStudentsTotal ?? "—")}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      بدون فصل نشط · ضمن النتائج
+                    </span>
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </div>
+        </aside>
       </div>
-
-      {registryResultsPending && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary"
-        >
-          جاري تحميل الطلاب...
-        </div>
-      )}
-
-      {serverStudentsError && !registrySearchPending && (
-        <div
-          role="alert"
-          aria-live="assertive"
-          className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm font-medium text-amber-700 dark:text-amber-300"
-        >
-          <strong>{serverStudentsError}</strong>
-          <span className="mt-1 block text-xs">
-            المعروض الآن نسخة محلية جزئية وقد لا تشمل جميع الطلاب. تم إيقاف التعديل والفصل والأرشفة مؤقتاً حتى تعود بيانات النظام، منعاً للتعامل مع بيانات قديمة.
-          </span>
-        </div>
-      )}
-
-      {registryServerUnavailable &&
-      filteredTotalCount === 0 &&
-      !registryResultsPending ? (
-        <EmptyState
-          icon={AlertTriangle}
-          title="لا تتوفر نتائج محلية كافية"
-          description="تعذر الاتصال ببيانات النظام، والنسخة المحلية الجزئية لا تحتوي نتائج لهذه الفلاتر. هذا لا يعني عدم وجود طلاب في النظام."
-        />
-      ) : !registryServerUnavailable &&
-      students.length === 0 &&
-      filteredTotalCount === 0 &&
-      !registryResultsPending ? (
-        <EmptyState
-          icon={UserPlus}
-          title="لم تقم بإضافة طلاب بعد"
-          description={
-            canAddStudents
-              ? "ابدأ بإضافة أول طالب، وبعدها ستظهر البطاقات والفلاتر والإحصائيات هنا تلقائياً."
-              : "لا توجد سجلات طلاب متاحة للعرض حالياً."
-          }
-          action={canAddStudents ? (
-            <Button
-              onClick={() => setSection("student-register")}
-              className="tp-student-registry__empty-action"
-            >
-              <UserPlus aria-hidden="true" className="size-4" />
-              إضافة طالب الآن
-            </Button>
-          ) : undefined}
-        />
-      ) : filteredTotalCount === 0 ? (
-        <EmptyState
-          icon={SearchX}
-          title="لا توجد نتائج مطابقة"
-          description="الفلاتر تعمل معاً؛ غيّر شروط البحث أو امسح الفلاتر لعرض كل الطلاب."
-          action={
-            <Button
-              variant="outline"
-              onClick={resetFilters}
-              className="tp-student-registry__empty-action"
-            >
-              <RotateCcw aria-hidden="true" className="size-4" />
-              مسح الفلاتر
-            </Button>
-          }
-        />
-      ) : (
-        <StudentRegistryResults
-          students={paged}
-          viewMode={viewMode}
-          activeIssue={filterRegistryIssue}
-          courseName={courseName}
-          whatsappLink={whatsappLink}
-          telegramLink={telegramLink}
-          canEdit={canEditStudents}
-          canArchive={canArchiveStudents}
-          serverUnavailable={registryServerUnavailable}
-          statusActionSaving={isStatusActionSaving}
-          deleting={isDeletingStudent}
-          onFile={(student) => setFileDialog({ student, open: true })}
-          onEdit={openEditDialog}
-          onDismiss={openDismissDialog}
-          onRestore={(student) =>
-            setRestoreDialog({ student, open: true })
-          }
-          onArchive={openDeleteDialog}
-        />
-      )}
-
-      {totalPages > 1 && (
-        <div className="tp-student-registry__pagination">
-          <Button
-            variant="outline"
-            size="sm"
-            className="tp-student-registry__pagination-button tp-student-registry__pagination-button--previous"
-            disabled={page <= 1}
-            onClick={() => changeRegistryPage(page - 1)}
-          >
-            <ChevronRight aria-hidden="true" className="size-4" />
-            السابق
-          </Button>
-          <span className="tp-student-registry__pagination-summary text-sm text-muted-foreground">
-            صفحة {page} من {totalPages} · المعروض في الصفحة: {paged.length}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="tp-student-registry__pagination-button tp-student-registry__pagination-button--next"
-            disabled={page >= totalPages}
-            onClick={() => changeRegistryPage(page + 1)}
-          >
-            التالي
-            <ChevronLeft aria-hidden="true" className="size-4" />
-          </Button>
-        </div>
-      )}
 
       <Dialog
         open={editDialog.open}
@@ -2509,101 +2527,22 @@ export function StudentRegistryView() {
           }
         }}
       >
-        <DialogContent
-          dir="rtl"
-          className="teacherpro-fullscreen-dialog left-0 top-0 flex h-dvh max-h-dvh w-dvw max-w-none flex-col translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none border-0 p-0 shadow-none sm:max-w-none sm:rounded-none sm:p-0"
-        >
-          <DialogHeader className="shrink-0 border-b border-border/70 bg-gradient-to-l from-primary/12 via-background to-muted/50 px-6 py-5 pl-16 text-right">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <DialogTitle className="text-2xl font-black tracking-tight text-gradient-brand">
-                  تعديل بيانات الطالب
-                </DialogTitle>
-                <DialogDescription className="mt-2 text-sm leading-6">
-                  واجهة منظمة لتحديث البيانات الأساسية، الاتصال، الدورة، وفترة
-                  السماح بدون تغيير آلية الحفظ.
-                </DialogDescription>
-              </div>
-              <Badge
-                variant="secondary"
-                className="w-fit rounded-full px-4 py-1 text-xs font-bold"
-              >
-                {editDialog.form.gender || "بيانات الطالب"}
-              </Badge>
-            </div>
+        <DialogContent dir="rtl" className="tp-registry-editor sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>تعديل بيانات الطالب</DialogTitle>
           </DialogHeader>
-
-          <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
-            <div className="grid gap-5 lg:grid-cols-[0.9fr_1.6fr]">
-              <aside className="space-y-4">
-                <div className="rounded-[1.75rem] border border-primary/20 bg-primary/5 p-4 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-14 shrink-0 items-center justify-center rounded-3xl bg-primary text-xl font-black text-primary-foreground shadow-lg shadow-primary/20">
-                      {editDialog.form.name.trim().slice(0, 1) || "ط"}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="break-words text-lg font-black [overflow-wrap:anywhere]">
-                        {editDialog.form.name || "اسم الطالب"}
-                      </p>
-                      <p className="break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                        {editDialog.form.school || "المدرسة غير محددة"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-2 text-sm">
-                    <div className="rounded-2xl bg-background/80 p-3">
-                      <span className="text-xs text-muted-foreground">
-                        الدورة
-                      </span>
-                      <p className="mt-1 font-bold">
-                        {editDialog.form.courseId
-                          ? courseName(editDialog.form.courseId)
-                          : "لم يتم اختيار دورة"}
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="rounded-2xl bg-background/80 p-3 text-center">
-                        <p className="text-xs text-muted-foreground">الهاتف</p>
-                        <p className="mt-1 break-words font-black [overflow-wrap:anywhere]">
-                          {editDialog.form.phone || "—"}
-                        </p>
-                      </div>
-                      <div className="rounded-2xl bg-background/80 p-3 text-center">
-                        <p className="text-xs text-muted-foreground">مدة المنح المدخلة</p>
-                        <p className="mt-1 font-black">
-                          {editDialog.form.accountingGraceDays || "0"} يوم
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-[1.75rem] border bg-card p-4 shadow-sm">
-                  <div className="mb-3 flex items-center gap-2">
-                    <ShieldCheck className="size-4 text-primary" />
-                    <h4 className="font-black">ملاحظات الإدخال</h4>
-                  </div>
-                  <ul className="space-y-2 text-xs leading-6 text-muted-foreground">
-                    <li>• الأرقام تقبل الصيغة العراقية 07 وتتكون من 11 رقم.</li>
-                    <li>• فترة السماح لا تتجاوز 30 يوم.</li>
-                    <li>
-                      • تغيير الدورة يعيد تهيئة خيارات نوع البرنامج والموقع.
-                    </li>
-                  </ul>
-                </div>
-              </aside>
-
-              <div className="space-y-5">
-                <section className="rounded-[1.75rem] border bg-card p-4 shadow-sm md:p-5">
+          <div className="tp-registry-editor__body">
+            <div>
+              <div className="space-y-4">
+                <section className="tp-registry-editor__section">
                   <div className="mb-4 flex items-center gap-2">
                     <UserRound className="size-5 text-primary" />
                     <div>
                       <h3 className="font-black">البيانات الأساسية</h3>
                     </div>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2 md:col-span-2">
+                  <div className="tp-registry-editor__fields">
+                    <div className="space-y-2 tp-registry-editor__wide">
                       <Label htmlFor="edit-name">اسم الطالب</Label>
                       <Input
                         id="edit-name"
@@ -2613,7 +2552,7 @@ export function StudentRegistryView() {
                         onChange={(e) => updateEditForm("name", e.target.value)}
                         required
                         placeholder="اسم الطالب الرباعي"
-                        className="h-12 rounded-2xl"
+                        className="h-11 rounded-xl"
                       />
                     </div>
                     <div className="space-y-2">
@@ -2628,7 +2567,7 @@ export function StudentRegistryView() {
                         }
                         required
                         placeholder="اسم المدرسة"
-                        className="h-12 rounded-2xl"
+                        className="h-11 rounded-xl"
                       />
                     </div>
                     <div className="space-y-2">
@@ -2640,7 +2579,7 @@ export function StudentRegistryView() {
                       >
                         <SelectTrigger
                           id="edit-gender"
-                          className="h-12 rounded-2xl"
+                          className="h-11 rounded-xl"
                         >
                           <SelectValue />
                         </SelectTrigger>
@@ -2650,7 +2589,7 @@ export function StudentRegistryView() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2 md:col-span-2">
+                    <div className="space-y-2 tp-registry-editor__wide">
                       <Label htmlFor="edit-telegram">معرف التيليجرام</Label>
                       <Input
                         id="edit-telegram"
@@ -2660,7 +2599,7 @@ export function StudentRegistryView() {
                         onChange={(e) => updateEditTelegram(e.target.value)}
                         disabled={!isAdmin}
                         placeholder="اختياري - username بدون @"
-                        className="h-12 rounded-2xl"
+                        className="h-11 rounded-xl"
                       />
                       <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-muted/30 p-3 text-xs text-muted-foreground">
                         <span>
@@ -2688,14 +2627,14 @@ export function StudentRegistryView() {
                   </div>
                 </section>
 
-                <section className="rounded-[1.75rem] border bg-card p-4 shadow-sm md:p-5">
+                <section className="tp-registry-editor__section">
                   <div className="mb-4 flex items-center gap-2">
                     <Phone className="size-5 text-primary" />
                     <div>
                       <h3 className="font-black">بيانات الاتصال</h3>
                     </div>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="tp-registry-editor__fields">
                     <div className="space-y-2">
                       <Label htmlFor="edit-phone">رقم الطالب</Label>
                       <Input
@@ -2735,15 +2674,15 @@ export function StudentRegistryView() {
                   </div>
                 </section>
 
-                <section className="rounded-[1.75rem] border bg-card p-4 shadow-sm md:p-5">
+                <section className="tp-registry-editor__section">
                   <div className="mb-4 flex items-center gap-2">
                     <GraduationCap className="size-5 text-primary" />
                     <div>
                       <h3 className="font-black">الدورة ونوع البرنامج</h3>
                     </div>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    <div className="space-y-2 xl:col-span-2">
+                  <div className="tp-registry-editor__fields">
+                    <div className="space-y-2 tp-registry-editor__wide">
                       <Label htmlFor="edit-courseId">اختر الدورة</Label>
                       <Select
                         name="courseId"
@@ -2768,7 +2707,7 @@ export function StudentRegistryView() {
                       >
                         <SelectTrigger
                           id="edit-courseId"
-                          className="h-12 rounded-2xl"
+                          className="h-11 rounded-xl"
                         >
                           <SelectValue
                             placeholder={
@@ -2799,7 +2738,7 @@ export function StudentRegistryView() {
                     </div>
 
                     {editNeedsTransferPolicy && editOriginalStudent && (
-                      <div className="md:col-span-2 xl:col-span-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-500/50 dark:bg-amber-950/20 dark:text-amber-100">
+                      <div className="tp-registry-editor__wide rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-500/50 dark:bg-amber-950/20 dark:text-amber-100">
                         <div className="mb-3 flex items-start gap-2">
                           <AlertTriangle className="mt-0.5 size-5 shrink-0" />
                           <div>
@@ -2809,7 +2748,8 @@ export function StudentRegistryView() {
                                 : "تغيير داخل نفس الدورة — اختر طريقة التعامل مع الملف"}
                             </p>
                             <p className="mt-1 text-xs leading-6 opacity-90">
-                              رصيد الطالب الحالي: {formatOpportunityBalance(editOriginalStudent)}.
+                              رصيد الطالب الحالي:{" "}
+                              {formatOpportunityBalance(editOriginalStudent)}.
                               {editCourseChanged
                                 ? ` سيتم حفظ كل درجاته وفرصه وإجازاته ومكالماته وملاحظاته الحالية داخل ملف سابق للقراءة فقط، ثم تصفير الملف الحي وبدء التسجيل في ${courseName(editDialog.form.courseId)}.`
                                 : " يمكنك إبقاء كل الدرجات والفرص والإجراءات حرفياً كما هي، أو أرشفتها والبدء كطالب جديد داخل الدورة نفسها."}
@@ -2820,11 +2760,19 @@ export function StudentRegistryView() {
                         <RadioGroup
                           value={effectiveCourseTransferPolicy}
                           onValueChange={(value) => {
-                            setCourseTransferPolicy(value as CourseTransferPolicy);
-                            setCourseTransferPolicySignature(editTransferSignature);
+                            setCourseTransferPolicy(
+                              value as CourseTransferPolicy,
+                            );
+                            setCourseTransferPolicySignature(
+                              editTransferSignature,
+                            );
                             setAcademicImpactConfirmed(false);
                           }}
-                          className={`grid gap-3 ${editCourseChanged ? "" : "md:grid-cols-2"}`}
+                          className={
+                            editCourseChanged
+                              ? "grid gap-3"
+                              : "tp-registry-editor__fields"
+                          }
                         >
                           <label className="flex cursor-pointer items-start gap-3 rounded-2xl border bg-background/80 p-3 text-foreground shadow-sm transition hover:border-primary/50">
                             <RadioGroupItem value="reset" className="mt-1" />
@@ -2835,7 +2783,11 @@ export function StudentRegistryView() {
                                   : "اعتباره طالباً جديداً داخل الدورة"}
                               </span>
                               <span className="mt-1 block text-xs leading-6 text-muted-foreground">
-                                يُحفظ الملف الحالي للقراءة فقط، ثم تُزال الدرجات والخصومات والإجازات والمكالمات والملاحظات من الملف الحي. يبدأ برصيد {editTargetOpportunities} / {editTargetOpportunities} وتاريخ تسجيل جديد لحظة الحفظ.
+                                يُحفظ الملف الحالي للقراءة فقط، ثم تُزال الدرجات
+                                والخصومات والإجازات والمكالمات والملاحظات من
+                                الملف الحي. يبدأ برصيد {editTargetOpportunities}{" "}
+                                / {editTargetOpportunities} وتاريخ تسجيل جديد
+                                لحظة الحفظ.
                               </span>
                             </span>
                           </label>
@@ -2848,7 +2800,10 @@ export function StudentRegistryView() {
                                   الإبقاء على الملف كما هو حرفياً
                                 </span>
                                 <span className="mt-1 block text-xs leading-6 text-muted-foreground">
-                                  تتغير خيارات نوع البرنامج/الكورس/الموقع فقط. لا يعاد احتساب الرصيد، ولا تُقيّد الفرص بسقف جديد، ولا تتغير الدرجات أو الخصومات أو الحالة الأكاديمية.
+                                  تتغير خيارات نوع البرنامج/الكورس/الموقع فقط.
+                                  لا يعاد احتساب الرصيد، ولا تُقيّد الفرص بسقف
+                                  جديد، ولا تتغير الدرجات أو الخصومات أو الحالة
+                                  الأكاديمية.
                                 </span>
                               </span>
                             </label>
@@ -2859,23 +2814,31 @@ export function StudentRegistryView() {
                           <div className="mt-3" aria-live="polite">
                             {editTargetActiveChapterLoading ? (
                               <p className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700 dark:border-sky-500/50 dark:bg-sky-950/30 dark:text-sky-100">
-                                جاري التحقق من الفصل النشط ورصيد البداية… انتظر قبل الحفظ.
+                                جاري التحقق من الفصل النشط ورصيد البداية… انتظر
+                                قبل الحفظ.
                               </p>
                             ) : editTargetActiveChapterLookupFailed ? (
                               <p className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
-                                تعذر التحقق من الفصل النشط. أعد المحاولة قبل بدء ملف جديد.
+                                تعذر التحقق من الفصل النشط. أعد المحاولة قبل بدء
+                                ملف جديد.
                               </p>
                             ) : editTargetActiveChapterConflict ? (
                               <p className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
-                                يوجد أكثر من فصل نشط مرتبط بهذه الدورة. يجب حل التعارض أولاً؛ تم إيقاف بدء الملف الجديد لحماية رصيد الطالب.
+                                يوجد أكثر من فصل نشط مرتبط بهذه الدورة. يجب حل
+                                التعارض أولاً؛ تم إيقاف بدء الملف الجديد لحماية
+                                رصيد الطالب.
                               </p>
                             ) : !editTargetActiveChapter ? (
                               <p className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
-                                لا يوجد فصل نشط لهذه الدورة. لن يبدأ الطالب برصيد 0 ولن يُسمح بالحفظ حتى يتم تفعيل فصل واحد.
+                                لا يوجد فصل نشط لهذه الدورة. لن يبدأ الطالب
+                                برصيد 0 ولن يُسمح بالحفظ حتى يتم تفعيل فصل واحد.
                               </p>
                             ) : (
                               <p className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-950/30 dark:text-emerald-100">
-                                تم التحقق: الفصل النشط «{editTargetActiveChapter.name}» ورصيد البداية {editTargetOpportunities} / {editTargetOpportunities}.
+                                تم التحقق: الفصل النشط «
+                                {editTargetActiveChapter.name}» ورصيد البداية{" "}
+                                {editTargetOpportunities} /{" "}
+                                {editTargetOpportunities}.
                               </p>
                             )}
                           </div>
@@ -2908,7 +2871,7 @@ export function StudentRegistryView() {
                           >
                             <SelectTrigger
                               id="edit-courseProgram"
-                              className="h-12 rounded-2xl"
+                              className="h-11 rounded-xl"
                             >
                               <SelectValue placeholder="اختر نوع الدورة..." />
                             </SelectTrigger>
@@ -2933,7 +2896,7 @@ export function StudentRegistryView() {
                         >
                           <SelectTrigger
                             id="edit-courseTerm"
-                            className="h-12 rounded-2xl"
+                            className="h-11 rounded-xl"
                           >
                             <SelectValue placeholder="اختر الكورس..." />
                           </SelectTrigger>
@@ -2970,7 +2933,7 @@ export function StudentRegistryView() {
                           >
                             <SelectTrigger
                               id="edit-studyType"
-                              className="h-12 rounded-2xl"
+                              className="h-11 rounded-xl"
                             >
                               <SelectValue placeholder="اختر نوع البرنامج..." />
                             </SelectTrigger>
@@ -2987,14 +2950,14 @@ export function StudentRegistryView() {
                   </div>
                 </section>
 
-                <section className="rounded-[1.75rem] border bg-card p-4 shadow-sm md:p-5">
+                <section className="tp-registry-editor__section">
                   <div className="mb-4 flex items-center gap-2">
                     <MapPin className="size-5 text-primary" />
                     <div>
                       <h3 className="font-black">الموقع</h3>
                     </div>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="tp-registry-editor__fields">
                     {editDialog.form.studyType &&
                     editLocationScopes.length > 0 ? (
                       <div className="space-y-2">
@@ -3019,7 +2982,7 @@ export function StudentRegistryView() {
                         >
                           <SelectTrigger
                             id="edit-locationScope"
-                            className="h-12 rounded-2xl"
+                            className="h-11 rounded-xl"
                           >
                             <SelectValue placeholder="اختر الموقع..." />
                           </SelectTrigger>
@@ -3054,7 +3017,7 @@ export function StudentRegistryView() {
                         </label>
                       </div>
                     ) : (
-                      <div className="rounded-2xl border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground md:col-span-2">
+                      <div className="rounded-2xl border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground tp-registry-editor__wide">
                         اختر الدورة ونوع البرنامج لعرض خيارات الموقع.
                       </div>
                     )}
@@ -3072,7 +3035,7 @@ export function StudentRegistryView() {
                           }
                           placeholder="مثلاً: تركيا"
                           required
-                          className="h-12 rounded-2xl"
+                          className="h-11 rounded-xl"
                         />
                       </div>
                     )}
@@ -3089,7 +3052,7 @@ export function StudentRegistryView() {
                           >
                             <SelectTrigger
                               id="edit-subSite"
-                              className="h-12 rounded-2xl"
+                              className="h-11 rounded-xl"
                             >
                               <SelectValue placeholder="اختر الموقع الفرعي..." />
                             </SelectTrigger>
@@ -3106,14 +3069,14 @@ export function StudentRegistryView() {
                   </div>
                 </section>
 
-                <section className="rounded-[1.75rem] border bg-card p-4 shadow-sm md:p-5">
+                <section className="tp-registry-editor__section">
                   <div className="mb-4 flex items-center gap-2">
                     <CalendarDays className="size-5 text-primary" />
                     <div>
                       <h3 className="font-black">التسجيل وفترة السماح</h3>
                     </div>
                   </div>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="tp-registry-editor__fields">
                     <div className="space-y-2">
                       <Label htmlFor="edit-createdAt">
                         تاريخ إضافة الطالب / بداية السماح
@@ -3147,7 +3110,7 @@ export function StudentRegistryView() {
                           )
                         }
                         required
-                        className="h-12 rounded-2xl"
+                        className="h-11 rounded-xl"
                       />
                       <p className="text-xs text-muted-foreground">
                         هذا الحقل هو مدة المنح، وليس العداد المتبقي. عند تغييره
@@ -3160,19 +3123,25 @@ export function StudentRegistryView() {
                     <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4">
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div>
-                          <p className="text-xs text-muted-foreground">السماح المتبقي الآن</p>
+                          <p className="text-xs text-muted-foreground">
+                            السماح المتبقي الآن
+                          </p>
                           <p className="mt-1 text-2xl font-black text-primary">
                             {editOriginalGraceRemainingDays} يوم
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">المدة اليدوية المحفوظة</p>
+                          <p className="text-xs text-muted-foreground">
+                            المدة اليدوية المحفوظة
+                          </p>
                           <p className="mt-1 text-lg font-black">
                             {editOriginalGraceDurationDays} يوم
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-muted-foreground">الحالة الفعلية</p>
+                          <p className="text-xs text-muted-foreground">
+                            الحالة الفعلية
+                          </p>
                           <p className="mt-1 font-black">
                             {editOriginalGraceActive
                               ? `نشطة حتى ${graceEndDate(editOriginalStudent)}`
@@ -3219,39 +3188,112 @@ export function StudentRegistryView() {
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="mt-0.5 size-5 shrink-0" />
                         <div className="min-w-0 flex-1">
-                          <p className="font-black">تغيير التاريخ أو فترة السماح يعيد تفسير الامتحانات القديمة</p>
+                          <p className="font-black">
+                            تغيير التاريخ أو فترة السماح يعيد تفسير الامتحانات
+                            القديمة
+                          </p>
                           {!hasCurrentAcademicImpactPreview ? (
                             <p className="mt-1 text-xs leading-6 opacity-90">
-                              سيظهر أثر التعديل على الدرجات والفرص قبل الحفظ لتأكيده.
+                              سيظهر أثر التعديل على الدرجات والفرص قبل الحفظ
+                              لتأكيده.
                             </p>
                           ) : academicImpactPreview ? (
                             <div className="mt-3 space-y-3">
                               <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                                <div className="rounded-xl bg-background/80 p-3 text-foreground"><p className="text-xs text-muted-foreground">درجات تغير تفسيرها</p><p className="mt-1 text-xl font-black">{academicImpactPreview.impact.changedGrades}</p></div>
-                                <div className="rounded-xl bg-background/80 p-3 text-foreground"><p className="text-xs text-muted-foreground">أصبحت محمية</p><p className="mt-1 text-xl font-black">{academicImpactPreview.impact.becameProtected}</p></div>
-                                <div className="rounded-xl bg-background/80 p-3 text-foreground"><p className="text-xs text-muted-foreground">عادت للمحاسبة</p><p className="mt-1 text-xl font-black">{academicImpactPreview.impact.becameChargeable}</p></div>
-                                <div className="rounded-xl bg-background/80 p-3 text-foreground"><p className="text-xs text-muted-foreground">الرصيد المتوقع</p><p className="mt-1 text-xl font-black">{academicImpactPreview.projection?.current.opportunities ?? "—"} ← {academicImpactPreview.projection?.projected.opportunities ?? "—"}</p></div>
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
+                                  <p className="text-xs text-muted-foreground">
+                                    درجات تغير تفسيرها
+                                  </p>
+                                  <p className="mt-1 text-xl font-black">
+                                    {academicImpactPreview.impact.changedGrades}
+                                  </p>
+                                </div>
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
+                                  <p className="text-xs text-muted-foreground">
+                                    أصبحت محمية
+                                  </p>
+                                  <p className="mt-1 text-xl font-black">
+                                    {
+                                      academicImpactPreview.impact
+                                        .becameProtected
+                                    }
+                                  </p>
+                                </div>
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
+                                  <p className="text-xs text-muted-foreground">
+                                    عادت للمحاسبة
+                                  </p>
+                                  <p className="mt-1 text-xl font-black">
+                                    {
+                                      academicImpactPreview.impact
+                                        .becameChargeable
+                                    }
+                                  </p>
+                                </div>
+                                <div className="rounded-xl bg-background/80 p-3 text-foreground">
+                                  <p className="text-xs text-muted-foreground">
+                                    الرصيد المتوقع
+                                  </p>
+                                  <p className="mt-1 text-xl font-black">
+                                    {academicImpactPreview.projection?.current
+                                      .opportunities ?? "—"}{" "}
+                                    ←{" "}
+                                    {academicImpactPreview.projection?.projected
+                                      .opportunities ?? "—"}
+                                  </p>
+                                </div>
                               </div>
                               {academicImpactPreview.projection && (
                                 <p className="rounded-xl bg-background/80 p-3 text-xs leading-6 text-foreground">
-                                  الحالة المتوقعة: {academicImpactPreview.projection.current.status} ← {academicImpactPreview.projection.projected.status}
-                                  {academicImpactPreview.projection.projected.dismissalReason ? ` — ${academicImpactPreview.projection.projected.dismissalReason}` : ""}
+                                  الحالة المتوقعة:{" "}
+                                  {
+                                    academicImpactPreview.projection.current
+                                      .status
+                                  }{" "}
+                                  ←{" "}
+                                  {
+                                    academicImpactPreview.projection.projected
+                                      .status
+                                  }
+                                  {academicImpactPreview.projection.projected
+                                    .dismissalReason
+                                    ? ` — ${academicImpactPreview.projection.projected.dismissalReason}`
+                                    : ""}
                                 </p>
                               )}
-                              {academicImpactPreview.impact.sample.length > 0 && (
+                              {academicImpactPreview.impact.sample.length >
+                                0 && (
                                 <div className="max-h-48 space-y-2 overflow-y-auto">
-                                  {academicImpactPreview.impact.sample.map((item) => (
-                                    <div key={item.examId} className="rounded-xl bg-background/80 p-3 text-xs text-foreground">
-                                      <p className="font-bold">{item.examName} — {formatAppDate(item.examDate)}</p>
-                                      <p className="mt-1 text-muted-foreground">{academicImpactKindLabel(item.before)} ← {academicImpactKindLabel(item.after)}</p>
-                                    </div>
-                                  ))}
+                                  {academicImpactPreview.impact.sample.map(
+                                    (item) => (
+                                      <div
+                                        key={item.examId}
+                                        className="rounded-xl bg-background/80 p-3 text-xs text-foreground"
+                                      >
+                                        <p className="font-bold">
+                                          {item.examName} —{" "}
+                                          {formatAppDate(item.examDate)}
+                                        </p>
+                                        <p className="mt-1 text-muted-foreground">
+                                          {academicImpactKindLabel(item.before)}{" "}
+                                          ←{" "}
+                                          {academicImpactKindLabel(item.after)}
+                                        </p>
+                                      </div>
+                                    ),
+                                  )}
                                 </div>
                               )}
                               <Button
                                 type="button"
-                                variant={academicImpactConfirmed ? "default" : "outline"}
-                                onClick={() => setAcademicImpactConfirmed((value) => !value)}
+                                variant={
+                                  academicImpactConfirmed
+                                    ? "default"
+                                    : "outline"
+                                }
+                                onClick={() =>
+                                  setAcademicImpactConfirmed((value) => !value)
+                                }
                                 className="min-h-11 w-full rounded-xl sm:w-auto"
                               >
                                 {academicImpactConfirmed
@@ -3260,7 +3302,11 @@ export function StudentRegistryView() {
                               </Button>
                             </div>
                           ) : null}
-                          {academicImpactLoading && <p className="mt-2 text-xs font-bold">جاري حساب أثر التعديل…</p>}
+                          {academicImpactLoading && (
+                            <p className="mt-2 text-xs font-bold">
+                              جاري حساب أثر التعديل…
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -3270,7 +3316,7 @@ export function StudentRegistryView() {
             </div>
           </div>
 
-          <DialogFooter className="shrink-0 border-t border-border/70 bg-muted/30 px-4 py-4 sm:justify-between md:px-6">
+          <DialogFooter>
             <div className="tp-student-registry__dialog-actions">
               <Button
                 variant="outline"
@@ -3318,8 +3364,7 @@ export function StudentRegistryView() {
                 </p>
                 <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-destructive">
                   الحذف النهائي معطّل لحماية الدرجات والإجازات والمكالمات
-                  والملاحظات وسجلات الفرص من الضياع أو ظهور حالات
-                  “طالب محذوف”.
+                  والملاحظات وسجلات الفرص من الضياع أو ظهور حالات “طالب محذوف”.
                 </div>
                 <div className="rounded-2xl border bg-muted/40 p-3 text-foreground">
                   <div className="mb-2 font-bold">
@@ -3382,16 +3427,19 @@ export function StudentRegistryView() {
             <AlertDialogTitle>تأكيد فك ارتباط تيليجرام</AlertDialogTitle>
             <AlertDialogDescription className="space-y-3 leading-7">
               <span className="block">
-                سيتم فك حساب تيليجرام «{editOriginalStudent?.telegram || "—"}» عن الطالب
-                «{editOriginalStudent?.name || "الطالب المحدد"}».
+                سيتم فك حساب تيليجرام «{editOriginalStudent?.telegram || "—"}»
+                عن الطالب «{editOriginalStudent?.name || "الطالب المحدد"}».
               </span>
               <span className="block rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-foreground">
-                لن يتغير رقم الطالب أو رقم ولي الأمر. يستطيع الطالب ربط حساب تيليجرام جديد لاحقاً باستخدام رقم هاتفه.
+                لن يتغير رقم الطالب أو رقم ولي الأمر. يستطيع الطالب ربط حساب
+                تيليجرام جديد لاحقاً باستخدام رقم هاتفه.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isUnlinkingTelegram}>إلغاء</AlertDialogCancel>
+            <AlertDialogCancel disabled={isUnlinkingTelegram}>
+              إلغاء
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={(event) => {
                 event.preventDefault();
@@ -3401,7 +3449,9 @@ export function StudentRegistryView() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               <Unlink aria-hidden="true" className="size-4" />
-              {isUnlinkingTelegram ? "جاري فك الارتباط..." : "تأكيد فك الارتباط"}
+              {isUnlinkingTelegram
+                ? "جاري فك الارتباط..."
+                : "تأكيد فك الارتباط"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -3417,7 +3467,8 @@ export function StudentRegistryView() {
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد استعادة الطالب من الأرشيف</AlertDialogTitle>
             <AlertDialogDescription>
-              هل تريد استعادة «{restoreDialog.student?.name || "الطالب المحدد"}» من الأرشيف؟ هذه العملية مختلفة عن استرجاع الطالب المفصول.
+              هل تريد استعادة «{restoreDialog.student?.name || "الطالب المحدد"}»
+              من الأرشيف؟ هذه العملية مختلفة عن استرجاع الطالب المفصول.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -3426,10 +3477,13 @@ export function StudentRegistryView() {
               disabled={isStatusActionSaving || !restoreDialog.student}
               onClick={(event) => {
                 event.preventDefault();
-                if (restoreDialog.student) void handleRestoreArchived(restoreDialog.student);
+                if (restoreDialog.student)
+                  void handleRestoreArchived(restoreDialog.student);
               }}
             >
-              {isStatusActionSaving ? "جاري الاستعادة..." : "استعادة من الأرشيف"}
+              {isStatusActionSaving
+                ? "جاري الاستعادة..."
+                : "استعادة من الأرشيف"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -3449,7 +3503,9 @@ export function StudentRegistryView() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm leading-6 text-destructive">
-              عند تأكيد الفصل سيصبح الطالب <strong>مفصولاً</strong> ورصيد فرصه <strong>0</strong>. لا توجد أنواع أو درجات للفصل، وسجل الفصل السابق لا يغيّر هذا القرار.
+              عند تأكيد الفصل سيصبح الطالب <strong>مفصولاً</strong> ورصيد فرصه{" "}
+              <strong>0</strong>. لا توجد أنواع أو درجات للفصل، وسجل الفصل
+              السابق لا يغيّر هذا القرار.
             </div>
             <div className="space-y-2">
               <Label htmlFor="dismiss-reason">سبب الفصل</Label>

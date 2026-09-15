@@ -1,0 +1,153 @@
+/* Registry controls inside the shared management layout. */
+.tp-student-registry,
+.tp-student-registry :where(p, h3, label, span),
+.tp-registry-editor :where(p, h3, h4, label, span, div) {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.tp-registry-heading,
+.tp-registry-actions,
+.tp-registry-results-toolbar,
+.tp-registry-page-size {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+}
+
+.tp-registry-heading,
+.tp-registry-results-toolbar {
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tp-registry-view-choice {
+  inline-size: 11rem;
+  max-inline-size: 100%;
+}
+
+.tp-registry-view-choice .tp-filter-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tp-registry-view-choice label {
+  flex-shrink: 0;
+}
+
+.tp-registry-page-size [data-slot="select-trigger"] {
+  inline-size: 5rem;
+  min-block-size: 2.5rem;
+}
+
+.tp-registry-results-toolbar {
+  scroll-margin-top: 7rem;
+}
+
+.tp-registry-stat-choice,
+.tp-registry-stat-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  inline-size: 100%;
+  min-block-size: 3.5rem;
+  block-size: auto;
+  padding: 0;
+  white-space: normal;
+}
+
+.tp-student-registry__pagination {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  padding-block: 0.5rem;
+}
+
+.tp-student-registry__pagination-summary {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  text-align: center;
+}
+
+.tp-student-registry__pagination-button {
+  min-inline-size: 0;
+  min-block-size: 2.5rem;
+}
+
+/* The editor uses the shared dialog's one scroll area and sticky footer. */
+.tp-registry-editor__body {
+  container: registry-editor / inline-size;
+}
+
+.tp-registry-editor__section {
+  min-inline-size: 0;
+  padding: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--card) 80%, transparent);
+}
+
+.tp-registry-editor__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-inline-size: 0;
+}
+
+.tp-registry-editor__wide {
+  grid-column: 1 / -1;
+}
+
+.tp-registry-editor
+  :is(
+    input:not([type="checkbox"]):not([type="radio"]),
+    [data-slot="select-trigger"]
+  ) {
+  min-block-size: 2.75rem;
+  max-inline-size: 100%;
+}
+
+.tp-student-registry__dialog-actions {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.tp-student-registry__dialog-button {
+  min-block-size: 2.5rem;
+  white-space: normal;
+}
+
+@container registry-editor (min-width: 30rem) {
+  .tp-registry-editor__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 640px) {
+  .tp-student-registry__pagination {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem;
+  }
+
+  .tp-student-registry__dialog-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+.tp-registry-editor label:has(input[type="checkbox"]) {
+  min-block-size: 2.75rem;
+  touch-action: manipulation;
+}

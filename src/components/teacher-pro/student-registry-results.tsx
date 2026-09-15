@@ -3,6 +3,7 @@
 import React from "react";
 import {
   Archive,
+  ChevronDown,
   Eye,
   Pencil,
   RotateCcw,
@@ -16,6 +17,7 @@ import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { formatStudentGraceRemaining } from "./student-registry-helpers";
+import "./student-registry-results.css";
 
 const ARCHIVED_STUDENT_STATUS = "مؤرشف";
 
@@ -120,8 +122,7 @@ function registryHealthBadges(student: Student) {
   if (!normalizeTelegramIdentifier(student.telegram || "")) {
     badges.push({
       label: "بلا تيليجرام",
-      className:
-        "border-muted-foreground/30 bg-muted/60 text-muted-foreground",
+      className: "border-muted-foreground/30 bg-muted/60 text-muted-foreground",
     });
   }
 
@@ -185,8 +186,7 @@ export function formatRegistryLocation(student: Student): string {
     return "عموم بغداد";
   }
   return (
-    Array.from(new Set([primary, secondary].filter(Boolean))).join(" — ") ||
-    "—"
+    Array.from(new Set([primary, secondary].filter(Boolean))).join(" — ") || "—"
   );
 }
 
@@ -211,7 +211,7 @@ function ContactLink({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="break-all font-bold text-primary underline-offset-4 hover:underline"
+      className="tp-registry-contact break-all font-bold text-primary underline-offset-4 hover:underline"
     >
       {children || "—"}
     </a>
@@ -269,9 +269,7 @@ function StudentDismissalDetails({ student }: { student: Student }) {
   if (student.status !== "مفصول") return null;
   return (
     <div className="rounded-lg bg-destructive/10 p-2 text-xs text-destructive">
-      <div>
-        {student.dismissalReason || "سبب الفصل غير مدخل"}
-      </div>
+      <div>{student.dismissalReason || "سبب الفصل غير مدخل"}</div>
       {student.dismissalNotes && (
         <div className="mt-1 text-destructive/80">
           ملاحظات: {student.dismissalNotes}
@@ -313,7 +311,7 @@ function StudentActions({
       <Button
         variant="default"
         size="sm"
-        className="tp-student-registry__action-button"
+        className="tp-registry-action"
         onClick={() => onFile(student)}
       >
         <Eye aria-hidden="true" className="size-4" />
@@ -321,9 +319,9 @@ function StudentActions({
       </Button>
       {canEdit && (
         <Button
-          variant="secondary"
+          variant="outline"
           size="sm"
-          className="tp-student-registry__action-button"
+          className="tp-registry-action"
           disabled={serverUnavailable}
           onClick={() => onEdit(student)}
         >
@@ -335,7 +333,7 @@ function StudentActions({
         <Button
           variant="destructive"
           size="sm"
-          className="tp-student-registry__action-button"
+          className="tp-registry-action"
           disabled={serverUnavailable || statusActionSaving}
           onClick={() => onDismiss(student)}
         >
@@ -347,7 +345,7 @@ function StudentActions({
         <Button
           variant="outline"
           size="sm"
-          className="tp-student-registry__action-button tp-student-registry__action-button--restore"
+          className="tp-registry-action border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
           disabled={serverUnavailable || statusActionSaving}
           onClick={() => onRestore(student)}
         >
@@ -359,7 +357,7 @@ function StudentActions({
         <Button
           variant="outline"
           size="sm"
-          className="tp-student-registry__action-button border-destructive/40 text-destructive hover:bg-destructive/10"
+          className="tp-registry-action border-destructive/40 text-destructive hover:bg-destructive/10"
           disabled={serverUnavailable || deleting}
           onClick={() => onArchive(student)}
         >
@@ -391,85 +389,9 @@ export function StudentRegistryResults({
 }: StudentRegistryResultsProps) {
   if (viewMode === "cards") {
     return (
-      <div className="tp-student-registry__cards grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="tp-registry-results tp-registry-results__cards">
         {students.map((student) => (
-          <Card
-            key={student.id}
-            className="transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-xl hover:shadow-primary/10"
-          >
-            <CardContent className="p-4">
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold">{student.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {student.code} — {student.school || "بدون مدرسة"}
-                  </p>
-                </div>
-                <StudentStatusBadge status={student.status} />
-              </div>
-
-              <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
-                <RegistryField label="الدورة" value={courseName(student.courseId) || "—"} />
-                <RegistryField label="نوع الدورة" value={formatRegistryCourseProgram(student)} />
-                <RegistryField label="نوع البرنامج" value={student.studyType || "—"} />
-                <RegistryField label="الجنس" value={student.gender || "—"} />
-                <RegistryField label="الموقع" value={formatRegistryLocation(student)} />
-                <RegistryField label="الفرص" value={formatOpportunityBalance(student, { separator: " / " })} />
-                <RegistryField label="السماح المتبقي" value={formatStudentGraceRemaining(student)} />
-                <RegistryField label="تاريخ الإضافة" value={formatAppDate(student.createdAt, student.createdAt || "—")} />
-                <RegistryField
-                  label="تيليجرام"
-                  value={
-                    student.telegram ? (
-                      <ContactLink href={telegramLink(student.telegram)}>
-                        {student.telegram}
-                      </ContactLink>
-                    ) : (
-                      "—"
-                    )
-                  }
-                />
-                <RegistryField
-                  label="رقم الطالب"
-                  value={
-                    <ContactLink href={whatsappLink(student.phone)}>
-                      {student.phone}
-                    </ContactLink>
-                  }
-                />
-                <RegistryField
-                  label="ولي الأمر"
-                  value={
-                    <ContactLink href={whatsappLink(student.parentPhone)}>
-                      {student.parentPhone}
-                    </ContactLink>
-                  }
-                />
-              </div>
-
-              <StudentHealthIndicators
-                student={student}
-                activeIssue={activeIssue}
-                className="mb-3"
-              />
-              <div className="mb-3">
-                <StudentDismissalDetails student={student} />
-              </div>
-              <div className="tp-student-registry__card-actions">
-                <StudentActions student={student} {...actionProps} />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="grid gap-3 lg:hidden">
-        {students.map((student) => (
-          <CompactStudentRow
+          <StudentRegistryRow
             key={student.id}
             student={student}
             activeIssue={activeIssue}
@@ -480,84 +402,132 @@ export function StudentRegistryResults({
           />
         ))}
       </div>
-      <div className="table-wrap tp-student-registry__table-wrap hidden lg:block" tabIndex={0} aria-label="جدول سجل الطلاب؛ يمكن تمريره أفقياً وعمودياً">
-        <table className="responsive-table tp-student-registry__table min-w-[1120px] text-sm">
-          <caption className="sr-only">
-            نتائج سجل الطلاب حسب الفلاتر الحالية، وتشمل بيانات الدراسة والتواصل والحالة والإجراءات.
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col" className="p-3 text-right">الطالب</th>
-              <th scope="col" className="p-3 text-right">الدراسة</th>
-              <th scope="col" className="p-3 text-right">الموقع</th>
-              <th scope="col" className="p-3 text-right">التواصل</th>
-              <th scope="col" className="p-3 text-right">الملف الأكاديمي</th>
-              <th scope="col" className="p-3 text-right">الحالة وسلامة الملف</th>
-              <th scope="col" className="p-3 text-right">الإجراءات</th>
+    );
+  }
+
+  return (
+    <div
+      className="table-wrap tp-registry-results tp-registry-results__table-wrap"
+      tabIndex={0}
+      role="region"
+      aria-label="جدول سجل الطلاب؛ يمكن تمريره أفقياً وعمودياً"
+    >
+      <table className="responsive-table tp-registry-results__table text-sm">
+        <caption className="sr-only">
+          نتائج سجل الطلاب حسب الفلاتر الحالية، وتشمل بيانات الدراسة والتواصل
+          والحالة والإجراءات.
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col" className="p-3 text-right">
+              الطالب
+            </th>
+            <th scope="col" className="p-3 text-right">
+              الدراسة
+            </th>
+            <th scope="col" className="p-3 text-right">
+              الموقع
+            </th>
+            <th scope="col" className="p-3 text-right">
+              التواصل
+            </th>
+            <th scope="col" className="p-3 text-right">
+              الملف الأكاديمي
+            </th>
+            <th scope="col" className="p-3 text-right">
+              الحالة وسلامة الملف
+            </th>
+            <th scope="col" className="p-3 text-right">
+              الإجراءات
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {students.map((student) => (
+            <tr key={student.id} className="border-t align-top">
+              <td className="min-w-52 p-3 font-medium">
+                <p>{student.name}</p>
+                <p className="text-xs text-muted-foreground">{student.code}</p>
+                <p className="text-xs text-muted-foreground">
+                  {student.school || "بدون مدرسة"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  الجنس: {student.gender || "—"}
+                </p>
+              </td>
+              <td className="min-w-48 p-3">
+                <p className="font-bold">
+                  {courseName(student.courseId) || "—"}
+                </p>
+                <p className="text-xs">
+                  {formatRegistryCourseProgram(student)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {student.studyType || "—"}
+                </p>
+              </td>
+              <td className="min-w-44 p-3">
+                {formatRegistryLocation(student)}
+              </td>
+              <td className="min-w-52 space-y-1 p-3 text-xs">
+                <p>
+                  الطالب:{" "}
+                  <ContactLink href={whatsappLink(student.phone)}>
+                    {student.phone}
+                  </ContactLink>
+                </p>
+                <p>
+                  ولي الأمر:{" "}
+                  <ContactLink href={whatsappLink(student.parentPhone)}>
+                    {student.parentPhone}
+                  </ContactLink>
+                </p>
+                <p>
+                  تيليجرام:{" "}
+                  {student.telegram ? (
+                    <ContactLink href={telegramLink(student.telegram)}>
+                      {student.telegram}
+                    </ContactLink>
+                  ) : (
+                    "—"
+                  )}
+                </p>
+              </td>
+              <td className="min-w-40 space-y-1 p-3 text-xs">
+                <p>
+                  الفرص:{" "}
+                  <strong>
+                    {formatOpportunityBalance(student, { separator: " / " })}
+                  </strong>
+                </p>
+                <p>السماح المتبقي: {formatStudentGraceRemaining(student)}</p>
+                <p>
+                  التسجيل:{" "}
+                  {formatAppDate(student.createdAt, student.createdAt || "—")}
+                </p>
+              </td>
+              <td className="min-w-64 space-y-2 p-3">
+                <StudentStatusBadge status={student.status} />
+                <StudentHealthIndicators
+                  student={student}
+                  activeIssue={activeIssue}
+                />
+                <StudentDismissalDetails student={student} />
+              </td>
+              <td className="min-w-64 p-3">
+                <div className="tp-registry-row-actions">
+                  <StudentActions student={student} {...actionProps} />
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {students.map((student) => (
-              <tr key={student.id} className="border-t align-top">
-                <td className="min-w-52 p-3 font-medium">
-                  <p>{student.name}</p>
-                  <p className="text-xs text-muted-foreground">{student.code}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {student.school || "بدون مدرسة"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    الجنس: {student.gender || "—"}
-                  </p>
-                </td>
-                <td className="min-w-48 p-3">
-                  <p className="font-bold">{courseName(student.courseId) || "—"}</p>
-                  <p className="text-xs">{formatRegistryCourseProgram(student)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {student.studyType || "—"}
-                  </p>
-                </td>
-                <td className="min-w-44 p-3">{formatRegistryLocation(student)}</td>
-                <td className="min-w-52 space-y-1 p-3 text-xs">
-                  <p>
-                    الطالب: <ContactLink href={whatsappLink(student.phone)}>{student.phone}</ContactLink>
-                  </p>
-                  <p>
-                    ولي الأمر: <ContactLink href={whatsappLink(student.parentPhone)}>{student.parentPhone}</ContactLink>
-                  </p>
-                  <p>
-                    تيليجرام:{" "}
-                    {student.telegram ? (
-                      <ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink>
-                    ) : (
-                      "—"
-                    )}
-                  </p>
-                </td>
-                <td className="min-w-40 space-y-1 p-3 text-xs">
-                  <p>الفرص: <strong>{formatOpportunityBalance(student, { separator: " / " })}</strong></p>
-                  <p>السماح المتبقي: {formatStudentGraceRemaining(student)}</p>
-                  <p>التسجيل: {formatAppDate(student.createdAt, student.createdAt || "—")}</p>
-                </td>
-                <td className="min-w-64 space-y-2 p-3">
-                  <StudentStatusBadge status={student.status} />
-                  <StudentHealthIndicators student={student} activeIssue={activeIssue} />
-                  <StudentDismissalDetails student={student} />
-                </td>
-                <td className="tp-student-registry__actions-cell min-w-72 p-3">
-                  <div className="tp-student-registry__table-actions">
-                    <StudentActions student={student} {...actionProps} />
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function CompactStudentRow({
+function StudentRegistryRow({
   student,
   activeIssue,
   courseName,
@@ -571,54 +541,95 @@ function CompactStudentRow({
   telegramLink: (telegram: string) => string;
 }) {
   return (
-    <article className="rounded-2xl border bg-card/85 p-3 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="font-black">{student.name}</h3>
-          <p className="text-xs text-muted-foreground">
-            {student.code} — {student.school || "بدون مدرسة"}
-          </p>
+    <Card
+      className="tp-registry-row"
+      role="article"
+      aria-labelledby={`registry-student-${student.id}`}
+    >
+      <CardContent className="tp-registry-row__body">
+        <div className="tp-registry-row__header">
+          <div className="tp-registry-row__identity">
+            <h3 id={`registry-student-${student.id}`}>{student.name}</h3>
+            <p className="text-xs text-muted-foreground">
+              <bdi>{student.code}</bdi> — {student.school || "بدون مدرسة"}
+            </p>
+          </div>
+          <StudentStatusBadge status={student.status} />
         </div>
-        <StudentStatusBadge status={student.status} />
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-        <RegistryField label="الدورة" value={courseName(student.courseId) || "—"} />
-        <RegistryField label="نوع الدورة" value={formatRegistryCourseProgram(student)} />
-        <RegistryField label="الدراسة" value={student.studyType || "—"} />
-        <RegistryField label="الجنس" value={student.gender || "—"} />
-        <RegistryField label="الموقع" value={formatRegistryLocation(student)} />
-        <RegistryField label="الفرص" value={formatOpportunityBalance(student, { separator: " / " })} />
-        <RegistryField label="السماح المتبقي" value={formatStudentGraceRemaining(student)} />
-        <RegistryField label="التسجيل" value={formatAppDate(student.createdAt, student.createdAt || "—")} />
-      </div>
-      <div className="mt-3 space-y-1 rounded-xl bg-muted/35 p-2 text-xs">
-        <p>
-          الطالب: <ContactLink href={whatsappLink(student.phone)}>{student.phone}</ContactLink>
-        </p>
-        <p>
-          ولي الأمر: <ContactLink href={whatsappLink(student.parentPhone)}>{student.parentPhone}</ContactLink>
-        </p>
-        <p>
-          تيليجرام:{" "}
-          {student.telegram ? (
-            <ContactLink href={telegramLink(student.telegram)}>{student.telegram}</ContactLink>
-          ) : (
-            "—"
-          )}
-        </p>
-      </div>
-      <StudentHealthIndicators
-        student={student}
-        activeIssue={activeIssue}
-        className="mt-3"
-      />
-      <div className="mt-3">
+        <dl className="tp-registry-row__fields">
+          <RegistryField
+            label="الدورة"
+            value={courseName(student.courseId) || "—"}
+          />
+          <RegistryField
+            label="نوع الدورة"
+            value={formatRegistryCourseProgram(student)}
+          />
+          <RegistryField
+            label="نوع البرنامج"
+            value={student.studyType || "—"}
+          />
+          <RegistryField
+            label="الموقع"
+            value={formatRegistryLocation(student)}
+          />
+          <RegistryField
+            label="الفرص"
+            value={formatOpportunityBalance(student, { separator: " / " })}
+          />
+          <RegistryField
+            label="السماح المتبقي"
+            value={formatStudentGraceRemaining(student)}
+          />
+        </dl>
+        <StudentHealthIndicators student={student} activeIssue={activeIssue} />
         <StudentDismissalDetails student={student} />
-      </div>
-      <div className="tp-student-registry__table-actions mt-3">
-        <StudentActions student={student} {...actionProps} />
-      </div>
-    </article>
+        <details className="tp-registry-row__details">
+          <summary>
+            بيانات التواصل والتسجيل
+            <ChevronDown aria-hidden="true" className="size-4" />
+          </summary>
+          <dl className="tp-registry-row__fields tp-registry-row__contact-fields">
+            <RegistryField
+              label="رقم الطالب"
+              value={
+                <ContactLink href={whatsappLink(student.phone)}>
+                  {student.phone}
+                </ContactLink>
+              }
+            />
+            <RegistryField
+              label="ولي الأمر"
+              value={
+                <ContactLink href={whatsappLink(student.parentPhone)}>
+                  {student.parentPhone}
+                </ContactLink>
+              }
+            />
+            <RegistryField
+              label="تيليجرام"
+              value={
+                student.telegram ? (
+                  <ContactLink href={telegramLink(student.telegram)}>
+                    {student.telegram}
+                  </ContactLink>
+                ) : (
+                  "—"
+                )
+              }
+            />
+            <RegistryField label="الجنس" value={student.gender || "—"} />
+            <RegistryField
+              label="تاريخ الإضافة"
+              value={formatAppDate(student.createdAt, student.createdAt || "—")}
+            />
+          </dl>
+        </details>
+        <div className="tp-registry-row-actions tp-registry-row__actions">
+          <StudentActions student={student} {...actionProps} />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -630,9 +641,9 @@ function RegistryField({
   value: React.ReactNode;
 }) {
   return (
-    <div className="min-w-0">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <div className="break-words text-xs font-medium">{value}</div>
+    <div className="tp-registry-field">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="text-xs font-medium">{value}</dd>
     </div>
   );
 }

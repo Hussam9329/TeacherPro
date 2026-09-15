@@ -37,7 +37,6 @@ import {
 import { toast } from "@/lib/user-toast";
 import {
   ClipboardCheck,
-  ClipboardPaste,
   Eye,
   Loader2,
   PlusCircle,
@@ -63,6 +62,7 @@ import {
   sanitizeTelegramInput,
 } from "@/lib/student-utils";
 import { baghdadTodayKey } from "@/lib/baghdad-time";
+import "./student-bulk-text-import.css";
 
 const EXPECTED_COLUMNS = 15;
 const COLUMN_NAMES = [
@@ -868,7 +868,9 @@ export function StudentBulkTextImportView() {
             {row.student ? formatOpportunityBalance(row.student) : "—"}
           </div>
           {row.activeChapterName && (
-            <div className="text-[11px] text-muted-foreground">{row.activeChapterName}</div>
+            <div className="text-[11px] text-muted-foreground">
+              {row.activeChapterName}
+            </div>
           )}
         </td>
         <td className="p-3 dir-ltr text-left">
@@ -921,201 +923,174 @@ export function StudentBulkTextImportView() {
   };
 
   return (
-    <div className="section-stack tp-bulk-import mx-auto max-w-7xl">
-      <Card className="tp-bulk-import__shell gap-0 overflow-hidden py-0">
-        <CardHeader className="tp-bulk-import__hero relative overflow-hidden border-b bg-card/70 p-5 md:p-6">
-          <div className="absolute inset-inline-start-0 top-0 h-28 w-28 rounded-full bg-primary/20 blur-3xl" />
-          <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex size-14 shrink-0 items-center justify-center rounded-3xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
-                <ClipboardPaste className="size-7" />
-              </div>
-              <div>
-                <CardTitle className="text-2xl font-black tracking-tight text-gradient-brand md:text-3xl">
-                  إضافة جماعية للطلاب
-                </CardTitle>
-              </div>
-            </div>
+    <div className="tp-management-page tp-bulk-import-page space-y-4">
+      <Card className="tp-management-action-card tp-bulk-import__input-card">
+        <CardHeader>
+          <div className="tp-bulk-import__heading">
+            <CardTitle className="text-base">بيانات الطلاب</CardTitle>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setRawText(SAMPLE_TEXT);
+                setPreviewDone(false);
+              }}
+              disabled={isPreviewing}
+            >
+              وضع المثال
+            </Button>
           </div>
         </CardHeader>
+        <CardContent className="tp-bulk-import__input">
+          <details className="tp-bulk-import__format">
+            <summary>ترتيب الأعمدة ({EXPECTED_COLUMNS})</summary>
+            <ol>
+              {COLUMN_NAMES.map((name, index) => (
+                <li key={name}>
+                  <span>{index + 1}</span>
+                  {name}
+                </li>
+              ))}
+            </ol>
+            <p>
+              التسجيل الجماعي لا يعتمد على عمود الفرص المكتوب بالنص؛ فرص البداية
+              تُحسب من الفصل النشط للدورة، والدورة الموقوفة أو ذات تعارض الفصول
+              تُرفض قبل الإضافة.
+            </p>
+          </details>
 
-        <CardContent className="tp-bulk-import__content space-y-6 p-4 md:p-6 lg:p-8">
-          <section className="surface-card tp-bulk-import__input p-5 md:p-6">
-            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h3 className="text-lg font-black">مربع الإدخال</h3>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  الترتيب: {COLUMN_NAMES.join(" ← ")}
-                </p>
-              </div>
+          <label className="sr-only" htmlFor="bulk-student-text">
+            نص بيانات الطلاب
+          </label>
+          <textarea
+            id="bulk-student-text"
+            dir="rtl"
+            value={rawText}
+            disabled={isPreviewing}
+            onChange={(event) => {
+              setRawText(event.target.value);
+              setPreviewDone(false);
+            }}
+            placeholder="الصق بيانات الطلاب هنا، كل طالب في سطر مستقل…"
+            className="tp-bulk-import__textarea"
+          />
+
+          <div className="tp-bulk-import__input-footer">
+            <div
+              className="min-w-0 text-xs text-muted-foreground"
+              role="status"
+            >
+              {contextLoading ? "جارٍ تجهيز بيانات التسجيل" : null}
+            </div>
+            <div className="tp-bulk-import__actions">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setRawText(SAMPLE_TEXT)}
+                onClick={() => {
+                  setRawText("");
+                  setPreviewRows([]);
+                  setPreviewDone(false);
+                }}
                 disabled={isPreviewing}
               >
-                وضع المثال
+                مسح
+              </Button>
+              <Button
+                type="button"
+                onClick={buildPreview}
+                disabled={isPreviewing || contextLoading || !registerContext}
+              >
+                {isPreviewing ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Eye className="size-4" />
+                )}
+                {isPreviewing ? "جارٍ الفحص…" : "معاينة وفحص"}
               </Button>
             </div>
-
-            <textarea
-              dir="rtl"
-              value={rawText}
-              disabled={isPreviewing}
-              onChange={(event) => {
-                setRawText(event.target.value);
-                setPreviewDone(false);
-              }}
-              placeholder={SAMPLE_TEXT}
-              className="min-h-[260px] w-full rounded-2xl border border-input bg-background/70 p-4 font-mono text-sm leading-7 shadow-xs outline-none transition focus:border-ring focus:ring-4 focus:ring-ring/20"
-            />
-
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                <Badge variant="outline">{EXPECTED_COLUMNS} عمود</Badge>
-                <Badge variant="outline">الأرقام تُحوّل تلقائياً إلى 07</Badge>
-                <Badge variant="outline">@ التيليجرام اختياري</Badge>
-                <Badge
-                  variant={
-                    contextLoading
-                      ? "outline"
-                      : registerContext
-                        ? "secondary"
-                        : "destructive"
-                  }
-                >
-                  {contextLoading
-                    ? "جارٍ تجهيز بيانات التسجيل"
-                    : registerContext
-                      ? `الدورات: ${registerContext.stats.active}`
-                      : "سياق التسجيل غير متاح"}
-                </Badge>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setRawText("");
-                    setPreviewRows([]);
-                    setPreviewDone(false);
-                  }}
-                  disabled={isPreviewing}
-                >
-                  مسح
-                </Button>
-                <Button
-                  type="button"
-                  onClick={buildPreview}
-                  disabled={isPreviewing || contextLoading || !registerContext}
-                >
-                  {isPreviewing ? (
-                    <Loader2 className="ml-2 size-4 animate-spin" />
-                  ) : (
-                    <Eye className="ml-2 size-4" />
-                  )}
-                  {isPreviewing
-                    ? "جارٍ الفحص…"
-                    : "معاينة وفحص"}
-                </Button>
-              </div>
+          </div>
+          {contextError ? (
+            <div className="tp-bulk-import__context-error" role="alert">
+              {contextError}
             </div>
-            {contextError ? (
-              <div className="mt-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 text-sm leading-6 text-destructive">
-                {contextError}
-              </div>
-            ) : null}
-            <div className="mt-3 rounded-2xl border border-primary/15 bg-primary/5 p-3 text-xs leading-6 text-muted-foreground">
-              التسجيل الجماعي لا يعتمد على عمود الفرص المكتوب بالنص؛ فرص البداية
-              تُحسب من الفصل النشط للدورة، والدورة الموقوفة أو
-              ذات تعارض الفصول تُرفض قبل الإضافة.
-            </div>
-          </section>
+          ) : null}
+        </CardContent>
+      </Card>
 
-          {previewDone && (
-            <section className="surface-card tp-bulk-import__preview p-5 md:p-6">
-              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h3 className="text-lg font-black">نتيجة المعاينة</h3>
+      {previewDone && (
+        <div className="tp-management-workspace">
+          <section
+            className="tp-management-main-flow"
+            aria-label="معاينة الطلاب"
+          >
+            <Card className="tp-management-results-card">
+              <CardHeader>
+                <div className="tp-bulk-import__heading">
+                  <CardTitle className="text-base">نتيجة المعاينة</CardTitle>
+                  <p className="tp-management-count-summary text-xs text-muted-foreground">
+                    {summary.total} سطر
+                  </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge>{summary.total} سطر</Badge>
-                  <Badge variant="secondary">{summary.ready} جاهز</Badge>
-                  <Badge
-                    variant={summary.needsEdit ? "destructive" : "outline"}
-                  >
-                    {summary.needsEdit} يحتاج تعديل
-                  </Badge>
-                  <Badge
-                    variant={summary.duplicate ? "destructive" : "outline"}
-                  >
-                    {summary.duplicate} مكرر
-                  </Badge>
-                  <Badge
-                    variant={
-                      summary.unknownCourseOrLocation
-                        ? "destructive"
-                        : "outline"
+              </CardHeader>
+              <CardContent className="tp-bulk-import__preview">
+                <fieldset className="tp-bulk-import__policy">
+                  <legend>طريقة الاستيراد</legend>
+                  <RadioGroup
+                    value={importPolicy}
+                    onValueChange={(value) =>
+                      setImportPolicy(value as ImportPolicy)
                     }
+                    aria-label="طريقة الاستيراد"
+                    className="tp-bulk-import__policy-options"
                   >
-                    {summary.unknownCourseOrLocation} دورة/موقع
-                  </Badge>
-                  <Badge variant="outline">{summary.warningRows} تحذير</Badge>
-                </div>
-              </div>
+                    <label
+                      className="tp-bulk-import__policy-option"
+                      data-selected={importPolicy === "valid-only"}
+                    >
+                      <RadioGroupItem value="valid-only" />
+                      <span>
+                        <span className="block font-bold">
+                          استيراد الصحيح فقط
+                        </span>
+                        <span className="tp-bulk-import__policy-description">
+                          إضافة الأسطر الجاهزة وتجاهل الأسطر التي تحتوي أخطاء.
+                        </span>
+                      </span>
+                    </label>
+                    <label
+                      className="tp-bulk-import__policy-option"
+                      data-selected={importPolicy === "fail-on-error"}
+                    >
+                      <RadioGroupItem value="fail-on-error" />
+                      <span>
+                        <span className="block font-bold">
+                          إلغاء الاستيراد إذا يوجد خطأ واحد
+                        </span>
+                        <span className="tp-bulk-import__policy-description">
+                          لا تبدأ الإضافة إلا بعد أن تكون جميع الأسطر جاهزة.
+                        </span>
+                      </span>
+                    </label>
+                  </RadioGroup>
+                </fieldset>
 
-              <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                <div className="mb-3 font-black">سياسة الاستيراد</div>
-                <RadioGroup
-                  value={importPolicy}
-                  onValueChange={(value) =>
-                    setImportPolicy(value as ImportPolicy)
-                  }
-                  className="grid gap-3 md:grid-cols-2"
-                >
-                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-background/70 p-4 transition hover:border-primary/40">
-                    <RadioGroupItem value="valid-only" className="mt-1" />
-                    <span>
-                      <span className="block font-bold">
-                        استيراد الصحيح فقط
-                      </span>
-                      <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                        سيتم استيراد الأسطر الجاهزة فقط، وتبقى الأسطر الخاطئة
-                        ظاهرة حتى يعدلها المستخدم لاحقاً.
-                      </span>
-                    </span>
-                  </label>
-                  <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-background/70 p-4 transition hover:border-primary/40">
-                    <RadioGroupItem value="fail-on-error" className="mt-1" />
-                    <span>
-                      <span className="block font-bold">
-                        إلغاء الاستيراد إذا يوجد خطأ واحد
-                      </span>
-                      <span className="mt-1 block text-sm leading-6 text-muted-foreground">
-                        لن يتم استيراد أي طالب إلا بعد أن تصبح كل الأسطر ضمن قسم
-                        جاهز للاستيراد.
-                      </span>
-                    </span>
-                  </label>
-                </RadioGroup>
-              </div>
+                {summary.blockingRows > 0 && (
+                  <div
+                    role="status"
+                    className={`rounded-xl border p-3 text-sm leading-7 ${
+                      importPolicy === "valid-only"
+                        ? "border-amber-300/50 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+                        : "border-destructive/30 bg-destructive/10 text-destructive"
+                    }`}
+                  >
+                    <ShieldAlert className="ml-2 inline size-4" />
+                    {importPolicy === "valid-only"
+                      ? `سيتم استيراد ${summary.ready} طالب جاهز فقط، وتجاهل ${summary.blockingRows} سطر يحتاج مراجعة.`
+                      : `لن يتم الاستيراد لأن هناك ${summary.blockingRows} سطر يحتوي على خطأ مانع.`}
+                  </div>
+                )}
 
-              {summary.blockingRows > 0 && (
-                <div
-                  className={`mb-4 rounded-2xl border p-4 text-sm leading-7 ${
-                    importPolicy === "valid-only"
-                      ? "border-amber-300/50 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
-                      : "border-destructive/30 bg-destructive/10 text-destructive"
-                  }`}
-                >
-                  <ShieldAlert className="ml-2 inline size-4" />
-                  {importPolicy === "valid-only"
-                    ? `سيتم استيراد ${summary.ready} طالب جاهز فقط، وتجاهل ${summary.blockingRows} سطر يحتاج مراجعة.`
-                    : `لن يتم الاستيراد لأن هناك ${summary.blockingRows} سطر يحتوي على خطأ مانع.`}
-                </div>
-              )}
-
-              <div className="space-y-5">
                 {(
                   [
                     "ready",
@@ -1129,71 +1104,153 @@ export function StudentBulkTextImportView() {
                   const copy = PREVIEW_CATEGORY_COPY[category];
 
                   return (
-                    <div
+                    <section
                       key={category}
-                      className="overflow-hidden rounded-2xl border bg-background/60"
+                      className="tp-bulk-import__group"
+                      aria-labelledby={`bulk-preview-${category}`}
                     >
-                      <div className="flex flex-col gap-2 border-b bg-muted/45 p-4 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <div className="font-black">{copy.title}</div>
-                          <div className="mt-1 text-sm leading-6 text-muted-foreground">
-                            {copy.description}
-                          </div>
-                        </div>
-                        <Badge
-                          variant={
-                            category === "ready" ? "secondary" : "outline"
-                          }
+                      <div className="tp-bulk-import__group-header">
+                        <h3
+                          id={`bulk-preview-${category}`}
+                          className="text-sm font-bold"
                         >
+                          {copy.title}
+                        </h3>
+                        <span className="text-xs text-muted-foreground">
                           {rows.length} سطر
-                        </Badge>
+                        </span>
                       </div>
-
-                      <div className="table-wrap max-h-[min(26rem,55dvh)] overflow-auto" tabIndex={0} aria-label="معاينة بيانات الاستيراد؛ يمكن تمريرها أفقياً وعمودياً">
+                      <div
+                        className="table-wrap tp-bulk-import__table-scroll max-h-[min(26rem,55dvh)] overflow-auto"
+                        tabIndex={0}
+                        role="region"
+                        aria-label={`معاينة ${copy.title}؛ يمكن تمريرها أفقياً وعمودياً`}
+                      >
                         <table className="responsive-table min-w-[980px] text-right text-sm">
+                          <caption className="sr-only">
+                            {copy.title}: {copy.description}
+                          </caption>
                           <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur">
                             <tr className="border-b">
-                              <th className="p-3">السطر</th>
-                              <th className="p-3">الطالب</th>
-                              <th className="p-3">الدورة</th>
-                              <th className="p-3">البرنامج</th>
-                              <th className="p-3">الدراسة</th>
-                              <th className="p-3">الموقع</th>
-                              <th className="p-3">فرص البداية</th>
-                              <th className="p-3">هاتف الطالب</th>
-                              <th className="p-3">الحالة</th>
-                              <th className="p-3">الفحص</th>
+                              <th scope="col" className="p-3">
+                                السطر
+                              </th>
+                              <th scope="col" className="p-3">
+                                الطالب
+                              </th>
+                              <th scope="col" className="p-3">
+                                الدورة
+                              </th>
+                              <th scope="col" className="p-3">
+                                البرنامج
+                              </th>
+                              <th scope="col" className="p-3">
+                                الدراسة
+                              </th>
+                              <th scope="col" className="p-3">
+                                الموقع
+                              </th>
+                              <th scope="col" className="p-3">
+                                فرص البداية
+                              </th>
+                              <th scope="col" className="p-3">
+                                هاتف الطالب
+                              </th>
+                              <th scope="col" className="p-3">
+                                الحالة
+                              </th>
+                              <th scope="col" className="p-3">
+                                الفحص
+                              </th>
                             </tr>
                           </thead>
                           <tbody>{rows.map(renderPreviewRow)}</tbody>
                         </table>
                       </div>
-                    </div>
+                    </section>
                   );
                 })}
-              </div>
 
-              <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm leading-6 text-muted-foreground">
-                  {importPolicy === "valid-only"
-                    ? "سيتم استيراد الأسطر الجاهزة فقط."
-                    : "عند الضغط يجب أن تكون كل الأسطر سليمة، وإلا لن يبدأ الاستيراد."}
+                <div className="tp-bulk-import__save-bar">
+                  <p className="text-xs leading-6 text-muted-foreground">
+                    {importPolicy === "valid-only"
+                      ? "سيتم استيراد الأسطر الجاهزة فقط."
+                      : "عند الضغط يجب أن تكون كل الأسطر سليمة، وإلا لن يبدأ الاستيراد."}
+                  </p>
+                  <Button
+                    type="button"
+                    disabled={!canImport}
+                    onClick={() => setConfirmOpen(true)}
+                  >
+                    <PlusCircle className="size-4" />
+                    {importPolicy === "valid-only"
+                      ? "استيراد الصحيح فقط"
+                      : "إكمال الإضافة"}
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  disabled={!canImport}
-                  onClick={() => setConfirmOpen(true)}
-                >
-                  <PlusCircle className="ml-2 size-4" />
-                  {importPolicy === "valid-only"
-                    ? "استيراد الصحيح فقط"
-                    : "إكمال الإضافة"}
-                </Button>
+              </CardContent>
+            </Card>
+          </section>
+          <aside
+            className="tp-management-stats-rail"
+            aria-label="إحصائيات المعاينة"
+          >
+            <div className="space-y-2">
+              <h3 className="text-sm font-black">إحصائيات المعاينة</h3>
+              <div
+                className="grid"
+                role="group"
+                aria-label="إحصائيات المعاينة"
+                tabIndex={0}
+              >
+                {[
+                  {
+                    label: "الأسطر",
+                    value: summary.total,
+                    color: "text-primary",
+                  },
+                  {
+                    label: "جاهز للاستيراد",
+                    value: summary.ready,
+                    color: "text-emerald-600 dark:text-emerald-400",
+                  },
+                  {
+                    label: "يحتاج تعديل",
+                    value: summary.needsEdit,
+                    color: "text-amber-600 dark:text-amber-400",
+                  },
+                  {
+                    label: "مكرر",
+                    value: summary.duplicate,
+                    color: "text-destructive",
+                  },
+                  {
+                    label: "دورة أو موقع غير معروف",
+                    value: summary.unknownCourseOrLocation,
+                    color: "text-amber-600 dark:text-amber-400",
+                  },
+                  {
+                    label: "أسطر مع تحذيرات",
+                    value: summary.warningRows,
+                    color: "text-amber-600 dark:text-amber-400",
+                  },
+                ].map((stat) => (
+                  <Card key={stat.label}>
+                    <CardContent className="p-4 text-center">
+                      <p className={`text-2xl font-bold ${stat.color}`}>
+                        {stat.value}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {stat.label}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
-            </section>
-          )}
-        </CardContent>
-      </Card>
+            </div>
+          </aside>
+        </div>
+      )}
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent dir="rtl">
