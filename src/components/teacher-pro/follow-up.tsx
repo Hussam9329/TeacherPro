@@ -2218,11 +2218,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 <CardTitle>
                   {editingLeaveId ? "تعديل إجازة قائمة" : "إضافة إجازة"}
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  الإجازة تستثني الطالب من محاسبة الامتحانات المشمولة بها:
-                  تُحفظ درجاته الحالية نسخةً احتياطية وتظهر مؤقتاً كـ«مجاز»،
-                  وعند حذف الإجازة تُسترجع درجاته الأصلية تلقائياً ويُعاد احتسابه.
-                </p>
               </CardHeader>
               <CardContent className="space-y-3">
                 <fieldset disabled={leaveSaving} className="min-w-0 space-y-3">
@@ -2353,10 +2348,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     <div className="space-y-2">
                       <Label>تاريخ الإجازة</Label>
                       <DateInput value={leaveDate} onChange={setLeaveDate} />
-                      <p className="text-[11px] text-muted-foreground">
-                        تاريخ تسجيل الإجازة (للعرض والسجل) — الاستثناء يطبَّق على
-                        الامتحان المختار أياً كان هذا التاريخ.
-                      </p>
                     </div>
                   </>
                 ) : (
