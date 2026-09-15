@@ -72,6 +72,11 @@ import {
   Pause,
   Play,
   Search,
+  Users,
+  CircleCheck,
+  ShieldCheck,
+  Layers,
+  ClipboardList,
 } from "lucide-react";
 import { EmptyState } from "./ui-kit";
 import { formatAppDate } from "@/lib/format";
@@ -225,7 +230,12 @@ function CourseEditorDialog({
         className="tp-course-editor teacherpro-fullscreen-dialog left-0 top-0 flex h-dvh max-h-dvh w-dvw max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none p-0 sm:left-1/2 sm:top-1/2 sm:h-[min(90dvh,56rem)] sm:w-[calc(100dvw-2rem)] sm:max-w-5xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:p-0"
       >
         <DialogHeader className="shrink-0 px-4 pl-16 sm:px-6 sm:pl-16">
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className="tp-course-editor__title">
+            <span className="tp-course-editor__icon">
+              <BookOpen aria-hidden="true" />
+            </span>
+            {title}
+          </DialogTitle>
         </DialogHeader>
         <div className="tp-course-editor__body">{children}</div>
       </DialogContent>
@@ -564,14 +574,44 @@ export function CoursesView() {
   const renderStats = () => (
     <dl className="tp-courses__stats" aria-label="إحصائيات الدورات">
       {[
-        { label: "إجمالي الدورات", value: stats?.total },
-        { label: "نشطة للتسجيل", value: stats?.active },
-        { label: "موقوفة عن التسجيل", value: stats?.inactive },
-        { label: "عليها طلاب", value: stats?.withStudents },
-        { label: "آمنة للحذف", value: stats?.deletable },
-      ].map(({ label, value }) => (
-        <div key={label}>
-          <dt>{label}</dt>
+        {
+          label: "إجمالي الدورات",
+          value: stats?.total,
+          icon: BookOpen,
+          tone: "violet",
+        },
+        {
+          label: "نشطة للتسجيل",
+          value: stats?.active,
+          icon: CircleCheck,
+          tone: "green",
+        },
+        {
+          label: "موقوفة عن التسجيل",
+          value: stats?.inactive,
+          icon: Pause,
+          tone: "amber",
+        },
+        {
+          label: "عليها طلاب",
+          value: stats?.withStudents,
+          icon: Users,
+          tone: "sky",
+        },
+        {
+          label: "آمنة للحذف",
+          value: stats?.deletable,
+          icon: ShieldCheck,
+          tone: "teal",
+        },
+      ].map(({ label, value, icon: Icon, tone }) => (
+        <div key={label} data-tone={tone}>
+          <dt>
+            <span className="tp-courses__stat-icon" aria-hidden="true">
+              <Icon />
+            </span>
+            {label}
+          </dt>
           <dd>{value ?? (isLoading ? "…" : "—")}</dd>
         </div>
       ))}
@@ -613,6 +653,9 @@ export function CoursesView() {
         aria-labelledby={`course-title-${row.id}`}
       >
         <header className="tp-course-card__header">
+          <span className="tp-course-card__identity-icon">
+            <BookOpen aria-hidden="true" />
+          </span>
           <h3 id={`course-title-${row.id}`}>{row.course.name}</h3>
           <span
             className={`tp-course-card__status ${row.course.active ? "is-active" : "is-inactive"}`}
@@ -622,16 +665,22 @@ export function CoursesView() {
         </header>
 
         <dl className="tp-course-card__metrics">
-          <div>
-            <dt>الطلاب</dt>
+          <div data-tone="sky">
+            <dt>
+              <Users aria-hidden="true" /> الطلاب
+            </dt>
             <dd>{row.counts.students}</dd>
           </div>
-          <div>
-            <dt>الامتحانات</dt>
+          <div data-tone="violet">
+            <dt>
+              <ClipboardList aria-hidden="true" /> الامتحانات
+            </dt>
             <dd>{row.counts.exams}</dd>
           </div>
-          <div>
-            <dt>الفصول</dt>
+          <div data-tone="teal">
+            <dt>
+              <Layers aria-hidden="true" /> الفصول
+            </dt>
             <dd>{row.counts.courseChapters}</dd>
           </div>
         </dl>
@@ -658,7 +707,8 @@ export function CoursesView() {
 
         <div className="tp-course-card__actions">
           <Button
-            variant="secondary"
+            variant="default"
+            className="tp-course-card__edit-button"
             onClick={(event) => {
               courseDialogTrigger.current = event.currentTarget;
               openEditDialog(row);
@@ -669,6 +719,7 @@ export function CoursesView() {
           </Button>
           <Button
             variant="outline"
+            className={`tp-course-card__toggle-button ${row.course.active ? "is-pause" : "is-resume"}`}
             disabled={isTogglingCourse}
             onClick={() => void handleToggle(row)}
             aria-label={`${row.course.active ? "إيقاف التسجيل في" : "تفعيل التسجيل في"} ${row.course.name}`}
@@ -684,7 +735,10 @@ export function CoursesView() {
 
         <details className="tp-course-card__disclosure">
           <summary>
-            تفاصيل الدورة <ChevronDown aria-hidden="true" />
+            <span>
+              <ClipboardList aria-hidden="true" /> تفاصيل الدورة
+            </span>{" "}
+            <ChevronDown aria-hidden="true" />
           </summary>
           <div className="tp-course-card__details">
             <section className="tp-course-card__detail-section">
@@ -796,7 +850,12 @@ export function CoursesView() {
   return (
     <div className="tp-courses">
       <div className="tp-courses__intro">
-        <h2>إدارة الدورات</h2>
+        <h2>
+          <span className="tp-courses__intro-icon">
+            <BookOpen aria-hidden="true" />
+          </span>
+          إدارة الدورات
+        </h2>
         <Button
           onClick={(event) => {
             courseDialogTrigger.current = event.currentTarget;
