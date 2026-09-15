@@ -1662,60 +1662,6 @@
    Visual guidance only. These classes do not trigger saves, change debounce
    timing, alter API calls, or introduce additional persistence. */
 @layer components {
-  .tp-save-guide {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid color-mix(in oklch, var(--primary) 15%, var(--border));
-    border-radius: 1rem;
-    background: color-mix(in oklch, var(--primary) 4%, var(--card));
-  }
-
-  .tp-save-guide__item {
-    display: flex;
-    min-width: 0;
-    align-items: flex-start;
-    gap: 0.65rem;
-    padding: 0.65rem 0.75rem;
-    border: 1px solid color-mix(in oklch, var(--border) 78%, transparent);
-    border-radius: 0.875rem;
-    background: color-mix(in oklch, var(--background) 88%, transparent);
-  }
-
-  .tp-save-guide__marker {
-    width: 0.55rem;
-    height: 0.55rem;
-    flex: 0 0 auto;
-    margin-top: 0.38rem;
-    border-radius: 9999px;
-    background: var(--primary);
-    box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 12%, transparent);
-  }
-
-  .tp-save-guide__item[data-save-mode="manual"] .tp-save-guide__marker {
-    background: var(--foreground);
-    box-shadow: 0 0 0 4px color-mix(in oklch, var(--foreground) 9%, transparent);
-  }
-
-  .tp-save-guide__title {
-    display: block;
-    color: var(--foreground);
-    font-size: 0.75rem;
-    font-weight: 900;
-    line-height: 1.35;
-  }
-
-  .tp-save-guide__description {
-    display: block;
-    margin-top: 0.15rem;
-    color: var(--muted-foreground);
-    font-size: 0.6875rem;
-    font-weight: 600;
-    line-height: 1.65;
-  }
-
   .tp-save-indicator {
     display: inline-flex;
     min-height: 1.75rem;
@@ -1795,16 +1741,6 @@
 }
 
 @media (max-width: 640px) {
-  .tp-save-guide {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0.55rem;
-    padding: 0.6rem;
-  }
-
-  .tp-save-guide__item {
-    padding: 0.6rem 0.65rem;
-  }
-
   .tp-save-manual-button {
     min-width: 0;
   }
@@ -2083,11 +2019,6 @@
   .tp-chapters__stats > div {
     min-height: 5.7rem;
     background: color-mix(in oklch, var(--muted) 24%, transparent);
-  }
-
-  .tp-chapters__rule {
-    border-inline-start: 3px solid color-mix(in oklch, var(--primary) 38%, var(--border));
-    line-height: 1.75;
   }
 
   .tp-chapters__filters,
@@ -2873,15 +2804,6 @@
   overflow-wrap: anywhere;
 }
 
-.tp-student-profile__stat-hint {
-  grid-column: 1 / -1;
-  min-width: 0;
-  color: var(--muted-foreground);
-  font-size: 0.6875rem;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-
 .tp-student-profile__panel {
   min-width: 0;
   scroll-margin-top: 0.75rem;
@@ -3047,10 +2969,6 @@
 .tp-grade-entry-page .teacherpro-heavy-row:focus-within {
   border-inline-start-color: var(--primary);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
-}
-
-.tp-grade-entry-page .tp-save-guide {
-  margin-block-end: 1.25rem;
 }
 
 /* Exam records page contract. */

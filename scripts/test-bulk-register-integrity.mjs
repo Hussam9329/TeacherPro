@@ -112,8 +112,8 @@ assert(
 );
 assert(
   bulkView.includes("await studentApi.bulkPreview") &&
-    bulkView.includes("جارٍ الفحص من بيانات النظام") &&
-    bulkView.includes("المعاينة سليمة من بيانات النظام") &&
+    bulkView.includes("جارٍ الفحص…") &&
+    bulkView.includes("اكتملت المعاينة") &&
     !bulkView.includes(".listAll()") &&
     !bulkView.includes("getStudentDuplicateMessage(students") &&
     api.includes("bulkPreview:") &&
@@ -141,7 +141,7 @@ assert(
 );
 assert(
   bulkView.includes("فرص البداية") &&
-    bulkView.includes("في بيانات النظام") &&
+    bulkView.includes("تُحسب من الفصل النشط للدورة") &&
     bulkView.includes("التسجيل الجماعي لا يعتمد على عمود الفرص"),
   "واجهة التسجيل الجماعي تعرض مصدر فرص البداية للمستخدم بوضوح",
 );

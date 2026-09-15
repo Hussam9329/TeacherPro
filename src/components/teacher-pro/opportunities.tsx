@@ -213,7 +213,7 @@ export function OpportunitiesView() {
         if (!cancelled && !silent) {
           setServerStudents([]);
           setServerTotalPages(1);
-          toast.error("تعذر تحميل طلاب الفرص من بيانات النظام.");
+          toast.error("تعذر تحميل طلاب الفرص.");
         }
       })
       .finally(() => {
@@ -339,7 +339,7 @@ export function OpportunitiesView() {
       .catch(() => {
         if (!cancelled) {
           setDetailsLogs([]);
-          toast.error("تعذر تحميل تفاصيل فرص الطالب من بيانات النظام.");
+          toast.error("تعذر تحميل تفاصيل فرص الطالب.");
         }
       })
       .finally(() => {
@@ -672,7 +672,7 @@ export function OpportunitiesView() {
     });
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر تنفيذ إجراء الفرص من النظام");
+      toast.error(result.error || "تعذر تنفيذ إجراء الفرص");
       return;
     }
 
@@ -690,10 +690,10 @@ export function OpportunitiesView() {
 
     toast.success(
       result.data?.reactivated ? `تمت استعادة الطالب نشطاً برصيد ${updatedStudent?.opportunities} من الفرص وتسجيل السبب` : actionDialog.type === "deduct"
-        ? "تم خصم الفرص من النظام وإعادة الاحتساب"
+        ? "تم خصم الفرص وإعادة الاحتساب"
         : actionDialog.type === "add"
-          ? "تمت إضافة الفرص من النظام وإعادة الاحتساب"
-          : "تمت إعادة تعيين الفرص من النظام وإعادة الاحتساب",
+          ? "تمت إضافة الفرص وإعادة الاحتساب"
+          : "تمت إعادة تعيين الفرص وإعادة الاحتساب",
     );
     if (result.data?.reactivated) {
       emitTeacherProDataChanged({ source: "local-mutation", reason: "manual-student-restoration", scopes: ["students", "grades", "opportunities", "dismissed", "dashboard", "follow-up"], dispatchLocal: true });
@@ -712,7 +712,7 @@ export function OpportunitiesView() {
       reason: "تراجع من صفحة إدارة الفرص",
     });
     if (!result.ok) {
-      toast.error(result.error || "تعذر التراجع عن حركة الفرص من النظام");
+      toast.error(result.error || "تعذر التراجع عن حركة الفرص");
       return;
     }
     const updatedStudent = result.data?.student as OpportunityStudent | undefined;
@@ -788,7 +788,7 @@ export function OpportunitiesView() {
     }
 
     toast.success(
-      `${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${affected} طالب من كل المطابقين في بيانات النظام${bulkSkippedCount ? `، وتم استثناء ${bulkSkippedCount}` : ""}`,
+      `${bulkActionDialog.type === "deduct" ? "تم خصم" : "تمت إضافة"} ${normalizedAmount} فرصة لـ ${affected} طالب من جميع المطابقين للفلاتر${bulkSkippedCount ? `، وتم استثناء ${bulkSkippedCount}` : ""}`,
     );
     setBulkActionDialog({ type: "add", open: false });
     setBulkReason("");
@@ -883,7 +883,7 @@ export function OpportunitiesView() {
 
     if (failedStudentIds.size > 0) {
       throw new Error(
-        `تعذر إكمال تقرير HTML لأن تفاصيل ${failedStudentIds.size} من أصل ${total} طالب لم تُحمّل من النظام. لم يتم إنشاء ملف ناقص؛ يرجى إعادة المحاولة.`,
+        `تعذر إكمال تقرير HTML لأن تفاصيل ${failedStudentIds.size} من أصل ${total} طالب لم تُحمّل. يرجى إعادة المحاولة لإنشاء التقرير كاملاً.`,
       );
     }
 
@@ -1008,7 +1008,7 @@ export function OpportunitiesView() {
                 fetchRows={fetchOpportunityExportRows}
                 columns={opportunityExportColumns}
                 triggerLabel="تصدير"
-                description="تصدير HTML للطلاب: يبحث الطالب عن اسمه ليشاهد فرصه المتبقية، وتاريخ بدء حساب فرص الفصل، وأسباب الإضافة والخصم، ودرجات امتحانات الفصل الحالي. كل امتحان بلا درجة يظهر غياباً. البيانات تُجلب من النظام وقت التصدير."
+                description="تقرير HTML لفرص الطلاب ودرجاتهم في الامتحانات المختارة. كل امتحان بلا درجة يظهر غياباً."
                 fetchStudentDetails={fetchOpportunityStudentDetails}
                 selectHtmlExams
                 getRowId={(s) => String((s as Record<string, unknown>)?.id ?? "")}
@@ -1035,10 +1035,9 @@ export function OpportunitiesView() {
               عمليات جماعية حسب الفلترة الحالية
             </p>
             <p className="text-xs text-muted-foreground">
-              سيطبق الإجراء على كل الطلاب المطابقين للفلاتر من بيانات النظام،
-              وليس الصفحة الحالية فقط.{" "}
+              يشمل الإجراء جميع الطلاب المطابقين للفلاتر في كل الصفحات.{" "}
               {bulkTargetLoading
-                ? "جاري احتساب النطاق الكامل من بيانات النظام…"
+                ? "جاري احتساب الطلاب المطابقين…"
                 : ""}{" "}
               {bulkSkippedNoActiveChapterCount > 0
                 ? `يوجد ${bulkSkippedNoActiveChapterCount} طالب بلا فصل نشط.`
@@ -1096,7 +1095,7 @@ export function OpportunitiesView() {
           <div className="space-y-2">
             {studentsLoading ? (
               <p className="empty-state py-8">
-                جاري تحميل الطلاب من بيانات النظام...
+                جاري تحميل الطلاب...
               </p>
             ) : paged.length === 0 ? (
               <p className="empty-state py-8">
@@ -1302,7 +1301,7 @@ export function OpportunitiesView() {
           {/* Opportunity Overview */}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-black">إجمالي الطلاب في النظام</h3>
+              <h3 className="text-sm font-black">إجمالي الطلاب</h3>
               <Badge variant="outline">نطاق كلي</Badge>
             </div>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-8">
@@ -1340,7 +1339,7 @@ export function OpportunitiesView() {
                   {statsSuffix}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  إجمالي الطلاب في النظام
+                  إجمالي الطلاب
                 </p>
               </CardContent>
             </Card>
@@ -1520,7 +1519,7 @@ export function OpportunitiesView() {
               <div className="max-h-[55dvh] space-y-3 overflow-y-auto pe-1">
                 {detailsLogsLoading ? (
                   <p className="empty-state py-8">
-                    جاري تحميل سجل الطالب من بيانات النظام...
+                    جاري تحميل سجل الطالب...
                   </p>
                 ) : selectedDetailsLogs.length === 0 ? (
                   <p className="empty-state py-8">
@@ -1605,8 +1604,7 @@ export function OpportunitiesView() {
           <div className="space-y-4">
             <div className="rounded-2xl border bg-muted/50 p-3 text-sm leading-6">
               <p className="font-bold">
-                سيتم تطبيق العملية على {bulkTargetCount} طالب من كل قاعدة
-                البيانات بعد الفلاتر والاستثناءات، وليس الصفحة الحالية فقط.
+                ستشمل العملية {bulkTargetCount} طالباً مطابقاً للفلاتر والاستثناءات في جميع الصفحات.
               </p>
               <p className="text-xs text-muted-foreground">
                 الفلاتر: {activeCourseFilterName} • {activeStatusFilterName} •{" "}
@@ -1614,8 +1612,7 @@ export function OpportunitiesView() {
                 {search.trim() ? ` • بحث: ${search.trim()}` : ""}
               </p>
               <p className="mt-1 text-xs font-semibold text-primary">
-                المطابقون قبل الاستثناءات: {bulkTotalMatchingCount} • لديهم مصدر
-                فرص صالح: {bulkEligibleWithActiveChapterCount}
+                المطابقون قبل الاستثناءات: {bulkTotalMatchingCount} • مؤهلون لتعديل الفرص: {bulkEligibleWithActiveChapterCount}
               </p>
               {bulkActionDialog.type === "add" ? (
                 <div className="mt-3 rounded-xl border bg-background/70 p-3">
@@ -1685,8 +1682,7 @@ export function OpportunitiesView() {
               )}
               {bulkInvalidOpportunitySourceCount > 0 ? (
                 <p className="mt-2 text-xs font-semibold text-amber-600">
-                  سيتم تجاوز {bulkInvalidOpportunitySourceCount} طالب لأن مصدر
-                  سقف الفرص غير صالح
+                  سيتم تجاوز {bulkInvalidOpportunitySourceCount} طالب بسبب إعدادات الفصل أو الفرص
                   {bulkSkippedNoActiveChapterCount > 0
                     ? ` • بلا فصل نشط: ${bulkSkippedNoActiveChapterCount}`
                     : ""}

@@ -95,7 +95,7 @@ export function DashboardView({
         });
         const data = await res.json().catch(() => null);
         if (!res.ok) {
-          throw new Error(data?.error || "تعذر تحميل الإحصائيات من بيانات النظام.");
+          throw new Error(data?.error || "تعذر تحميل الإحصائيات.");
         }
         if (!request.isLatest()) return;
         setStats(data as DashboardStats);
@@ -105,7 +105,7 @@ export function DashboardView({
         setStatsError(
           error instanceof Error
             ? error.message
-            : "تعذر تحميل الإحصائيات من بيانات النظام.",
+            : "تعذر تحميل الإحصائيات.",
         );
         if (!background) setStats(null);
       } finally {
@@ -128,21 +128,18 @@ export function DashboardView({
       value: stats?.activeStudents,
       icon: Users,
       tone: "success" as const,
-      hint: "عدّ مباشر من بيانات النظام",
     },
     {
       label: "طلاب مفصولون",
       value: stats?.dismissedStudents,
       icon: Shield,
       tone: "warning" as const,
-      hint: "عدّ مباشر من بيانات النظام",
     },
     {
       label: "إجمالي الطلاب",
       value: stats?.totalStudents,
       icon: BookOpen,
       tone: "info" as const,
-      hint: "كل الطلاب المسجلين في بيانات النظام",
     },
   ];
 
@@ -225,7 +222,6 @@ export function DashboardView({
             value={initialLoading ? "…" : card.value ?? "—"}
             icon={card.icon}
             tone={card.tone}
-            hint={card.hint}
           />
         ))}
       </div>

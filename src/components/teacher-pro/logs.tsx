@@ -106,7 +106,7 @@ export function LogsView() {
         if (!request.isLatest()) return;
         if (!result) {
           if (!background) setLogs([]);
-          setError("تعذر تحميل السجلات من بيانات النظام.");
+          setError("تعذر تحميل السجلات.");
           return;
         }
         const nextLogs = ((result.logs || []) as unknown as AuditLogRow[]).map((log) => ({
@@ -141,7 +141,7 @@ export function LogsView() {
         if (!request.isLatest()) return;
         console.warn("[LogsView] failed to load logs", err);
         if (!background) setLogs([]);
-        setError("تعذر تحميل السجلات من بيانات النظام.");
+        setError("تعذر تحميل السجلات.");
       })
       .finally(() => {
         if (request.isLatest()) setLoading(false);
@@ -345,7 +345,7 @@ export function LogsView() {
                   <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">لا توجد سجلات حسب الفلترة الحالية.</td></tr>
                 ) : null}
                 {loading && logs.length === 0 ? (
-                  <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">جاري تحميل السجلات من بيانات النظام...</td></tr>
+                  <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">جاري تحميل السجلات...</td></tr>
                 ) : null}
               </tbody>
             </table>

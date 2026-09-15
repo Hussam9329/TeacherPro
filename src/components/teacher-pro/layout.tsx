@@ -1114,10 +1114,10 @@ export function TeacherProLayout() {
       : connectionVisualStatus === "error"
         ? syncStatus.message || "تعذر إكمال مزامنة البيانات مع النظام."
         : connectionVisualStatus === "syncing"
-          ? "تتم مزامنة البيانات الحالية مع النظام في الخلفية."
+          ? "جارٍ تحديث البيانات."
           : connectionVisualStatus === "loading"
-            ? "يجري التحقق من الاتصال ببيانات النظام."
-            : "الاتصال مستقر والبيانات متاحة من النظام.";
+            ? "جارٍ التحقق من الاتصال."
+            : "الاتصال مستقر.";
 
   if (!authChecked) {
     return (
@@ -1125,7 +1125,6 @@ export function TeacherProLayout() {
         <div className="w-full max-w-md">
           <LoadingState
             title="جاري التحقق من الجلسة..."
-            description="نراجع تسجيل الدخول المحفوظ قبل فتح النظام."
           />
         </div>
       </div>
@@ -1176,9 +1175,6 @@ export function TeacherProLayout() {
               >
                 TeacherPro
               </h1>
-              <p className="text-[11px] leading-5 text-sidebar-foreground/55">
-                واجهة تعليمية احترافية
-              </p>
             </div>
             <Button
               variant="ghost"
@@ -1569,7 +1565,7 @@ export function TeacherProLayout() {
 
         {!dbLoading && !dbConnected && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100 md:px-6">
-            تعذر إكمال تحميل البيانات من النظام.
+            تعذر إكمال تحميل البيانات.
             <Button className="ms-3" variant="outline" size="sm" onClick={() => void loadFromServer()}>
               إعادة المحاولة
             </Button>

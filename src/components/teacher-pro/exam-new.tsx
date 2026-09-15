@@ -233,7 +233,7 @@ function buildExamPayload(form: ExamFormState): Omit<Exam, "id"> {
 function selectedCourseBlockers(rows: ExamCreateContextRow[], selectedIds: string[]): string[] {
   return selectedIds.flatMap((id) => {
     const row = rows.find((item) => item.id === id);
-    if (!row) return [`الدورة ${id} غير موجودة في سياق بيانات النظام`];
+    if (!row) return [`الدورة ${id} غير موجودة`];
     return row.canSelectForExam ? [] : row.blockers.map((blocker) => `${String(row.course?.name || row.id)}: ${blocker}`);
   });
 }
@@ -272,7 +272,7 @@ export function ExamNewView() {
         if (!payload?.rows) {
           if (!silent) {
             setContextRows([]);
-            setContextError("تعذر تحميل سياق إضافة الامتحان من بيانات النظام.");
+            setContextError("تعذر تحميل إعدادات إضافة الامتحان.");
           }
           return;
         }
@@ -284,7 +284,7 @@ export function ExamNewView() {
       .catch(() => {
         if (!controller.signal.aborted && !silent) {
           setContextRows([]);
-          setContextError("تعذر تحميل سياق إضافة الامتحان من بيانات النظام.");
+          setContextError("تعذر تحميل إعدادات إضافة الامتحان.");
         }
       })
       .finally(() => {
@@ -325,7 +325,7 @@ export function ExamNewView() {
         telegramCloseAt: state.telegramCloseAt,
         requireTelegramWindow: true,
         preflightError: contextLoading
-          ? "انتظر تحميل سياق إضافة الامتحان من بيانات النظام"
+          ? "انتظر تحميل إعدادات إضافة الامتحان"
           : contextError || null,
         courseSelectionError:
           blockers.length > 0
@@ -351,7 +351,7 @@ export function ExamNewView() {
     }
     const result = await examApi.add(buildExamPayload(form));
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر إضافة الامتحان من النظام.");
+      toast.error(result.error || "تعذر إضافة الامتحان.");
       return;
     }
     setForm(emptyForm());
@@ -362,7 +362,7 @@ export function ExamNewView() {
       scopes: ["exams", "grades", "opportunities", "follow-up", "dashboard"],
       dispatchLocal: true  // ← إضافة هذا السطر لإصلاح المشكلة
     });
-    toast.success("تمت إضافة الامتحان من بيانات النظام");
+    toast.success("تمت إضافة الامتحان");
   });
 
   const toggleCourseSelection = (state: ExamFormState, courseId: string): ExamFormState => ({
@@ -376,7 +376,7 @@ export function ExamNewView() {
       <div className="space-y-3">
         {contextLoading ? (
           <div className="rounded-lg border bg-muted/40 p-3 text-sm text-muted-foreground">
-            جاري تحميل الدورات والفصول النشطة من بيانات النظام...
+            جاري تحميل الدورات والفصول النشطة...
           </div>
         ) : contextError ? (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
@@ -391,7 +391,7 @@ export function ExamNewView() {
                 disabled={selectableCourses.length === 0}
                 onCheckedChange={() => setState((prev) => ({ ...prev, courseIds: allSelected ? [] : selectableCourses.map((row) => row.id) }))}
               />
-              <Label htmlFor={allId} className="text-sm font-bold">الكل للدورات الصالحة من بيانات النظام</Label>
+              <Label htmlFor={allId} className="text-sm font-bold">كل الدورات الصالحة</Label>
               <Badge variant="outline" className="text-[10px]">{selectableCourses.length} صالحة</Badge>
             </div>
             {contextRows.map((row) => {
@@ -462,7 +462,6 @@ export function ExamNewView() {
             <SelectItem value="معطل">معطل</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">تعطيل الامتحان يتم فورياً من سجل الامتحانات عند الحاجة.</p>
       </div>
       {state.statusMode === "تفعيل مجدول" && (
         <div className="tp-form-field space-y-2">
@@ -616,12 +615,12 @@ export function ExamNewView() {
           </div>
           {matchedStudentsCount === 0 && (
             <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs font-semibold text-destructive">
-              لا يوجد طلاب نشطون ظاهرون من سياق النظام لهذه المواقع في الدورات المختارة. قد يتم إنشاء الامتحان بدون نتائج متوقعة.
+              لا يوجد طلاب نشطون في الدورات والمواقع المختارة؛ سيُنشأ الامتحان دون طلاب مطابقين.
             </div>
           )}
           {matchedStudentsCount !== null && matchedStudentsCount > 0 && (
             <p className="text-xs text-muted-foreground">
-              مؤشر الطلاب النشطين حسب الدورات والمواقع المختارة من النظام: {matchedStudentsCount}
+              الطلاب النشطون في الدورات والمواقع المختارة: {matchedStudentsCount}
             </p>
           )}
           <ExamFieldError
@@ -810,7 +809,6 @@ export function ExamNewView() {
         <div className="tp-form-preview space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4 md:col-span-2 xl:col-span-3">
           <div>
             <h3 className="font-bold">معاينة الحكم قبل الحفظ</h3>
-            <p className="text-xs text-muted-foreground">هذه المعاينة توضح كيف سيتعامل النظام مع الدرجات والغياب والغش حسب القيم الحالية.</p>
           </div>
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
             {judgmentPreview.map((item) => (
@@ -876,7 +874,7 @@ export function ExamNewView() {
           <CardTitle>إضافة امتحان جديد</CardTitle>
         </CardHeader>
         <CardContent className="tp-exam-new__content space-y-4">
-          <div className="tp-exam-new__stats grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="tp-exam-new__stats grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">الدورات الصالحة</p>
               <p className="text-2xl font-black">{contextLoading ? "..." : selectableCourses.length}</p>
@@ -888,10 +886,6 @@ export function ExamNewView() {
             <div className="rounded-2xl border bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">الطلاب النشطون</p>
               <p className="text-2xl font-black">{contextLoading ? "..." : contextRows.reduce((sum, row) => sum + Number(row.activeStudents || 0), 0)}</p>
-            </div>
-            <div className="rounded-2xl border bg-muted/30 p-3">
-              <p className="text-xs text-muted-foreground">مصدر الصفحة</p>
-              <p className="text-sm font-bold text-emerald-600">بيانات النظام</p>
             </div>
           </div>
 

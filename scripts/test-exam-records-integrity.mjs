@@ -29,9 +29,9 @@ must(
 );
 
 must(
-  page.includes("تفاصيل الامتحان مخفية") &&
+  page.includes("tp-exam-record-card-collapsed") &&
     page.includes("renderExamDetailsPanel") &&
-    page.includes("detailsOpen ?"),
+    page.includes("{detailsOpen && ("),
   "كارت الامتحان يعرض ملخصاً فقط ويُظهر التفاصيل عند الفتح",
   "يجب أن تكون تفاصيل الامتحان داخل شرط detailsOpen لا ظاهرة دائماً."
 );

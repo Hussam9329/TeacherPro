@@ -258,7 +258,7 @@ export function GradeRecordsView() {
           if (!silent) {
             setServerGrades(null);
             setServerGradesError(
-              "تعذر تحميل سجل الدرجات من النظام. تم تعطيل التعديل والحذف حتى يرجع الاتصال.",
+              "تعذر تحميل سجل الدرجات. التعديل والحذف غير متاحين حتى عودة الاتصال.",
             );
           }
           return;
@@ -283,7 +283,7 @@ export function GradeRecordsView() {
         if (controller.signal.aborted || silent) return;
         setServerGrades(null);
         setServerGradesError(
-          "تعذر تحميل سجل الدرجات من النظام. تم تعطيل التعديل والحذف حتى يرجع الاتصال.",
+          "تعذر تحميل سجل الدرجات. التعديل والحذف غير متاحين حتى عودة الاتصال.",
         );
       })
       .finally(() => {
@@ -473,7 +473,7 @@ export function GradeRecordsView() {
 
   const toggleAcademicAccounting = async (gradeId: string, checked: boolean) => {
     if (!canRunGradeRecordActions) {
-      toast.error("تعذر تنفيذ الإجراء قبل تحميل سجل الدرجات من النظام.");
+      toast.error("انتظر تحميل سجل الدرجات قبل تنفيذ الإجراء.");
       return;
     }
     if (!isAcademicAccountingRow(gradeId)) {
@@ -487,7 +487,7 @@ export function GradeRecordsView() {
     });
     if (!result.ok || result.queued) {
       if (result.status === 409) setServerRefreshKey((key) => key + 1);
-      toast.error(result.error || "تعذر حفظ مراجعة السجل في النظام.");
+      toast.error(result.error || "تعذر حفظ مراجعة السجل.");
       return;
     }
     updateServerGradeRow(gradeId, { academicAccountingChecked: checked });
@@ -633,7 +633,7 @@ export function GradeRecordsView() {
     withGrade: systemGradeCoverageStats?.withGrade,
     withoutGrade: systemGradeCoverageStats?.withoutGrade,
     total: systemGradeCoverageStats?.total,
-    scopeLabel: "إجمالي الطلاب في النظام",
+    scopeLabel: "إجمالي الطلاب",
     missingHint: "لا يملكون درجات مسجلة حتى الآن",
   };
 
@@ -711,7 +711,7 @@ export function GradeRecordsView() {
 
   const openEditGradeDialog = (gradeId: string) => {
     if (!canRunGradeRecordActions) {
-      toast.error("تعذر تعديل الدرجة قبل تحميل سجل الدرجات من النظام.");
+      toast.error("انتظر تحميل سجل الدرجات قبل تعديل الدرجة.");
       return;
     }
     const grade = gradeForAction(gradeId);
@@ -792,7 +792,7 @@ export function GradeRecordsView() {
     options: { confirmLeaveEnd?: boolean } = {},
   ) => {
     if (!canRunGradeRecordActions) {
-      toast.error("تعذر تعديل الدرجة قبل تحميل سجل الدرجات من النظام.");
+      toast.error("انتظر تحميل سجل الدرجات قبل تعديل الدرجة.");
       return;
     }
     const validated = validateEditDialogScore();
@@ -819,7 +819,7 @@ export function GradeRecordsView() {
         return;
       }
       if (result.status === 409) setServerRefreshKey((key) => key + 1);
-      toast.error(result.error || "تعذر تعديل الدرجة من النظام.");
+      toast.error(result.error || "تعذر تعديل الدرجة.");
       return;
     }
 
@@ -848,7 +848,7 @@ export function GradeRecordsView() {
     toast.success(
       payload.leaveEndedByGrade
         ? "تم اعتماد الدرجة وإنهاء الإجازة وإعادة احتساب الطالب."
-        : "تم تعديل الدرجة من بيانات النظام وإعادة الاحتساب",
+        : "تم تعديل الدرجة وإعادة الاحتساب",
     );
   };
 
@@ -873,7 +873,7 @@ export function GradeRecordsView() {
 
   const openDeleteGradeDialog = (gradeId: string) => {
     if (!canRunGradeRecordActions) {
-      toast.error("تعذر حذف الدرجة قبل تحميل سجل الدرجات من النظام.");
+      toast.error("انتظر تحميل سجل الدرجات قبل حذف الدرجة.");
       return;
     }
     const grade = gradeForAction(gradeId);
@@ -890,7 +890,7 @@ export function GradeRecordsView() {
 
   const handleDeleteGrade = runDeleteGradeLocked(async () => {
     if (!canRunGradeRecordActions) {
-      toast.error("تعذر حذف الدرجة قبل تحميل سجل الدرجات من النظام.");
+      toast.error("انتظر تحميل سجل الدرجات قبل حذف الدرجة.");
       return;
     }
     const grade = gradeForAction(deleteDialog.id);
@@ -905,7 +905,7 @@ export function GradeRecordsView() {
       grade.updatedAt,
     );
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر حذف الدرجة من النظام.");
+      toast.error(result.error || "تعذر حذف الدرجة.");
       return;
     }
     setServerGrades((current) =>
@@ -915,7 +915,7 @@ export function GradeRecordsView() {
     );
     setServerTotalCount((count) => Math.max(0, count - 1));
     refreshGradeRecordsAfterMutation("grade-records-delete");
-    toast.success("تم حذف الدرجة من بيانات النظام");
+    toast.success("تم حذف الدرجة");
     setDeleteDialog({ open: false, id: "", label: "" });
   });
 
@@ -1243,8 +1243,8 @@ export function GradeRecordsView() {
               <h3 className="text-sm font-black">ورقة إدخال الدرجة</h3>
               <p className="mt-1 text-xs leading-6 text-muted-foreground">
                 {selectedFilteredExam
-                  ? `الامتحان المحدد: ${selectedFilteredExam.name}. الورقة تبقى متاحة من تسجيل الدرجات وتعرض الطلاب من بيانات النظام حسب هذا الامتحان.`
-                  : "اختر امتحاناً من الفلتر حتى تعرف الورقة التي تريد إدخال درجاتها."}
+                  ? `الامتحان: ${selectedFilteredExam.name}`
+                  : "اختر امتحاناً لإدخال درجاته."}
               </p>
             </div>
             <Button
@@ -1287,7 +1287,7 @@ export function GradeRecordsView() {
 
       {serverGradesLoading && (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
-          جاري تحميل سجل الدرجات من بيانات النظام...
+          جاري تحميل سجل الدرجات...
         </div>
       )}
 

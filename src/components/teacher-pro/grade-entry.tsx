@@ -397,7 +397,7 @@ export function GradeEntryView() {
             setEntrySheetOpportunityLogs([]);
             setEntrySheetCourseChapters([]);
             setEntrySheetError(
-              "تعذر تحميل ورقة إدخال الدرجات من بيانات النظام. حدّث الصفحة أو تحقق من صلاحية الحساب.",
+              "تعذر تحميل ورقة إدخال الدرجات. حدّث الصفحة أو تحقق من صلاحية الحساب.",
             );
           }
           return;
@@ -448,7 +448,7 @@ export function GradeEntryView() {
         setEntrySheetOpportunityLogs([]);
         setEntrySheetCourseChapters([]);
         setEntrySheetError(
-          "تعذر تحميل ورقة إدخال الدرجات من بيانات النظام. حدّث الصفحة أو تحقق من صلاحية الحساب.",
+          "تعذر تحميل ورقة إدخال الدرجات. حدّث الصفحة أو تحقق من صلاحية الحساب.",
         );
       })
       .finally(() => {
@@ -1280,7 +1280,7 @@ export function GradeEntryView() {
           }));
           showGradeEntryNotice(
             "error",
-            result.error || "تعذر حذف الدرجة من بيانات النظام. لم يتم تغيير ورقة الإدخال.",
+            result.error || "تعذر حذف الدرجة. لم تتغير ورقة الإدخال.",
           );
           restoreDraftFromSavedGrade(studentId);
           return;
@@ -1297,7 +1297,7 @@ export function GradeEntryView() {
         setEditableRows((prev) => ({ ...prev, [studentId]: false }));
         setSavedRows((prev) => ({
           ...prev,
-          [studentId]: "تم حذف الدرجة من بيانات النظام",
+          [studentId]: "تم حذف الدرجة",
         }));
         setRowSaveStates((prev) => ({
           ...prev,
@@ -1306,7 +1306,7 @@ export function GradeEntryView() {
         emitGradeEntryServerSync("grade-entry-delete");
         showGradeEntryNotice(
           "success",
-          "تم حذف الدرجة من بيانات النظام وإعادة احتساب الطالب",
+          "تم حذف الدرجة وإعادة احتساب الطالب",
         );
       } finally {
         if (selectedExamIdRef.current === examId) {
@@ -1399,7 +1399,7 @@ export function GradeEntryView() {
     if (entrySheetError) {
       showGradeEntryNotice(
         "error",
-        "لا يمكن حفظ درجة لأن ورقة الإدخال لم تُحمّل من بيانات النظام.",
+        "انتظر تحميل ورقة الإدخال قبل حفظ الدرجة.",
       );
       return;
     }
@@ -1581,7 +1581,7 @@ export function GradeEntryView() {
             if (!options.silent) {
               showGradeEntryNotice(
                 "success",
-                "تم التحقق من بيانات النظام: الدرجة محفوظة فعلياً.",
+                "تم حفظ الدرجة.",
               );
             }
             return;
@@ -1627,7 +1627,7 @@ export function GradeEntryView() {
           showGradeEntryNotice(
             "error",
             result.error ||
-              "تعذر حفظ الدرجة في بيانات النظام. بقي التعديل كمسودة غير محفوظة.",
+              "تعذر حفظ الدرجة. بقي التعديل كمسودة غير محفوظة.",
           );
           return;
         }
@@ -1708,7 +1708,7 @@ export function GradeEntryView() {
             }));
             showGradeEntryNotice(
               "error",
-              "لم يرجع النظام سجل الدرجة النهائي، ولم يُعثر عليه عند التحقق من بيانات النظام.",
+              "تعذر تأكيد حفظ الدرجة. راجع السجل قبل إعادة المحاولة.",
             );
           } else if (offlineAttempt) {
             confirmGradeEntryOfflineAttempt(
@@ -1773,7 +1773,7 @@ export function GradeEntryView() {
                 ? "تم اعتماد الدرجة وإنهاء الإجازة وإعادة احتساب الطالب."
                 : payload.graceEnded
                   ? "تم حفظ الدرجة وإنهاء فترة السماح؛ بدأت محاسبة الطالب من هذه الدرجة."
-                  : "تم حفظ الدرجة في بيانات النظام وإعادة احتساب الطالب",
+                  : "تم حفظ الدرجة وإعادة احتساب الطالب",
           );
         }
       } finally {
@@ -1950,7 +1950,7 @@ export function GradeEntryView() {
   const handleClearAbsentGradesConfirmed = async () => {
     if (!selectedExam) return;
     if (entrySheetError) {
-      toast.error("لا يمكن إلغاء الغياب لأن ورقة الإدخال غير محملة من بيانات النظام.");
+      toast.error("انتظر تحميل ورقة الإدخال قبل إلغاء الغياب.");
       return;
     }
 
@@ -1976,7 +1976,7 @@ export function GradeEntryView() {
     });
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر إلغاء حالات الغياب من بيانات النظام.");
+      toast.error(result.error || "تعذر إلغاء حالات الغياب.");
       return;
     }
 
@@ -2009,12 +2009,12 @@ export function GradeEntryView() {
       setSavedRows((prev) => {
         const next = { ...prev };
         realAffectedStudentIds.forEach((studentId) => {
-          next[studentId] = "تم إلغاء الغياب من بيانات النظام";
+          next[studentId] = "تم إلغاء الغياب";
         });
         return next;
       });
       emitGradeEntryServerSync("grade-entry-clear-absent");
-      toast.success(`تم إلغاء حالة غائب من ${removedCount} طالب من بيانات النظام`);
+      toast.success(`تم إلغاء حالة غائب من ${removedCount} طالب`);
     } else {
       toast.info("لا توجد حالات غياب قابلة للإلغاء للطلاب النشطين");
     }
@@ -2039,7 +2039,7 @@ export function GradeEntryView() {
     if (!selectedExam) return;
     if (markingAllMissingAbsent) return;
     if (entrySheetError) {
-      toast.error("لا يمكن تسجيل الغياب الجماعي لأن ورقة الإدخال غير محملة من بيانات النظام.");
+      toast.error("انتظر تحميل ورقة الإدخال قبل تسجيل الغياب الجماعي.");
       return;
     }
 
@@ -2075,7 +2075,7 @@ export function GradeEntryView() {
     });
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر تسجيل الغياب الجماعي من بيانات النظام.");
+      toast.error(result.error || "تعذر تسجيل الغياب الجماعي.");
       return;
     }
 
@@ -2524,7 +2524,7 @@ export function GradeEntryView() {
           </CardHeader>
           <CardContent>
             <p className="empty-state">
-              اختر الامتحان من الأعلى حتى تظهر ورقة إدخال الدرجات هنا مباشرة.
+              اختر امتحاناً لإدخال درجاته.
             </p>
           </CardContent>
         </Card>
@@ -2634,37 +2634,13 @@ export function GradeEntryView() {
                 <CardTitle>
                   ورقة إدخال الدرجة - {examStudents.length} طالب
                 </CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  البحث هنا يجد الطالب حتى لو تغيرت دورته ما دامت درجته مسجلة
-                  لهذا الامتحان، ويعرض وقت إدخال الدرجة في السجل.
-                </p>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="tp-save-guide mb-4" aria-label="طريقة حفظ درجات الطلاب">
-              <div className="tp-save-guide__item" data-save-mode="automatic">
-                <span className="tp-save-guide__marker" aria-hidden="true" />
-                <span>
-                  <span className="tp-save-guide__title">الحفظ التلقائي</span>
-                  <span className="tp-save-guide__description">
-                    تُحفظ الدرجة أو الملاحظة عند مغادرة الحقل، وتُحفظ الحالة مباشرة عند اختيارها.
-                  </span>
-                </span>
-              </div>
-              <div className="tp-save-guide__item" data-save-mode="manual">
-                <span className="tp-save-guide__marker" aria-hidden="true" />
-                <span>
-                  <span className="tp-save-guide__title">الحفظ اليدوي</span>
-                  <span className="tp-save-guide__description">
-                    استخدم «حفظ الآن» لتثبيت بيانات الصف مباشرة دون انتظار مغادرة الحقل.
-                  </span>
-                </span>
-              </div>
-            </div>
             {entrySheetLoading && (
               <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary">
-                جاري تحميل ورقة إدخال الدرجات من بيانات النظام...
+                جاري تحميل ورقة إدخال الدرجات...
               </div>
             )}
             {entrySheetError && (
@@ -2739,7 +2715,7 @@ export function GradeEntryView() {
                   {entrySheetLoading
                     ? "جاري تجهيز ورقة إدخال الدرجة..."
                     : entrySheetError
-                      ? "تعذر تحميل الطلاب من بيانات النظام لهذا الامتحان."
+                      ? "تعذر تحميل طلاب هذا الامتحان."
                       : "لا يوجد طلاب مطابقون للفلاتر أو للدورات المربوطة بفصل نشط."}
                 </p>
               ) : (
@@ -2860,7 +2836,7 @@ export function GradeEntryView() {
                             <Badge variant="outline" className="text-[10px]">
                               {grade.status === "درجة"
                                 ? "درجة محفوظة"
-                                : `حالة النظام: ${grade.status}`}
+                                : `الحالة: ${grade.status}`}
                             </Badge>
                             <span>
                               وقت الإدخال: {formatGradeEntryTimestamp(grade.createdAt)}

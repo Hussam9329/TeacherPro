@@ -610,7 +610,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       .catch(() => {
         if (!cancelled && !controller.signal.aborted) {
           setCallCourseExamsFromDb([]);
-          toast.error("تعذر تحميل امتحانات المكالمات من بيانات النظام.");
+          toast.error("تعذر تحميل امتحانات المكالمات.");
         }
       })
       .finally(() => {
@@ -1040,7 +1040,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const saveLeave = async () => {
     if (leaveOperationRef.current) return;
     if (selectedLeavesError || selectedLeavesLoading) {
-      toast.error("انتظر تحميل إجازات الطالب من بيانات النظام قبل الحفظ.");
+      toast.error("انتظر تحميل إجازات الطالب قبل الحفظ.");
       return;
     }
     if (!leaveStudentId || !leaveReason.trim()) {
@@ -1122,7 +1122,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       ? await studentLeaveApi.update(editingLeaveId, payload)
       : await studentLeaveApi.add(payload);
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر حفظ الإجازة من النظام.");
+      toast.error(result.error || "تعذر حفظ الإجازة.");
       return;
     }
 
@@ -1160,7 +1160,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       toast.success(
         restoredGradeCount > 0
           ? `تم تحديث الإجازة واسترجاع ${restoredGradeCount} درجة/درجات أصلية ثم إعادة الاحتساب.`
-          : "تم تحديث الإجازة وإعادة احتساب الطالب من بيانات النظام.",
+          : "تم تحديث الإجازة وإعادة احتساب الطالب.",
       );
       return;
     }
@@ -1436,8 +1436,8 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         </div>
         <p className="text-[11px] text-muted-foreground">
           {leavePickerLoading
-            ? "جاري جلب النتائج من بيانات النظام…"
-            : `معروض ${filteredStudents.length} من ${leavePickerTotal || filteredStudents.length} طالب/طالبة في النظام حسب البحث. يمكن تسجيل إجازة للمفصول ومراجعة سبب فصله. المؤرشف لا يقبل إجازة جديدة.`}
+            ? "جاري البحث…"
+            : `معروض ${filteredStudents.length} من ${leavePickerTotal || filteredStudents.length} طالب/طالبة حسب البحث.`}
         </p>
         {selectedLeaveStudent && (
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-card/80 p-2">
@@ -1469,7 +1469,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       ? `فترة من ${formatAppDate(leave.dateFrom || leave.date)} إلى ${formatAppDate(leave.dateTo || leave.dateFrom || leave.date)}`
       : "امتحان واحد";
     const ok = window.confirm(
-      `سيتم حذف إجازة (${scopeText}) من بيانات النظام نهائياً، واسترجاع أي درجات عُلّقت بسببها (يُستثنى الغياب غير الصالح قبل التسجيل أو ضمن السماح)، ثم إعادة احتساب الطالب. هل تريد المتابعة؟`,
+      `سيتم حذف إجازة (${scopeText}) نهائياً، واسترجاع أي درجات عُلّقت بسببها (يُستثنى الغياب غير الصالح قبل التسجيل أو ضمن السماح)، ثم إعادة احتساب الطالب. هل تريد المتابعة؟`,
     );
     if (!ok) return;
 
@@ -1481,7 +1481,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const result = await studentLeaveApi.remove(leave.id);
 
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر حذف الإجازة من النظام.");
+      toast.error(result.error || "تعذر حذف الإجازة.");
       return;
     }
 
@@ -1550,9 +1550,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     <Card>
       <CardHeader>
         <CardTitle>الإجازات السابقة</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          كل الإجازات هنا تأتي من بيانات النظام، وأي حذف يسترجع الدرجات المحفوظة احتياطياً قبل إعادة الاحتساب.
-        </p>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid gap-3 md:grid-cols-4">
@@ -2131,9 +2128,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 <Label className="text-xs font-bold text-muted-foreground">
                   ملاحظات المكالمات
                 </Label>
-                <span className="text-[11px] text-muted-foreground">
-                  حفظ تلقائي عند مغادرة الحقل، أو حفظ مباشر من الزر
-                </span>
               </div>
               <textarea
                 className="min-h-28 w-full rounded-2xl border border-input bg-background px-3 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -2161,7 +2155,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     ? "جارٍ حفظ الملاحظة..."
                     : Object.prototype.hasOwnProperty.call(callNoteDrafts, row.student.id)
                       ? "تعديل غير محفوظ — سيُحفظ عند مغادرة الحقل"
-                      : "محفوظة من بيانات النظام"}
+                      : "محفوظة"}
                 </span>
                 <Button
                   type="button"
@@ -2261,7 +2255,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 {selectedLeaveStudent && selectedStudentLeaves.length > 0 && (
                   <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/50 dark:bg-amber-950/25">
                     <p className="text-xs font-bold text-amber-900 dark:text-amber-100">
-                      إجازات الطالب المحدد حالياً في النظام (
+                      إجازات الطالب (
                       {selectedStudentLeaves.length}):
                     </p>
                     <ul className="space-y-1.5">
@@ -2708,14 +2702,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 </p>
               ) : !callExamSelected ? (
                 <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
-                  تم اختيار الدورة. اختر امتحاناً من امتحانات هذه الدورة لعرض
-                  الطلاب. مصدر الامتحانات هنا بيانات النظام، وليس البيانات المؤقتة المحلية.
+                  اختر امتحاناً لعرض الطلاب.
                 </p>
               ) : callLoading ? (
                 <div className="rounded-2xl border bg-muted/30 p-3 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
-                    <span>جاري تحميل طلاب ودرجات هذه الدورة من بيانات النظام...</span>
+                    <span>جاري تحميل الطلاب والدرجات...</span>
                   </div>
                 </div>
               ) : null}

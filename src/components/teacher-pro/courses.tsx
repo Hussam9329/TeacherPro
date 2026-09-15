@@ -937,7 +937,7 @@ export function CoursesView() {
       const data = await courseApi.overview({ signal, quietAbort: true });
       if (!data) {
         if (!signal?.aborted && !options.silent) {
-          setLoadError("تعذر تحميل ملخص الدورات من بيانات النظام.");
+          setLoadError("تعذر تحميل ملخص الدورات.");
           setIsLoading(false);
         }
         return;
@@ -1028,7 +1028,7 @@ export function CoursesView() {
     }
     setCreateForm(emptyCourseForm());
     setShowCreateForm(false);
-    toast.success("تمت إضافة الدورة من بيانات النظام");
+    toast.success("تمت إضافة الدورة");
     await syncCoursesAfterMutation("إضافة دورة");
   });
 
@@ -1086,7 +1086,7 @@ export function CoursesView() {
       form: emptyCourseForm(),
       row: null,
     });
-    toast.success(impact?.message || "تم تعديل الدورة بعد التحقق من الحفظ");
+    toast.success(impact?.message || "تم تعديل الدورة");
     await syncCoursesAfterMutation(
       syncStudentSnapshots ? "تعديل ومزامنة إعدادات دورة" : "تعديل دورة",
     );
@@ -1176,7 +1176,7 @@ export function CoursesView() {
       toast.error(result.error || "تعذر حذف الدورة");
       return;
     }
-    toast.success("تم حذف الدورة بعد التحقق من الحفظ");
+    toast.success("تم حذف الدورة");
     setDeleteDialog({
       open: false,
       id: "",
@@ -1209,7 +1209,7 @@ export function CoursesView() {
     <div className="tp-courses__stats grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       <div className="rounded-2xl border bg-card/80 p-4 shadow-sm">
         <p className="text-xs text-muted-foreground">
-          إجمالي الدورات في النظام
+          إجمالي الدورات
         </p>
         <p className="mt-1 text-2xl font-black">
           {stats?.total ?? rows.length}
@@ -1290,8 +1290,7 @@ export function CoursesView() {
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              أنشئت: {formatAppDate(row.course.createdAt)} — البيانات من بيانات
-              النظام
+              أنشئت: {formatAppDate(row.course.createdAt)}
             </p>
           </div>
           <div className="tp-course-card__actions flex flex-wrap gap-2">
@@ -1471,7 +1470,7 @@ export function CoursesView() {
               form={createForm}
               setForm={setCreateForm}
               onSubmit={handleCreate}
-              submitLabel="حفظ الدورة من بيانات النظام"
+              submitLabel="حفظ الدورة"
               submitDisabled={isAddingCourse}
             />
           </CardContent>
@@ -1574,8 +1573,7 @@ export function CoursesView() {
             </div>
             <p className="mt-2 leading-6">
               {courseStatusFilterLabels[statusFilter]} —{" "}
-              {courseDeleteFilterLabels[deleteFilter]}. هذه الفلاتر للعرض فقط
-              ولا تغيّر حالة أي دورة.
+              {courseDeleteFilterLabels[deleteFilter]}
             </p>
           </div>
         </CardHeader>
@@ -1616,9 +1614,7 @@ export function CoursesView() {
                   تعديل الدورة
                 </DialogTitle>
                 <DialogDescription>
-                  الحفظ يتم من النظام أولاً. إذا كان التعديل يحذف خياراً يستخدمه
-                  طلاب مسجلون، سيتم رفضه برسالة واضحة حتى لا يتغير تصنيف طالب
-                  قديم بدون قصد.
+                  لا يمكن حذف خيار يستخدمه طلاب مسجلون.
                 </DialogDescription>
                 {editDialog.row ? (
                   <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
@@ -1650,7 +1646,7 @@ export function CoursesView() {
                     }))
                   }
                   onSubmit={handleEditSave}
-                  submitLabel="حفظ التعديلات بعد فحص النظام"
+                  submitLabel="حفظ التعديلات"
                   submitDisabled={isSavingCourse}
                 />
               </div>
@@ -1677,9 +1673,7 @@ export function CoursesView() {
             <AlertDialogDescription asChild>
               <div className="space-y-4 text-right leading-7">
                 <p>
-                  تم حساب الأثر الآن من بيانات النظام. اختر هل تبقى بيانات
-                  الطلاب القدامى كنسخة تاريخية، أم تتم مزامنتها مع الإعدادات
-                  الجديدة ضمن عملية واحدة.
+                  اختر الاحتفاظ ببيانات الطلاب الحالية أو تحديثها حسب الإعدادات الجديدة.
                 </p>
                 {courseSyncDialog.preview ? (
                   <>
@@ -1784,8 +1778,7 @@ export function CoursesView() {
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-right leading-7">
                 <p>
-                  الحذف لا يعتمد على بيانات الصفحة المؤقتة. يتم السماح به فقط
-                  إذا أكدت بيانات النظام أن الدورة غير مرتبطة بطلاب أو امتحانات.
+                  يمكن حذف الدورة إذا لم تكن مرتبطة بطلاب أو امتحانات.
                 </p>
                 {deleteDialog.row ? (
                   <div
@@ -1799,7 +1792,7 @@ export function CoursesView() {
                     <p className="text-sm">
                       {deleteDialog.row.deleteSafety.blockers.length
                         ? deleteDialog.row.deleteSafety.blockers.join("، ")
-                        : "لا توجد روابط مانعة حسب آخر فحص من بيانات النظام."}
+                        : "لا توجد روابط تمنع الحذف."}
                     </p>
                     <p className="text-sm">
                       {deleteDialog.row.deleteSafety.recommendedAction}

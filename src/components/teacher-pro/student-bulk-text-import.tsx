@@ -361,7 +361,7 @@ export function StudentBulkTextImportView() {
       if (!context) {
         if (!silent) {
           setRegisterContext(null);
-          setContextError("تعذر تحميل سياق التسجيل الجماعي من بيانات النظام.");
+          setContextError("تعذر تحميل بيانات التسجيل الجماعي.");
         }
         return;
       }
@@ -369,7 +369,7 @@ export function StudentBulkTextImportView() {
     } catch {
       if (!silent) {
         setRegisterContext(null);
-        setContextError("تعذر الاتصال بالنظام لتحميل سياق التسجيل الجماعي.");
+        setContextError("تعذر تحميل بيانات التسجيل الجماعي. حاول مجدداً.");
       }
     } finally {
       setContextLoading(false);
@@ -440,13 +440,13 @@ export function StudentBulkTextImportView() {
   const buildPreview = async () => {
     if (isPreviewing) return;
     if (contextLoading) {
-      toast.error("انتظر اكتمال تحميل سياق التسجيل الجماعي من بيانات النظام");
+      toast.error("انتظر اكتمال تحميل بيانات التسجيل الجماعي");
       return;
     }
     if (!registerContext) {
       toast.error("تعذر فحص التسجيل الجماعي", {
         description:
-          contextError || "لا يوجد سياق دورات متاح من بيانات النظام.",
+          contextError || "تعذر تحميل الدورات.",
       });
       return;
     }
@@ -561,7 +561,7 @@ export function StudentBulkTextImportView() {
         (courseRow.activeChapterCount || 0) === 0
       ) {
         warnings.push(
-          "لا يوجد فصل نشط لهذه الدورة؛ النظام سيسجل الطالب بفرص 0 بوضوح.",
+          "لا يوجد فصل نشط لهذه الدورة؛ سيُسجل الطالب بدون فرص.",
         );
       } else if (courseRow?.activeChapter && opportunities <= 0) {
         warnings.push(
@@ -570,7 +570,7 @@ export function StudentBulkTextImportView() {
       }
       if (courseRow?.activeChapter && inputOpportunities !== opportunities) {
         warnings.push(
-          `تم تجاهل عمود الفرص (${inputOpportunities}) واعتماد فرص الفصل النشط من بيانات النظام: ${opportunities}.`,
+          `تم تجاهل عمود الفرص (${inputOpportunities}) واعتماد فرص الفصل النشط: ${opportunities}.`,
         );
       }
 
@@ -722,7 +722,7 @@ export function StudentBulkTextImportView() {
           })) as Array<Record<string, unknown>>,
         );
         if (!databaseResult.ok) {
-          toast.error("تعذر إكمال المعاينة من بيانات النظام", {
+          toast.error("تعذر إكمال المعاينة", {
             description:
               databaseResult.error || "تحقق من الاتصال ثم حاول مرة أخرى.",
           });
@@ -730,7 +730,7 @@ export function StudentBulkTextImportView() {
         }
         const databasePreview = getBulkPreviewResponse(databaseResult.data);
         if (!databasePreview) {
-          toast.error("وصلت نتيجة معاينة غير مكتملة من بيانات النظام", {
+          toast.error("نتيجة المعاينة غير مكتملة", {
             description: "أعد المحاولة قبل تنفيذ الإضافة.",
           });
           return;
@@ -780,7 +780,7 @@ export function StudentBulkTextImportView() {
         description: `جاهز ${readyCount} سطر، ويحتاج ${errorsCount} سطر إلى مراجعة`,
       });
     } else {
-      toast.success("المعاينة سليمة من بيانات النظام", {
+      toast.success("اكتملت المعاينة", {
         description: `جاهز لإضافة ${result.length} طالب بعد التأكيد`,
       });
     }
@@ -828,7 +828,7 @@ export function StudentBulkTextImportView() {
       reason: "إضافة جماعية للطلاب",
       scopes: ["students", "opportunities", "dashboard", "bulk-import", "logs"],
     });
-    toast.success("تمت الإضافة الجماعية من بيانات النظام", {
+    toast.success("تمت الإضافة الجماعية", {
       description: `تمت إضافة ${response.count ?? studentsToImport.length} طالب إلى سجل الطلاب${response.warnings?.length ? `، مع ${response.warnings.length} تنبيه فرص` : ""}`,
     });
     setRawText("");
@@ -867,11 +867,9 @@ export function StudentBulkTextImportView() {
           <div className="font-black">
             {row.student ? formatOpportunityBalance(row.student) : "—"}
           </div>
-          <div className="text-[11px] text-muted-foreground">
-            {row.activeChapterName
-              ? `من ${row.activeChapterName}`
-              : "من بيانات النظام"}
-          </div>
+          {row.activeChapterName && (
+            <div className="text-[11px] text-muted-foreground">{row.activeChapterName}</div>
+          )}
         </td>
         <td className="p-3 dir-ltr text-left">
           {row.student?.phone || normalizePhone(row.rawCells[12] || "") || "—"}
@@ -989,7 +987,7 @@ export function StudentBulkTextImportView() {
                   {contextLoading
                     ? "جارٍ تجهيز بيانات التسجيل"
                     : registerContext
-                      ? `الدورات من بيانات النظام: ${registerContext.stats.active}`
+                      ? `الدورات: ${registerContext.stats.active}`
                       : "سياق التسجيل غير متاح"}
                 </Badge>
               </div>
@@ -1017,7 +1015,7 @@ export function StudentBulkTextImportView() {
                     <Eye className="ml-2 size-4" />
                   )}
                   {isPreviewing
-                    ? "جارٍ الفحص من بيانات النظام"
+                    ? "جارٍ الفحص…"
                     : "معاينة وفحص"}
                 </Button>
               </div>
@@ -1029,7 +1027,7 @@ export function StudentBulkTextImportView() {
             ) : null}
             <div className="mt-3 rounded-2xl border border-primary/15 bg-primary/5 p-3 text-xs leading-6 text-muted-foreground">
               التسجيل الجماعي لا يعتمد على عمود الفرص المكتوب بالنص؛ فرص البداية
-              تُحسب من الفصل النشط للدورة في بيانات النظام، والدورة الموقوفة أو
+              تُحسب من الفصل النشط للدورة، والدورة الموقوفة أو
               ذات تعارض الفصول تُرفض قبل الإضافة.
             </div>
           </section>
@@ -1039,10 +1037,6 @@ export function StudentBulkTextImportView() {
               <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h3 className="text-lg font-black">نتيجة المعاينة</h3>
-                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                    النتيجة مفحوصة مباشرةً من بيانات النظام حتى يعرف المستخدم
-                    ما الذي سيُستورد وما الذي يحتاج مراجعة.
-                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Badge>{summary.total} سطر</Badge>
@@ -1182,7 +1176,7 @@ export function StudentBulkTextImportView() {
               <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm leading-6 text-muted-foreground">
                   {importPolicy === "valid-only"
-                    ? "عند الضغط سيتم إرسال الأسطر الجاهزة فقط إلى النظام."
+                    ? "سيتم استيراد الأسطر الجاهزة فقط."
                     : "عند الضغط يجب أن تكون كل الأسطر سليمة، وإلا لن يبدأ الاستيراد."}
                 </div>
                 <Button

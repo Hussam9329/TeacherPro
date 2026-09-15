@@ -406,7 +406,7 @@ export function ChaptersView() {
       setChapterNameInput("");
       setOpportunities(5);
       await refreshAfterMutation("إضافة فصل بعد التحقق من الحفظ");
-      toast.success("تمت إضافة الفصل من بيانات النظام");
+      toast.success("تمت إضافة الفصل");
     })();
   };
 
@@ -437,7 +437,7 @@ export function ChaptersView() {
       }
       setCourseId("");
       await refreshAfterMutation("ربط فصل بدورة بعد التحقق من الحفظ");
-      toast.success("تم ربط الفصل بالدورة بعد التحقق من الحفظ");
+      toast.success("تم ربط الفصل بالدورة");
     })();
   };
 
@@ -480,7 +480,7 @@ export function ChaptersView() {
     });
     setChapterSyncDialog({ open: false, payload: null, preview: null });
     await refreshAfterMutation("تعديل فصل ومزامنة أثر الفرص");
-    toast.success(impact?.message || "تم تعديل الفصل بعد التحقق من الحفظ");
+    toast.success(impact?.message || "تم تعديل الفصل");
     return true;
   };
 
@@ -564,7 +564,7 @@ export function ChaptersView() {
       }
       setDeleteLinkDialog({ open: false, link: null, course: null });
       await refreshAfterMutation("حذف ربط فصل بدورة آمن");
-      toast.success("تم حذف الربط بعد التحقق من الحفظ");
+      toast.success("تم حذف الربط");
     })();
   };
 
@@ -581,7 +581,7 @@ export function ChaptersView() {
       const result = await courseChapterApi.previewAction(link.id, action);
       if (!result.ok) {
         setActionPreviewError(
-          result.error || "تعذر تحميل معاينة الأثر من النظام",
+          result.error || "تعذر تحميل معاينة الأثر",
         );
         setActionPreviewLoading(false);
         return;
@@ -601,7 +601,7 @@ export function ChaptersView() {
       if (!actionPreview?.canExecute) {
         toast.error(
           actionPreview?.blockingMessage ||
-            "لا يمكن تنفيذ هذا الإجراء حسب آخر معاينة من بيانات النظام.",
+            "لا يمكن تنفيذ هذا الإجراء حسب المعاينة الحالية.",
         );
         return;
       }
@@ -983,11 +983,11 @@ export function ChaptersView() {
         <CardContent className="space-y-4">
           <div className="tp-chapters__stats grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {statCard(
-              "إجمالي الدورات في النظام",
+              "إجمالي الدورات",
               overview?.stats.courses ?? "—",
             )}
             {statCard(
-              "إجمالي الفصول في النظام",
+              "إجمالي الفصول",
               overview?.stats.chapters ?? "—",
             )}
             {statCard(
@@ -1001,11 +1001,6 @@ export function ChaptersView() {
             {statCard("طلاب 0/0", zeroZeroReviewCount, "للمراجعة فقط")}
           </div>
 
-          <div className="tp-chapters__rule rounded-2xl border border-dashed bg-muted/25 p-3 text-xs text-muted-foreground">
-            أي تفعيل أو إلغاء تفعيل يعرض أثره قبل التنفيذ، ويتم من النظام داخل
-            عملية واحدة حتى لا يظهر أكثر من فصل نشط لنفس الدورة. عداد طلاب 0/0
-            مؤشر تشخيصي للعرض والمراجعة فقط، ولا ينفذ إصلاحاً جماعياً.
-          </div>
         </CardContent>
       </Card>
 
@@ -1125,7 +1120,7 @@ export function ChaptersView() {
                 disabled={isAddingChapter}
                 className="w-full rounded-full"
               >
-                {isAddingChapter ? "جاري الإضافة..." : "إضافة فصل من النظام"}
+                {isAddingChapter ? "جاري الإضافة..." : "إضافة فصل"}
               </Button>
             </form>
 
@@ -1206,9 +1201,7 @@ export function ChaptersView() {
                 يوقف أي فصل نشط سابق، ويفعّل «الفصل الثاني - الانسجة» بثلاث
                 فرص، ويعيد جميع طلاب الدورتين — بمن فيهم المفصولون والمؤرشفون —
                 إلى نشط برصيد 3/3. إذا لم يكن الفصل المستهدف موجوداً فسينشئه
-                التنفيذ بثلاث فرص داخل المعاملة نفسها. المعاينة تعرض الاسمين
-                الفعليين المطابقين من بيانات النظام قبل السماح بالتنفيذ، ولا
-                تشمل «الدورة الصيفية الثانية».
+                التنفيذ بثلاث فرص. لا تشمل العملية «الدورة الصيفية الثانية».
               </p>
               <Button
                 type="button"
@@ -1243,9 +1236,6 @@ export function ChaptersView() {
       <div className="tp-chapters__status space-y-4">
         <div className="tp-chapters__status-header flex items-center justify-between gap-2">
           <h3 className="text-lg font-black">حالة الدورات والفصول</h3>
-          <p className="text-xs text-muted-foreground">
-            كل الأرقام من بيانات النظام.
-          </p>
         </div>
         {loading ? (
           renderLoadingSkeleton()
@@ -1326,7 +1316,7 @@ export function ChaptersView() {
               إلغاء
             </Button>
             <Button onClick={handleEditChapterSave} disabled={isSavingChapter}>
-              {isSavingChapter ? "جاري الحفظ..." : "حفظ بعد التحقق من الحفظ"}
+              {isSavingChapter ? "جاري الحفظ..." : "حفظ التعديلات"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1409,13 +1399,13 @@ export function ChaptersView() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {resolvedTransitionCourseNames
-                ? `العملية محصورة بالدورتين الفعليتين ${resolvedTransitionCourseNames}. لا تشمل «الدورة الصيفية الثانية». ستوقف الفصل السابق، ثم تستخدم الفصل الثاني - الانسجة أو تنشئه إذا كان غير موجود، وتجعل جميع طلابهما نشطين برصيد 3/3 داخل معاملة واحدة.`
-                : "ستقرأ المعاينة الاسمين الفعليين للدورتين وحالة وجود الفصل المستهدف من بيانات النظام قبل عرض الأثر والسماح بالتنفيذ، ولن تشمل «الدورة الصيفية الثانية»."}
+                ? `العملية محصورة بالدورتين الفعليتين ${resolvedTransitionCourseNames}. لا تشمل «الدورة الصيفية الثانية». ستوقف الفصل السابق، ثم تستخدم الفصل الثاني - الانسجة أو تنشئه إذا كان غير موجود، وتجعل جميع طلابهما نشطين برصيد 3/3.`
+                : "تعرض المعاينة الدورتين والفصل المستهدف والطلاب المتأثرين. لا تشمل العملية «الدورة الصيفية الثانية»."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           {transitionPreviewLoading ? (
             <p className="rounded-2xl border bg-muted/25 p-4 text-sm text-muted-foreground">
-              جاري قراءة العدد والحالة الحالية من بيانات النظام...
+              جاري تحميل المعاينة...
             </p>
           ) : transitionPreviewError ? (
             <div className="space-y-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
@@ -1434,7 +1424,7 @@ export function ChaptersView() {
             <div className="space-y-3 text-sm">
               <p className="rounded-xl border border-primary/25 bg-primary/5 p-3 text-xs font-bold leading-6">
                 {transitionPreview.target.willCreateChapter
-                  ? `الفصل «${transitionPreview.target.chapterName}» غير موجود حالياً؛ سيُنشأ بثلاث فرص عند التأكيد داخل المعاملة نفسها.`
+                  ? `الفصل «${transitionPreview.target.chapterName}» غير موجود حالياً؛ سيُنشأ بثلاث فرص عند التأكيد.`
                   : `سيُستخدم الفصل الموجود «${transitionPreview.target.chapterName}» وتُضبط فرصه من ${transitionPreview.target.currentChapterOpportunities ?? "—"} إلى ${transitionPreview.target.nextChapterOpportunities}.`}
               </p>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -1586,8 +1576,7 @@ export function ChaptersView() {
                 : "إلغاء تفعيل الفصل"}
             </DialogTitle>
             <DialogDescription>
-              هذا الإجراء بعد التحقق من الحفظ وسيتم داخل بيانات النظام مع
-              أرشفة/استرجاع الفرص حسب الحالة.
+              سيتم أرشفة الفرص أو استرجاعها حسب الإجراء المختار.
             </DialogDescription>
           </DialogHeader>
           {actionCourse && actionLink ? (
@@ -1601,7 +1590,7 @@ export function ChaptersView() {
               </div>
               {actionPreviewLoading ? (
                 <p className="rounded-xl border bg-muted/25 p-3 text-xs text-muted-foreground">
-                  جاري قراءة الأثر المباشر من بيانات النظام...
+                  جاري تحميل معاينة الأثر...
                 </p>
               ) : actionPreviewError ? (
                 <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
@@ -1648,7 +1637,7 @@ export function ChaptersView() {
                   >
                     {actionPreview?.message ||
                       (actionDialog.action === "activate"
-                        ? "سيتم تعطيل أي فصل نشط آخر لنفس الدورة، ثم تفعيل هذا الفصل وتحديث فرص الطلاب من بيانات النظام."
+                        ? "سيتم تعطيل أي فصل نشط آخر لنفس الدورة، ثم تفعيل هذا الفصل وتحديث فرص الطلاب."
                         : "سيتم أرشفة فرص الطلاب غير المؤرشفين ثم تصفير فرص الدورة لأنها ستصبح بلا فصل نشط.")}
                   </p>
                 </>

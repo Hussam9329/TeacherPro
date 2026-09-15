@@ -30,8 +30,7 @@ const logsHasLatestRequestGuard =
 must(
   logsView.includes("logApi") &&
     logsHasLatestRequestGuard &&
-    logsView.includes("CountScopeSummary") &&
-    logsView.includes("بيانات النظام"),
+    logsView.includes("CountScopeSummary"),
   "صفحة السجلات تقرأ من النظام وتلغي الطلبات القديمة",
   "صفحة السجلات يجب أن تقرأ من logApi مع حماية Latest Request لا من كاش Zustand فقط.",
 );

@@ -1315,12 +1315,6 @@ function BackupTab() {
           <CardTitle className="text-lg">تصدير نسخة احتياطية</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            يقوم النظام بتصدير جميع الجداول التشغيلية (18 جدولاً) بما فيها:
-            الطلاب، الدورات، الفصول، الدرجات، الفرص، الإجازات، المكالمات،
-            أرشيف التسجيل، نسخ درجات الإجازات،
-            وسجلات التدقيق كاملةً.
-          </p>
           <Button onClick={handleExport} disabled={exporting || exportLocked}>
             {exporting ? 'جارٍ التصدير...' : 'تصدير النسخة الاحتياطية (JSON)'}
           </Button>

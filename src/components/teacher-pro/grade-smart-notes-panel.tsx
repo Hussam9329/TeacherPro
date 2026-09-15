@@ -130,12 +130,6 @@ export function GradeSmartNotesPanel({
             <CardTitle id="grade-smart-notes-title" className="text-lg">
               لوحة الدرجات الذكية لهذا الامتحان
             </CardTitle>
-            <p className="mt-1 max-w-3xl text-xs leading-6 text-muted-foreground">
-              تعرض السجلات التاريخية للمراجعة والدرجات المحفوظة دون أثر أكاديمي.
-              الإدخال الحالي لا يعلّق الدرجات: السماح والإجازة وما قبل التسجيل
-              تُعتمد درجاتها فوراً وتُحتسب، والمعلّق اليوم مخصص لحالات الفصل
-              فقط.
-            </p>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" aria-label={`إجمالي السجلات ${totalCount}`}>

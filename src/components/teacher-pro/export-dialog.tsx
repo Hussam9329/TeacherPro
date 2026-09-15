@@ -1615,7 +1615,7 @@ export function ExportDialog<T = Record<string, unknown>>({
       <DialogContent dir="rtl" className="max-h-[90dvh] min-w-0 overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{htmlExamSelectionOpen ? "اختر امتحانات تقرير HTML" : title}</DialogTitle>
-          {htmlExamSelectionOpen ? <DialogDescription>أزل علامة الصح عن أي امتحان لا تريد عرضه في التقرير. رصيد الفرص يبقى حسب سجل الطالب في النظام.</DialogDescription>
+          {htmlExamSelectionOpen ? <DialogDescription>إخفاء امتحان من التقرير لا يغيّر رصيد الفرص.</DialogDescription>
             : description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
         <div className="space-y-4 py-2">
@@ -1715,12 +1715,6 @@ export function ExportDialog<T = Record<string, unknown>>({
                 );
               })}
             </div>
-            <p className="text-xs text-muted-foreground">
-              سيتم تصدير الأعمدة المختارة فقط وبنفس ترتيبها الظاهر في هذه القائمة (للملفات CSV / Excel / PDF).
-              {fetchStudentDetails
-                ? " زر «تصدير HTML» يُنتج ملف بحث: خانة البحث وسطية ومرنة لكل الشاشات، تكتب الاسم الثنائي فما فوق فيظهر قائمة بالطلاب المطابقين، وعند اختيار طالب تظهر بياناته (الاسم + الدورة + عدد الفرص) مع زر «إظهار التفاصيل» يفتح درجات امتحانات الفصل النشط الحالي وسجل فرصه، والطالب المفصول تظهر بجانب اسمه شارة «مفصول»."
-                : ""}
-            </p>
           </div>}
         </div>
         <DialogFooter className="flex-col gap-2 sm:flex-row sm:flex-wrap">

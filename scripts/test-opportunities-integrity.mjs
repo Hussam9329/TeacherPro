@@ -192,7 +192,7 @@ check(
   exportDialog.includes('const interactiveMode = Boolean(') &&
     exportDialog.includes('options.studentDetails && options.studentList') &&
     opportunitiesView.includes('const failedStudentIds = new Set<string>()') &&
-    opportunitiesView.includes('لم يتم إنشاء ملف ناقص؛ يرجى إعادة المحاولة'),
+    opportunitiesView.includes('يرجى إعادة المحاولة لإنشاء التقرير كاملاً'),
   'التقرير لا يدخل وضع البحث بمدخلات ناقصة ولا ينشئ ملفاً جزئياً عند فشل تفاصيل طالب',
 );
 

@@ -179,7 +179,6 @@ assert(
 assert(
   chaptersView.includes('statCard("طلاب 0/0"') &&
     chaptersView.includes("للمراجعة فقط") &&
-    chaptersView.includes("مؤشر تشخيصي للعرض والمراجعة فقط") &&
     !chaptersView.includes("/api/students/fix-zero-opportunities") &&
     !chaptersView.includes("repairDialog") &&
     !chaptersView.includes("repairPreview") &&

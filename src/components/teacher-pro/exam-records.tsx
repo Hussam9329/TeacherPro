@@ -221,9 +221,6 @@ function renderExamDetailsPanel(
         ))}
       </div>
 
-      <div className="rounded-xl border border-dashed bg-muted/30 p-3 text-center text-xs text-muted-foreground">
-        تم إخفاء تفاصيل درجات الطلاب من سجل الامتحانات. يمكن مراجعة الدرجات من قائمة سجل الدرجات.
-      </div>
     </div>
   );
 }
@@ -360,20 +357,16 @@ const ExamRecordCard = React.memo(function ExamRecordCard(props: ExamRecordVisua
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        {detailsOpen ? (
-          renderExamDetailsPanel(details, {
+      {detailsOpen && (
+        <CardContent>
+          {renderExamDetailsPanel(details, {
             pass: passStat,
             notPassed: notPassedStat,
             protected: protectedStat,
             total: totalStat,
-          })
-        ) : (
-          <div className="rounded-2xl border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
-            تفاصيل الامتحان مخفية حتى تضغط على "إظهار التفاصيل". القائمة تعرض الامتحانات والبحث فقط حتى تبقى الصفحة خفيفة وواضحة للمستخدم.
-          </div>
-        )}
-      </CardContent>
+          })}
+        </CardContent>
+      )}
     </Card>
   );
 });
@@ -420,9 +413,9 @@ const ExamRecordTableRow = React.memo(function ExamRecordTableRow(props: ExamRec
             <Badge variant={entryAvailable ? "secondary" : "destructive"}>
               {entryAnswer}
             </Badge>
-            <p className="text-xs text-muted-foreground">
-              {detailsOpen ? entryReason : "اضغط إظهار التفاصيل للسبب الكامل"}
-            </p>
+            {detailsOpen && (
+              <p className="text-xs text-muted-foreground">{entryReason}</p>
+            )}
           </div>
         </td>
         <td className="p-3 min-w-44">{courseLabel || "—"}</td>
@@ -810,13 +803,13 @@ export function ExamRecordsView() {
 
     if (!result) return;
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر تعديل الامتحان من النظام.");
+      toast.error(result.error || "تعذر تعديل الامتحان.");
       return;
     }
 
     setEditingExamId(null);
     await refreshExamRecordsAfterMutation("exam-records-edit");
-    toast.success("تم تعديل الامتحان من بيانات النظام وإعادة الاحتساب");
+    toast.success("تم تعديل الامتحان وإعادة الاحتساب");
   };
 
   const openDeleteExamDialog = useCallback(
@@ -864,7 +857,7 @@ export function ExamRecordsView() {
     const result = await examApi.remove(deleteDialog.id);
     setExamMutating(deleteDialog.id, false);
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر حذف الامتحان من النظام.");
+      toast.error(result.error || "تعذر حذف الامتحان.");
       return;
     }
     setDeleteDialog({
@@ -875,7 +868,7 @@ export function ExamRecordsView() {
       dependentCount: 0,
     });
     await refreshExamRecordsAfterMutation("exam-records-delete");
-    toast.success("تم حذف الامتحان من بيانات النظام");
+    toast.success("تم حذف الامتحان");
   });
 
   const handleToggleExamActive = useCallback(
@@ -896,7 +889,7 @@ export function ExamRecordsView() {
       }
       if (!result) return;
       if (!result.ok || result.queued) {
-        toast.error(result.error || "تعذر تغيير حالة الامتحان من النظام.");
+        toast.error(result.error || "تعذر تغيير حالة الامتحان.");
         return;
       }
       await refreshExamRecordsAfterMutation(
@@ -904,8 +897,8 @@ export function ExamRecordsView() {
       );
       toast.success(
         exam.active
-          ? "تم تعطيل الامتحان من بيانات النظام"
-          : "تم تفعيل الامتحان من بيانات النظام",
+          ? "تم تعطيل الامتحان"
+          : "تم تفعيل الامتحان",
       );
     },
     [refreshExamRecordsAfterMutation, setExamMutating, updateExamWithActivationConfirmation],
@@ -1140,8 +1133,7 @@ export function ExamRecordsView() {
                 <p>الامتحان: &quot;{deleteDialog.name}&quot;</p>
                 {deleteDialog.gradeCount === null ? (
                   <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 font-semibold text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
-                    جاري التحقق من بيانات النظام لمعرفة هل توجد درجات مرتبطة
-                    بهذا الامتحان.
+                    جاري التحقق من السجلات المرتبطة بالامتحان...
                   </p>
                 ) : deleteDialog.gradeCount > 0 ? (
                   <p className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 font-semibold text-destructive">

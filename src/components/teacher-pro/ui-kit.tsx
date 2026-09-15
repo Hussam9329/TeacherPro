@@ -48,6 +48,7 @@ export function StatCard({
     danger: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
     info: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20',
   }[tone];
+  const visibleScopeLabel = scopeLabel ?? TEACHERPRO_COUNT_SCOPE_COPY[scope];
 
   return (
     <Card className={cn('metric-card py-0', countScopeStyles[scope])} data-count-scope={scope}>
@@ -59,9 +60,11 @@ export function StatCard({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm text-muted-foreground">{label}</p>
-              <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', countScopePillStyles[scope])}>
-                {scopeLabel || TEACHERPRO_COUNT_SCOPE_COPY[scope]}
-              </span>
+              {visibleScopeLabel && (
+                <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', countScopePillStyles[scope])}>
+                  {visibleScopeLabel}
+                </span>
+              )}
             </div>
             <p className="text-2xl font-black tracking-tight">{value}</p>
             {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
@@ -77,7 +80,7 @@ export function CountScopeSummary({
   systemTotal,
   filteredTotal,
   pageCount,
-  subject = 'سجل',
+  subject = 'السجلات',
   className,
 }: {
   systemTotal?: React.ReactNode;
@@ -89,7 +92,7 @@ export function CountScopeSummary({
   const items: Array<{ scope: CountScope; label: string; value: React.ReactNode }> = [
     ...(systemTotal === undefined
       ? []
-      : [{ scope: 'system' as const, label: `إجمالي ${subject} في النظام`, value: systemTotal }]),
+      : [{ scope: 'system' as const, label: `إجمالي ${subject}`, value: systemTotal }]),
     { scope: 'filtered', label: 'المطابقون للفلاتر', value: filteredTotal },
     { scope: 'page', label: 'المعروض في الصفحة', value: pageCount },
   ];
@@ -112,7 +115,7 @@ export function CountScopeSummary({
 
 export function EmptyState({
   title = 'لا توجد بيانات',
-  description = 'ستظهر النتائج هنا بعد إضافة البيانات أو تعديل الفلاتر.',
+  description,
   icon: Icon = SearchX,
   action,
 }: {
@@ -127,7 +130,7 @@ export function EmptyState({
         <Icon className="size-5" />
       </div>
       <p className="font-bold text-foreground">{title}</p>
-      <p className="mx-auto mt-1 max-w-md text-xs leading-6 text-muted-foreground">{description}</p>
+      {description && <p className="mx-auto mt-1 max-w-md text-xs leading-6 text-muted-foreground">{description}</p>}
       {action && <div className="mt-4 flex justify-center">{action}</div>}
     </div>
   );
@@ -135,7 +138,7 @@ export function EmptyState({
 
 export function LoadingState({
   title = 'جاري تحميل البيانات...',
-  description = 'نجهّز المعلومات من بيانات النظام، ستظهر النتائج بعد لحظات.',
+  description,
 }: {
   title?: string;
   description?: string;
@@ -153,7 +156,7 @@ export function LoadingState({
         </div>
         <div className="min-w-0 flex-1">
           <p className="tp-loading-state__title">{title}</p>
-          <p className="tp-loading-state__description">{description}</p>
+          {description && <p className="tp-loading-state__description">{description}</p>}
           <div className="tp-loading-state__skeleton" aria-hidden="true">
             <div className="tp-loading-state__line w-full" />
             <div className="tp-loading-state__line w-2/3" />

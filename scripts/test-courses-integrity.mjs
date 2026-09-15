@@ -79,13 +79,13 @@ assert(
 assert(
   coursesView.includes("courseApi.add") &&
     !coursesView.includes("addCourse({") &&
-    coursesView.includes("تمت إضافة الدورة من بيانات النظام"),
+    coursesView.includes("تمت إضافة الدورة"),
   "إضافة الدورة صارت server-first ولا تولد ID محلي وهمي",
 );
 assert(
   coursesView.includes("courseApi.update") &&
-    !coursesView.includes('toast.success("تم تعديل الدورة")') &&
-    coursesView.includes("بعد التحقق من الحفظ"),
+    coursesView.includes("if (!result.ok)") &&
+    coursesView.includes('toast.success(impact?.message || "تم تعديل الدورة")'),
   "تعديل الدورة لا يظهر نجاحاً إلا بعد موافقة الخادم",
 );
 assert(

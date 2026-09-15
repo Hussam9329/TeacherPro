@@ -119,7 +119,7 @@ must(
   uiKit.includes("TEACHERPRO_COUNT_SCOPE_COPY") &&
     uiKit.includes("data-count-scope={scope}") &&
     uiKit.includes("CountScopeSummary") &&
-    uiKit.includes("إجمالي ${subject} في النظام") &&
+    uiKit.includes("إجمالي ${subject}") &&
     uiKit.includes("المطابقون للفلاتر") &&
     uiKit.includes("المعروض في الصفحة"),
   "مكوّنات العدادات تميّز بصرياً بين النظام والفلاتر والصفحة الحالية",

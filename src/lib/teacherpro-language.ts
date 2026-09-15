@@ -27,7 +27,7 @@ export const TEACHERPRO_ACTION_COPY = Object.freeze({
 });
 
 export const TEACHERPRO_COUNT_SCOPE_COPY = Object.freeze({
-  system: "إجمالي البيانات في النظام",
+  system: "",
   filtered: "المطابقون للفلاتر",
   page: "المعروض في الصفحة",
   context: "ضمن الاختيار الحالي",

@@ -721,7 +721,7 @@ export function StudentRegistryView() {
         setOtherStudentsTotal(null);
         setNoActiveChapterStudentsTotal(null);
         setStudentStatsError(
-          "تعذر تحميل عدادات الطلاب من بيانات النظام حالياً.",
+          "تعذر تحميل أعداد الطلاب حالياً.",
         );
       })
       .finally(() => {
@@ -1298,7 +1298,7 @@ export function StudentRegistryView() {
         return "انتظر اكتمال التحقق من الفصل النشط للدورة المستهدفة";
       }
       if (editTargetActiveChapterLookupFailed) {
-        return "تعذر التحقق من الفصل النشط من بيانات النظام؛ أعد المحاولة قبل بدء ملف جديد";
+        return "تعذر التحقق من الفصل النشط؛ أعد المحاولة قبل بدء ملف جديد";
       }
       if (editTargetActiveChapterConflict) {
         return "الدورة المستهدفة تحتوي تعارضاً بين الفصول النشطة؛ يجب حل التعارض قبل بدء ملف جديد";
@@ -1650,10 +1650,7 @@ export function StudentRegistryView() {
     }
     closeDismissDialog();
     setServerRefreshKey((value) => value + 1);
-    toast.success("تم فصل الطالب من بيانات النظام", {
-      description:
-        "تم حفظ حالة الطالب وسجل الفرص والملاحظة الإدارية داخل عملية واحدة.",
-    });
+    toast.success("تم فصل الطالب");
   });
 
   const handleRestoreArchived = runStatusActionLocked(async (student: Student) => {
@@ -2149,7 +2146,7 @@ export function StudentRegistryView() {
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">
-                الطلاب النشطون · إجمالي النظام
+                الطلاب النشطون
               </p>
               <p className="text-2xl font-black">
                 {registryStatsPending
@@ -2181,7 +2178,7 @@ export function StudentRegistryView() {
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">
-                قائمة المفصولين · إجمالي النظام
+                المفصولون
               </p>
               <p className="text-2xl font-black text-destructive">
                 {registryStatsPending
@@ -2213,7 +2210,7 @@ export function StudentRegistryView() {
           <CardContent className="flex items-center justify-between gap-3 p-4">
             <div>
               <p className="text-xs text-muted-foreground">
-                المؤرشفون · إجمالي النظام
+                المؤرشفون
               </p>
               <p className="text-2xl font-black text-slate-600 dark:text-slate-300">
                 {registryStatsPending
@@ -2285,7 +2282,7 @@ export function StudentRegistryView() {
                     حالات طلاب غير معروفة: {otherStudentsTotal}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    توجد حالات خارج نشط ومفصول ومؤرشف ضمن إجمالي النظام.
+                    توجد حالات خارج نشط ومفصول ومؤرشف.
                   </p>
                 </div>
               </div>
@@ -2386,7 +2383,7 @@ export function StudentRegistryView() {
           aria-live="polite"
           className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm font-medium text-primary"
         >
-          جاري تحميل نتائج الطلاب من بيانات النظام...
+          جاري تحميل الطلاب...
         </div>
       )}
 
@@ -2603,9 +2600,6 @@ export function StudentRegistryView() {
                     <UserRound className="size-5 text-primary" />
                     <div>
                       <h3 className="font-black">البيانات الأساسية</h3>
-                      <p className="text-xs text-muted-foreground">
-                        الاسم، المدرسة، الجنس، ومعرف التيليجرام.
-                      </p>
                     </div>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -2699,9 +2693,6 @@ export function StudentRegistryView() {
                     <Phone className="size-5 text-primary" />
                     <div>
                       <h3 className="font-black">بيانات الاتصال</h3>
-                      <p className="text-xs text-muted-foreground">
-                        أرقام الطالب وولي الأمر مع ضبط الصيغة تلقائياً.
-                      </p>
                     </div>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -2749,9 +2740,6 @@ export function StudentRegistryView() {
                     <GraduationCap className="size-5 text-primary" />
                     <div>
                       <h3 className="font-black">الدورة ونوع البرنامج</h3>
-                      <p className="text-xs text-muted-foreground">
-                        اختر الدورة ثم أكمل الخيارات المرتبطة بها.
-                      </p>
                     </div>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -2871,11 +2859,11 @@ export function StudentRegistryView() {
                           <div className="mt-3" aria-live="polite">
                             {editTargetActiveChapterLoading ? (
                               <p className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700 dark:border-sky-500/50 dark:bg-sky-950/30 dark:text-sky-100">
-                                جاري التحقق من الفصل النشط ورصيد البداية من بيانات النظام… لا يمكن الحفظ قبل اكتمال التحقق.
+                                جاري التحقق من الفصل النشط ورصيد البداية… انتظر قبل الحفظ.
                               </p>
                             ) : editTargetActiveChapterLookupFailed ? (
                               <p className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
-                                تعذر التحقق من الفصل النشط من بيانات النظام. لن يُسمح ببدء ملف جديد حتى ينجح التحقق.
+                                تعذر التحقق من الفصل النشط. أعد المحاولة قبل بدء ملف جديد.
                               </p>
                             ) : editTargetActiveChapterConflict ? (
                               <p className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 dark:border-red-500/50 dark:bg-red-950/30 dark:text-red-100">
@@ -3004,9 +2992,6 @@ export function StudentRegistryView() {
                     <MapPin className="size-5 text-primary" />
                     <div>
                       <h3 className="font-black">الموقع</h3>
-                      <p className="text-xs text-muted-foreground">
-                        تظهر الخيارات حسب نوع البرنامج والدورة المختارة.
-                      </p>
                     </div>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -3089,10 +3074,6 @@ export function StudentRegistryView() {
                           required
                           className="h-12 rounded-2xl"
                         />
-                        <p className="text-xs text-muted-foreground">
-                          خيار خارج القطر عام لكل الدورات ولا يحتاج تفعيله من
-                          إعدادات الدورة.
-                        </p>
                       </div>
                     )}
 
@@ -3130,9 +3111,6 @@ export function StudentRegistryView() {
                     <CalendarDays className="size-5 text-primary" />
                     <div>
                       <h3 className="font-black">التسجيل وفترة السماح</h3>
-                      <p className="text-xs text-muted-foreground">
-                        يحدد هذا الجزء بداية احتساب الطالب أكاديمياً.
-                      </p>
                     </div>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -3244,7 +3222,7 @@ export function StudentRegistryView() {
                           <p className="font-black">تغيير التاريخ أو فترة السماح يعيد تفسير الامتحانات القديمة</p>
                           {!hasCurrentAcademicImpactPreview ? (
                             <p className="mt-1 text-xs leading-6 opacity-90">
-                              عند الضغط على حفظ سيعرض النظام الأثر الفعلي من بيانات النظام أولاً، ولن يحفظ التغيير قبل تأكيدك.
+                              سيظهر أثر التعديل على الدرجات والفرص قبل الحفظ لتأكيده.
                             </p>
                           ) : academicImpactPreview ? (
                             <div className="mt-3 space-y-3">
@@ -3282,7 +3260,7 @@ export function StudentRegistryView() {
                               </Button>
                             </div>
                           ) : null}
-                          {academicImpactLoading && <p className="mt-2 text-xs font-bold">جاري حساب الأثر من بيانات النظام…</p>}
+                          {academicImpactLoading && <p className="mt-2 text-xs font-bold">جاري حساب أثر التعديل…</p>}
                         </div>
                       </div>
                     </div>
@@ -3293,9 +3271,6 @@ export function StudentRegistryView() {
           </div>
 
           <DialogFooter className="shrink-0 border-t border-border/70 bg-muted/30 px-4 py-4 sm:justify-between md:px-6">
-            <p className="hidden text-xs text-muted-foreground sm:block">
-              راجع الحقول المطلوبة قبل حفظ التعديل.
-            </p>
             <div className="tp-student-registry__dialog-actions">
               <Button
                 variant="outline"
@@ -3348,7 +3323,7 @@ export function StudentRegistryView() {
                 </div>
                 <div className="rounded-2xl border bg-muted/40 p-3 text-foreground">
                   <div className="mb-2 font-bold">
-                    فحص العلاقات من بيانات النظام
+                    البيانات المرتبطة بالطالب
                   </div>
                   {deleteImpactLoading ? (
                     <div className="text-muted-foreground">

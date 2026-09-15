@@ -132,7 +132,7 @@ function ProfileLoadNotice({
   if (loading) {
     return (
       <div role="status" aria-live="polite" className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-bold text-primary">
-        جاري تحميل ملف الطالب الكامل من بيانات النظام…
+        جاري تحميل ملف الطالب…
       </div>
     );
   }
@@ -158,8 +158,8 @@ function ProfileCollectionEmpty({
   error: string | null;
   emptyText: string;
 }) {
-  if (loading) return <p role="status" aria-live="polite" className="empty-state py-8">جاري تحميل البيانات من النظام…</p>;
-  if (error) return <p role="alert" className="empty-state py-8 text-destructive">تعذر التحقق من هذه البيانات من النظام.</p>;
+  if (loading) return <p role="status" aria-live="polite" className="empty-state py-8">جاري تحميل البيانات…</p>;
+  if (error) return <p role="alert" className="empty-state py-8 text-destructive">تعذر تحميل هذه البيانات.</p>;
   return <p className="empty-state py-8">{emptyText}</p>;
 }
 
@@ -677,10 +677,10 @@ export function StudentProfileDialog({
           setDatabaseStatsError(null);
           return;
         }
-        if (!silent) setDatabaseStatsError("تعذر تحميل إحصاءات ملف الطالب من النظام حالياً.");
+        if (!silent) setDatabaseStatsError("تعذر تحميل إحصاءات الطالب حالياً.");
       })
       .catch(() => {
-        if (!cancelled && !silent) setDatabaseStatsError("تعذر تحميل إحصاءات ملف الطالب من النظام حالياً.");
+        if (!cancelled && !silent) setDatabaseStatsError("تعذر تحميل إحصاءات الطالب حالياً.");
       })
       .finally(() => {
         if (!cancelled) setDatabaseStatsLoading(false);
@@ -704,7 +704,7 @@ export function StudentProfileDialog({
       .then((result) => {
         if (cancelled) return;
         if (!result || result.studentId !== student.id) {
-          if (!silent) setDatabaseGradesError("تعذر تحميل ملف الطالب الكامل من النظام حالياً.");
+          if (!silent) setDatabaseGradesError("تعذر تحميل ملف الطالب حالياً.");
           return;
         }
         setDatabaseGrades((result.grades || []) as unknown as Grade[]);
@@ -724,7 +724,7 @@ export function StudentProfileDialog({
       })
       .catch(() => {
         if (cancelled || silent) return;
-        setDatabaseGradesError("تعذر تحميل ملف الطالب الكامل من النظام حالياً.");
+        setDatabaseGradesError("تعذر تحميل ملف الطالب حالياً.");
       })
       .finally(() => {
         if (!cancelled) setDatabaseGradesLoading(false);
@@ -850,7 +850,7 @@ export function StudentProfileDialog({
           ? `${activeChapter?.name || "الفصل النشط"} — سقف الفرص 0`
           : activeChapter?.name
             || (databaseStatsError
-              ? "تعذر التحقق من الفصل النشط من النظام"
+              ? "تعذر التحقق من الفصل النشط"
               : "لا يوجد فصل نشط");
   const profileStatValue = (value: number | undefined) => {
     if (statsPending) return "…";
@@ -879,11 +879,11 @@ export function StudentProfileDialog({
   const timelineCount = profileStatValue(statsForStudent?.timeline);
 
   const gradesEmptyMessage = databaseGradesLoading
-    ? "جاري تحميل درجات الطالب من النظام…"
+    ? "جاري تحميل درجات الطالب…"
     : databaseGradesError
       ? databaseGradesError
       : databaseStats && databaseStats.grades > 0 && studentGrades.length === 0
-        ? "توجد درجات مسجلة في بيانات النظام لكن تعذر عرضها الآن. حدّث الصفحة أو أعد فتح الملف."
+        ? "تعذر عرض درجات الطالب الآن. حدّث الصفحة أو أعد فتح الملف."
         : "لا توجد درجات لهذا الطالب";
   const filteredGradeRows = filterStudentProfileGrades(
     studentGrades.map((grade) => {
@@ -915,19 +915,19 @@ export function StudentProfileDialog({
     gradeViewFilter,
   );
 
-  const allCards: { key: StudentProfileCardKey; label: string; value: string | number; hint: string }[] = [
-    { key: "grades", label: "الدرجات", value: profileStatValue(statsForStudent?.grades), hint: "عرض درجات الطالب" },
-    { key: "exams", label: "الامتحانات", value: examCount, hint: "عدد الامتحانات" },
-    { key: "absences", label: "الغيابات", value: absentCount, hint: "عرض الغيابات المؤثرة" },
-    { key: "grace-grades", label: "ضمن السماح", value: graceGradeCount, hint: "درجات مسجلة بدون خصم" },
-    { key: "no-discount-grades", label: "بدون خصم", value: noDiscountGradeCount, hint: "درجات امتحانات لا تحاسب الطالب" },
-    { key: "opportunities", label: "الخصومات/الفرص", value: opportunityText, hint: "الفرص والخصومات" },
-    { key: "status-actions", label: "فصل/إعادة تفعيل", value: `${dismissalsCount}/${reactivationsCount}`, hint: "مسار حالة الطالب" },
-    { key: "calls", label: "المكالمات", value: callsCount, hint: "متابعة واتصالات" },
-    { key: "leaves", label: "الإجازات", value: leavesCount, hint: "إجازات امتحان/فترة" },
-    { key: "notes", label: "الملاحظات", value: notesCount, hint: "عرض ملاحظات الطالب" },
-    { key: "archives", label: "الملفات السابقة", value: profileLogPending ? "…" : databaseEnrollmentArchives.length, hint: "أرشيف قراءة فقط قبل النقل أو إعادة البداية" },
-    { key: "timeline", label: "السجل الزمني", value: timelineCount, hint: "كل حركة مرتبطة بالطالب" },
+  const allCards: { key: StudentProfileCardKey; label: string; value: string | number }[] = [
+    { key: "grades", label: "الدرجات", value: profileStatValue(statsForStudent?.grades) },
+    { key: "exams", label: "الامتحانات", value: examCount },
+    { key: "absences", label: "الغيابات", value: absentCount },
+    { key: "grace-grades", label: "ضمن السماح", value: graceGradeCount },
+    { key: "no-discount-grades", label: "بدون خصم", value: noDiscountGradeCount },
+    { key: "opportunities", label: "الخصومات/الفرص", value: opportunityText },
+    { key: "status-actions", label: "فصل/إعادة تفعيل", value: `${dismissalsCount}/${reactivationsCount}` },
+    { key: "calls", label: "المكالمات", value: callsCount },
+    { key: "leaves", label: "الإجازات", value: leavesCount },
+    { key: "notes", label: "الملاحظات", value: notesCount },
+    { key: "archives", label: "الملفات السابقة", value: profileLogPending ? "…" : databaseEnrollmentArchives.length },
+    { key: "timeline", label: "السجل الزمني", value: timelineCount },
   ];
   const sectionAccess = statsForStudent?.sections;
   const gradeCardKeys = new Set<StudentProfileCardKey>([
@@ -1016,7 +1016,6 @@ export function StudentProfileDialog({
               <div className="tp-student-profile__section-heading">
                 <div className="min-w-0">
                   <h3 id="student-profile-summary-title" className="font-black">إحصائيات الطالب</h3>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">اختر أي بطاقة لعرض التفاصيل المرتبطة بها.</p>
                 </div>
                 <button
                   type="button"
@@ -1053,7 +1052,6 @@ export function StudentProfileDialog({
                     >
                       <span className="tp-student-profile__stat-label">{item.label}</span>
                       <span dir="ltr" className="tp-student-profile__stat-value">{item.value}</span>
-                      <span className="tp-student-profile__stat-hint">{item.hint}</span>
                     </button>
                   );
                 })}
@@ -1144,7 +1142,6 @@ export function StudentProfileDialog({
                     <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-sm sm:rounded-3xl">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="font-black text-destructive">خصومات الفصل الحالي ({deductionLogs.length})</p>
-                        <span className="text-xs text-muted-foreground">مصدر البيانات: النظام</span>
                       </div>
                       <Button variant="link" size="sm" className="mt-1 h-auto px-0" onClick={() => setTab("opportunities")}>
                         عرض سجل الفرص الكامل والفصول السابقة
@@ -1257,7 +1254,7 @@ export function StudentProfileDialog({
             {tab === "opportunities" && (
               <div className="rounded-2xl border bg-card/80 p-4 shadow-sm sm:rounded-3xl sm:p-5">
                 <h4 className="mb-4 text-base font-black sm:text-lg">سجل الفرص</h4>
-                <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3"><div className="rounded-2xl bg-primary/10 p-3 text-center"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-xs text-muted-foreground">فرص محفوظة</p></div><div className="rounded-2xl bg-red-500/10 p-3 text-center"><p className="text-xl font-black text-red-600 sm:text-2xl">{deductedCount}</p><p className="text-xs text-muted-foreground">حركات خصم</p></div><div className="rounded-2xl bg-emerald-500/10 p-3 text-center"><p className="text-xl font-black text-emerald-600 sm:text-2xl">{addedCount}</p><p className="text-xs text-muted-foreground">حركات إضافة/تعديل</p></div></div>
+                <div className="mb-4 grid gap-2 sm:grid-cols-3 sm:gap-3"><div className="rounded-2xl bg-primary/10 p-3 text-center"><p className="text-xl font-black text-primary sm:text-2xl">{opportunityText}</p><p className="text-xs text-muted-foreground">الفرص</p></div><div className="rounded-2xl bg-red-500/10 p-3 text-center"><p className="text-xl font-black text-red-600 sm:text-2xl">{deductedCount}</p><p className="text-xs text-muted-foreground">حركات خصم</p></div><div className="rounded-2xl bg-emerald-500/10 p-3 text-center"><p className="text-xl font-black text-emerald-600 sm:text-2xl">{addedCount}</p><p className="text-xs text-muted-foreground">حركات إضافة/تعديل</p></div></div>
                 <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
                   {opportunityTraceRows.length === 0 ? <ProfileCollectionEmpty loading={profileLogPending} error={databaseGradesError} emptyText="لا توجد حركات فرص" /> : [...opportunityTraceRows].reverse().map((row) => (
                     <div key={row.log.id} className="grid min-w-0 gap-2 rounded-2xl bg-muted/55 p-3 text-sm md:grid-cols-[auto_auto_minmax(0,1fr)] md:items-center"><span>{formatAppDate(row.log.date)}</span><Badge className="w-fit" variant={row.log.action === "خصم" || row.log.action === "خصم تلقائي" ? "destructive" : "default"}>{displayOpportunityAction(row.log.action)} {row.log.amount}</Badge><span className="break-words text-muted-foreground">{row.details}</span></div>
@@ -1492,7 +1489,6 @@ export function StudentProfileDialog({
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h4 className="text-base font-black sm:text-lg">اللوغ الكامل للطالب</h4>
-                  <p className="text-xs text-muted-foreground">يعرض الدرجات، الإجازات، المكالمات، الملاحظات، حركات الفرص، وسجلات النظام المرتبطة بالطالب.</p>
                 </div>
                 <Badge variant="outline">{fullStudentLog.length} سجل</Badge>
               </div>

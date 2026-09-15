@@ -225,13 +225,9 @@ function getStudentCreateResponse(data: unknown): StudentCreateResponse {
 function SectionTitle({
   icon: Icon,
   title,
-  description,
-  actions,
 }: {
   icon: React.ElementType;
   title: string;
-  description?: string;
-  actions?: React.ReactNode;
 }) {
   return (
     <div className="mb-5 flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
@@ -243,14 +239,8 @@ function SectionTitle({
           <h3 className="text-base font-black tracking-tight text-foreground md:text-lg">
             {title}
           </h3>
-          {description && (
-            <p className="mt-1 text-xs leading-6 text-muted-foreground">
-              {description}
-            </p>
-          )}
         </div>
       </div>
-      {actions && <div className="shrink-0">{actions}</div>}
     </div>
   );
 }
@@ -273,13 +263,13 @@ export function StudentRegisterView() {
       const context = await studentRegisterApi.context();
       if (!context) {
         setRegisterContext(null);
-        setContextError("تعذر تحميل الدورات من بيانات النظام.");
+        setContextError("تعذر تحميل الدورات.");
         return;
       }
       setRegisterContext(context);
     } catch {
       setRegisterContext(null);
-      setContextError("تعذر الاتصال بالنظام لتحميل سياق التسجيل.");
+      setContextError("تعذر تحميل بيانات التسجيل. حاول مجدداً.");
     } finally {
       setContextLoading(false);
     }
@@ -587,9 +577,9 @@ export function StudentRegisterView() {
 
   const validateRequiredFields = () => {
     if (contextLoading)
-      return "انتظر اكتمال تحميل سياق التسجيل من بيانات النظام";
+      return "انتظر اكتمال تحميل بيانات التسجيل";
     if (!registerContext) {
-      return contextError || "تعذر تحميل سياق التسجيل من بيانات النظام";
+      return contextError || "تعذر تحميل بيانات التسجيل";
     }
     if (selectedCourseCannotRegister) {
       return selectedCourseHasChapterConflict
@@ -722,7 +712,7 @@ export function StudentRegisterView() {
       window.localStorage.removeItem(STUDENT_DRAFT_KEY);
       setForm(emptyForm());
       void loadRegisterContext();
-      toast.success("تم حفظ بيانات الطالب من بيانات النظام", {
+      toast.success("تم حفظ بيانات الطالب", {
         description: `${response.student?.code ? `الكود: ${response.student.code} — ` : ""}${
           response.opportunitiesWarning || gracePeriodDescription
         }`,
@@ -753,8 +743,7 @@ export function StudentRegisterView() {
         <CardContent className="tp-register__content p-4 md:p-6 lg:p-8">
           {contextLoading ? (
             <LoadingState
-              title="جاري تحميل سياق التسجيل من بيانات النظام..."
-              description="نحضّر الدورات النشطة والفصول والفرص الحقيقية قبل السماح بالحفظ."
+              title="جاري تحميل بيانات التسجيل..."
             />
           ) : contextError ? (
             <EmptyState
@@ -823,7 +812,6 @@ export function StudentRegisterView() {
               <SectionTitle
                 icon={BookOpen}
                 title="تفاصيل الدورة"
-                description="اختيار الدورة يحدد المواقع المتاحة تلقائياً."
               />
 
               <div className="tp-form-grid grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -1163,10 +1151,6 @@ export function StudentRegisterView() {
                         required
                         className={fieldBaseClass}
                       />
-                      <p className="text-xs leading-5 text-muted-foreground">
-                        خيار خارج القطر عام لكل الدورات ولا يحتاج تفعيله من
-                        إعدادات الدورة.
-                      </p>
                     </div>
                   )}
 
@@ -1218,7 +1202,6 @@ export function StudentRegisterView() {
               <SectionTitle
                 icon={User}
                 title="بيانات الطالب"
-                description="المعلومات الأساسية المطلوبة لإنشاء ملف الطالب."
               />
               <div className="tp-form-grid grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="space-y-2">
@@ -1346,9 +1329,7 @@ export function StudentRegisterView() {
                   </div>
                   {duplicateTelegramStudent && (
                     <p className="tp-field-feedback tp-field-feedback-warning">
-                      تنبيه محلي: معرف التيليجرام موجود في البيانات المؤقتة للطالب{" "}
-                      {duplicateTelegramStudent.name}. النظام سيفحص نهائياً عند
-                      الحفظ.
+                      قد يكون معرف التيليجرام مرتبطاً بالطالب {duplicateTelegramStudent.name}. راجع المعرف قبل الحفظ.
                     </p>
                   )}
                 </div>
@@ -1379,9 +1360,7 @@ export function StudentRegisterView() {
                   </div>
                   {duplicatePhoneStudent && (
                     <p className="tp-field-feedback tp-field-feedback-warning">
-                      تنبيه محلي: رقم الهاتف موجود في البيانات المؤقتة للطالب{" "}
-                      {duplicatePhoneStudent.name}. النظام سيفحص نهائياً عند
-                      الحفظ.
+                      قد يكون رقم الهاتف مرتبطاً بالطالب {duplicatePhoneStudent.name}. راجع الرقم قبل الحفظ.
                     </p>
                   )}
                 </div>
@@ -1420,7 +1399,6 @@ export function StudentRegisterView() {
               <SectionTitle
                 icon={CalendarDays}
                 title="إعدادات التسجيل"
-                description="حدد تاريخ تسجيل الطالب وعدد أيام السماح التي لا يُحاسَب خلالها على الامتحانات أو الإخفاقات."
               />
               <div className="tp-form-grid grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="space-y-2">
@@ -1508,8 +1486,8 @@ export function StudentRegisterView() {
                     ? "المسودة محفوظة تلقائيًا على هذا الجهاز"
                     : "تبدأ المسودة التلقائية بعد إدخال البيانات"}
                 </span>
-                <div
-                  className={`flex items-start gap-2 text-sm leading-6 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "font-bold text-destructive" : "text-muted-foreground"}`}
+                {(selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter) && <div
+                  className="flex items-start gap-2 text-sm font-bold leading-6 text-destructive"
                 >
                   <AlertCircle
                     className={`mt-0.5 h-4 w-4 shrink-0 ${selectedCourseHasChapterConflict || selectedCourseHasNoActiveChapter ? "text-destructive" : "text-primary"}`}
@@ -1517,11 +1495,9 @@ export function StudentRegisterView() {
                   <span>
                     {selectedCourseHasChapterConflict
                       ? "التسجيل موقوف لهذه الدورة لأن فيها أكثر من فصل نشط."
-                      : selectedCourseHasNoActiveChapter
-                        ? "تنبيه قبل الحفظ: هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص."
-                        : "راجع بيانات الطالب والدورة قبل الحفظ. الحفظ النهائي يتم من بيانات النظام."}
+                      : "تنبيه قبل الحفظ: هذه الدورة لا تحتوي على فصل نشط، الطالب سيُسجل بدون فرص."}
                   </span>
-                </div>
+                </div>}
               </div>
               <Button
                 type="submit"

@@ -316,7 +316,6 @@ body{margin:0;padding:24px}
 .detail{font-size:13px;line-height:1.7}
 .danger{border-color:#fecaca;background:#fff7f7}.warning{border-color:#fde68a;background:#fffdf3}
 .success{border-color:#a7f3d0;background:#f4fff9}.info{border-color:#bfdbfe;background:#f7fbff}
-.footer{margin-top:28px;border-top:1px solid #e5e7eb;padding-top:12px;font-size:12px;color:#6b7280;text-align:center}
 @media(max-width:760px){body{padding:8px}.page{padding:14px;border-radius:10px}.header{display:block}.status{display:inline-block;margin-top:10px}.grid{grid-template-columns:1fr 1fr}.summary{grid-template-columns:repeat(2,1fr)}.event-head{display:block}.event-head span{display:block;margin-top:4px}.event{padding:10px}}
 @media(max-width:430px){.grid{grid-template-columns:1fr}.summary{grid-template-columns:1fr 1fr}}
 @page{size:A4;margin:12mm}
@@ -331,7 +330,6 @@ body{margin:0;padding:24px}
 <div class="summary">${metrics.map((metric) => `<div class="metric"><strong>${metric.value}</strong><span>${escapeDismissedHistoryHtml(metric.label)}</span></div>`).join("")}</div>
 <h2 class="section-title">السجل الزمني الكامل</h2>
 ${eventRows}
-<footer class="footer">تم إنشاء هذا التقرير من السجل الفعلي المحفوظ في TeacherPro.</footer>
 </main>
 </body>
 </html>`;
@@ -595,7 +593,7 @@ export function DismissedManagementView() {
       const profile = await studentProfileLogApi.get(student.id);
       if (!profile) {
         toast.error(
-          "تعذر جلب بيانات تقرير HTML لهذا الطالب من النظام؛ لم تُرسل أي رسالة.",
+          "تعذر تجهيز تقرير الطالب؛ لم تُرسل أي رسالة.",
         );
         return;
       }
@@ -655,7 +653,7 @@ export function DismissedManagementView() {
         try {
           await navigator.clipboard.writeText(completeMessage);
           window.alert(
-            "تم نسخ التقرير الدراسي الكامل من نفس مصدر بيانات تصدير HTML. ستفتح محادثة الطالب الآن؛ الصق الرسالة ثم أرسلها.",
+            "تم نسخ التقرير. ستفتح محادثة الطالب الآن؛ الصق الرسالة ثم أرسلها.",
           );
           window.location.assign(
             `tg://resolve?domain=${encodeURIComponent(username)}`,
@@ -664,13 +662,13 @@ export function DismissedManagementView() {
         } catch {
           downloadOpportunityHtml(telegramStudent, details);
           window.alert(
-            "تعذر النسخ التلقائي، لذلك تم تنزيل التقرير الكامل كملف HTML من نفس المصدر. ستفتح المحادثة الآن لإرفاقه.",
+            "تعذر نسخ التقرير، فتم تنزيله كملف HTML. ستفتح المحادثة الآن لإرفاقه.",
           );
         }
       } else {
         downloadOpportunityHtml(telegramStudent, details);
         window.alert(
-          "التقرير أطول من حد رسالة تيليجرام، لذلك تم تنزيله كاملاً كملف HTML من نفس المصدر. ستفتح المحادثة الآن لإرفاقه.",
+          "التقرير أطول من حد رسالة تيليجرام، فتم تنزيله كملف HTML. ستفتح المحادثة الآن لإرفاقه.",
         );
       }
 
@@ -712,7 +710,7 @@ export function DismissedManagementView() {
         expectedMutationToken: student.mutationToken || "",
       });
       if (!result.ok || result.queued) {
-        toast.error(result.error || "تعذر حفظ ملاحظات الفصل من النظام.");
+        toast.error(result.error || "تعذر حفظ ملاحظات الفصل.");
         return;
       }
 
@@ -748,12 +746,12 @@ export function DismissedManagementView() {
         scopes: ["students", "dismissed", "dashboard", "follow-up"],
         dispatchLocal: true,
       });
-      toast.success("تم حفظ ملاحظات الفصل من بيانات النظام.");
+      toast.success("تم حفظ ملاحظات الفصل.");
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "تعذر حفظ ملاحظات الفصل من النظام.",
+          : "تعذر حفظ ملاحظات الفصل.",
       );
     } finally {
       setSavingNoteIds((current) => ({ ...current, [student.id]: false }));
@@ -791,7 +789,7 @@ export function DismissedManagementView() {
       expectedMutationToken: student.mutationToken || "",
     });
     if (!result.ok || result.queued) {
-      toast.error(result.error || "تعذر استعادة الطالب من بيانات النظام.");
+      toast.error(result.error || "تعذر استعادة الطالب.");
       return;
     }
 
@@ -1171,16 +1169,6 @@ export function DismissedManagementView() {
                   </Button>
                 </div>
 
-                {student.telegram ? (
-                  <p className="text-[11px] text-muted-foreground">
-                    زر تيليجرام يجهز الرسالة من نفس مصدر بيانات ملف تصدير
-                    HTML (لوغ ملف الطالب من بيانات النظام): كل امتحان
-                    ودرجته وحالته مع سجل تغيّر الفرص. عند تجاوز حد الرابط
-                    يُنسخ التقرير، وعند تجاوز حد الرسالة أو تعذر النسخ
-                    يُنزّل ملف HTML كامل من نفس المصدر دون فقدان البيانات.
-                  </p>
-                ) : null}
-
                 <div className="flex flex-wrap gap-2 border-t pt-3">
                   {student.status === "مفصول" && canReactivate ? (
                     <>
@@ -1252,9 +1240,6 @@ export function DismissedManagementView() {
 
                 {isOpen && history ? (
                   <div className="space-y-3 rounded-2xl border bg-muted/10 p-3 sm:p-4">
-                    <p className="text-[11px] text-muted-foreground">
-                      يعرض السجل البيانات التي تسمح بها صلاحيات هذا الحساب.
-                    </p>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                       {historyMetrics(history).map((metric) => (
                         <div
