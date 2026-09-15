@@ -1893,6 +1893,14 @@ export function StudentRegistryView() {
                 triggerLabel="تصدير"
                 description="تقرير سجل الطلاب حسب الفلاتر الحالية"
               />
+              <Button
+                variant="outline"
+                onClick={resetFilters}
+                disabled={!hasActiveRegistryFilters}
+              >
+                <RotateCcw className="size-4" aria-hidden="true" />
+                تصفير الفلاتر
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -2115,16 +2123,6 @@ export function StudentRegistryView() {
                   )}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="tp-filter-actions">
-              <Button
-                variant="outline"
-                onClick={resetFilters}
-                disabled={!hasActiveRegistryFilters}
-              >
-                <RotateCcw className="size-4" aria-hidden="true" />
-                تصفير الفلاتر
-              </Button>
             </div>
           </div>
         </CardContent>
