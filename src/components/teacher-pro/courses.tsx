@@ -31,6 +31,8 @@ import {
 } from "./course-builder";
 import "./courses.css";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -64,20 +66,7 @@ import {
   useTeacherProSyncKey,
 } from "@/hooks/use-teacherpro-sync";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
-import {
-  BookOpen,
-  Plus,
-  ChevronDown,
-  Pencil,
-  Pause,
-  Play,
-  Search,
-  Users,
-  CircleCheck,
-  ShieldCheck,
-  Layers,
-  ClipboardList,
-} from "lucide-react";
+import { BookOpen, Plus, ChevronDown, Pencil, Pause, Play } from "lucide-react";
 import { EmptyState } from "./ui-kit";
 import { formatAppDate } from "@/lib/format";
 
@@ -227,15 +216,10 @@ function CourseEditorDialog({
           event.preventDefault();
           onCloseFocus();
         }}
-        className="tp-course-editor teacherpro-fullscreen-dialog left-0 top-0 flex h-dvh max-h-dvh w-dvw max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none p-0 sm:left-1/2 sm:top-1/2 sm:h-[min(90dvh,56rem)] sm:w-[calc(100dvw-2rem)] sm:max-w-5xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:p-0"
+        className="tp-course-editor sm:max-w-3xl"
       >
-        <DialogHeader className="shrink-0 px-4 pl-16 sm:px-6 sm:pl-16">
-          <DialogTitle className="tp-course-editor__title">
-            <span className="tp-course-editor__icon">
-              <BookOpen aria-hidden="true" />
-            </span>
-            {title}
-          </DialogTitle>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <div className="tp-course-editor__body">{children}</div>
       </DialogContent>
@@ -261,6 +245,7 @@ export function CoursesView() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
   const debouncedSearchText = useDebouncedValue(searchText, 250);
   const [statusFilter, setStatusFilter] = useState<CourseStatusFilter>("all");
@@ -572,50 +557,49 @@ export function CoursesView() {
   });
 
   const renderStats = () => (
-    <dl className="tp-courses__stats" aria-label="إحصائيات الدورات">
+    <div
+      className="grid"
+      role="group"
+      aria-label="إحصائيات الدورات"
+      tabIndex={0}
+    >
       {[
         {
           label: "إجمالي الدورات",
           value: stats?.total,
-          icon: BookOpen,
-          tone: "violet",
+          color: "text-foreground",
         },
         {
           label: "نشطة للتسجيل",
           value: stats?.active,
-          icon: CircleCheck,
-          tone: "green",
+          color: "text-emerald-600 dark:text-emerald-400",
         },
         {
           label: "موقوفة عن التسجيل",
           value: stats?.inactive,
-          icon: Pause,
-          tone: "amber",
+          color: "text-amber-600 dark:text-amber-400",
         },
         {
           label: "عليها طلاب",
           value: stats?.withStudents,
-          icon: Users,
-          tone: "sky",
+          color: "text-primary",
         },
         {
           label: "آمنة للحذف",
           value: stats?.deletable,
-          icon: ShieldCheck,
-          tone: "teal",
+          color: "text-sky-600 dark:text-sky-400",
         },
-      ].map(({ label, value, icon: Icon, tone }) => (
-        <div key={label} data-tone={tone}>
-          <dt>
-            <span className="tp-courses__stat-icon" aria-hidden="true">
-              <Icon />
-            </span>
-            {label}
-          </dt>
-          <dd>{value ?? (isLoading ? "…" : "—")}</dd>
-        </div>
+      ].map(({ label, value, color }) => (
+        <Card key={label}>
+          <CardContent className="p-4 text-center">
+            <p className={`text-2xl font-bold ${color}`}>
+              {value ?? (isLoading ? "…" : "—")}
+            </p>
+            <p className="text-xs text-muted-foreground">{label}</p>
+          </CardContent>
+        </Card>
       ))}
-    </dl>
+    </div>
   );
 
   const renderLoadingSkeleton = () => (
@@ -646,56 +630,53 @@ export function CoursesView() {
     const locationSummary = buildLocationSummary(row.course);
     const studyTypeUsage = topUsageItems(row.usage.studyTypes);
     const locationUsage = topUsageItems(row.usage.locations);
+    const isExpanded = expandedCourseId === row.id;
     return (
       <article
         key={row.id}
         className="tp-course-card"
         aria-labelledby={`course-title-${row.id}`}
       >
-        <header className="tp-course-card__header">
-          <span className="tp-course-card__identity-icon">
-            <BookOpen aria-hidden="true" />
-          </span>
-          <h3 id={`course-title-${row.id}`}>{row.course.name}</h3>
-          <span
-            className={`tp-course-card__status ${row.course.active ? "is-active" : "is-inactive"}`}
-          >
-            {row.course.active ? "نشطة للتسجيل" : "موقوفة عن التسجيل"}
-          </span>
-        </header>
-
-        <dl className="tp-course-card__metrics">
-          <div data-tone="sky">
-            <dt>
-              <Users aria-hidden="true" /> الطلاب
-            </dt>
-            <dd>{row.counts.students}</dd>
+        <div className="tp-course-card__overview">
+          <div className="tp-course-card__identity">
+            <header className="tp-course-card__header">
+              <h3 id={`course-title-${row.id}`}>{row.course.name}</h3>
+              <Badge
+                variant="outline"
+                className={
+                  row.course.active
+                    ? "text-emerald-700 dark:text-emerald-400"
+                    : "text-amber-700 dark:text-amber-400"
+                }
+              >
+                {row.course.active ? "نشطة للتسجيل" : "موقوفة عن التسجيل"}
+              </Badge>
+            </header>
+            <dl className="tp-course-card__chapter">
+              <dt>الفصل النشط:</dt>
+              <dd>
+                <span>{row.activeChapter?.name || "لا يوجد"}</span>
+                {row.activeChapter && (
+                  <span> · {row.activeChapter.opportunities} فرص</span>
+                )}
+              </dd>
+            </dl>
           </div>
-          <div data-tone="violet">
-            <dt>
-              <ClipboardList aria-hidden="true" /> الامتحانات
-            </dt>
-            <dd>{row.counts.exams}</dd>
-          </div>
-          <div data-tone="teal">
-            <dt>
-              <Layers aria-hidden="true" /> الفصول
-            </dt>
-            <dd>{row.counts.courseChapters}</dd>
-          </div>
-        </dl>
-
-        <dl className="tp-course-card__chapter">
-          <dt>الفصل النشط</dt>
-          <dd>
-            <span>{row.activeChapter?.name || "لا يوجد"}</span>
-            {row.activeChapter && (
-              <span className="tp-course-card__opportunities">
-                {row.activeChapter.opportunities} فرص
-              </span>
-            )}
-          </dd>
-        </dl>
+          <dl className="tp-course-card__metrics">
+            <div>
+              <dt>الطلاب</dt>
+              <dd className="text-primary">{row.counts.students}</dd>
+            </div>
+            <div>
+              <dt>الامتحانات</dt>
+              <dd>{row.counts.exams}</dd>
+            </div>
+            <div>
+              <dt>الفصول</dt>
+              <dd>{row.counts.courseChapters}</dd>
+            </div>
+          </dl>
+        </div>
 
         {row.configWarnings.length > 0 && (
           <div className="tp-course-card__warnings" role="status">
@@ -708,7 +689,8 @@ export function CoursesView() {
         <div className="tp-course-card__actions">
           <Button
             variant="default"
-            className="tp-course-card__edit-button"
+            size="sm"
+            className="text-xs font-bold"
             onClick={(event) => {
               courseDialogTrigger.current = event.currentTarget;
               openEditDialog(row);
@@ -719,7 +701,23 @@ export function CoursesView() {
           </Button>
           <Button
             variant="outline"
-            className={`tp-course-card__toggle-button ${row.course.active ? "is-pause" : "is-resume"}`}
+            size="sm"
+            className="text-xs"
+            aria-expanded={isExpanded}
+            aria-controls={`course-details-${row.id}`}
+            aria-label={`تفاصيل ${row.course.name}`}
+            onClick={() => setExpandedCourseId(isExpanded ? null : row.id)}
+          >
+            التفاصيل{" "}
+            <ChevronDown
+              className={isExpanded ? "rotate-180" : undefined}
+              aria-hidden="true"
+            />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className={`text-xs ${row.course.active ? "text-amber-700 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}
             disabled={isTogglingCourse}
             onClick={() => void handleToggle(row)}
             aria-label={`${row.course.active ? "إيقاف التسجيل في" : "تفعيل التسجيل في"} ${row.course.name}`}
@@ -733,14 +731,13 @@ export function CoursesView() {
           </Button>
         </div>
 
-        <details className="tp-course-card__disclosure">
-          <summary>
-            <span>
-              <ClipboardList aria-hidden="true" /> تفاصيل الدورة
-            </span>{" "}
-            <ChevronDown aria-hidden="true" />
-          </summary>
-          <div className="tp-course-card__details">
+        {isExpanded && (
+          <div
+            id={`course-details-${row.id}`}
+            className="tp-course-card__details"
+            role="region"
+            aria-label={`تفاصيل ${row.course.name}`}
+          >
             <section className="tp-course-card__detail-section">
               <h4>إعدادات التسجيل</h4>
               <dl className="tp-course-card__facts">
@@ -842,38 +839,31 @@ export function CoursesView() {
               </Button>
             </section>
           </div>
-        </details>
+        )}
       </article>
     );
   };
 
   return (
-    <div className="tp-courses">
-      <div className="tp-courses__intro">
-        <h2>
-          <span className="tp-courses__intro-icon">
-            <BookOpen aria-hidden="true" />
-          </span>
-          إدارة الدورات
-        </h2>
-        <Button
-          onClick={(event) => {
-            courseDialogTrigger.current = event.currentTarget;
-            setShowCreateForm(true);
-          }}
-        >
-          <Plus aria-hidden="true" /> إضافة دورة جديدة
-        </Button>
-      </div>
-
-      {renderStats()}
-
-      <section className="tp-courses__list" aria-label="قائمة الدورات">
-        <div className="tp-courses__filters">
-          <div className="tp-courses__search">
-            <Label htmlFor="course-search">بحث في الدورات</Label>
-            <div className="tp-courses__search-input">
-              <Search aria-hidden="true" />
+    <div className="tp-management-page tp-courses-page space-y-4">
+      <Card className="tp-filter-card tp-management-filters">
+        <CardHeader>
+          <div className="tp-courses-page__filter-heading">
+            <CardTitle className="text-base">فلاتر الدورات</CardTitle>
+            <Button
+              onClick={(event) => {
+                courseDialogTrigger.current = event.currentTarget;
+                setShowCreateForm(true);
+              }}
+            >
+              <Plus aria-hidden="true" /> إضافة دورة جديدة
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="tp-filter-content pt-2">
+          <div className="tp-filter-grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+            <div className="tp-filter-field tp-filter-search">
+              <Label htmlFor="course-search">بحث في الدورات</Label>
               <Input
                 id="course-search"
                 value={searchText}
@@ -882,92 +872,123 @@ export function CoursesView() {
                 autoComplete="off"
               />
             </div>
+            <div className="tp-filter-field tp-filter-primary">
+              <Label htmlFor="course-status-filter">حالة الدورة</Label>
+              <Select
+                value={statusFilter}
+                onValueChange={(value) =>
+                  setStatusFilter(value as CourseStatusFilter)
+                }
+              >
+                <SelectTrigger id="course-status-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(courseStatusFilterLabels).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="tp-filter-field tp-filter-secondary">
+              <Label htmlFor="course-delete-filter">حماية الحذف</Label>
+              <Select
+                value={deleteFilter}
+                onValueChange={(value) =>
+                  setDeleteFilter(value as CourseDeleteFilter)
+                }
+              >
+                <SelectTrigger id="course-delete-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(courseDeleteFilterLabels).map(
+                    ([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ),
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="tp-filter-actions">
+              <Button
+                variant="outline"
+                disabled={!hasActiveFilters}
+                onClick={() => {
+                  setSearchText("");
+                  setStatusFilter("all");
+                  setDeleteFilter("all");
+                }}
+              >
+                تصفير الفلاتر
+              </Button>
+            </div>
           </div>
-          <div className="tp-courses__filter">
-            <Label htmlFor="course-status-filter">حالة الدورة</Label>
-            <Select
-              value={statusFilter}
-              onValueChange={(value) =>
-                setStatusFilter(value as CourseStatusFilter)
-              }
-            >
-              <SelectTrigger id="course-status-filter">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(courseStatusFilterLabels).map(
-                  ([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ),
-                )}
-              </SelectContent>
-            </Select>
+        </CardContent>
+      </Card>
+
+      <div className="tp-management-workspace">
+        <section className="tp-management-main-flow" aria-label="قائمة الدورات">
+          <Card className="tp-management-results-card">
+            <CardHeader>
+              <div className="tp-courses-page__list-heading">
+                <CardTitle>قائمة الدورات</CardTitle>
+                <p
+                  className="text-xs text-muted-foreground"
+                  data-count-scope="filtered"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {isLoading
+                    ? "جاري التحميل…"
+                    : `${filteredStats.total} من ${rows.length} دورة`}
+                </p>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadError ? (
+                <div className="tp-courses__error" role="alert">
+                  <p>{loadError}</p>
+                  <Button
+                    variant="outline"
+                    onClick={() => void refreshOverview()}
+                  >
+                    إعادة المحاولة
+                  </Button>
+                </div>
+              ) : isLoading ? (
+                renderLoadingSkeleton()
+              ) : filteredRows.length === 0 ? (
+                <EmptyState
+                  icon={BookOpen}
+                  title={
+                    hasActiveFilters ? "لا توجد دورات مطابقة" : "لا توجد دورات"
+                  }
+                />
+              ) : (
+                <div className="tp-courses__grid">
+                  {filteredRows.map(renderCourseCard)}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+        <aside
+          className="tp-management-stats-rail"
+          aria-label="إحصائيات إدارة الدورات"
+        >
+          <div className="space-y-2">
+            <h3 className="text-sm font-black">إحصائيات الدورات</h3>
+            {renderStats()}
           </div>
-          <div className="tp-courses__filter">
-            <Label htmlFor="course-delete-filter">حماية الحذف</Label>
-            <Select
-              value={deleteFilter}
-              onValueChange={(value) =>
-                setDeleteFilter(value as CourseDeleteFilter)
-              }
-            >
-              <SelectTrigger id="course-delete-filter">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(courseDeleteFilterLabels).map(
-                  ([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ),
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="tp-courses__results" role="status" aria-live="polite">
-          <p data-count-scope="filtered">
-            {isLoading
-              ? "جاري التحميل…"
-              : `${filteredStats.total} من ${rows.length} دورة`}
-          </p>
-          {hasActiveFilters && (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setSearchText("");
-                setStatusFilter("all");
-                setDeleteFilter("all");
-              }}
-            >
-              تصفير الفلاتر
-            </Button>
-          )}
-        </div>
-        {loadError ? (
-          <div className="tp-courses__error" role="alert">
-            <p>{loadError}</p>
-            <Button variant="outline" onClick={() => void refreshOverview()}>
-              إعادة المحاولة
-            </Button>
-          </div>
-        ) : isLoading ? (
-          renderLoadingSkeleton()
-        ) : filteredRows.length === 0 ? (
-          <EmptyState
-            icon={BookOpen}
-            title={hasActiveFilters ? "لا توجد دورات مطابقة" : "لا توجد دورات"}
-          />
-        ) : (
-          <div className="tp-courses__grid">
-            {filteredRows.map(renderCourseCard)}
-          </div>
-        )}
-      </section>
+        </aside>
+      </div>
 
       <CourseEditorDialog
         open={showCreateForm}

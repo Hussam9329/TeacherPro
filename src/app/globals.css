@@ -3029,74 +3029,74 @@
 }
 
 /* Opportunities page contract. */
-.tp-opportunities-page {
-  --tp-opportunities-stats-width: clamp(18rem, 24vw, 21rem);
+:is(.tp-opportunities-page, .tp-management-page) {
+  --tp-management-stats-width: clamp(18rem, 24vw, 21rem);
 }
 
-.tp-opportunities-page > .tp-filter-card {
+:is(.tp-opportunities-page, .tp-management-page) > .tp-filter-card {
   border-color: color-mix(in srgb, var(--primary) 22%, transparent);
 }
 
 /* Keep the full filter set visible, but remove the generic staged labels on
    this page so the control surface stays compact and the results start sooner. */
-.tp-opportunities-page .tp-opportunities-filters .tp-filter-grid::before,
-.tp-opportunities-page .tp-opportunities-filters .tp-filter-grid::after {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-filters, .tp-management-filters) .tp-filter-grid::before,
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-filters, .tp-management-filters) .tp-filter-grid::after {
   content: none;
   display: none;
 }
 
-.tp-opportunities-page .tp-opportunities-filters > [data-slot="card-header"] {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-filters, .tp-management-filters) > [data-slot="card-header"] {
   padding: 0.8rem 1rem 0.65rem;
 }
 
-.tp-opportunities-page .tp-opportunities-filters .tp-filter-content {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-filters, .tp-management-filters) .tp-filter-content {
   padding: 0.75rem 1rem 1rem;
 }
 
-.tp-opportunities-page .tp-opportunities-filters .tp-filter-grid {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-filters, .tp-management-filters) .tp-filter-grid {
   gap: 0.7rem;
 }
 
-.tp-opportunities-page .tp-opportunities-workspace {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-workspace, .tp-management-workspace) {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: 0.9rem;
 }
 
-.tp-opportunities-page .tp-opportunities-main-flow {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-main-flow, .tp-management-main-flow) {
   display: grid;
   min-width: 0;
   gap: 0.75rem;
 }
 
-.tp-opportunities-page .tp-opportunities-bulk-card,
-.tp-opportunities-page .tp-opportunities-results-card,
-.tp-opportunities-page .tp-opportunities-stats-rail [data-slot="card"] {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-bulk-card, .tp-management-action-card),
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-results-card, .tp-management-results-card),
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-stats-rail, .tp-management-stats-rail) [data-slot="card"] {
   box-shadow: none;
 }
 
-.tp-opportunities-page .tp-opportunities-bulk-card > [data-slot="card-content"] {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-bulk-card, .tp-management-action-card) > [data-slot="card-content"] {
   padding: 0.85rem 1rem;
 }
 
-.tp-opportunities-page .tp-opportunities-count-summary {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-count-summary, .tp-management-count-summary) {
   margin: 0;
 }
 
-.tp-opportunities-page .tp-opportunities-results-card {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-results-card, .tp-management-results-card) {
   min-width: 0;
   scroll-margin-top: 6rem;
 }
 
-.tp-opportunities-page .tp-opportunities-results-card > [data-slot="card-header"] {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-results-card, .tp-management-results-card) > [data-slot="card-header"] {
   padding-block: 0.9rem;
 }
 
 /* On phones and tablets the complete statistics set becomes one compact,
    touch-friendly horizontal KPI rail instead of a tall block between filters
    and results. Nothing is removed: every metric remains in the same DOM. */
-.tp-opportunities-page .tp-opportunities-stats-rail {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-stats-rail, .tp-management-stats-rail) {
   order: -1;
   min-width: 0;
   overflow: hidden;
@@ -3106,11 +3106,11 @@
   padding: 0.7rem;
 }
 
-.tp-opportunities-page .tp-opportunities-stats-rail > .space-y-2 {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-stats-rail, .tp-management-stats-rail) > .space-y-2 {
   min-width: 0;
 }
 
-.tp-opportunities-page .tp-opportunities-stats-rail .grid {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-stats-rail, .tp-management-stats-rail) .grid {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(10.5rem, 11.5rem);
@@ -3123,13 +3123,13 @@
   scrollbar-width: thin;
 }
 
-.tp-opportunities-page .tp-opportunities-stats-rail .grid > [data-slot="card"] {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-stats-rail, .tp-management-stats-rail) .grid > [data-slot="card"] {
   min-width: 0;
   scroll-snap-align: start;
   border-color: color-mix(in srgb, var(--border) 88%, transparent);
 }
 
-.tp-opportunities-page .tp-opportunities-stats-rail [data-slot="card-content"] {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-stats-rail, .tp-management-stats-rail) [data-slot="card-content"] {
   display: flex;
   min-height: 5rem;
   flex-direction: column;
@@ -3137,38 +3137,38 @@
   padding: 0.7rem 0.65rem;
 }
 
-.tp-opportunities-page .tp-opportunities-stats-rail .text-2xl {
+:is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-stats-rail, .tp-management-stats-rail) .text-2xl {
   font-size: 1.25rem;
   line-height: 1.55rem;
 }
 
-.tp-opportunities-page .max-h-80 {
+:is(.tp-opportunities-page, .tp-management-page) .max-h-80 {
   scrollbar-gutter: stable;
 }
 
 @media (min-width: 480px) and (max-width: 767px) {
-  .tp-opportunities-page .tp-opportunities-filters .tp-filter-grid {
+  :is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-filters, .tp-management-filters) .tp-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .tp-opportunities-page .tp-opportunities-filters .tp-filter-search {
+  :is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-filters, .tp-management-filters) .tp-filter-search {
     grid-column: 1 / -1;
   }
 }
 
 @media (min-width: 1280px) {
-  .tp-opportunities-page .tp-opportunities-workspace {
+  :is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-workspace, .tp-management-workspace) {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--tp-opportunities-stats-width);
+    grid-template-columns: minmax(0, 1fr) var(--tp-management-stats-width);
     align-items: start;
     gap: 1rem;
   }
 
-  .tp-opportunities-page .tp-opportunities-main-flow {
+  :is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-main-flow, .tp-management-main-flow) {
     grid-column: 1;
   }
 
-  .tp-opportunities-page .tp-opportunities-stats-rail {
+  :is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-stats-rail, .tp-management-stats-rail) {
     order: 0;
     grid-column: 2;
     position: sticky;
@@ -3178,7 +3178,7 @@
     scrollbar-gutter: stable;
   }
 
-  .tp-opportunities-page .tp-opportunities-stats-rail .grid {
+  :is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-stats-rail, .tp-management-stats-rail) .grid {
     grid-auto-flow: row;
     grid-auto-columns: auto;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3186,7 +3186,7 @@
     padding-bottom: 0;
   }
 
-  .tp-opportunities-page .tp-opportunities-stats-rail [data-slot="card-content"] {
+  :is(.tp-opportunities-page, .tp-management-page) :is(.tp-opportunities-stats-rail, .tp-management-stats-rail) [data-slot="card-content"] {
     min-height: 5.35rem;
   }
 }
