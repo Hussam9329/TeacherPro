@@ -94,6 +94,12 @@
   background: color-mix(in srgb, var(--card) 80%, transparent);
 }
 
+.tp-registry-editor__section h3 {
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
 .tp-registry-editor__fields {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
