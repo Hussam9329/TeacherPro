@@ -313,6 +313,6 @@ test("dashboard keeps KPI loading, stale errors, and accessibility after retired
   for (const label of ["طلاب نشطون", "طلاب مفصولون", "إجمالي الطلاب"]) {
     assert.ok(dashboard.includes(label), `the ${label} KPI is retained`);
   }
-  assert.match(dashboard, /grid-cols-1/);
-  assert.match(dashboard, /xl:grid-cols-3/);
+  assert.match(globalCss, /container: dashboard \/ inline-size/);
+  assert.match(globalCss, /@container dashboard \(min-width: 40rem\)/);
 });

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft,
   BookOpen,
   CalendarCheck,
   ChartColumn,
@@ -17,7 +16,6 @@ import {
   Users,
   UsersRound,
 } from "lucide-react";
-import { StatCard } from "./ui-kit";
 import { useTeacherStore, type SectionId } from "@/lib/teacher-store";
 import {
   useTeacherProBackgroundSyncDetector,
@@ -127,19 +125,19 @@ export function DashboardView({
       label: "طلاب نشطون",
       value: stats?.activeStudents,
       icon: Users,
-      tone: "success" as const,
+      color: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
     },
     {
       label: "طلاب مفصولون",
       value: stats?.dismissedStudents,
       icon: Shield,
-      tone: "warning" as const,
+      color: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
     },
     {
       label: "إجمالي الطلاب",
       value: stats?.totalStudents,
       icon: BookOpen,
-      tone: "info" as const,
+      color: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
     },
   ];
 
@@ -156,7 +154,7 @@ export function DashboardView({
 
   return (
     <div
-      className="section-stack tp-dashboard"
+      className="tp-dashboard"
       data-dashboard-state={dashboardState}
       aria-busy={initialLoading || statsRefreshing}
     >
@@ -209,41 +207,40 @@ export function DashboardView({
       )}
 
       {!initialError && stats && (
-        <p className="text-xs text-muted-foreground" aria-live="polite">
+        <p className="tp-dashboard__updated text-muted-foreground" aria-live="polite">
           {statsRefreshing ? "جارٍ تحديث الأرقام…" : `آخر تحديث: ${formatStatsTime(stats.generatedAt)}`}
         </p>
       )}
 
-      <div className="tp-dashboard__kpis grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {kpiCards.map((card) => (
-          <StatCard
-            key={card.label}
-            label={card.label}
-            value={initialLoading ? "…" : card.value ?? "—"}
-            icon={card.icon}
-            tone={card.tone}
-          />
+      <div className="tp-dashboard__kpis" role="group" aria-label="إحصائيات الطلاب">
+        {kpiCards.map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="tp-dashboard__stat" data-count-scope="system">
+            <span className={`tp-dashboard__stat-icon ${color}`} aria-hidden="true">
+              <Icon />
+            </span>
+            <div className="tp-dashboard__stat-copy">
+              <p className="tp-dashboard__stat-label text-muted-foreground">{label}</p>
+              <p className="tp-dashboard__stat-value">{initialLoading ? "…" : value ?? "—"}</p>
+            </div>
+          </div>
         ))}
       </div>
 
       {visibleShortcuts.length > 0 && (
-        <nav aria-label="اختصارات لوحة التحكم" className="space-y-3">
-          <h3 className="text-base font-bold">الوصول السريع</h3>
-          <div className="tp-dashboard__shortcuts grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+        <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
+          <h3 className="text-sm font-bold">الوصول السريع</h3>
+          <div className="tp-dashboard__shortcuts">
             {visibleShortcuts.map(({ section, title, icon: Icon, color }) => (
               <a
                 key={section}
                 href={`/?section=${section}`}
                 onClick={(event) => onSectionLinkClick?.(event, section)}
-                className="tp-dashboard__shortcut group flex min-h-36 min-w-0 flex-col justify-between gap-5 rounded-2xl border border-border/80 bg-card p-4 text-start text-card-foreground shadow-sm transition-[background-color,border-color,box-shadow] hover:border-primary/40 hover:bg-accent/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none sm:p-5"
+                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
               >
-                <span className={`flex size-12 items-center justify-center rounded-2xl ${color}`} aria-hidden="true">
-                  <Icon className="size-6" />
+                <span className={`tp-dashboard__shortcut-icon ${color}`} aria-hidden="true">
+                  <Icon />
                 </span>
-                <span className="flex min-w-0 items-center justify-between gap-2">
-                  <span className="min-w-0 break-words text-sm font-bold leading-6 sm:text-base">{title}</span>
-                  <ArrowLeft className="size-4 shrink-0 text-muted-foreground group-hover:text-primary" aria-hidden="true" />
-                </span>
+                <span className="tp-dashboard__shortcut-label">{title}</span>
               </a>
             ))}
           </div>
