@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTeacherStore, type Course } from "@/lib/teacher-store";
 import {
   courseApi,
@@ -8,30 +14,25 @@ import {
   type CourseStudentSyncPreview,
 } from "@/lib/api";
 import {
-  COURSE_PROGRAMS,
-  STUDY_TYPES,
-  LOCATION_SCOPES,
-  BAGHDAD_MODES,
   type CourseProgram,
   type StudyType,
-  type LocationScope,
-  type BaghdadMode,
-  type StudyLocationConfig,
-  type CourseLocationConfig,
-  type StudyTypesByProgram,
   getAvailablePrograms,
   getAvailableStudyTypes,
   getCourseLocationConfig,
   getStudyTypesByProgram,
 } from "@/lib/course-config";
-import { BAGHDAD_COURSE_SITES, IRAQI_PROVINCES } from "@/lib/iraq";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  CourseBuilderForm,
+  type CourseFormState,
+  emptyCourseForm,
+  normalizeCourseLocationConfig,
+  normalizeStudyLocationConfig,
+  validateCourseForm,
+} from "./course-builder";
+import "./courses.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -44,7 +45,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -56,7 +56,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/lib/user-toast";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
@@ -67,24 +66,17 @@ import {
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import {
   BookOpen,
-  Settings,
-  MapPin,
-  GraduationCap,
-  Monitor,
-  Building,
+  Plus,
+  ChevronDown,
+  Pencil,
+  Pause,
+  Play,
+  Search,
 } from "lucide-react";
 import { EmptyState } from "./ui-kit";
 import { formatAppDate } from "@/lib/format";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type CourseFormState = {
-  name: string;
-  availablePrograms: CourseProgram[];
-  availableStudyTypes: StudyType[];
-  studyTypesByProgram: StudyTypesByProgram;
-  locationConfig: CourseLocationConfig;
-};
 
 type CourseOverviewRow = NonNullable<CourseOverviewResponse["rows"]>[number] & {
   course: Course;
@@ -104,176 +96,6 @@ const courseDeleteFilterLabels: Record<CourseDeleteFilter, string> = {
   deletable: "قابلة للحذف",
   blocked: "محمية من الحذف",
 };
-
-function emptyCourseForm(): CourseFormState {
-  return {
-    name: "",
-    availablePrograms: [],
-    availableStudyTypes: [],
-    studyTypesByProgram: {},
-    locationConfig: {},
-  };
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function toggleInArray<T>(arr: T[], item: T): T[] {
-  return arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item];
-}
-
-function usesAutoGeneralBaghdad(studyType: StudyType): boolean {
-  return studyType === "إلكتروني" || studyType === "مدمج";
-}
-
-function usesForcedCustomBaghdad(studyType: StudyType): boolean {
-  return studyType === "حضوري";
-}
-
-function normalizeStudyLocationConfig(
-  studyType: StudyType,
-  config: StudyLocationConfig,
-): StudyLocationConfig {
-  const nextConfig: StudyLocationConfig = {
-    ...config,
-    scopes: [...(config.scopes || [])],
-  };
-
-  if (
-    usesAutoGeneralBaghdad(studyType) &&
-    nextConfig.scopes.includes("بغداد")
-  ) {
-    nextConfig.baghdadMode = "عموم بغداد";
-    nextConfig.baghdadSites = undefined;
-  }
-
-  if (
-    usesForcedCustomBaghdad(studyType) &&
-    nextConfig.scopes.includes("بغداد")
-  ) {
-    nextConfig.baghdadMode = "بغداد - مخصص";
-    nextConfig.baghdadSites = nextConfig.baghdadSites || [];
-  }
-
-  return nextConfig;
-}
-
-function normalizeCourseLocationConfig(
-  config: CourseLocationConfig,
-  studyTypes: StudyType[],
-): CourseLocationConfig {
-  const nextConfig: CourseLocationConfig = {};
-
-  for (const studyType of studyTypes) {
-    const studyConfig = config[studyType];
-    if (studyConfig) {
-      nextConfig[studyType] = normalizeStudyLocationConfig(
-        studyType,
-        studyConfig,
-      );
-    }
-  }
-
-  return nextConfig;
-}
-
-function getStudyTypesFromProgramMap(
-  studyTypesByProgram: StudyTypesByProgram,
-  programs: CourseProgram[],
-): StudyType[] {
-  const values = programs.flatMap(
-    (program) => studyTypesByProgram[program] || [],
-  );
-  return Array.from(new Set(values));
-}
-
-function validateCourseForm(form: CourseFormState): string | null {
-  if (!form.name.trim()) return "يرجى إدخال اسم الدورة";
-  if (form.availablePrograms.length === 0)
-    return "يجب اختيار نوع دورة واحد على الأقل";
-
-  for (const program of form.availablePrograms) {
-    if ((form.studyTypesByProgram[program] || []).length === 0) {
-      return `يجب اختيار نوع دراسة واحد على الأقل لنوع الدورة "${program}"`;
-    }
-  }
-
-  for (const studyType of form.availableStudyTypes) {
-    const config = form.locationConfig[studyType];
-    if (!config || config.scopes.length === 0) {
-      return `يجب تحديد إعدادات المواقع لنوع البرنامج "${studyType}"`;
-    }
-    if (config.scopes.includes("بغداد") && !config.baghdadMode) {
-      return `يجب اختيار نوع بغداد لنوع البرنامج "${studyType}"`;
-    }
-    if (
-      config.baghdadMode === "بغداد - مخصص" &&
-      (!config.baghdadSites || config.baghdadSites.length === 0)
-    ) {
-      return `يجب اختيار موقع واحد على الأقل من مواقع بغداد لنوع البرنامج "${studyType}"`;
-    }
-    if (
-      config.scopes.includes("محافظات") &&
-      (!config.provinces || config.provinces.length === 0)
-    ) {
-      return `يجب اختيار محافظة واحدة على الأقل لنوع البرنامج "${studyType}"`;
-    }
-  }
-
-  return null;
-}
-
-function formatListSummary(
-  values: string[],
-  emptyText = "لا توجد خيارات محددة",
-): string {
-  if (values.length === 0) return emptyText;
-  if (values.length <= 4) return values.join("، ");
-  return `${values.slice(0, 4).join("، ")}، +${values.length - 4}`;
-}
-
-function buildCourseFormSummary(form: CourseFormState) {
-  const courseName = form.name.trim() || "الدورة الجديدة";
-  const normalizedLocationConfig = normalizeCourseLocationConfig(
-    form.locationConfig,
-    form.availableStudyTypes,
-  );
-  const programLines = form.availablePrograms.map((program) => {
-    const studyTypes = form.studyTypesByProgram[program] || [];
-    return `${program}: ${formatListSummary(studyTypes, "لم يتم اختيار نوع دراسة")}`;
-  });
-  const locationLines = form.availableStudyTypes.map((studyType) => {
-    const rawConfig = normalizedLocationConfig[studyType] || { scopes: [] };
-    const config = normalizeStudyLocationConfig(studyType, rawConfig);
-    const parts: string[] = [];
-
-    if (config.scopes.includes("بغداد")) {
-      if (config.baghdadMode === "عموم بغداد") {
-        parts.push("عموم بغداد");
-      } else if (config.baghdadMode === "بغداد - مخصص") {
-        parts.push(
-          `بغداد - مخصص: ${formatListSummary(config.baghdadSites || [], "لم تحدد مواقع بغداد بعد")}`,
-        );
-      } else {
-        parts.push("بغداد");
-      }
-    }
-    if (config.scopes.includes("محافظات")) {
-      parts.push(
-        `محافظات: ${formatListSummary(config.provinces || [], "لم تحدد المحافظات بعد")}`,
-      );
-    }
-
-    return `${studyType}: ${parts.length > 0 ? parts.join("، ") : "لم تحدد المواقع بعد"}`;
-  });
-
-  return {
-    courseName,
-    programCount: form.availablePrograms.length,
-    studyTypeCount: form.availableStudyTypes.length,
-    programLines,
-    locationLines,
-  };
-}
 
 /** Generate a human-readable location summary for a course */
 function buildLocationSummary(course: Course): string {
@@ -312,495 +134,6 @@ function buildLocationSummary(course: Course): string {
   }
 
   return parts.join(" | ");
-}
-
-// ─── Course Builder Form ─────────────────────────────────────────────────────
-
-function CourseBuilderForm({
-  form,
-  setForm,
-  onSubmit,
-  submitLabel,
-  submitDisabled,
-}: {
-  form: CourseFormState;
-  setForm: React.Dispatch<React.SetStateAction<CourseFormState>>;
-  onSubmit: () => void;
-  submitLabel: string;
-  submitDisabled: boolean;
-}) {
-  const summary = useMemo(() => buildCourseFormSummary(form), [form]);
-
-  const handleProgramToggle = (program: CourseProgram) => {
-    setForm((prev) => {
-      const nextPrograms = toggleInArray(prev.availablePrograms, program);
-      const nextStudyTypesByProgram: StudyTypesByProgram = {
-        ...prev.studyTypesByProgram,
-      };
-
-      if (nextPrograms.includes(program)) {
-        nextStudyTypesByProgram[program] =
-          nextStudyTypesByProgram[program] || [];
-      } else {
-        delete nextStudyTypesByProgram[program];
-      }
-
-      const nextStudyTypes = getStudyTypesFromProgramMap(
-        nextStudyTypesByProgram,
-        nextPrograms,
-      );
-      return {
-        ...prev,
-        availablePrograms: nextPrograms,
-        studyTypesByProgram: nextStudyTypesByProgram,
-        availableStudyTypes: nextStudyTypes,
-        locationConfig: normalizeCourseLocationConfig(
-          prev.locationConfig,
-          nextStudyTypes,
-        ),
-      };
-    });
-  };
-
-  const handleStudyTypeToggle = (
-    program: CourseProgram,
-    studyType: StudyType,
-  ) => {
-    setForm((prev) => {
-      const currentProgramTypes = prev.studyTypesByProgram[program] || [];
-      const nextProgramTypes = toggleInArray(currentProgramTypes, studyType);
-      const nextStudyTypesByProgram: StudyTypesByProgram = {
-        ...prev.studyTypesByProgram,
-        [program]: nextProgramTypes,
-      };
-      const nextStudyTypes = getStudyTypesFromProgramMap(
-        nextStudyTypesByProgram,
-        prev.availablePrograms,
-      );
-      const nextConfig = normalizeCourseLocationConfig(
-        prev.locationConfig,
-        nextStudyTypes,
-      );
-
-      if (nextProgramTypes.includes(studyType) && !nextConfig[studyType]) {
-        nextConfig[studyType] = { scopes: [] };
-      }
-
-      return {
-        ...prev,
-        studyTypesByProgram: nextStudyTypesByProgram,
-        availableStudyTypes: nextStudyTypes,
-        locationConfig: nextConfig,
-      };
-    });
-  };
-
-  const handleScopeToggle = (studyType: StudyType, scope: LocationScope) => {
-    setForm((prev) => {
-      const prevStudy = prev.locationConfig[studyType] || { scopes: [] };
-      const nextScopes = toggleInArray(prevStudy.scopes, scope);
-      const nextStudy: StudyLocationConfig = {
-        ...prevStudy,
-        scopes: nextScopes,
-      };
-
-      // Clean up if scope removed
-      if (!nextScopes.includes("بغداد")) {
-        nextStudy.baghdadMode = undefined;
-        nextStudy.baghdadSites = undefined;
-      }
-      if (!nextScopes.includes("محافظات")) {
-        nextStudy.provinces = undefined;
-      }
-
-      if (nextScopes.includes("بغداد") && usesAutoGeneralBaghdad(studyType)) {
-        nextStudy.baghdadMode = "عموم بغداد";
-        nextStudy.baghdadSites = undefined;
-      }
-
-      if (nextScopes.includes("بغداد") && usesForcedCustomBaghdad(studyType)) {
-        nextStudy.baghdadMode = "بغداد - مخصص";
-        nextStudy.baghdadSites = nextStudy.baghdadSites || [];
-      }
-
-      return {
-        ...prev,
-        locationConfig: { ...prev.locationConfig, [studyType]: nextStudy },
-      };
-    });
-  };
-
-  const handleBaghdadModeChange = (studyType: StudyType, mode: BaghdadMode) => {
-    if (usesForcedCustomBaghdad(studyType) && mode !== "بغداد - مخصص") return;
-    setForm((prev) => {
-      const prevStudy = prev.locationConfig[studyType] || { scopes: [] };
-      const nextStudy: StudyLocationConfig = {
-        ...prevStudy,
-        baghdadMode: mode,
-        baghdadSites:
-          mode === "بغداد - مخصص" ? prevStudy.baghdadSites || [] : undefined,
-      };
-      return {
-        ...prev,
-        locationConfig: { ...prev.locationConfig, [studyType]: nextStudy },
-      };
-    });
-  };
-
-  const handleBaghdadSiteToggle = (studyType: StudyType, site: string) => {
-    setForm((prev) => {
-      const prevStudy = prev.locationConfig[studyType] || {
-        scopes: [],
-        baghdadMode: "بغداد - مخصص" as BaghdadMode,
-      };
-      const nextSites = toggleInArray(prevStudy.baghdadSites || [], site);
-      return {
-        ...prev,
-        locationConfig: {
-          ...prev.locationConfig,
-          [studyType]: { ...prevStudy, baghdadSites: nextSites },
-        },
-      };
-    });
-  };
-
-  const handleProvinceToggle = (studyType: StudyType, province: string) => {
-    setForm((prev) => {
-      const prevStudy = prev.locationConfig[studyType] || { scopes: [] };
-      const nextProvinces = toggleInArray(prevStudy.provinces || [], province);
-      return {
-        ...prev,
-        locationConfig: {
-          ...prev.locationConfig,
-          [studyType]: { ...prevStudy, provinces: nextProvinces },
-        },
-      };
-    });
-  };
-
-  const handleSelectAllProvinces = (studyType: StudyType) => {
-    setForm((prev) => {
-      const prevStudy = prev.locationConfig[studyType] || { scopes: [] };
-      const allSelected =
-        (prevStudy.provinces || []).length === IRAQI_PROVINCES.length;
-      return {
-        ...prev,
-        locationConfig: {
-          ...prev.locationConfig,
-          [studyType]: {
-            ...prevStudy,
-            provinces: allSelected ? [] : [...IRAQI_PROVINCES],
-          },
-        },
-      };
-    });
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* بيانات أساسية */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-          <Settings className="size-4 text-primary" />
-          <span>بيانات أساسية</span>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="courseName">اسم الدورة *</Label>
-          <Input
-            id="courseName"
-            autoComplete="off"
-            value={form.name}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, name: e.target.value }))
-            }
-            placeholder="مثال: أحياء السادس - دفعة جديدة"
-          />
-        </div>
-      </div>
-
-      <Separator />
-
-      {/* نوع الدورة */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-          <GraduationCap className="size-4 text-primary" />
-          <span>نوع الدورة</span>
-        </div>
-        <div className="flex flex-wrap gap-4">
-          {COURSE_PROGRAMS.map((program) => (
-            <label
-              key={program}
-              className="flex items-center gap-2 cursor-pointer"
-            >
-              <Checkbox
-                checked={form.availablePrograms.includes(program)}
-                onCheckedChange={() => handleProgramToggle(program)}
-              />
-              <span className="text-sm">{program}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {form.availablePrograms.length > 0 && (
-        <>
-          <Separator />
-
-          {/* نوع البرنامج حسب نوع الدورة */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-              <Monitor className="size-4 text-primary" />
-              <span>نوع البرنامج لكل نوع دورة</span>
-            </div>
-            {form.availablePrograms.map((program) => (
-              <Card key={program} className="border-dashed bg-muted/20">
-                <CardHeader className="pb-3 pt-4 px-4">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <GraduationCap className="size-4 text-muted-foreground" />
-                    {program}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 pb-4">
-                  <div className="flex flex-wrap gap-4">
-                    {STUDY_TYPES.map((st) => (
-                      <label
-                        key={`${program}-${st}`}
-                        className="flex items-center gap-2 cursor-pointer"
-                      >
-                        <Checkbox
-                          checked={(
-                            form.studyTypesByProgram[program] || []
-                          ).includes(st)}
-                          onCheckedChange={() =>
-                            handleStudyTypeToggle(program, st)
-                          }
-                        />
-                        <span className="text-sm">{st}</span>
-                      </label>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* إعداد المواقع لكل نوع دراسة */}
-      {form.availableStudyTypes.length > 0 && (
-        <>
-          <Separator />
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-              <MapPin className="size-4 text-primary" />
-              <span>إعداد المواقع لكل نوع دراسة مستخدم</span>
-            </div>
-            {form.availableStudyTypes.map((studyType) => {
-              const studyConfig = form.locationConfig[studyType] || {
-                scopes: [],
-              };
-              const isAutoGeneralBaghdad = usesAutoGeneralBaghdad(studyType);
-              const isForcedCustomBaghdad = usesForcedCustomBaghdad(studyType);
-              return (
-                <Card key={studyType} className="border-dashed">
-                  <CardHeader className="pb-3 pt-4 px-4">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Building className="size-4 text-muted-foreground" />
-                      {studyType}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-4 space-y-4">
-                    {/* Scopes */}
-                    <div className="flex flex-wrap gap-4">
-                      {LOCATION_SCOPES.map((scope) => (
-                        <label
-                          key={scope}
-                          className="flex items-center gap-2 cursor-pointer"
-                        >
-                          <Checkbox
-                            checked={studyConfig.scopes.includes(scope)}
-                            onCheckedChange={() =>
-                              handleScopeToggle(studyType, scope)
-                            }
-                          />
-                          <span className="text-sm">{scope}</span>
-                        </label>
-                      ))}
-                    </div>
-
-                    {/* Baghdad options */}
-                    {studyConfig.scopes.includes("بغداد") &&
-                      !isAutoGeneralBaghdad && (
-                        <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-                          <RadioGroup
-                            value={
-                              isForcedCustomBaghdad
-                                ? "بغداد - مخصص"
-                                : studyConfig.baghdadMode || ""
-                            }
-                            onValueChange={(v) =>
-                              handleBaghdadModeChange(
-                                studyType,
-                                v as BaghdadMode,
-                              )
-                            }
-                            className="flex flex-wrap gap-4"
-                          >
-                            {BAGHDAD_MODES.map((mode) => {
-                              const disabled =
-                                isForcedCustomBaghdad && mode === "عموم بغداد";
-                              return (
-                                <label
-                                  key={mode}
-                                  className={`flex items-center gap-2 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
-                                >
-                                  <RadioGroupItem
-                                    value={mode}
-                                    disabled={disabled}
-                                  />
-                                  <span className="text-sm">{mode}</span>
-                                </label>
-                              );
-                            })}
-                          </RadioGroup>
-
-                          {/* Baghdad sites */}
-                          {(isForcedCustomBaghdad ||
-                            studyConfig.baghdadMode === "بغداد - مخصص") && (
-                            <div className="flex flex-wrap gap-3 pt-1">
-                              {BAGHDAD_COURSE_SITES.map((site) => (
-                                <label
-                                  key={site}
-                                  className="flex items-center gap-2 cursor-pointer"
-                                >
-                                  <Checkbox
-                                    checked={(
-                                      studyConfig.baghdadSites || []
-                                    ).includes(site)}
-                                    onCheckedChange={() =>
-                                      handleBaghdadSiteToggle(studyType, site)
-                                    }
-                                  />
-                                  <span className="text-sm">{site}</span>
-                                </label>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                    {/* Provinces */}
-                    {studyConfig.scopes.includes("محافظات") && (
-                      <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">المحافظات</span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleSelectAllProvinces(studyType)}
-                          >
-                            {(studyConfig.provinces || []).length ===
-                            IRAQI_PROVINCES.length
-                              ? "إلغاء الكل"
-                              : "اختيار الكل"}
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-                          {IRAQI_PROVINCES.map((province) => (
-                            <label
-                              key={province}
-                              className="flex items-center gap-2 cursor-pointer"
-                            >
-                              <Checkbox
-                                checked={(studyConfig.provinces || []).includes(
-                                  province,
-                                )}
-                                onCheckedChange={() =>
-                                  handleProvinceToggle(studyType, province)
-                                }
-                              />
-                              <span className="text-sm">{province}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      <Separator />
-
-      <Card className="border-primary/20 bg-primary/5 shadow-none">
-        <CardHeader className="pb-3 pt-4 px-4">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <BookOpen className="size-4 text-primary" />
-            ملخص قبل الحفظ
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4 text-sm leading-7 space-y-3">
-          <p className="font-medium text-foreground">
-            هذه الدورة تحتوي على {summary.programCount} نوع دورة و{" "}
-            {summary.studyTypeCount} نوع دراسة.
-          </p>
-          <div className="rounded-xl border bg-background/70 p-3">
-            <p className="mb-1 font-semibold text-foreground">
-              ستظهر للطلاب بهذه الخيارات:
-            </p>
-            {summary.programLines.length > 0 ? (
-              <ul className="list-disc space-y-1 pr-5 text-muted-foreground">
-                {summary.programLines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-muted-foreground">
-                اختر نوع دورة واحد على الأقل حتى تظهر خيارات التسجيل للطلاب.
-              </p>
-            )}
-          </div>
-          <div className="rounded-xl border bg-background/70 p-3">
-            <p className="mb-1 font-semibold text-foreground">
-              هذه المواقع مفعلة:
-            </p>
-            {summary.locationLines.length > 0 ? (
-              <ul className="list-disc space-y-1 pr-5 text-muted-foreground">
-                {summary.locationLines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-muted-foreground">
-                بعد اختيار نوع البرنامج ستظهر هنا المواقع التي ستكون مفعلة في
-                التسجيل.
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      {/* Submit */}
-      <Button
-        onClick={onSubmit}
-        disabled={
-          submitDisabled ||
-          !form.name.trim() ||
-          form.availablePrograms.length === 0 ||
-          form.availableStudyTypes.length === 0
-        }
-        className="w-full"
-      >
-        {submitDisabled ? "جاري الحفظ..." : submitLabel}
-      </Button>
-    </div>
-  );
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────────
@@ -868,7 +201,40 @@ function courseDeleteBadge(row: CourseOverviewRow) {
   return row.deleteSafety.canDelete ? "آمنة للحذف" : "الحذف محمي";
 }
 
+function CourseEditorDialog({
+  open,
+  onOpenChange,
+  onCloseFocus,
+  title,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCloseFocus: () => void;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        dir="rtl"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          onCloseFocus();
+        }}
+        className="tp-course-editor teacherpro-fullscreen-dialog left-0 top-0 flex h-dvh max-h-dvh w-dvw max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none p-0 sm:left-1/2 sm:top-1/2 sm:h-[min(90dvh,56rem)] sm:w-[calc(100dvw-2rem)] sm:max-w-5xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl sm:p-0"
+      >
+        <DialogHeader className="shrink-0 px-4 pl-16 sm:px-6 sm:pl-16">
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="tp-course-editor__body">{children}</div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function CoursesView() {
+  const courseDialogTrigger = useRef<HTMLButtonElement | null>(null);
   const { loadSectionDataFromServer } = useTeacherStore();
   const syncKey = useTeacherProSyncKey([
     "courses",
@@ -994,17 +360,7 @@ export function CoursesView() {
     });
   }, [debouncedSearchText, deleteFilter, rows, statusFilter]);
 
-  const filteredStats = useMemo(
-    () => ({
-      total: filteredRows.length,
-      active: filteredRows.filter((row) => row.course.active).length,
-      inactive: filteredRows.filter((row) => !row.course.active).length,
-      deletable: filteredRows.filter((row) => row.deleteSafety.canDelete)
-        .length,
-      blocked: filteredRows.filter((row) => !row.deleteSafety.canDelete).length,
-    }),
-    [filteredRows],
-  );
+  const filteredStats = { total: filteredRows.length };
 
   const hasActiveFilters =
     Boolean(debouncedSearchText.trim()) ||
@@ -1206,60 +562,39 @@ export function CoursesView() {
   });
 
   const renderStats = () => (
-    <div className="tp-courses__stats grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-      <div className="rounded-2xl border bg-card/80 p-4 shadow-sm">
-        <p className="text-xs text-muted-foreground">
-          إجمالي الدورات
-        </p>
-        <p className="mt-1 text-2xl font-black">
-          {stats?.total ?? rows.length}
-        </p>
-      </div>
-      <div className="rounded-2xl border bg-emerald-500/5 p-4 shadow-sm">
-        <p className="text-xs text-muted-foreground">نشطة للتسجيل</p>
-        <p className="mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">
-          {stats?.active ?? 0}
-        </p>
-      </div>
-      <div className="rounded-2xl border bg-amber-500/5 p-4 shadow-sm">
-        <p className="text-xs text-muted-foreground">موقوفة عن الاختيارات</p>
-        <p className="mt-1 text-2xl font-black text-amber-600 dark:text-amber-400">
-          {stats?.inactive ?? 0}
-        </p>
-      </div>
-      <div className="rounded-2xl border bg-primary/5 p-4 shadow-sm">
-        <p className="text-xs text-muted-foreground">عليها طلاب</p>
-        <p className="mt-1 text-2xl font-black text-primary">
-          {stats?.withStudents ?? 0}
-        </p>
-      </div>
-      <div className="rounded-2xl border bg-muted/30 p-4 shadow-sm">
-        <p className="text-xs text-muted-foreground">آمنة للحذف</p>
-        <p className="mt-1 text-2xl font-black">{stats?.deletable ?? 0}</p>
-      </div>
-    </div>
+    <dl className="tp-courses__stats" aria-label="إحصائيات الدورات">
+      {[
+        { label: "إجمالي الدورات", value: stats?.total },
+        { label: "نشطة للتسجيل", value: stats?.active },
+        { label: "موقوفة عن التسجيل", value: stats?.inactive },
+        { label: "عليها طلاب", value: stats?.withStudents },
+        { label: "آمنة للحذف", value: stats?.deletable },
+      ].map(({ label, value }) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value ?? (isLoading ? "…" : "—")}</dd>
+        </div>
+      ))}
+    </dl>
   );
 
   const renderLoadingSkeleton = () => (
-    <div className="tp-courses__loading grid gap-4 xl:grid-cols-2">
+    <div
+      className="tp-courses__grid"
+      role="status"
+      aria-label="جاري تحميل الدورات"
+    >
+      <span className="sr-only">جاري تحميل الدورات…</span>
       {[0, 1, 2, 3].map((index) => (
         <div
           key={index}
-          className="rounded-3xl border bg-card/80 p-5 shadow-sm"
+          className="tp-course-card tp-courses__skeleton"
+          aria-hidden="true"
         >
-          <div className="flex items-start justify-between gap-3 border-b pb-4">
-            <div className="space-y-2">
-              <span className="block h-5 w-44 animate-pulse rounded-full bg-muted" />
-              <span className="block h-4 w-28 animate-pulse rounded-full bg-muted" />
-            </div>
-            <span className="h-7 w-24 animate-pulse rounded-full bg-muted" />
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <span className="h-20 animate-pulse rounded-2xl bg-muted" />
-            <span className="h-20 animate-pulse rounded-2xl bg-muted" />
-            <span className="h-20 animate-pulse rounded-2xl bg-muted" />
-          </div>
-          <span className="mt-4 block h-14 animate-pulse rounded-2xl bg-muted" />
+          <span className="h-5 w-2/3 animate-pulse rounded bg-muted" />
+          <span className="h-14 w-full animate-pulse rounded-lg bg-muted" />
+          <span className="h-10 w-full animate-pulse rounded-lg bg-muted" />
+          <span className="h-10 w-full animate-pulse rounded-lg bg-muted" />
         </div>
       ))}
     </div>
@@ -1272,388 +607,370 @@ export function CoursesView() {
     const studyTypeUsage = topUsageItems(row.usage.studyTypes);
     const locationUsage = topUsageItems(row.usage.locations);
     return (
-      <div
+      <article
         key={row.id}
-        className="tp-course-card rounded-3xl border bg-card/90 p-5 shadow-sm transition-colors hover:border-primary/25"
+        className="tp-course-card"
+        aria-labelledby={`course-title-${row.id}`}
       >
-        <div className="tp-course-card__header flex flex-wrap items-start justify-between gap-3 border-b pb-4">
-          <div className="min-w-0 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <b className="text-lg leading-tight">{row.course.name}</b>
-              <Badge variant={row.course.active ? "default" : "secondary"}>
-                {row.course.active ? "نشطة للتسجيل" : "موقوفة عن الاختيارات"}
-              </Badge>
-              <Badge
-                variant={row.deleteSafety.canDelete ? "outline" : "destructive"}
-              >
-                {courseDeleteBadge(row)}
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              أنشئت: {formatAppDate(row.course.createdAt)}
-            </p>
-          </div>
-          <div className="tp-course-card__actions flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => openEditDialog(row)}
-            >
-              تعديل
-            </Button>
-            <Button
-              variant={row.course.active ? "outline" : "default"}
-              size="sm"
-              disabled={isTogglingCourse}
-              onClick={() => void handleToggle(row)}
-            >
-              {row.course.active ? "إيقاف الاختيارات" : "تفعيل الاختيارات"}
-            </Button>
-          </div>
-        </div>
-
-        <div className="tp-course-card__metrics mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-2xl border bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">الطلاب</p>
-            <p className="text-xl font-black">{row.counts.students}</p>
-            <p className="text-[11px] text-muted-foreground">
-              نشط {row.counts.activeStudents} / مفصول{" "}
-              {row.counts.dismissedStudents} / مؤرشف{" "}
-              {row.counts.archivedStudents}
-            </p>
-          </div>
-          <div className="rounded-2xl border bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">الامتحانات</p>
-            <p className="text-xl font-black">{row.counts.exams}</p>
-            <p className="text-[11px] text-muted-foreground">
-              فعالة {row.counts.activeExams} / معطلة {row.counts.inactiveExams}
-            </p>
-          </div>
-          <div className="rounded-2xl border bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">الفصول</p>
-            <p className="text-xl font-black">{row.counts.courseChapters}</p>
-            <p className="text-[11px] text-muted-foreground">
-              النشط:{" "}
-              {row.activeChapter
-                ? `${row.activeChapter.name} (${row.activeChapter.opportunities} فرص)`
-                : "لا يوجد"}
-            </p>
-          </div>
-          <div className="rounded-2xl border bg-muted/20 p-3">
-            <p className="text-[11px] text-muted-foreground">الحذف</p>
-            <p className="text-sm font-black">
-              {row.deleteSafety.canDelete ? "مسموح" : "مرفوض"}
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              {row.deleteSafety.blockers.length
-                ? row.deleteSafety.blockers.join("، ")
-                : "لا توجد روابط مانعة"}
-            </p>
-          </div>
-        </div>
-
-        <div className="tp-course-card__details mt-4 grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-          <div className="tp-course-card__config space-y-3 rounded-2xl border bg-muted/15 p-4">
-            <p className="text-xs font-bold text-muted-foreground">
-              إعدادات التسجيل
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {programs.map((program) => (
-                <Badge
-                  key={program}
-                  variant="outline"
-                  className="whitespace-normal leading-5 text-start"
-                >
-                  <GraduationCap className="ml-1 size-3" />
-                  {program}:{" "}
-                  {(studyTypesByProgram[program] || []).join("، ") ||
-                    "بدون نوع دراسة"}
-                </Badge>
-              ))}
-            </div>
-            {locationSummary ? (
-              <div className="flex items-start gap-2 rounded-xl border bg-background/70 p-3 text-xs text-muted-foreground">
-                <MapPin className="mt-0.5 size-4 shrink-0" />
-                <span className="leading-6">{locationSummary}</span>
-              </div>
-            ) : (
-              <p className="rounded-xl border border-dashed bg-background/70 p-3 text-xs text-muted-foreground">
-                لا توجد إعدادات مواقع مكتملة لهذه الدورة.
-              </p>
-            )}
-          </div>
-
-          <div className="tp-course-card__impact space-y-3 rounded-2xl border bg-muted/15 p-4">
-            <p className="text-xs font-bold text-muted-foreground">
-              الأثر الحالي
-            </p>
-            {studyTypeUsage.length > 0 ? (
-              <div className="space-y-1 text-xs text-muted-foreground">
-                <p className="font-bold text-foreground">
-                  استخدام أنواع الدراسة
-                </p>
-                {studyTypeUsage.map((item) => (
-                  <p key={item}>{item}</p>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                لا يوجد طلاب مرتبطون بهذه الإعدادات حالياً.
-              </p>
-            )}
-            {locationUsage.length > 0 ? (
-              <div className="space-y-1 text-xs text-muted-foreground">
-                <p className="font-bold text-foreground">
-                  أكثر المواقع استخداماً
-                </p>
-                {locationUsage.map((item) => (
-                  <p key={item}>{item}</p>
-                ))}
-              </div>
-            ) : null}
-            {row.configWarnings.length > 0 ? (
-              <div className="space-y-1 rounded-xl border border-amber-200/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100">
-                {row.configWarnings.map((warning) => (
-                  <p key={warning}>{warning}</p>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="tp-course-card__footer mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-          <p className="max-w-2xl text-xs leading-6 text-muted-foreground">
-            {row.deleteSafety.recommendedAction} التعطيل يوقف الدورة عن التسجيل
-            والاختيارات الجديدة فقط ولا يغيّر بيانات الطلاب الحاليين.
-          </p>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => openDeleteDialog(row)}
-            className="text-destructive hover:text-destructive"
+        <header className="tp-course-card__header">
+          <h3 id={`course-title-${row.id}`}>{row.course.name}</h3>
+          <span
+            className={`tp-course-card__status ${row.course.active ? "is-active" : "is-inactive"}`}
           >
-            حذف نهائي
+            {row.course.active ? "نشطة للتسجيل" : "موقوفة عن التسجيل"}
+          </span>
+        </header>
+
+        <dl className="tp-course-card__metrics">
+          <div>
+            <dt>الطلاب</dt>
+            <dd>{row.counts.students}</dd>
+          </div>
+          <div>
+            <dt>الامتحانات</dt>
+            <dd>{row.counts.exams}</dd>
+          </div>
+          <div>
+            <dt>الفصول</dt>
+            <dd>{row.counts.courseChapters}</dd>
+          </div>
+        </dl>
+
+        <dl className="tp-course-card__chapter">
+          <dt>الفصل النشط</dt>
+          <dd>
+            <span>{row.activeChapter?.name || "لا يوجد"}</span>
+            {row.activeChapter && (
+              <span className="tp-course-card__opportunities">
+                {row.activeChapter.opportunities} فرص
+              </span>
+            )}
+          </dd>
+        </dl>
+
+        {row.configWarnings.length > 0 && (
+          <div className="tp-course-card__warnings" role="status">
+            {row.configWarnings.map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+          </div>
+        )}
+
+        <div className="tp-course-card__actions">
+          <Button
+            variant="secondary"
+            onClick={(event) => {
+              courseDialogTrigger.current = event.currentTarget;
+              openEditDialog(row);
+            }}
+            aria-label={`تعديل ${row.course.name}`}
+          >
+            <Pencil aria-hidden="true" /> تعديل الدورة
+          </Button>
+          <Button
+            variant="outline"
+            disabled={isTogglingCourse}
+            onClick={() => void handleToggle(row)}
+            aria-label={`${row.course.active ? "إيقاف التسجيل في" : "تفعيل التسجيل في"} ${row.course.name}`}
+          >
+            {row.course.active ? (
+              <Pause aria-hidden="true" />
+            ) : (
+              <Play aria-hidden="true" />
+            )}
+            {row.course.active ? "إيقاف التسجيل" : "تفعيل التسجيل"}
           </Button>
         </div>
-      </div>
+
+        <details className="tp-course-card__disclosure">
+          <summary>
+            تفاصيل الدورة <ChevronDown aria-hidden="true" />
+          </summary>
+          <div className="tp-course-card__details">
+            <section className="tp-course-card__detail-section">
+              <h4>إعدادات التسجيل</h4>
+              <dl className="tp-course-card__facts">
+                {programs.map((program) => (
+                  <div key={program}>
+                    <dt>{program}</dt>
+                    <dd>
+                      {(studyTypesByProgram[program] || []).join("، ") ||
+                        "بدون نوع دراسة"}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {locationSummary ? (
+                <ul className="tp-course-card__locations">
+                  {locationSummary.split(" | ").map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-muted-foreground">
+                  لا توجد إعدادات مواقع مكتملة لهذه الدورة.
+                </p>
+              )}
+            </section>
+
+            <section className="tp-course-card__detail-section">
+              <h4>الطلاب والامتحانات</h4>
+              <dl className="tp-course-card__facts">
+                <div>
+                  <dt>طلاب نشطون</dt>
+                  <dd>{row.counts.activeStudents}</dd>
+                </div>
+                <div>
+                  <dt>طلاب مفصولون</dt>
+                  <dd>{row.counts.dismissedStudents}</dd>
+                </div>
+                <div>
+                  <dt>طلاب مؤرشفون</dt>
+                  <dd>{row.counts.archivedStudents}</dd>
+                </div>
+                <div>
+                  <dt>امتحانات فعالة</dt>
+                  <dd>{row.counts.activeExams}</dd>
+                </div>
+                <div>
+                  <dt>امتحانات معطلة</dt>
+                  <dd>{row.counts.inactiveExams}</dd>
+                </div>
+                <div>
+                  <dt>تاريخ الإنشاء</dt>
+                  <dd>{formatAppDate(row.course.createdAt)}</dd>
+                </div>
+              </dl>
+            </section>
+
+            {(studyTypeUsage.length > 0 || locationUsage.length > 0) && (
+              <section className="tp-course-card__detail-section">
+                {studyTypeUsage.length > 0 && (
+                  <>
+                    <h4>توزيع الطلاب حسب الدراسة</h4>
+                    <ul>
+                      {studyTypeUsage.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {locationUsage.length > 0 && (
+                  <>
+                    <h4>أكثر المواقع استخداماً</h4>
+                    <ul>
+                      {locationUsage.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </section>
+            )}
+
+            <section className="tp-course-card__detail-section tp-course-card__delete">
+              <h4>{courseDeleteBadge(row)}</h4>
+              <p>
+                {row.deleteSafety.blockers.length
+                  ? row.deleteSafety.blockers.join("، ")
+                  : "لا توجد روابط مانعة للحذف."}
+              </p>
+              <p className="text-muted-foreground">
+                إيقاف التسجيل لا يغيّر بيانات الطلاب الحاليين.
+              </p>
+              <Button
+                variant="ghost"
+                onClick={() => openDeleteDialog(row)}
+                className="text-destructive hover:text-destructive"
+                aria-label={`حذف نهائي للدورة ${row.course.name}`}
+              >
+                حذف نهائي
+              </Button>
+            </section>
+          </div>
+        </details>
+      </article>
     );
   };
 
   return (
-    <div className="tp-courses space-y-6">
-      <div className="tp-courses__intro rounded-3xl border bg-card/90 p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <BookOpen className="size-5 text-primary" />
-              <h2 className="text-xl font-black">إدارة الدورات</h2>
-            </div>
-          </div>
-          <Button onClick={() => setShowCreateForm((value) => !value)}>
-            {showCreateForm ? "إخفاء نموذج الإضافة" : "إضافة دورة جديدة"}
-          </Button>
-        </div>
+    <div className="tp-courses">
+      <div className="tp-courses__intro">
+        <h2>إدارة الدورات</h2>
+        <Button
+          onClick={(event) => {
+            courseDialogTrigger.current = event.currentTarget;
+            setShowCreateForm(true);
+          }}
+        >
+          <Plus aria-hidden="true" /> إضافة دورة جديدة
+        </Button>
       </div>
 
       {renderStats()}
 
-      {showCreateForm ? (
-        <Card className="tp-courses__create rounded-3xl border-primary/20 shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BookOpen className="size-5 text-primary" />
-              إضافة دورة جديدة
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <CourseBuilderForm
-              form={createForm}
-              setForm={setCreateForm}
-              onSubmit={handleCreate}
-              submitLabel="حفظ الدورة"
-              submitDisabled={isAddingCourse}
-            />
-          </CardContent>
-        </Card>
-      ) : null}
+      <section className="tp-courses__list" aria-label="قائمة الدورات">
+        <div className="tp-courses__filters">
+          <div className="tp-courses__search">
+            <Label htmlFor="course-search">بحث في الدورات</Label>
+            <div className="tp-courses__search-input">
+              <Search aria-hidden="true" />
+              <Input
+                id="course-search"
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                placeholder="اسم الدورة، الفصل أو الموقع"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+          <div className="tp-courses__filter">
+            <Label htmlFor="course-status-filter">حالة الدورة</Label>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) =>
+                setStatusFilter(value as CourseStatusFilter)
+              }
+            >
+              <SelectTrigger id="course-status-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(courseStatusFilterLabels).map(
+                  ([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="tp-courses__filter">
+            <Label htmlFor="course-delete-filter">حماية الحذف</Label>
+            <Select
+              value={deleteFilter}
+              onValueChange={(value) =>
+                setDeleteFilter(value as CourseDeleteFilter)
+              }
+            >
+              <SelectTrigger id="course-delete-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(courseDeleteFilterLabels).map(
+                  ([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="tp-courses__results" role="status" aria-live="polite">
+          <p data-count-scope="filtered">
+            {isLoading
+              ? "جاري التحميل…"
+              : `${filteredStats.total} من ${rows.length} دورة`}
+          </p>
+          {hasActiveFilters && (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setSearchText("");
+                setStatusFilter("all");
+                setDeleteFilter("all");
+              }}
+            >
+              تصفير الفلاتر
+            </Button>
+          )}
+        </div>
+        {loadError ? (
+          <div className="tp-courses__error" role="alert">
+            <p>{loadError}</p>
+            <Button variant="outline" onClick={() => void refreshOverview()}>
+              إعادة المحاولة
+            </Button>
+          </div>
+        ) : isLoading ? (
+          renderLoadingSkeleton()
+        ) : filteredRows.length === 0 ? (
+          <EmptyState
+            icon={BookOpen}
+            title={hasActiveFilters ? "لا توجد دورات مطابقة" : "لا توجد دورات"}
+          />
+        ) : (
+          <div className="tp-courses__grid">
+            {filteredRows.map(renderCourseCard)}
+          </div>
+        )}
+      </section>
 
-      <Card className="tp-courses__list tp-filter-card rounded-3xl shadow-sm">
-        <CardHeader className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle>قائمة الدورات</CardTitle>
-            <Badge variant="outline">
-              {filteredRows.length} من {rows.length}
-            </Badge>
-          </div>
-          <div className="tp-filter-grid lg:grid-cols-[minmax(0,1fr)_220px_230px]">
-            <Input
-              className="tp-filter-search h-11 rounded-2xl"
-              value={searchText}
-              onChange={(event) => setSearchText(event.target.value)}
-              placeholder="بحث باسم الدورة، النوع، الموقع، الفصل أو سبب منع الحذف..."
-              autoComplete="off"
-            />
-            <div className="tp-filter-field tp-filter-primary">
-              <Label className="text-xs text-muted-foreground">
-                حالة الدورة
-              </Label>
-              <Select
-                value={statusFilter}
-                onValueChange={(value) =>
-                  setStatusFilter(value as CourseStatusFilter)
-                }
-              >
-                <SelectTrigger className="h-10 rounded-2xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(courseStatusFilterLabels).map(
-                    ([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="tp-filter-field tp-filter-secondary">
-              <Label className="text-xs text-muted-foreground">
-                حماية الحذف
-              </Label>
-              <Select
-                value={deleteFilter}
-                onValueChange={(value) =>
-                  setDeleteFilter(value as CourseDeleteFilter)
-                }
-              >
-                <SelectTrigger className="h-10 rounded-2xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(courseDeleteFilterLabels).map(
-                    ([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="tp-filter-summary">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" data-count-scope="filtered">
-                المطابقون للفلاتر: {filteredStats.total}
-              </Badge>
-              <Badge variant="secondary">نشطة: {filteredStats.active}</Badge>
-              <Badge variant="secondary">
-                موقوفة: {filteredStats.inactive}
-              </Badge>
-              <Badge variant="outline">
-                قابلة للحذف: {filteredStats.deletable}
-              </Badge>
-              <Badge variant="outline">محمية: {filteredStats.blocked}</Badge>
-              {hasActiveFilters ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 rounded-full px-3 text-[11px]"
-                  onClick={() => {
-                    setSearchText("");
-                    setStatusFilter("all");
-                    setDeleteFilter("all");
-                  }}
-                >
-                  تصفير الفلاتر
-                </Button>
-              ) : null}
-            </div>
-            <p className="mt-2 leading-6">
-              {courseStatusFilterLabels[statusFilter]} —{" "}
-              {courseDeleteFilterLabels[deleteFilter]}
+      <CourseEditorDialog
+        open={showCreateForm}
+        onCloseFocus={() => courseDialogTrigger.current?.focus()}
+        onOpenChange={(open) => {
+          if (!isAddingCourse) setShowCreateForm(open);
+        }}
+        title="إضافة دورة جديدة"
+      >
+        <CourseBuilderForm
+          form={createForm}
+          setForm={setCreateForm}
+          onSubmit={handleCreate}
+          submitLabel="حفظ الدورة"
+          submitDisabled={isAddingCourse}
+        />
+      </CourseEditorDialog>
+
+      <CourseEditorDialog
+        open={editDialog.open}
+        onCloseFocus={() => courseDialogTrigger.current?.focus()}
+        onOpenChange={(open) => {
+          if (!isSavingCourse && !isApplyingCourseSync)
+            setEditDialog((prev) => ({ ...prev, open }));
+        }}
+        title="تعديل الدورة"
+      >
+        {editDialog.row && (
+          <div className="tp-course-editor__context">
+            <p className="font-bold">{editDialog.row.course.name}</p>
+            <dl className="tp-course-editor__facts">
+              <div>
+                <dt>الطلاب</dt>
+                <dd>{editDialog.row.counts.students}</dd>
+              </div>
+              <div>
+                <dt>الامتحانات</dt>
+                <dd>{editDialog.row.counts.exams}</dd>
+              </div>
+              <div>
+                <dt>الفصل النشط</dt>
+                <dd>{editDialog.row.activeChapter?.name || "لا يوجد"}</dd>
+              </div>
+            </dl>
+            <p className="text-sm text-muted-foreground">
+              لا يمكن حذف خيار يستخدمه طلاب مسجلون.
             </p>
           </div>
-        </CardHeader>
-        <CardContent>
-          {loadError ? (
-            <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-4 text-sm text-destructive">
-              {loadError}
-            </div>
-          ) : isLoading ? (
-            renderLoadingSkeleton()
-          ) : filteredRows.length === 0 ? (
-            <EmptyState
-              icon={BookOpen}
-              title="لا توجد دورات مطابقة"
-              description="غيّر البحث أو الفلاتر، أو أضف دورة جديدة من زر الإضافة أعلاه."
-            />
-          ) : (
-            <div className="tp-courses__grid grid gap-4 xl:grid-cols-2">
-              {filteredRows.map(renderCourseCard)}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ─── Edit Course Dialog ──────────────────────────────────────────── */}
-      <Dialog
-        open={editDialog.open}
-        onOpenChange={(open) => setEditDialog((prev) => ({ ...prev, open }))}
-      >
-        <DialogContent
-          dir="rtl"
-          className="teacherpro-fullscreen-dialog left-0 top-0 z-[70] flex h-dvh max-h-dvh w-dvw max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-background p-0 shadow-none sm:w-dvw sm:max-w-none sm:rounded-none sm:p-0"
-        >
-          <div className="flex h-full min-h-0 flex-col">
-            <DialogHeader className="shrink-0 border-b bg-background/95 px-5 py-5 text-right shadow-sm backdrop-blur md:px-8">
-              <div className="mx-auto w-full max-w-6xl space-y-2 pl-10">
-                <DialogTitle className="text-2xl font-black">
-                  تعديل الدورة
-                </DialogTitle>
-                <DialogDescription>
-                  لا يمكن حذف خيار يستخدمه طلاب مسجلون.
-                </DialogDescription>
-                {editDialog.row ? (
-                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
-                    <div className="rounded-xl border bg-muted/30 p-3">
-                      الطلاب: {editDialog.row.counts.students}
-                    </div>
-                    <div className="rounded-xl border bg-muted/30 p-3">
-                      الامتحانات: {editDialog.row.counts.exams}
-                    </div>
-                    <div className="rounded-xl border bg-muted/30 p-3">
-                      الفصل النشط:{" "}
-                      {editDialog.row.activeChapter?.name || "لا يوجد"}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </DialogHeader>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-8 md:py-6">
-              <div className="mx-auto w-full max-w-6xl rounded-3xl border bg-card/80 p-4 shadow-sm md:p-6">
-                <CourseBuilderForm
-                  form={editDialog.form}
-                  setForm={(action) =>
-                    setEditDialog((prev) => ({
-                      ...prev,
-                      form:
-                        typeof action === "function"
-                          ? action(prev.form)
-                          : action,
-                    }))
-                  }
-                  onSubmit={handleEditSave}
-                  submitLabel="حفظ التعديلات"
-                  submitDisabled={isSavingCourse}
-                />
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+        )}
+        <CourseBuilderForm
+          form={editDialog.form}
+          setForm={(action) =>
+            setEditDialog((prev) => ({
+              ...prev,
+              form: typeof action === "function" ? action(prev.form) : action,
+            }))
+          }
+          onSubmit={handleEditSave}
+          submitLabel="حفظ التعديلات"
+          submitDisabled={isSavingCourse || isApplyingCourseSync}
+        />
+      </CourseEditorDialog>
 
       {/* ─── Course snapshot synchronization preview ─────────────────────── */}
       <AlertDialog
@@ -1667,13 +984,17 @@ export function CoursesView() {
           );
         }}
       >
-        <AlertDialogContent dir="rtl" className="max-w-2xl">
+        <AlertDialogContent
+          dir="rtl"
+          className="tp-course-sync-dialog sm:max-w-2xl"
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>معاينة أثر تعديل إعدادات الدورة</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-4 text-right leading-7">
                 <p>
-                  اختر الاحتفاظ ببيانات الطلاب الحالية أو تحديثها حسب الإعدادات الجديدة.
+                  اختر الاحتفاظ ببيانات الطلاب الحالية أو تحديثها حسب الإعدادات
+                  الجديدة.
                 </p>
                 {courseSyncDialog.preview ? (
                   <>
@@ -1777,9 +1098,7 @@ export function CoursesView() {
             <AlertDialogTitle>حذف نهائي للدورة</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3 text-right leading-7">
-                <p>
-                  يمكن حذف الدورة إذا لم تكن مرتبطة بطلاب أو امتحانات.
-                </p>
+                <p>يمكن حذف الدورة إذا لم تكن مرتبطة بطلاب أو امتحانات.</p>
                 {deleteDialog.row ? (
                   <div
                     className={`rounded-xl border p-3 ${deleteDialog.row.deleteSafety.canDelete ? "bg-muted/40" : "border-destructive/25 bg-destructive/10 text-destructive"}`}
