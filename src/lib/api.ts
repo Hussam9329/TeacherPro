@@ -1490,8 +1490,14 @@ export const studentApi = {
     apiPost("students/status-action", payload),
   unlinkTelegram: (payload: { studentId: string; expectedTelegram: string }) =>
     apiPost("students/unlink-telegram", payload),
+  editSnapshot: (id: string) =>
+    apiGet<{ student: Record<string, unknown> }>(
+      `students/edit-snapshot?id=${encodeURIComponent(id)}`,
+    ),
   updateImpact: (payload: Record<string, unknown>) =>
-    apiPost("students/update-impact", payload) as Promise<
+    // This POST only reads the proposed academic impact. Retry transient reads
+    // without queuing them or reporting an uncertain student write.
+    apiPost("students/update-impact", { ...payload, previewOnly: true }) as Promise<
       ApiResult & { data?: StudentAcademicUpdateImpactResponse }
     >,
   listAll: async (

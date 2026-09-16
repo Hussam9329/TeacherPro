@@ -134,6 +134,14 @@ import {
   type RegistryViewMode,
   type StudentEditForm,
 } from "./student-registry-helpers";
+import {
+  prepareStudentEditRecovery,
+  resolveStudentEditRecovery,
+  studentEditFieldLabels,
+  type StudentEditField,
+  type StudentEditRecovery,
+  type StudentEditRecoveryChoice,
+} from "./student-edit-recovery";
 import "./student-registry.css";
 
 export function StudentRegistryView() {
@@ -417,6 +425,19 @@ export function StudentRegistryView() {
   }>({ open: false, id: "", form: emptyEditForm });
   const [editOriginalStudent, setEditOriginalStudent] =
     useState<Student | null>(null);
+  const [editRecoveryReason, setEditRecoveryReason] = useState<
+    "conflict" | "unknown" | null
+  >(null);
+  const [editRecovery, setEditRecovery] = useState<{
+    student: Student;
+    review: StudentEditRecovery;
+  } | null>(null);
+  const [editRecoveryChoices, setEditRecoveryChoices] = useState<
+    Partial<Record<StudentEditField, StudentEditRecoveryChoice>>
+  >({});
+  const [editRecoveryLoading, setEditRecoveryLoading] = useState(false);
+  const editRecoveryRequest = useRef(0);
+  const editRecoveryPanel = useRef<HTMLDivElement>(null);
   const [courseTransferPolicy, setCourseTransferPolicy] = useState<
     CourseTransferPolicy | ""
   >("");
@@ -1196,17 +1217,94 @@ export function StudentRegistryView() {
       return;
     }
     setEditOriginalStudent(student);
+    editRecoveryRequest.current += 1;
+    setEditRecoveryReason(null);
+    setEditRecovery(null);
+    setEditRecoveryChoices({});
+    setEditRecoveryLoading(false);
     setCourseTransferPolicy("");
     setCourseTransferPolicySignature("");
     setAcademicImpactPreview(null);
     setAcademicImpactPreviewSignature("");
     setAcademicImpactConfirmed(false);
+    setAcademicImpactLoading(false);
     setGracePeriodStartMode("");
     setEditGraceInputTouched(false);
     setEditDialog({
       open: true,
       id: student.id,
       form: getStudentEditForm(student),
+    });
+  };
+
+  useEffect(() => {
+    if (editRecoveryReason) {
+      editRecoveryPanel.current?.focus();
+    }
+  }, [editRecoveryReason]);
+
+  useEffect(() => () => {
+    editRecoveryRequest.current += 1;
+  }, []);
+
+  // A refresh of the list must never silently replace the baseline of an open
+  // editor. Rebase only after the user reviews the authoritative row and any
+  // conflicting fields; the next PUT still carries its new CAS token.
+  const loadEditRecovery = async () => {
+    if (!editOriginalStudent || !editRecoveryReason || editRecoveryLoading) return;
+    const requestedId = editDialog.id;
+    const request = ++editRecoveryRequest.current;
+    setEditRecoveryLoading(true);
+    try {
+      const response = await studentApi.editSnapshot(requestedId);
+      if (request !== editRecoveryRequest.current) return;
+      const student = response?.student as unknown as Student | undefined;
+      if (!student || student.id !== requestedId || !student.mutationToken) {
+        toast.error("تعذر تحميل أحدث سجل للطالب. بقيت تعديلاتك محفوظة في النافذة؛ أعد المراجعة عند عودة الاتصال.");
+        return;
+      }
+      setEditRecovery({
+        student,
+        review: prepareStudentEditRecovery(
+          getStudentEditForm(editOriginalStudent),
+          editDialog.form,
+          getStudentEditForm(student),
+        ),
+      });
+      setEditRecoveryChoices({});
+    } catch {
+      if (request === editRecoveryRequest.current) {
+        toast.error("تعذر تحميل أحدث سجل للطالب. لم تُفقد تعديلاتك؛ حاول المراجعة مجدداً.");
+      }
+    } finally {
+      if (request === editRecoveryRequest.current) setEditRecoveryLoading(false);
+    }
+  };
+
+  const acceptEditRecovery = () => {
+    if (!editRecovery || editRecoveryLoading) return;
+    const form = resolveStudentEditRecovery(editRecovery.review, editRecoveryChoices);
+    if (!form) return;
+    setEditOriginalStudent(editRecovery.student);
+    setEditDialog((current) => ({ ...current, form }));
+    mergeStudentsCache([editRecovery.student]);
+    setAcademicImpactPreview(null);
+    setAcademicImpactPreviewSignature("");
+    setAcademicImpactConfirmed(false);
+    setCourseTransferPolicy("");
+    setCourseTransferPolicySignature("");
+    // Preserve the explicit renewal intent unless the user chose the server's
+    // grace duration in a real conflict. Reviewing data is not saving it.
+    if (editRecoveryChoices.accountingGraceDays === "latest") {
+      setGracePeriodStartMode("");
+      setEditGraceInputTouched(false);
+    }
+    setEditRecoveryReason(null);
+    setEditRecovery(null);
+    setEditRecoveryChoices({});
+    setServerRefreshKey((value) => value + 1);
+    toast.success("تم تحديث نسخة المراجعة دون حفظ أي تعديل", {
+      description: "راجع القيم وأثر السماح، ثم أكد الحفظ عند الحاجة.",
     });
   };
 
@@ -1381,6 +1479,10 @@ export function StudentRegistryView() {
   };
 
   const handleEditSave = runSaveEditLocked(async () => {
+    if (editRecoveryReason) {
+      editRecoveryPanel.current?.focus();
+      return;
+    }
     const error = validateEditForm();
     if (error) {
       toast.error(error);
@@ -1411,13 +1513,26 @@ export function StudentRegistryView() {
     if (editNeedsAcademicImpactPreview && !resolvedAcademicImpactConfirmed) {
       if (!hasResolvedAcademicImpactPreview) {
         setAcademicImpactLoading(true);
-        const previewResult = await studentApi.updateImpact({
-          studentId: editDialog.id,
-          createdAt: form.createdAt,
-          accountingGraceDays: Number(form.accountingGraceDays || 0),
-          gracePeriodStartMode: resolvedGracePeriodStartMode || undefined,
-        });
-        setAcademicImpactLoading(false);
+        const currentEditorRequest = editRecoveryRequest.current;
+        let previewResult: Awaited<ReturnType<typeof studentApi.updateImpact>>;
+        try {
+          previewResult = await studentApi.updateImpact({
+            studentId: editDialog.id,
+            createdAt: form.createdAt,
+            accountingGraceDays: Number(form.accountingGraceDays || 0),
+            gracePeriodStartMode: resolvedGracePeriodStartMode || undefined,
+          });
+        } catch {
+          if (currentEditorRequest === editRecoveryRequest.current) {
+            toast.error("تعذر تحميل معاينة السماح. لم يتم إرسال طلب حفظ؛ حاول مجدداً.");
+          }
+          return;
+        } finally {
+          if (currentEditorRequest === editRecoveryRequest.current) {
+            setAcademicImpactLoading(false);
+          }
+        }
+        if (currentEditorRequest !== editRecoveryRequest.current) return;
         if (!previewResult.ok || !previewResult.data) {
           toast.error(
             previewResult.error || "تعذر معاينة أثر التغيير الأكاديمي",
@@ -1483,10 +1598,13 @@ export function StudentRegistryView() {
     });
 
     if (!result.ok) {
-      if (result.status === 409) {
+      if (result.status === 409 || result.outcomeUnknown) {
         setAcademicImpactPreview(null);
         setAcademicImpactPreviewSignature("");
         setAcademicImpactConfirmed(false);
+        setEditRecovery(null);
+        setEditRecoveryChoices({});
+        setEditRecoveryReason(result.outcomeUnknown ? "unknown" : "conflict");
         setServerRefreshKey((value) => value + 1);
       }
       toast.error(result.error || "تعذر تعديل بيانات الطالب");
@@ -2516,8 +2634,13 @@ export function StudentRegistryView() {
       <Dialog
         open={editDialog.open}
         onOpenChange={(open) => {
+          if (isSavingEdit) return;
           setEditDialog((prev) => ({ ...prev, open }));
           if (!open) {
+            editRecoveryRequest.current += 1;
+            setEditRecoveryReason(null);
+            setEditRecovery(null);
+            setEditRecoveryLoading(false);
             setEditOriginalStudent(null);
             setCourseTransferPolicy("");
             setGracePeriodStartMode("");
@@ -2530,8 +2653,100 @@ export function StudentRegistryView() {
             <DialogTitle>تعديل بيانات الطالب</DialogTitle>
           </DialogHeader>
           <div className="tp-registry-editor__body">
+            {editRecoveryReason && (
+              <div
+                ref={editRecoveryPanel}
+                tabIndex={-1}
+                role="region"
+                aria-label="مراجعة أحدث بيانات الطالب"
+                className="mb-4 space-y-3 rounded-2xl border border-amber-400/50 bg-amber-500/10 p-4 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <p className="font-bold">
+                  {editRecoveryReason === "unknown"
+                    ? "تعذّر تأكيد نتيجة الحفظ؛ راجع أحدث سجل"
+                    : "تحتاج نسخة التعديل إلى تحديث"}
+                </p>
+                <p className="text-xs leading-6">
+                  تعديلاتك ما زالت موجودة. راجع أحدث سجل قبل إعادة الحفظ؛ تحميله لا يغيّر أي بيانات.
+                </p>
+                {editRecovery && (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border bg-background p-3 text-xs leading-6">
+                      <p>المحفوظ الآن: {editRecovery.student.status} · الفرص: {formatOpportunityBalance(editRecovery.student)}</p>
+                      <p>مدة السماح: {editRecovery.student.accountingGraceDays || 0} يوم · المتبقي: {studentGraceRemainingDays(editRecovery.student)} يوم</p>
+                      <p>بداية السماح: {editRecovery.student.gracePeriodStartDate ? formatAppDate(editRecovery.student.gracePeriodStartDate) : "من تاريخ التسجيل"}</p>
+                      {editRecoveryReason === "unknown" && editRecovery.review.matchesDraft && (
+                        <p className="mt-2 font-bold">القيم الحالية تطابق ما كتبته. راجع بداية السماح والمتبقي أعلاه؛ قد تكون العملية السابقة حُفظت بالفعل.</p>
+                      )}
+                    </div>
+                    {editRecovery.review.conflicts.length ? (
+                      <div className="space-y-3">
+                        <p className="text-xs font-bold">تغيّرت هذه الحقول أيضاً في النظام؛ اختر القيمة التي تريدها:</p>
+                        {editRecovery.review.conflicts.map((conflict) => (
+                          <fieldset key={conflict.field} className="min-w-0 rounded-xl border bg-background p-3">
+                            <legend className="px-1 text-xs font-bold">{studentEditFieldLabels[conflict.field]}</legend>
+                            <RadioGroup
+                              value={editRecoveryChoices[conflict.field] || ""}
+                              onValueChange={(value) => {
+                                if (value === "draft" || value === "latest") {
+                                  setEditRecoveryChoices((current) => ({ ...current, [conflict.field]: value }));
+                                }
+                              }}
+                              className="grid gap-2 sm:grid-cols-2"
+                            >
+                              {(["latest", "draft"] as const).map((choice) => {
+                                const id = `student-recovery-${conflict.field}-${choice}`;
+                                const value = conflict[choice];
+                                const display = conflict.field === "courseId"
+                                  ? courses.find((course) => course.id === value)?.name || value
+                                  : value;
+                                return (
+                                  <Label key={choice} htmlFor={id} className="flex min-w-0 cursor-pointer items-start gap-2 rounded-lg border p-3 text-xs leading-6">
+                                    <RadioGroupItem id={id} value={choice} className="mt-1 shrink-0" />
+                                    <span className="min-w-0 break-words">
+                                      <span className="block text-muted-foreground">{choice === "latest" ? "المحفوظ الآن" : "تعديلي"}</span>
+                                      {display || "فارغ"}
+                                    </span>
+                                  </Label>
+                                );
+                              })}
+                            </RadioGroup>
+                          </fieldset>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs leading-6">لا يوجد تعارض بين الحقول. سنحتفظ بتعديلاتك ونحدّث الحقول التي لم تعدّلها، ثم تراجع الأثر من جديد.</p>
+                    )}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => void loadEditRecovery()} disabled={editRecoveryLoading}>
+                    {editRecoveryLoading ? "جاري جلب أحدث سجل…" : editRecovery ? "تحديث المراجعة" : "مراجعة أحدث بيانات الطالب"}
+                  </Button>
+                  {editRecovery && (
+                    <Button type="button" size="sm" onClick={acceptEditRecovery} disabled={editRecoveryLoading || !resolveStudentEditRecovery(editRecovery.review, editRecoveryChoices)}>
+                      اعتماد المراجعة دون حفظ
+                    </Button>
+                  )}
+                  {editRecoveryReason === "unknown" && editRecovery && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => {
+                      editRecoveryRequest.current += 1;
+                      mergeStudentsCache([editRecovery.student]);
+                      setServerRefreshKey((value) => value + 1);
+                      setEditDialog({ open: false, id: "", form: emptyEditForm });
+                      setEditOriginalStudent(null);
+                      setEditRecoveryReason(null);
+                      setEditRecovery(null);
+                      setEditRecoveryLoading(false);
+                    }} disabled={editRecoveryLoading}>
+                      إغلاق بدون إعادة الحفظ
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
             <div>
-              <div className="space-y-4">
+              <fieldset disabled={Boolean(editRecoveryReason) || isSavingEdit} className="min-w-0 space-y-4">
                 <section className="tp-registry-editor__section">
                   <div className="mb-4 flex items-center gap-2">
                     <UserRound className="size-5 text-primary" />
@@ -3310,7 +3525,7 @@ export function StudentRegistryView() {
                     </div>
                   )}
                 </section>
-              </div>
+              </fieldset>
             </div>
           </div>
 
@@ -3319,7 +3534,12 @@ export function StudentRegistryView() {
               <Button
                 variant="outline"
                 className="tp-student-registry__dialog-button"
+                disabled={isSavingEdit}
                 onClick={() => {
+                  editRecoveryRequest.current += 1;
+                  setEditRecoveryReason(null);
+                  setEditRecovery(null);
+                  setEditRecoveryLoading(false);
                   setEditDialog({ open: false, id: "", form: emptyEditForm });
                   setEditOriginalStudent(null);
                   setGracePeriodStartMode("");
@@ -3332,7 +3552,7 @@ export function StudentRegistryView() {
               <Button
                 className="tp-student-registry__dialog-button"
                 onClick={handleEditSave}
-                disabled={isSavingEdit || editResetChapterUnresolved}
+                disabled={isSavingEdit || editResetChapterUnresolved || Boolean(editRecoveryReason)}
               >
                 <Save aria-hidden="true" className="size-4" />
                 {isSavingEdit

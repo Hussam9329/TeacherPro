@@ -108,16 +108,22 @@ export async function GET(req: NextRequest) {
       rememberDismissal(log.studentId, String(log.reason || ""), log.date);
     }
 
+    const sourceStudentsById = new Map(
+      students.map((student) => [student.id, student]),
+    );
     return NextResponse.json({
       students: studentsWithOpportunity.map((student) => {
         const lastDismissal = lastDismissalByStudentId.get(student.id);
-        return withStudentMutationToken({
-          ...(student as unknown as Record<string, unknown>),
-          wasDismissed: true,
-          lastDismissalReason:
-            student.dismissalReason || lastDismissal?.reason || "",
-          lastDismissalAt: lastDismissal?.date || "",
-        });
+        return withStudentMutationToken(
+          {
+            ...(student as unknown as Record<string, unknown>),
+            wasDismissed: true,
+            lastDismissalReason:
+              student.dismissalReason || lastDismissal?.reason || "",
+            lastDismissalAt: lastDismissal?.date || "",
+          },
+          sourceStudentsById.get(student.id) as unknown as Record<string, unknown>,
+        );
       }),
       totalCount,
       page,

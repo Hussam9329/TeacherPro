@@ -269,6 +269,7 @@ export async function POST(req: NextRequest) {
         ...result,
         student: withStudentMutationToken(
           studentWithOpportunity as unknown as Record<string, unknown>,
+          result.student as unknown as Record<string, unknown>,
         ),
         source: "database",
       });
@@ -381,6 +382,7 @@ export async function POST(req: NextRequest) {
         ...result,
         student: withStudentMutationToken(
           studentWithOpportunity as unknown as Record<string, unknown>,
+          result.student as unknown as Record<string, unknown>,
         ),
         source: "database",
       });
@@ -517,6 +519,7 @@ export async function POST(req: NextRequest) {
       ...result,
       student: withStudentMutationToken(
         studentWithOpportunity as unknown as Record<string, unknown>,
+        result.student as unknown as Record<string, unknown>,
       ),
       source: "database",
     });

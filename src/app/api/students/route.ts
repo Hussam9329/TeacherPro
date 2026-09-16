@@ -256,9 +256,17 @@ export async function GET(req: NextRequest) {
   }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const sourceStudentsById = new Map(
+    students.map((student) => [student.id, student]),
+  );
 
   return NextResponse.json({
-    students: responseStudents.map((student) => withStudentMutationToken(student)),
+    students: responseStudents.map((student) =>
+      withStudentMutationToken(
+        student,
+        sourceStudentsById.get(String(student.id)) as unknown as Record<string, unknown>,
+      ),
+    ),
     totalCount,
     page,
     pageSize,
@@ -606,6 +614,7 @@ export async function POST(req: NextRequest) {
       {
         student: withStudentMutationToken(
           studentWithOpportunity as unknown as Record<string, unknown>,
+          created.student as unknown as Record<string, unknown>,
         ),
         opportunitiesWarning: created.opportunitiesWarning,
         source: "database",
@@ -974,10 +983,20 @@ export async function PUT(req: NextRequest) {
   const graceStartDateChanged =
     baghdadDateKey(requestedGraceStartDate) !==
     baghdadDateKey(currentStudent.gracePeriodStartDate);
+  const requestedGraceEndedAt =
+    data.gracePeriodEndedAt !== undefined
+      ? data.gracePeriodEndedAt
+      : currentStudent.gracePeriodEndedAt;
+  const graceEndChanged =
+    baghdadDateKey(requestedGraceEndedAt) !==
+    baghdadDateKey(currentStudent.gracePeriodEndedAt);
 
   if (
     !resetEnrollment &&
-    (registrationDateChanged || graceDaysChanged || graceStartDateChanged) &&
+    (registrationDateChanged ||
+      graceDaysChanged ||
+      graceStartDateChanged ||
+      graceEndChanged) &&
     (!academicImpactConfirmed || !academicImpactPreviewToken)
   ) {
     return NextResponse.json(
@@ -1210,10 +1229,18 @@ export async function PUT(req: NextRequest) {
       const transactionGraceStartDateChanged =
         baghdadDateKey(transactionRequestedGraceStartDate) !==
         baghdadDateKey(lockedStudent.gracePeriodStartDate);
+      const transactionRequestedGraceEndedAt =
+        transactionData.gracePeriodEndedAt !== undefined
+          ? transactionData.gracePeriodEndedAt
+          : lockedStudent.gracePeriodEndedAt;
+      const transactionGraceEndChanged =
+        baghdadDateKey(transactionRequestedGraceEndedAt) !==
+        baghdadDateKey(lockedStudent.gracePeriodEndedAt);
       const transactionAcademicInputsChanged =
         transactionRegistrationDateChanged ||
         transactionGraceDaysChanged ||
-        transactionGraceStartDateChanged;
+        transactionGraceStartDateChanged ||
+        transactionGraceEndChanged;
 
       if (
         lockedStudent.status === ARCHIVED_STUDENT_STATUS &&
@@ -1237,6 +1264,7 @@ export async function PUT(req: NextRequest) {
           proposedCreatedAt: transactionRequestedCreatedAt,
           proposedGraceDays: transactionRequestedGraceDays,
           proposedGraceStartDate: transactionRequestedGraceStartDate,
+          proposedGraceEndedAt: transactionRequestedGraceEndedAt,
         });
         if (currentPreviewToken !== academicImpactPreviewToken) {
           throw new StudentIntegrityError(
@@ -1306,6 +1334,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({
       student: withStudentMutationToken(
         studentWithOpportunity as unknown as Record<string, unknown>,
+        result.refreshedStudent as unknown as Record<string, unknown>,
       ),
       academicRecalculation: result.academicRecalculation,
       enrollmentArchive: result.archiveSummary,
@@ -1411,6 +1440,7 @@ export async function DELETE(req: NextRequest) {
       archived: true,
       student: withStudentMutationToken(
         studentWithOpportunity as unknown as Record<string, unknown>,
+        result.student as unknown as Record<string, unknown>,
       ),
       impact: {
         ...result.impact,

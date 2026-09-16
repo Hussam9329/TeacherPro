@@ -44,6 +44,9 @@ export function buildStudentMutationToken(
 
 export function withStudentMutationToken<T extends Record<string, unknown>>(
   student: T,
+  sourceStudent: Record<string, unknown> = student,
 ): T & { mutationToken: string } {
-  return { ...student, mutationToken: buildStudentMutationToken(student) };
+  // Display snapshots may normalize legacy balances. The concurrency guard
+  // must fingerprint the stored row that PUT will compare, not its presentation.
+  return { ...student, mutationToken: buildStudentMutationToken(sourceStudent) };
 }

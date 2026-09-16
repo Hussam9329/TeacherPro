@@ -143,6 +143,7 @@ export async function POST(req: NextRequest) {
           proposedCreatedAt,
           proposedGraceDays,
           proposedGraceStartDate,
+          proposedGraceEndedAt,
         }),
       ]);
 
