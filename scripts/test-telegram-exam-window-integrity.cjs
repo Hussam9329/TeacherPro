@@ -60,8 +60,14 @@ for (const form of [newForm, editForm]) {
   assert.match(form, /نافذة تسليم الإجابات عبر تيليجرام/);
   assert.match(form, /telegramOpenAt/);
   assert.match(form, /telegramCloseAt/);
-  assert.match(form, /لا تغيّر|ولا تغيّر/);
 }
+// The create screen deliberately omits explanatory prose. Keep the actual
+// required time controls and their error associations as the UI contract.
+assert.match(newForm, /requireTelegramWindow:\s*true/);
+for (const suffix of ["telegram-open-at", "telegram-close-at"]) {
+  assert.ok(newForm.includes(`${suffix}-error`));
+}
+assert.doesNotMatch(newForm, /telegram-window-help/);
 assert.match(editForm, /امسحهما معاً لتعطيل التسليم عبر تيليجرام/);
 
 console.log("Telegram exam submission-window integrity checks passed.");

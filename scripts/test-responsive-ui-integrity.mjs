@@ -164,7 +164,7 @@ pass(/<button[\s\S]*?tp-sidebar-overlay/.test(layout), "TeacherPro layout: mobil
 // Full-screen and floating interfaces use dynamic viewport units rather than brittle screen classes.
 includesAll(courses, ["CourseEditorDialog", 'className="tp-course-editor sm:max-w-3xl"'], "Course dialog uses the shared responsive primitive");
 includesAll(profileDialog, ["h-dvh", "w-dvw", "tp-student-profile__header"], "Student profile dialog");
-const profileCss = globals.slice(globals.indexOf("/* Student profile layout contract"), globals.indexOf("/* New exam layout contract"));
+const profileCss = globals.slice(globals.indexOf("/* Student profile layout contract"), globals.indexOf("/* Grade-entry page contract"));
 includesAll(profileCss, ["env(safe-area-inset-top)", "env(safe-area-inset-bottom)"], "Student profile safe areas");
 pass(/\.tp-student-profile__nav\s*\{[^}]*position:\s*static/.test(profileCss), "Student profile: statistics must scroll with the content");
 pass(!/overflow-x:\s*auto|position:\s*sticky/.test(profileCss), "Student profile: statistics must not form a sticky or horizontal strip");
