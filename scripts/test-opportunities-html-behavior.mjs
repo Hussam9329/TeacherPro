@@ -963,6 +963,63 @@ check("حماية الرصيد القديم لا توصف كمنح فرص جدي
   assert.doesNotMatch(details.s1.opportunityLogs[0].reason, /P2|المالك|احتساب/);
 });
 
+check("استعادة برصيد جديد تمنع عرض خصم الامتحان المسوّى كخصم حالي وتوضح مصدر الرصيد", () => {
+  const exam = { id: "restored-exam", name: "امتحان قبل الاستعادة", date: "2026-09-12", type: "تراكمي", fullMark: 100 };
+  const profile = {
+    student: { name: studentList[0].name, code: "BIO-TEST", status: "نشط", opportunities: 3, opportunityLimit: 3 },
+    currentChapter: { id: "current", name: "الفصل الحالي", since: "2026-09-01", examIds: [exam.id] },
+    grades: [{ id: "settled-grade", examId: exam.id, status: "غائب", score: null }],
+    exams: [exam],
+    opportunityLogs: [
+      { action: "خصم تلقائي", amount: 2, examId: exam.id, chapterId: "current", date: exam.date },
+      { action: "رصيد إعادة التفعيل", amount: 3, balanceAfter: 3, ledgerVersion: 2, chapterId: "current", settledGradeIds: '["settled-grade"]', date: "2026-09-16T09:44:47.457Z", reason: "PRIVATE_ADMIN_REASON" },
+    ],
+  };
+  const before = JSON.stringify(profile);
+  const details = buildStudentDetailsFromProfileLog(profile);
+  assert.match(details.grades[0].opportunityEffect, /^لا يوجد خصم لهذا الامتحان.*تسوية/);
+  assert.equal(details.studentSnapshot.opportunities, 3);
+  assert.equal(details.opportunityLogs.length, 2, "التقرير لا يحذف سجل التدقيق التاريخي");
+  const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: { s1: details } });
+  const { dom } = executeInlineScripts(html, "settled-opportunity-report");
+  openStudentDetails(dom, "s1", studentList[0].name);
+  assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>3<\/strong>/);
+  assert.match(dom.elements.tpStudentOverview.innerHTML, /أُعيد تفعيلك برصيد 3 من الفرص/);
+  assert.match(dom.elements.tpStudentOverview.innerHTML, /16 سبتمبر 2026/);
+  assert.doesNotMatch(dom.elements.tpStudentOverview.innerHTML, /PRIVATE_ADMIN_REASON/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /tp-grade-no-deduction/);
+  assert.doesNotMatch(dom.elements.tpGradesBody.innerHTML, /تم خصم فرصتين/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /غياب/);
+  const withoutExams = selectHtmlReportExams({ s1: details }, []);
+  assert.deepEqual(withoutExams.s1.balanceNotes, details.balanceNotes);
+  assert.equal(JSON.stringify(profile), before, "الرصيد والدرجات والسجل لا تتغير أثناء العرض");
+});
+
+check("إضافة الإدارة تظهر بجانب الرصيد دون إخفاء خصومات صحيحة أو اختراع تسوية", () => {
+  const exam = { id: "deducted-exam", name: "امتحان", date: "2026-09-12", fullMark: 50 };
+  const profile = {
+    student: { name: studentList[0].name, status: "نشط", opportunities: 3, opportunityLimit: 3 },
+    currentChapter: { id: "current", name: "الفصل الحالي", since: "2026-09-01", examIds: [exam.id] },
+    grades: [{ id: "unsettled-grade", examId: exam.id, status: "درجة", score: 2 }],
+    exams: [exam],
+    opportunityLogs: [
+      { action: "خصم تلقائي", amount: 1, examId: exam.id, chapterId: "current", date: exam.date },
+      { action: "إضافة", amount: 2, appliedAmount: 2, ledgerVersion: 2, chapterId: "current", date: "2026-09-13T13:10:31.636Z", reason: "تسوية" },
+    ],
+  };
+  const details = buildStudentDetailsFromProfileLog(profile);
+  assert.equal(details.grades[0].opportunityEffect, "تم خصم فرصة لهذا الامتحان");
+  const sanitized = sanitizeStudentDetailsForHtml({ s1: details });
+  assert.deepEqual(sanitizeStudentDetailsForHtml(sanitized), sanitized);
+  const html = buildHtml(rows, columns, "تقرير", { studentList, studentDetails: sanitized });
+  const { dom } = executeInlineScripts(html, "manual-grant-report");
+  openStudentDetails(dom, "s1", studentList[0].name);
+  assert.match(dom.elements.tpStudentOverview.innerHTML, /أضافت الإدارة فرصتين/);
+  assert.match(dom.elements.tpStudentOverview.innerHTML, /13 سبتمبر 2026/);
+  assert.match(dom.elements.tpGradesBody.innerHTML, /tp-grade-deduction/);
+  assert.match(dom.elements.tpStudentOverview.innerHTML, /<strong>3<\/strong>/);
+});
+
 if (failures > 0) {
   console.error(`\nفشل ${failures} من اختبارات HTML السلوكية لإدارة الفرص.`);
   process.exit(1);

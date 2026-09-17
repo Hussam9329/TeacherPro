@@ -40,6 +40,91 @@ export function hasTwoOpportunityPledge(logs: Record<string, unknown>[]): boolea
   });
 }
 
+export type ReportBalanceNote = { text: string; date: string };
+export type ReportOpportunityContext = {
+  settlement: {
+    date: string;
+    settledGradeIds: ReadonlySet<string>;
+  } | null;
+  balanceNotes: ReportBalanceNote[];
+};
+
+function reportLogDate(log: Record<string, unknown>): string | null {
+  if (log.date instanceof Date && !Number.isFinite(log.date.getTime())) return null;
+  const value = log.date instanceof Date ? log.date.toISOString() : String(log.date || "");
+  return value && Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+function reportBalanceGrant(log: Record<string, unknown>): boolean {
+  // Keep the balance-grant vocabulary aligned with the academic engine. A
+  // status-only reactivation is not a grant and cannot settle a grade.
+  return log.action === "رصيد بعد تعهد" || log.action === "رصيد إعادة التفعيل" ||
+    String(log.reason || "").includes("فرصتين بعد التعهد");
+}
+
+/** Describe recorded balance commands without recalculating the balance.
+ * Structured settlement membership follows gradeSettlementExclusion: only
+ * the exact saved grade IDs are covered, never every exam before a date.
+ * Unlike the broader profile explanation, this public report requires a
+ * known active chapter and does not infer a legacy settlement from notes. */
+export function buildReportOpportunityContext(
+  logs: readonly Record<string, unknown>[],
+  activeChapterId?: unknown,
+): ReportOpportunityContext {
+  const chapterId = typeof activeChapterId === "string" ? activeChapterId.trim() : "";
+  if (!chapterId) return { settlement: null, balanceNotes: [] };
+  const currentLogs = logs.filter(log => log.chapterId === chapterId && reportLogDate(log));
+  const ordered = [...currentLogs].sort((a, b) =>
+    Date.parse(reportLogDate(a)!) - Date.parse(reportLogDate(b)!));
+  const setters = ordered.filter(log => log.ledgerVersion === 2 &&
+    (log.action === "إعادة تعيين" || reportBalanceGrant(log)));
+  const reset = setters.filter(log => log.action === "إعادة تعيين").at(-1);
+  const grant = setters.filter(reportBalanceGrant).at(-1);
+  // The engine chooses a reset when a reset and a grant have the same date.
+  const latest = reset && (!grant || Date.parse(reportLogDate(reset)!) >= Date.parse(reportLogDate(grant)!))
+    ? reset : grant;
+  const targetBalance = latest ? reportNumber(latest.balanceAfter ?? latest.amount) : null;
+  const validLatest = latest && targetBalance !== null && Number.isSafeInteger(targetBalance) ? latest : null;
+  let settlement: ReportOpportunityContext["settlement"] = null;
+  if (validLatest) {
+    const settledGradeIds = new Set<string>();
+    // Corrupt/missing membership never falls back to an older settlement's
+    // IDs, which could incorrectly hide a later, still-effective grade.
+    try {
+      const ids: unknown = typeof validLatest.settledGradeIds === "string"
+        ? JSON.parse(validLatest.settledGradeIds) : null;
+      if (Array.isArray(ids) && ids.every(id => typeof id === "string" && id.trim())) {
+        ids.forEach(id => settledGradeIds.add(id));
+      }
+    } catch { /* Keep all grade effects when their settlement is unproved. */ }
+    settlement = { date: reportLogDate(validLatest)!, settledGradeIds };
+  }
+
+  const balanceNotes: ReportBalanceNote[] = [];
+  if (validLatest) {
+    const reason = String(validLatest.reason || "");
+    // The owner removed chapter-opening and balance-confirmation notes.
+    if (reportBalanceGrant(validLatest)) {
+      const text = validLatest.action === "رصيد بعد تعهد" || hasTwoOpportunityPledge([validLatest])
+        ? `مُنحت رصيداً قدره ${targetBalance} من الفرص بعد قبول التعهّد`
+        : `أُعيد تفعيلك برصيد ${targetBalance} من الفرص`;
+      balanceNotes.push({ text, date: reportLogDate(validLatest)! });
+    } else if (!/حماية P\d+|دون تغيير بتوجيه المالك|انتقال|تحويل فصل/.test(reason)) {
+      balanceNotes.push({ text: `حدّدت الإدارة رصيدك بـ ${targetBalance} من الفرص`, date: reportLogDate(validLatest)! });
+    }
+  }
+  for (const log of ordered) {
+    if (log.action !== "إضافة" || reportBalanceGrant(log)) continue;
+    const date = reportLogDate(log)!;
+    if (settlement && Date.parse(date) < Date.parse(settlement.date)) continue;
+    const amount = reportNumber(log.appliedAmount) ?? reportNumber(log.amount);
+    if (amount === null || amount <= 0 || !Number.isSafeInteger(amount)) continue;
+    const count = amount === 1 ? "فرصة واحدة" : amount === 2 ? "فرصتين" : `${amount} فرص`;
+    balanceNotes.push({ text: `أضافت الإدارة ${count}`, date });
+  }
+  return { settlement, balanceNotes };
+}
+
 export type ReportMovementKind = "add" | "deduct" | "reset" | "chapter-start" | "confirm-balance" | "return-balance" | "return" | "dismiss" | "other";
 type Movement = {
   action: string; amount: number; reason?: string | null;
@@ -113,17 +198,29 @@ export function reportGradeOutcome(grade: Record<string, unknown>, exam?: Record
   return ({ "غائب": "غياب", "غش": "حالة غش", "مجاز": "إجازة", "ضمن فترة السماح": "ضمن فترة السماح", "قبل تسجيل الطالب": "قبل تسجيلك" } as Record<string, string>)[status] || "غياب";
 }
 
-export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<string, unknown> | undefined, logs: Record<string, unknown>[]): string {
+export function reportGradeEffect(grade: Record<string, unknown>, exam: Record<string, unknown> | undefined, logs: Record<string, unknown>[], context?: ReportOpportunityContext): string {
+  const settlement = context?.settlement;
+  const settledGrade = Boolean(settlement && typeof grade.id === "string" && settlement.settledGradeIds.has(grade.id));
+  const effectiveLogs = settlement ? logs.filter(log => {
+    const automatic = log.action === "خصم تلقائي" || log.action === "فصل تلقائي" ||
+      String(log.reason || "").startsWith("تلقائي:");
+    if (automatic) return !settledGrade;
+    // A later manual deduction still affects a settled exam. An old dated
+    // manual command was superseded by the saved reset/return balance.
+    const date = reportLogDate(log);
+    return !date || Date.parse(date) >= Date.parse(settlement.date);
+  }) : logs;
   // Describe stored movements first; grade thresholds alone do not prove a deduction.
-  const deductions = logs.filter(l => l.action === "خصم" || l.action === "خصم تلقائي");
+  const deductions = effectiveLogs.filter(l => l.action === "خصم" || l.action === "خصم تلقائي");
   const deducted = deductions.reduce((sum, l) => sum + (reportNumber(l.appliedAmount) ?? reportNumber(l.amount) ?? 0), 0);
-  const dismissed = logs.some(l => String(l.action || "").startsWith("فصل"));
+  const dismissed = effectiveLogs.some(l => String(l.action || "").startsWith("فصل"));
   const deductionText = deducted === 1
     ? "تم خصم فرصة لهذا الامتحان"
     : deducted === 2
       ? "تم خصم فرصتين لهذا الامتحان"
       : deducted > 0 ? `عدد الفرص المخصومة لهذا الامتحان: ${deducted}` : "";
   if (deducted || dismissed) return [deductionText, dismissed ? "سُجّل فصل بسبب هذا الامتحان" : ""].filter(Boolean).join(". ");
+  if (settledGrade) return "لا يوجد خصم لهذا الامتحان — مشمول بتسوية الرصيد";
   if (grade.academicEffectExcluded) return "لا خصم: هذه الدرجة مستثناة من حساب الفرص.";
   if (grade.status === "مجاز") return "لا خصم: لديك إجازة لهذا الامتحان.";
   if (grade.status === "قبل تسجيل الطالب") return "لا خصم: الامتحان قبل تسجيلك.";

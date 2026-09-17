@@ -453,8 +453,8 @@ must(
 
 must(
   !exportDialog.includes('id="tpLogsSectionTitle"') &&
-    exportDialog.includes("reportGradeEffect(grade, exam, scopedLogs.filter(log => log.examId === examId))"),
-  "حذف قسم السجل من HTML لا يغير اعتماد أثر الامتحان على سجل الفصل النشط",
+    exportDialog.includes("reportGradeEffect(grade, exam, scopedLogs.filter(log => log.examId === examId), opportunityContext)"),
+  "أثر الامتحان يعتمد على سجل الفصل النشط مع احترام تسوية الرصيد",
 );
 
 must(

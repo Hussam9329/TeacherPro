@@ -20,7 +20,7 @@ import { toast } from "@/lib/user-toast";
 import { humanizeTeacherProText } from "@/lib/teacherpro-language";
 import { buildProfessionalXlsx } from "@/lib/xlsx-export";
 import { opportunityLogWithinActiveChapter } from "@/lib/active-chapter-report";
-import { hasTwoOpportunityPledge, presentOpportunityMovement, reportGradeEffect, reportGradeOutcome, reportNumber, type ReportMovementKind } from "@/lib/student-report-presentation";
+import { buildReportOpportunityContext, hasTwoOpportunityPledge, presentOpportunityMovement, reportGradeEffect, reportGradeOutcome, reportNumber, type ReportBalanceNote, type ReportMovementKind } from "@/lib/student-report-presentation";
 
 export type ExportColumn<T = Record<string, unknown>> = {
   key: string;
@@ -75,6 +75,8 @@ export type StudentDetails = {
   generatedAt?: string | null;
   /** A recorded two-opportunity pledge grant, independent of the remaining balance. */
   hasTwoOpportunityPledge?: boolean;
+  /** Recorded balance changes, independent of which exams are shown. */
+  balanceNotes?: ReportBalanceNote[];
   studentSnapshot?: {
     name: string; code: string; status: string; opportunities: number | null; courseName?: string;
     opportunityLimit: number | null; registeredAt: string | null;
@@ -179,6 +181,7 @@ export function sanitizeStudentDetailsForHtml(details: StudentDetailsMap): Stude
         activeChapterSince: studentDetails.activeChapterSince ?? null,
         generatedAt: studentDetails.generatedAt ?? null,
         hasTwoOpportunityPledge: studentDetails.hasTwoOpportunityPledge === true,
+        balanceNotes: (studentDetails.balanceNotes || []).map(({ text, date }) => ({ text, date })),
         studentSnapshot: studentDetails.studentSnapshot,
         grades: (studentDetails.grades || [])
           .map((grade) => {
@@ -307,6 +310,7 @@ export function buildStudentDetailsFromProfileLog(
   const rawLogs = Array.isArray(profile.opportunityLogs) ? profile.opportunityLogs : [];
   const logScope = resolveActiveChapterLogScope(profile);
   const scopedLogs = rawLogs.filter(log => opportunityLogWithinActiveChapter(log, logScope));
+  const opportunityContext = buildReportOpportunityContext(rawLogs, String(profile.currentChapter?.id || ""));
   const gradeExamIds = new Set<string>();
   const grades: StudentGradeDetail[] = rawGrades
     // درجات امتحانات الفصل النشط الحالي فقط: عند توفر سياق الفصل النشط
@@ -335,7 +339,7 @@ export function buildStudentDetailsFromProfileLog(
         status: String(grade.status || ""),
         notes: grade.notes ? String(grade.notes) : null,
         outcome: reportGradeOutcome(grade, exam),
-        opportunityEffect: reportGradeEffect(grade, exam, scopedLogs.filter(log => log.examId === examId)),
+        opportunityEffect: reportGradeEffect(grade, exam, scopedLogs.filter(log => log.examId === examId), opportunityContext),
         passMark: reportNumber(exam?.passMark),
       };
     });
@@ -367,7 +371,7 @@ export function buildStudentDetailsFromProfileLog(
         status: "غائب",
         notes: null,
         outcome: "غياب",
-        opportunityEffect: reportGradeEffect({ status: "غائب" }, examRecord, scopedLogs.filter(log => log.examId === examId)),
+        opportunityEffect: reportGradeEffect({ status: "غائب" }, examRecord, scopedLogs.filter(log => log.examId === examId), opportunityContext),
         passMark: reportNumber(examRecord.passMark),
       });
     }
@@ -405,6 +409,7 @@ export function buildStudentDetailsFromProfileLog(
     grades, opportunityLogs, activeChapterName,
     // Pledges from the full enrollment history must survive exam/chapter filters.
     hasTwoOpportunityPledge: hasTwoOpportunityPledge(rawLogs),
+    balanceNotes: opportunityContext.balanceNotes,
     activeChapterSince: logScope?.since ?? null,
     generatedAt: profile.generatedAt ?? null,
     studentSnapshot: student ? {
@@ -561,7 +566,7 @@ const DETAILS_MODAL_CSS = `
   .tp-summary-item:first-child { background: #e5f5ef; border-color: #b1d9c9; }
   .tp-summary-item:first-child strong { font-size: 32px; }
   .tp-summary-label { display: block; font-size: 13px; color: #435d6b; margin-bottom: 6px; }
-  .tp-pledge-note { display: block; margin-top: 6px; font-size: 13px; font-weight: 400; line-height: 1.8; color: #435d6b; overflow-wrap: anywhere; }
+  .tp-pledge-note, .tp-balance-note { display: block; margin-top: 6px; font-size: 13px; font-weight: 400; line-height: 1.8; color: #435d6b; overflow-wrap: anywhere; }
   .tp-details-section { min-width: 0; margin: 28px 0 0; scroll-margin-top: 90px; }
   .tp-details-section h3 { font-size: 20px; line-height: 1.7; color: #123f4d; margin: 0 0 6px; }
   .tp-details-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 14px; font-weight: 400; border: 1px solid #dbe5e9; border-radius: 12px; }
@@ -779,6 +784,13 @@ const DETAILS_MODAL_JS = `
       ? '<span class="tp-pledge-note">تم منح الطالب فرصتين بسبب تعهده</span>' : '';
   }
 
+  function balanceNotesHtml(studentId){
+    var notes = DATA[studentId] && DATA[studentId].balanceNotes;
+    return Array.isArray(notes) ? notes.map(function(note){
+      return '<span class="tp-balance-note">' + esc(note.text) + (note.date ? ' بتاريخ ' + fmtDate(note.date) : '') + '.</span>';
+    }).join('') : '';
+  }
+
   function renderStudentCard(student){
     var id = esc(student.id);
     var html = '<table class="tp-student-summary-table" role="table" aria-label="ملخص الطالب المختار">'
@@ -791,7 +803,7 @@ const DETAILS_MODAL_JS = `
       + '<tbody><tr role="row">'
       + mobileCell('الطالب', esc(student.name) + ' ' + dismissedBadgeHtml(student), 'tp-student-name-cell')
       + mobileCell('الدورة', esc(student.courseName || '—'))
-      + mobileCell('عدد الفرص', fmtNum(student.opportunities) + pledgeNoteHtml(student.id))
+      + mobileCell('عدد الفرص', fmtNum(student.opportunities) + pledgeNoteHtml(student.id) + balanceNotesHtml(student.id))
       + mobileCell('تفاصيل الطالب', '<button type="button" class="tp-details-btn" data-sid="' + id + '">إظهار التفاصيل</button>', 'tp-details-cell')
       + '</tr></tbody>'
       + '</table>';
@@ -851,7 +863,7 @@ const DETAILS_MODAL_JS = `
     if (gradesTitleEl) gradesTitleEl.textContent = data && data.activeChapterName ? 'درجاتك — ' + data.activeChapterName : 'درجاتك في الامتحانات';
     if (overview) {
       overview.innerHTML = '<div class="tp-report-summary">'
-        + '<div class="tp-summary-item"><span class="tp-summary-label">فرصك المتبقية</span><strong>' + fmtNum(balance) + '</strong>' + pledgeNoteHtml(studentId) + '</div></div>';
+        + '<div class="tp-summary-item"><span class="tp-summary-label">فرصك المتبقية</span><strong>' + fmtNum(balance) + '</strong>' + pledgeNoteHtml(studentId) + balanceNotesHtml(studentId) + '</div></div>';
     }
     if (!data) {
       gradesBody.innerHTML = '<tr class="tp-empty-row tp-error-row" role="row"><td colspan="4" role="cell">تفاصيل هذا الطالب غير موجودة في هذه النسخة. اطلب نسخة جديدة من الإدارة.</td></tr>';
@@ -859,7 +871,7 @@ const DETAILS_MODAL_JS = `
       gradesBody.innerHTML = data.grades && data.grades.length ? data.grades.map(function(g){
         var score = g.score === null || g.score === undefined ? 'غياب' : '<bdi>' + fmtNum(g.score) + ' / ' + fmtNum(g.fullMark) + '</bdi>';
         var effectText = String(g.opportunityEffect || 'لا تتوفر تفاصيل الأثر في هذه النسخة.').trim();
-        var effectClass = effectText === 'لا يوجد خصم لهذا الامتحان' ? 'tp-grade-no-deduction'
+        var effectClass = effectText.indexOf('لا يوجد خصم لهذا الامتحان') === 0 ? 'tp-grade-no-deduction'
           : /^(تم خصم |عدد الفرص المخصومة لهذا الامتحان:)/.test(effectText) ? 'tp-grade-deduction' : '';
         return '<tr role="row">'
           + mobileCell('الامتحان', '<strong class="tp-event-title">' + esc(g.examName) + '</strong><span class="tp-event-exam">' + esc(g.examType) + '</span>')
