@@ -37,6 +37,7 @@ import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { searchAny } from "@/lib/validation";
 import { StudentProfileDialog } from "./student-profile-dialog";
+import { CallPhoneQrDialog } from "./call-phone-qr-dialog";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { CountScopeSummary } from "./ui-kit";
 import {
@@ -72,7 +73,15 @@ type CallCategory =
   | "protected"
   | "missing";
 type CallStatusFilter =
-  "all" | "absent" | "discounted" | "failed" | "cheating" | "passed" | "full" | "protected";
+  | "all"
+  | "absent"
+  | "discounted"
+  | "failed"
+  | "cheating"
+  | "passed"
+  | "full"
+  | "protected"
+  | "dismissed";
 type CallGradeDisplayMode = "latest" | "latest-two" | "all";
 type CallContactStatusFilter =
   | "all"
@@ -136,6 +145,7 @@ const callStatusFilterLabels: Record<CallStatusFilter, string> = {
   passed: "الطلاب الناجحين",
   full: "الدرجات الكاملة",
   protected: "المحميون (مجاز/سماح/قبل التسجيل)",
+  dismissed: "المفصولين",
 };
 
 const callStatusFilterOptions = Object.keys(
@@ -2084,6 +2094,25 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   {renderPhoneLink("ولي الأمر", row.student.parentPhone)}
                   {renderTelegramLink(row.student.telegram)}
                 </div>
+                {(row.student.phone || row.student.parentPhone) && (
+                  <div className="rounded-2xl border border-dashed bg-background/70 p-3">
+                    <p className="mb-2 text-[11px] font-bold text-muted-foreground">
+                      نقل الرقم إلى هاتف آخر عبر QR
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <CallPhoneQrDialog
+                        studentName={row.student.name}
+                        phoneLabel="الطالب"
+                        phone={row.student.phone}
+                      />
+                      <CallPhoneQrDialog
+                        studentName={row.student.name}
+                        phoneLabel="ولي الأمر"
+                        phone={row.student.parentPhone}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">
@@ -2681,6 +2710,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
               ) : callGradeRangeInvalid ? (
                 <p className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-sm font-bold text-destructive">
                   درجة «من» يجب ألا تكون أكبر من درجة «إلى».
+                </p>
+              ) : callStatusFilter === "dismissed" && !callGradeFrom && !callGradeTo ? (
+                <p className="rounded-2xl border border-red-300/60 bg-red-50/60 p-3 text-xs font-bold text-red-800 dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-100">
+                  يعرض هذا الفلتر الطلاب الذين حالتهم الحالية «مفصول» ضمن
+                  الدورة والامتحان المحددين.
                 </p>
               ) : callGradeFrom || callGradeTo ? (
                 <p className="rounded-2xl border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">

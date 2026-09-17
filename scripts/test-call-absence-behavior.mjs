@@ -61,6 +61,7 @@ const identity = loadTypeScriptModule("src/lib/call-identity.ts");
 const range = loadTypeScriptModule("src/lib/call-grade-range.ts");
 const contact = loadTypeScriptModule("src/lib/call-contact-status.ts");
 const notes = loadTypeScriptModule("src/lib/call-notes-filter.ts");
+const phoneQr = loadTypeScriptModule("src/lib/call-phone-qr.ts");
 const candidatesSource = fs.readFileSync(
   path.join(root, "src/app/api/student-calls/candidates/route.ts"),
   "utf8",
@@ -153,6 +154,22 @@ test("notes filter counts only non-empty manual student notes", () => {
     }),
     false,
   );
+});
+
+test("phone QR handoff uses a local tel URI with an international Iraqi number", () => {
+  assert.equal(
+    phoneQr.callPhoneQrValue("0770 123 4567"),
+    "tel:+9647701234567",
+  );
+  assert.equal(
+    phoneQr.callPhoneQrValue("٠٧٨١٢٣٤٥٦٧٨"),
+    "tel:+9647812345678",
+  );
+  assert.equal(
+    phoneQr.callPhoneQrValue("+964 750 123 4567"),
+    "tel:+9647501234567",
+  );
+  assert.equal(phoneQr.callPhoneQrValue(""), "");
 });
 
 test("stored absent remains absent for inactive and no-discount exams", () => {

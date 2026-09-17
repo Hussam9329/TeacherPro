@@ -15,6 +15,8 @@ const files = {
   contactStatus: 'src/lib/call-contact-status.ts',
   notesFilter: 'src/lib/call-notes-filter.ts',
   callIdentity: 'src/lib/call-identity.ts',
+  callPhoneQr: 'src/lib/call-phone-qr.ts',
+  callPhoneQrDialog: 'src/components/teacher-pro/call-phone-qr-dialog.tsx',
 };
 
 const read = (file) => fs.readFileSync(file, 'utf8');
@@ -41,6 +43,8 @@ const gradeRange = read(files.gradeRange);
 const contactStatus = read(files.contactStatus);
 const notesFilter = read(files.notesFilter);
 const callIdentity = read(files.callIdentity);
+const callPhoneQr = read(files.callPhoneQr);
+const callPhoneQrDialog = read(files.callPhoneQrDialog);
 
 const callPageSizeMatch = followUp.match(/const CALL_PAGE_SIZE = (\d+);/);
 const callPageSize = Number(callPageSizeMatch?.[1] || 0);
@@ -130,6 +134,30 @@ assert(
 assert(
   !followUp.includes('whatsapp://send'),
   'لا توجد روابط whatsapp:// داخل تبويبة المكالمات',
+);
+assert(
+  followUp.includes('CallPhoneQrDialog') &&
+    followUp.includes('phoneLabel="الطالب"') &&
+    followUp.includes('phoneLabel="ولي الأمر"'),
+  'كل رقم متوفر في بطاقة المكالمات يملك زر QR مستقل للطالب أو ولي الأمر',
+);
+assert(
+  callPhoneQrDialog.includes('QRCodeSVG') &&
+    callPhoneQrDialog.includes('value={qrValue}') &&
+    callPhoneQrDialog.includes('marginSize={4}') &&
+    callPhoneQr.includes('`tel:${dialNumber}`') &&
+    !callPhoneQrDialog.includes('api.qrserver') &&
+    !callPhoneQrDialog.includes('chart.googleapis'),
+  'رمز الاتصال يُولد محلياً بهامش قابل للمسح ويحوّل الهاتف إلى tel: بلا خدمة خارجية',
+);
+assert(
+  followUp.includes('| "dismissed";') &&
+    followUp.includes('dismissed: "المفصولين"') &&
+    candidates.includes('normalized === "dismissed"') &&
+    stats.includes('normalized === "dismissed"') &&
+    candidates.includes('studentStatus === STUDENT_STATUS_DISMISSED') &&
+    stats.includes('student?.status === STUDENT_STATUS_DISMISSED'),
+  'فلتر المفصولين موجود في الواجهة وتطبقه القائمة والإحصائيات على الحالة الحالية نفسها',
 );
 
 

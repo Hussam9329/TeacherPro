@@ -14,7 +14,10 @@ import {
   gradeKindForCalls,
   parseCourseIds,
 } from "@/lib/grade-classification";
-import { studentCourseScopeWhere } from "@/lib/student-scope";
+import {
+  STUDENT_STATUS_DISMISSED,
+  studentCourseScopeWhere,
+} from "@/lib/student-scope";
 import {
   callGradeMatchesRangeForStatus,
   parseCallGradeRange,
@@ -44,7 +47,8 @@ type CallStatusFilter =
   | "cheating"
   | "passed"
   | "full"
-  | "protected";
+  | "protected"
+  | "dismissed";
 
 type DbStudentLite = {
   id: string;
@@ -121,7 +125,8 @@ function normalizeCallStatusFilter(value: string | null): CallStatusFilter {
     normalized === "cheating" ||
     normalized === "passed" ||
     normalized === "full" ||
-    normalized === "protected"
+    normalized === "protected" ||
+    normalized === "dismissed"
   ) {
     return normalized;
   }
@@ -187,6 +192,9 @@ function gradeMatchesStatusFilter(
   absenceSource?: CallAbsenceSource | null,
 ): boolean {
   if (!grade && !absenceSource) return false;
+  if (filter === "dismissed") {
+    return student?.status === STUDENT_STATUS_DISMISSED;
+  }
   const impactKind = classifyCallImpact(grade, exam, student, leaves);
   const kind = absenceSource ? "absent" : gradeKindForCalls(impactKind);
   // ROOT-CAUSE FIX (الإصلاح السابع — شمل المحميين في فلتر "كل الحالات"):

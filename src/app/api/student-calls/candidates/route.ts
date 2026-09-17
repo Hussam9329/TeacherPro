@@ -13,7 +13,10 @@ import {
   gradeKindForCalls,
   parseCourseIds,
 } from "@/lib/grade-classification";
-import { studentCourseScopeWhere } from "@/lib/student-scope";
+import {
+  STUDENT_STATUS_DISMISSED,
+  studentCourseScopeWhere,
+} from "@/lib/student-scope";
 import { attachStudentOpportunitySnapshots } from "@/lib/student-opportunity-snapshot-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import {
@@ -45,7 +48,8 @@ export type CallStatusFilter =
   | "cheating"
   | "passed"
   | "full"
-  | "protected";
+  | "protected"
+  | "dismissed";
 
 type CallKind =
   | "absent"
@@ -146,7 +150,8 @@ function normalizeCallStatusFilter(value: string | null): CallStatusFilter {
     normalized === "cheating" ||
     normalized === "passed" ||
     normalized === "full" ||
-    normalized === "protected"
+    normalized === "protected" ||
+    normalized === "dismissed"
   ) {
     return normalized;
   }
@@ -369,7 +374,11 @@ function gradeMatchesStatusFilter(
   kind: CallKind,
   impactKind: GradeClassificationKind,
   absenceSource?: CallAbsenceSource | null,
+  studentStatus?: string,
 ): boolean {
+  if (filter === "dismissed") {
+    return studentStatus === STUDENT_STATUS_DISMISSED;
+  }
   if (filter === "all") {
     // ROOT-CAUSE FIX: شمل المحميين (مجاز، ضمن السماح، قبل التسجيل) في
     // فلتر "كل الحالات" ليطابق عددي سجل الدرجات. فقط missing مستثنى.
@@ -742,7 +751,16 @@ export async function GET(req: NextRequest) {
       if (!grade) return [];
       const impactKind = classifyCallImpact(grade, exam, student, leaves);
       const kind = absenceSource ? "absent" : gradeKindForCalls(impactKind);
-      if (!gradeMatchesStatusFilter(statusFilter, kind, impactKind, absenceSource)) return [];
+      if (
+        !gradeMatchesStatusFilter(
+          statusFilter,
+          kind,
+          impactKind,
+          absenceSource,
+          student.status,
+        )
+      )
+        return [];
       if (!callGradeMatchesRangeForStatus(grade, gradeRange, statusFilter)) return [];
       const contactStatus = normalizeContactStatus(bestCallByStudentId.get(student.id));
       if (!contactStatusMatchesFilter(contactStatusFilter, contactStatus)) return [];
