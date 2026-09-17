@@ -4,9 +4,10 @@ const { PGlite } = require('@electric-sql/pglite');
 
 (async () => {
   const db = new PGlite();
+  const guardMigrations = ['20260910140000_active_chapter_opportunity_guard', '20260917180000_guard_automatic_log_chapter'];
   for (const directory of fs.readdirSync('prisma/migrations').sort()) {
     const file = `prisma/migrations/${directory}/migration.sql`;
-    if (fs.existsSync(file) && directory !== '20260910140000_active_chapter_opportunity_guard') await db.exec(fs.readFileSync(file, 'utf8'));
+    if (fs.existsSync(file) && !guardMigrations.includes(directory)) await db.exec(fs.readFileSync(file, 'utf8'));
   }
   await db.exec(`
     INSERT INTO "Course" (id,name) VALUES ('c_mqry9o7z_78jc7b','course');
@@ -19,7 +20,9 @@ const { PGlite } = require('@electric-sql/pglite');
     INSERT INTO "OpportunityLog" (id,"studentId","examId",action,amount,reason,"chapterId") VALUES ('bad','s','cmt1hg0sx0000l104pb1asisz','خصم تلقائي',1,'تلقائي: غياب','current'),('manual','s',null,'إعادة تعيين',3,'تسوية تاريخية: انتقال','current');
     CREATE TEMP TABLE chapter_scope_repair_plan(payload jsonb);
   `);
-  await db.exec(fs.readFileSync('prisma/migrations/20260910140000_active_chapter_opportunity_guard/migration.sql', 'utf8'));
+  for (const migration of guardMigrations) {
+    await db.exec(fs.readFileSync(`prisma/migrations/${migration}/migration.sql`, 'utf8'));
+  }
   await assert.rejects(db.exec(`INSERT INTO "OpportunityLog" (id,"studentId","examId",action,amount,reason,"chapterId") VALUES ('new-bad','s','cmt1hg0sx0000l104pb1asisz','خصم تلقائي',1,'تلقائي: غياب','current')`), /outside the active chapter/);
   await assert.rejects(db.exec(`UPDATE "OpportunityLog" SET reason='تلقائي: إعادة كتابة خطأ' WHERE id='bad'`), /outside the active chapter/);
   const expected = {};

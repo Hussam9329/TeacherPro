@@ -11,7 +11,7 @@ import {
  * column used by the application. Keep this in sync with the newest migration.
  */
 export const REQUIRED_DATABASE_MIGRATION =
-  '20260913120000_add_exam_telegram_submission_window';
+  '20260917180000_guard_automatic_log_chapter';
 
 const SCHEMA_NOT_READY_MESSAGE =
   'نسخة قاعدة البيانات أقدم من نسخة النظام. يلزم مسؤول النظام تطبيق تحديثات قاعدة البيانات قبل إعادة المحاولة.';

@@ -154,7 +154,12 @@ require.extensions['.ts']=(m,f)=>m._compile(ts.transpileModule(fs.readFileSync(f
   const missingWindowCreate=await route.POST({url:'https://example.test/api/exams',json:async()=>({name:'نافذة مطلوبة',type:'يومي',courseIds:['c'],mainSite:'بغداد',date:'2026-09-10',fullMark:20,passMark:10,discountMark:7,opportunitiesPenalty:1,noDiscount:false})});
   assert.equal(missingWindowCreate.status,400,'POST requires both Telegram submission-window endpoints');
   assert.equal(await client.exam.count({}),examCountBeforeMissingWindow,'invalid Telegram window creates no exam');
-  await pg.exec(`INSERT INTO "OpportunityLog"(id,"studentId","examId",action,amount,reason,date,"chapterId","balanceBefore","balanceAfter","ledgerVersion") VALUES('keep-unassigned-history','s1','historic','خصم تلقائي',1,'تلقائي: سجل قديم بلا فصل','2026-07-17 23:00',NULL,3,2,2);`);
+  // Restore a pre-guard fixture with its original missing chapter. Ordinary
+  // new writes must no longer be allowed to recreate this legacy shape.
+  await pg.transaction(async tx => {
+    await tx.exec(`SELECT set_config('teacherpro.restore_snapshot','on',true)`);
+    await tx.exec(`INSERT INTO "OpportunityLog"(id,"studentId","examId",action,amount,reason,date,"chapterId","balanceBefore","balanceAfter","ledgerVersion") VALUES('keep-unassigned-history','s1','historic','خصم تلقائي',1,'تلقائي: سجل قديم بلا فصل','2026-07-17 23:00',NULL,3,2,2);`);
+  });
  // Seed current automatic IDs with the actual engine so settled historical
  // evidence can be distinguished from deductions the changed policy removes.
  const baselineReplay=await previewStudentsAcademicState(Array.from({length:1000},(_,i)=>'s'+(i+1)),{tx:client});

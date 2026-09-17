@@ -234,5 +234,9 @@
   "20260913120000_add_exam_telegram_submission_window": {
     "kind": "expand",
     "checksum": "20e64587a182e81d45979883d9a5b608a46fb44828794c29017c938a6fa43f5f"
+  },
+  "20260917180000_guard_automatic_log_chapter": {
+    "kind": "expand",
+    "checksum": "a463818b18c3ea3071f52d043e2a312623972f286e9adae229758e48f43e7fdf"
   }
 }

@@ -25,8 +25,10 @@ const reconciliationMigrationName =
   "20260820140000_schema_authority_reconciliation";
 const requiredRuntimeMigrationName =
   "20260828034500_single_dismissal_policy";
-const requiredDatabaseMigrationName =
-  "20260913120000_add_exam_telegram_submission_window";
+const requiredDatabaseMigrationName = fs.readdirSync(path.join(root, "prisma/migrations"))
+  .filter(name => fs.existsSync(path.join(root, "prisma/migrations", name, "migration.sql")))
+  .sort().at(-1);
+const telegramWindowMigrationName = "20260913120000_add_exam_telegram_submission_window";
 const graceTerminationMigrationName =
   "20260822210000_end_grace_on_numeric_grade";
 const initialBridgeMigrationName = "20260601000000_initial_schema_bridge";
@@ -152,7 +154,13 @@ check(
   deploymentMigrationPolicy[requiredDatabaseMigrationName]?.kind === "expand" &&
     deploymentMigrationPolicy[requiredDatabaseMigrationName]?.checksum ===
       createHash("sha256").update(requiredDatabaseMigration).digest("hex"),
-  "the Telegram exam-window migration has a checksum-bound expand policy",
+  "the latest required migration has a checksum-bound expand policy",
+);
+check(
+  deploymentMigrationPolicy[telegramWindowMigrationName]?.kind === "expand" &&
+    deploymentMigrationPolicy[telegramWindowMigrationName]?.checksum === createHash("sha256")
+      .update(read(path.join("prisma/migrations", telegramWindowMigrationName, "migration.sql"))).digest("hex"),
+  "the Telegram exam-window migration retains its checksum-bound expand policy",
 );
 check(
   prismaSchema.includes("gracePeriodEndedAt DateTime?") &&
