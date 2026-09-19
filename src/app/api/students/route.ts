@@ -759,12 +759,8 @@ export async function PUT(req: NextRequest) {
   if (data.telegram !== undefined) {
     data.telegram = sanitizeTelegramInput(String(data.telegram ?? ""));
     const currentTelegram = sanitizeTelegramInput(String(currentStudent.telegram ?? ""));
-    if (currentTelegram && !data.telegram) {
-      return NextResponse.json(
-        { error: "استخدم زر فك ارتباط تيليجرام لتأكيد العملية بأمان." },
-        { status: 400 },
-      );
-    }
+    // مسح حقل التيليجرام من نافذة التعديل يلغي ارتباط الحساب نهائياً؛
+    // يُعاد حساب telegramKey تلقائياً إلى null أدناه فيمنع الحساب القديم من الدخول باسم الطالب.
     if (data.telegram !== currentTelegram && !principal.isAdmin) {
       return NextResponse.json(
         { error: "تعديل ارتباط تيليجرام متاح لمدير النظام فقط." },

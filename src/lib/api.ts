@@ -1488,8 +1488,6 @@ export const studentApi = {
   add: (student: Record<string, unknown>) => apiPost("students", student),
   statusAction: (payload: Record<string, unknown>) =>
     apiPost("students/status-action", payload),
-  unlinkTelegram: (payload: { studentId: string; expectedTelegram: string }) =>
-    apiPost("students/unlink-telegram", payload),
   editSnapshot: (id: string) =>
     apiGet<{ student: Record<string, unknown> }>(
       `students/edit-snapshot?id=${encodeURIComponent(id)}`,

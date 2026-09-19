@@ -669,7 +669,7 @@ test("mutation reconciliation immediately removes stale filtered rows", () => {
   assert.equal(original[1].name, "Old");
 });
 
-test("only the real admin receives Telegram unlink capability", () => {
+test("only the real admin receives full student identity management", () => {
   const admin = registryViewHelpers.getStudentRegistryCapabilities({
     username: "assistant",
     roleId: "role_admin",
