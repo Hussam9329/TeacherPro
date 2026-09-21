@@ -19,11 +19,11 @@ export async function GET(req: NextRequest) {
   try {
     const students = await withDatabaseSchema(() => db.student.findMany({
       where: { id: { in: ids } },
-      select: { id: true, status: true, dismissedChecked: true },
+      select: { id: true, status: true, dismissedChecked: true, dismissedCheckEpoch: true },
     }), "Student");
     return NextResponse.json({ students }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return routeErrorResponse(error, "تعذر تحميل تأشير الطلاب.");
+    return routeErrorResponse(error, "تعذر تحميل حالة اغلاق كود الطلاب.");
   }
 }
 
@@ -39,6 +39,6 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ student }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof DismissedCheckError) return validationError(error.message, error.status);
-    return routeErrorResponse(error, "تعذر حفظ تأشير الطالب.");
+    return routeErrorResponse(error, "تعذر حفظ حالة اغلاق كود الطالب.");
   }
 }

@@ -18,6 +18,7 @@ export function useDismissedChecks(
   const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
   const pending = useRef(new Set<string>());
   const revision = useRef(0);
+  const lifecycle = useRef(0);
   const readSequence = useRef(0);
   const currentUserId = useRef(userId);
   currentUserId.current = userId;
@@ -26,13 +27,24 @@ export function useDismissedChecks(
   const onStatusChangedRef = useRef(onStatusChanged);
   onStatusChangedRef.current = onStatusChanged;
   const idsKey = JSON.stringify(students.filter((student) => student.status === "مفصول").map((student) => student.id).sort());
+  const scopeKey = JSON.stringify([userId, students
+    .filter((student) => student.status === "مفصول")
+    .map((student) => [student.id, student.dismissedCheckEpoch ?? 0])
+    .sort(([left], [right]) => String(left).localeCompare(String(right)))]);
+  const currentScopeKey = useRef(scopeKey);
+  currentScopeKey.current = scopeKey;
+  const [snapshotScopeKey, setSnapshotScopeKey] = useState(scopeKey);
 
   useEffect(() => {
+    // A flag belongs to the currently displayed dismissal, not to a permanent
+    // browser cache. Leaving the page or reactivating a student retires it.
     pending.current.clear();
     setPendingIds(new Set());
     setSnapshots({});
+    setSnapshotScopeKey(scopeKey);
     revision.current += 1;
-  }, [userId]);
+    lifecycle.current += 1;
+  }, [scopeKey]);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     const ids = JSON.parse(idsKey) as string[];
@@ -40,17 +52,20 @@ export function useDismissedChecks(
     const request = ++readSequence.current;
     const startedRevision = revision.current;
     const rows = await readDismissedChecks(ids, signal);
-    if (signal?.aborted || request !== readSequence.current || startedRevision !== revision.current || currentUserId.current !== userId) return;
+    if (signal?.aborted || request !== readSequence.current || startedRevision !== revision.current || currentScopeKey.current !== scopeKey) return;
     const byId = new Map(currentStudents.current.map((student) => [student.id, student]));
     setSnapshots((previous) => {
       const next = { ...previous };
-      for (const row of rows) if (!pending.current.has(row.id)) next[row.id] = row;
+      for (const row of rows) {
+        if (byId.get(row.id)?.status === "مفصول" && !pending.current.has(row.id)) next[row.id] = row;
+      }
       return next;
     });
-    if (rows.some((row) => byId.get(row.id)?.status !== row.status) || rows.length !== ids.length) {
+    if (rows.some((row) => byId.get(row.id)?.status !== row.status ||
+      (byId.get(row.id)?.dismissedCheckEpoch ?? 0) !== row.dismissedCheckEpoch) || rows.length !== ids.length) {
       onStatusChangedRef.current();
     }
-  }, [idsKey, userId]);
+  }, [idsKey, scopeKey]);
 
   useEffect(() => {
     if (!userId || unavailable || idsKey === "[]") return;
@@ -82,32 +97,44 @@ export function useDismissedChecks(
   }, [refresh, userId, unavailable, idsKey]);
 
   const toggle = useCallback(async (student: Student, checked: boolean) => {
-    if (!canEdit || unavailable || student.status !== "مفصول" || pending.current.has(student.id)) return;
-    const before = snapshots[student.id] || { id: student.id, status: student.status, dismissedChecked: Boolean(student.dismissedChecked) };
+    const currentStudent = currentStudents.current.find((row) => row.id === student.id);
+    if (!canEdit || unavailable || currentStudent?.status !== "مفصول" || pending.current.has(student.id)) return;
+    const before = (snapshotScopeKey === scopeKey ? snapshots[student.id] : undefined) || {
+      id: currentStudent.id, status: currentStudent.status, dismissedChecked: Boolean(currentStudent.dismissedChecked),
+      dismissedCheckEpoch: currentStudent.dismissedCheckEpoch ?? 0,
+    };
     if (before.status !== "مفصول" || before.dismissedChecked === checked) return;
     const startedUserId = userId;
+    const startedLifecycle = lifecycle.current;
+    const isCurrent = () => currentUserId.current === startedUserId &&
+      currentScopeKey.current === scopeKey && lifecycle.current === startedLifecycle &&
+      currentStudents.current.some((row) => row.id === student.id && row.status === "مفصول");
     pending.current.add(student.id);
     revision.current += 1;
     setPendingIds(new Set(pending.current));
     setSnapshots((previous) => ({ ...previous, [student.id]: { ...before, dismissedChecked: checked } }));
     try {
-      const saved = await saveDismissedCheck(student.id, checked, before.dismissedChecked);
-      if (currentUserId.current !== startedUserId) return;
+      const saved = await saveDismissedCheck(student.id, checked, before.dismissedChecked, before.dismissedCheckEpoch);
+      if (!isCurrent()) return;
       setSnapshots((previous) => ({ ...previous, [student.id]: saved }));
-      emitTeacherProDataChanged({ scopes: ["students", "logs"], reason: "تحديث تأشير الطالب المفصول", dispatchLocal: false });
+      emitTeacherProDataChanged({ scopes: ["students", "logs"], reason: "تحديث اغلاق كود الطالب المفصول", dispatchLocal: false });
     } catch (error) {
-      if (currentUserId.current !== startedUserId) return;
+      if (!isCurrent()) return;
       setSnapshots((previous) => ({ ...previous, [student.id]: before }));
-      toast.error(error instanceof Error ? error.message : "تعذر حفظ التأشير. يتم تحديث الحالة من النظام.");
+      toast.error(error instanceof Error ? error.message : "تعذر حفظ اغلاق كود الطالب. يتم تحديث الحالة من النظام.");
     } finally {
-      if (currentUserId.current === startedUserId) {
+      if (isCurrent()) {
         pending.current.delete(student.id);
         revision.current += 1;
         setPendingIds(new Set(pending.current));
         void refresh().catch(() => {});
       }
     }
-  }, [canEdit, unavailable, snapshots, userId, refresh]);
+  }, [canEdit, unavailable, snapshots, snapshotScopeKey, scopeKey, userId, refresh]);
 
-  return { snapshots, pendingIds, toggle };
+  return {
+    snapshots: snapshotScopeKey === scopeKey ? snapshots : {},
+    pendingIds: snapshotScopeKey === scopeKey ? pendingIds : new Set<string>(),
+    toggle,
+  };
 }

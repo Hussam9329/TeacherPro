@@ -242,5 +242,9 @@
   "20260921170000_shared_followup_checkboxes": {
     "kind": "expand",
     "checksum": "b11660f8f894fa48548c4f0a67b4a7b7e29548dac5f66c7c210a92e3b5fec022"
+  },
+  "20260921190000_dismissed_check_lifecycle": {
+    "kind": "expand",
+    "checksum": "220321cf2d0c802aa954e0aa0bd5da987f1b23ff157b194ff5dacda350721e77"
   }
 }

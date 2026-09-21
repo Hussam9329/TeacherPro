@@ -8,8 +8,9 @@ type AcademicStudentResult = Pick<
 
 /**
  * Persist the engine's final student fields inside the caller's transaction.
- * Student has no Prisma @updatedAt field. All other student fields and
- * database timestamps therefore remain untouched, as with student.update.
+ * Student has no Prisma @updatedAt field. The status trigger retires the
+ * previous dismissal checkbox; other manual fields and timestamps remain
+ * untouched, as with student.update.
  */
 export async function persistAcademicStudentResults(
   client: Pick<Prisma.TransactionClient, "$queryRaw">,

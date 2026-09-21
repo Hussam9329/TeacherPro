@@ -94,6 +94,7 @@ const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
   "dismissalNotes",
   // Shared checklist has a narrow endpoint; generic edits must preserve it.
   "dismissedChecked",
+  "dismissedCheckEpoch",
   // gracePeriodStartDate is set by the backend only (when graceDays changes)
   "gracePeriodStartDate",
   // gracePeriodEndedAt is owned by the grade engine/manual grace restart.

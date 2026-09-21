@@ -73,6 +73,7 @@ export interface Student {
   dismissalReason: string;
   dismissalNotes: string;
   dismissedChecked?: boolean;
+  dismissedCheckEpoch?: number;
   createdAt: string;
   opportunities: number;
   baseOpportunities: number;
@@ -1046,7 +1047,8 @@ function normalizeStudentRecord(st: Record<string, unknown>): Student {
       ? String(st.gracePeriodEndedAt)
       : null,
     dismissalNotes: String(st.dismissalNotes || ""),
-    dismissedChecked: st.dismissedChecked === true,
+    dismissedChecked: st.status === "مفصول" && st.dismissedChecked === true,
+    dismissedCheckEpoch: Number(st.dismissedCheckEpoch || 0),
     createdAt: st.createdAt
       ? baghdadDateKey(st.createdAt as string | Date) || todayISO()
       : todayISO(),

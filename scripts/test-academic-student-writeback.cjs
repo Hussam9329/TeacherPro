@@ -76,9 +76,13 @@ const { persistAcademicStudentResults } = require('../src/lib/academic-student-w
 
     const expectedById = new Map(results.map(student => [student.id, student]));
     for (const student of await snapshot()) {
-      const { status, opportunities, dismissalReason, ...otherFields } = student;
-      const { status: oldStatus, opportunities: oldOpportunities, dismissalReason: oldReason, ...originalFields } = originalById.get(student.id);
+      const { status, opportunities, dismissalReason, dismissedChecked, dismissedCheckEpoch, ...otherFields } = student;
+      const { status: oldStatus, opportunities: oldOpportunities, dismissalReason: oldReason,
+        dismissedChecked: oldChecked, dismissedCheckEpoch: oldEpoch, ...originalFields } = originalById.get(student.id);
       assert.deepEqual(otherFields, originalFields, 'manual fields, identity, enrollment, and timestamps remain unchanged');
+      assert.equal(dismissedCheckEpoch, oldEpoch + (status !== oldStatus ? 1 : 0), 'only a status transition starts a new checkbox episode');
+      assert.equal(dismissedChecked, status !== oldStatus || status !== 'مفصول' ? false : oldChecked,
+        'the database lifecycle guard retires the prior dismissal check');
       const expected = expectedById.get(student.id);
       assert.deepEqual([status, opportunities, dismissalReason], expected
         ? [expected.status, expected.opportunities, expected.dismissalReason || null]

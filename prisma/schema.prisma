@@ -75,6 +75,7 @@ model Student {
   dismissalReason String?
   dismissalNotes  String?
   dismissedChecked Boolean @default(false)
+  dismissedCheckEpoch Int @default(0)
   opportunities   Int      @default(0)
   baseOpportunities Int    @default(0)
   accountingGraceDays Int   @default(0)

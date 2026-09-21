@@ -297,13 +297,13 @@ function StudentDismissedCheck({
       <Checkbox
         id={id}
         className="tp-registry-dismissed-check__box"
-        aria-label={`تأشير الطالب المفصول ${student.name}`}
+        aria-label={`اغلاق كود الطالب المفصول ${student.name}`}
         aria-busy={checkSaving}
         checked={checkSnapshot?.dismissedChecked ?? Boolean(student.dismissedChecked)}
         disabled={!canEdit || serverUnavailable || checkSaving}
         onCheckedChange={(checked) => onCheck(student, checked === true)}
       />
-      <span>{checkSaving ? "جاري الحفظ…" : "تأشير"}</span>
+      <span>{checkSaving ? "جاري الحفظ…" : "اغلاق كود"}</span>
     </label>
   );
 }
