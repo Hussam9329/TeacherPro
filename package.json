@@ -82,7 +82,7 @@
     "test:loading": "node scripts/test-read-loading.cjs && node scripts/test-bootstrap-behavior.cjs",
     "test:manual-restoration": "node scripts/test-manual-student-restoration.cjs",
     "test:retained-dismissals": "node scripts/test-automatic-log-chapter-guard.cjs && node scripts/test-retained-dismissals-planner.cjs && node scripts/test-retained-dismissals-repair.cjs",
-    "test:shared-followup": "node scripts/test-shared-followup-migration.cjs && node --experimental-strip-types scripts/test-shared-followup-replay.mjs && node scripts/test-call-note-management.cjs && node scripts/test-dismissed-check.cjs && node scripts/test-call-notes-dialog.cjs && node scripts/test-call-notes-global-query.cjs && node scripts/test-dismissed-check-lifecycle.cjs && node scripts/test-dismissed-check-lifecycle-db.cjs"
+    "test:shared-followup": "node scripts/test-shared-followup-migration.cjs && node --experimental-strip-types scripts/test-shared-followup-replay.mjs && node scripts/test-call-note-management.cjs && node scripts/test-dismissed-check.cjs && node scripts/test-call-notes-dialog.cjs && node scripts/test-call-notes-global-query.cjs && node scripts/test-dismissed-check-lifecycle-db.cjs && node scripts/test-code-closures-query.cjs && node scripts/test-code-closures-dialog.cjs && node scripts/test-code-closures-save.cjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

@@ -73,7 +73,6 @@ import {
 import { getRequiredTextError } from "@/lib/validation";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { useActionLock } from "@/hooks/use-action-lock";
-import { useDismissedChecks } from "@/hooks/use-dismissed-checks";
 import {
   Archive,
   AlertTriangle,
@@ -1696,13 +1695,6 @@ export function StudentRegistryView() {
   const registryServerUnavailable = Boolean(
     serverStudentsError && !serverStudents,
   );
-  const dismissedChecks = useDismissedChecks(
-    paged,
-    registryUser?.id || "",
-    canEditStudents,
-    registryServerUnavailable,
-    () => setServerRefreshKey((value) => value + 1),
-  );
   const closeDismissDialog = () => {
     setDismissDialog({ student: null, open: false });
     setDismissReason("");
@@ -2416,9 +2408,6 @@ export function StudentRegistryView() {
                   serverUnavailable={registryServerUnavailable}
                   statusActionSaving={isStatusActionSaving}
                   deleting={isDeletingStudent}
-                  dismissedCheckSnapshots={dismissedChecks.snapshots}
-                  dismissedCheckPendingIds={dismissedChecks.pendingIds}
-                  onDismissedCheck={dismissedChecks.toggle}
                   onFile={(student) => setFileDialog({ student, open: true })}
                   onEdit={openEditDialog}
                   onDismiss={openDismissDialog}

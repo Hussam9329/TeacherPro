@@ -1,0 +1,138 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const ts = require("typescript");
+const { PGlite } = require("@electric-sql/pglite");
+const { NextRequest, NextResponse } = require("next/server");
+
+const source = fs.readFileSync("src/app/api/students/code-closures/route.ts", "utf8");
+const compiled = ts.transpileModule(source, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText;
+
+(async () => {
+  const pg = new PGlite();
+  try {
+    await pg.exec(`
+      CREATE TABLE "Course" (id text PRIMARY KEY, name text NOT NULL);
+      CREATE TABLE "Student" (
+        id text PRIMARY KEY, name text NOT NULL, code text NOT NULL,
+        status text NOT NULL, "dismissedChecked" boolean NOT NULL,
+        "dismissedCheckEpoch" integer NOT NULL, "courseId" text REFERENCES "Course"(id),
+        "dismissalReason" text, opportunities integer NOT NULL
+      );
+      INSERT INTO "Course" VALUES ('course-a','الدورة الأولى'),('course-b','الدورة الثانية');
+      INSERT INTO "Student"
+      SELECT 'student-' || lpad(i::text, 4, '0'), 'طالب ' || lpad((i / 2)::text, 4, '0'),
+        'BIO-' || i, 'مفصول', i % 3 = 0, i % 4,
+        CASE WHEN i % 2 = 0 THEN 'course-a' ELSE 'course-b' END,
+        CASE WHEN i % 2 = 0 THEN 'غياب' ELSE NULL END, 0
+      FROM generate_series(1, 601) i;
+      INSERT INTO "Student" VALUES
+        ('active','طالب نشط','ACTIVE','نشط',true,1,'course-a',NULL,2),
+        ('archived','طالب مؤرشف','ARCHIVED','مؤرشف',true,0,'course-b',NULL,0);
+    `);
+    const snapshot = () => pg.query('SELECT row_to_json(s) AS row FROM "Student" s ORDER BY id').then(({ rows }) => rows);
+    const before = await snapshot();
+    let reads = 0;
+    let denied = false;
+    let failRead = false;
+    const authCalls = [];
+    const schemaChecks = [];
+    const expectedSelect = {
+      id: true, name: true, code: true, status: true,
+      dismissedChecked: true, dismissedCheckEpoch: true,
+      courseId: true, course: { select: { id: true, name: true } }, dismissalReason: true,
+    };
+    // The adapter offers only a read, so an unexpected mutation fails the test.
+    // Execute it in a PostgreSQL read-only transaction as an additional guard.
+    const mocks = {
+      "next/server": { NextRequest, NextResponse },
+      "@/lib/server-auth": {
+        requirePermission: async (req, permission) => {
+          authCalls.push({ req, permission });
+          return denied ? NextResponse.json({ error: "forbidden" }, { status: 403 }) : null;
+        },
+      },
+      "@/lib/db": { db: { student: { findMany: async (args) => {
+        reads += 1;
+        assert.deepEqual(Object.keys(args).sort(), ["orderBy", "select", "where"], "the list has no pagination or truncation");
+        assert.deepEqual(args.where, { status: "مفصول" }, "all current dismissed students are returned, including checked ones");
+        assert.deepEqual(args.select, expectedSelect, "only display data and the authoritative shared flag/epoch are loaded");
+        assert.deepEqual(args.orderBy, [{ name: "asc" }, { id: "asc" }]);
+        if (failRead) throw new Error("simulated database outage");
+        return pg.transaction(async (sql) => {
+          await sql.exec("SET TRANSACTION READ ONLY");
+          return (await sql.query(`SELECT s.id,s.name,s.code,s.status,
+            s."dismissedChecked",s."dismissedCheckEpoch",s."courseId",s."dismissalReason",
+            json_build_object('id',c.id,'name',c.name) AS course
+            FROM "Student" s JOIN "Course" c ON c.id=s."courseId"
+            WHERE s.status=$1 ORDER BY s.name ASC,s.id ASC`, [args.where.status])).rows;
+        });
+      } } } },
+      "@/lib/schema-readiness": { withDatabaseSchema: async (read, model) => { schemaChecks.push(model); return read(); } },
+      "@/lib/route-helpers": { routeErrorResponse: (_error, message) => NextResponse.json({ error: message }, { status: 500 }) },
+    };
+    const loaded = { exports: {} };
+    new Function("module", "exports", "require", compiled)(loaded, loaded.exports, (name) => {
+      assert(name in mocks, `unexpected route dependency: ${name}`);
+      return mocks[name];
+    });
+    assert.equal(loaded.exports.dynamic, "force-dynamic");
+    assert.equal(loaded.exports.runtime, "nodejs");
+    const { GET } = loaded.exports;
+    const request = () => new NextRequest("https://teacherpro.test/api/students/code-closures");
+
+    denied = true;
+    assert.equal((await GET(request())).status, 403);
+    assert.equal(reads, 0, "denied requests cannot read student information");
+    assert.equal(schemaChecks.length, 0);
+    denied = false;
+
+    const response = await GET(request());
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("Cache-Control"), "no-store");
+    const data = await response.json();
+    assert.equal(reads, 1, "counts and records share the same single-query snapshot");
+    assert.deepEqual(schemaChecks, ["Student"]);
+    assert.equal(data.students.length, 601, "all records beyond the usual 500-row cap remain available");
+    assert.equal(data.totalCount, 601);
+    assert.equal(data.checkedCount, 200, "existing checked flags remain visible to the Checked filter");
+    assert.equal(data.uncheckedCount, 401);
+    assert.equal(data.checkedCount + data.uncheckedCount, data.totalCount);
+    assert(Number.isFinite(Date.parse(data.generatedAt)));
+    assert(data.students.every((student) => student.status === "مفصول"));
+    const checkedStudent = data.students.find((student) => student.id === "student-0003");
+    assert.equal(checkedStudent.dismissedChecked, true);
+    assert.equal(checkedStudent.dismissedCheckEpoch, 3, "the existing lifecycle epoch is preserved for CAS writes");
+    assert.deepEqual(checkedStudent.course, { id: "course-b", name: "الدورة الثانية" });
+    assert.equal(checkedStudent.dismissalReason, null);
+    const checkedIds = data.students.filter((student) => student.dismissedChecked).map((student) => student.id);
+    const originalCheckedIds = before.map(({ row }) => row).filter((student) => student.status === "مفصول" && student.dismissedChecked).map((student) => student.id);
+    assert.deepEqual(checkedIds.sort(), originalCheckedIds.sort(), "the read preserves every previously checked student");
+    assert.deepEqual(await snapshot(), before, "reading never changes any flag, status, epoch, or academic value");
+    assert(authCalls.every(({ permission }) => permission === "students.view"));
+
+    failRead = true;
+    const failedResponse = await GET(request());
+    assert.equal(failedResponse.status, 500, "failed reads are errors, never fabricated empty results");
+    failRead = false;
+
+    // A later request sees reactivation and newly dismissed records immediately.
+    await pg.query('UPDATE "Student" SET status=$1 WHERE id=$2', ["نشط", "student-0003"]);
+    await pg.query('UPDATE "Student" SET status=$1 WHERE id=$2', ["مفصول", "active"]);
+    const fresh = await (await GET(request())).json();
+    assert(!fresh.students.some((student) => student.id === "student-0003"));
+    assert(fresh.students.some((student) => student.id === "active"));
+    assert.equal(fresh.totalCount, 601);
+
+    await pg.query('UPDATE "Student" SET status=$1', ["نشط"]);
+    const empty = await (await GET(request())).json();
+    assert.deepEqual(empty.students, []);
+    assert.equal(empty.totalCount, 0);
+    assert.equal(empty.checkedCount, 0);
+    assert.equal(empty.uncheckedCount, 0);
+    console.log("PASS: code-closure query permissions, complete current dismissed snapshot, preserved checked flags/epochs, consistent counts, fresh status reads, no-store and read-only behavior");
+  } finally {
+    await pg.close();
+  }
+})().catch((error) => { console.error(error); process.exitCode = 1; });

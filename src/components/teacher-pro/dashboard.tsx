@@ -9,6 +9,7 @@ import {
   ClipboardList,
   FilePlus2,
   ListChecks,
+  LockKeyhole,
   PenLine,
   PhoneCall,
   Shield,
@@ -24,6 +25,7 @@ import {
 } from "@/hooks/use-teacherpro-sync";
 import { useLatestRequest } from "@/hooks/use-latest-request";
 import { CallNotesManagementDialog } from "./call-notes-management-dialog";
+import { CodeClosuresDialog } from "./code-closures-dialog";
 
 type DashboardStats = {
   activeStudents: number;
@@ -75,6 +77,15 @@ export function DashboardView({
     actor.permissions?.includes("follow-up.manage")
   ));
   const [callNotesOpen, setCallNotesOpen] = useState(false);
+  const canViewCodeClosures = canAccess("student-registry") || canAccess("dismissed-management");
+  const canManageCodeClosures = Boolean(actor && (
+    actor.username?.trim().toLowerCase() === "admin" ||
+    actor.roleId === "role_admin" ||
+    actor.permissions?.includes("students.edit") ||
+    actor.permissions?.includes("students.dismiss") ||
+    actor.permissions?.includes("students.reactivate")
+  ));
+  const [codeClosuresOpen, setCodeClosuresOpen] = useState(false);
   const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const beginStatsRequest = useLatestRequest();
@@ -237,7 +248,7 @@ export function DashboardView({
         ))}
       </div>
 
-      {(visibleShortcuts.length > 0 || canViewCallNotes) && (
+      {(visibleShortcuts.length > 0 || canViewCallNotes || canViewCodeClosures) && (
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
           <h3 className="text-sm font-bold">الوصول السريع</h3>
           <div className="tp-dashboard__shortcuts">
@@ -267,6 +278,19 @@ export function DashboardView({
                 <span className="tp-dashboard__shortcut-label">إدارة ملاحظات المكالمات</span>
               </button>
             )}
+            {canViewCodeClosures && (
+              <button
+                type="button"
+                onClick={() => setCodeClosuresOpen(true)}
+                aria-haspopup="dialog"
+                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
+              >
+                <span className="tp-dashboard__shortcut-icon bg-rose-500/10 text-rose-700 dark:text-rose-300" aria-hidden="true">
+                  <LockKeyhole />
+                </span>
+                <span className="tp-dashboard__shortcut-label">اغلاق الكودات</span>
+              </button>
+            )}
           </div>
         </nav>
       )}
@@ -275,6 +299,14 @@ export function DashboardView({
           open={callNotesOpen}
           onOpenChange={setCallNotesOpen}
           canManage={canManageCallNotes}
+        />
+      )}
+      {canViewCodeClosures && (
+        <CodeClosuresDialog
+          key={actor?.id}
+          open={codeClosuresOpen}
+          onOpenChange={setCodeClosuresOpen}
+          canManage={canManageCodeClosures}
         />
       )}
     </div>
