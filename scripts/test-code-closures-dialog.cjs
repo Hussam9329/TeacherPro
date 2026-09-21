@@ -56,6 +56,7 @@ function harness() {
   const depsEqual = (left, right) => left && right &&
     left.length === right.length && left.every((value, index) => Object.is(value, right[index]));
   const react = {
+    useId() { return 'closure-filter-test'; },
     useState(initial) {
       const index = cursor++;
       if (!slots[index]) {
@@ -116,8 +117,9 @@ function harness() {
   const jsx = (type, elementProps) => ({ type, props: elementProps });
   const dependencies = {
     react,
+    './code-closures-dialog.css': {},
     'react/jsx-runtime': { jsx, jsxs: jsx },
-    'lucide-react': named(['CheckCheck', 'LockKeyhole', 'Loader2', 'RefreshCw', 'Search', 'X']),
+    'lucide-react': named(['AlertCircle', 'BookOpen', 'CheckCheck', 'ChevronDown', 'LockKeyhole', 'Loader2', 'RefreshCw', 'Search', 'UserRound', 'X']),
     '@/components/ui/button': named(['Button']),
     '@/components/ui/checkbox': named(['Checkbox']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
@@ -220,7 +222,7 @@ const snapshot = (value, checked) => ({
   id: value.id, status: value.status, dismissedChecked: checked, dismissedCheckEpoch: value.dismissedCheckEpoch,
 });
 function filter(view, label) {
-  const button = view.nodes('Button').find((node) => node.props.children?.[0] === label);
+  const button = view.nodes('Button').find((node) => node.props['aria-label'] === label);
   assert(button, `Missing ${label} status filter`);
   button.props.onClick();
   view.render();
@@ -264,7 +266,7 @@ function selectCourse(view, value) {
   selectCourse(view, 'course2');
   assert.equal(view.nodes('Checkbox').length, 1);
   assert(view.text().includes('المعروض 1 من 1 طالب مفصول'));
-  const courseCount = (label) => view.nodes('Button').find((node) => node.props.children?.[0] === label).props.children[1].props.children;
+  const courseCount = (label) => view.nodes('Button').find((node) => node.props['aria-label'] === label).props.children[1].props.children;
   assert.equal(courseCount('All'), 1);
   assert.equal(courseCount('Checked'), 0);
   assert.equal(courseCount('unChecked'), 1);
