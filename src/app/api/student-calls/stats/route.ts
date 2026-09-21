@@ -414,6 +414,7 @@ export async function GET(req: NextRequest) {
         where: {
           studentId: { in: students.map((student) => student.id) },
           category: CALL_STUDENT_NOTE_CATEGORY,
+          OR: [{ examId }, { examId: null }],
           notes: { not: "" },
         },
         select: { studentId: true, category: true, notes: true },

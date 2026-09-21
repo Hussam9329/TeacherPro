@@ -238,5 +238,9 @@
   "20260917180000_guard_automatic_log_chapter": {
     "kind": "expand",
     "checksum": "a463818b18c3ea3071f52d043e2a312623972f286e9adae229758e48f43e7fdf"
+  },
+  "20260921170000_shared_followup_checkboxes": {
+    "kind": "expand",
+    "checksum": "b11660f8f894fa48548c4f0a67b4a7b7e29548dac5f66c7c210a92e3b5fec022"
   }
 }

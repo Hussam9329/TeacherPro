@@ -72,6 +72,7 @@ export interface Student {
   status: "نشط" | "مفصول" | "مؤرشف";
   dismissalReason: string;
   dismissalNotes: string;
+  dismissedChecked?: boolean;
   createdAt: string;
   opportunities: number;
   baseOpportunities: number;
@@ -189,6 +190,8 @@ export interface StudentLeave {
 }
 
 export interface StudentCall {
+  noteResolved?: boolean;
+  noteRevision?: number;
   id: string;
   studentId: string;
   examId: string;
@@ -1043,6 +1046,7 @@ function normalizeStudentRecord(st: Record<string, unknown>): Student {
       ? String(st.gracePeriodEndedAt)
       : null,
     dismissalNotes: String(st.dismissalNotes || ""),
+    dismissedChecked: st.dismissedChecked === true,
     createdAt: st.createdAt
       ? baghdadDateKey(st.createdAt as string | Date) || todayISO()
       : todayISO(),
@@ -1911,6 +1915,8 @@ export const useTeacherStore = create<TeacherState>()(
                   ? baghdadDateKey(call.createdAt as string | Date) || todayISO()
                   : todayISO(),
                 notes: String(call.notes || ""),
+                noteResolved: call.noteResolved === true,
+                noteRevision: Number(call.noteRevision || 0),
               })) as StudentCall[])
             : get().studentCalls;
 
@@ -2157,6 +2163,8 @@ export const useTeacherStore = create<TeacherState>()(
                     ? baghdadDateKey(call.createdAt as string | Date) || todayISO()
                     : todayISO(),
                   notes: String(call.notes || ""),
+                  noteResolved: call.noteResolved === true,
+                  noteRevision: Number(call.noteRevision || 0),
                 }),
               ) as StudentCall[];
             }

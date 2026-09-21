@@ -13,6 +13,8 @@ import type { Student } from "@/lib/teacher-store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import type { DismissedCheckSnapshot } from "@/lib/dismissed-check-api";
 import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
@@ -279,6 +281,33 @@ function StudentDismissalDetails({ student }: { student: Student }) {
   );
 }
 
+type DismissedCheckProps = {
+  checkSnapshot?: DismissedCheckSnapshot;
+  checkSaving: boolean;
+  onCheck: (student: Student, checked: boolean) => void;
+};
+
+function StudentDismissedCheck({
+  student, canEdit, serverUnavailable, checkSnapshot, checkSaving, onCheck,
+}: DismissedCheckProps & Pick<StudentActionsProps, "student" | "canEdit" | "serverUnavailable">) {
+  if (student.status !== "مفصول" || (checkSnapshot && checkSnapshot.status !== "مفصول")) return null;
+  const id = `dismissed-check-${student.id}`;
+  return (
+    <label htmlFor={id} className="tp-registry-dismissed-check">
+      <Checkbox
+        id={id}
+        className="tp-registry-dismissed-check__box"
+        aria-label={`تأشير الطالب المفصول ${student.name}`}
+        aria-busy={checkSaving}
+        checked={checkSnapshot?.dismissedChecked ?? Boolean(student.dismissedChecked)}
+        disabled={!canEdit || serverUnavailable || checkSaving}
+        onCheckedChange={(checked) => onCheck(student, checked === true)}
+      />
+      <span>{checkSaving ? "جاري الحفظ…" : "تأشير"}</span>
+    </label>
+  );
+}
+
 type StudentActionsProps = {
   student: Student;
   canEdit: boolean;
@@ -376,6 +405,9 @@ type StudentRegistryResultsProps = Omit<StudentActionsProps, "student"> & {
   courseName: (courseId: string) => string;
   whatsappLink: (phone: string) => string;
   telegramLink: (telegram: string) => string;
+  dismissedCheckSnapshots: Record<string, DismissedCheckSnapshot>;
+  dismissedCheckPendingIds: ReadonlySet<string>;
+  onDismissedCheck: (student: Student, checked: boolean) => void;
 };
 
 export function StudentRegistryResults({
@@ -385,6 +417,9 @@ export function StudentRegistryResults({
   courseName,
   whatsappLink,
   telegramLink,
+  dismissedCheckSnapshots,
+  dismissedCheckPendingIds,
+  onDismissedCheck,
   ...actionProps
 }: StudentRegistryResultsProps) {
   if (viewMode === "cards") {
@@ -398,6 +433,9 @@ export function StudentRegistryResults({
             courseName={courseName}
             whatsappLink={whatsappLink}
             telegramLink={telegramLink}
+            checkSnapshot={dismissedCheckSnapshots[student.id]}
+            checkSaving={dismissedCheckPendingIds.has(student.id)}
+            onCheck={onDismissedCheck}
             {...actionProps}
           />
         ))}
@@ -507,7 +545,17 @@ export function StudentRegistryResults({
                 </p>
               </td>
               <td className="min-w-64 space-y-2 p-3">
-                <StudentStatusBadge status={student.status} />
+                <div className="tp-registry-row__status">
+                  <StudentStatusBadge status={student.status} />
+                  <StudentDismissedCheck
+                    student={student}
+                    canEdit={actionProps.canEdit}
+                    serverUnavailable={actionProps.serverUnavailable}
+                    checkSnapshot={dismissedCheckSnapshots[student.id]}
+                    checkSaving={dismissedCheckPendingIds.has(student.id)}
+                    onCheck={onDismissedCheck}
+                  />
+                </div>
                 <StudentHealthIndicators
                   student={student}
                   activeIssue={activeIssue}
@@ -533,8 +581,11 @@ function StudentRegistryRow({
   courseName,
   whatsappLink,
   telegramLink,
+  checkSnapshot,
+  checkSaving,
+  onCheck,
   ...actionProps
-}: StudentActionsProps & {
+}: StudentActionsProps & DismissedCheckProps & {
   activeIssue: RegistryIssueFilter;
   courseName: (courseId: string) => string;
   whatsappLink: (phone: string) => string;
@@ -554,7 +605,17 @@ function StudentRegistryRow({
               <bdi>{student.code}</bdi> — {student.school || "بدون مدرسة"}
             </p>
           </div>
-          <StudentStatusBadge status={student.status} />
+          <div className="tp-registry-row__status">
+            <StudentStatusBadge status={student.status} />
+            <StudentDismissedCheck
+              student={student}
+              canEdit={actionProps.canEdit}
+              serverUnavailable={actionProps.serverUnavailable}
+              checkSnapshot={checkSnapshot}
+              checkSaving={checkSaving}
+              onCheck={onCheck}
+            />
+          </div>
         </div>
         <dl className="tp-registry-row__fields">
           <RegistryField

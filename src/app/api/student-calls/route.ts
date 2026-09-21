@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { requirePermission } from "@/lib/server-auth";
+import { requirePermission, requirePermissionPrincipal } from "@/lib/server-auth";
 import { db } from "@/lib/db";
 import {
   requireText,
@@ -13,6 +13,7 @@ import {
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { CALL_STUDENT_NOTE_CATEGORY } from "@/lib/call-notes-filter";
 import { isStudentExamCall } from "@/lib/call-identity";
+import { CallNoteMutationError, editCallNote, readExpectedNoteRevision, upsertExamCallNote } from "@/lib/call-note-management-server";
 
 function dateOrNull(value: unknown): Date | null {
   if (!value) return null;
@@ -91,8 +92,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.calls.manage");
-  if (authError) return authError;
+  const principal = await requirePermissionPrincipal(req, "follow-up.calls.manage");
+  if (principal instanceof NextResponse) return principal;
 
   try {
     const body = await req.json();
@@ -101,6 +102,17 @@ export async function POST(req: NextRequest) {
     if (studentError) return validationError(studentError);
     const categoryError = requireText(data.category, "نوع المكالمة");
     if (categoryError) return validationError(categoryError);
+
+    if (data.category === CALL_STUDENT_NOTE_CATEGORY) {
+      const expectedRevision = readExpectedNoteRevision(body.expectedRevision);
+      const result = await withDatabaseSchema(
+        () => db.$transaction((tx) => upsertExamCallNote(tx, principal, {
+          studentId: data.studentId, examId: data.examId, notes: data.notes, expectedRevision,
+          expectedNoteId: body.expectedNoteId === undefined ? undefined : String(body.expectedNoteId || "").trim() || null,
+        })), "StudentCall",
+      );
+      return NextResponse.json(result);
+    }
 
     // Upsert by the logical call key, not by client-provided IDs.
     // This prevents duplicate call rows when the user changes status quickly or retries after a network failure.
@@ -131,21 +143,6 @@ export async function POST(req: NextRequest) {
             where: logicalWhere,
             orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           });
-
-          if (data.category === CALL_STUDENT_NOTE_CATEGORY && !data.notes.trim()) {
-            if (existing) {
-              await tx.studentCall.delete({ where: { id: existing.id } });
-              await tx.studentCall.deleteMany({
-                where: {
-                  studentId: data.studentId,
-                  examId: data.examId,
-                  category: data.category,
-                  id: { not: existing.id },
-                },
-              });
-            }
-            return { studentCall: null, deleted: true };
-          }
 
           if (!data.status && data.category !== CALL_STUDENT_NOTE_CATEGORY && !existing) {
             return { studentCall: null, deleted: false };
@@ -199,13 +196,14 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof CallNoteMutationError) return NextResponse.json({ error: error.message, studentCall: error.studentCall }, { status: error.status });
     return routeErrorResponse(error, "تعذر حفظ المكالمة حالياً.");
   }
 }
 
 export async function PUT(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.calls.manage");
-  if (authError) return authError;
+  const principal = await requirePermissionPrincipal(req, "follow-up.calls.manage");
+  if (principal instanceof NextResponse) return principal;
 
   try {
     const body = await req.json();
@@ -226,30 +224,57 @@ export async function PUT(req: NextRequest) {
     if (updates.completedAt !== undefined)
       data.completedAt = dateOrNull(updates.completedAt);
     if (updates.notes !== undefined) data.notes = String(updates.notes ?? "");
-    const studentCall = await withDatabaseSchema(
-      () => db.studentCall.update({ where: { id: String(id) }, data }),
-      "StudentCall",
+    const result = await withDatabaseSchema(
+      () => db.$transaction(async (tx) => {
+        const existing = await tx.studentCall.findUnique({ where: { id: String(id) } });
+        if (!existing) throw new CallNoteMutationError("المكالمة غير موجودة.", 404);
+        if (existing.category === CALL_STUDENT_NOTE_CATEGORY) {
+          // Legacy notes keep their existing scope. Only the dedicated endpoint
+          // changes completion, and editing cannot convert a note into a call.
+          if ((updates.examId !== undefined && data.examId !== existing.examId) ||
+              (updates.category !== undefined && data.category !== existing.category)) {
+            throw new CallNoteMutationError("لا يمكن تغيير الامتحان المرتبط بالملاحظة.", 400);
+          }
+          return editCallNote(tx, principal, {
+            id: existing.id, notes: updates.notes === undefined ? existing.notes : String(updates.notes ?? ""),
+            expectedRevision: readExpectedNoteRevision(updates.expectedRevision),
+          });
+        }
+        if (data.category === CALL_STUDENT_NOTE_CATEGORY) {
+          throw new CallNoteMutationError("احفظ الملاحظة من حقل ملاحظات الامتحان.", 400);
+        }
+        return { studentCall: await tx.studentCall.update({ where: { id: existing.id }, data }), deleted: false };
+      }), "StudentCall",
     );
-    return NextResponse.json({ studentCall });
+    return NextResponse.json(result);
   } catch (error) {
+    if (error instanceof CallNoteMutationError) return NextResponse.json({ error: error.message, studentCall: error.studentCall }, { status: error.status });
     return routeErrorResponse(error, "تعذر تحديث المكالمة حالياً.");
   }
 }
 
 export async function DELETE(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.calls.manage");
-  if (authError) return authError;
+  const principal = await requirePermissionPrincipal(req, "follow-up.calls.manage");
+  if (principal instanceof NextResponse) return principal;
 
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
     if (!id) return validationError("تعذر تحديد المكالمة المطلوبة");
-    await withDatabaseSchema(
-      () => db.studentCall.delete({ where: { id } }),
-      "StudentCall",
-    );
+    await withDatabaseSchema(() => db.$transaction(async (tx) => {
+      const existing = await tx.studentCall.findUnique({ where: { id } });
+      if (existing?.category === CALL_STUDENT_NOTE_CATEGORY) {
+        const rawRevision = searchParams.get("expectedRevision");
+        await editCallNote(tx, principal, {
+          id, notes: "", expectedRevision: readExpectedNoteRevision(rawRevision === null ? undefined : Number(rawRevision)),
+        });
+      } else {
+        await tx.studentCall.delete({ where: { id } });
+      }
+    }), "StudentCall");
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (error instanceof CallNoteMutationError) return NextResponse.json({ error: error.message, studentCall: error.studentCall }, { status: error.status });
     return routeErrorResponse(error, "تعذر حذف المكالمة حالياً.");
   }
 }

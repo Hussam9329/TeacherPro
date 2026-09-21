@@ -74,6 +74,7 @@ model Student {
   gracePeriodHistoryPreserved Boolean @default(false)
   dismissalReason String?
   dismissalNotes  String?
+  dismissedChecked Boolean @default(false)
   opportunities   Int      @default(0)
   baseOpportunities Int    @default(0)
   accountingGraceDays Int   @default(0)
@@ -262,6 +263,8 @@ model StudentCall {
   completed   Boolean   @default(false)
   completedAt DateTime?
   notes       String    @default("")
+  noteResolved Boolean  @default(false)
+  noteRevision Int      @default(0)
   createdAt   DateTime  @default(now())
   student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   exam        Exam?     @relation(fields: [examId], references: [id], onDelete: Cascade)
@@ -270,6 +273,7 @@ model StudentCall {
   @@index([studentId])
   @@index([examId])
   @@index([createdAt])
+  @@index([category, examId, noteResolved])
 }
 
 model StudentCallHistoryMigrationRun {

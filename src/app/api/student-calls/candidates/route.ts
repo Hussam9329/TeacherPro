@@ -692,6 +692,7 @@ export async function GET(req: NextRequest) {
         where: {
           studentId: { in: candidateStudentIds },
           category: CALL_STUDENT_NOTE_CATEGORY,
+          OR: [{ examId }, { examId: null }],
           notes: { not: "" },
         },
         select: { studentId: true, category: true, notes: true },
@@ -834,7 +835,7 @@ export async function GET(req: NextRequest) {
                   studentId: { in: pagedStudentIds },
                   OR: [
                     { examId: { in: courseExamIds } },
-                    { category: CALL_STUDENT_NOTE_CATEGORY },
+                    { category: CALL_STUDENT_NOTE_CATEGORY, examId: null },
                   ],
                 },
                 orderBy: [{ createdAt: "desc" }, { id: "desc" }],

@@ -44,6 +44,8 @@ export function mutationCanBeReplayed(
     "activationPreviewToken",
     "expectedMutationToken",
     "expectedUpdatedAt",
+    "expectedRevision",
+    "expectedChecked",
     "expectMissing",
   ].some((key) => record[key] !== undefined && record[key] !== "");
   if (hasGuard) return false;

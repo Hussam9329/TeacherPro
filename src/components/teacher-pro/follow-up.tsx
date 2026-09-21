@@ -38,6 +38,7 @@ import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { searchAny } from "@/lib/validation";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { CallPhoneQrDialog } from "./call-phone-qr-dialog";
+import { CallNotesManagementDialog } from "./call-notes-management-dialog";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { CountScopeSummary } from "./ui-kit";
 import {
@@ -354,7 +355,16 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     courseName,
     activeChapterForCourse,
     mergeStudentsCache,
+    currentUser,
   } = useTeacherStore();
+
+  const callActor = currentUser();
+  const canManageCalls = Boolean(callActor && (
+    callActor.username?.trim().toLowerCase() === "admin" ||
+    callActor.roleId === "role_admin" ||
+    callActor.permissions?.includes("follow-up.calls.manage") ||
+    callActor.permissions?.includes("follow-up.manage")
+  ));
 
   const [globalSearch, setGlobalSearch] = useState("");
   const debouncedGlobalSearch = useDebouncedValue(globalSearch, 180);
@@ -534,6 +544,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const callRowsRef = useRef<CallStudentRow[]>([]);
   const [callFilterRefreshKey, setCallFilterRefreshKey] = useState(0);
   const [callNoteDrafts, setCallNoteDrafts] = useState<Record<string, string>>({});
+  const callNoteDraftRevisionsRef = useRef<Record<string, number>>({});
+  const callNoteDraftIdsRef = useRef<Record<string, string | null>>({});
+  const [callNoteConflicts, setCallNoteConflicts] = useState<Record<string, StudentCall | null>>({});
+  const callNoteSavingRef = useRef(new Set<string>());
+  const [callNotesManagementOpen, setCallNotesManagementOpen] = useState(false);
   const [callServerPageInfo, setCallServerPageInfo] = useState({
     totalCount: 0,
     totalPages: 1,
@@ -576,6 +591,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
 
   useEffect(() => {
+    setCallNotesManagementOpen(false);
     setCallExamId("");
     setCallStatusFilter("all");
     setCallContactStatusFilter("all");
@@ -588,6 +604,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }, [callCourseId]);
 
   useEffect(() => {
+    setCallNotesManagementOpen(false);
     setCallStatusFilter("all");
     setCallContactStatusFilter("all");
     setCallNotesFilter("all");
@@ -965,14 +982,21 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const callStudentNoteLookup = useMemo(() => {
     const map = new Map<string, (typeof effectiveStudentCalls)[number]>();
     effectiveStudentCalls.forEach((call) => {
-      if (call.category === CALL_STUDENT_NOTE_CATEGORY && !map.has(call.studentId))
-        map.set(call.studentId, call);
+      const key = studentExamCallIdentityKey(call.studentId, call.examId);
+      if (call.category === CALL_STUDENT_NOTE_CATEGORY && !map.has(key))
+        map.set(key, call);
     });
     return map;
   }, [effectiveStudentCalls]);
 
-  const callNoteForStudent = (studentId: string) =>
-    callStudentNoteLookup.get(studentId);
+  const callNoteForStudent = (studentId: string, examId = callExamId) =>
+    callStudentNoteLookup.get(studentExamCallIdentityKey(studentId, examId));
+
+  const callNoteExportText = (lookup: Map<string, StudentCall>, studentId: string, examId: string) => {
+    const examNote = lookup.get(studentExamCallIdentityKey(studentId, examId))?.notes || "";
+    const generalNote = lookup.get(studentExamCallIdentityKey(studentId, ""))?.notes || "";
+    return [examNote, generalNote ? `ملاحظة عامة سابقة: ${generalNote}` : ""].filter(Boolean).join("\n");
+  };
 
   // تبويبة المكالمات صارت Server-Driven بالكامل:
   // لا نبني الصفوف من بيانات الطلاب المؤقتة أو الدرجات المحلي حتى لا تختلف القائمة عن الإحصائيات والتصدير.
@@ -1211,7 +1235,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const callExportRows = callRows.map((row) => ({
     row,
     status: callStatusForLog(callLogForRow(row)),
-    note: callNoteForStudent(row.student.id)?.notes || "",
+    note: callNoteExportText(callStudentNoteLookup, row.student.id, callExamId),
     courseName,
   }));
 
@@ -1240,8 +1264,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         const key = studentExamCallIdentityKey(call.studentId, call.examId);
         if (!serverCallLookup.has(key)) serverCallLookup.set(key, call);
       }
-      if (call.category === CALL_STUDENT_NOTE_CATEGORY && !serverNoteLookup.has(call.studentId)) {
-        serverNoteLookup.set(call.studentId, call);
+      const noteKey = studentExamCallIdentityKey(call.studentId, call.examId);
+      if (call.category === CALL_STUDENT_NOTE_CATEGORY && !serverNoteLookup.has(noteKey)) {
+        serverNoteLookup.set(noteKey, call);
       }
     });
 
@@ -1250,7 +1275,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       const call = item
         ? serverCallLookup.get(studentExamCallIdentityKey(row.student.id, item.exam.id))
         : undefined;
-      const note = serverNoteLookup.get(row.student.id)?.notes || "";
+      const note = callNoteExportText(serverNoteLookup, row.student.id, callExamId);
       return { row, status: callStatusForLog(call), note, courseName };
     });
   };
@@ -1350,12 +1375,44 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     }
   };
 
-  const saveCallStudentNote = async (row: CallStudentRow, notes: string) => {
-    const existing = callNoteForStudent(row.student.id);
+  const saveCallStudentNote = async (row: CallStudentRow, notes: string, replaceConflict = false) => {
+    if (!canManageCalls) return;
+    const examId = row.focusItem?.exam.id;
+    if (!examId) return;
+    const draftKey = studentExamCallIdentityKey(row.student.id, examId);
+    if (callNoteSavingRef.current.has(draftKey)) return;
+    const hasConflict = Object.prototype.hasOwnProperty.call(callNoteConflicts, draftKey);
+    if (hasConflict && !replaceConflict) return;
+    const existing = replaceConflict ? callNoteConflicts[draftKey] : callNoteForStudent(row.student.id, examId);
+    const clearSavedDraft = () => {
+      setCallNoteDrafts((current) => {
+        if (current[draftKey] !== notes) return current;
+        const next = { ...current };
+        delete next[draftKey];
+        return next;
+      });
+      delete callNoteDraftRevisionsRef.current[draftKey];
+      delete callNoteDraftIdsRef.current[draftKey];
+      setCallNoteConflicts((current) => {
+        const next = { ...current };
+        delete next[draftKey];
+        return next;
+      });
+    };
+    if (notes.trim() === String(existing?.notes || "").trim()) {
+      clearSavedDraft();
+      return;
+    }
     const payload = {
       studentId: row.student.id,
-      examId: "",
+      examId,
       category: CALL_STUDENT_NOTE_CATEGORY,
+      expectedRevision: replaceConflict ? existing?.noteRevision ?? 0 : callNoteDraftRevisionsRef.current[draftKey] ?? existing?.noteRevision ?? 0,
+      expectedNoteId: replaceConflict
+        ? existing?.id ?? null
+        : Object.prototype.hasOwnProperty.call(callNoteDraftIdsRef.current, draftKey)
+          ? callNoteDraftIdsRef.current[draftKey]
+          : existing?.id ?? null,
       target: "ملاحظات المكالمات",
       phone: [row.student.phone, row.student.parentPhone]
         .filter(Boolean)
@@ -1366,13 +1423,21 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       notes,
     };
     if (!notes.trim() && !existing) return;
-    const savingKey = `note:${row.student.id}`;
+    const savingKey = `note:${draftKey}`;
+    callNoteSavingRef.current.add(draftKey);
     setCallSaving(savingKey, true);
     callMutationVersionRef.current += 1;
     try {
       const result = await studentCallApi.upsert(payload);
       if (!result.ok) {
-        toast.error(result.error || "تعذر حفظ ملاحظة المكالمات.");
+        if (result.status === 409 && result.data && typeof result.data === "object" && "studentCall" in result.data) {
+          const currentNote = (result.data as { studentCall: StudentCall | null }).studentCall;
+          setCallNoteConflicts((current) => ({ ...current, [draftKey]: currentNote }));
+          mergeSavedCall(payload, currentNote, !currentNote);
+        }
+        toast.error(result.queued
+          ? "لم تُحفظ الملاحظة في النظام بعد. بقي نصّك هنا حتى يتم تأكيد الحفظ."
+          : result.error || "تعذر حفظ ملاحظة المكالمات.");
         return;
       }
       const data = result.data as { studentCall?: StudentCall | null; deleted?: boolean } | null;
@@ -1381,11 +1446,11 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         setCallGradePage(1);
         setCallFilterRefreshKey((current) => current + 1);
       }
-      setCallNoteDrafts((current) => {
-        const next = { ...current };
-        delete next[row.student.id];
-        return next;
-      });
+      clearSavedDraft();
+      // An edit typed while the previous version was being saved remains a
+      // draft against the newly acknowledged revision, not an older one.
+      callNoteDraftRevisionsRef.current[draftKey] = data?.studentCall?.noteRevision ?? 0;
+      callNoteDraftIdsRef.current[draftKey] = data?.studentCall?.id ?? null;
       emitTeacherProDataChanged({
         source: "local-mutation",
         reason: "تحديث ملاحظات المكالمات",
@@ -1394,6 +1459,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
       });
       toast.success(notes.trim() ? "تم حفظ ملاحظة المكالمات" : "تم حذف ملاحظة المكالمات");
     } finally {
+      callNoteSavingRef.current.delete(draftKey);
       setCallSaving(savingKey, false);
     }
   };
@@ -1905,15 +1971,18 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     const item = row.focusItem;
     const call = callLogForRow(row);
     const contactStatus = callStatusForLog(call);
-    const callStudentNote = callNoteForStudent(row.student.id);
+    const noteDraftKey = studentExamCallIdentityKey(row.student.id, item?.exam.id || callExamId);
+    const callStudentNote = callNoteForStudent(row.student.id, item?.exam.id || callExamId);
+    const generalCallNote = callNoteForStudent(row.student.id, "");
     const displayMode = callGradeDisplayModes[row.student.id] || "latest";
     const statusSavingKey = item
       ? `status:${studentExamCallIdentityKey(row.student.id, item.exam.id)}`
       : "";
-    const noteSavingKey = `note:${row.student.id}`;
-    const noteValue = Object.prototype.hasOwnProperty.call(callNoteDrafts, row.student.id)
-      ? callNoteDrafts[row.student.id]
+    const noteSavingKey = `note:${noteDraftKey}`;
+    const noteValue = Object.prototype.hasOwnProperty.call(callNoteDrafts, noteDraftKey)
+      ? callNoteDrafts[noteDraftKey]
       : callStudentNote?.notes || "";
+    const noteHasConflict = Object.prototype.hasOwnProperty.call(callNoteConflicts, noteDraftKey);
     const displayedGradeItems = visibleCallGradeItems(row.items, displayMode);
     const historyGradeItems = displayedGradeItems.filter(
       (gradeItem) => gradeItem.id !== row.focusItem?.id,
@@ -2155,34 +2224,70 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
             <div className="rounded-2xl border bg-muted/15 p-4">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <Label className="text-xs font-bold text-muted-foreground">
-                  ملاحظات المكالمات
+                  ملاحظات المكالمات لهذا الامتحان
                 </Label>
               </div>
+              {generalCallNote?.notes && (
+                <div className="mb-3 rounded-xl border bg-background/60 p-3">
+                  <p className="mb-1 text-xs font-semibold text-muted-foreground">ملاحظة عامة سابقة</p>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-6 [overflow-wrap:anywhere]">{generalCallNote.notes}</p>
+                </div>
+              )}
               <textarea
                 className="min-h-28 w-full rounded-2xl border border-input bg-background px-3 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                readOnly={!canManageCalls}
                 value={noteValue}
-                onChange={(event) =>
+                onChange={(event) => {
+                  if (!Object.prototype.hasOwnProperty.call(callNoteDrafts, noteDraftKey)) {
+                    callNoteDraftRevisionsRef.current[noteDraftKey] = callStudentNote?.noteRevision ?? 0;
+                    callNoteDraftIdsRef.current[noteDraftKey] = callStudentNote?.id ?? null;
+                  }
                   setCallNoteDrafts((current) => ({
                     ...current,
-                    [row.student.id]: event.target.value,
-                  }))
-                }
+                    [noteDraftKey]: event.target.value,
+                  }));
+                }}
                 onBlur={(event) => void saveCallStudentNote(row, event.target.value)}
                 placeholder="دوّن ملاحظة مختصرة وواضحة تخص تواصل هذا الطالب أو ولي أمره"
               />
+              {noteHasConflict && (
+                <div role="alert" className="mt-2 space-y-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
+                  <p className="text-xs font-semibold">عدّل مستخدم آخر الملاحظة. تعديلك باقٍ في الحقل أعلاه.</p>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-6 [overflow-wrap:anywhere]">
+                    المحفوظة الآن: {callNoteConflicts[noteDraftKey]?.notes || "لا توجد ملاحظة"}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" disabled={Boolean(callSavingKeys[noteSavingKey])}
+                      onClick={() => {
+                        delete callNoteDraftRevisionsRef.current[noteDraftKey];
+                        delete callNoteDraftIdsRef.current[noteDraftKey];
+                        setCallNoteDrafts((current) => { const next = { ...current }; delete next[noteDraftKey]; return next; });
+                        setCallNoteConflicts((current) => { const next = { ...current }; delete next[noteDraftKey]; return next; });
+                      }}>
+                      اعتماد الملاحظة المحفوظة
+                    </Button>
+                    <Button type="button" size="sm" disabled={!canManageCalls || Boolean(callSavingKeys[noteSavingKey])}
+                      onClick={() => void saveCallStudentNote(row, noteValue, true)}>
+                      حفظ تعديلي
+                    </Button>
+                  </div>
+                </div>
+              )}
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span
                   className={`tp-save-indicator ${
                     callSavingKeys[noteSavingKey]
                       ? "tp-save-indicator--saving"
-                      : Object.prototype.hasOwnProperty.call(callNoteDrafts, row.student.id)
+                      : Object.prototype.hasOwnProperty.call(callNoteDrafts, noteDraftKey)
                         ? "tp-save-indicator--pending"
                         : "tp-save-indicator--saved"
                   }`}
                 >
                   {callSavingKeys[noteSavingKey]
                     ? "جارٍ حفظ الملاحظة..."
-                    : Object.prototype.hasOwnProperty.call(callNoteDrafts, row.student.id)
+                    : noteHasConflict
+                      ? "اختر الملاحظة التي تريد اعتمادها"
+                    : Object.prototype.hasOwnProperty.call(callNoteDrafts, noteDraftKey)
                       ? "تعديل غير محفوظ — سيُحفظ عند مغادرة الحقل"
                       : "محفوظة"}
                 </span>
@@ -2192,7 +2297,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                   variant="outline"
                   className="tp-save-manual-button h-8 rounded-full px-3 text-[11px]"
                   title="حفظ الملاحظة مباشرة"
-                  disabled={Boolean(callSavingKeys[noteSavingKey])}
+                  disabled={!canManageCalls || noteHasConflict || Boolean(callSavingKeys[noteSavingKey])}
                   onClick={() => void saveCallStudentNote(row, noteValue)}
                 >
                   حفظ الآن
@@ -2487,9 +2592,26 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
       {view === "calls" && (
         <div className="space-y-4">
+          <CallNotesManagementDialog
+            open={callNotesManagementOpen}
+            onOpenChange={setCallNotesManagementOpen}
+            courseId={callCourseId}
+            examId={callExamId}
+            examName={selectedCallExam?.name || ""}
+            canManage={canManageCalls}
+          />
           <Card className="tp-filter-card">
-            <CardHeader>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle>المكالمات المرتبطة بسجل الدرجات</CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                className="w-full shrink-0 sm:w-auto"
+                disabled={!callExamSelected}
+                onClick={() => setCallNotesManagementOpen(true)}
+              >
+                إدارة ملاحظات المكالمات
+              </Button>
             </CardHeader>
             <CardContent className="tp-filter-content space-y-4">
               <div className="tp-filter-grid grid-cols-1 md:grid-cols-6">
