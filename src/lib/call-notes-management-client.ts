@@ -9,14 +9,21 @@ export type ManagedCallNote = {
   noteRevision: number;
   noteResolved: boolean;
   createdAt: string;
-  student: { id: string; name: string; code: string };
+  student: {
+    id: string;
+    name: string;
+    code: string;
+    courseId: string;
+    course: { id: string; name: string } | null;
+  };
+  exam: { id: string; name: string } | null;
   scope: "exam" | "general";
   contactStatus: string;
+  contactExam: { id: string; name: string } | null;
 };
 
 export type ManagedCallNotesResponse = {
   notes: ManagedCallNote[];
-  exam: { id: string; name: string };
   totalCount: number;
 };
 
@@ -34,10 +41,9 @@ async function responseBody(response: Response) {
 }
 
 export const callNotesManagementApi = {
-  list(courseId: string, examId: string, signal?: AbortSignal): Promise<ManagedCallNotesResponse> {
-    const query = new URLSearchParams({ courseId, examId });
+  list(signal?: AbortSignal): Promise<ManagedCallNotesResponse> {
     return withReadDeadline(async (readSignal) => {
-      const response = await fetch(`/api/student-calls/notes?${query}`, {
+      const response = await fetch("/api/student-calls/notes", {
         credentials: "same-origin",
         cache: "no-store",
         signal: readSignal,

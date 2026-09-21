@@ -8,6 +8,7 @@ import {
   ChartColumn,
   ClipboardList,
   FilePlus2,
+  ListChecks,
   PenLine,
   PhoneCall,
   Shield,
@@ -22,6 +23,7 @@ import {
   useTeacherProSyncKey,
 } from "@/hooks/use-teacherpro-sync";
 import { useLatestRequest } from "@/hooks/use-latest-request";
+import { CallNotesManagementDialog } from "./call-notes-management-dialog";
 
 type DashboardStats = {
   activeStudents: number;
@@ -62,8 +64,17 @@ export function DashboardView({
 }: {
   onSectionLinkClick?: (event: MouseEvent<HTMLAnchorElement>, section: SectionId) => void;
 } = {}) {
-  const { canAccess } = useTeacherStore();
+  const { canAccess, currentUser } = useTeacherStore();
   const visibleShortcuts = dashboardShortcuts.filter((shortcut) => canAccess(shortcut.section));
+  const canViewCallNotes = canAccess("follow-up-calls");
+  const actor = currentUser();
+  const canManageCallNotes = Boolean(actor && (
+    actor.username?.trim().toLowerCase() === "admin" ||
+    actor.roleId === "role_admin" ||
+    actor.permissions?.includes("follow-up.calls.manage") ||
+    actor.permissions?.includes("follow-up.manage")
+  ));
+  const [callNotesOpen, setCallNotesOpen] = useState(false);
   const syncKey = useTeacherProSyncKey(["dashboard", "students", "grades", "opportunities", "exams"]);
   const isBackgroundSync = useTeacherProBackgroundSyncDetector(syncKey);
   const beginStatsRequest = useLatestRequest();
@@ -226,7 +237,7 @@ export function DashboardView({
         ))}
       </div>
 
-      {visibleShortcuts.length > 0 && (
+      {(visibleShortcuts.length > 0 || canViewCallNotes) && (
         <nav aria-label="اختصارات لوحة التحكم" className="tp-dashboard__navigation">
           <h3 className="text-sm font-bold">الوصول السريع</h3>
           <div className="tp-dashboard__shortcuts">
@@ -243,8 +254,28 @@ export function DashboardView({
                 <span className="tp-dashboard__shortcut-label">{title}</span>
               </a>
             ))}
+            {canViewCallNotes && (
+              <button
+                type="button"
+                onClick={() => setCallNotesOpen(true)}
+                aria-haspopup="dialog"
+                className="tp-dashboard__shortcut text-card-foreground hover:border-primary/40 hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transition-none"
+              >
+                <span className="tp-dashboard__shortcut-icon bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" aria-hidden="true">
+                  <ListChecks />
+                </span>
+                <span className="tp-dashboard__shortcut-label">إدارة ملاحظات المكالمات</span>
+              </button>
+            )}
           </div>
         </nav>
+      )}
+      {canViewCallNotes && (
+        <CallNotesManagementDialog
+          open={callNotesOpen}
+          onOpenChange={setCallNotesOpen}
+          canManage={canManageCallNotes}
+        />
       )}
     </div>
   );

@@ -38,7 +38,6 @@ import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { searchAny } from "@/lib/validation";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { CallPhoneQrDialog } from "./call-phone-qr-dialog";
-import { CallNotesManagementDialog } from "./call-notes-management-dialog";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { CountScopeSummary } from "./ui-kit";
 import {
@@ -548,7 +547,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const callNoteDraftIdsRef = useRef<Record<string, string | null>>({});
   const [callNoteConflicts, setCallNoteConflicts] = useState<Record<string, StudentCall | null>>({});
   const callNoteSavingRef = useRef(new Set<string>());
-  const [callNotesManagementOpen, setCallNotesManagementOpen] = useState(false);
   const [callServerPageInfo, setCallServerPageInfo] = useState({
     totalCount: 0,
     totalPages: 1,
@@ -591,7 +589,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
 
   useEffect(() => {
-    setCallNotesManagementOpen(false);
     setCallExamId("");
     setCallStatusFilter("all");
     setCallContactStatusFilter("all");
@@ -604,7 +601,6 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   }, [callCourseId]);
 
   useEffect(() => {
-    setCallNotesManagementOpen(false);
     setCallStatusFilter("all");
     setCallContactStatusFilter("all");
     setCallNotesFilter("all");
@@ -2592,26 +2588,9 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
 
       {view === "calls" && (
         <div className="space-y-4">
-          <CallNotesManagementDialog
-            open={callNotesManagementOpen}
-            onOpenChange={setCallNotesManagementOpen}
-            courseId={callCourseId}
-            examId={callExamId}
-            examName={selectedCallExam?.name || ""}
-            canManage={canManageCalls}
-          />
           <Card className="tp-filter-card">
-            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardHeader>
               <CardTitle>المكالمات المرتبطة بسجل الدرجات</CardTitle>
-              <Button
-                type="button"
-                size="sm"
-                className="w-full shrink-0 sm:w-auto"
-                disabled={!callExamSelected}
-                onClick={() => setCallNotesManagementOpen(true)}
-              >
-                إدارة ملاحظات المكالمات
-              </Button>
             </CardHeader>
             <CardContent className="tp-filter-content space-y-4">
               <div className="tp-filter-grid grid-cols-1 md:grid-cols-6">

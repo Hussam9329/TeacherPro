@@ -3,68 +3,83 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requirePermission, requirePermissionPrincipal } from "@/lib/server-auth";
+import { requireAnyPermission, requirePermissionPrincipal } from "@/lib/server-auth";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import { withDatabaseSchema } from "@/lib/schema-readiness";
 import { CALL_STUDENT_NOTE_CATEGORY, hasManualCallNote } from "@/lib/call-notes-filter";
 import { normalizeContactStatus } from "@/lib/call-contact-status";
-import { studentCourseScopeWhere } from "@/lib/student-scope";
+import { studentCourseScopeWhere, studentScopeWhere } from "@/lib/student-scope";
 import {
   CallNoteMutationError, readExpectedNoteRevision, setCallNoteResolved,
 } from "@/lib/call-note-management-server";
 
 export async function GET(req: NextRequest) {
-  const authError = await requirePermission(req, "follow-up.view");
+  const authError = await requireAnyPermission(req, ["follow-up.calls.view", "follow-up.view"]);
   if (authError) return authError;
   try {
     const params = new URL(req.url).searchParams;
     const courseId = (params.get("courseId") || "").trim();
     const examId = (params.get("examId") || "").trim();
-    if (!courseId || !examId) return validationError("اختر الدورة والامتحان أولاً.");
     const result = await withDatabaseSchema(async () => {
-      const [exam, examCourse] = await Promise.all([
-        db.exam.findUnique({ where: { id: examId }, select: { id: true, name: true } }),
-        db.examCourse.findFirst({ where: { examId, courseId }, select: { id: true } }),
-      ]);
-      if (!exam) throw new CallNoteMutationError("الامتحان غير موجود.", 404);
-      if (!examCourse) {
-        throw new CallNoteMutationError("الامتحان غير مرتبط بالدورة المختارة.", 400);
+      // The dashboard opens the complete shared queue. Optional parameters are
+      // retained for callers that already request one course/exam explicitly.
+      const exam = examId
+        ? await db.exam.findUnique({ where: { id: examId }, select: { id: true, name: true } })
+        : null;
+      if (examId && !exam) throw new CallNoteMutationError("الامتحان غير موجود.", 404);
+      if (examId && courseId) {
+        const examCourse = await db.examCourse.findFirst({ where: { examId, courseId }, select: { id: true } });
+        if (!examCourse) throw new CallNoteMutationError("الامتحان غير مرتبط بالدورة المختارة.", 400);
       }
       const notes = await db.studentCall.findMany({
         where: {
           category: CALL_STUDENT_NOTE_CATEGORY,
           noteResolved: false,
           notes: { not: "" },
-          OR: [{ examId }, { examId: null }],
-          student: { is: studentCourseScopeWhere(courseId, "followup") },
+          ...(examId ? { OR: [{ examId }, { examId: null }] } : {}),
+          student: { is: courseId ? studentCourseScopeWhere(courseId, "followup") : studentScopeWhere("followup") },
         },
         select: {
           id: true, studentId: true, examId: true, notes: true,
           category: true, noteRevision: true, noteResolved: true, createdAt: true,
-          student: { select: { id: true, name: true, code: true } },
+          exam: { select: { id: true, name: true } },
+          student: { select: { id: true, name: true, code: true, courseId: true, course: { select: { id: true, name: true } } } },
         },
         orderBy: [{ student: { name: "asc" } }, { createdAt: "desc" }, { id: "desc" }],
       });
       const visibleNotes = notes.filter(hasManualCallNote);
       const studentIds = [...new Set(visibleNotes.map((note) => note.studentId))];
       const calls = studentIds.length ? await db.studentCall.findMany({
-        where: { studentId: { in: studentIds }, examId, category: { not: CALL_STUDENT_NOTE_CATEGORY } },
-        select: { studentId: true, status: true, completed: true },
+        where: { studentId: { in: studentIds }, category: { not: CALL_STUDENT_NOTE_CATEGORY } },
+        select: { studentId: true, examId: true, status: true, completed: true, exam: { select: { id: true, name: true } } },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       }) : [];
-      const contactByStudent = new Map<string, string>();
+      const contactKey = (studentId: string, callExamId: string | null) => JSON.stringify([studentId, callExamId]);
+      const contactByExam = new Map<string, typeof calls[number]>();
+      const latestContactByStudent = new Map<string, typeof calls[number]>();
       for (const call of calls) {
-        if (!contactByStudent.has(call.studentId)) {
-          contactByStudent.set(call.studentId, normalizeContactStatus(call));
+        const key = contactKey(call.studentId, call.examId);
+        if (!contactByExam.has(key)) contactByExam.set(key, call);
+        if (!latestContactByStudent.has(call.studentId) && normalizeContactStatus(call)) {
+          latestContactByStudent.set(call.studentId, call);
         }
       }
       return {
-        notes: visibleNotes.map((note) => ({
-          ...note,
-          scope: note.examId ? "exam" : "general",
-          contactStatus: contactByStudent.get(note.studentId) || "",
-        })),
-        exam: { id: exam.id, name: exam.name }, totalCount: visibleNotes.length,
+        notes: visibleNotes.map((note) => {
+          // A note for one exam must never borrow another exam's action.
+          // Older general notes remain general; their latest actual contact is
+          // presented separately rather than inventing an exam association.
+          const contact = note.examId
+            ? contactByExam.get(contactKey(note.studentId, note.examId))
+            : latestContactByStudent.get(note.studentId);
+          return {
+            ...note,
+            scope: note.examId ? "exam" : "general",
+            contactStatus: normalizeContactStatus(contact),
+            contactExam: contact?.exam || null,
+          };
+        }),
+        exam, totalCount: visibleNotes.length,
         source: "database",
       };
     }, "StudentCall");
