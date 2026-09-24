@@ -135,7 +135,7 @@ function harness() {
   const dependencies = {
     react,
     'react/jsx-runtime': { jsx, jsxs: jsx },
-    'lucide-react': named(['CheckCheck', 'ClipboardList', 'Loader2', 'RefreshCw', 'Search', 'X']),
+    'lucide-react': named(['CalendarDays', 'CheckCheck', 'ClipboardList', 'Clock3', 'Loader2', 'RefreshCw', 'Search', 'X']),
     '@/components/ui/button': named(['Button']),
     '@/components/ui/checkbox': named(['Checkbox']),
     '@/components/ui/dialog': named(['Dialog', 'DialogContent', 'DialogHeader', 'DialogTitle']),
@@ -235,11 +235,30 @@ const note = (id = 'n1') => ({
   view.reads[0].resolve({ notes: [note()] });
   await view.flush();
   assert.equal(view.nodes('Checkbox').length, 1);
-  assert(view.text().includes('تاريخ الملاحظة: '));
+  assert(view.text().includes('تاريخ الملاحظة'));
+  assert(view.text().includes('بتوقيت بغداد'));
   assert.equal(view.nodes('time')[0].props.dateTime, '2026-09-18T22:30:00.000Z');
   assert.equal(view.nodes('time')[0].props.children, '19 سبتمبر 2026');
+  assert.equal(view.nodes('time')[1].props.dateTime, '2026-09-18T22:30:00.000Z');
+  assert.equal(view.nodes('time')[1].props.children, '1:30 ص');
   console.log('PASS: slow reads survive multiple five-second polling ticks.');
-  console.log('PASS: actual note creation date is displayed in Baghdad time with Arabic month names.');
+  console.log('PASS: original note creation date and time use Baghdad, including next-day rollover.');
+
+  for (const [createdAt, expectedDate, expectedTime] of [
+    ['2026-09-23T21:00:00.000Z', '24 سبتمبر 2026', '12:00 ص'],
+    ['2026-09-23T09:00:00.000Z', '23 سبتمبر 2026', '12:00 م'],
+    ['2026-09-23T15:07:00.000Z', '23 سبتمبر 2026', '6:07 م'],
+    ['invalid-date', '—', '—'],
+  ]) {
+    const clockView = harness();
+    clockView.render();
+    clockView.reads[0].resolve({ notes: [{ ...note(), createdAt }] });
+    await clockView.flush();
+    assert.equal(clockView.nodes('time')[0].props.children, expectedDate);
+    assert.equal(clockView.nodes('time')[1].props.children, expectedTime);
+    assert.equal(clockView.writes.length, 0);
+  }
+  console.log('PASS: Baghdad midnight, noon, minute padding and missing-date fallback do not alter notes.');
 
   view.nodes('Checkbox')[0].props.onCheckedChange(true);
   view.render();

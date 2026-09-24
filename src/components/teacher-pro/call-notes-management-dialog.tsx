@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCheck, ClipboardList, Loader2, RefreshCw, Search, X } from "lucide-react";
+import { CalendarDays, CheckCheck, ClipboardList, Clock3, Loader2, RefreshCw, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -27,10 +27,22 @@ const noteDateFormatter = new Intl.DateTimeFormat("ar-EG", {
   numberingSystem: "latn",
   timeZone: "Asia/Baghdad",
 });
+const noteTimeFormatter = new Intl.DateTimeFormat("ar-EG", {
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+  numberingSystem: "latn",
+  timeZone: "Asia/Baghdad",
+});
 
 function formatNoteDate(createdAt: string) {
   const date = new Date(createdAt);
   return Number.isFinite(date.getTime()) ? noteDateFormatter.format(date) : "—";
+}
+
+function formatNoteTime(createdAt: string) {
+  const date = new Date(createdAt);
+  return Number.isFinite(date.getTime()) ? noteTimeFormatter.format(date) : "—";
 }
 
 function actionColor(status: string) {
@@ -343,9 +355,22 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                     {note.scope === "general" ? "ملاحظة عامة" : note.exam?.name || "امتحان غير مسمى"}
                   </p>
                   <p className="whitespace-pre-wrap break-words text-sm leading-7 [overflow-wrap:anywhere]">{note.notes}</p>
-                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                    تاريخ الملاحظة: <time dateTime={note.createdAt}>{formatNoteDate(note.createdAt)}</time>
-                  </p>
+                  <div className="mt-3 flex w-fit max-w-full flex-wrap items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 p-2 text-primary dark:bg-primary/10">
+                    <div className="flex min-w-0 items-center gap-2 px-1">
+                      <CalendarDays aria-hidden="true" className="h-4 w-4 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-medium leading-4 text-muted-foreground">تاريخ الملاحظة</p>
+                        <time dateTime={note.createdAt} className="block text-xs font-semibold leading-5">{formatNoteDate(note.createdAt)}</time>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg border border-primary/10 bg-background/80 px-2.5 py-1 shadow-sm">
+                      <Clock3 aria-hidden="true" className="h-4 w-4 shrink-0" />
+                      <div>
+                        <time dateTime={note.createdAt} className="block whitespace-nowrap text-sm font-bold leading-5 tabular-nums">{formatNoteTime(note.createdAt)}</time>
+                        <p className="whitespace-nowrap text-[10px] font-medium leading-4 text-muted-foreground">بتوقيت بغداد</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <label className="col-start-2 row-start-1 flex min-h-11 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg hover:bg-primary/5 md:col-start-4">
                   <Checkbox
