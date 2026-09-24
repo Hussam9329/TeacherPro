@@ -774,6 +774,7 @@ export function GradeEntryView() {
             student.name,
             student.code,
             student.telegram,
+            student.username,
             student.phone,
             student.parentPhone,
             student.school,

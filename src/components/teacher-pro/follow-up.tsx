@@ -209,6 +209,11 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
   },
   { key: "code", label: "الكود", value: ({ row }) => row.student.code || "" },
   {
+    key: "username",
+    label: "يوزر تليكرام",
+    value: ({ row }) => row.student.username || "",
+  },
+  {
     key: "course",
     label: "الدورة",
     value: ({ row, courseName }) => courseName(row.student.courseId),
@@ -286,7 +291,10 @@ function whatsappLink(phone: string): string {
 
 function telegramLink(telegram: string): string {
   const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
-  return username ? `https://t.me/${encodeURIComponent(username)}` : "#";
+  // المعرفات الرقمية لا تصلح لروابط تليكرام.
+  if (!username || /^\d+$/.test(username)) return "#";
+  // فتح المحادثة داخل تطبيق تليكرام مباشرة بدل نسخة الويب.
+  return `tg://resolve?domain=${encodeURIComponent(username)}`;
 }
 
 function visibleCallGradeItems(
@@ -1846,12 +1854,34 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     );
   };
 
-  const renderTelegramLink = (telegram?: string) => {
+  const renderTelegramLink = (telegram?: string, username?: string | null) => {
+    // يوزر تليكرام المستعاد أولاً — يفتح المحادثة داخل التطبيق.
+    const preferred = String(username || "").trim().replace(/^@+/, "");
+    if (preferred) {
+      return (
+        <a
+          className="rounded-xl border bg-card px-3 py-2 text-xs font-bold text-sky-700 underline dark:text-sky-300"
+          href={telegramLink(preferred)}
+          target="_blank"
+          rel="noreferrer"
+        >
+          يوزر تليكرام: {preferred}
+        </a>
+      );
+    }
     const normalizedTelegram = normalizeTelegramIdentifier(telegram || "");
     if (!normalizedTelegram) {
       return (
         <span className="rounded-xl border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           التيليجرام: لا يوجد معرف
+        </span>
+      );
+    }
+    // المعرف الرقمي يُعرض نصاً — لا يصلح لفتح محادثة تليكرام.
+    if (/^\d+$/.test(normalizedTelegram)) {
+      return (
+        <span className="rounded-xl border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          المعرف: <span dir="ltr">{normalizedTelegram}</span> (لا يوجد يوزر)
         </span>
       );
     }
@@ -1862,7 +1892,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         target="_blank"
         rel="noreferrer"
       >
-        التيليجرام: {normalizedTelegram}
+        يوزر تليكرام: {normalizedTelegram}
       </a>
     );
   };
@@ -2157,7 +2187,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                 <div className="flex flex-wrap gap-2">
                   {renderPhoneLink("الطالب", row.student.phone)}
                   {renderPhoneLink("ولي الأمر", row.student.parentPhone)}
-                  {renderTelegramLink(row.student.telegram)}
+                  {renderTelegramLink(row.student.telegram, row.student.username)}
                 </div>
                 {(row.student.phone || row.student.parentPhone) && (
                   <div className="rounded-2xl border border-dashed bg-background/70 p-3">

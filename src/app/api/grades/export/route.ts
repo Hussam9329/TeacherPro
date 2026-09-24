@@ -41,6 +41,8 @@ function buildGradeSearchWhere(
     { phone: { startsWith: compactQuery, mode: "insensitive" } },
     { parentPhone: { startsWith: compactQuery, mode: "insensitive" } },
     { telegram: { startsWith: telegramQuery, mode: "insensitive" } },
+    // يوزر تليكرام المستعاد: بحث بنفس استعلام الدرجات (بدون مسافات).
+    { username: { contains: compactQuery, mode: "insensitive" } },
   ];
 
   if (normalizedQuery)

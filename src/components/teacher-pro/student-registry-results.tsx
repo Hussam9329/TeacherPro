@@ -483,11 +483,25 @@ export function StudentRegistryResults({
                   </ContactLink>
                 </p>
                 <p>
-                  تيليجرام:{" "}
-                  {student.telegram ? (
-                    <ContactLink href={telegramLink(student.telegram)}>
-                      {student.telegram}
+                  يوزر تليكرام:{" "}
+                  {student.username ? (
+                    <ContactLink href={telegramLink(student.username)}>
+                      {student.username}
                     </ContactLink>
+                  ) : (
+                    "—"
+                  )}
+                </p>
+                <p>
+                  معرف تليكرام:{" "}
+                  {student.telegram ? (
+                    /^\d+$/.test(student.telegram) ? (
+                      <span dir="ltr">{student.telegram}</span>
+                    ) : (
+                      <ContactLink href={telegramLink(student.telegram)}>
+                        {student.telegram}
+                      </ContactLink>
+                    )
                   ) : (
                     "—"
                   )}
@@ -611,12 +625,28 @@ function StudentRegistryRow({
               }
             />
             <RegistryField
-              label="تيليجرام"
+              label="يوزر تليكرام"
+              value={
+                student.username ? (
+                  <ContactLink href={telegramLink(student.username)}>
+                    {student.username}
+                  </ContactLink>
+                ) : (
+                  "—"
+                )
+              }
+            />
+            <RegistryField
+              label="معرف تليكرام"
               value={
                 student.telegram ? (
-                  <ContactLink href={telegramLink(student.telegram)}>
-                    {student.telegram}
-                  </ContactLink>
+                  /^\d+$/.test(student.telegram) ? (
+                    <span dir="ltr">{student.telegram}</span>
+                  ) : (
+                    <ContactLink href={telegramLink(student.telegram)}>
+                      {student.telegram}
+                    </ContactLink>
+                  )
                 ) : (
                   "—"
                 )

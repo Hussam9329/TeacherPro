@@ -60,6 +60,8 @@ export interface Student {
   phone: string;
   parentPhone: string;
   telegram: string;
+  /** يوزر تليكرام المستعاد (بدون @) — قد يكون فارغاً إن لم يُسترجع بعد. */
+  username?: string | null;
   courseProgram: "منهج كامل" | "كورسات" | "";
   courseTerm: "الكورس الأول" | "الكورس الثاني" | "";
   studyType: "إلكتروني" | "حضوري" | "مدمج" | "";

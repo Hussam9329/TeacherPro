@@ -44,6 +44,7 @@ function buildSearchWhere(rawQuery: string): Prisma.StudentWhereInput | null {
       { phone: { contains: q, mode: "insensitive" } },
       { parentPhone: { contains: q, mode: "insensitive" } },
       { telegram: { contains: q, mode: "insensitive" } },
+      { username: { contains: q, mode: "insensitive" } },
       { dismissalReason: { contains: q, mode: "insensitive" } },
       { dismissalNotes: { contains: q, mode: "insensitive" } },
     ],

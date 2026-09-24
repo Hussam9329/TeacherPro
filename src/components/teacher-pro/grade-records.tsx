@@ -116,6 +116,11 @@ const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
     label: "التيليجرام",
     value: ({ student }) => student?.telegram || "",
   },
+  {
+    key: "username",
+    label: "يوزر تليكرام",
+    value: ({ student }) => student?.username || "",
+  },
   { key: "exam", label: "الامتحان", value: ({ exam }) => exam?.name || "" },
   {
     key: "status",
@@ -1031,7 +1036,7 @@ export function GradeRecordsView() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="اسم / كود / تيليجرام / امتحان"
+                placeholder="اسم / كود / تيليجرام / يوزر / امتحان"
               />
             </div>
             <div className="tp-filter-field tp-filter-primary">

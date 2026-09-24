@@ -1085,7 +1085,8 @@ export function StudentProfileDialog({
                 <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 xl:grid-cols-4">
                   <InfoBox label="رقم الطالب" value={<ContactLink href={whatsappLink(profileStudent.phone)}>{profileStudent.phone}</ContactLink>} />
                   <InfoBox label="رقم ولي الأمر" value={<ContactLink href={whatsappLink(profileStudent.parentPhone)}>{profileStudent.parentPhone}</ContactLink>} />
-                  <InfoBox label="التيليجرام" value={profileStudent.telegram ? <ContactLink href={telegramLink(profileStudent.telegram)}>{profileStudent.telegram}</ContactLink> : "—"} />
+                  <InfoBox label="يوزر تليكرام" value={profileStudent.username ? <ContactLink href={telegramLink(profileStudent.username)}>{profileStudent.username}</ContactLink> : "—"} />
+                  <InfoBox label="معرف تليكرام" value={profileStudent.telegram ? (/^\d+$/.test(profileStudent.telegram) ? <span dir="ltr">{profileStudent.telegram}</span> : <ContactLink href={telegramLink(profileStudent.telegram)}>{profileStudent.telegram}</ContactLink>) : "—"} />
                   <InfoBox label="أسلوب الدراسة" value={profileStudent.studyType || "—"} />
                 </div>
 

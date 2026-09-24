@@ -10,6 +10,7 @@ export const studentEditFieldLabels: Record<StudentEditField, string> = {
   phone: "رقم الطالب",
   parentPhone: "رقم ولي الأمر",
   telegram: "تيليجرام",
+  username: "يوزر التيليجرام (المستعاد)",
   courseProgram: "نوع الدورة",
   courseTerm: "الكورس",
   studyType: "أسلوب الدراسة",

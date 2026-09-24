@@ -246,5 +246,9 @@
   "20260921190000_dismissed_check_lifecycle": {
     "kind": "expand",
     "checksum": "220321cf2d0c802aa954e0aa0bd5da987f1b23ff157b194ff5dacda350721e77"
+  },
+  "20260924120000_student_username_field": {
+    "kind": "expand",
+    "checksum": "4ada4ced0e37e75f0b38386eec189dfaef89fe6caebb90e76e76845de0adc2a5"
   }
 }

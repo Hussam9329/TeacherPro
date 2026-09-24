@@ -72,6 +72,11 @@ const examGradeExportColumns: ExportColumn<any>[] = [
     label: "التيليجرام",
     value: (row) => row.student?.telegram || "",
   },
+  {
+    key: "username",
+    label: "يوزر تليكرام",
+    value: (row) => row.student?.username || "",
+  },
   { key: "notes", label: "ملاحظات", value: (row) => row.grade.notes || "" },
 ];
 

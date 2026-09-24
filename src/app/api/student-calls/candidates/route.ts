@@ -70,6 +70,7 @@ type DbStudentLite = {
   phone: string | null;
   parentPhone: string | null;
   telegram: string | null;
+  username: string | null;
   courseProgram: string | null;
   courseTerm: string | null;
   studyType: string | null;
@@ -417,6 +418,7 @@ function searchableValues(args: {
     student.phone,
     student.parentPhone,
     student.telegram,
+    student.username,
     student.school,
     student.status,
     student.studyType,
@@ -549,6 +551,7 @@ export async function GET(req: NextRequest) {
         phone: true,
         parentPhone: true,
         telegram: true,
+        username: true,
         courseProgram: true,
         courseTerm: true,
         studyType: true,
@@ -598,6 +601,7 @@ export async function GET(req: NextRequest) {
             phone: true,
             parentPhone: true,
             telegram: true,
+            username: true,
             courseProgram: true,
             courseTerm: true,
             studyType: true,

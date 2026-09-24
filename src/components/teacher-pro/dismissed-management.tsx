@@ -99,6 +99,7 @@ type StudentHistory = {
     phone: string;
     parentPhone: string;
     telegram: string;
+    username?: string;
     courseId: string;
     courseName: string;
     courseProgram: string;
@@ -190,6 +191,20 @@ function telegramUsername(value?: string) {
     .trim();
 }
 
+/**
+ * يوزر التليجرام الصالح للمراسلة: يفضّل اليوزر المستعاد (username)
+ * ويرفض المعرف الرقمي لأنه لا يفتح محادثة تليكرام.
+ */
+function studentTelegramHandle(student: {
+  telegram?: string | null;
+  username?: string | null;
+}): string {
+  const preferred = telegramUsername(student.username || "");
+  if (preferred && !/^\d+$/.test(preferred)) return preferred;
+  const fallback = telegramUsername(student.telegram || "");
+  return fallback && !/^\d+$/.test(fallback) ? fallback : "";
+}
+
 function toneClasses(tone: TimelineEvent["tone"]) {
   if (tone === "danger") return "border-red-500/30 bg-red-500/5";
   if (tone === "warning") return "border-amber-500/30 bg-amber-500/5";
@@ -275,7 +290,8 @@ function buildHtmlReport(history: StudentHistory) {
     ["المدرسة", s.school || "—"],
     ["رقم الطالب", s.phone || "—"],
     ["رقم ولي الأمر", s.parentPhone || "—"],
-    ["تيليجرام", s.telegram || "—"],
+    ["يوزر تليكرام", s.username || "—"],
+    ["معرف تليكرام", s.telegram || "—"],
     ["نوع الاشتراك", s.courseProgram || "—"],
     ["الكورس", s.courseTerm || "—"],
     ["نوع البرنامج", s.studyType || "—"],
@@ -583,7 +599,7 @@ export function DismissedManagementView() {
   };
 
   const openTelegram = async (student: Student) => {
-    const username = telegramUsername(student.telegram);
+    const username = studentTelegramHandle(student);
     if (!username) return;
 
     setTelegramLoading((current) => ({ ...current, [student.id]: true }));
@@ -975,7 +991,7 @@ export function DismissedManagementView() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="الاسم / الكود / تيليجرام / رقم الطالب / رقم ولي الأمر / سبب الفصل"
+                placeholder="الاسم / الكود / تيليجرام / يوزر تليكرام / رقم الطالب / رقم ولي الأمر / سبب الفصل"
               />
             </div>
           </div>
@@ -1156,7 +1172,7 @@ export function DismissedManagementView() {
                     type="button"
                     variant="outline"
                     disabled={
-                      !telegramUsername(student.telegram) ||
+                      !studentTelegramHandle(student) ||
                       historyLoading[student.id] ||
                       telegramLoading[student.id]
                     }
@@ -1165,7 +1181,7 @@ export function DismissedManagementView() {
                     <Send className="size-4" />
                     {telegramLoading[student.id]
                       ? "جاري تجهيز التقرير..."
-                      : student.telegram || "تيليجرام غير متوفر"}
+                      : student.username || student.telegram || "تيليجرام غير متوفر"}
                   </Button>
                 </div>
 

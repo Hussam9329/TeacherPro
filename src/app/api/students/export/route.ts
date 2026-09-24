@@ -18,6 +18,7 @@ const studentExportSelect = {
   phone: true,
   parentPhone: true,
   telegram: true,
+  username: true,
   courseProgram: true,
   courseTerm: true,
   studyType: true,

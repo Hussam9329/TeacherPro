@@ -1324,6 +1324,13 @@ export function StudentRegistryView() {
     }));
   };
 
+  const updateEditUsername = (value: string) => {
+    setEditDialog((prev) => ({
+      ...prev,
+      form: { ...prev.form, username: sanitizeTelegramInput(value) },
+    }));
+  };
+
   const updateEditPhone = (key: "phone" | "parentPhone", value: string) => {
     setEditDialog((prev) => ({
       ...prev,
@@ -1525,6 +1532,7 @@ export function StudentRegistryView() {
       phone: form.phone.trim(),
       parentPhone: form.parentPhone.trim(),
       telegram: sanitizeTelegramInput(form.telegram),
+      username: sanitizeTelegramInput(form.username),
       courseProgram: editEffectiveCourseProgram || "",
       courseTerm:
         editEffectiveCourseProgram === "كورسات" ? form.courseTerm : "",
@@ -1989,7 +1997,7 @@ export function StudentRegistryView() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="اسم / كود / تيليجرام / هاتف"
+                placeholder="اسم / كود / تيليجرام / يوزر تليكرام / هاتف"
               />
             </div>
             <div className="tp-filter-field tp-filter-primary">
@@ -2765,6 +2773,23 @@ export function StudentRegistryView() {
                         placeholder="اختياري - username بدون @"
                         className="h-11 rounded-xl"
                       />
+                    </div>
+                    <div className="space-y-2 tp-registry-editor__wide">
+                      <Label htmlFor="edit-username">
+                        يوزر التيليجرام (المستعاد)
+                      </Label>
+                      <Input
+                        id="edit-username"
+                        name="username"
+                        autoComplete="off"
+                        value={editDialog.form.username}
+                        onChange={(e) => updateEditUsername(e.target.value)}
+                        placeholder="اختياري - يوزر إضافي بدون @"
+                        className="h-11 rounded-xl"
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        يستخدم للبحث ولفتح المحادثة داخل تطبيق تليكرام.
+                      </p>
                     </div>
                   </div>
                 </section>

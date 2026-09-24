@@ -58,6 +58,7 @@ model Student {
   parentPhone     String?
   telegram        String?
   telegramKey     String?  @unique
+  username        String?  // يوزر تليكرام المستعاد (بدون @، قابل للبحث، غير فريد)
 
   courseProgram   String?  // منهج كامل / كورسات
   courseTerm      String?  // الكورس الأول / الكورس الثاني (فقط عند كورسات)
@@ -98,6 +99,7 @@ model Student {
   @@index([parentPhone])
   @@index([mainSite])
   @@index([subSite])
+  @@index([username])
 }
 
 model Exam {

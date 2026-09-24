@@ -55,6 +55,15 @@ import {
 } from "@/lib/student-mutation-token";
 import { buildStudentRegistryWhere } from "@/lib/student-registry-filters-server";
 
+/**
+ * يوزر تليكرام المستعاد (username): قيمة حرفية بدون @، غير رقمية، غير فريدة.
+ * القيم الفارغة/الرقمية تُحفظ null — الرقمي يعني معرف تليكرام وليس يوزراً.
+ */
+function sanitizeUsernameValue(value: unknown): string | null {
+  const cleaned = sanitizeTelegramInput(String(value ?? ""));
+  return cleaned && !/^\d+$/.test(cleaned) ? cleaned : null;
+}
+
 function normalizeGraceDays(value: unknown): number {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) return 0;
@@ -559,6 +568,9 @@ export async function POST(req: NextRequest) {
             phone: sanitizePhoneInput(String(body.phone ?? "")),
             parentPhone: sanitizePhoneInput(String(body.parentPhone ?? "")),
             telegram: sanitizeTelegramInput(String(body.telegram ?? "")),
+            username:
+              sanitizeUsernameValue(body.username) ??
+              sanitizeUsernameValue(body.telegram),
             courseProgram: body.courseProgram || null,
             courseTerm:
               body.courseProgram === "كورسات" ? body.courseTerm || null : null,
@@ -770,6 +782,10 @@ export async function PUT(req: NextRequest) {
         { status: 403 },
       );
     }
+  }
+  if (data.username !== undefined) {
+    // username مستقل عن telegram (المعرف): تنقية فقط بدون قيود فريدة أو صلاحيات.
+    data.username = sanitizeUsernameValue(data.username);
   }
   if (data.createdAt !== undefined) {
     const parsedCreatedAt = new Date(String(data.createdAt || ""));

@@ -135,6 +135,7 @@ export type StudentEditForm = {
   phone: string;
   parentPhone: string;
   telegram: string;
+  username: string;
   courseProgram: string;
   courseTerm: string;
   studyType: string;
@@ -153,6 +154,7 @@ export const emptyEditForm: StudentEditForm = {
   phone: "",
   parentPhone: "",
   telegram: "",
+  username: "",
   courseProgram: "",
   courseTerm: "",
   studyType: "",
@@ -172,6 +174,7 @@ export function getStudentEditForm(student: Student): StudentEditForm {
     phone: student.phone,
     parentPhone: student.parentPhone,
     telegram: sanitizeTelegramInput(student.telegram),
+    username: sanitizeTelegramInput(student.username || ""),
     courseProgram: student.courseProgram || "",
     courseTerm: student.courseTerm || "",
     studyType: student.studyType || "",
@@ -196,7 +199,53 @@ export function whatsappLink(phone: string): string {
 
 export function telegramLink(telegram: string): string {
   const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
-  return username ? `https://t.me/${encodeURIComponent(username)}` : "";
+  // المعرفات الرقمية لا تصلح لروابط تليكرام — تفتح فقط اليوزرات الحرفية.
+  if (!username || /^\d+$/.test(username)) return "";
+  // فتح المحادثة داخل تطبيق تليكرام مباشرة بدل نسخة الويب.
+  return `tg://resolve?domain=${encodeURIComponent(username)}`;
+}
+
+export type TelegramHandleInfo = {
+  /** اسم الحقل المعروض: «يوزر تليكرام» أو «معرف تليكرام». */
+  label: string;
+  /** القيمة المعروضة بدون @. */
+  value: string;
+  /** رابط tg:// يفتح التطبيق، أو "" إذا لا يوجد رابط صالح. */
+  href: string;
+};
+
+/**
+ * يفضّل اليوزر المستعاد (username) على المعرف الرقمي (telegram) في كل
+ * بطاقات العرض؛ المعرف الرقمي يُعرض نصاً بدون رابط لأنه لا يفتح محادثة.
+ */
+export function describeTelegramHandle(student: {
+  telegram?: string | null;
+  username?: string | null;
+}): TelegramHandleInfo {
+  const username = String(student.username ?? "")
+    .trim()
+    .replace(/^@+/, "");
+  const telegram = String(student.telegram ?? "")
+    .trim()
+    .replace(/^@+/, "");
+  if (username) {
+    return {
+      label: "يوزر تليكرام",
+      value: username,
+      href: telegramLink(username),
+    };
+  }
+  if (telegram) {
+    if (/^\d+$/.test(telegram)) {
+      return { label: "معرف تليكرام", value: telegram, href: "" };
+    }
+    return {
+      label: "يوزر تليكرام",
+      value: telegram,
+      href: telegramLink(telegram),
+    };
+  }
+  return { label: "تيليكرام", value: "", href: "" };
 }
 
 export function normalizeGraceDaysInput(value: string): string {

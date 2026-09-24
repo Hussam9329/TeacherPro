@@ -88,6 +88,7 @@ type StudentRegisterForm = {
   phone: string;
   parentPhone: string;
   telegram: string;
+  username: string;
   courseProgram: string;
   courseTerm: string;
   studyType: string;
@@ -154,6 +155,7 @@ function emptyForm(): StudentRegisterForm {
     phone: "",
     parentPhone: "",
     telegram: "",
+    username: "",
     courseProgram: "",
     courseTerm: "",
     studyType: "",
@@ -669,6 +671,7 @@ export function StudentRegisterView() {
         phone: form.phone.trim(),
         parentPhone: form.parentPhone.trim(),
         telegram: sanitizeTelegramInput(form.telegram),
+        username: sanitizeTelegramInput(form.username),
         courseProgram: effectiveCourseProgram,
         courseTerm: effectiveCourseProgram === "كورسات" ? form.courseTerm : "",
         studyType: form.studyType,
@@ -1278,6 +1281,36 @@ export function StudentRegisterView() {
                         {duplicateTelegramStudent.name}. راجع المعرف قبل الحفظ.
                       </p>
                     )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="reg-username"
+                      className="text-xs font-bold text-foreground"
+                    >
+                      يوزر التيليجرام (المستعاد)
+                    </Label>
+                    <div className="relative">
+                      <FieldIcon icon={Send} />
+                      <Input
+                        id="reg-username"
+                        name="username"
+                        autoComplete="off"
+                        value={form.username}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            username: sanitizeTelegramInput(e.target.value),
+                          }))
+                        }
+                        placeholder="يوزر إضافي بدون @ (اختياري)"
+                        dir="ltr"
+                        className={`${fieldBaseClass} text-left font-tabular`}
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      إن تُرك فارغاً يُعتمد نفس معرف التيليجرام تلقائياً.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
