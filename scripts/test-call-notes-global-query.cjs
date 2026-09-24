@@ -9,8 +9,8 @@ const CATEGORY = 'call-student-note';
 const courses = [{ id: 'course-a', name: 'الدورة الأولى' }, { id: 'course-b', name: 'الدورة الثانية' }];
 const exams = ['a', 'b', 'c'].map((suffix) => ({ id: `exam-${suffix}`, name: `امتحان ${suffix}` }));
 const students = [
-  { id: 'student-a', name: 'طالب أول', code: 'BIO-A', status: 'نشط', courseId: 'course-a' },
-  { id: 'student-b', name: 'طالب ثان', code: 'BIO-B', status: 'مفصول', courseId: 'course-b' },
+  { id: 'student-a', name: 'طالب أول', code: 'BIO-A', telegram: '123456789', username: 'student_one', status: 'نشط', courseId: 'course-a' },
+  { id: 'student-b', name: 'طالب ثان', code: 'BIO-B', telegram: null, username: null, status: 'مفصول', courseId: 'course-b' },
   { id: 'archived', name: 'طالب مؤرشف', code: 'BIO-X', status: 'مؤرشف', courseId: 'course-a' },
 ].map((student) => ({ ...student, course: courses.find((course) => course.id === student.courseId) }));
 const note = (id, studentId, examId, extra = {}) => ({
@@ -138,6 +138,10 @@ async function request(query = '') {
   assert.equal(all.body.exam, null);
   assert.deepEqual(reads, ['studentCall', 'studentCall'], 'Global queue uses two set-based reads, with no student/exam N+1.');
   const byId = Object.fromEntries(all.body.notes.map((item) => [item.id, item]));
+  assert.equal(byId['a-exam-a'].student.telegram, '123456789');
+  assert.equal(byId['a-exam-a'].student.username, 'student_one');
+  assert.equal(byId['b-exam-b'].student.telegram, null);
+  assert.equal(byId['b-exam-b'].student.username, null);
   assert.equal(byId['a-exam-a'].contactStatus, 'لم يرد', 'Latest action for the exact exam wins.');
   assert.equal(byId['a-exam-b'].contactStatus, 'تم الاتصال');
   assert.equal(byId['a-exam-c'].contactStatus, '', 'Another exam action must not leak into a blank action.');

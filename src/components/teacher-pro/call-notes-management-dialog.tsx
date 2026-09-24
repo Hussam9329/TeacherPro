@@ -10,6 +10,8 @@ import { callNotesManagementApi, type ManagedCallNote } from "@/lib/call-notes-m
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
 import { normalizeForSearch } from "@/lib/validation";
+import { contactStatusMatchesFilter, normalizeContactStatusFilter, type ContactStatusFilter } from "@/lib/call-contact-status";
+import { describeTelegramHandle } from "./student-registry-helpers";
 
 type Props = {
   open: boolean;
@@ -43,8 +45,9 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
   const [search, setSearch] = useState("");
   const [courseId, setCourseId] = useState("");
   const [examId, setExamId] = useState("");
-  const selectedCourseNameRef = useRef("");
-  const selectedExamNameRef = useRef("");
+  const [actionFilter, setActionFilter] = useState<ContactStatusFilter>("all");
+  const [selectedCourseName, setSelectedCourseName] = useState("");
+  const [selectedExamName, setSelectedExamName] = useState("");
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
@@ -91,6 +94,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
     setSearch("");
     setCourseId("");
     setExamId("");
+    setActionFilter("all");
     if (!open) return;
     void refresh();
     // The ordinary background sync intentionally waits while dialogs are open.
@@ -164,7 +168,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
     return [...values].sort((left, right) => left[1].localeCompare(right[1], "ar"));
   }, [courseNotes]);
   const hasGeneralNotes = courseNotes.some((note) => !note.examId);
-  const hasFilters = Boolean(search.trim() || courseId || examId);
+  const hasFilters = Boolean(search.trim() || courseId || examId || actionFilter !== "all");
   const totalCount = notes.filter((note) => !pendingIds.has(note.id)).length;
   const visibleNotes = useMemo(() => {
     const query = normalizeForSearch(search);
@@ -172,21 +176,23 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
       if (pendingIds.has(note.id)) return false;
       if (examId === GENERAL_NOTES && note.examId) return false;
       if (examId && examId !== GENERAL_NOTES && note.examId !== examId) return false;
+      if (!contactStatusMatchesFilter(actionFilter, note.contactStatus)) return false;
       return !query || normalizeForSearch(
-        `${note.student.name} ${note.student.code} ${note.notes}`,
+        `${note.student.name} ${note.student.code} ${note.student.telegram || ""} ${note.student.username || ""} ${note.notes}`,
       ).includes(query);
     });
-  }, [courseNotes, examId, search, pendingIds]);
+  }, [courseNotes, examId, actionFilter, search, pendingIds]);
 
   function clearFilters() {
     setSearch("");
     setCourseId("");
     setExamId("");
+    setActionFilter("all");
   }
 
   function selectCourse(value: string) {
     setCourseId(value);
-    selectedCourseNameRef.current = courses.find(([id]) => id === value)?.[1] || "الدورة المحددة";
+    setSelectedCourseName(courses.find(([id]) => id === value)?.[1] || "الدورة المحددة");
     // Keep a compatible exam selection when a course is changed, including
     // general notes. Polling never changes the filters the user is working in.
     if (examId && !notes.some((note) =>
@@ -205,7 +211,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid shrink-0 grid-cols-2 gap-2 rounded-2xl border bg-muted/25 p-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.3fr)]">
+        <div className="grid shrink-0 grid-cols-2 gap-2 rounded-2xl border bg-muted/25 p-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)]">
           <label className="col-span-2 min-w-0 space-y-1.5 md:col-span-1">
             <span className="text-xs font-semibold">بحث</span>
             <div className="relative">
@@ -214,7 +220,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 aria-label="بحث في ملاحظات المكالمات"
-                placeholder="اسم الطالب، الكود أو الملاحظة"
+                placeholder="الاسم، الكود، تيليجرام أو الملاحظة"
                 className="pr-9"
               />
             </div>
@@ -228,7 +234,7 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
               className="h-11 w-full min-w-0 truncate rounded-xl border border-input bg-background px-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
             >
               <option value="">كل الدورات</option>
-              {courseId && !courses.some(([id]) => id === courseId) && <option value={courseId}>{selectedCourseNameRef.current}</option>}
+              {courseId && !courses.some(([id]) => id === courseId) && <option value={courseId}>{selectedCourseName}</option>}
               {courses.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
             </select>
           </label>
@@ -240,14 +246,29 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
               onChange={(event) => {
                 const value = event.target.value;
                 setExamId(value);
-                selectedExamNameRef.current = exams.find(([id]) => id === value)?.[1] || "الامتحان المحدد";
+                setSelectedExamName(exams.find(([id]) => id === value)?.[1] || "الامتحان المحدد");
               }}
               className="h-11 w-full min-w-0 truncate rounded-xl border border-input bg-background px-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
             >
               <option value="">كل الامتحانات والملاحظات العامة</option>
               {(hasGeneralNotes || examId === GENERAL_NOTES) && <option value={GENERAL_NOTES}>الملاحظات العامة</option>}
-              {examId && examId !== GENERAL_NOTES && !exams.some(([id]) => id === examId) && <option value={examId}>{selectedExamNameRef.current}</option>}
+              {examId && examId !== GENERAL_NOTES && !exams.some(([id]) => id === examId) && <option value={examId}>{selectedExamName}</option>}
               {exams.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select>
+          </label>
+          <label className="col-span-2 min-w-0 space-y-1.5 md:col-span-1">
+            <span className="text-xs font-semibold">الإجراء</span>
+            <select
+              aria-label="تصفية حسب الإجراء"
+              value={actionFilter}
+              onChange={(event) => setActionFilter(normalizeContactStatusFilter(event.target.value))}
+              className="h-11 w-full min-w-0 truncate rounded-xl border border-input bg-background px-2 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
+            >
+              <option value="all">كل الإجراءات</option>
+              <option value="no-action">بدون إجراء</option>
+              <option value="contacted">تم الاتصال</option>
+              <option value="unanswered">لم يرد</option>
+              <option value="wrong">الرقم خاطئ</option>
             </select>
           </label>
         </div>
@@ -288,13 +309,25 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
             <div aria-hidden="true" className="hidden grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,2fr)_3rem] gap-3 rounded-xl bg-muted/60 px-4 py-2 text-xs font-semibold text-muted-foreground md:grid">
               <span>الطالب</span><span>الإجراء</span><span>الملاحظة</span><span className="text-center">تم</span>
             </div>
-            {visibleNotes.map((note) => (
+            {visibleNotes.map((note) => {
+              const telegram = describeTelegramHandle(note.student);
+              return (
               <article key={note.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_2.75rem] gap-x-2 gap-y-3 rounded-2xl border bg-background/80 p-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,2fr)_3rem] md:items-start md:gap-3 md:p-4">
                 <div className="min-w-0">
                   <p className="break-words text-sm font-bold leading-6">{note.student.name}</p>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                     <span dir="ltr">{note.student.code}</span>
                     {note.student.course && <span>{note.student.course.name}</span>}
+                  </div>
+                  <div className="mt-2 min-w-0 text-xs leading-5">
+                    <span className="text-muted-foreground">تيليجرام: </span>
+                    {telegram.href ? (
+                      <a href={telegram.href} dir="ltr" className="inline-block max-w-full break-all font-medium text-primary underline-offset-4 hover:underline" aria-label={`فتح تيليجرام ${note.student.name}`}>
+                        @{telegram.value}
+                      </a>
+                    ) : telegram.value ? (
+                      <span dir="ltr" className="inline-block max-w-full break-all font-mono">{telegram.value}</span>
+                    ) : <span className="text-muted-foreground">غير متوفر</span>}
                   </div>
                 </div>
                 <div className="col-start-1 row-start-2 md:col-start-2 md:row-start-1">
@@ -325,7 +358,8 @@ export function CallNotesManagementDialog({ open, onOpenChange, canManage }: Pro
                   <span className="text-[10px] text-muted-foreground md:hidden">تم</span>
                 </label>
               </article>
-            ))}
+              );
+            })}
           </div>
         )}
         </div>

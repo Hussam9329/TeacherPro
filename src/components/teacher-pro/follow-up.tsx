@@ -37,7 +37,7 @@ import { formatAppDate, sanitizePhoneInput } from "@/lib/format";
 import { normalizeTelegramIdentifier } from "@/lib/student-utils";
 import { searchAny } from "@/lib/validation";
 import { StudentProfileDialog } from "./student-profile-dialog";
-import { CallPhoneQrDialog } from "./call-phone-qr-dialog";
+import { CallPhoneQr } from "./call-phone-qr";
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import { CountScopeSummary } from "./ui-kit";
 import {
@@ -2194,13 +2194,13 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
                     <p className="mb-2 text-[11px] font-bold text-muted-foreground">
                       نقل الرقم إلى هاتف آخر عبر QR
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      <CallPhoneQrDialog
+                    <div className="grid grid-cols-2 gap-2">
+                      <CallPhoneQr
                         studentName={row.student.name}
                         phoneLabel="الطالب"
                         phone={row.student.phone}
                       />
-                      <CallPhoneQrDialog
+                      <CallPhoneQr
                         studentName={row.student.name}
                         phoneLabel="ولي الأمر"
                         phone={row.student.parentPhone}

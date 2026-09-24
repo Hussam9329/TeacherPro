@@ -1,5 +1,6 @@
 import { ownerHeaders } from "@/lib/outbox-session";
 import { withReadDeadline } from "@/lib/read-deadline";
+import type { ContactStatus } from "@/lib/call-contact-status";
 
 export type ManagedCallNote = {
   id: string;
@@ -13,12 +14,14 @@ export type ManagedCallNote = {
     id: string;
     name: string;
     code: string;
+    telegram: string | null;
+    username: string | null;
     courseId: string;
     course: { id: string; name: string } | null;
   };
   exam: { id: string; name: string } | null;
   scope: "exam" | "general";
-  contactStatus: string;
+  contactStatus: ContactStatus;
   contactExam: { id: string; name: string } | null;
 };
 

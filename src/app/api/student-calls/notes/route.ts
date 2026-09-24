@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
           id: true, studentId: true, examId: true, notes: true,
           category: true, noteRevision: true, noteResolved: true, createdAt: true,
           exam: { select: { id: true, name: true } },
-          student: { select: { id: true, name: true, code: true, courseId: true, course: { select: { id: true, name: true } } } },
+          student: { select: { id: true, name: true, code: true, telegram: true, username: true, courseId: true, course: { select: { id: true, name: true } } } },
         },
         orderBy: [{ student: { name: "asc" } }, { createdAt: "desc" }, { id: "desc" }],
       });

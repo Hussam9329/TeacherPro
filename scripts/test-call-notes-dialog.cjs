@@ -22,6 +22,27 @@ vm.runInNewContext(ts.transpileModule(
   { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } },
 ).outputText, validationContext);
 
+// Load the real pure helpers so contact filtering and Telegram links are tested
+// together with the component rather than reproduced by a test double.
+const helperModules = new Map();
+function loadHelper(relative) {
+  const file = path.resolve(root, relative);
+  if (helperModules.has(file)) return helperModules.get(file);
+  const context = {
+    exports: {},
+    require(name) {
+      if (name.startsWith('@/')) return loadHelper(`src/${name.slice(2)}.ts`);
+      if (name.startsWith('.')) return loadHelper(path.resolve(path.dirname(file), `${name}.ts`));
+      return require(name);
+    },
+  };
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
+  }).outputText, context);
+  helperModules.set(file, context.exports);
+  return context.exports;
+}
+
 function deferred() {
   let resolve;
   let reject;
@@ -123,6 +144,8 @@ function harness() {
     '@/lib/teacherpro-sync': { emitTeacherProDataChanged() {} },
     '@/lib/user-toast': { toast: { error: (error) => errors.push(error) } },
     '@/lib/validation': validationContext.exports,
+    '@/lib/call-contact-status': loadHelper('src/lib/call-contact-status.ts'),
+    './student-registry-helpers': loadHelper('src/components/teacher-pro/student-registry-helpers.ts'),
   };
   const context = {
     exports: {},
@@ -357,6 +380,56 @@ const note = (id = 'n1') => ({
   await view.flush();
   assert.equal(view.nodes('Checkbox').length, 3);
   console.log('PASS: completed filter facets stay labelled; every reopening starts unfiltered.');
+
+  view = harness();
+  view.render();
+  const actionNotes = ['', 'تم الاتصال', 'لم يرد', 'الرقم خاطئ'].map((contactStatus, index) => ({
+    ...note(`action-${index}`), contactStatus,
+    student: {
+      ...note(`action-${index}`).student,
+      telegram: index === 0 ? '123456789' : index === 1 ? '@legacy_student' : null,
+      username: index === 2 ? '@current_student' : null,
+    },
+  }));
+  view.reads[0].resolve({ notes: actionNotes });
+  await view.flush();
+  assert.equal(view.nodes('a').length, 2, 'Numeric IDs and missing Telegram values must not create broken links.');
+  assert(view.nodes('a').some((node) => node.props.href === 'tg://resolve?domain=legacy_student'));
+  assert(view.nodes('a').some((node) => node.props.href === 'tg://resolve?domain=current_student'));
+  assert(view.text().includes('123456789'));
+  assert(view.text().includes('غير متوفر'));
+  const selectAction = (value) => {
+    view.nodes('select').find((node) => node.props['aria-label'] === 'تصفية حسب الإجراء').props.onChange({ target: { value } });
+    view.render();
+  };
+  for (const [index, filter] of ['no-action', 'contacted', 'unanswered', 'wrong'].entries()) {
+    selectAction(filter);
+    assert.equal(view.nodes('Checkbox').length, 1);
+    assert(view.text().includes(`ملاحظة تجريبية action-${index}`));
+    assert(view.text().includes('المعروض 1 من 4 ملاحظة'));
+  }
+  selectAction('unanswered');
+  selectCourse('course1');
+  selectExam('exam1');
+  search('current_student');
+  assert.equal(view.nodes('Checkbox').length, 1, 'Action, course, exam, and Telegram search combine.');
+  search('legacy_student');
+  assert.equal(view.nodes('Checkbox').length, 0);
+  search('');
+  view.tick();
+  view.reads[1].resolve({ notes: actionNotes.filter((item) => item.contactStatus !== 'لم يرد') });
+  await view.flush();
+  assert.equal(view.nodes('select')[2].props.value, 'unanswered', 'Polling preserves the action filter when its last match disappears.');
+  assert.equal(view.nodes('Checkbox').length, 0);
+  view.nodes('Button').find((node) => JSON.stringify(node).includes('مسح الفلاتر')).props.onClick();
+  view.render();
+  assert.equal(view.nodes('select')[2].props.value, 'all');
+  assert.equal(view.nodes('Checkbox').length, 3);
+  selectAction('wrong');
+  view.setProps({ open: false });
+  view.setProps({ open: true });
+  assert.equal(view.nodes('select')[2].props.value, 'all');
+  console.log('PASS: action filters combine, preserve polling state, reset correctly, and display/search Telegram handles safely.');
 
   view = harness();
   view.setProps({ canManage: false });

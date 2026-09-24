@@ -16,7 +16,7 @@ const files = {
   notesFilter: 'src/lib/call-notes-filter.ts',
   callIdentity: 'src/lib/call-identity.ts',
   callPhoneQr: 'src/lib/call-phone-qr.ts',
-  callPhoneQrDialog: 'src/components/teacher-pro/call-phone-qr-dialog.tsx',
+  callPhoneQrDialog: 'src/components/teacher-pro/call-phone-qr.tsx',
 };
 
 const read = (file) => fs.readFileSync(file, 'utf8');
@@ -136,19 +136,20 @@ assert(
   'لا توجد روابط whatsapp:// داخل تبويبة المكالمات',
 );
 assert(
-  followUp.includes('CallPhoneQrDialog') &&
+  followUp.includes('CallPhoneQr') &&
     followUp.includes('phoneLabel="الطالب"') &&
     followUp.includes('phoneLabel="ولي الأمر"'),
-  'كل رقم متوفر في بطاقة المكالمات يملك زر QR مستقل للطالب أو ولي الأمر',
+  'كل رقم متوفر في بطاقة المكالمات يملك QR مستقل للطالب أو ولي الأمر',
 );
 assert(
   callPhoneQrDialog.includes('QRCodeSVG') &&
     callPhoneQrDialog.includes('value={qrValue}') &&
     callPhoneQrDialog.includes('marginSize={4}') &&
+    !callPhoneQrDialog.includes('Dialog') &&
     callPhoneQr.includes('`tel:${dialNumber}`') &&
     !callPhoneQrDialog.includes('api.qrserver') &&
     !callPhoneQrDialog.includes('chart.googleapis'),
-  'رمز الاتصال يُولد محلياً بهامش قابل للمسح ويحوّل الهاتف إلى tel: بلا خدمة خارجية',
+  'رمز الاتصال ظاهر مباشرة ويُولد محلياً بهامش قابل للمسح ويحوّل الهاتف إلى tel: بلا خدمة خارجية',
 );
 assert(
   followUp.includes('| "dismissed";') &&
