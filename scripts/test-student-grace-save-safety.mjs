@@ -53,6 +53,11 @@ const grace = loadModule("../src/lib/student-grace.ts", new Map([
   ["@/lib/baghdad-time", baghdad],
 ]));
 
+const historyServer = loadModule("../src/lib/student-grace-history-server.ts", new Map([
+  ["@/lib/student-grace", grace],
+  ["@/lib/baghdad-time", baghdad],
+]));
+
 function fixture(overrides = {}) {
   return {
     id: "fixture-student", name: "fixture student", code: "FIXTURE-1",
@@ -65,6 +70,7 @@ function fixture(overrides = {}) {
     createdAt: new Date("2026-09-10T00:00:00.000Z"),
     gracePeriodStartDate: new Date("2026-09-10T00:00:00.000Z"),
     gracePeriodEndedAt: new Date("2026-09-11T09:00:00.000Z"),
+    gracePeriodHistory: [],
     ...overrides,
   };
 }
@@ -74,6 +80,7 @@ function createHarness(options = {}) {
   const before = structuredClone(stored);
   const events = [];
   const writes = [];
+  const previewProposals = [];
   const course = { id: "fixture-course", active: true };
   const principal = { id: "fixture-admin", name: "fixture admin", isAdmin: true };
   let reads = 0;
@@ -102,6 +109,9 @@ function createHarness(options = {}) {
     },
     course: { findUnique: async () => course },
     auditLog: { create: async () => { events.push("audit-write"); return {}; } },
+    grade: { findMany: async () => structuredClone(options.grades || []) },
+    studentLeaveGradeBackup: { findMany: async () => structuredClone(options.backups || []) },
+    courseChapter: { findMany: async () => [{ chapter: { name: "fixture chapter", opportunities: 3 } }] },
   };
   const routeHelpers = {
     isDatabaseMigrationRequiredError: () => false,
@@ -158,12 +168,19 @@ function createHarness(options = {}) {
         catch (error) { stored = transactionBefore; throw error; }
       },
     }],
-    ["@/lib/student-enrollment-archive-server", {}],
+    ["@/lib/student-enrollment-archive-server", {
+      archiveAndResetStudentEnrollment: async (context) => {
+        assert.equal(context, tx);
+        events.push("enrollment-archive");
+        return { archiveId: "fixture-archive" };
+      },
+    }],
     ["@/lib/student-academic-impact-token", {
       buildStudentAcademicImpactToken: async (context, proposal) => {
         assert.equal(context, tx);
         events.push("academic-preview-check");
         assert.equal(proposal.studentId, stored.id);
+        previewProposals.push(structuredClone(proposal));
         assert.equal(proposal.proposedGraceEndedAt, null, "renewal must preview reopening grace, not retaining the old end marker");
         return "current-academic-preview";
       },
@@ -171,6 +188,7 @@ function createHarness(options = {}) {
     ["@/lib/student-code-sequence", {}],
     ["@/lib/schema-readiness", {}],
     ["@/lib/student-grace", grace],
+    ["@/lib/student-grace-history-server", historyServer],
     ["@/lib/grace-period-repair-server", {
       repairProtectedAbsencesForStudents: async () => { events.push("absence-repair"); },
     }],
@@ -185,7 +203,7 @@ function createHarness(options = {}) {
   const put = loadModule("../src/app/api/students/route.ts", dependencies).PUT;
   const get = loadModule("../src/app/api/students/edit-snapshot/route.ts", dependencies).GET;
   return {
-    before, events, writes, permissions,
+    before, events, writes, permissions, previewProposals,
     student: () => structuredClone(stored),
     reads: () => reads,
     update: async (data) => {
@@ -294,6 +312,8 @@ test("ordinary profile edits retain ended grace and never recalculate balances",
   assert.ok(!harness.events.includes("academic-recalculation"));
   assert.equal(harness.student().opportunities, harness.before.opportunities);
   assert.equal(harness.student().baseOpportunities, harness.before.baseOpportunities);
+  assert.deepEqual(harness.student().gracePeriodHistory, harness.before.gracePeriodHistory);
+  assert.equal(harness.writes[0].gracePeriodHistory, undefined, "ordinary edits must not rewrite grace history");
 });
 
 test("archived students cannot bypass academic edit protection with ended-at-only renewal", async () => {
@@ -382,4 +402,96 @@ test("edit snapshot handles a database read failure without retrying a mutation"
   assert.equal((await harness.snapshot()).status, 500);
   assert.equal(harness.reads(), 1);
   harness.assertNoWrites();
+});
+
+test("renewal persists elapsed grace so old and new exam dates remain protected", async () => {
+  const harness = createHarness({ student: fixture({ gracePeriodEndedAt: null }) });
+  const today = baghdad.baghdadTodayKey();
+  const result = await harness.update({
+    ...confirmedRenewal,
+    gracePeriodStartMode: "now",
+    academicImpactPreviewGraceStartDate: today,
+    expectedMutationToken: tokens.buildStudentMutationToken(harness.before),
+  });
+  assert.equal(result.status, 200, result.body.error);
+  const student = harness.student();
+  assert.equal(baghdad.baghdadDateKey(student.gracePeriodStartDate), today);
+  assert.ok(grace.isExamWithinStudentGraceWindow(student, { id: "old-exam", date: "2026-09-12" }), "renewal must retain the earlier granted right even without a Grade row");
+  assert.ok(grace.isExamWithinStudentGraceWindow(student, { id: "new-exam", date: today }));
+  assert.equal(grace.isExamWithinStudentGraceWindow(student, { id: "gap-exam", date: "2026-09-17" }), false, "a gap between grants must not become exempt");
+  assert.deepEqual(student.gracePeriodHistory, harness.previewProposals[0].proposedGraceHistory, "the saved history must be exactly the history protected by confirmation");
+  assert.equal(student.opportunities, harness.before.opportunities, "the route never directly overwrites balances while storing history");
+});
+
+test("renewal captures a legacy grace marker instead of exposing it to reconciliation", async () => {
+  const harness = createHarness({
+    grades: [{ id: "legacy-grade", examId: "legacy-exam", status: "ضمن فترة السماح", score: null, exam: { id: "legacy-exam", date: new Date("2026-09-12T00:00:00.000Z") } }],
+  });
+  const result = await harness.update({
+    ...confirmedRenewal,
+    gracePeriodStartMode: "now",
+    academicImpactPreviewGraceStartDate: baghdad.baghdadTodayKey(),
+  });
+  assert.equal(result.status, 200, result.body.error);
+  const student = harness.student();
+  assert.ok(grace.isExamWithinStudentGraceWindow(student, { id: "legacy-exam", date: "2026-09-12" }), "a legitimate saved historical grace marker must remain protected when dates are renewed");
+  assert.equal(grace.isExamWithinStudentGraceWindow(student, { id: "unproven-exam", date: "2026-09-12" }), false, "a legacy marker must protect only its own exam, not all exams that day");
+  assert.equal(grace.isExamWithinStudentGraceWindow(student, { id: "legacy-exam", date: "2026-09-13" }), false, "editing an exam date must not blindly carry its old protection");
+});
+
+test("client-supplied history cannot grant exemptions or replace saved history", async () => {
+  const storedHistory = [{ start: "2026-09-10", endExclusive: "2026-09-11", excludedExamIds: [] }];
+  const harness = createHarness({ student: fixture({ gracePeriodHistory: storedHistory }) });
+  const result = await harness.update({
+    school: "reviewed school",
+    gracePeriodHistory: [{ start: "2026-01-01", endExclusive: "2027-01-01", excludedExamIds: [] }],
+    expectedMutationToken: tokens.buildStudentMutationToken(harness.before),
+  });
+  assert.equal(result.status, 200, result.body.error);
+  assert.deepEqual(harness.student().gracePeriodHistory, storedHistory);
+  assert.equal(harness.writes[0].gracePeriodHistory, undefined);
+  assert.ok(!harness.events.includes("academic-recalculation"));
+});
+
+test("a new enrollment clears old manual grace and retained history", async () => {
+  const harness = createHarness({ student: fixture({
+    gracePeriodEndedAt: null,
+    gracePeriodHistory: [{ start: "2026-09-10", endExclusive: "2026-09-16", excludedExamIds: [] }],
+  }) });
+  const result = await harness.update({
+    subSite: "بابل", courseTransferPolicy: "reset", accountingGraceDays: 6,
+    expectedMutationToken: tokens.buildStudentMutationToken(harness.before),
+  });
+  assert.equal(result.status, 200, result.body.error);
+  const student = harness.student();
+  assert.ok(harness.events.includes("enrollment-archive"));
+  assert.equal(student.accountingGraceDays, 0, "unchanged historical duration is not a new manual grant");
+  assert.equal(student.gracePeriodStartDate, null);
+  assert.equal(student.gracePeriodEndedAt, null);
+  assert.deepEqual(student.gracePeriodHistory, []);
+  assert.equal(grace.getStudentGraceWindow(student).source, "automatic");
+  assert.equal(grace.getStudentGraceWindow(student).days, 3);
+  assert.equal(grace.isExamWithinStudentGraceWindow(student, { id: "old-enrollment-exam", date: "2026-09-12" }), false);
+});
+
+test("academic preview and edit guards invalidate when source or proposed grace history changes", async () => {
+  const history = [{ start: "2026-09-10", endExclusive: "2026-09-16", excludedExamIds: ["numeric-exam"] }];
+  let raw = fixture({ gracePeriodHistory: history });
+  const originalMutationToken = tokens.buildStudentMutationToken(raw);
+  const client = { student: { findUnique: async ({ select }) => Object.fromEntries(Object.keys(select).map((key) => [key, structuredClone(raw[key])])) } };
+  for (const model of ["grade", "studentLeave", "opportunityLog", "studentNote", "exam", "courseChapter", "chapter"]) {
+    client[model] = { findMany: async () => [] };
+  }
+  const academicTokens = loadModule("../src/lib/student-academic-impact-token.ts", new Map([
+    ["node:crypto", require("node:crypto")],
+    ["@/lib/db", { db: client }],
+    ["@/lib/baghdad-time", baghdad],
+  ]));
+  const proposal = { studentId: raw.id, proposedCreatedAt: raw.createdAt, proposedGraceDays: 6, proposedGraceStartDate: raw.gracePeriodStartDate, proposedGraceHistory: history };
+  const first = await academicTokens.buildStudentAcademicImpactToken(client, proposal);
+  assert.equal(first, await academicTokens.buildStudentAcademicImpactToken(client, proposal));
+  assert.notEqual(first, await academicTokens.buildStudentAcademicImpactToken(client, { ...proposal, proposedGraceHistory: [] }), "the displayed proposal cannot authorize a different historical exemption set");
+  raw = { ...raw, gracePeriodHistory: [] };
+  assert.notEqual(first, await academicTokens.buildStudentAcademicImpactToken(client, proposal), "a concurrent history change invalidates the old preview");
+  assert.notEqual(originalMutationToken, tokens.buildStudentMutationToken(raw), "the edit guard must reject an editor opened before a history change");
 });

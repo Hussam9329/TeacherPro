@@ -228,10 +228,10 @@ must(
 );
 
 must(
-  gradeEntry.includes('import { isStudentCurrentlyInGrace } from "@/lib/student-grace"') &&
-    gradeEntry.includes("isStudentCurrentlyInGrace(student)") &&
+  gradeEntry.includes('import { getGradeEntryGraceState } from "@/lib/grade-entry-grace"') &&
+    gradeEntry.includes("getGradeEntryGraceState({") &&
     gradeEntry.includes('data-grace-direct-entry=') &&
-    gradeEntry.includes("const studentInGrace") &&
+    gradeEntry.includes("protectedForExam: studentInGrace, numericGradeEndsGrace") &&
     gradeEntry.includes("وتبدأ المحاسبة من نفس") &&
     gradeEntry.includes("تم حفظ الدرجة وإنهاء فترة السماح") &&
     gradeEntry.includes("payload.graceEnded") &&

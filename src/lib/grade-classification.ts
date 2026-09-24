@@ -68,6 +68,7 @@ export type StudentGraceLike = {
   accountingGraceDays?: number | null;
   gracePeriodStartDate?: Date | string | null;
   gracePeriodEndedAt?: Date | string | null;
+  gracePeriodHistory?: unknown;
 };
 
 export type StudentLeaveLike = {
@@ -132,7 +133,7 @@ export function isExamBeforeStudentRegistration(
 
 export function isExamWithinStudentGracePeriodUnified(
   student: StudentGraceLike,
-  exam: Pick<ExamLike, "date">,
+  exam: Pick<ExamLike, "date"> & Partial<Pick<ExamLike, "id">>,
 ): boolean {
   return isExamWithinStudentGraceWindow(student, exam);
 }

@@ -808,12 +808,14 @@ export interface StudentAcademicUpdateImpactResponse {
     accountingGraceDays: number;
     gracePeriodStartDate?: string | null;
     gracePeriodEndedAt?: string | null;
+    gracePeriodHistory?: unknown;
   };
   proposed: {
     createdAt: string;
     accountingGraceDays: number;
     gracePeriodStartDate?: string | null;
     gracePeriodEndedAt?: string | null;
+    gracePeriodHistory?: unknown;
   };
   impact: {
     totalGrades: number;

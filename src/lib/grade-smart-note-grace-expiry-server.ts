@@ -141,6 +141,7 @@ if (process.env.ALLOW_LEGACY_GRACE_SCORED_MIGRATION !== "1") {
           accountingGraceDays: true,
           gracePeriodStartDate: true,
           gracePeriodEndedAt: true,
+          gracePeriodHistory: true,
         },
       },
       exam: { select: { fullMark: true } },

@@ -17,6 +17,7 @@ import {
   resolveManualGraceStartDate,
   validateManualGraceStartDate,
 } from "@/lib/student-grace";
+import { captureStudentGraceHistory } from "@/lib/student-grace-history-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 
 function normalizeGraceDays(value: unknown): number {
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
           accountingGraceDays: true,
           gracePeriodStartDate: true,
           gracePeriodEndedAt: true,
+          gracePeriodHistory: true,
         },
       });
       if (!student) {
@@ -144,6 +146,9 @@ export async function POST(req: NextRequest) {
         dayKey(proposedGraceEndedAt) !== dayKey(student.gracePeriodEndedAt);
       const graceChanged =
         graceDaysChanged || graceStartChanged || graceEndChanged;
+      const proposedGraceHistory = dateChanged || graceChanged
+        ? await captureStudentGraceHistory(tx, student)
+        : student.gracePeriodHistory;
 
       const [grades, leaves, projection, previewToken] = await Promise.all([
         tx.grade.findMany({
@@ -159,6 +164,7 @@ export async function POST(req: NextRequest) {
             accountingGraceDays: proposedGraceDays,
             gracePeriodStartDate: proposedGraceStartDate,
             gracePeriodEndedAt: proposedGraceEndedAt,
+            gracePeriodHistory: proposedGraceHistory,
           },
           { tx },
         ),
@@ -168,6 +174,7 @@ export async function POST(req: NextRequest) {
           proposedGraceDays,
           proposedGraceStartDate,
           proposedGraceEndedAt,
+          proposedGraceHistory,
         }),
       ]);
 
@@ -176,12 +183,14 @@ export async function POST(req: NextRequest) {
         accountingGraceDays: student.accountingGraceDays,
         gracePeriodStartDate: student.gracePeriodStartDate,
         gracePeriodEndedAt: student.gracePeriodEndedAt,
+        gracePeriodHistory: student.gracePeriodHistory,
       };
       const projectedStudent = {
         createdAt: proposedCreatedAt,
         accountingGraceDays: proposedGraceDays,
         gracePeriodStartDate: proposedGraceStartDate,
         gracePeriodEndedAt: proposedGraceEndedAt,
+        gracePeriodHistory: proposedGraceHistory,
       };
 
       const changes = grades

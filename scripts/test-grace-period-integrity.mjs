@@ -126,7 +126,7 @@ check(
   repairHelper.includes('grade.status === "غائب"') &&
     repairHelper.includes('grade.status === "غائب" &&') &&
     !repairHelper.includes('(!options.onlyAbsences || grade.status === "غائب")') &&
-    repairHelper.includes("studentCall.deleteMany") &&
+    !repairHelper.includes("studentCall.deleteMany") &&
     repairHelper.includes('status: "ضمن فترة السماح"') &&
     repairHelper.includes('status: "قبل تسجيل الطالب"') &&
     repairHelper.includes("grade.updateMany") &&
@@ -153,7 +153,7 @@ check(
 );
 check(
   "حارس قاعدة البيانات لا يغير المخطط ويتطلب أحدث migration مطلوبة",
-  schemaReadiness.includes("20260924120000_student_username_field") &&
+  schemaReadiness.includes("20260924150000_student_grace_history") &&
     schemaReadiness.includes('FROM "_prisma_migrations"') &&
     !schemaReadiness.includes("$executeRaw"),
 );

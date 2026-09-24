@@ -271,6 +271,7 @@ type NumericGradeAttemptContext = {
     accountingGraceDays: number;
     gracePeriodStartDate: Date | null;
     gracePeriodEndedAt: Date | null;
+    gracePeriodHistory?: unknown;
   };
   exam: {
     id: string;
@@ -336,6 +337,7 @@ async function inspectNumericGradeAttempt(
         accountingGraceDays: true,
         gracePeriodStartDate: true,
         gracePeriodEndedAt: true,
+        gracePeriodHistory: true,
       },
     }),
     tx.exam.findUnique({

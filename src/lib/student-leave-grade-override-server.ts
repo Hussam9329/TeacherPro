@@ -162,6 +162,7 @@ async function restoreLeaveBackups(
         accountingGraceDays: true,
         gracePeriodStartDate: true,
         gracePeriodEndedAt: true,
+        gracePeriodHistory: true,
       },
     }),
     client.exam.findMany({

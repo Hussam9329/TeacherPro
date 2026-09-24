@@ -250,5 +250,9 @@
   "20260924120000_student_username_field": {
     "kind": "expand",
     "checksum": "4ada4ced0e37e75f0b38386eec189dfaef89fe6caebb90e76e76845de0adc2a5"
+  },
+  "20260924150000_student_grace_history": {
+    "kind": "expand",
+    "checksum": "c20060080d3bd76ef83a59a68a66960a6ea72fe1c3174677516e5b2aa254ea03"
   }
 }

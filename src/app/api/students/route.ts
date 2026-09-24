@@ -45,6 +45,7 @@ import {
   resolveManualGraceStartDate,
   validateManualGraceStartDate,
 } from "@/lib/student-grace";
+import { captureStudentGraceHistory } from "@/lib/student-grace-history-server";
 import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import {
@@ -110,6 +111,7 @@ const NON_WRITABLE_STUDENT_UPDATE_KEYS = new Set([
   "gracePeriodStartDate",
   // gracePeriodEndedAt is owned by the grade engine/manual grace restart.
   "gracePeriodEndedAt",
+  "gracePeriodHistory",
   // Prisma relation objects that may be present after GET /api/students include: { course: true }
   "course",
   "grades",
@@ -1244,6 +1246,21 @@ export async function PUT(req: NextRequest) {
         // الطالب الجديد يبدأ من لحظة النقل/إعادة البداية؛ هذا يمنع امتحانات
         // الملف القديم من العودة إلى التأثير مستقبلاً.
         transactionData.createdAt = new Date();
+        if (customGraceStart && baghdadDateKey(customGraceStart) < baghdadDateKey(transactionData.createdAt)) {
+          throw new StudentIntegrityError("بداية السماح لا يمكن أن تسبق بداية ملف الطالب الجديد.", 400);
+        }
+        // A new enrollment must not inherit the previous enrollment's grace.
+        // Only an explicitly edited grant belongs to the new file.
+        const explicitGraceGrant = gracePeriodStartMode ||
+          (data.accountingGraceDays !== undefined &&
+            Number(data.accountingGraceDays) !== Number(lockedStudent.accountingGraceDays || 0));
+        transactionData.accountingGraceDays = explicitGraceGrant
+          ? Number(data.accountingGraceDays || 0)
+          : 0;
+        transactionData.gracePeriodStartDate = transactionData.accountingGraceDays > 0
+          ? resolveManualGraceStartDate({ mode: "registration", createdAt: transactionData.createdAt })
+          : null;
+        transactionData.gracePeriodHistory = [];
       } else if (transactionKeepEnrollment) {
         // No recalculation and no balance rewrite. "Keep" is literal.
         delete transactionData.opportunities;
@@ -1301,12 +1318,14 @@ export async function PUT(req: NextRequest) {
             409,
           );
         }
+        transactionData.gracePeriodHistory = await captureStudentGraceHistory(tx, lockedStudent);
         const currentPreviewToken = await buildStudentAcademicImpactToken(tx, {
           studentId: String(id),
           proposedCreatedAt: transactionRequestedCreatedAt,
           proposedGraceDays: transactionRequestedGraceDays,
           proposedGraceStartDate: transactionRequestedGraceStartDate,
           proposedGraceEndedAt: transactionRequestedGraceEndedAt,
+          proposedGraceHistory: transactionData.gracePeriodHistory,
         });
         if (currentPreviewToken !== academicImpactPreviewToken) {
           throw new StudentIntegrityError(
@@ -1326,10 +1345,8 @@ export async function PUT(req: NextRequest) {
       }
 
       if (!transactionResetEnrollment && transactionAcademicInputsChanged) {
-        // First remove/restore stale protection created under the old registration/grace
-        // dates, then rebuild the current protection set. includeAbsent makes a past
-        // exam that just left protection immediately accountable instead of leaving
-        // an empty row that batch absence would only repair later.
+        // Reconcile against both retained grace history and the new window.
+        // A renewal must never turn an already protected past exam into absence.
         await reconcileProtectedGradeMarkersForStudentAcademicEdit(tx, [String(id)]);
         await ensureProtectedGradeMarkers(tx, {
           studentIds: [String(id)],

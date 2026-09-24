@@ -82,6 +82,7 @@ model Student {
   accountingGraceDays Int   @default(0)
   gracePeriodStartDate DateTime?
   gracePeriodEndedAt DateTime?
+  gracePeriodHistory Json @default("[]")
   createdAt       DateTime @default(now())
   courseId        String
   course          Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)

@@ -104,6 +104,9 @@ function selectStudentForResponse() {
     opportunities: true,
     baseOpportunities: true,
     accountingGraceDays: true,
+    gracePeriodStartDate: true,
+    gracePeriodEndedAt: true,
+    gracePeriodHistory: true,
   } as const;
 }
 

@@ -69,6 +69,7 @@ async function inspectCandidates(client: typeof db | Prisma.TransactionClient) {
           accountingGraceDays: true,
           gracePeriodStartDate: true,
           gracePeriodEndedAt: true,
+          gracePeriodHistory: true,
         },
       },
       exam: {

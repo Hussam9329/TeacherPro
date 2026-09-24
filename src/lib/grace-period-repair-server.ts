@@ -15,8 +15,9 @@ type ProtectedGradeCandidate = {
     accountingGraceDays: number;
     gracePeriodStartDate: Date | null;
     gracePeriodEndedAt: Date | null;
+    gracePeriodHistory: Prisma.JsonValue;
   };
-  exam: { date: Date };
+  exam: { id: string; date: Date };
 };
 
 export type GracePeriodRepairResult = {
@@ -34,10 +35,11 @@ function uniqueIds(values: Array<string | null | undefined>): string[] {
 }
 
 /**
- * Converts grace-protected absences to an explicit scoreless grace marker,
- * converts impossible pre-registration absences, and removes related call rows.
- * Manually entered numeric grades before registration remain real Grade rows;
- * their permanent academic exclusion is handled by the unified writeback.
+ * Converts grace-protected absences to an explicit scoreless grace marker
+ * and converts impossible pre-registration absences. Original call notes and
+ * contact actions are manual history and must survive either correction;
+ * follow-up eligibility is derived from the corrected grades when read.
+ * Manually entered numeric grades are left to the unified writeback.
  * Call this inside the
  * same transaction as grace/registration changes, before academic
  * recalculation, so no request can observe a protected student as absent.
@@ -45,6 +47,8 @@ function uniqueIds(values: Array<string | null | undefined>): string[] {
 export async function repairProtectedAbsencesForStudents(
   client: PrismaClientLike,
   rawStudentIds: Array<string | null | undefined>,
+  // Keep the legacy deleteCalls option source-compatible with maintenance
+  // callers, but never let it erase manually recorded follow-up history.
   options: { deleteCalls?: boolean; onlyAbsences?: boolean; examIds?: string[] } = {},
 ): Promise<GracePeriodRepairResult> {
   const requestedStudentIds = uniqueIds(rawStudentIds);
@@ -69,9 +73,10 @@ export async function repairProtectedAbsencesForStudents(
           accountingGraceDays: true,
           gracePeriodStartDate: true,
           gracePeriodEndedAt: true,
+          gracePeriodHistory: true,
         },
       },
-      exam: { select: { date: true } },
+      exam: { select: { id: true, date: true } },
     },
   })) as ProtectedGradeCandidate[];
   const beforeRegistration = candidates.filter(
@@ -91,16 +96,6 @@ export async function repairProtectedAbsencesForStudents(
   }
 
   const affectedStudentIds = uniqueIds(protectedAbsences.map((grade) => grade.studentId));
-  const callResult = options.deleteCalls === false
-    ? { count: 0 }
-    : await client.studentCall.deleteMany({
-        where: {
-          OR: protectedAbsences.map((grade) => ({
-            studentId: grade.studentId,
-            examId: grade.examId,
-          })),
-        },
-      });
   const graceGradeIds = withinGrace.map((grade) => grade.id);
   const convertedResult = graceGradeIds.length
     ? await client.grade.updateMany({
@@ -151,6 +146,6 @@ export async function repairProtectedAbsencesForStudents(
     convertedGrades: convertedResult.count,
     convertedBeforeRegistration: beforeRegistrationResult.count,
     deletedGrades: 0,
-    deletedCalls: callResult.count,
+    deletedCalls: 0,
   };
 }

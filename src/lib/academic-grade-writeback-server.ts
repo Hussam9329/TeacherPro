@@ -11,6 +11,7 @@ import {
   type AcademicServerRecalculationResult,
 } from "@/lib/academic-recalculate-server";
 import { isExamWithinStudentGraceWindow } from "@/lib/student-grace";
+import { captureStudentGraceHistory } from "@/lib/student-grace-history-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 import {
   isPreRegistrationNumericGrade,
@@ -425,6 +426,7 @@ export async function syncAcademicGradeWriteback(
         accountingGraceDays: true,
         gracePeriodStartDate: true,
         gracePeriodEndedAt: true,
+        gracePeriodHistory: true,
       },
     }),
     client.exam.findUnique({
@@ -493,6 +495,9 @@ export async function syncAcademicGradeWriteback(
         accountingGraceDays: 0,
         gracePeriodStartDate: null,
         gracePeriodEndedAt: endedAt,
+        gracePeriodHistory: await captureStudentGraceHistory(client, student, {
+          now: endedAt, includeToday: false, excludeExamId: examId,
+        }),
       },
     });
     graceEnded = ended.count > 0;
@@ -584,6 +589,9 @@ export async function syncAcademicGradeWriteback(
         accountingGraceDays: 0,
         gracePeriodStartDate: null,
         gracePeriodEndedAt: endedAt,
+        gracePeriodHistory: await captureStudentGraceHistory(client, student, {
+          now: endedAt, includeToday: false, excludeExamId: examId,
+        }),
       },
     });
     registrationBackdated = backdated.count > 0;
@@ -705,8 +713,9 @@ export async function syncAcademicGradeWriteback(
         accountingGraceDays: student.accountingGraceDays,
         gracePeriodStartDate: studentGraceStartStr,
         gracePeriodEndedAt: studentGraceEndedAtStr,
+        gracePeriodHistory: student.gracePeriodHistory,
       },
-      { date: examDateStr },
+      { id: examId, date: examDateStr },
     )
   ) {
     throw new AcademicGradeWritebackError(
@@ -724,8 +733,9 @@ export async function syncAcademicGradeWriteback(
         accountingGraceDays: student.accountingGraceDays,
         gracePeriodStartDate: studentGraceStartStr,
         gracePeriodEndedAt: studentGraceEndedAtStr,
+        gracePeriodHistory: student.gracePeriodHistory,
       },
-      { date: examDateStr },
+      { id: examId, date: examDateStr },
     )
   ) {
     throw new AcademicGradeWritebackError(

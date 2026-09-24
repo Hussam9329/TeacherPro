@@ -43,6 +43,7 @@ export interface AcademicStudent {
   accountingGraceDays: number;
   gracePeriodStartDate?: string | null;
   gracePeriodEndedAt?: string | null;
+  gracePeriodHistory?: unknown;
 }
 
 export interface AcademicExam {

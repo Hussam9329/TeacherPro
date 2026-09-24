@@ -10,10 +10,19 @@ export type StudentGraceLike = {
   accountingGraceDays?: number | string | null;
   gracePeriodStartDate?: Date | string | null;
   gracePeriodEndedAt?: Date | string | null;
+  gracePeriodHistory?: unknown;
 };
 
 export type ExamDateLike = {
+  id?: string;
   date?: Date | string | null;
+};
+
+export type StudentGraceHistoryEntry = {
+  start: string;
+  endExclusive: string;
+  excludedExamIds: string[];
+  examIds?: string[];
 };
 
 export type StudentGraceWindow = {
@@ -92,7 +101,9 @@ export function parseGraceDateOnly(
   const date = new Date(
     Date.UTC(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0),
   );
-  return Number.isFinite(date.getTime()) ? date : null;
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === key
+    ? date
+    : null;
 }
 
 export function resolveManualGraceStartDate(args: {
@@ -166,7 +177,68 @@ export function isExamWithinStudentGraceWindow(
   student: StudentGraceLike,
   exam: ExamDateLike,
 ): boolean {
-  return isDateWithinStudentGraceWindow(student, exam.date);
+  if (isDateWithinStudentGraceWindow(student, exam.date)) return true;
+  const date = parseGraceDateOnly(exam.date)?.toISOString().slice(0, 10);
+  if (!date) return false;
+  return normalizeStudentGraceHistory(student.gracePeriodHistory).some(
+    (entry) => date >= entry.start && date < entry.endExclusive &&
+      (!entry.examIds || Boolean(exam.id && entry.examIds.includes(exam.id))) &&
+      (entry.excludedExamIds.length === 0 || Boolean(exam.id && !entry.excludedExamIds.includes(exam.id))),
+  );
+}
+
+/** Persisted, server-owned civil-day intervals; never extend the current counter. */
+export function normalizeStudentGraceHistory(value: unknown): StudentGraceHistoryEntry[] {
+  if (!Array.isArray(value)) return [];
+  const unique = new Map<string, StudentGraceHistoryEntry>();
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const start = typeof item.start === "string" ? parseGraceDateOnly(item.start) : null;
+    const end = typeof item.endExclusive === "string" ? parseGraceDateOnly(item.endExclusive) : null;
+    if (!start || !end || start >= end) continue;
+    const examIds = Array.isArray(item.examIds)
+      ? [...new Set<string>(item.examIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0))].sort()
+      : undefined;
+    if (item.examIds !== undefined && !examIds?.length) continue;
+    const entry: StudentGraceHistoryEntry = {
+      start: start.toISOString().slice(0, 10),
+      endExclusive: end.toISOString().slice(0, 10),
+      excludedExamIds: Array.isArray(item.excludedExamIds)
+        ? [...new Set<string>(item.excludedExamIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0))].sort()
+        : [],
+      ...(examIds ? { examIds } : {}),
+    };
+    unique.set(JSON.stringify(entry), entry);
+  }
+  return [...unique.values()].sort((a, b) =>
+    a.start.localeCompare(b.start) || a.endExclusive.localeCompare(b.endExclusive) ||
+    JSON.stringify(a).localeCompare(JSON.stringify(b)),
+  );
+}
+
+/**
+ * Save elapsed entitlement before replacing a window. Renewal preserves today;
+ * numeric activation preserves earlier days and keeps the entered exam chargeable.
+ * Future days in an edited/cancelled grant are not silently carried forward.
+ */
+export function preserveStudentGraceHistory(
+  student: StudentGraceLike,
+  options: { now?: Date; includeToday?: boolean; excludeExamId?: string } = {},
+): StudentGraceHistoryEntry[] {
+  const history = normalizeStudentGraceHistory(student.gracePeriodHistory);
+  const window = getStudentGraceWindow(student);
+  const cutoff = parseGraceDateOnly(options.now || new Date());
+  if (window && cutoff) {
+    if (options.includeToday !== false) cutoff.setUTCDate(cutoff.getUTCDate() + 1);
+    const end = new Date(Math.min(window.endExclusive.getTime(), cutoff.getTime()));
+    if (end > window.start) {
+      history.push({ start: window.start.toISOString().slice(0, 10), endExclusive: end.toISOString().slice(0, 10), excludedExamIds: [] });
+    }
+  }
+  if (options.excludeExamId) {
+    for (const entry of history) entry.excludedExamIds.push(options.excludeExamId);
+  }
+  return normalizeStudentGraceHistory(history);
 }
 
 /**

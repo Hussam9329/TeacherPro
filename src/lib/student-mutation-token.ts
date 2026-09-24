@@ -28,6 +28,7 @@ const STUDENT_MUTATION_TOKEN_FIELDS = [
   "accountingGraceDays",
   "gracePeriodStartDate",
   "gracePeriodEndedAt",
+  "gracePeriodHistory",
   "courseId",
 ] as const;
 

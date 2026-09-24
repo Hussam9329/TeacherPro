@@ -23,6 +23,7 @@ export async function buildStudentAcademicImpactToken(
     proposedGraceDays: number;
     proposedGraceStartDate?: Date | string | null;
     proposedGraceEndedAt?: Date | string | null;
+    proposedGraceHistory?: unknown;
   },
 ): Promise<string> {
   const student = await client.student.findUnique({
@@ -40,6 +41,7 @@ export async function buildStudentAcademicImpactToken(
       accountingGraceDays: true,
       gracePeriodStartDate: true,
       gracePeriodEndedAt: true,
+      gracePeriodHistory: true,
       dismissalReason: true,
       dismissalNotes: true,
     },
@@ -166,7 +168,7 @@ export async function buildStudentAcademicImpactToken(
   ]);
 
   const payload = {
-    version: 6,
+    version: 7,
     student,
     proposedCreatedAt: dayKey(input.proposedCreatedAt),
     proposedGraceStartDate: input.proposedGraceStartDate
@@ -175,6 +177,7 @@ export async function buildStudentAcademicImpactToken(
     proposedGraceEndedAt: input.proposedGraceEndedAt
       ? dayKey(input.proposedGraceEndedAt)
       : "",
+    proposedGraceHistory: input.proposedGraceHistory ?? student?.gracePeriodHistory ?? [],
     proposedGraceDays: Math.min(
       30,
       Math.max(0, Math.trunc(Number(input.proposedGraceDays || 0))),

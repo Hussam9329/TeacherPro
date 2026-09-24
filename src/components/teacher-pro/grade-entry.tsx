@@ -85,7 +85,7 @@ import {
   splitSelection,
   studentMatchesExamMainSites,
 } from "@/lib/exam-utils";
-import { isStudentCurrentlyInGrace } from "@/lib/student-grace";
+import { getGradeEntryGraceState } from "@/lib/grade-entry-grace";
 import { applyOpportunityPenalty } from "@/lib/opportunity-balance";
 import { countAllManualGradesForExam } from "@/lib/grade-entry-stats";
 import {
@@ -840,16 +840,6 @@ export function GradeEntryView() {
   const getStudentLeaveForSelectedExam = (studentId: string) =>
     leaveByStudentId.get(studentId);
 
-  const isStudentInGraceForSelectedExam = (studentId: string) => {
-    if (!selectedExam) return false;
-    const student = studentById.get(studentId);
-    return Boolean(
-      student &&
-        isStudentCurrentlyInGrace(student) &&
-        isExamOnOrAfterStudentRegistration(student, selectedExam),
-    );
-  };
-
   const gradeHasAutomaticEffect = (studentId: string, examId: string) =>
     examId === selectedExamId && automaticEffectStudentIds.has(studentId);
 
@@ -1055,7 +1045,12 @@ export function GradeEntryView() {
         }
 
         const hasLeave = leaveByStudentId.has(student.id);
-        const hasGrace = isExamWithinStudentGracePeriod(student, selectedExam);
+        const { protectedForExam: hasGrace } = getGradeEntryGraceState({
+          student,
+          exam: selectedExam,
+          grade,
+          hasLeave,
+        });
         const entered = !hasLeave && isGradeEntered(grade, selectedExam);
         if (filterStatus === "ضمن السماح" && !hasGrace) return false;
         if (filterStatus === "غير مسجل" && (entered || hasLeave)) return false;
@@ -2750,8 +2745,13 @@ export function GradeEntryView() {
                             : "idle");
                   const examBeforeRegistration =
                     !isExamOnOrAfterStudentRegistration(student, selectedExam);
-                  const studentInGrace =
-                    isStudentInGraceForSelectedExam(student.id);
+                  const { protectedForExam: studentInGrace, numericGradeEndsGrace } =
+                    getGradeEntryGraceState({
+                      student,
+                      exam: selectedExam,
+                      grade,
+                      hasLeave: Boolean(leave),
+                    });
                   const canEditPersistedGrade =
                     canEditGradeForStudent(student.id) &&
                     !examBeforeRegistration &&
@@ -2778,7 +2778,7 @@ export function GradeEntryView() {
                       className="teacherpro-heavy-row tp-save-row grid grid-cols-1 items-center gap-3 rounded-2xl border bg-card/80 p-3 shadow-sm xl:grid-cols-[1.5fr_130px_130px_1fr_170px]"
                       data-save-state={savePhase}
                       data-grace-direct-entry={
-                        studentInGrace ? "true" : undefined
+                        numericGradeEndsGrace ? "true" : undefined
                       }
                     >
                       <div className="min-w-0">
@@ -2883,10 +2883,10 @@ export function GradeEntryView() {
                           </p>
                         )}
                           {!leave &&
-                          studentInGrace && (
+                          numericGradeEndsGrace && (
                             <p className="mt-1 text-[11px] text-sky-700 dark:text-sky-300">
-                              الطالب ضمن فترة السماح؛ عند إدخال درجة رقمية
-                              ستنتهي فترة السماح فوراً وتبدأ المحاسبة من نفس
+                              عند إدخال درجة رقمية تنتهي فترة السماح الحالية
+                              للطالب فوراً وتبدأ المحاسبة من نفس
                               الدرجة.
                             </p>
                           )}
@@ -3089,7 +3089,7 @@ export function GradeEntryView() {
                                       "تعديل غير محفوظ"
                                     : leave
                                       ? "الطالب مجاز — الدرجة تنهي الإجازة وتُحتسب"
-                                      : studentInGrace
+                                      : numericGradeEndsGrace
                                         ? "أدخل الدرجة — ستبدأ المحاسبة"
                                         : savePhase === "idle" && entered
                                           ? "جاهز للتعديل"

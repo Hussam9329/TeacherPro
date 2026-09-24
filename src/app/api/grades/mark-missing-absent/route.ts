@@ -88,11 +88,12 @@ export async function POST(req: NextRequest) {
                 accountingGraceDays: true,
                 gracePeriodStartDate: true,
                 gracePeriodEndedAt: true,
+                gracePeriodHistory: true,
               },
             }),
             tx.exam.findUnique({
               where: { id: examId },
-              select: { date: true },
+              select: { id: true, date: true },
             }),
           ]);
           if (!student) throw new AcademicGradeWritebackError("الطالب غير موجود.", 404);
