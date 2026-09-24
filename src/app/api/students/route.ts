@@ -41,7 +41,9 @@ import {
 import { assertDatabaseSchemaReady } from "@/lib/schema-readiness";
 import {
   normalizeGracePeriodStartMode,
+  parseGraceStartDateInput,
   resolveManualGraceStartDate,
+  validateManualGraceStartDate,
 } from "@/lib/student-grace";
 import { repairProtectedAbsencesForStudents } from "@/lib/grace-period-repair-server";
 import { baghdadDateKey } from "@/lib/baghdad-time";
@@ -665,6 +667,7 @@ export async function PUT(req: NextRequest) {
       rawAcademicImpactPreviewGraceStartDate,
     expectedMutationToken: rawExpectedMutationToken,
     gracePeriodStartMode: rawGracePeriodStartMode,
+    gracePeriodStartDate: rawGracePeriodStartDate,
     ...rawData
   } = body;
   const data: any = { ...rawData };
@@ -696,6 +699,16 @@ export async function PUT(req: NextRequest) {
   const gracePeriodStartMode = normalizeGracePeriodStartMode(
     rawGracePeriodStartMode,
   );
+  const customGraceStart =
+    gracePeriodStartMode === "custom"
+      ? parseGraceStartDateInput(rawGracePeriodStartDate)
+      : null;
+  if (gracePeriodStartMode === "custom" && !customGraceStart) {
+    return NextResponse.json(
+      { error: "تاريخ بداية فترة السماح المحدد غير صالح" },
+      { status: 400 },
+    );
+  }
 
   if (!id) {
     return NextResponse.json(
@@ -802,6 +815,18 @@ export async function PUT(req: NextRequest) {
     if (graceDaysError)
       return NextResponse.json({ error: graceDaysError }, { status: 400 });
 
+    if (customGraceStart) {
+      const startError = validateManualGraceStartDate({
+        start: customGraceStart,
+        createdAt:
+          data.createdAt instanceof Date
+            ? data.createdAt
+            : currentStudent.createdAt,
+      });
+      if (startError)
+        return NextResponse.json({ error: startError }, { status: 400 });
+    }
+
     const requestedGraceDays = normalizeGraceDays(data.accountingGraceDays);
     const currentGraceDays = Number(currentStudent.accountingGraceDays || 0);
     const graceDaysChanged = requestedGraceDays !== currentGraceDays;
@@ -815,19 +840,21 @@ export async function PUT(req: NextRequest) {
     } else if (graceDaysChanged || gracePeriodStartMode) {
       // لا نعيد تشغيل السماح عند تعديل الاسم/الهاتف لأن الواجهة ترسل عدد
       // الأيام دائماً. تاريخ البدء يتغير فقط عند تغيير الأيام أو اختيار
-      // مصدر بدء صريح من المستخدم.
+      // مصدر بدء صريح من المستخدم (بما فيه تاريخ بداية محدد).
       data.gracePeriodStartDate =
         academicImpactConfirmed &&
         academicImpactPreviewToken &&
         academicImpactPreviewGraceStartDate
           ? academicImpactPreviewGraceStartDate
-          : resolveManualGraceStartDate({
-              mode: gracePeriodStartMode || "now",
-              createdAt:
-                data.createdAt instanceof Date
-                  ? data.createdAt
-                  : currentStudent.createdAt,
-            });
+          : customGraceStart
+            ? customGraceStart
+            : resolveManualGraceStartDate({
+                mode: gracePeriodStartMode === "custom" ? "now" : gracePeriodStartMode || "now",
+                createdAt:
+                  data.createdAt instanceof Date
+                    ? data.createdAt
+                    : currentStudent.createdAt,
+              });
       // Granting a new manual grace period explicitly reopens grace after a
       // previous numeric grade may have ended it.
       data.gracePeriodEndedAt = null;

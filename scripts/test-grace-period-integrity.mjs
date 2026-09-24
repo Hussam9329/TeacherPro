@@ -153,9 +153,27 @@ check(
 );
 check(
   "حارس قاعدة البيانات لا يغير المخطط ويتطلب أحدث migration مطلوبة",
-  schemaReadiness.includes("20260913120000_add_exam_telegram_submission_window") &&
+  schemaReadiness.includes("20260924120000_student_username_field") &&
     schemaReadiness.includes('FROM "_prisma_migrations"') &&
     !schemaReadiness.includes("$executeRaw"),
+);
+check(
+  "بداية السماح بتاريخ محدد: مسار الحفظ والمعاينة يطبقان نفس قواعد التحقق والواجهة تعرضها",
+  grace.includes('value === "custom"') &&
+    grace.includes("parseGraceStartDateInput") &&
+    grace.includes("validateManualGraceStartDate") &&
+    grace.includes("لا يمكن أن يسبق تاريخ تسجيل الطالب") &&
+    grace.includes("لا يمكن أن يكون في المستقبل") &&
+    students.includes("parseGraceStartDateInput") &&
+    students.includes("validateManualGraceStartDate") &&
+    students.includes("gracePeriodStartDate: rawGracePeriodStartDate") &&
+    updateImpact.includes("parseGraceStartDateInput") &&
+    updateImpact.includes("validateManualGraceStartDate") &&
+    registry.includes("edit-grace-start-mode") &&
+    registry.includes("edit-grace-start-date") &&
+    registry.includes('"custom"') &&
+    registry.includes("gracePeriodStartDate: resolvedGraceStartDate") &&
+    registry.includes("normalizeGracePeriodStartMode"),
 );
 
 let failed = 0;

@@ -13,7 +13,9 @@ import { withSerializableTransaction } from "@/lib/serializable-transaction";
 import { routeErrorResponse, validationError } from "@/lib/route-helpers";
 import {
   normalizeGracePeriodStartMode,
+  parseGraceStartDateInput,
   resolveManualGraceStartDate,
+  validateManualGraceStartDate,
 } from "@/lib/student-grace";
 import { baghdadDateKey } from "@/lib/baghdad-time";
 
@@ -98,18 +100,40 @@ export async function POST(req: NextRequest) {
           ? student.accountingGraceDays
           : normalizeGraceDays(body.accountingGraceDays);
 
+      const customGraceStart =
+        gracePeriodStartMode === "custom"
+          ? parseGraceStartDateInput(body.gracePeriodStartDate)
+          : null;
+      if (gracePeriodStartMode === "custom" && !customGraceStart) {
+        throw Object.assign(
+          new Error("تاريخ بداية فترة السماح المحدد غير صالح"),
+          { statusCode: 400 },
+        );
+      }
+      if (customGraceStart) {
+        const startError = validateManualGraceStartDate({
+          start: customGraceStart,
+          createdAt: proposedCreatedAt,
+        });
+        if (startError) {
+          throw Object.assign(new Error(startError), { statusCode: 400 });
+        }
+      }
+
       const dateChanged = dayKey(proposedCreatedAt) !== dayKey(student.createdAt);
       const graceDaysChanged =
         proposedGraceDays !== Number(student.accountingGraceDays || 0);
       const proposedGraceStartDate =
         proposedGraceDays <= 0
           ? null
-          : graceDaysChanged || gracePeriodStartMode
-            ? resolveManualGraceStartDate({
-                mode: gracePeriodStartMode || "now",
-                createdAt: proposedCreatedAt,
-              })
-            : student.gracePeriodStartDate;
+          : customGraceStart
+            ? customGraceStart
+            : graceDaysChanged || gracePeriodStartMode
+              ? resolveManualGraceStartDate({
+                  mode: gracePeriodStartMode || "now",
+                  createdAt: proposedCreatedAt,
+                })
+              : student.gracePeriodStartDate;
       const proposedGraceEndedAt =
         proposedGraceDays > 0 && (graceDaysChanged || gracePeriodStartMode)
           ? null
@@ -246,7 +270,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "الطالب غير موجود" }, { status: 404 });
     }
     if (candidate.statusCode === 400) {
-      return validationError("تاريخ التسجيل الجديد غير صالح");
+      return validationError(
+        candidate.message && candidate.message !== "invalid registration date"
+          ? candidate.message
+          : "تاريخ التسجيل الجديد غير صالح",
+      );
     }
     return routeErrorResponse(error, "تعذر معاينة أثر تاريخ التسجيل وفترة السماح.");
   }

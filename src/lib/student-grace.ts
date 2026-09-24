@@ -3,7 +3,7 @@ import { baghdadDateKey } from "@/lib/baghdad-time";
 export const AUTOMATIC_NEW_STUDENT_GRACE_DAYS = 3;
 export const MAX_MANUAL_STUDENT_GRACE_DAYS = 30;
 
-export type GracePeriodStartMode = "registration" | "now";
+export type GracePeriodStartMode = "registration" | "now" | "custom";
 
 export type StudentGraceLike = {
   createdAt?: Date | string | null;
@@ -43,7 +43,42 @@ export function normalizeGraceDays(value: unknown): number {
 export function normalizeGracePeriodStartMode(
   value: unknown,
 ): GracePeriodStartMode | "" {
-  return value === "registration" || value === "now" ? value : "";
+  return value === "registration" ||
+    value === "now" ||
+    value === "custom"
+    ? value
+    : "";
+}
+
+/**
+ * يحوّل إدخال تاريخ بداية صريح (yyyy-mm-dd أو تاريخ) إلى منتصف ليل UTC
+ * لنفس يوم بغداد. يعيد null عند الإدخال غير الصالح.
+ */
+export function parseGraceStartDateInput(value: unknown): Date | null {
+  if (!value) return null;
+  return parseGraceDateOnly(value as Date | string);
+}
+
+/**
+ * قواعد تاريخ البداية الصريح: لا يسبق تاريخ التسجيل ولا يدخل المستقبل.
+ * يعيد رسالة خطأ عربية أو سلسلة فارغة عند الصلاحية.
+ */
+export function validateManualGraceStartDate(args: {
+  start: Date;
+  createdAt: Date | string;
+  now?: Date;
+}): string {
+  const startKey = baghdadDateKey(args.start);
+  if (!startKey) return "تاريخ بداية فترة السماح غير صالح.";
+  const registrationKey = baghdadDateKey(args.createdAt);
+  if (registrationKey && startKey < registrationKey) {
+    return "تاريخ بداية السماح لا يمكن أن يسبق تاريخ تسجيل الطالب.";
+  }
+  const todayKey = baghdadDateKey(args.now || new Date());
+  if (todayKey && startKey > todayKey) {
+    return "تاريخ بداية السماح لا يمكن أن يكون في المستقبل.";
+  }
+  return "";
 }
 
 export function parseGraceDateOnly(

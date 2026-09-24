@@ -28,7 +28,7 @@ function check(label, condition) {
 
 const registryUi = `${registry}\n${registryResults}\n${registryHelpers}`;
 check('سجل الطلاب يستخدم روابط واتساب ويب https://wa.me وليس whatsapp://', registryUi.includes('https://wa.me/') && !registryUi.includes('whatsapp://'));
-check('سجل الطلاب يستخدم روابط تليكرام https://t.me وليس tg://', registryUi.includes('https://t.me/') && !registryUi.includes('tg://'));
+check('سجل الطلاب يفتح تليكرام داخل التطبيق بروابط tg://resolve لليوزرات ويعرض المعرفات الرقمية بلا روابط', registryHelpers.includes('tg://resolve?domain=') && registryHelpers.includes('export function telegramLink') && registryHelpers.includes('describeTelegramHandle') && registry.includes('telegramLink={telegramLink}'));
 check('تحميل سجل الطلاب يستخدم AbortController فعلياً لمنع رجوع نتائج قديمة', registry.includes('new AbortController()') && registry.includes('controller.abort()') && registry.includes('quietAbort: true'));
 check('قائمة سجل الطلاب تطلب opportunityMode حتى تصل Badges الصحة من قاعدة البيانات', registry.includes('opportunityMode: true'));
 check(

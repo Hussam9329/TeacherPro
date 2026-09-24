@@ -17,8 +17,8 @@ import {
   type StudentAcademicUpdateImpactResponse,
   type StudentDeleteImpactResponse,
 } from "@/lib/api";
-import { type GracePeriodStartMode } from "@/lib/student-grace";
-import { baghdadDateKey } from "@/lib/baghdad-time";
+import { type GracePeriodStartMode, normalizeGracePeriodStartMode } from "@/lib/student-grace";
+import { baghdadDateKey, baghdadTodayKey } from "@/lib/baghdad-time";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -451,6 +451,8 @@ export function StudentRegistryView() {
   const [gracePeriodStartMode, setGracePeriodStartMode] = useState<
     GracePeriodStartMode | ""
   >("");
+  const [gracePeriodStartDateDraft, setGracePeriodStartDateDraft] =
+    useState("");
   const [editGraceInputTouched, setEditGraceInputTouched] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
@@ -1030,7 +1032,9 @@ export function StudentRegistryView() {
       !editGraceDaysChanged,
   );
   const editGraceSettingsChanged =
-    editGraceDaysChanged || editGraceRenewalRequested;
+    editGraceDaysChanged ||
+    editGraceRenewalRequested ||
+    Boolean(gracePeriodStartMode);
   const editOriginalGraceRemainingDays = editOriginalStudent
     ? studentGraceRemainingDays(editOriginalStudent)
     : 0;
@@ -1040,7 +1044,7 @@ export function StudentRegistryView() {
   const editOriginalGraceActive = Boolean(
     editOriginalStudent && isStudentCurrentlyInGrace(editOriginalStudent),
   );
-  const editAcademicImpactSignature = `${editDialog.id}|${editDialog.form.createdAt}|${Number(editDialog.form.accountingGraceDays || 0)}|${gracePeriodStartMode}`;
+  const editAcademicImpactSignature = `${editDialog.id}|${editDialog.form.createdAt}|${Number(editDialog.form.accountingGraceDays || 0)}|${gracePeriodStartMode}|${gracePeriodStartMode === "custom" ? gracePeriodStartDateDraft : ""}`;
   const resetWillStartNewFile =
     editNeedsTransferPolicy && effectiveCourseTransferPolicy === "reset";
   const editResetChapterUnresolved =
@@ -1224,6 +1228,7 @@ export function StudentRegistryView() {
     setAcademicImpactConfirmed(false);
     setAcademicImpactLoading(false);
     setGracePeriodStartMode("");
+    setGracePeriodStartDateDraft("");
     setEditGraceInputTouched(false);
     setEditDialog({
       open: true,
@@ -1461,7 +1466,27 @@ export function StudentRegistryView() {
         : "now";
       setGracePeriodStartMode(resolvedGracePeriodStartMode);
     }
-    const resolvedAcademicImpactSignature = `${editDialog.id}|${form.createdAt}|${Number(form.accountingGraceDays || 0)}|${resolvedGracePeriodStartMode}`;
+    let resolvedGraceStartDate: string | undefined;
+    if (resolvedGracePeriodStartMode === "custom") {
+      const draft = gracePeriodStartDateDraft;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(draft)) {
+        toast.error("اختر تاريخ بداية صحيحاً لفترة السماح.");
+        return;
+      }
+      const registrationKey = baghdadDateKey(form.createdAt);
+      if (registrationKey && draft < registrationKey) {
+        toast.error(
+          "تاريخ بداية السماح لا يمكن أن يسبق تاريخ تسجيل الطالب.",
+        );
+        return;
+      }
+      if (draft > baghdadTodayKey()) {
+        toast.error("تاريخ بداية السماح لا يمكن أن يكون في المستقبل.");
+        return;
+      }
+      resolvedGraceStartDate = draft;
+    }
+    const resolvedAcademicImpactSignature = `${editDialog.id}|${form.createdAt}|${Number(form.accountingGraceDays || 0)}|${resolvedGracePeriodStartMode}|${resolvedGracePeriodStartMode === "custom" ? resolvedGraceStartDate ?? "" : ""}`;
     const hasResolvedAcademicImpactPreview =
       academicImpactPreviewSignature === resolvedAcademicImpactSignature &&
       Boolean(academicImpactPreview);
@@ -1479,6 +1504,7 @@ export function StudentRegistryView() {
             createdAt: form.createdAt,
             accountingGraceDays: Number(form.accountingGraceDays || 0),
             gracePeriodStartMode: resolvedGracePeriodStartMode || undefined,
+            gracePeriodStartDate: resolvedGraceStartDate,
           });
         } catch {
           if (currentEditorRequest === editRecoveryRequest.current) {
@@ -1554,6 +1580,7 @@ export function StudentRegistryView() {
       createdAt: form.createdAt,
       accountingGraceDays: Number(form.accountingGraceDays || 0),
       gracePeriodStartMode: resolvedGracePeriodStartMode || undefined,
+      gracePeriodStartDate: resolvedGraceStartDate,
     });
 
     if (!result.ok) {
@@ -1582,6 +1609,7 @@ export function StudentRegistryView() {
     setAcademicImpactPreviewSignature("");
     setAcademicImpactConfirmed(false);
     setGracePeriodStartMode("");
+    setGracePeriodStartDateDraft("");
     setEditGraceInputTouched(false);
     setServerRefreshKey((value) => value + 1);
     toast.success("تم تعديل بيانات الطالب", {
@@ -2603,6 +2631,7 @@ export function StudentRegistryView() {
             setEditOriginalStudent(null);
             setCourseTransferPolicy("");
             setGracePeriodStartMode("");
+            setGracePeriodStartDateDraft("");
             setEditGraceInputTouched(false);
           }
         }}
@@ -3284,6 +3313,82 @@ export function StudentRegistryView() {
                         تبدأ مدة جديدة بعد معاينة أثرها وتأكيدها.
                       </p>
                     </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="edit-grace-start-mode">
+                          بداية فترة السماح
+                        </Label>
+                        {gracePeriodStartMode ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 rounded-lg text-xs"
+                            onClick={() => {
+                              setGracePeriodStartMode("");
+                              setGracePeriodStartDateDraft("");
+                              setAcademicImpactPreview(null);
+                              setAcademicImpactPreviewSignature("");
+                              setAcademicImpactConfirmed(false);
+                            }}
+                          >
+                            <X aria-hidden="true" className="size-3.5" />
+                            إلغاء الاختيار
+                          </Button>
+                        ) : null}
+                      </div>
+                      <Select
+                        value={gracePeriodStartMode || undefined}
+                        onValueChange={(value) => {
+                          const mode = normalizeGracePeriodStartMode(value);
+                          setGracePeriodStartMode(mode);
+                          if (mode !== "custom") {
+                            setGracePeriodStartDateDraft("");
+                          }
+                          setAcademicImpactPreview(null);
+                          setAcademicImpactPreviewSignature("");
+                          setAcademicImpactConfirmed(false);
+                        }}
+                      >
+                        <SelectTrigger
+                          id="edit-grace-start-mode"
+                          className="h-11 rounded-xl"
+                        >
+                          <SelectValue placeholder="افتراضي حسب نوع التعديل" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="registration">
+                            من تاريخ تسجيل الطالب
+                          </SelectItem>
+                          <SelectItem value="now">
+                            من يوم حفظ التعديل
+                          </SelectItem>
+                          <SelectItem value="custom">تاريخ محدد</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {gracePeriodStartMode === "custom" ? (
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-grace-start-date">
+                            تاريخ بداية فترة السماح
+                          </Label>
+                          <DateInput
+                            id="edit-grace-start-date"
+                            value={gracePeriodStartDateDraft}
+                            onChange={(value) => {
+                              setGracePeriodStartDateDraft(value);
+                              setAcademicImpactPreview(null);
+                              setAcademicImpactPreviewSignature("");
+                              setAcademicImpactConfirmed(false);
+                            }}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            من هذا التاريخ حتى نهاية المدة تُعاد تفسير
+                            الامتحانات ضمن السماح بعد معاينة الأثر وتأكيدها.
+                            لا يمكن أن يسبق تاريخ التسجيل ولا يدخل المستقبل.
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
 
                   {editOriginalStudent && (
@@ -3497,6 +3602,7 @@ export function StudentRegistryView() {
                   setEditDialog({ open: false, id: "", form: emptyEditForm });
                   setEditOriginalStudent(null);
                   setGracePeriodStartMode("");
+                  setGracePeriodStartDateDraft("");
                   setEditGraceInputTouched(false);
                 }}
               >
