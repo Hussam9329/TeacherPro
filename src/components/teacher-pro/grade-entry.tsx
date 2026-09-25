@@ -1484,7 +1484,7 @@ export function GradeEntryView() {
     const rowKey = `${examAtRequest.id}:${studentId}`;
     const attemptedRevision = draftRevisionRef.current[rowKey] || 0;
 
-    // كل حفظ لطالب واحد ينتظر السابق. هذا يمنع blur وتغيير الحالة والزر
+    // كل حفظ لطالب واحد ينتظر السابق. هذا يمنع blur وتغيير الحالة وEnter
     // من إرسال طلبين بنفس expectedUpdatedAt ثم خسارة آخر تعديل بسبب 409.
     const runSave = async () => {
       if (selectedExamIdRef.current !== examAtRequest.id) return;
@@ -3028,21 +3028,6 @@ export function GradeEntryView() {
                                             ? "غير مدخل — يُحفظ تلقائياً"
                                             : "غير مدخل")}
                         </Badge>
-                        {!isAutoSaveCaptureRow && (
-                          <Button
-                            size="sm"
-                            className="tp-save-manual-button"
-                            title="حفظ بيانات هذا الطالب مباشرة"
-                            onClick={() => void saveGrade(student.id)}
-                            disabled={
-                              (!canEditPersistedGrade &&
-                                !protectedNumericCapture) ||
-                              isSaving
-                            }
-                          >
-                            {isSaving ? "جارٍ الحفظ..." : "حفظ الآن"}
-                          </Button>
-                        )}
                       </div>
                     </div>
                   );
