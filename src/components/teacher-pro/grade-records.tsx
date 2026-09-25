@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { ExportDialog, type ExportColumn } from "./export-dialog";
 import {
   Select,
@@ -157,12 +157,6 @@ const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
     key: "accounting",
     label: "الإجراء الحالي / المتوقع",
     value: ({ classificationText }) => classificationText,
-  },
-  {
-    key: "checked",
-    label: "مؤشر المحاسبة",
-    value: ({ grade }) =>
-      grade?.academicAccountingChecked ? "تمت مراجعة السجل (لا تغيّر الخصم)" : "",
   },
   { key: "notes", label: "ملاحظات", value: ({ grade }) => grade?.notes || "" },
 ];
@@ -408,20 +402,6 @@ export function GradeRecordsView() {
     });
   };
 
-  const isAcademicAccountingRow = (gradeId: string) => {
-    const grade = gradeForAction(gradeId);
-    const exam = grade ? exams.find((item) => item.id === grade.examId) : null;
-    const student = grade
-      ? students.find((item) => item.id === grade.studentId)
-      : null;
-    return Boolean(
-      grade &&
-      exam &&
-      classification(grade, exam, student || undefined).kind ===
-        "academic-accounting",
-    );
-  };
-
   const studentHasManualReactivation = (studentId: string) =>
     opportunityLogs.some(
       (log) => log.studentId === studentId && log.action === "إعادة تفعيل",
@@ -487,33 +467,6 @@ export function GradeRecordsView() {
       score,
       notes,
     );
-
-  const toggleAcademicAccounting = async (gradeId: string, checked: boolean) => {
-    if (!canRunGradeRecordActions) {
-      toast.error("انتظر تحميل سجل الدرجات قبل تنفيذ الإجراء.");
-      return;
-    }
-    if (!isAcademicAccountingRow(gradeId)) {
-      toast.error("التأشير متاح فقط لحالة محاسبة رسوب");
-      return;
-    }
-    const currentGrade = gradeForAction(gradeId);
-    const result = await gradeApi.update(gradeId, {
-      academicAccountingChecked: checked,
-      expectedUpdatedAt: currentGrade?.updatedAt || "",
-    });
-    if (!result.ok || result.queued) {
-      if (result.status === 409) setServerRefreshKey((key) => key + 1);
-      toast.error(result.error || "تعذر حفظ مراجعة السجل.");
-      return;
-    }
-    updateServerGradeRow(gradeId, { academicAccountingChecked: checked });
-    mergeGradesCache([{ ...(gradeForAction(gradeId) as Grade), academicAccountingChecked: checked }]);
-    refreshGradeRecordsAfterMutation("grade-records-accounting-check");
-    toast.success(
-      checked ? "تم تأشير محاسبة الرسوب" : "تم إلغاء تأشير محاسبة الرسوب",
-    );
-  };
 
   const studentById = useMemo(() => {
     const map = new Map(students.map((student) => [student.id, student]));
@@ -820,7 +773,6 @@ export function GradeRecordsView() {
       status: editDialog.status,
       score,
       notes: editDialog.notes,
-      academicAccountingChecked: false,
       expectedUpdatedAt: grade.updatedAt || "",
       confirmEndLeave: options.confirmLeaveEnd === true,
     });
@@ -847,7 +799,6 @@ export function GradeRecordsView() {
         status: editDialog.status,
         score,
         notes: editDialog.notes,
-        academicAccountingChecked: false,
       } as Grade);
 
     updateServerGradeRow(editDialog.id, updatedGrade);
@@ -1389,26 +1340,6 @@ export function GradeRecordsView() {
                   >
                     {cls.text}
                   </Badge>
-                  {cls.kind === "academic-accounting" && (
-                    <label className="flex items-center gap-2 rounded-xl border px-2 py-1 text-xs">
-                      <Checkbox
-                        checked={Boolean(grade.academicAccountingChecked)}
-                        onCheckedChange={(checked) =>
-                          void toggleAcademicAccounting(grade.id, checked === true)
-                        }
-                      />
-                      <span>
-                        {grade.academicAccountingChecked
-                          ? "تمت مراجعة السجل"
-                          : "تعليم السجل كمراجع"}
-                      </span>
-                    </label>
-                  )}
-                  {cls.kind === "academic-accounting" && (
-                    <span className="text-[10px] text-muted-foreground">
-                      مؤشر متابعة فقط؛ لا يعتمد أو يلغي الخصم.
-                    </span>
-                  )}
                   <Button
                     variant="secondary"
                     size="sm"
@@ -1442,7 +1373,6 @@ export function GradeRecordsView() {
                 <th className="p-3 text-right">الحالة</th>
                 <th className="p-3 text-right">الدرجة</th>
                 <th className="p-3 text-right">محاسبة</th>
-                <th className="p-3 text-right">مراجعة السجل (لا تؤثر على الخصم)</th>
                 <th className="p-3 text-right">ملاحظات</th>
                 <th className="p-3 text-right">الإجراءات</th>
               </tr>
@@ -1499,26 +1429,6 @@ export function GradeRecordsView() {
                         <p className="mt-1 text-[11px] font-medium text-violet-700 dark:text-violet-300">
                           غير محتسبة: {getExamEntryAvailability(exam).reason}
                         </p>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      {cls.kind === "academic-accounting" ? (
-                        <label className="inline-flex items-center gap-2 text-xs">
-                          <Checkbox
-                            checked={Boolean(grade.academicAccountingChecked)}
-                            onCheckedChange={(checked) =>
-                              void toggleAcademicAccounting(
-                                grade.id,
-                                checked === true,
-                              )
-                            }
-                          />
-                          <span>
-                            {grade.academicAccountingChecked ? "تمت المراجعة" : "غير مراجع"}
-                          </span>
-                        </label>
-                      ) : (
-                        "—"
                       )}
                     </td>
                     <td className="p-3 min-w-48">

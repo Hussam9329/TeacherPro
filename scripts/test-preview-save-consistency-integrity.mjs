@@ -103,7 +103,6 @@ check(
     gradesRoute.includes("freshTargetGrade.updatedAt.toISOString()") &&
   gradesRoute.includes("requiresFreshGrade: true") &&
     gradeRecords.includes("expectedUpdatedAt: grade.updatedAt") &&
-    gradeRecords.includes("expectedUpdatedAt: currentGrade?.updatedAt") &&
     gradeEntry.includes("expectedUpdatedAt: currentGrade?.updatedAt") &&
     gradeEntry.includes("expectMissing: !currentGrade") &&
     gradesRoute.includes("expectMissing && existingGrade"),
