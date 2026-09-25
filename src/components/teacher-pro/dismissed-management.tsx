@@ -193,7 +193,7 @@ function telegramUsername(value?: string) {
 
 /**
  * يوزر التليجرام الصالح للمراسلة: يفضّل اليوزر المستعاد (username)
- * ويرفض المعرف الرقمي لأنه لا يفتح محادثة تليكرام.
+ * ويرفض المعرف الرقمي لأنه لا يفتح محادثة تيليجرام.
  */
 function studentTelegramHandle(student: {
   telegram?: string | null;
@@ -290,8 +290,8 @@ function buildHtmlReport(history: StudentHistory) {
     ["المدرسة", s.school || "—"],
     ["رقم الطالب", s.phone || "—"],
     ["رقم ولي الأمر", s.parentPhone || "—"],
-    ["يوزر تليكرام", s.username || "—"],
-    ["معرف تليكرام", s.telegram || "—"],
+    ["يوزر تيليجرام", s.username || "—"],
+    ["معرف تيليجرام", s.telegram || "—"],
     ["نوع الاشتراك", s.courseProgram || "—"],
     ["الكورس", s.courseTerm || "—"],
     ["نوع البرنامج", s.studyType || "—"],
@@ -991,7 +991,7 @@ export function DismissedManagementView() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="الاسم / الكود / تيليجرام / يوزر تليكرام / رقم الطالب / رقم ولي الأمر / سبب الفصل"
+                placeholder="الاسم / الكود / تيليجرام / يوزر تيليجرام / رقم الطالب / رقم ولي الأمر / سبب الفصل"
               />
             </div>
           </div>

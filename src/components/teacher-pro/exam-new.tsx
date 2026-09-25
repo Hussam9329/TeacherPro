@@ -212,7 +212,7 @@ function buildJudgmentPreview(state: ExamFormState): JudgmentPreviewItem[] {
   });
   items.push({
     title: `أكبر من ${formatRangeNumber(discountMark)} وأقل من ${formatRangeNumber(passMark)}`,
-    description: "راسب/محاسبة رسوب بدون خصم فرص مباشر.",
+    description: "راسب بدون خصم فرص مباشر.",
     tone: "warn",
   });
   items.push({

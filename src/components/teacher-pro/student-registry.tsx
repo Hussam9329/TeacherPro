@@ -90,7 +90,7 @@ import {
   UserX,
   X,
 } from "lucide-react";
-import { EmptyState } from "./ui-kit";
+import { CountScopeSummary, EmptyState } from "./ui-kit";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import {
   StudentRegistryResults,
@@ -1920,7 +1920,7 @@ export function StudentRegistryView() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="اسم / كود / تيليجرام / يوزر تليكرام / هاتف"
+                placeholder="اسم / كود / تيليجرام / يوزر تيليجرام / هاتف"
               />
             </div>
             <div className="tp-filter-field tp-filter-primary">
@@ -2211,6 +2211,17 @@ export function StudentRegistryView() {
                   </div>
                 </div>
               </div>
+              <CountScopeSummary
+                className="mb-2"
+                subject="الطلاب"
+                systemTotal={registryStatsPending ? "…" : (studentsSystemTotal ?? "—")}
+                filteredTotal={
+                  registryResultsPending
+                    ? "…"
+                    : `${filteredTotalCount}${registryServerUnavailable ? " (محلياً)" : ""}`
+                }
+                pageCount={paged.length}
+              />
               <div
                 ref={registryResultsRef}
                 className="tp-registry-results-toolbar"
@@ -2707,7 +2718,7 @@ export function StudentRegistryView() {
                         className="h-11 rounded-xl"
                       />
                       <p className="text-[11px] text-muted-foreground">
-                        يستخدم للبحث ولفتح المحادثة داخل تطبيق تليكرام.
+                        يستخدم للبحث ولفتح المحادثة داخل تطبيق تيليجرام.
                       </p>
                     </div>
                   </div>

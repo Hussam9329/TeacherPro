@@ -80,7 +80,7 @@ const examGradeExportColumns: ExportColumn<any>[] = [
   },
   {
     key: "username",
-    label: "يوزر تليكرام",
+    label: "يوزر تيليجرام",
     value: (row) => row.student?.username || "",
   },
   { key: "notes", label: "ملاحظات", value: (row) => row.grade.notes || "" },

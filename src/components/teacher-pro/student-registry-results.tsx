@@ -492,7 +492,7 @@ export function StudentRegistryResults({
                   </ContactLink>
                 </p>
                 <p>
-                  يوزر تليكرام:{" "}
+                  يوزر تيليجرام:{" "}
                   {student.username ? (
                     <ContactLink href={telegramLink(student.username)}>
                       {student.username}
@@ -502,7 +502,7 @@ export function StudentRegistryResults({
                   )}
                 </p>
                 <p>
-                  معرف تليكرام:{" "}
+                  معرف تيليجرام:{" "}
                   {student.telegram ? (
                     /^\d+$/.test(student.telegram) ? (
                       <span dir="ltr">{student.telegram}</span>
@@ -637,7 +637,7 @@ function StudentRegistryRow({
               }
             />
             <RegistryField
-              label="يوزر تليكرام"
+              label="يوزر تيليجرام"
               value={
                 student.username ? (
                   <ContactLink href={telegramLink(student.username)}>
@@ -649,7 +649,7 @@ function StudentRegistryRow({
               }
             />
             <RegistryField
-              label="معرف تليكرام"
+              label="معرف تيليجرام"
               value={
                 student.telegram ? (
                   /^\d+$/.test(student.telegram) ? (

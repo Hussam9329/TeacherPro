@@ -292,11 +292,16 @@ function PermissionsArchitectureTab() {
         <CardHeader>
           <CardTitle className="text-base">هيكلة الصلاحيات الذكية</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إجمالي الصلاحيات</p><p className="text-2xl font-black">{PERMISSION_CATALOG.length}</p></div>
-          <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">عرض</p><p className="text-2xl font-black">{totalByLevel.read || 0}</p></div>
-          <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إضافة/تعديل</p><p className="text-2xl font-black">{totalByLevel.write || 0}</p></div>
-          <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إدارة/حذف</p><p className="text-2xl font-black">{(totalByLevel.manage || 0) + (totalByLevel.delete || 0)}</p></div>
+        <CardContent className="space-y-3">
+          <p className="rounded-xl bg-muted/30 p-3 text-xs leading-6 text-muted-foreground">
+            أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل قائمة الصلاحيات مع معرّف صلاحية واضح، وتُربط بإجراء الصفحة في مخطط الربط.
+          </p>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إجمالي الصلاحيات</p><p className="text-2xl font-black">{PERMISSION_CATALOG.length}</p></div>
+            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">عرض</p><p className="text-2xl font-black">{totalByLevel.read || 0}</p></div>
+            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إضافة/تعديل</p><p className="text-2xl font-black">{totalByLevel.write || 0}</p></div>
+            <div className="rounded-xl border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">إدارة/حذف</p><p className="text-2xl font-black">{(totalByLevel.manage || 0) + (totalByLevel.delete || 0)}</p></div>
+          </div>
         </CardContent>
       </Card>
 

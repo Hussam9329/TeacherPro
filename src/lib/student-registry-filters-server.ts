@@ -88,7 +88,7 @@ export function buildStudentRegistrySearchWhere(
     { name: { contains: query, mode: "insensitive" } },
     { code: { startsWith: query, mode: "insensitive" } },
     { school: { contains: query, mode: "insensitive" } },
-    // يوزر تليكرام المستعاد قابل للبحث بنفس استعلام الساحة (substring).
+    // يوزر تيليجرام المستعاد قابل للبحث بنفس استعلام الساحة (substring).
     { username: { contains: query, mode: "insensitive" } },
   ];
 

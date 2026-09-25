@@ -7,7 +7,6 @@ export type GradeStatusFilter =
   | "cheating"
   | "discounted"
   | "failed"
-  | "academic-accounting"
   | "passed"
   | "full-mark"
   | "has-grade";
@@ -20,7 +19,6 @@ export const gradeStatusFilterLabels: Record<GradeStatusFilter, string> = {
   cheating: "طلاب الغش",
   discounted: "الطلاب المخصومون",
   failed: "الراسبون غير المخصومين",
-  "academic-accounting": "طلاب المحاسبة",
   passed: "الطلاب الناجحون",
   "full-mark": "الدرجة الكاملة",
   "has-grade": "الطلاب الذين لديهم درجة",
@@ -88,8 +86,9 @@ export function gradeMatchesStatusFilter(
       return !isNoAccountingKind && score !== null && !exam.noDiscount && score <= discountMark;
     case "failed":
       return !isNoAccountingKind && isFailedNotDiscounted(score, exam);
+    // توافق مع روابط قديمة: «طلاب المحاسبة» = الراسبون غير المخصومين.
     case "academic-accounting":
-      return !isNoAccountingKind && kind === "academic-accounting";
+      return !isNoAccountingKind && isFailedNotDiscounted(score, exam);
     case "passed":
       return !isNoAccountingKind && score !== null && score >= passMark;
     case "full-mark":

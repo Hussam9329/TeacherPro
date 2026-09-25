@@ -100,7 +100,7 @@ export function academicImpactKindLabel(kind: string): string {
     "absent-dismissal": "غياب فصل",
     "absent-deducted": "غياب مخصوم",
     discounted: "درجة مخصومة",
-    "academic-accounting": "محاسبة أكاديمية",
+    "academic-accounting": "راسب غير مخصوم",
     dismissal: "درجة فصل",
     failed: "راسب",
     passed: "ناجح",
@@ -198,14 +198,14 @@ export function whatsappLink(phone: string): string {
 
 export function telegramLink(telegram: string): string {
   const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
-  // المعرفات الرقمية لا تصلح لروابط تليكرام — تفتح فقط اليوزرات الحرفية.
+  // المعرفات الرقمية لا تصلح لروابط تيليجرام — تفتح فقط اليوزرات الحرفية.
   if (!username || /^\d+$/.test(username)) return "";
-  // فتح المحادثة داخل تطبيق تليكرام مباشرة بدل نسخة الويب.
+  // فتح المحادثة داخل تطبيق تيليجرام مباشرة بدل نسخة الويب.
   return `tg://resolve?domain=${encodeURIComponent(username)}`;
 }
 
 export type TelegramHandleInfo = {
-  /** اسم الحقل المعروض: «يوزر تليكرام» أو «معرف تليكرام». */
+  /** اسم الحقل المعروض: «يوزر تيليجرام» أو «معرف تيليجرام». */
   label: string;
   /** القيمة المعروضة بدون @. */
   value: string;
@@ -229,17 +229,17 @@ export function describeTelegramHandle(student: {
     .replace(/^@+/, "");
   if (username) {
     return {
-      label: "يوزر تليكرام",
+      label: "يوزر تيليجرام",
       value: username,
       href: telegramLink(username),
     };
   }
   if (telegram) {
     if (/^\d+$/.test(telegram)) {
-      return { label: "معرف تليكرام", value: telegram, href: "" };
+      return { label: "معرف تيليجرام", value: telegram, href: "" };
     }
     return {
-      label: "يوزر تليكرام",
+      label: "يوزر تيليجرام",
       value: telegram,
       href: telegramLink(telegram),
     };

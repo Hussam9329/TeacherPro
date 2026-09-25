@@ -69,7 +69,7 @@ const opportunityExportColumns: ExportColumn<any>[] = [
   },
   { key: "phone", label: "الهاتف", value: (s) => s.phone || "", defaultSelected: false },
   { key: "telegram", label: "التيليجرام", value: (s) => s.telegram || "", defaultSelected: false },
-  { key: "username", label: "يوزر تليكرام", value: (s) => s.username || "", defaultSelected: false },
+  { key: "username", label: "يوزر تيليجرام", value: (s) => s.username || "", defaultSelected: false },
 ];
 
 type OpportunityStudent = Student & {
@@ -475,9 +475,9 @@ export function OpportunitiesView() {
     const username = String(telegram || "")
       .trim()
       .replace(/^@+/, "");
-    // المعرفات الرقمية لا تصلح لروابط تليكرام.
+    // المعرفات الرقمية لا تصلح لروابط تيليجرام.
     if (!username || /^\d+$/.test(username)) return "#";
-    // فتح المحادثة داخل تطبيق تليكرام مباشرة بدل نسخة الويب.
+    // فتح المحادثة داخل تطبيق تيليجرام مباشرة بدل نسخة الويب.
     return `tg://resolve?domain=${encodeURIComponent(username)}`;
   };
 
@@ -968,7 +968,7 @@ export function OpportunitiesView() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                placeholder="اسم الطالب / الكود / الهاتف / يوزر تليكرام / المدرسة"
+                placeholder="اسم الطالب / الكود / الهاتف / يوزر تيليجرام / المدرسة"
               />
             </div>
             <div className="tp-filter-actions">

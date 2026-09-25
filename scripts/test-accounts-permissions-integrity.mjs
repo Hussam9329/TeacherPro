@@ -65,7 +65,7 @@ must(
 must(
   accounts.includes("PermissionsArchitectureTab") &&
     accounts.includes("PAGE_PERMISSION_BLUEPRINT") &&
-    accounts.includes("أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل PERMISSION_CATALOG"),
+    accounts.includes("أي ميزة جديدة تنضاف لأي صفحة لازم تنضاف هنا داخل قائمة الصلاحيات"),
   "إدارة الحسابات تحتوي تبويب هيكلة الصلاحيات مع قاعدة إضافة أي ميزة جديدة",
   "إدارة الحسابات يجب أن تحتوي تبويب يشرح هيكلة الصلاحيات ويجعل أي ميزة جديدة Permission ID واضح.",
 );

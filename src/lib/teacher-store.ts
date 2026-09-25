@@ -65,7 +65,7 @@ export interface Student {
   phone: string;
   parentPhone: string;
   telegram: string;
-  /** يوزر تليكرام المستعاد (بدون @) — قد يكون فارغاً إن لم يُسترجع بعد. */
+  /** يوزر تيليجرام المستعاد (بدون @) — قد يكون فارغاً إن لم يُسترجع بعد. */
   username?: string | null;
   courseProgram: "منهج كامل" | "كورسات" | "";
   courseTerm: "الكورس الأول" | "الكورس الثاني" | "";
@@ -2432,11 +2432,7 @@ export const useTeacherStore = create<TeacherState>()(
         if (score >= exam.passMark)
           return { text: "ناجح", type: "ok", kind: "pass" };
         if (score > exam.discountMark && score < exam.passMark)
-          return {
-            text: "محاسبة رسوب",
-            type: "warn",
-            kind: "academic-accounting",
-          };
+          return { text: "راسب", type: "danger", kind: "fail" };
         return { text: "مخصوم", type: "danger", kind: "deducted" };
       },
 

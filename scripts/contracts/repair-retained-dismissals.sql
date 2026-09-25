@@ -265,8 +265,11 @@ BEGIN
   UPDATE "Student" SET status='نشط',opportunities=(item->'after'->>'opportunities')::integer,
    "dismissalReason"=NULL,"dismissalType"=NULL WHERE id=item->>'studentId';
   SELECT to_jsonb(s) INTO after_student FROM "Student" s WHERE s.id=item->>'studentId';
-  IF (before_student-ARRAY['status','opportunities','dismissalReason','dismissalType']) IS DISTINCT FROM
-   (after_student-ARRAY['status','opportunities','dismissalReason','dismissalType']) THEN
+  -- dismissedChecked/dismissedCheckEpoch are trigger-managed by
+  -- tp_reset_dismissed_check on status transitions, so they may legitimately
+  -- change during a reviewed restoration; any other field must not move.
+  IF (before_student-ARRAY['status','opportunities','dismissalReason','dismissalType','dismissedChecked','dismissedCheckEpoch']) IS DISTINCT FROM
+   (after_student-ARRAY['status','opportunities','dismissalReason','dismissalType','dismissedChecked','dismissedCheckEpoch']) THEN
    RAISE EXCEPTION 'Restoration changed unrelated target fields';
   END IF;
   -- Neutral history: deliberately no reactivation/reset opportunity command.

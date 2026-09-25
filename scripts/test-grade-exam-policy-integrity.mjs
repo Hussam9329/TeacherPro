@@ -95,9 +95,10 @@ must(
 must(
   gradeRoute.includes("if (!hasAcademicMutation)") &&
     gradeRoute.includes("academicRecalculation: null") &&
-    gradeRecords.includes("مؤشر متابعة فقط؛ لا يعتمد أو يلغي الخصم") &&
-    gradeRecords.includes("مراجعة السجل (لا تؤثر على الخصم)"),
-  "حقل مراجعة السجل معلوماتي فقط ولا يعيد الاحتساب أو يوحي بتغيير الخصم",
+    !gradeRecords.includes("تعليم السجل كمراجع") &&
+    !gradeRecords.includes("مؤشر متابعة فقط؛ لا يعتمد أو يلغي الخصم") &&
+    !gradeRecords.includes("مراجعة السجل (لا تؤثر على الخصم)"),
+  "مربع مراجعة السجل محذوف من الواجهة والباكند يبقيه Metadata فقط",
   "حقل المراجعة يجب أن يبقى Metadata واضحاً لا إجراءً أكاديمياً.",
 );
 

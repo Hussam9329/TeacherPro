@@ -442,7 +442,7 @@ export function CourseBuilderForm({
             className="tp-course-builder__heading"
           >
             <Monitor aria-hidden="true" />
-            نوع الدراسة
+            نوع البرنامج
           </h3>
           <div className="tp-course-builder__programs">
             {form.availablePrograms.map((program, programIndex) => (

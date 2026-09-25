@@ -2426,7 +2426,7 @@ export function GradeEntryView() {
                 <span>الدرجة الكاملة: {selectedExam.fullMark}</span>
                 <span>النجاح: {selectedExam.passMark}</span>
                 {selectedExam.noDiscount ? (
-                  <span>بدون خصم: لا محاسبة على الدرجة أو الغياب</span>
+                  <span>بدون خصم: لا خصم فرص على الدرجة أو الغياب</span>
                 ) : selectedExam.type !== "فاينل" ? (
                   <>
                     <span>الخصم: {selectedExam.discountMark}</span>

@@ -53,8 +53,8 @@ import {
 import { buildStudentRegistryWhere } from "@/lib/student-registry-filters-server";
 
 /**
- * يوزر تليكرام المستعاد (username): قيمة حرفية بدون @، غير رقمية، غير فريدة.
- * القيم الفارغة/الرقمية تُحفظ null — الرقمي يعني معرف تليكرام وليس يوزراً.
+ * يوزر تيليجرام المستعاد (username): قيمة حرفية بدون @، غير رقمية، غير فريدة.
+ * القيم الفارغة/الرقمية تُحفظ null — الرقمي يعني معرف تيليجرام وليس يوزراً.
  */
 function sanitizeUsernameValue(value: unknown): string | null {
   const cleaned = sanitizeTelegramInput(String(value ?? ""));
@@ -861,7 +861,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "تغيير نوع الدراسة/الدورة/الموقع داخل نفس الدورة يحتاج اختياراً واضحاً: الإبقاء على الملف كما هو أو البدء كطالب جديد.",
+          "تغيير نوع البرنامج/الدورة/الموقع داخل نفس الدورة يحتاج اختياراً واضحاً: الإبقاء على الملف كما هو أو البدء كطالب جديد.",
         requiresTransferPolicy: true,
       },
       { status: 409 },

@@ -206,7 +206,7 @@ const callExportColumns: ExportColumn<CallExportRow>[] = [
   { key: "code", label: "الكود", value: ({ row }) => row.student.code || "" },
   {
     key: "username",
-    label: "يوزر تليكرام",
+    label: "يوزر تيليجرام",
     value: ({ row }) => row.student.username || "",
   },
   {
@@ -287,9 +287,9 @@ function whatsappLink(phone: string): string {
 
 function telegramLink(telegram: string): string {
   const username = normalizeTelegramIdentifier(telegram).replace(/^@+/, "");
-  // المعرفات الرقمية لا تصلح لروابط تليكرام.
+  // المعرفات الرقمية لا تصلح لروابط تيليجرام.
   if (!username || /^\d+$/.test(username)) return "#";
-  // فتح المحادثة داخل تطبيق تليكرام مباشرة بدل نسخة الويب.
+  // فتح المحادثة داخل تطبيق تيليجرام مباشرة بدل نسخة الويب.
   return `tg://resolve?domain=${encodeURIComponent(username)}`;
 }
 
@@ -1204,7 +1204,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
     toast.success(
       leaveMode === "period"
         ? `تمت إضافة إجازة الفترة وهي تغطي ${coveredExamCount} امتحاناً تابعاً لدورة/موقع الطالب، مع إعادة احتساب الطالب`
-        : "تمت إضافة الإجازة وإعادة احتساب الطالب بدون محاسبة هذا الامتحان",
+        : "تمت إضافة الإجازة وإعادة احتساب الطالب بدون خصم على هذا الامتحان",
     );
     } catch {
       toast.error("تعذر حفظ الإجازة. بقيت بيانات النموذج محفوظة للمحاولة مجدداً.");
@@ -1828,7 +1828,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
   };
 
   const renderTelegramLink = (telegram?: string, username?: string | null) => {
-    // يوزر تليكرام المستعاد أولاً — يفتح المحادثة داخل التطبيق.
+    // يوزر تيليجرام المستعاد أولاً — يفتح المحادثة داخل التطبيق.
     const preferred = String(username || "").trim().replace(/^@+/, "");
     if (preferred) {
       return (
@@ -1838,7 +1838,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
           target="_blank"
           rel="noreferrer"
         >
-          يوزر تليكرام: {preferred}
+          يوزر تيليجرام: {preferred}
         </a>
       );
     }
@@ -1850,7 +1850,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         </span>
       );
     }
-    // المعرف الرقمي يُعرض نصاً — لا يصلح لفتح محادثة تليكرام.
+    // المعرف الرقمي يُعرض نصاً — لا يصلح لفتح محادثة تيليجرام.
     if (/^\d+$/.test(normalizedTelegram)) {
       return (
         <span className="rounded-xl border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
@@ -1865,7 +1865,7 @@ function FollowUpViewBase({ view }: { view: FollowView }) {
         target="_blank"
         rel="noreferrer"
       >
-        يوزر تليكرام: {normalizedTelegram}
+        يوزر تيليجرام: {normalizedTelegram}
       </a>
     );
   };

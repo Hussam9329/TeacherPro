@@ -130,7 +130,7 @@ const gradeExportColumns: ExportColumn<GradeExportRow>[] = [
   },
   {
     key: "username",
-    label: "يوزر تليكرام",
+    label: "يوزر تيليجرام",
     value: ({ student }) => student?.username || "",
   },
   { key: "exam", label: "الامتحان", value: ({ exam }) => exam?.name || "" },
@@ -1372,7 +1372,7 @@ export function GradeRecordsView() {
                 <th className="p-3 text-right">الامتحان</th>
                 <th className="p-3 text-right">الحالة</th>
                 <th className="p-3 text-right">الدرجة</th>
-                <th className="p-3 text-right">محاسبة</th>
+                <th className="p-3 text-right">النتيجة</th>
                 <th className="p-3 text-right">ملاحظات</th>
                 <th className="p-3 text-right">الإجراءات</th>
               </tr>
