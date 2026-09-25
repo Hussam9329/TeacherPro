@@ -1,0 +1,768 @@
+<title>تقرير فترة السماح</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@500;600;700&display=swap">
+<style>
+  :root {
+    --bg: #F6F8FA;
+    --surface: #FFFFFF;
+    --ink: #132033;
+    --muted: #56677D;
+    --line: #DCE3EB;
+    --accent: #1D4E89;
+    --accent-soft: #E6EEF8;
+    --grace: #0B7A63;
+    --grace-soft: #DCF2EA;
+    --count: #A2410F;
+    --count-soft: #FBE9DD;
+    --pre: #5F6B7A;
+    --pre-soft: #ECEFF3;
+    --high: #B42318;
+    --high-soft: #FDE8E6;
+    --mid: #A75A06;
+    --mid-soft: #FCF0DD;
+    --low: #4A5A6E;
+    --low-soft: #EDF1F5;
+    --fixed: #17803D;
+    --fixed-soft: #E2F4E7;
+    --display: "Readex Pro", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+    --body: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0D131C;
+      --surface: #141C28;
+      --ink: #E6ECF3;
+      --muted: #9AA9BB;
+      --line: #273345;
+      --accent: #86B4EE;
+      --accent-soft: #17263A;
+      --grace: #4ED0AE;
+      --grace-soft: #113A31;
+      --count: #F2A367;
+      --count-soft: #3A2416;
+      --pre: #A6B0BD;
+      --pre-soft: #1D2632;
+      --high: #F78B82;
+      --high-soft: #3A1816;
+      --mid: #F2B65C;
+      --mid-soft: #382912;
+      --low: #AEBBCB;
+      --low-soft: #1B2432;
+      --fixed: #72DE9C;
+      --fixed-soft: #112F1D;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0D131C;
+    --surface: #141C28;
+    --ink: #E6ECF3;
+    --muted: #9AA9BB;
+    --line: #273345;
+    --accent: #86B4EE;
+    --accent-soft: #17263A;
+    --grace: #4ED0AE;
+    --grace-soft: #113A31;
+    --count: #F2A367;
+    --count-soft: #3A2416;
+    --pre: #A6B0BD;
+    --pre-soft: #1D2632;
+    --high: #F78B82;
+    --high-soft: #3A1816;
+    --mid: #F2B65C;
+    --mid-soft: #382912;
+    --low: #AEBBCB;
+    --low-soft: #1B2432;
+    --fixed: #72DE9C;
+    --fixed-soft: #112F1D;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.85;
+    direction: rtl;
+    text-align: right;
+  }
+  .page {
+    max-width: 860px;
+    margin-inline: auto;
+    padding-inline: 20px;
+    padding-block: 32px 64px;
+    display: grid;
+    gap: 44px;
+  }
+  h1, h2, h3 {
+    font-family: var(--display);
+    line-height: 1.35;
+    text-wrap: balance;
+    margin: 0;
+  }
+  h1 { font-size: clamp(30px, 6vw, 42px); font-weight: 700; }
+  h2 { font-size: clamp(22px, 4.2vw, 28px); font-weight: 600; }
+  h3 { font-size: 18px; font-weight: 600; }
+  p { margin: 0; max-width: 68ch; }
+  ul, ol { margin: 0; padding-inline-start: 1.3em; display: grid; gap: 6px; }
+  strong { font-weight: 600; }
+  a { color: var(--accent); }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+  .num { font-variant-numeric: tabular-nums; }
+  section { display: grid; gap: 18px; scroll-margin-top: 16px; }
+  .eyebrow {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+  }
+  .lead { font-size: 18px; color: var(--muted); }
+  .muted { color: var(--muted); }
+
+  /* Header */
+  header.top { display: grid; gap: 14px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 14px; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; }
+  nav.toc a {
+    text-decoration: none;
+    font-size: 14px;
+    padding: 6px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--ink);
+    background: var(--surface);
+  }
+  nav.toc a:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Summary box */
+  .summary {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 22px;
+    display: grid;
+    gap: 14px;
+  }
+  .summary ul { gap: 10px; }
+
+  /* Calendar strip: the one signature visual */
+  .strip-wrap { overflow-x: auto; }
+  .strip {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(74px, 1fr));
+    gap: 6px;
+    min-width: 600px;
+  }
+  .day {
+    border-radius: 10px;
+    padding: 10px 8px;
+    display: grid;
+    gap: 2px;
+    justify-items: center;
+    text-align: center;
+    border: 1px solid transparent;
+  }
+  .day .wd { font-size: 12px; color: var(--muted); }
+  .day .dt { font-family: var(--display); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .day .st { font-size: 12px; font-weight: 600; }
+  .day .ex { font-size: 11px; min-height: 18px; }
+  .day.pre { background: var(--pre-soft); }
+  .day.pre .st { color: var(--pre); }
+  .day.grace { background: var(--grace-soft); border-color: color-mix(in srgb, var(--grace) 35%, transparent); }
+  .day.grace .st { color: var(--grace); }
+  .day.count { background: var(--count-soft); }
+  .day.count .st { color: var(--count); }
+  .exam-dot { display: inline-flex; align-items: center; gap: 4px; color: var(--ink); }
+  .exam-dot::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .7; }
+  .strip-caption { font-size: 14px; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+
+  /* Figures (the numbers are the point of this section) */
+  .figures {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .fig {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px;
+    display: grid;
+    gap: 4px;
+    align-content: start;
+  }
+  .fig b {
+    font-family: var(--display);
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+  }
+  .fig span { font-size: 14px; color: var(--muted); line-height: 1.6; }
+  @media (max-width: 620px) { .figures { grid-template-columns: repeat(2, 1fr); } }
+
+  /* Lists of contradictions */
+  .pairs { display: grid; gap: 12px; }
+  .pair {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: grid;
+    gap: 6px;
+  }
+  .pair h3 { font-size: 17px; }
+  .pair p { color: var(--muted); }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 15px; }
+  th, td { padding: 12px 14px; text-align: right; vertical-align: top; border-bottom: 1px solid var(--line); }
+  th { font-weight: 600; font-size: 13px; color: var(--muted); background: color-mix(in srgb, var(--line) 30%, var(--surface)); }
+  tr:last-child td { border-bottom: 0; }
+  td.id { font-family: var(--display); font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; font-size: 14px; }
+  td.before { color: var(--muted); }
+  td.topic { font-weight: 600; white-space: nowrap; }
+
+  .pill {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .pill.high { background: var(--high-soft); color: var(--high); }
+  .pill.mid { background: var(--mid-soft); color: var(--mid); }
+  .pill.low { background: var(--low-soft); color: var(--low); }
+  .pill.fixed { background: var(--fixed-soft); color: var(--fixed); }
+
+  .counts { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* The proposal */
+  .idea {
+    background: var(--accent-soft);
+    border-radius: 16px;
+    padding: 24px;
+    display: grid;
+    gap: 18px;
+  }
+  .idea blockquote {
+    margin: 0;
+    font-family: var(--display);
+    font-size: clamp(20px, 3.6vw, 25px);
+    font-weight: 600;
+    line-height: 1.6;
+    color: var(--ink);
+  }
+  .rules { list-style: none; padding: 0; display: grid; gap: 12px; counter-reset: r; }
+  .rules li {
+    counter-increment: r;
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+  .rules li::before {
+    content: counter(r);
+    font-family: var(--display);
+    font-weight: 700;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--surface);
+    color: var(--accent);
+    border: 1px solid var(--line);
+  }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .box {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px;
+    display: grid;
+    gap: 10px;
+    align-content: start;
+  }
+  .box.gone h3 { color: var(--count); }
+  .box.kept h3 { color: var(--grace); }
+  @media (max-width: 680px) { .two-col { grid-template-columns: 1fr; } }
+
+  /* Phases timeline: a real sequence, so numbering carries information */
+  .phases { list-style: none; padding: 0; display: grid; gap: 0; }
+  .phases li {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 14px;
+    position: relative;
+    padding-bottom: 18px;
+  }
+  .phases li:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: 21px;
+    top: 42px;
+    bottom: 0;
+    width: 2px;
+    background: var(--line);
+  }
+  .phase-no {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-family: var(--display);
+    font-weight: 700;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .phases h3 { font-size: 17px; margin-bottom: 2px; }
+  .phases p { color: var(--muted); }
+  .safe { font-size: 13px; font-weight: 600; color: var(--grace); }
+
+  /* Decisions */
+  .decisions { display: grid; gap: 10px; }
+  .decision {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: grid;
+    gap: 6px;
+  }
+  .decision .q { font-weight: 600; }
+  .decision .s { color: var(--muted); font-size: 15px; }
+  .decision .s b { color: var(--grace); font-weight: 600; }
+
+  .note {
+    border-inline-start: 4px solid var(--mid);
+    background: var(--mid-soft);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: grid;
+    gap: 6px;
+  }
+  .note.info { border-color: var(--accent); background: var(--accent-soft); }
+
+  details {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 18px;
+  }
+  details[open] { display: grid; gap: 14px; }
+  summary { cursor: pointer; font-weight: 600; }
+  code, .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 13px; direction: ltr; unicode-bidi: embed; }
+  .tech td { font-size: 13px; }
+
+  footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 18px; }
+
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="page" dir="rtl" lang="ar">
+
+  <header class="top">
+    <span class="eyebrow">TeacherPro · تقرير فني مبسّط</span>
+    <h1>تقرير فترة السماح</h1>
+    <p class="lead">ماذا تفعل فترة السماح اليوم، ولماذا صارت معقدة، وما المشاكل المؤكدة فيها، وكيف نبسّطها لتصبح فكرة واحدة يفهمها كل الموظفين.</p>
+    <div class="meta">
+      <span class="num">التاريخ: 25/9/2026</span>
+      <span>الكود المفحوص: آخر نسخة على main</span>
+      <span>طريقة الفحص: قراءة الكود كاملاً + تجارب تشغيل + مراجعة مستقلة لكل مشكلة</span>
+    </div>
+    <nav class="toc" aria-label="أقسام التقرير">
+      <a href="#summary">الخلاصة</a>
+      <a href="#what">ما هي فترة السماح</a>
+      <a href="#today">كيف تعمل اليوم</a>
+      <a href="#why">لماذا هي معقدة</a>
+      <a href="#conflicts">التناقضات</a>
+      <a href="#problems">المشاكل المؤكدة</a>
+      <a href="#proposal">الفكرة المبسطة</a>
+      <a href="#compare">قبل وبعد</a>
+      <a href="#plan">خطة التنفيذ</a>
+      <a href="#decisions">قرارات مطلوبة منك</a>
+    </nav>
+  </header>
+
+  <!-- 1. Summary -->
+  <section id="summary">
+    <span class="eyebrow">الخلاصة</span>
+    <h2>باختصار شديد</h2>
+    <div class="summary">
+      <ul>
+        <li><strong>فترة السماح تعمل، لكنها صارت متشابكة.</strong> الموظف يحتاج أن يفهم <span class="num">16</span> مفهوماً مختلفاً حتى يعرف هل سيُخصم من الطالب أم لا، والسماح يمكن أن ينتهي بـ<span class="num">7</span> طرق مختلفة.</li>
+        <li><strong>فحصنا <span class="num">33</span> مشكلة محتملة.</strong> <span class="num">8</span> منها أُصلحت على main بالأمس، و<span class="num">25</span> ما زالت موجودة، منها <span class="num">2</span> خطيرة يمكن أن تخصم فرصاً أو تفصل طلاباً دون تحذير.</li>
+        <li><strong>السبب الرئيسي ليس خطأً واحداً.</strong> معلومة «هذا الامتحان محمي بالسماح» محفوظة في <span class="num">7</span> أماكن، ويقرّرها <span class="num">22</span> موضعاً في الكود بـ<span class="num">7</span> أساليب مختلفة، فتتعارض فيما بينها.</li>
+        <li><strong>الحل المقترح:</strong> السماح = <strong>تاريخ بداية + عدد أيام + آخر يوم مكتوب</strong>. الامتحان الذي يقع يومه داخل هذه الأيام لا يُحسب على الطالب. ولا يغيّر السماح إلا قرار من الإدارة. بهذا تختفي <span class="num">23</span> مشكلة من <span class="num">25</span> من أساسها.</li>
+        <li><strong>المطلوب منك:</strong> الموافقة على الفكرة، والإجابة على <a href="#decisions">9 قرارات</a> قصيرة، ثم نبدأ التنفيذ على مراحل آمنة لا تغيّر رصيد أي طالب.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 2. What is grace -->
+  <section id="what">
+    <span class="eyebrow">الفكرة الأصلية</span>
+    <h2>ما هي فترة السماح؟</h2>
+    <p>الطالب الجديد يحتاج أياماً ليتأقلم. خلال هذه الأيام لا نريد أن يخسر فرصاً أو يُفصل بسبب امتحان. هذه الأيام هي <strong>فترة السماح</strong>. مثال من رسائل الأستاذ: <strong>«انضم الطالب في 22/9، سماح 4 أيام».</strong></p>
+    <div class="strip-wrap">
+      <div class="strip" role="img" aria-label="تقويم من 20 إلى 27 سبتمبر: 20 و21 قبل التسجيل، من 22 إلى 25 أيام سماح محمية، 26 و27 يُحاسب فيها الطالب">
+        <div class="day pre"><span class="wd">الأحد</span><span class="dt">20/9</span><span class="st">قبل التسجيل</span><span class="ex"></span></div>
+        <div class="day pre"><span class="wd">الاثنين</span><span class="dt">21/9</span><span class="st">قبل التسجيل</span><span class="ex"><span class="exam-dot">امتحان</span></span></div>
+        <div class="day grace"><span class="wd">الثلاثاء</span><span class="dt">22/9</span><span class="st">سماح · يوم 1</span><span class="ex"></span></div>
+        <div class="day grace"><span class="wd">الأربعاء</span><span class="dt">23/9</span><span class="st">سماح · يوم 2</span><span class="ex"><span class="exam-dot">امتحان</span></span></div>
+        <div class="day grace"><span class="wd">الخميس</span><span class="dt">24/9</span><span class="st">سماح · يوم 3</span><span class="ex"></span></div>
+        <div class="day grace"><span class="wd">الجمعة</span><span class="dt">25/9</span><span class="st">سماح · آخر يوم</span><span class="ex"></span></div>
+        <div class="day count"><span class="wd">السبت</span><span class="dt">26/9</span><span class="st">يُحاسب</span><span class="ex"><span class="exam-dot">امتحان</span></span></div>
+        <div class="day count"><span class="wd">الأحد</span><span class="dt">27/9</span><span class="st">يُحاسب</span><span class="ex"></span></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--pre-soft)"></i>قبل التسجيل: لا يُحسب أبداً</span>
+      <span><i class="sw" style="background:var(--grace-soft)"></i>أيام السماح: لا خصم ولا فصل</span>
+      <span><i class="sw" style="background:var(--count-soft)"></i>بعد السماح: يُحاسب عادي</span>
+    </div>
+    <p class="strip-caption">امتحان 21/9 لا يُحسب لأنه قبل التسجيل. امتحان 23/9 لا يُحسب لأنه داخل السماح. امتحان 26/9 يُحسب لأن السماح انتهى في 25/9. هذه هي الفكرة كلها، وهي بسيطة. المشكلة في طريقة تطبيقها داخل النظام.</p>
+  </section>
+
+  <!-- 3. How it works today -->
+  <section id="today">
+    <span class="eyebrow">الوضع الحالي</span>
+    <h2>كيف تعمل فترة السماح اليوم؟</h2>
+
+    <h3>كيف يبدأ السماح</h3>
+    <ul>
+      <li><strong>تلقائي:</strong> كل طالب جديد يأخذ 3 أيام من يوم تسجيله. لا يظهر هذا في أي حقل، لأن الحقل المخزّن يكون «0».</li>
+      <li><strong>يدوي:</strong> من 1 إلى 30 يوماً، و<strong>يحل محل</strong> التلقائي ولا يُضاف إليه. لذلك سماح يدوي بيوم واحد يحمي أقل من عدم كتابة شيء.</li>
+      <li><strong>بداية اليدوي:</strong> من تاريخ التسجيل، أو من يوم الحفظ، أو من تاريخ محدد. خيار «تاريخ محدد» موجود في شاشة التعديل فقط (أُضيف بالأمس). في شاشة الإضافة يظهر سؤال «موافق/إلغاء»، وزر «إلغاء» لا يلغي الحفظ بل يعني «ابدأ من اليوم».</li>
+      <li><strong>الإضافة الجماعية:</strong> تبدأ دائماً من تاريخ التسجيل، وتغيّر الأرقام الخاطئة بصمت (مثلاً «1.5» تصبح 15 يوماً).</li>
+    </ul>
+
+    <h3>كيف ينتهي السماح (7 طرق)</h3>
+    <ol>
+      <li>بانتهاء الأيام طبيعياً.</li>
+      <li>عند أول درجة رقمية تُكتب للطالب، حتى لو كانت لامتحان قديم خارج أيام السماح، أو إعادة حفظ لنفس الدرجة.</li>
+      <li>عند إدخال درجة لامتحان قبل تسجيله، فيتغير تاريخ تسجيله وحده.</li>
+      <li>عند اعتماد «درجة قبل التسجيل» من الملاحظات الذكية.</li>
+      <li>من داخل قاعدة البيانات مباشرةً عند استرجاع درجة من إجازة أو تعديل امتحان، وهذا الطريق لا يحفظ أيام السماح التي مضت.</li>
+      <li>عند تعديل الإدارة للأيام أو البداية أو تاريخ التسجيل.</li>
+      <li>عند نقل الطالب إلى دورة أخرى أو اعتباره طالباً جديداً.</li>
+    </ol>
+
+    <h3>أين تُحفظ معلومة «هذا الامتحان محمي»</h3>
+    <p>في <strong>7 أماكن</strong>: حساب الأيام من حقول الطالب، وسجل السماح التاريخي (نوعان من القيود)، وعبارة «ضمن فترة السماح» المكتوبة مكان الدرجة، ونسخة منها تحت الإجازة، وعلامة «مستبعدة من المحاسبة» على الدرجة، وملاحظة ذكية قديمة معلّقة. كل مكان يمكن أن يقول شيئاً مختلفاً عن الآخر.</p>
+  </section>
+
+  <!-- 4. Why complex -->
+  <section id="why">
+    <span class="eyebrow">حجم التعقيد</span>
+    <h2>لماذا نقول إنها معقدة؟ بالأرقام</h2>
+    <div class="figures">
+      <div class="fig"><b>16</b><span>مفهوماً يحتاج الموظف أن يفهمها ليتوقع النتيجة</span></div>
+      <div class="fig"><b>7</b><span>طرق مختلفة يمكن أن ينتهي بها السماح</span></div>
+      <div class="fig"><b>22</b><span>موضعاً في الكود يقرر «هل الامتحان محمي» بـ7 أساليب مختلفة</span></div>
+      <div class="fig"><b>84</b><span>ملفاً في المشروع تتعامل مع السماح</span></div>
+      <div class="fig"><b class="num">2,555</b><span>سطراً تقريباً من الكود خاصة بالسماح</span></div>
+      <div class="fig"><b>23</b><span>مكاناً يعيد حساب السماح بطريقته بدل المكان الموحّد</span></div>
+    </div>
+    <p class="muted">كلما زادت الأماكن التي تقرر نفس الشيء، زادت فرص أن تقرر شيئاً مختلفاً. هذا هو مصدر أغلب المشاكل.</p>
+  </section>
+
+  <!-- 5. Contradictions -->
+  <section id="conflicts">
+    <span class="eyebrow">التناقضات</span>
+    <h2>أوضح التناقضات التي وجدناها</h2>
+    <p class="muted">وجدنا 18 تناقضاً بين أجزاء النظام. هذه أوضحها وأكثرها تأثيراً على الطلاب:</p>
+    <div class="pairs">
+      <div class="pair">
+        <h3>نفس الدرجة تُحسب أو لا تُحسب حسب يوم كتابتها</h3>
+        <p>إذا كتب المدرس الدرجة خلال أيام السماح ينتهي السماح وتُحسب على الطالب. وإذا تأخر وكتبها بعد انتهاء السماح لا تُحسب. المدرس المنضبط يضر الطالب، والمتأخر ينفعه.</p>
+      </div>
+      <div class="pair">
+        <h3>سماح يوم واحد أقل من «لا شيء»</h3>
+        <p>الصفر يعني 3 أيام تلقائية، واليدوي يحل محل التلقائي. فإذا أعطت الإدارة سماحاً بيوم أو يومين، يحصل الطالب على حماية أقل مما لو لم تعطه شيئاً. و«إلغاء السماح» لا يلغيه فعلاً بل يعيده إلى 3 أيام.</p>
+      </div>
+      <div class="pair">
+        <h3>الغياب داخل السماح ممنوع، والغش مسموح</h3>
+        <p>النظام يرفض تسجيل «غائب» ويكتب بدله «ضمن فترة السماح»، لكنه يقبل تسجيل «غش». فكرة واحدة تُطبّق بطريقتين مختلفتين، ونتائجهما تختلف عند انتهاء السماح.</p>
+      </div>
+      <div class="pair">
+        <h3>درجة لامتحان قديم تُنهي سماحاً جديداً</h3>
+        <p>الإدارة تعطي الطالب سماحاً جديداً، ثم يعدّل مدرس ملاحظة على درجة قديمة له، فينتهي السماح كله فوراً. شاشة إدخال الدرجات لا تُظهر أن ذلك الامتحان له علاقة بالسماح أصلاً.</p>
+      </div>
+      <div class="pair">
+        <h3>المعاينة تقول «لا أثر» ثم يُخصم</h3>
+        <p>شاشة المعاينة قبل حفظ تعديل السماح أو تاريخ التسجيل تحسب بطريقة، والحفظ نفسه يعمل بطريقة أخرى. فيوافق المدير على «لا تغيير» ويتفاجأ بخصم أو فصل.</p>
+      </div>
+      <div class="pair">
+        <h3>التقرير يقول «لا خصم» والطالب مخصوم فعلاً</h3>
+        <p>التقارير والتصدير تحكم على الدرجة من نص الملاحظة المكتوبة، والنظام يحكم من التواريخ. فقد يُقال لولي الأمر «لا خصم: ضمن السماح» والطالب محاسب فعلاً، أو العكس.</p>
+      </div>
+      <div class="pair">
+        <h3>طريقتان لإنهاء السماح، واحدة تحفظ الأيام الماضية والأخرى لا</h3>
+        <p>إنهاء السماح من داخل البرنامج يحفظ الأيام التي مضت، أما إنهاؤه من داخل قاعدة البيانات (عند استرجاع درجة من إجازة) فلا يحفظها. فتتحول امتحانات كانت محمية إلى امتحانات محسوبة.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Problems -->
+  <section id="problems">
+    <span class="eyebrow">المشاكل</span>
+    <h2>المشاكل المؤكدة (25 مشكلة)</h2>
+    <p class="muted">كل مشكلة هنا راجعها وكيل مستقل حاول إثبات أنها غير صحيحة، ولم تبقَ إلا المؤكدة بالدليل من الكود الحالي.</p>
+    <div class="counts">
+      <span class="pill high">خطيرة: 2</span>
+      <span class="pill mid">متوسطة: 11</span>
+      <span class="pill low">بسيطة: 12</span>
+      <span class="pill fixed">أُصلحت بالأمس: 8</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>رقم</th><th>ماذا يحدث فعلاً</th><th>الخطورة</th></tr></thead>
+        <tbody>
+          <tr><td class="id">G02</td><td>عند إرجاع تاريخ تسجيل الطالب إلى تاريخ أبكر، تقول المعاينة «لا تغيير، الفرص 3 ← 3»، لكن الحفظ يسجّله غائباً في امتحانات تلك الأيام ويخصم من فرصه، وقد يُفصل دون تحذير.</td><td><span class="pill high">خطيرة</span></td></tr>
+          <tr><td class="id">G05</td><td>تعديل تاريخ امتحان سابق أو دوراته أو موقعه يسجّل «غائب» فوراً لكل طالب لم تُدخل درجته، بلا معاينة. إذا كان الامتحان فاينل يُفصل هؤلاء كلهم بحفظة واحدة.</td><td><span class="pill high">خطيرة</span></td></tr>
+          <tr><td class="id">G03</td><td>تعديل ملاحظة على درجة قديمة، أو إعادة حفظها بنفس الرقم، ينهي سماحاً يدوياً منحته الإدارة للتو، فتُحسب على الطالب امتحانات بقية أيام السماح.</td><td><span class="pill mid">متوسطة</span></td></tr>
+          <tr><td class="id">G06</td><td>طالب فُصل بسبب غياب، ثم أُعطي سماحاً يغطي ذلك الامتحان: يبقى مفصولاً بسبب لم يعد صحيحاً، ويُحذف سجل الفصل الذي يوثّق ما حدث.</td><td><span class="pill mid">متوسطة</span></td></tr>
+          <tr><td class="id">G07</td><td>حذف إجازة أو تعديلها لطالب في السماح، وتحتها درجة قديمة، ينهي سماحه بصمت، فتصبح امتحانات أيام السماح قابلة للخصم دون أن ينتبه أحد.</td><td><span class="pill mid">متوسطة</span></td></tr>
+          <tr><td class="id">G08</td><td>عبارة «ضمن فترة السماح» المكتوبة مسبقاً على امتحان قادم تبقى بعد انتهاء السماح مبكراً، فإذا غاب الطالب عنه لاحقاً لا يُحاسب.</td><td><span class="pill mid">متوسطة</span></td></tr>
+          <tr><td class="id">G10</td><td>درجة لامتحان أقدم من التسجيل تغيّر تاريخ التسجيل وحدها، وتبقى امتحانات بين التاريخين «قبل التسجيل»، ثم تتحول فجأة إلى غيابات مخصومة عند أي تعديل لاحق.</td><td><span class="pill mid">متوسطة</span></td></tr>
+          <tr><td class="id">G11</td><td>نفس الدرجة لنفس الامتحان تُحسب إذا كُتبت خلال أيام السماح، ولا تُحسب إذا كُتبت بعدها أو وصلت متأخرة لأن جهاز المدرس كان بلا إنترنت.</td><td><span class="pill mid">متوسطة</span></td></tr>
+          <tr><td class="id">G13</td><td>درجة كُتبت بالخطأ لطالب جديد ثم حُذفت: يبقى سماحه منتهياً ولا يرجع، فيُحاسب على بقية أيام السماح.</td><td><span class="pill mid">متوسطة</span></td></tr>
+          <tr><td class="id">G14</td><td>لا يُسجَّل من غيّر السماح أو أنهاه، ولا القيمة قبل التغيير وبعده، ولا السبب. لا يمكن معرفة تاريخ سماح أي طالب.</td><td><span class="pill mid">متوسطة</span></td></tr>
+          <tr><td class="id">G15</td><td>سماح بدأ «من تاريخ التسجيل» يبقى على التاريخ القديم إذا صُحّح تاريخ التسجيل لاحقاً، مع أن الحقل مكتوب عليه «تاريخ إضافة الطالب / بداية السماح».</td><td><span class="pill mid">متوسطة</span></td></tr>
+          <tr><td class="id">G17</td><td>في الإضافة الجماعية: «1.5» تصبح 15 يوماً، و«3.0» (المنسوخة من Excel) أو «45» تصبح 30 يوماً، بلا أي تحذير.</td><td><span class="pill mid">متوسطة</span></td></tr>
+          <tr><td class="id">G19</td><td>عند تسجيل طالب بتاريخ سابق واختيار «من اليوم»، تقول الرسالة «لن يُحاسب من 20/9 إلى 24/9» والمحفوظ فعلاً من 25/9 إلى 29/9.</td><td><span class="pill mid">متوسطة</span></td></tr>
+          <tr><td class="id">G09</td><td>من ورقة إدخال الدرجات يمكن تحويل درجة تاريخية محمية إلى «غائب» أو «غش» مع أن شاشة التعديل تمنع ذلك. لا تتأثر الفرص، لكن الرقم يضيع من السجل.</td><td><span class="pill low">بسيطة</span></td></tr>
+          <tr><td class="id">G20</td><td>تسوية «درجات السماح القديمة» اليومية متوقفة فعلياً، والأمر المذكور لتشغيلها غير موجود. لا ضرر اليوم، لكن تفعيلها يوماً ما سيكتب درجات محسوبة مع رسالة تقول إنها مستبعدة.</td><td><span class="pill low">بسيطة</span></td></tr>
+          <tr><td class="id">G22</td><td>اختيار بداية السماح بنافذة «موافق/إلغاء»: «إلغاء» لا يلغي بل يعني «من اليوم». الإضافة تفترض «من التسجيل» والتعديل يفترض «من اليوم».</td><td><span class="pill low">بسيطة</span></td></tr>
+          <tr><td class="id">G23</td><td>طالب بتاريخ تسجيل قادم يظهر سماحه «منتهياً» وأنه «خاضع للمحاسبة»، وزر التجديد يقدّم البداية فيخسر أياماً.</td><td><span class="pill low">بسيطة</span></td></tr>
+          <tr><td class="id">G24</td><td>أحياناً يظهر تاريخ التسجيل أو نهاية السماح متأخراً أو متقدماً بيوم عن تاريخ بغداد.</td><td><span class="pill low">بسيطة</span></td></tr>
+          <tr><td class="id">G25</td><td>مسودة تسجيل قديمة تُكمَل بعد أيام تحتفظ بتاريخها القديم بلا تنبيه، فقد تكون أيام السماح منتهية لحظة الإضافة.</td><td><span class="pill low">بسيطة</span></td></tr>
+          <tr><td class="id">G27</td><td>بعد حفظ درجة أنهت السماح، يبقى صف الطالب في ورقة الإدخال يقول «ضمن فترة السماح» حتى إعادة تحميل الصفحة.</td><td><span class="pill low">بسيطة</span></td></tr>
+          <tr><td class="id">G28</td><td>في حالة نادرة تظهر رسالة فشل خاطئة «لا يمكن اعتماد درجة لطالب مجاز» لطالب في السماح. لا تتغير الفرص.</td><td><span class="pill low">بسيطة</span></td></tr>
+          <tr><td class="id">G29</td><td>عند تعارض تعديلين في نفس الوقت، تقول شاشة حل التعارض «سنحتفظ بتعديلاتك» وتحذف طلب تجديد السماح بصمت.</td><td><span class="pill low">بسيطة</span></td></tr>
+          <tr><td class="id">G30</td><td>طالب سُجّل بين منتصف الليل والساعة 3 فجراً يغيب عن ملف التصدير إذا صُدّر فوراً.</td><td><span class="pill low">بسيطة</span></td></tr>
+          <tr><td class="id">G31</td><td>سكربتات الفحص اليدوي تحسب السماح بطريقة قديمة، فقد تُبلغ عن مشاكل غير موجودة أو تخفي مشاكل حقيقية.</td><td><span class="pill low">بسيطة</span></td></tr>
+          <tr><td class="id">G32</td><td>اختبار السماح الشامل على قاعدة بيانات حقيقية لا يعمل، ويترك بيانات تجريبية عالقة عند فشله.</td><td><span class="pill low">بسيطة</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>ما أُصلح على main بالأمس (8 مشاكل)</h3>
+    <ul>
+      <li>إنهاء السماح بدرجة رقمية صار يحفظ الأيام التي مضت، فلا تتحول الامتحانات المحمية سابقاً إلى خصم (بقيت حالة نادرة عبر الإجازات، مذكورة في G07).</li>
+      <li>نقل الطالب أو اعتباره جديداً يعطيه سماحاً جديداً بدل وراثة سماح ملفه القديم.</li>
+      <li>تصحيح السماح لم يعد يحذف المكالمات وملاحظاتها، وتقليله لم يعد يخصم مرتين.</li>
+      <li>إجراءات الفرص لم تعد تمسح بيانات السماح من الصفحة.</li>
+      <li>فلتر «ضمن السماح» وشارة الصف في إدخال الدرجات صارا يتفقان.</li>
+      <li>اختبار سلامة السماح عاد ينجح، وأُضيفت اختبارات سلوكية حقيقية.</li>
+    </ul>
+
+    <div class="note">
+      <strong>حالة الاختبارات الآن على main:</strong>
+      <p>من 49 مجموعة اختبارات تنجح 44 وتفشل 5. أربعة منها قديمة ولا علاقة لها بالسماح. والخامسة (<span class="mono">test:p1</span>) جديدة، سببها تحديث «حفظ سجل السماح» بالأمس، لأن الاختبار لا يوفّر دالة قاعدة بيانات يحتاجها التحديث. سنصلحها ضمن التبسيط.</p>
+    </div>
+  </section>
+
+  <!-- 7. Proposal -->
+  <section id="proposal">
+    <span class="eyebrow">الحل المقترح</span>
+    <h2>الفكرة المبسطة: جملة واحدة و5 قواعد</h2>
+    <div class="idea">
+      <blockquote>السماح أيام محددة لها أول يوم وآخر يوم مكتوبان للجميع. أي امتحان يقع يومه داخلها لا يخصم فرصة ولا يفصل الطالب مهما كانت نتيجته، ولا يغيّر هذه الأيام إلا قرار من الإدارة بعد أن ترى أثره.</blockquote>
+      <ol class="rules">
+        <li><div><strong>السماح = تاريخ بداية + عدد أيام، ويُكتب آخر يوم دائماً.</strong> مثال: انضم في 22/9 وسماحه 4 أيام، فهو محمي في 22 و23 و24 و25/9. الطالب الجديد يأخذ 3 أيام من يوم تسجيله إلا إذا كتب الموظف رقماً آخر من 0 إلى 30. <strong>الصفر يعني بلا سماح.</strong></div></li>
+        <li><div><strong>الحكم بيوم الامتحان فقط.</strong> الامتحان الذي يقع يومه داخل أيام السماح لا يخصم ولا يفصل، مهما كانت النتيجة ومهما كان نوع الامتحان. النتيجة تُسجَّل كما هي ومعها علامة «ضمن السماح – لا خصم». يوم كتابة الدرجة لا يهم.</div></li>
+        <li><div><strong>لا يغيّر السماح إلا الإدارة.</strong> الدرجات والغياب والإجازات وتعديل الامتحانات لا تُنهي السماح ولا تغيّره أبداً. الإدارة تضيف أو تمدّ أو تنهي اليوم أو تلغي، وقبل الحفظ ترى أسماء الامتحانات التي تدخل الحماية أو تخرج منها وأثرها على الفرص. ويُحفظ اسم من غيّر ووقته وسببه.</div></li>
+        <li><div><strong>ما قبل التسجيل لا يُحسب أبداً.</strong> ويظهر بجانبه «قبل التسجيل». كتابة درجة لامتحان قديم لا تغيّر تاريخ التسجيل وحدها. تصحيح تاريخ التسجيل يكون من ملف الطالب مع معاينة.</div></li>
+        <li><div><strong>سبب واحد ظاهر.</strong> إذا اجتمع أكثر من سبب يظهر واحد بهذا الترتيب: مجاز، ثم قبل التسجيل، ثم ضمن السماح. وكل فترات السماح (الحالية والسابقة) تظهر في سجل الطالب بتواريخها واسم من أضافها.</div></li>
+      </ol>
+    </div>
+
+    <div class="two-col">
+      <div class="box gone">
+        <h3>ما سيختفي</h3>
+        <ul>
+          <li>المعنى المخفي للصفر (الصفر = 3 أيام).</li>
+          <li>قاعدة «اليدوي يحل محل التلقائي».</li>
+          <li>خيارات البداية المخفية ونافذة «موافق/إلغاء».</li>
+          <li>إنهاء السماح عند أول درجة رقمية، في البرنامج وفي قاعدة البيانات.</li>
+          <li>تغيير تاريخ التسجيل تلقائياً بسبب درجة.</li>
+          <li>عبارات «ضمن فترة السماح» و«قبل تسجيل الطالب» المكتوبة مكان الدرجات. تصبح علامة تُحسب وتظهر بجانب النتيجة.</li>
+          <li>تسجيل غياب جماعي عند تعديل امتحان.</li>
+          <li>السجل التاريخي المعقد، ويحل محله جدول واضح لفترات السماح.</li>
+          <li>تسوية «درجات السماح القديمة» المتوقفة أصلاً.</li>
+          <li>الحكم من نص الملاحظات في التقارير.</li>
+          <li>23 نسخة مكررة من منطق السماح، والسكربتات القديمة المعطلة.</li>
+        </ul>
+      </div>
+      <div class="box kept">
+        <h3>ما سيبقى كما هو</h3>
+        <ul>
+          <li>3 أيام افتراضية للطالب الجديد، ويمكن تغييرها.</li>
+          <li>الحد الأعلى 30 يوماً.</li>
+          <li>المعاينة قبل الحفظ، وتصبح دقيقة ومطابقة للحفظ.</li>
+          <li>الإجازة أقوى من السماح.</li>
+          <li>امتحانات ما قبل التسجيل لا تُحسب.</li>
+          <li>الإجازة والفصل لا يوقفان عدّاد السماح ولا يمددانه.</li>
+          <li>أرصدة الطلاب الحالية: لن يتغير رصيد أي طالب بسبب النقل.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>ماذا سيرى الموظف</h3>
+    <ul>
+      <li><strong>في التسجيل:</strong> حقلان في سطر واحد: «بداية السماح» و«أيام السماح»، وتحتهما سطر حي: «محمي من 22/9 إلى 25/9 (4 أيام)».</li>
+      <li><strong>في ملف الطالب:</strong> بطاقة «فترة السماح» فيها الحالة («ضمن السماح حتى 25/9، بقي يومان» أو «سماح قادم يبدأ 27/9» أو «انتهى في 25/9» أو «بلا سماح»)، وسجل كل الفترات، وقائمة الامتحانات المحمية.</li>
+      <li><strong>في إدخال الدرجات:</strong> «غائب» يُقبل داخل السماح، والصف يقول «ضمن السماح حتى 25/9 – لا خصم».</li>
+      <li><strong>زر «نسخ الملخص»:</strong> «انضم الطالب X في 22/9 — سماح 4 أيام: من 22/9 إلى 25/9». فالرسالة التي تصل للكادر مطابقة للنظام دائماً.</li>
+    </ul>
+  </section>
+
+  <!-- 8. Before/after -->
+  <section id="compare">
+    <span class="eyebrow">المقارنة</span>
+    <h2>قبل وبعد</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>الموضوع</th><th>اليوم</th><th>بعد التبسيط</th></tr></thead>
+        <tbody>
+          <tr><td class="topic">معنى «سماح 4 أيام»</td><td class="before">يعتمد على خيار مخفي: من التسجيل أو من اليوم أو من تاريخ آخر. الصفر يعني 3 أيام، ويوم أو يومان يحميان أقل من الصفر.</td><td>تاريخ بداية وعدد أيام وآخر يوم، كلها مكتوبة: من 22/9 إلى 25/9. الصفر يعني بلا سماح.</td></tr>
+          <tr><td class="topic">كتابة درجة أثناء السماح</td><td class="before">أول درجة تُنهي السماح فوراً، حتى لامتحان خارج الفترة أو إعادة حفظ لنفس الدرجة.</td><td>الدرجة تُحفظ وتظهر ولا تغيّر السماح أبداً.</td></tr>
+          <tr><td class="topic">متى يُحكم على الدرجة</td><td class="before">حسب يوم كتابتها.</td><td>حسب يوم الامتحان فقط، فالنتيجة واحدة مهما تأخر الإدخال.</td></tr>
+          <tr><td class="topic">الغياب داخل السماح</td><td class="before">يُرفض، وتُكتب بدله عبارة قد تبقى عالقة بعد انتهاء السماح.</td><td>يُسجَّل «غائب» كما هو ومعه «ضمن السماح – لا خصم».</td></tr>
+          <tr><td class="topic">تعديل تاريخ امتحان</td><td class="before">غياب لكل من لا درجة له، وفي الفاينل فصل جماعي، بلا معاينة.</td><td>لا يُكتب أي غياب. يُعاد الحساب فقط، وتظهر رسالة بعدد الطلاب المتأثرين.</td></tr>
+          <tr><td class="topic">المعاينة قبل الحفظ</td><td class="before">قد تقول «لا أثر» ثم يحدث خصم أو فصل.</td><td>المعاينة والحفظ يستعملان الحساب نفسه، مع أسماء الامتحانات المتأثرة.</td></tr>
+          <tr><td class="topic">طالب فُصل بسبب امتحان صار داخل السماح</td><td class="before">يبقى مفصولاً بسبب قديم ويُمسح دليل الفصل.</td><td>تعرض المعاينة «سيعود الطالب نشطاً» ويبقى سجل الفصل للاطلاع.</td></tr>
+          <tr><td class="topic">ما يظهر في القائمة</td><td class="before">«السماح المتبقي: 0 يوم» حتى لسماح لم يبدأ، وتواريخ قد تختلف بيوم.</td><td>«ضمن السماح حتى 25/9» أو «سماح يبدأ 27/9» أو «انتهى في 25/9»، بتوقيت بغداد دائماً.</td></tr>
+          <tr><td class="topic">رسالة الكادر</td><td class="before">«انضم 22/9، سماح 4 أيام» بلا تواريخ، فيفهمها كل شخص بشكل مختلف.</td><td>«من 22/9 إلى 25/9» منسوخة من النظام نفسه.</td></tr>
+          <tr><td class="topic">الإضافة الجماعية</td><td class="before">«1.5» تصبح 15 و«45» تصبح 30 بصمت.</td><td>يُرفض السطر برسالة واضحة: رقم صحيح من 0 إلى 30.</td></tr>
+          <tr><td class="topic">من غيّر السماح ومتى</td><td class="before">غير معروف.</td><td>كل إضافة أو تمديد أو إنهاء محفوظة باسم من قام بها ووقتها وسببها.</td></tr>
+          <tr><td class="topic">امتحان قبل التسجيل</td><td class="before">درجة له تغيّر تاريخ التسجيل وحدها وتُنهي السماح.</td><td>لا يُحسب أبداً. تصحيح تاريخ التسجيل قرار إداري مع معاينة.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 9. Options studied -->
+  <section id="options">
+    <span class="eyebrow">كيف اخترنا</span>
+    <h2>ثلاثة تصاميم درسناها</h2>
+    <p class="muted">صمّم ثلاثة خبراء مستقلين ثلاثة حلول، ثم قيّمها حَكَم رابع من 10 ودمج أفضل ما فيها. الأرقام الأعلى أفضل.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>التصميم</th><th>البساطة</th><th>الدقة</th><th>أمان نقل البيانات</th><th>سهولة التنفيذ</th><th>وضوحه للموظف</th></tr></thead>
+        <tbody class="num">
+          <tr><td class="topic">الأبسط (أقل عدد قواعد)</td><td>9</td><td>7</td><td>7</td><td>5</td><td>8</td></tr>
+          <tr><td class="topic">الأكثر أماناً للبيانات</td><td>6</td><td>8</td><td>9</td><td>4</td><td>7</td></tr>
+          <tr><td class="topic">الأقرب لعمل الموظفين</td><td>8</td><td>8</td><td>8</td><td>5</td><td>9</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>المختار:</strong> أساسه «الأقرب لعمل الموظفين» لأنه يطابق كلام الكادر («انضم 22/9، سماح 4 أيام»)، وأخذنا من «الأبسط» قواعده القليلة ومبدأ أن الدرجات لا تغيّر السماح، ومن «الأكثر أماناً» طريقة النقل على مراحل مع فحص يثبت أن رصيد كل طالب لم يتغير.</p>
+  </section>
+
+  <!-- 10. Plan -->
+  <section id="plan">
+    <span class="eyebrow">التنفيذ</span>
+    <h2>خطة التنفيذ على مراحل آمنة</h2>
+    <p class="muted">كل مرحلة تُرفع وحدها، ويمكن التراجع عنها، ولا تغيّر رصيد أي طالب حالي.</p>
+    <ol class="phases">
+      <li><span class="phase-no">0</span><div><h3>القرارات والإصلاحات الصغيرة</h3><p>تجيب على القرارات أدناه. نصلح الإضافة الجماعية، ونوحّد عرض التواريخ بتوقيت بغداد، ونحذف الكود المتوقف والسكربتات القديمة، ونصلح الاختبار الذي كُسر بالأمس.</p><span class="safe">لا تغيير في البيانات</span></div></li>
+      <li><span class="phase-no">1</span><div><h3>الدرجات لا تغيّر السماح</h3><p>نزيل إنهاء السماح بالدرجة من البرنامج ومن قاعدة البيانات معاً، مع ملف جاهز للتراجع.</p><span class="safe">الأرصدة الحالية لا تتغير، التأثير على الدرجات الجديدة فقط</span></div></li>
+      <li><span class="phase-no">2</span><div><h3>التوقف عن كتابة غيابات وعبارات تلقائية</h3><p>تعديل الامتحان لا يسجّل غياباً جماعياً، و«غائب» يُقبل داخل السماح، والمعاينة تطابق الحفظ تماماً.</p><span class="safe">الأرصدة لا تتغير</span></div></li>
+      <li><span class="phase-no">3</span><div><h3>جدول «فترات السماح» ونقل البيانات بالتوازي</h3><p>نضيف جدولاً واضحاً، ونشغّل النقل تجريبياً على البيانات الحقيقية ونعرض عليك التقرير. فحص آلي يقارن رصيد كل طالب قبل وبعد ويوقف النقل عند أي فرق. بعدها نشغّل النظامين معاً 7 أيام حتى لا يظهر أي اختلاف.</p><span class="safe">جُرّب على 2,860,000 حالة تجريبية: صفر اختلاف</span></div></li>
+      <li><span class="phase-no">4</span><div><h3>التحويل</h3><p>كل الشاشات تقرأ من الجدول الجديد. بطاقة «فترة السماح» الجديدة، والتسجيل بحقلين، وزر «نسخ الملخص»، وإزالة السماح من نموذج التعديل العام.</p><span class="safe">الحقول القديمة تبقى احتياطاً</span></div></li>
+      <li><span class="phase-no">5</span><div><h3>التنظيف</h3><p>بعد 2 إلى 4 أسابيع مستقرة ونسخة احتياطية جديدة، نحذف الحقول والأكواد القديمة، ونجمع اختبارات السماح في مجموعة واحدة واضحة تغطي القواعد الخمس.</p><span class="safe">بعد نسخة احتياطية كاملة</span></div></li>
+    </ol>
+
+    <div class="note info">
+      <strong>ملاحظة عن البيانات الحقيقية</strong>
+      <p>قاعدة البيانات لم تكن متاحة من بيئة العمل أثناء هذا الفحص، لذلك جرّبنا النقل على بيانات تجريبية فقط. التجربة الجافة على البيانات الحقيقية شرط إلزامي قبل المرحلة الثالثة، وسنعرض عليك نتيجتها قبل أي تغيير.</p>
+    </div>
+
+    <h3>مخاطر يجب أن تعرفها</h3>
+    <ul>
+      <li><strong>تغيير مقصود في السلوك:</strong> الدرجة داخل أيام السماح (حتى الصفر أو رسوب الفاينل) لن تُنهي السماح ولن تُحسب. أي خصم أقل للطلاب الجدد من اليوم. يحتاج موافقتك وتنبيهاً للكادر يوم الإطلاق.</li>
+      <li><strong>الحماية تعمل في الاتجاهين:</strong> تقصير السماح أو إلغاؤه سيُحسب غيابات داخله. لذلك المعاينة ستعرض أسماء هذه الامتحانات دائماً.</li>
+      <li><strong>حجم العمل:</strong> حوالي 50 ملفاً، موزعة على مراحل صغيرة يمكن التراجع عن كل منها.</li>
+    </ul>
+  </section>
+
+  <!-- 11. Decisions -->
+  <section id="decisions">
+    <span class="eyebrow">مطلوب منك</span>
+    <h2>9 قرارات قبل أن نبدأ</h2>
+    <p class="muted">لكل قرار كتبنا اقتراحنا. يكفي أن ترد بـ«موافق على الكل» أو تغيّر ما تريد.</p>
+    <div class="decisions">
+      <div class="decision"><span class="q">1. هل نلغي قاعدة «أول درجة داخل السماح تُنهي السماح فوراً»؟</span><span class="s"><b>اقتراحنا:</b> نعم، نلغيها. ينتهي السماح بآخر يوم فيه أو بقرار الإدارة فقط.</span></div>
+      <div class="decision"><span class="q">2. الغش داخل أيام السماح: بلا عقوبة مثل الغياب (الوضع الحالي)، أم يُعاقب دائماً لأنه مخالفة سلوك؟</span><span class="s"><b>اقتراحنا:</b> القرار لك. الوضع الحالي بلا عقوبة.</span></div>
+      <div class="decision"><span class="q">3. هل تبقى 3 أيام افتراضية؟ وهل نسمح بكتابة صفر (بلا سماح)؟ وهل يبقى الحد الأعلى 30 يوماً؟</span><span class="s"><b>اقتراحنا:</b> 3 أيام، نعم للصفر، والحد 30.</span></div>
+      <div class="decision"><span class="q">4. هل نسمح بسماح يبدأ في يوم قادم؟</span><span class="s"><b>اقتراحنا:</b> نعم حتى 7 أيام قادمة، ولا يبدأ أبداً قبل يوم التسجيل.</span></div>
+      <div class="decision"><span class="q">5. عند تصحيح تاريخ التسجيل: هل ينتقل سماح التسجيل معه؟</span><span class="s"><b>اقتراحنا:</b> نعم، مع خيار ظاهر في المعاينة لإلغاء ذلك.</span></div>
+      <div class="decision"><span class="q">6. درجة لامتحان قبل تاريخ التسجيل: هل نرفضها حتى تصحّح الإدارة تاريخ التسجيل من ملف الطالب؟</span><span class="s"><b>اقتراحنا:</b> نعم، بدل أن يتغير التاريخ وحده.</span></div>
+      <div class="decision"><span class="q">7. طالب فُصل بسبب امتحان صار داخل سماح جديد: هل يكون خيار «سيعود الطالب نشطاً» مختاراً مسبقاً في المعاينة؟</span><span class="s"><b>اقتراحنا:</b> نعم، ولا يشمل الفصل اليدوي أبداً.</span></div>
+      <div class="decision"><span class="q">8. من يحق له إضافة السماح أو تمديده أو إنهاؤه أو إلغاؤه؟</span><span class="s"><b>اقتراحنا:</b> القرار لك: المالك فقط، أو المالك والمشرفون.</span></div>
+      <div class="decision"><span class="q">9. عبارات «ضمن فترة السماح» العالقة على امتحانات قادمة لطلاب انتهى سماحهم، والملاحظات القديمة «درجة خلال السماح»: ماذا نفعل بها عند النقل؟</span><span class="s"><b>اقتراحنا:</b> نحذف العبارات العالقة بعد عرض قائمة الأسماء عليك، ونغلق الملاحظات القديمة بلا أثر.</span></div>
+    </div>
+  </section>
+
+  <section id="students">
+    <span class="eyebrow">ملاحظة جانبية</span>
+    <h2>تصحيح سماح الطلاب الأربعة</h2>
+    <p>تصحيحات قائمة الأستاذ حسن فلاح (زهراء عمر سالم علي، مصطفى أحمد چياد شروم، رحمه هاتف عبدالحسين مسلم، عائشة سعد علي جاسم BIO-2692) يمكن تنفيذها الآن من شاشة تعديل الطالب باختيار «تاريخ محدد» في بداية فترة السماح، لأن هذا الخيار أُضيف بالأمس. انتبه: نقل البداية إلى تاريخ لاحق يجعل امتحانات الأيام السابقة محسوبة على الطالب، والمعاينة ستعرض ذلك قبل الحفظ.</p>
+  </section>
+
+  <!-- Technical appendix -->
+  <section id="tech">
+    <details>
+      <summary>ملحق للمبرمجين: أماكن المشاكل في الكود</summary>
+      <div class="table-wrap tech">
+        <table>
+          <thead><tr><th>رقم</th><th>الملفات</th></tr></thead>
+          <tbody>
+            <tr><td class="id">G02</td><td><code>src/app/api/students/update-impact/route.ts</code>، <code>src/lib/grade-classification.ts</code>، <code>src/lib/academic-recalculate-server.ts</code></td></tr>
+            <tr><td class="id">G03</td><td><code>src/lib/grace-grade-activation.ts</code>، <code>src/lib/academic-grade-writeback-server.ts</code>، <code>src/app/api/grades/route.ts</code></td></tr>
+            <tr><td class="id">G05</td><td><code>src/app/api/exams/route.ts</code>، <code>src/lib/protected-grade-markers-server.ts</code></td></tr>
+            <tr><td class="id">G06</td><td><code>src/app/api/students/route.ts</code>، <code>src/lib/academic-engine.ts</code>، <code>src/lib/academic-recalculate-server.ts</code></td></tr>
+            <tr><td class="id">G07</td><td><code>prisma/migrations/20260908121000_grace_calendar_contract</code>، <code>src/app/api/student-leaves/route.ts</code></td></tr>
+            <tr><td class="id">G08</td><td><code>src/lib/protected-grade-markers-server.ts</code>، <code>src/app/api/students/bulk/route.ts</code></td></tr>
+            <tr><td class="id">G09</td><td><code>src/app/api/grades/route.ts</code>، <code>src/lib/academic-grade-writeback-server.ts</code></td></tr>
+            <tr><td class="id">G10</td><td><code>src/lib/pre-registration-grade-promotion-server.ts</code>، <code>src/lib/academic-grade-writeback-server.ts</code></td></tr>
+            <tr><td class="id">G11</td><td><code>src/lib/grace-grade-activation.ts</code>، <code>src/lib/student-grace.ts</code></td></tr>
+            <tr><td class="id">G13</td><td><code>prisma/schema.prisma</code> (<code>gracePeriodEndedByExamId</code> لا يُكتب أبداً)، <code>src/app/api/grades/route.ts</code></td></tr>
+            <tr><td class="id">G14</td><td><code>src/app/api/students/route.ts</code>، <code>src/app/api/students/bulk/route.ts</code></td></tr>
+            <tr><td class="id">G15</td><td><code>src/app/api/students/route.ts</code>، <code>src/app/api/students/update-impact/route.ts</code>، <code>src/components/teacher-pro/student-registry.tsx</code></td></tr>
+            <tr><td class="id">G17</td><td><code>src/components/teacher-pro/student-bulk-text-import.tsx</code></td></tr>
+            <tr><td class="id">G19, G22, G25</td><td><code>src/components/teacher-pro/student-register.tsx</code></td></tr>
+            <tr><td class="id">G20</td><td><code>src/lib/grade-smart-note-grace-expiry-server.ts</code></td></tr>
+            <tr><td class="id">G23, G29</td><td><code>src/lib/student-grace.ts</code>، <code>src/components/teacher-pro/student-registry.tsx</code>، <code>src/components/teacher-pro/student-edit-recovery.ts</code></td></tr>
+            <tr><td class="id">G24</td><td><code>src/components/teacher-pro/student-registry-helpers.ts</code>، <code>src/components/teacher-pro/opportunities.tsx</code></td></tr>
+            <tr><td class="id">G27</td><td><code>src/components/teacher-pro/grade-entry.tsx</code></td></tr>
+            <tr><td class="id">G28</td><td><code>src/app/api/grades/mark-missing-absent/route.ts</code></td></tr>
+            <tr><td class="id">G30</td><td><code>src/app/api/students/export/route.ts</code></td></tr>
+            <tr><td class="id">G31, G32</td><td><code>scripts/verify-grace-mechanism-live.mjs</code>، <code>scripts/analyze-grace-live.mjs</code>، <code>scripts/test-grace-end-to-end-live.mjs</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">الملفات الأساسية للنموذج الجديد: <code>src/lib/student-grace.ts</code> (يُعاد كتابته بحوالي 90 سطراً)، ودالة قرار واحدة <code>examProtection</code> في <code>src/lib/grade-classification.ts</code> يستعملها المحرك والشاشات والتقارير، وجدول جديد <code>StudentGracePeriod</code>، ومسار واحد للمعاينة والحفظ <code>planGraceChange</code>.</p>
+    </details>
+  </section>
+
+  <footer>
+    أُعدّ هذا التقرير بفحص الكود الحالي على main، وتجارب تشغيل محلية، ومراجعة مستقلة لكل مشكلة من وكيلين أو أكثر. لم تُغيَّر أي بيانات حقيقية.
+  </footer>
+</div>
