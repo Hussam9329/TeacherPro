@@ -2706,6 +2706,16 @@ export function GradeEntryView() {
                       examBeforeRegistration ||
                       student.status === "مفصول",
                   );
+                  const siteLabel =
+                    student.subSite ||
+                    student.locationScope ||
+                    student.mainSite ||
+                    "";
+                  // صفوف الالتقاط المحمي لطلبة الفصل: الحفظ تلقائي عند
+                  // الخروج من الخلية — بلا زر حفظ يدوي ولا سطر تلميح منفصل؛
+                  // شارة الحالة وحدها تكفي.
+                  const isAutoSaveCaptureRow =
+                    protectedNumericCapture && student.status === "مفصول";
                   // الإدخال المباشر للجميع دون استثناء: أُزيل القفل الذي كان
                   // يفرض الضغط على «تعديل» قبل كتابة الدرجة. كل قيود
                   // الصلاحيات الحقيقية (مؤرشف/مفصول/قبل التسجيل) تبقى مطبقة.
@@ -2727,12 +2737,6 @@ export function GradeEntryView() {
                           <p className="min-w-0 break-words text-sm font-bold [overflow-wrap:anywhere]">
                             {student.name}
                           </p>
-                          <Badge variant="outline" className="text-[10px]">
-                            {student.subSite ||
-                              student.locationScope ||
-                              student.mainSite ||
-                              "بدون موقع"}
-                          </Badge>
                           {leave && (
                             <Badge variant="secondary" className="text-[10px]">
                               الطالب مجاز
@@ -2745,18 +2749,19 @@ export function GradeEntryView() {
                           )}
                           {student.status === "مفصول" && (
                             <Badge
-                              variant={
-                                canEditPersistedGrade ? "secondary" : "destructive"
-                              }
+                              variant="destructive"
                               className="text-[10px]"
+                              title="أي رقم يُدخل لهذا الطالب يُعلّق للمراجعة حتى إعادة تفعيله يدوياً من الإدارة."
                             >
-                              {canEditPersistedGrade
-                                ? "مفصول - يمكن تصحيح سبب الفصل"
-                                : "مفصول - أي رقم سيُعلّق للمراجعة"}
+                              مفصول
                             </Badge>
                           )}
                           {studentHasManualReactivation(student.id) && (
-                            <Badge variant="outline" className="text-[10px]">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px]"
+                              title="عاد هذا الطالب عبر إعادة تفعيل يدوية من الإدارة؛ إعادته للفصل تحتاج قراراً يدوياً."
+                            >
                               إعادة تفعيل يدوي
                             </Badge>
                           )}
@@ -2769,29 +2774,25 @@ export function GradeEntryView() {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="truncate text-xs text-muted-foreground">
                           {student.code} - {courseName(student.courseId)}
+                          {siteLabel ? ` • ${siteLabel}` : ""}
                         </p>
                         {grade && (
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                            <Badge variant="outline" className="text-[10px]">
-                              {grade.status === "درجة"
-                                ? "درجة محفوظة"
-                                : grade.status === LEGACY_GRACE_PLACEHOLDER_STATUS
-                                  ? "لا توجد نتيجة مسجلة"
-                                  : `الحالة: ${grade.status}`}
-                            </Badge>
-                            <span>
-                              وقت الإدخال: {formatGradeEntryTimestamp(grade.createdAt)}
-                            </span>
+                          <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                            {grade.status === "درجة"
+                              ? "درجة مسجلة"
+                              : grade.status === LEGACY_GRACE_PLACEHOLDER_STATUS
+                                ? "لا توجد نتيجة مسجلة"
+                                : `الحالة: ${grade.status}`}
+                            {" • "}
+                            وقت الإدخال: {formatGradeEntryTimestamp(grade.createdAt)}
                             {grade.updatedAt &&
                               grade.createdAt &&
-                              String(grade.updatedAt) !== String(grade.createdAt) && (
-                                <span>
-                                  آخر تعديل: {formatGradeEntryTimestamp(grade.updatedAt)}
-                                </span>
-                              )}
-                          </div>
+                              String(grade.updatedAt) !== String(grade.createdAt)
+                              ? ` • آخر تعديل: ${formatGradeEntryTimestamp(grade.updatedAt)}`
+                              : ""}
+                          </p>
                         )}
                         {normalizedSearch &&
                           grade &&
@@ -2803,23 +2804,21 @@ export function GradeEntryView() {
                             ) ||
                             student.status === "مؤرشف") && (
                             <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-300">
-                              ظهر هذا الطالب لأن له درجة مسجلة لهذا الامتحان،
-                              حتى لو لم يعد مطابقاً للدورة أو الموقع أو الفصل
-                              الحالي.
+                              له درجة مسجلة على هذا الامتحان، لذا ظهر حتى لو
+                              لم يعد مطابقاً للدورة أو الموقع أو الفصل الحالي.
                             </p>
                           )}
                         {examBeforeRegistration && (
                           <p className="mt-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[11px] font-medium text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
-                            هذا الامتحان يسبق تاريخ تسجيل الطالب؛ عند إدخال
-                            درجة رقمية سيُقدَّم تاريخ تسجيله إلى تاريخ هذا
-                            الامتحان، وتُحتسب الدرجة رسمياً في سجله. الغياب
-                            والغش يبقيان غير متاحين لهذه الحالة.
+                            هذا الامتحان يسبق تسجيل الطالب؛ عند إدخال درجة
+                            تُقدَّم نهاية تسجيله إلى تاريخ الامتحان وتُحتسب
+                            رسمياً في سجله. الغياب والغش غير متاحين هنا.
                           </p>
                         )}
                         {leave && (
                           <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-300">
-                            الطالب مجاز لهذا الامتحان. عند إدخال درجة رقمية
-                            ستنتهي إجازته وتُعتمد الدرجة محتسبة في سجله
+                            الطالب مجاز لهذا الامتحان — إدخال درجة ينهي
+                            الإجازة وتُحتسب الدرجة في سجله
                             {leave.reason ? `: ${leave.reason}` : ""}
                           </p>
                         )}
@@ -2830,8 +2829,11 @@ export function GradeEntryView() {
                         )}
                         {student.status === "مفصول" &&
                           student.dismissalReason && (
-                            <p className="mt-1 text-[11px] text-destructive">
-                              {student.dismissalReason}
+                            <p
+                              className="mt-1 truncate text-[11px] text-destructive"
+                              title={student.dismissalReason}
+                            >
+                              سبب الفصل: {student.dismissalReason}
                             </p>
                           )}
                       </div>
@@ -2975,23 +2977,30 @@ export function GradeEntryView() {
                       />
 
                       <div className="flex flex-wrap items-center justify-end gap-2">
-                        {cls && !(gracePeriod && cls.kind === "grace") && (
-                          <Badge
-                            variant={
-                              cls.type === "ok"
-                                ? "default"
-                                : cls.type === "danger"
-                                  ? "destructive"
-                                  : cls.type === "warn"
-                                    ? "secondary"
-                                    : "outline"
-                            }
-                          >
-                            {cls.text}
-                          </Badge>
-                        )}
+                        {cls &&
+                          !(gracePeriod && cls.kind === "grace") &&
+                          cls.kind !== "leave" && (
+                            <Badge
+                              variant={
+                                cls.type === "ok"
+                                  ? "default"
+                                  : cls.type === "danger"
+                                    ? "destructive"
+                                    : cls.type === "warn"
+                                      ? "secondary"
+                                      : "outline"
+                              }
+                            >
+                              {cls.text}
+                            </Badge>
+                          )}
                         <Badge
                           variant="outline"
+                          title={
+                            isAutoSaveCaptureRow
+                              ? "تُحفظ الدرجة تلقائياً عند الخروج من الخلية."
+                              : undefined
+                          }
                           className={`tp-save-indicator ${
                             savePhase === "saving"
                               ? "tp-save-indicator--saving"
@@ -3018,38 +3027,30 @@ export function GradeEntryView() {
                                   ? effectiveSaveState?.message ||
                                     "تعديل غير محفوظ"
                                   : leave
-                                    ? "الطالب مجاز — الدرجة تنهي الإجازة وتُحتسب"
+                                    ? "مجاز — الإدخال ينهي الإجازة وتُحتسب الدرجة"
                                     : savePhase === "idle" && entered
                                       ? "جاهز للتعديل"
                                       : savedRows[student.id] ||
                                         (savePhase === "saved"
                                           ? "محفوظ"
-                                          : "غير مدخل")}
+                                          : isAutoSaveCaptureRow
+                                            ? "غير مدخل — يُحفظ تلقائياً"
+                                            : "غير مدخل")}
                         </Badge>
-                        {protectedNumericCapture &&
-                        student.status === "مفصول" ? (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                                ✓
-                              </span>
-                              <span>حفظ تلقائي عند الخروج</span>
-                            </div>
-                          ) : (
-                            <Button
-                              size="sm"
-                              className="tp-save-manual-button"
-                              title="حفظ بيانات هذا الطالب مباشرة"
-                              onClick={() => void saveGrade(student.id)}
-                              disabled={
-                                (!canEditPersistedGrade &&
-                                  !protectedNumericCapture) ||
-                                isSaving
-                              }
-                            >
-                              {isSaving
-                                ? "جارٍ الحفظ..."
-                                : "حفظ الآن"}
-                            </Button>
+                        {!isAutoSaveCaptureRow && (
+                          <Button
+                            size="sm"
+                            className="tp-save-manual-button"
+                            title="حفظ بيانات هذا الطالب مباشرة"
+                            onClick={() => void saveGrade(student.id)}
+                            disabled={
+                              (!canEditPersistedGrade &&
+                                !protectedNumericCapture) ||
+                              isSaving
+                            }
+                          >
+                            {isSaving ? "جارٍ الحفظ..." : "حفظ الآن"}
+                          </Button>
                         )}
                       </div>
                     </div>

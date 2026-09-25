@@ -29,9 +29,9 @@ const preRegistrationStatusMigration = read("prisma/migrations/20260722235500_al
 const pkg = JSON.parse(read("package.json"));
 
 must(
-  gradeEntry.includes("يسبق تاريخ تسجيل الطالب") &&
-    gradeEntry.includes("سيُقدَّم تاريخ تسجيله") &&
-    gradeEntry.includes("تُحتسب الدرجة رسمياً") &&
+  gradeEntry.includes("يسبق تسجيل الطالب") &&
+    gradeEntry.includes("تُقدَّم نهاية تسجيله") &&
+    gradeEntry.includes("رسمياً في سجله") &&
     gradeRecords.includes("تسجيل الطالب في الدورة"),
   "الواجهة تشرح أن درجة الامتحان السابق للتسجيل تقدّم تاريخ التسجيل وتُحتسب رسمياً",
   "يجب إظهار قاعدة تقديم تاريخ التسجيل واحتساب الدرجة في ورقة الإدخال وسجل الدرجات.",
