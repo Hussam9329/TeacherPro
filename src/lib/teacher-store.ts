@@ -2362,12 +2362,22 @@ export const useTeacherStore = create<TeacherState>()(
           : null;
       },
       classification: (grade, exam, student) => {
-        if (grade?.academicEffectExcluded || grade?.effectiveImpactExcluded || (grade && gradeSettlementExclusion(grade, exam, get().opportunityLogs, student ? get().activeChapterForCourse(student.courseId)?.id : undefined, student?.courseId)))
-          return {
-            text: "توثيق فقط - بلا أثر أكاديمي",
-            type: "info",
-            kind: "academic-effect-excluded",
-          };
+        const settlementReason = grade
+          ? gradeSettlementExclusion(
+              grade,
+              exam,
+              get().opportunityLogs,
+              student
+                ? get().activeChapterForCourse(student.courseId)?.id
+                : undefined,
+              student?.courseId,
+            )
+          : null;
+        const classifyNormally = (): {
+          text: string;
+          type: string;
+          kind: string;
+        } => {
         if (
           student &&
           get().studentLeaves.some((leave) =>
@@ -2434,6 +2444,16 @@ export const useTeacherStore = create<TeacherState>()(
         if (score > exam.discountMark && score < exam.passMark)
           return { text: "راسب", type: "danger", kind: "fail" };
         return { text: "مخصوم", type: "danger", kind: "deducted" };
+        };
+        // درجات «مؤجلة أثناء الفصل» المحفوظة بعد إعادة التفعيل: تُعرض شارتها
+        // كأي درجة عادية وفق درجتها — بلا عبارة «توثيق فقط» — مع إبقاء نوع
+        // التصنيف academic-effect-excluded حتى تبقى الفلاتر والمحركات تستبعدها.
+        if (grade?.academicEffectExcluded)
+          return { ...classifyNormally(), kind: "academic-effect-excluded" };
+        // صفوف التسوية التاريخية: شارة محايدة قصيرة بدل العبارة الطويلة.
+        if (grade?.effectiveImpactExcluded || settlementReason)
+          return { text: "بلا أثر", type: "info", kind: "academic-effect-excluded" };
+        return classifyNormally();
       },
 
       logAction: (module, action, details = "") => {

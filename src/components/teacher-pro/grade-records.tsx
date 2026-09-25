@@ -1300,11 +1300,6 @@ export function GradeRecordsView() {
                   {grade.notes ? (
                     <GradeNoteBanner notes={grade.notes} className="mt-2" />
                   ) : null}
-                  {grade.academicEffectExcluded && (
-                    <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium leading-5 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
-                      توثيق فقط - بلا خصم أو فصل أو محاسبة.
-                    </div>
-                  )}
                   {!isExamOnOrAfterStudentRegistration(student, exam) && (
                     <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium leading-5 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
                       محفوظة للمتابعة فقط ولا تخصم؛ تاريخ الامتحان يسبق تاريخ
@@ -1321,9 +1316,6 @@ export function GradeRecordsView() {
                   <span className="font-bold">
                     {gradeRecordScoreText(grade, exam)}
                   </span>
-                  {grade.academicEffectExcluded && (
-                    <Badge variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>
-                  )}
                   <Badge
                     variant={
                       cls.type === "ok"
@@ -1409,11 +1401,6 @@ export function GradeRecordsView() {
                       >
                         {cls.text}
                       </Badge>
-                      {grade.academicEffectExcluded && (
-                        <p className="mt-1 text-[11px] font-medium text-sky-700 dark:text-sky-300">
-                          توثيق فقط - بلا خصم أو فصل.
-                        </p>
-                      )}
                       {!isExamOnOrAfterStudentRegistration(student, exam) && (
                         <p className="mt-1 text-[11px] font-medium text-sky-700 dark:text-sky-300">
                           لا تخصم: الامتحان سابق للتسجيل.
