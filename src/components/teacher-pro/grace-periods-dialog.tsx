@@ -388,11 +388,6 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
         </div>
 
         <div className="tp-grace__body">
-          <p className="tp-grace__rule">
-            أي امتحان يقع تاريخه داخل فترة السماح يُعامل فيه الطالب كمجاز — فترة سماح، ولا يؤثر على فرصه أو فصله.
-            اليوم الأول والأخير محسوبان ضمن الفترة.
-          </p>
-
           {!data && (
             <>
               <section className="tp-grace__search" aria-label="البحث عن طالب">

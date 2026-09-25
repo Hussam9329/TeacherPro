@@ -78,16 +78,6 @@
   overscroll-behavior: contain;
 }
 
-.tp-grace__rule {
-  margin: 0;
-  padding: 0.65rem 0.85rem;
-  border-radius: 0.85rem;
-  background: color-mix(in srgb, var(--grace-accent) 8%, var(--grace-surface));
-  color: var(--foreground);
-  font-size: 0.82rem;
-  line-height: 1.8;
-}
-
 .tp-grace__muted { margin: 0; color: var(--muted-foreground); font-size: 0.8rem; }
 .tp-grace__empty-note {
   margin: 0;
