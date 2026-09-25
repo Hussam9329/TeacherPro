@@ -28,6 +28,8 @@ import { useLatestRequest } from "@/hooks/use-latest-request";
 import { CallNotesManagementDialog } from "./call-notes-management-dialog";
 import { CodeClosuresDialog } from "./code-closures-dialog";
 import { GracePeriodsDialog } from "./grace-periods-dialog";
+// One look for the three management windows opened from here.
+import "./tp-modal.css";
 
 type DashboardStats = {
   activeStudents: number;
