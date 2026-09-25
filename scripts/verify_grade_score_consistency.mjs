@@ -146,11 +146,11 @@ async function main() {
   console.log('      (يقوم بتنظيف الصفوف المتناقضة تلقائياً ويضيف Trigger لمنع تكرارها)');
   console.log('   2. لملاحظات الغياب القديمة على درجات فعلية:');
   console.log('      migration 20260820100000_clean_stale_absence_notes');
-  console.log('      (يستبدل النص القديم بـ "تم تصحيح الدرجة يدوياً...")');
+  console.log('      (يستبدل النص القديم بـ "تصحيح يدوي")');
   console.log('   3. أو نفّذ يدوياً:');
   console.log('      UPDATE "Grade" SET "score" = NULL');
   console.log('      WHERE "status" IS DISTINCT FROM \'درجة\' AND "score" IS NOT NULL;');
-  console.log('      UPDATE "Grade" SET "notes" = \'تم تصحيح الدرجة يدوياً...\'');
+  console.log('      UPDATE "Grade" SET "notes" = \'تصحيح يدوي\'');
   console.log('      WHERE "status" = \'درجة\' AND "score" IS NOT NULL');
   console.log('        AND "notes" LIKE \'%تسجيل جماعي كغائب%\';');
   console.log('   4. أعِد تشغيل هذا السكربت للتأكد من نجاح التنظيف.');

@@ -25,6 +25,9 @@ import {
 } from "@/lib/api";
 import { classifyGradeAcademicImpact, type GradeClassificationKind } from "@/lib/grade-classification";
 import { ArrowRightIcon, XIcon } from "lucide-react";
+
+import { GradeNoteBanner } from "@/components/teacher-pro/grade-note-banner";
+import { shortGradeNoteText } from "@/lib/grade-note-banners";
 import { useTeacherProBackgroundSyncDetector, useTeacherProSyncKey } from "@/hooks/use-teacherpro-sync";
 import { formatOpportunityBalance } from "@/lib/opportunity-balance";
 import { formatAuditLogDisplay } from "@/lib/audit-log-display";
@@ -223,7 +226,7 @@ function logToneVariant(tone: StudentLogRow["tone"]): "default" | "destructive" 
 function gradeLogDetails(grade: Grade, exam?: Exam) {
   const examName = exam?.name || "امتحان محذوف";
   const examDate = exam?.date ? ` - ${formatAppDate(exam.date)}` : "";
-  return `${examName}${examDate} - النتيجة: ${formatScore(grade, exam)} - الحالة: ${profileGradeStatus(grade.status)}${grade.notes ? ` - ملاحظة: ${grade.notes}` : ""}`;
+  return `${examName}${examDate} - النتيجة: ${formatScore(grade, exam)} - الحالة: ${profileGradeStatus(grade.status)}${grade.notes ? ` - ملاحظة: ${shortGradeNoteText(grade.notes)}` : ""}`;
 }
 
 function leaveLogDetails(leave: StudentLeave, exam?: Exam) {
@@ -1210,7 +1213,7 @@ export function StudentProfileDialog({
                         <div className="min-w-0">
                           <b className="break-words">{exam?.name || "امتحان محذوف"}</b>
                           <p className="text-xs text-muted-foreground">{formatAppDate(exam?.date)}</p>
-                          {grade.notes ? <p className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
+                          {grade.notes ? <div className="mt-2"><GradeNoteBanner notes={grade.notes} /></div> : null}
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {grade.academicEffectExcluded && <Badge className="w-fit" variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>}
@@ -1255,7 +1258,7 @@ export function StudentProfileDialog({
                       <div key={grade.id} className="min-w-0 rounded-2xl border bg-background/60 p-4">
                         <div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="break-words font-black">{exam.name}</p><p className="text-xs text-muted-foreground">{exam.type} - {formatAppDate(exam.date)}</p></div><div className="flex flex-wrap gap-1">{grade.academicEffectExcluded && <Badge variant="outline">توثيق فقط - بلا أثر أكاديمي</Badge>}{withinGrace && <Badge variant="outline">{GRACE_PERIOD_EXCUSE_LABEL}</Badge>}{!withinGrace && withoutDiscount && <Badge variant="secondary">بدون خصم</Badge>}{deductionLog && <Badge variant="destructive" title={humanizeProfileText(deductionLog.reason) || "خصم فرصة"}>خصم {deductionLog.amount} فرصة</Badge>}<Badge>{profileGradeStatus(grade.status)}</Badge></div></div>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs"><div className="rounded-xl bg-muted/60 p-2"><b>{exam.fullMark}</b><p>الكاملة</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{exam.passMark}</b><p>النجاح</p></div><div className="rounded-xl bg-muted/60 p-2"><b>{formatGradeScore(grade, exam, "—")}</b><p>درجة الطالب</p></div></div>
-                        {grade.notes ? <p className="mt-3 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100"><span className="font-bold">ملاحظة الدرجة: </span>{grade.notes}</p> : null}
+                        {grade.notes ? <div className="mt-3"><GradeNoteBanner notes={grade.notes} /></div> : null}
                         {grade.academicEffectExcluded && grade.academicEffectExclusionReason ? <p className="mt-2 text-xs font-medium text-sky-700 dark:text-sky-300">سبب عدم الاحتساب: {grade.academicEffectExclusionReason}</p> : null}
                       </div>
                     );
@@ -1472,7 +1475,7 @@ export function StudentProfileDialog({
                               {oldLeaveGradeBackups.length === 0 ? <p className="text-xs text-muted-foreground">لا توجد نسخ درجات</p> : oldLeaveGradeBackups.map((backup) => (
                                 <div key={String(backup.id)} className="rounded-xl bg-background p-3 text-xs">
                                   <p className="font-bold">{backup.exam?.name || "امتحان"} — {backup.status || "—"} {backup.score !== null && backup.score !== undefined ? `(${backup.score})` : ""}</p>
-                                  <p className="mt-1 break-words text-muted-foreground">{backup.notes || "بدون ملاحظات"} — {formatAppDate(backup.gradeUpdatedAt || backup.gradeCreatedAt || backup.createdAt)}</p>
+                                  <p className="mt-1 break-words text-muted-foreground">{backup.notes ? shortGradeNoteText(backup.notes) : "بدون ملاحظات"} — {formatAppDate(backup.gradeUpdatedAt || backup.gradeCreatedAt || backup.createdAt)}</p>
                                 </div>
                               ))}
                             </div>

@@ -35,7 +35,8 @@ must(
 
 must(
   page.includes("canRunGradeRecordActions") &&
-    page.includes("تم تعطيل التعديل والحذف حتى يرجع الاتصال"),
+    page.includes('toast.error("انتظر تحميل سجل الدرجات قبل تنفيذ الإجراء.")') &&
+    page.includes('disabled={!canRunGradeRecordActions}'),
   "سجل الدرجات يمنع التعديل والحذف إذا فشل تحميل الخادم",
   "يجب منع الإجراءات الحساسة عند فشل بيانات الخادم."
 );

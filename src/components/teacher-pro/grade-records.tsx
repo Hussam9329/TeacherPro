@@ -56,6 +56,8 @@ import { LEGACY_GRACE_PLACEHOLDER_STATUS } from "@/lib/academic-types";
 import { useActionLock } from "@/hooks/use-action-lock";
 import { applyOpportunityPenalty } from "@/lib/opportunity-balance";
 import { CheckCircle2, UserX } from "lucide-react";
+
+import { GradeNoteBanner } from "@/components/teacher-pro/grade-note-banner";
 import { CountScopeSummary, StatCard } from "./ui-kit";
 import {
   examMatchesAcademicFilters,
@@ -1345,10 +1347,7 @@ export function GradeRecordsView() {
                     <span>{formatAppDate(grade.createdAt)}</span>
                   </div>
                   {grade.notes ? (
-                    <div className="mt-2 rounded-xl border border-amber-200/70 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100">
-                      <span className="font-bold">ملاحظة الدرجة: </span>
-                      <span className="break-words">{grade.notes}</span>
-                    </div>
+                    <GradeNoteBanner notes={grade.notes} className="mt-2" />
                   ) : null}
                   {grade.academicEffectExcluded && (
                     <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium leading-5 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200">
@@ -1522,7 +1521,13 @@ export function GradeRecordsView() {
                         "—"
                       )}
                     </td>
-                    <td className="p-3 min-w-48">{grade.notes || "—"}</td>
+                    <td className="p-3 min-w-48">
+                      {grade.notes ? (
+                        <GradeNoteBanner notes={grade.notes} />
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="p-3 min-w-32">
                       <div className="flex flex-wrap gap-1">
                         <Button

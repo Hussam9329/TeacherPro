@@ -302,7 +302,7 @@ async function writeExcusedGradeMarkers(
   if (!examIds.length) return 0;
   const marker = {
     status: "مجاز", score: null,
-    notes: "تسجيل تلقائي: الطالب مجاز من هذا الامتحان",
+    notes: "إجازة",
     academicAccountingChecked: false,
   };
   await tx.grade.updateMany({ where: { studentId, examId: { in: examIds } }, data: marker });

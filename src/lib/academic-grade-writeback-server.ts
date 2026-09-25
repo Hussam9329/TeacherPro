@@ -123,8 +123,8 @@ function sanitizeStaleAbsenceNotes(input: {
   if (coercedToExcusedDueToLeave) {
     const reason = excusedLeaveReason?.trim();
     return reason
-      ? `الطالب مجاز من هذا الامتحان: ${reason}`
-      : "الطالب مجاز من هذا الامتحان.";
+      ? `إجازة: ${reason}`
+      : "إجازة";
   }
 
   // Rule 1: teacher corrected an absent/cheating row to a real grade,
@@ -134,7 +134,7 @@ function sanitizeStaleAbsenceNotes(input: {
     transitionedToScoredGrade &&
     (callerNotes === undefined || callerNotes === "" || echoedPreviousNotes)
   ) {
-    return "تم تصحيح الدرجة يدوياً بدلاً من التسجيل التلقائي السابق.";
+    return "تصحيح يدوي";
   }
 
   // ROOT-CAUSE FIX (status="مجاز" with stale absence note): if the
@@ -149,7 +149,7 @@ function sanitizeStaleAbsenceNotes(input: {
     if (callerNotes && !notesContainsStalePhrase(callerNotes)) {
       return callerNotes;
     }
-    return "الطالب مجاز من هذا الامتحان.";
+    return "إجازة";
   }
 
   // Rule 3: safety net — clear any stale phrase that somehow ended up on

@@ -66,7 +66,7 @@ export async function repairPreRegistrationAbsencesForStudents(
         { notes: "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم" },
       ],
     },
-    data: { notes: "تصحيح تلقائي: الامتحان يسبق تاريخ تسجيل الطالب" },
+    data: { notes: "قبل تسجيل الطالب" },
   });
 
   return {

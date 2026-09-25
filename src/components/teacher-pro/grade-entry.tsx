@@ -69,6 +69,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { isAutomaticGradeNote } from "@/lib/grade-note-banners";
 import { toast } from "@/lib/user-toast";
 import { formatAppDate, toLatinDigits } from "@/lib/format";
 import { normalizeForSearch } from "@/lib/validation";
@@ -2867,17 +2868,14 @@ export function GradeEntryView() {
                           // a real numeric grade BUT a contradictory "absent"
                           // note. Clear the notes here so the server gets a
                           // fresh empty value and applies its own sanitization
-                          // (which will replace with "تم تصحيح الدرجة يدوياً").
+                          // (which will replace with the short "تصحيح يدوي").
                           const existing = getGrade(student.id);
                           const previousStatusWasMarker = Boolean(
                             existing && existing.status !== "درجة",
                           );
                           const hadStaleAbsenceNote =
                             previousStatusWasMarker &&
-                            (
-                              (existing?.notes || "").includes("تسجيل جماعي كغائب") ||
-                              (existing?.notes || "").includes("تسجيل تلقائي")
-                            );
+                            isAutomaticGradeNote(existing?.notes);
                           updateDraft(student.id, {
                             score: nextScore,
                             status: "درجة",

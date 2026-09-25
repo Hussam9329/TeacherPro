@@ -142,8 +142,8 @@ export async function POST(req: NextRequest) {
             status: automaticStatus,
             score: null,
             notes: !registeredForExam
-              ? "تسجيل تلقائي: الامتحان يسبق تاريخ تسجيل الطالب"
-              : "تسجيل جماعي كغائب للطلاب غير المدخلة درجاتهم",
+              ? "قبل تسجيل الطالب"
+              : "غياب جماعي",
             sourceLabel: "تسجيل الحالات الجماعي",
             allowBlankGrade: false,
             blockOnLeave: true,

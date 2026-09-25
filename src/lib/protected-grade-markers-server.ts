@@ -250,7 +250,7 @@ export async function reconcileProtectedGradeMarkersForExamEdit(
           data: {
             status: "مجاز",
             score: null,
-            notes: "تسجيل تلقائي: الطالب مجاز من هذا الامتحان",
+            notes: "إجازة",
             academicAccountingChecked: false,
           },
         });
@@ -453,7 +453,7 @@ export async function ensureProtectedGradeMarkers(
           examId: exam.id,
           status: "مجاز",
           score: null,
-          notes: "تسجيل تلقائي: الطالب مجاز من هذا الامتحان",
+          notes: "إجازة",
         });
       } else if (!isExamOnOrAfterStudentRegistration(student, exam)) {
         beforeRegistrationRows.push({
@@ -461,7 +461,7 @@ export async function ensureProtectedGradeMarkers(
           examId: exam.id,
           status: "قبل تسجيل الطالب",
           score: null,
-          notes: "تسجيل تلقائي: الامتحان يسبق تاريخ تسجيل الطالب",
+          notes: "قبل تسجيل الطالب",
         });
       }
     }
