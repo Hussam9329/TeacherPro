@@ -75,6 +75,7 @@ export type GraceChangePlan = {
 };
 
 const ARCHIVED_STATUS = "مؤرشف";
+const DISMISSED_STATUS = "مفصول";
 
 function activeRanges(records: GracePeriodRecord[]): GracePeriodRange[] {
   return records
@@ -120,6 +121,10 @@ export async function planGraceChange(
   if (!student) throw new GraceChangeError("الطالب غير موجود.", 404);
   if (student.status === ARCHIVED_STATUS) {
     throw new GraceChangeError("الطالب مؤرشف؛ لا يمكن تعديل فترات سماحه.", 409);
+  }
+  // A dismissed student comes back through the pledge, never through grace.
+  if (student.status === DISMISSED_STATUS) {
+    throw new GraceChangeError("الطالب مفصول؛ يجب أن يوقع تعهداً قبل إضافة فترة سماح.", 409);
   }
 
   const records = await listStudentGracePeriods(tx, studentId);

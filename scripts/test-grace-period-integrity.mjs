@@ -163,14 +163,18 @@ check(
 );
 check(/requirePermission\(req, "students\.view"\)/.test(listRoute), "القائمة تتطلب صلاحية عرض الطلاب");
 
-// 9. Archived students can never receive or change a grace period.
+// 9. Archived and dismissed students can never receive or change a grace period.
 const planServer = read("src/lib/grace-period-plan-server.ts");
 check(/ARCHIVED_STATUS = "مؤرشف"/.test(planServer) && /student\.status === ARCHIVED_STATUS[\s\S]{0,120}throw new GraceChangeError/.test(planServer), "الخادم يرفض أي تعديل سماح لطالب مؤرشف");
+check(/DISMISSED_STATUS = "مفصول"/.test(planServer) && /student\.status === DISMISSED_STATUS[\s\S]{0,160}throw new GraceChangeError/.test(planServer), "الخادم يرفض أي تعديل سماح لطالب مفصول حتى يوقع تعهداً");
 check(
-  (dialog.match(/data-archived=\{isArchived\}/g) || []).length === 2 &&
-    (dialog.match(/disabled=\{loading \|\| isArchived\}/g) || []).length === 2 &&
-    /disabled=\{busy \|\| archived\}/.test(dialog),
-  "الطالب المؤرشف يظهر معطلاً في البحث والقائمة وزر الإضافة",
+  (dialog.match(/data-locked=\{lock\?\.kind \|\| "none"\}/g) || []).length === 3 &&
+    (dialog.match(/disabled=\{loading \|\| Boolean\(lock\)\}/g) || []).length === 2 &&
+    (dialog.match(/disabled=\{busy \|\| Boolean\(lock\)\}/g) || []).length === 2 &&
+    dialog.includes('"مؤرشف": { kind: "archived"') &&
+    dialog.includes('"مفصول": { kind: "dismissed"') &&
+    dialog.includes("الطالب مفصول — يجب أن يوقع تعهداً"),
+  "الطالب المؤرشف والمفصول يظهران معطلَين (بلونين مختلفين) في البحث والقائمة وأزرار الإضافة والتعديل",
 );
 
 // 9. Tests are wired.

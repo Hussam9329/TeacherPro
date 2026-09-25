@@ -248,18 +248,29 @@ a.tp-grace__tg:focus-visible { outline: 2px solid var(--grace-telegram); outline
 .tp-grace__state[data-light="yellow"] { background: color-mix(in srgb, var(--grace-yellow) 18%, transparent); color: var(--status-warning-fg); }
 .tp-grace__state[data-light="red"] { background: color-mix(in srgb, var(--grace-red) 12%, transparent); color: var(--status-danger-fg); }
 
-/* Archived students: visible, never openable or editable. */
-.tp-grace__card[data-archived="true"],
-.tp-grace__student[data-archived="true"] {
+/* Locked students (archived: grey, dismissed: red): visible, never openable or editable. */
+.tp-grace__card[data-locked="archived"],
+.tp-grace__card[data-locked="dismissed"],
+.tp-grace__student[data-locked="archived"],
+.tp-grace__student[data-locked="dismissed"] {
   border-style: dashed;
   border-inline-start-style: solid;
   background: color-mix(in srgb, var(--muted) 55%, var(--grace-surface));
 }
-.tp-grace__card[data-archived="true"] .tp-grace__identity,
-.tp-grace__card[data-archived="true"] .tp-grace__card-period { opacity: 0.6; }
-.tp-grace__card[data-archived="true"]:hover { box-shadow: none; }
-.tp-grace__card[data-archived="true"] .tp-grace__card-open { cursor: not-allowed; }
-.tp-grace__archived {
+.tp-grace__card[data-locked="dismissed"],
+.tp-grace__student[data-locked="dismissed"] {
+  border-color: color-mix(in srgb, var(--grace-red) 40%, var(--border));
+  background: color-mix(in srgb, var(--grace-red) 6%, var(--grace-surface));
+}
+.tp-grace__card[data-locked="archived"] .tp-grace__identity,
+.tp-grace__card[data-locked="archived"] .tp-grace__card-period { opacity: 0.6; }
+.tp-grace__card[data-locked="dismissed"] .tp-grace__identity,
+.tp-grace__card[data-locked="dismissed"] .tp-grace__card-period { opacity: 0.75; }
+.tp-grace__card[data-locked="archived"]:hover,
+.tp-grace__card[data-locked="dismissed"]:hover { box-shadow: none; }
+.tp-grace__card[data-locked="archived"] .tp-grace__card-open,
+.tp-grace__card[data-locked="dismissed"] .tp-grace__card-open { cursor: not-allowed; }
+.tp-grace__lock {
   display: inline-flex;
   align-items: center;
   padding: 0.05rem 0.5rem;
@@ -271,7 +282,12 @@ a.tp-grace__tg:focus-visible { outline: 2px solid var(--grace-telegram); outline
   font-weight: 750;
   white-space: nowrap;
 }
-.tp-grace__archived-note {
+.tp-grace__lock[data-lock="dismissed"] {
+  border-color: color-mix(in srgb, var(--grace-red) 35%, var(--border));
+  background: color-mix(in srgb, var(--grace-red) 12%, transparent);
+  color: var(--status-danger-fg);
+}
+.tp-grace__lock-note {
   margin: 0;
   padding: 0.6rem 0.85rem;
   border: 1px dashed var(--border);
@@ -280,6 +296,11 @@ a.tp-grace__tg:focus-visible { outline: 2px solid var(--grace-telegram); outline
   color: var(--muted-foreground);
   font-size: 0.85rem;
   font-weight: 650;
+}
+.tp-grace__lock-note[data-lock="dismissed"] {
+  border-color: color-mix(in srgb, var(--grace-red) 40%, var(--border));
+  background: color-mix(in srgb, var(--grace-red) 8%, var(--grace-surface));
+  color: var(--status-danger-fg);
 }
 
 /* ── Selected student ───────────────────────────────────────────────── */
