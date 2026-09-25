@@ -34,6 +34,8 @@ export async function GET(req: NextRequest) {
         code: true,
         status: true,
         telegram: true,
+        username: true,
+        createdAt: true,
         course: { select: { name: true } },
       },
       orderBy: [{ name: "asc" }, { code: "asc" }],
@@ -43,12 +45,15 @@ export async function GET(req: NextRequest) {
     const today = baghdadTodayKey();
     return NextResponse.json(
       {
+        today,
         students: students.map((student) => ({
           id: student.id,
           name: student.name,
           code: student.code,
           status: student.status,
           telegram: student.telegram || "",
+          username: student.username || "",
+          createdAt: student.createdAt.toISOString(),
           courseName: student.course?.name || "",
           ...graceSummary(periodsByStudent.get(student.id), today),
         })),

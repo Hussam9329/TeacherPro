@@ -183,13 +183,40 @@ export function graceDaysRemaining(period: Pick<GracePeriodRange, "startDate" | 
   return gracePeriodDays({ startDate: from, endDate: period.endDate });
 }
 
-/** «آخر يوم اليوم» / «متبقي 3 أيام» / «منتهية». */
+/** «تنتهي اليوم» / «متبقي 3 أيام» / «منتهية». */
 export function describeGraceRemaining(period: Pick<GracePeriodRange, "startDate" | "endDate">, todayKey: string): string {
   const left = graceDaysRemaining(period, todayKey);
   if (left === 0) return "منتهية";
   if (period.startDate > todayKey) return `تبدأ ${formatGraceDate(period.startDate)}`;
-  if (left === 1) return "آخر يوم اليوم";
+  if (left === 1) return "تنتهي اليوم";
   return `متبقي ${formatGraceDays(left)}`;
+}
+
+/** Status light: green ongoing, yellow ongoing but ends today, red ended. */
+export type GraceLight = "green" | "yellow" | "red";
+
+export const GRACE_LIGHT_LABELS: Record<GraceLight, string> = {
+  green: "فترة سماح مستمرة",
+  yellow: "فترة السماح تنتهي اليوم",
+  red: "فترة سماح منتهية",
+};
+
+export function gracePeriodLight(period: Pick<GracePeriodRange, "startDate" | "endDate">, todayKey: string): GraceLight {
+  if (todayKey && period.endDate < todayKey) return "red";
+  return period.endDate === todayKey ? "yellow" : "green";
+}
+
+/**
+ * One light for a student from their active periods: the period covering
+ * today decides; otherwise any still-running period is green; a student whose
+ * periods all ended is red; no period means no light.
+ */
+export function studentGraceLight(periods: unknown, todayKey: string): GraceLight | null {
+  const active = normalizeGracePeriodRanges(periods);
+  if (!active.length) return null;
+  const today = findStudentGracePeriod(active, todayKey);
+  if (today) return gracePeriodLight(today, todayKey);
+  return active.some((period) => period.endDate >= todayKey) ? "green" : "red";
 }
 
 export function formatGraceDate(key: string): string {

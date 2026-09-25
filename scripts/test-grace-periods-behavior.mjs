@@ -234,6 +234,19 @@ test("smart list filter: all, ongoing (last day included) and ended", () => {
   assert.equal(grace.graceDaysRemaining(PERIOD, "2026-03-27"), 2);
   assert.equal(grace.graceDaysRemaining(PERIOD, "2026-03-29"), 0);
   assert.equal(grace.describeGraceRemaining(PERIOD, "2026-03-26"), "متبقي 3 أيام");
-  assert.equal(grace.describeGraceRemaining(PERIOD, "2026-03-28"), "آخر يوم اليوم");
+  assert.equal(grace.describeGraceRemaining(PERIOD, "2026-03-28"), "تنتهي اليوم");
   assert.equal(grace.describeGraceRemaining(PERIOD, "2026-03-29"), "منتهية");
+});
+
+test("status light: green ongoing, yellow on the last day, red once ended", () => {
+  assert.equal(grace.gracePeriodLight(PERIOD, "2026-03-25"), "green");
+  assert.equal(grace.gracePeriodLight(PERIOD, "2026-03-27"), "green");
+  assert.equal(grace.gracePeriodLight(PERIOD, "2026-03-28"), "yellow");
+  assert.equal(grace.gracePeriodLight(PERIOD, "2026-03-29"), "red");
+  const older = { id: "p0", startDate: "2026-02-01", endDate: "2026-02-03" };
+  assert.equal(grace.studentGraceLight([older, PERIOD], "2026-03-26"), "green");
+  assert.equal(grace.studentGraceLight([older, PERIOD], "2026-03-28"), "yellow");
+  assert.equal(grace.studentGraceLight([older, PERIOD], "2026-04-10"), "red");
+  assert.equal(grace.studentGraceLight([{ ...PERIOD, cancelledAt: "2026-03-26T10:00:00Z" }], "2026-03-26"), null);
+  assert.equal(grace.studentGraceLight([], "2026-03-26"), null);
 });

@@ -8,6 +8,8 @@ export type GraceStudentSearchResult = {
   code: string;
   status: string;
   telegram: string;
+  username: string;
+  createdAt: string;
   courseName: string;
   graceState: "current" | "past" | "none";
   graceEndDate: string | null;
@@ -20,6 +22,9 @@ export type GracePeriodListItem = GracePeriodRange & {
   studentName: string;
   studentCode: string;
   studentStatus: string;
+  studentTelegram: string;
+  studentUsername: string;
+  studentCreatedAt: string;
   courseName: string;
 };
 
@@ -36,6 +41,8 @@ export type GraceStudentCard = {
   name: string;
   code: string;
   status: string;
+  telegram: string;
+  username: string;
   createdAt: string;
   courseName: string;
 };
@@ -108,7 +115,7 @@ async function postGrace<T>(body: Record<string, unknown>, fallback: string): Pr
 }
 
 export const gracePeriodsApi = {
-  search(query: string, signal?: AbortSignal): Promise<{ students: GraceStudentSearchResult[] }> {
+  search(query: string, signal?: AbortSignal): Promise<{ today: string; students: GraceStudentSearchResult[] }> {
     return withReadDeadline(async (requestSignal) => {
       const response = await fetch(`/api/grace-periods/search?q=${encodeURIComponent(query)}`, {
         credentials: "same-origin",

@@ -4,14 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
-  BookOpen,
   CalendarClock,
+  CalendarDays,
   CalendarPlus,
   CheckCircle2,
   Loader2,
   PencilLine,
   Search,
-  UserRound,
+  Send,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,10 +22,14 @@ import {
   formatGraceDate,
   formatGraceDays,
   formatGracePeriod,
+  GRACE_LIGHT_LABELS,
   GRACE_PERIOD_LIST_FILTERS,
   gracePeriodDays,
   gracePeriodEndFromDays,
+  gracePeriodLight,
   gracePeriodState,
+  studentGraceLight,
+  type GraceLight,
   MAX_GRACE_PERIOD_DAYS,
   validateGracePeriodInput,
   type GracePeriodListFilter,
@@ -39,9 +43,10 @@ import {
   type GracePeriodsResponse,
   type GraceStudentSearchResult,
 } from "@/lib/grace-periods-client";
-import { formatBaghdadDateTime } from "@/lib/baghdad-time";
+import { baghdadDateKey, formatBaghdadDateTime } from "@/lib/baghdad-time";
 import { emitTeacherProDataChanged } from "@/lib/teacherpro-sync";
 import { toast } from "@/lib/user-toast";
+import { describeTelegramHandle } from "./student-registry-helpers";
 import "./grace-periods-dialog.css";
 
 type Props = {
@@ -75,11 +80,59 @@ function examDateLabel(value: string): string {
   return formatGraceDate(String(value || "").slice(0, 10));
 }
 
+function registrationDateLabel(createdAt: string): string {
+  const key = baghdadDateKey(createdAt);
+  return key ? formatGraceDate(key) : "—";
+}
+
+/** The status light in front of a student: green, yellow (ends today) or red. */
+function GraceLightDot({ light }: { light: GraceLight | null }) {
+  if (!light) return null;
+  const label = GRACE_LIGHT_LABELS[light];
+  return <span className="tp-grace__light" data-light={light} role="img" aria-label={label} title={label} />;
+}
+
+type StudentIdentityProps = {
+  name: string;
+  telegram: string;
+  username: string;
+  createdAt: string;
+  light: GraceLight | null;
+};
+
+/** The student card shows only: name, Telegram (opens the app) and registration date. */
+function StudentIdentity({ name, telegram, username, createdAt, light }: StudentIdentityProps) {
+  const handle = describeTelegramHandle({ telegram, username });
+  return (
+    <div className="tp-grace__identity">
+      <strong className="tp-grace__name">
+        <GraceLightDot light={light} />
+        <span className="tp-grace__name-text">{name}</span>
+      </strong>
+      <div className="tp-grace__meta">
+        {handle.href ? (
+          <a className="tp-grace__tg" href={handle.href} dir="ltr" aria-label={`فتح محادثة تيليجرام مع ${name}`}>
+            <Send aria-hidden="true" />@{handle.value}
+          </a>
+        ) : (
+          <span className="tp-grace__tg" data-plain="true" dir={handle.value ? "ltr" : undefined}>
+            <Send aria-hidden="true" />{handle.value || "بدون تيليجرام"}
+          </span>
+        )}
+        <span className="tp-grace__reg">
+          <CalendarDays aria-hidden="true" />تاريخ التسجيل <span dir="ltr">{registrationDateLabel(createdAt)}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GraceStudentSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [searchToday, setSearchToday] = useState("");
   const [data, setData] = useState<GracePeriodsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -148,7 +201,10 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
       setSearchError("");
       try {
         const response = await gracePeriodsApi.search(trimmed, controller.signal);
-        if (!controller.signal.aborted) setResults(response.students || []);
+        if (!controller.signal.aborted) {
+          setResults(response.students || []);
+          setSearchToday(response.today || "");
+        }
       } catch (cause) {
         if (!controller.signal.aborted) {
           setResults([]);
@@ -193,6 +249,8 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
     () => (data?.periods || []).filter((period) => period.id !== currentPeriod?.id),
     [data, currentPeriod],
   );
+  const studentLight = data ? studentGraceLight(activePeriods, today) : null;
+  const currentLight = currentPeriod ? gracePeriodLight(currentPeriod, today) : null;
   const archived = data?.student.status === "مؤرشف";
   const editable = canManage && !archived;
 
@@ -314,6 +372,11 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
     );
   }
 
+  function searchResultLight(student: GraceStudentSearchResult): GraceLight | null {
+    if (student.graceState === "current") return student.graceEndDate === searchToday ? "yellow" : "green";
+    return student.graceState === "past" ? "red" : null;
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="tp-grace" dir="rtl">
@@ -331,136 +394,153 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
           </p>
 
           {!data && (
-            <section className="tp-grace__search" aria-label="البحث عن طالب">
-              <label className="tp-grace__field">
-                <span>البحث عن طالب</span>
+            <>
+              <section className="tp-grace__search" aria-label="البحث عن طالب">
                 <div className="tp-grace__input-wrap">
                   <Search aria-hidden="true" />
                   <Input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="الاسم أو الكود أو اليوزر أو الهاتف"
+                    placeholder="ابحث بالاسم أو الكود أو اليوزر أو الهاتف"
                     aria-label="البحث عن طالب"
                     className="tp-grace__search-input"
                     autoFocus
                   />
                   {searching && <Loader2 className="tp-grace__spinner animate-spin motion-reduce:animate-none" aria-hidden="true" />}
                 </div>
-              </label>
-              {searchError && <p role="alert" className="tp-grace__error"><AlertCircle aria-hidden="true" />{searchError}</p>}
-              {loadError && <p role="alert" className="tp-grace__error"><AlertCircle aria-hidden="true" />{loadError}</p>}
-              {query.trim().length >= 2 && !searching && results.length === 0 && !searchError && (
-                <p className="tp-grace__muted">لا يوجد طالب يطابق البحث.</p>
-              )}
-              {results.length > 0 && (
-                <ul className="tp-grace__results">
-                  {results.map((student) => (
-                    <li key={student.id}>
-                      <button type="button" className="tp-grace__result" onClick={() => void loadStudent(student.id)} disabled={loading}>
-                        <span className="tp-grace__avatar" aria-hidden="true"><UserRound /></span>
-                        <span className="tp-grace__result-text">
-                          <strong>{student.name}</strong>
-                          <span dir="ltr">{student.code}</span>
-                        </span>
-                        <span className="tp-grace__result-meta">
-                          {student.courseName && <span><BookOpen aria-hidden="true" />{student.courseName}</span>}
-                          {student.graceState === "current" && student.graceEndDate && (
-                            <span className="tp-grace__chip" data-state="current">
-                              ضمن فترة السماح حتى <span dir="ltr">{formatGraceDate(student.graceEndDate)}</span>
-                            </span>
-                          )}
-                          {student.graceState === "past" && (
-                            <span className="tp-grace__chip" data-state="past">فترة سماح منتهية</span>
-                          )}
-                          <span className="tp-grace__status" data-status={student.status}>{student.status}</span>
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          )}
+                {searchError && <p role="alert" className="tp-grace__error"><AlertCircle aria-hidden="true" />{searchError}</p>}
+                {loadError && <p role="alert" className="tp-grace__error"><AlertCircle aria-hidden="true" />{loadError}</p>}
+                {query.trim().length >= 2 && !searching && results.length === 0 && !searchError && (
+                  <p className="tp-grace__muted">لا يوجد طالب يطابق البحث.</p>
+                )}
+                {results.length > 0 && (
+                  <div className="tp-grace__group">
+                    <h3 className="tp-grace__group-title">الطلاب</h3>
+                    <ul className="tp-grace__cards">
+                      {results.map((student) => {
+                        const light = searchResultLight(student);
+                        return (
+                          <li key={student.id} className="tp-grace__card" data-light={light || "none"}>
+                            <button
+                              type="button"
+                              className="tp-grace__card-open"
+                              onClick={() => void loadStudent(student.id)}
+                              disabled={loading}
+                              aria-label={`فتح فترات السماح للطالب ${student.name}`}
+                            />
+                            <StudentIdentity
+                              name={student.name}
+                              telegram={student.telegram}
+                              username={student.username}
+                              createdAt={student.createdAt}
+                              light={light}
+                            />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
+              </section>
 
-          {!data && (
-            <section className="tp-grace__section" aria-labelledby="tp-grace-list">
-              <h3 id="tp-grace-list">
-                {listQuery ? "فترات السماح للطلاب المطابقين للبحث" : "فترات السماح"}
-              </h3>
-              <div role="group" aria-label="تصفية فترات السماح" className="tp-grace__filters">
-                {GRACE_PERIOD_LIST_FILTERS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className="tp-grace__filter"
-                    aria-pressed={listFilter === option.value}
-                    data-filter={option.value}
-                    onClick={() => setListFilter(option.value)}
-                  >
-                    <span>{option.label}</span>
-                    <span className="tp-grace__filter-count">{list ? list.counts[option.value] : "…"}</span>
-                  </button>
-                ))}
-              </div>
-              {listError && <p role="alert" className="tp-grace__error"><AlertCircle aria-hidden="true" />{listError}</p>}
-              {listLoading && !list && (
-                <p role="status" className="tp-grace__muted">
-                  <Loader2 className="inline size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> جارٍ تحميل فترات السماح…
-                </p>
-              )}
-              {list && list.periods.length === 0 && !listLoading && (
-                <p className="tp-grace__muted">
-                  {listFilter === "current"
-                    ? "لا توجد فترات سماح مستمرة."
-                    : listFilter === "past"
-                      ? "لا توجد فترات سماح منتهية."
-                      : "لا توجد فترات سماح."}
-                </p>
-              )}
-              {list && list.periods.length > 0 && (
-                <ul className="tp-grace__results" aria-busy={listLoading}>
-                  {list.periods.map((period) => {
-                    const state = gracePeriodState(period, list.today);
-                    return (
-                      <li key={period.id}>
-                        <button type="button" className="tp-grace__result" onClick={() => void loadStudent(period.studentId)} disabled={loading}>
-                          <span className="tp-grace__avatar" aria-hidden="true"><UserRound /></span>
-                          <span className="tp-grace__result-text">
-                            <strong>{period.studentName}</strong>
-                            <span dir="ltr">{period.studentCode}</span>
-                            {period.courseName && <span>{period.courseName}</span>}
-                          </span>
-                          <span className="tp-grace__list-period">
-                            <span dir="ltr" className="tp-grace__range-cell">{formatGracePeriod(period)}</span>
-                            <span className="tp-grace__muted">{formatGraceDays(gracePeriodDays(period))}</span>
-                            <span className="tp-grace__chip" data-state={state}>
-                              {state === "current" ? describeGraceRemaining(period, list.today) : "منتهية"}
+              <section className="tp-grace__section" aria-labelledby="tp-grace-list">
+                <div className="tp-grace__section-head">
+                  <h3 id="tp-grace-list">
+                    {listQuery ? "فترات السماح للطلاب المطابقين للبحث" : "فترات السماح"}
+                  </h3>
+                  <span className="tp-grace__muted">من الأحدث إلى الأقدم</span>
+                </div>
+                <div role="group" aria-label="تصفية فترات السماح" className="tp-grace__filters">
+                  {GRACE_PERIOD_LIST_FILTERS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className="tp-grace__filter"
+                      aria-pressed={listFilter === option.value}
+                      data-filter={option.value}
+                      onClick={() => setListFilter(option.value)}
+                    >
+                      {option.value !== "all" && (
+                        <span className="tp-grace__light" data-light={option.value === "current" ? "green" : "red"} aria-hidden="true" />
+                      )}
+                      <span className="tp-grace__filter-label">{option.label}</span>
+                      <span className="tp-grace__filter-count">{list ? list.counts[option.value] : "…"}</span>
+                    </button>
+                  ))}
+                </div>
+                {listError && <p role="alert" className="tp-grace__error"><AlertCircle aria-hidden="true" />{listError}</p>}
+                {listLoading && !list && (
+                  <p role="status" className="tp-grace__muted">
+                    <Loader2 className="inline size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> جارٍ تحميل فترات السماح…
+                  </p>
+                )}
+                {list && list.periods.length === 0 && !listLoading && (
+                  <p className="tp-grace__empty-note">
+                    {listFilter === "current"
+                      ? "لا توجد فترات سماح مستمرة."
+                      : listFilter === "past"
+                        ? "لا توجد فترات سماح منتهية."
+                        : "لا توجد فترات سماح."}
+                  </p>
+                )}
+                {list && list.periods.length > 0 && (
+                  <ul className="tp-grace__cards" aria-busy={listLoading}>
+                    {list.periods.map((period) => {
+                      const light = gracePeriodLight(period, list.today);
+                      return (
+                        <li key={period.id} className="tp-grace__card" data-light={light}>
+                          <button
+                            type="button"
+                            className="tp-grace__card-open"
+                            onClick={() => void loadStudent(period.studentId)}
+                            disabled={loading}
+                            aria-label={`فتح فترات السماح للطالب ${period.studentName}`}
+                          />
+                          <StudentIdentity
+                            name={period.studentName}
+                            telegram={period.studentTelegram}
+                            username={period.studentUsername}
+                            createdAt={period.studentCreatedAt}
+                            light={light}
+                          />
+                          <div className="tp-grace__card-period">
+                            <span className="tp-grace__card-range" dir="ltr">{formatGracePeriod(period)}</span>
+                            <span className="tp-grace__card-days">{formatGraceDays(gracePeriodDays(period))}</span>
+                            <span className="tp-grace__state" data-light={light}>
+                              {light === "red" ? "منتهية" : describeGraceRemaining(period, list.today)}
                             </span>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              {list?.truncated && (
-                <p className="tp-grace__muted">تُعرض أول {list.periods.length} فترة فقط؛ استخدم البحث لتضييق القائمة.</p>
-              )}
-            </section>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {list?.truncated && (
+                  <p className="tp-grace__muted">تُعرض أحدث {list.periods.length} فترة فقط؛ استخدم البحث لتضييق القائمة.</p>
+                )}
+              </section>
+            </>
           )}
 
           {data && (
             <>
-              <section className="tp-grace__student" aria-label="الطالب">
-                <span className="tp-grace__avatar tp-grace__avatar--large" aria-hidden="true"><UserRound /></span>
-                <div className="tp-grace__student-text">
-                  <strong>{data.student.name}</strong>
-                  <span dir="ltr">{data.student.code}</span>
-                  {data.student.courseName && <span className="tp-grace__muted">{data.student.courseName}</span>}
-                </div>
-                <span className="tp-grace__status" data-status={data.student.status}>{data.student.status}</span>
-                <Button type="button" variant="ghost" size="sm" onClick={() => { setData(null); setEditor(null); setPreview(null); }} disabled={busy}>
-                  <ArrowRight className="size-4" aria-hidden="true" />طالب آخر
+              <section className="tp-grace__student" data-light={studentLight || "none"} aria-label="الطالب">
+                <StudentIdentity
+                  name={data.student.name}
+                  telegram={data.student.telegram}
+                  username={data.student.username}
+                  createdAt={data.student.createdAt}
+                  light={studentLight}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="tp-grace__back"
+                  onClick={() => { setData(null); setEditor(null); setPreview(null); }}
+                  disabled={busy}
+                >
+                  <ArrowRight className="size-4" aria-hidden="true" />رجوع للقائمة
                 </Button>
               </section>
 
@@ -469,11 +549,16 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
               <section className="tp-grace__section" aria-labelledby="tp-grace-current">
                 <h3 id="tp-grace-current">الفترة الحالية</h3>
                 {currentPeriod ? (
-                  <div className="tp-grace__current">
-                    <div>
-                      <span className="tp-grace__badge"><i aria-hidden="true" />فترة حالية</span>
+                  <div className="tp-grace__current" data-light={currentLight || "green"}>
+                    <div className="tp-grace__current-main">
+                      <span className="tp-grace__badge" data-light={currentLight || "green"}>
+                        <GraceLightDot light={currentLight} />
+                        {currentLight === "yellow" ? "تنتهي اليوم" : "فترة مستمرة"}
+                      </span>
                       <p className="tp-grace__range" dir="ltr">{formatGracePeriod(currentPeriod)}</p>
-                      <p className="tp-grace__muted">{formatGraceDays(gracePeriodDays(currentPeriod))}</p>
+                      <p className="tp-grace__muted">
+                        {formatGraceDays(gracePeriodDays(currentPeriod))} · {describeGraceRemaining(currentPeriod, today)}
+                      </p>
                     </div>
                     {renderPeriodActions(currentPeriod)}
                   </div>
@@ -590,7 +675,7 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
                       </div>
                       {validation && (proposed?.startDate && (editor.mode === "days" ? editor.days : editor.endDate)) ? (
                         <p role="alert" className="tp-grace__error"><AlertCircle aria-hidden="true" />{validation}</p>
-                      ) : proposedDays > 0 && proposed ? (
+                      ) : proposedDays > 0 && proposed && !preview ? (
                         <p className="tp-grace__summary">
                           الطالب سيكون ضمن فترة السماح من <span dir="ltr">{formatGraceDate(proposed.startDate)}</span> إلى{" "}
                           <span dir="ltr">{formatGraceDate(proposed.endDate)}</span> — {formatGraceDays(proposedDays)}.
@@ -669,29 +754,35 @@ export function GracePeriodsDialog({ open, onOpenChange, canManage }: Props) {
               <section className="tp-grace__section" aria-labelledby="tp-grace-history">
                 <h3 id="tp-grace-history">الفترات السابقة</h3>
                 {historyPeriods.length === 0 ? (
-                  <p className="tp-grace__muted">لا توجد فترات سابقة.</p>
+                  <p className="tp-grace__empty-note">لا توجد فترات سابقة.</p>
                 ) : (
-                  <div className="table-wrap tp-grace__table-wrap" tabIndex={0} aria-label="جدول فترات السماح السابقة؛ يمكن تمريره أفقياً عند الحاجة">
-                    <table className="tp-grace__table">
-                      <thead>
-                        <tr><th>الفترة</th><th>المدة</th><th>الحالة</th><th><span className="sr-only">إجراءات</span></th></tr>
-                      </thead>
-                      <tbody>
-                        {historyPeriods.map((period) => (
-                          <tr key={period.id} data-cancelled={Boolean(period.cancelledAt)}>
-                            <td dir="ltr" className="tp-grace__range-cell">{formatGracePeriod(period)}</td>
-                            <td>{formatGraceDays(gracePeriodDays(period))}</td>
-                            <td>
-                              {period.cancelledAt
-                                ? `ملغاة${period.cancelledByName ? ` — ${period.cancelledByName}` : ""} · ${formatBaghdadDateTime(period.cancelledAt)}${period.cancelReason ? ` · ${period.cancelReason}` : ""}`
-                                : period.source === "legacy" ? "منتهية (من النظام القديم)" : "منتهية"}
-                            </td>
-                            <td>{renderPeriodActions(period)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ul className="tp-grace__history">
+                    {historyPeriods.map((period) => {
+                      const cancelled = Boolean(period.cancelledAt);
+                      const light = gracePeriodLight(period, today);
+                      return (
+                        <li key={period.id} className="tp-grace__history-row" data-cancelled={cancelled}>
+                          <span
+                            className="tp-grace__light"
+                            data-light={cancelled ? "off" : light}
+                            aria-hidden="true"
+                          />
+                          <div className="tp-grace__history-main">
+                            <span dir="ltr" className="tp-grace__range-cell">{formatGracePeriod(period)}</span>
+                            <span className="tp-grace__muted">{formatGraceDays(gracePeriodDays(period))}</span>
+                          </div>
+                          <span className="tp-grace__history-state" data-light={cancelled ? "off" : light}>
+                            {cancelled
+                              ? `ملغاة${period.cancelledByName ? ` — ${period.cancelledByName}` : ""} · ${formatBaghdadDateTime(period.cancelledAt)}${period.cancelReason ? ` · ${period.cancelReason}` : ""}`
+                              : light === "red"
+                                ? period.source === "legacy" ? "منتهية (من النظام القديم)" : "منتهية"
+                                : describeGraceRemaining(period, today)}
+                          </span>
+                          {renderPeriodActions(period)}
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
               </section>
             </>

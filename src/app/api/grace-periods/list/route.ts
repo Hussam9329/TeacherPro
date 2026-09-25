@@ -21,14 +21,29 @@ const periodSelect = {
   endDate: true,
   source: true,
   student: {
-    select: { name: true, code: true, status: true, course: { select: { name: true } } },
+    select: {
+      name: true,
+      code: true,
+      status: true,
+      telegram: true,
+      username: true,
+      createdAt: true,
+      course: { select: { name: true } },
+    },
   },
 } satisfies Prisma.GracePeriodSelect;
 
+// Every tab lists the newest period first.
+const newestFirst: Prisma.GracePeriodOrderByWithRelationInput[] = [
+  { startDate: "desc" },
+  { endDate: "desc" },
+  { createdAt: "desc" },
+];
+
 /**
  * GET /api/grace-periods/list?filter=all|current|past&q=
- * Read-only smart list of active (not cancelled) grace periods. Ongoing
- * periods come first, ending soonest; ended ones follow, most recent first.
+ * Read-only smart list of active (not cancelled) grace periods, newest first
+ * in every tab.
  */
 export async function GET(req: NextRequest) {
   const authError = await requirePermission(req, "students.view");
@@ -48,28 +63,14 @@ export async function GET(req: NextRequest) {
     const currentWhere: Prisma.GracePeriodWhereInput = { ...base, endDate: { gte: todayColumn } };
     const pastWhere: Prisma.GracePeriodWhereInput = { ...base, endDate: { lt: todayColumn } };
 
+    const listWhere = filter === "current" ? currentWhere : filter === "past" ? pastWhere : base;
     const result = await withDatabaseSchema(async () => {
-      const [currentCount, pastCount, current, past] = await Promise.all([
+      const [currentCount, pastCount, rows] = await Promise.all([
         db.gracePeriod.count({ where: currentWhere }),
         db.gracePeriod.count({ where: pastWhere }),
-        filter === "past"
-          ? Promise.resolve([])
-          : db.gracePeriod.findMany({
-              where: currentWhere,
-              select: periodSelect,
-              orderBy: [{ endDate: "asc" }, { startDate: "asc" }],
-              take: LIST_LIMIT,
-            }),
-        filter === "current"
-          ? Promise.resolve([])
-          : db.gracePeriod.findMany({
-              where: pastWhere,
-              select: periodSelect,
-              orderBy: [{ endDate: "desc" }, { startDate: "desc" }],
-              take: LIST_LIMIT,
-            }),
+        db.gracePeriod.findMany({ where: listWhere, select: periodSelect, orderBy: newestFirst, take: LIST_LIMIT }),
       ]);
-      return { currentCount, pastCount, rows: [...current, ...past].slice(0, LIST_LIMIT) };
+      return { currentCount, pastCount, rows };
     }, "GracePeriod");
 
     const total =
@@ -94,6 +95,9 @@ export async function GET(req: NextRequest) {
           studentName: row.student.name,
           studentCode: row.student.code,
           studentStatus: row.student.status,
+          studentTelegram: row.student.telegram || "",
+          studentUsername: row.student.username || "",
+          studentCreatedAt: row.student.createdAt.toISOString(),
           courseName: row.student.course?.name || "",
         })),
       },
